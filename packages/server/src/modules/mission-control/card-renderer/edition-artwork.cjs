@@ -172,11 +172,10 @@ function makeEditionArtwork(PATHS,backgroundForEdition){
     silver:['#FFFFFF','#C9D3E0','#5C6B7E','#1E2633','#8FA0B4','#F4F8FF','#A9B6C6'],
     gold:['#FFF7D6','#F2C766','#8A5A12','#3A2204','#C9922E','#FFF1C2','#D9A441'],
     pink:['#FFFFFF','#FFC6E3','#B03878','#3E0A26','#FF4C98','#FFE6F2','#F28CBF'],
-    ice:['#FFFFFF','#D6F3FF','#3A7FA8','#0B2A44','#6FC8FF','#EFFBFF','#9FE3FF'],
     mint:['#FFFFFF','#CFFBEA','#2E8C66','#0B3326','#8EF0C1','#EFFFF8','#A8F0D0'],
     fire:['#FFF8E0','#FFD08A','#C2410C','#3A0E03','#FF8A5C','#FFF0D6','#FFB067'],
     violet:['#FFFFFF','#E3D6FF','#6B3FC9','#1B0B40','#B98CFF','#F4EEFF','#C9B0FF'],
-    sui:['#FFFFFF','#CFE6FF','#2E6FC4','#08204A','#4DA2FF','#EAF4FF','#8EC5FF'],
+    sui:['#F4F6FA','#C9D3E0','#7586A5','#536179','#8FA0B4','#E8EDF5','#A9B6C6'],
     holo:['#FFFFFF','#FFB6DA','#8C5CFF','#101A40','#3FD0FF','#E8FFF6','#FFE98A'],
     rust:['#FFF1E8','#FFC2A0','#A8401C','#3A0F05','#E0683A','#FFE6D8','#F29A70'],
     amber:['#FFF8EC','#F6D2A0','#9A5E2A','#3A2210','#D89A5C','#FFF0DC','#E8B98A'],
@@ -204,18 +203,11 @@ function makeEditionArtwork(PATHS,backgroundForEdition){
 
   /* Secret rares tied to one crew number. #0503 is Sui's mainnet birthday (3 May 2023).
      In production the server says which numbers are special; this map only holds the designs. */
-  var MANIFEST_D='M-39.3 -142.0L-5.0 -142.4L-0.7 -140.7L0.4 -137.0L-2.2 -131.9L-35.2 -82.9L-65.6 -39.4L-70.2 -30.9L-75.6 -16.4L-77.8 -3.6L-77.2 9.8L-75.7 16.3L-71.2 28.8L-65.7 38.3L-59.4 46.0L-54.6 50.3L-36.0 58.6L-30.8 60.4L-27.1 60.6L-23.6 58.7L-12.3 43.2L-12.2 40.3L-13.7 38.3L-26.2 31.0L-33.1 30.5L-40.6 22.3L-45.1 13.7L-47.3 5.9L-47.8 -4.6L-45.9 -15.7L-41.2 -26.9L-35.6 -36.3L32.3 -134.5L35.5 -138.2L38.5 -140.2L45.2 -141.6L64.9 -141.3L69.5 -139.9L75.6 -136.0L76.6 -133.4L75.8 -129.9L54.4 -99.4L52.6 -96.3L52.4 -93.2L55.0 -90.4L64.5 -85.9L75.5 -78.9L84.1 -76.5L89.4 -71.8L100.2 -59.6L105.9 -51.3L112.4 -38.8L116.9 -26.3L119.6 -15.0L121.2 7.4L118.9 23.2L113.5 39.8L102.1 61.3L61.2 121.4L47.8 139.1L43.7 142.0L40.6 142.9L6.4 143.3L2.1 141.5L1.0 137.9L3.5 132.8L36.5 83.8L67.0 40.3L71.5 31.8L77.0 17.3L79.2 4.4L78.5 -8.9L77.1 -15.5L72.5 -27.9L67.1 -37.5L60.7 -45.1L56.0 -49.4L37.4 -57.7L32.2 -59.6L28.4 -59.7L24.9 -57.8L13.6 -42.3L13.5 -39.4L15.1 -37.5L27.5 -30.1L34.4 -29.7L42.0 -21.4L46.4 -12.8L48.6 -5.0L49.2 5.4L47.3 16.5L42.5 27.8L36.9 37.2L-30.9 135.3L-34.2 139.1L-37.2 141.1L-43.8 142.4L-63.6 142.2L-68.2 140.8L-74.3 136.9L-75.3 134.3L-74.5 130.8L-53.0 100.3L-51.3 97.2L-51.0 94.1L-53.6 91.3L-63.2 86.8L-74.2 79.8L-82.7 77.3L-88.1 72.7L-98.8 60.4L-104.6 52.2L-111.1 39.7L-115.6 27.2L-118.3 15.9L-119.8 -6.6L-117.6 -22.3L-112.2 -38.9L-100.7 -60.5L-59.8 -120.6L-46.5 -138.2L-42.4 -141.1ZM-5.5 -29.2L-10.3 -28.0L-15.6 -25.4L-22.9 -18.7L-27.2 -10.9L-28.7 -6.5L-29.7 0.5L-29.4 5.0L-27.1 12.7L-24.7 17.3L-16.8 25.4L-12.4 28.0L-5.5 30.1L6.8 30.1L11.6 28.9L17.0 26.3L24.3 19.5L28.5 11.8L30.1 7.3L31.1 0.3L30.7 -4.1L28.4 -11.8L26.1 -16.5L18.2 -24.6L13.7 -27.1L6.8 -29.2Z';
-  var SUI_D='M240.057 159.914C255.698 179.553 265.052 204.39 265.052 231.407C265.052 258.424 255.414 284.019 239.362 303.768L237.971 305.475L237.608 303.31C237.292 301.477 236.929 299.613 236.502 297.749C228.46 262.421 202.265 232.134 159.148 207.597C130.029 191.071 113.361 171.195 108.985 148.586C106.157 133.972 108.258 119.294 112.318 106.717C116.379 94.1569 122.414 83.6187 127.549 77.2831L144.328 56.7754C147.267 53.1731 152.781 53.1731 155.719 56.7754L240.073 159.914H240.057ZM266.584 139.422L154.155 1.96703C152.007 -0.655678 147.993 -0.655678 145.845 1.96703L33.4316 139.422L33.0683 139.881C12.3868 165.555 0 198.181 0 233.698C0 316.408 67.1635 383.461 150 383.461C232.837 383.461 300 316.408 300 233.698C300 198.181 287.613 165.555 266.932 139.896L266.568 139.438L266.584 139.422ZM60.3381 159.472L70.3866 147.164L70.6868 149.439C70.9237 151.24 71.2239 153.041 71.5715 154.858C78.0809 189.001 101.322 217.456 140.173 239.496C173.952 258.724 193.622 280.828 199.278 305.064C201.648 315.176 202.059 325.129 201.032 333.835L200.969 334.372L200.479 334.609C185.233 342.05 168.09 346.237 149.984 346.237C86.4546 346.237 34.9484 294.826 34.9484 231.391C34.9484 204.153 44.4439 179.142 60.3065 159.44L60.3381 159.472Z';
   var SPECIALS={
     manifest:{key:'manifest',one:true,metal:true,stamp:false,noBadge:true,grain:.22,label:'1 OF 1',stage:'MANIFEST',name:'Manifest',shareLine:'1 OF 1  ·  MANIFEST FREEDOM 69',line2:'MANIFEST FREEDOM 69',finish:'metal',chrome:'gold',shareAccent:'#F2C766',recruitedBy:'blastdotfun',
       frame:['#fff','#fff'],num:['#fff','#fff'],accent:'#8A5A12',disc:'#0B0C10',
       theme:{bg:['#fff','#fff'],glow:'#000',glowA:0,glow2:'#000',glow2A:0,gridO:0,ban:['#fff','#fff'],bezel:'#0B0C10',strip:{fill:'rgba(14,16,22,.06)',stroke:'#0E1016',text:'#0E1016'},spark:'#fff'},
-      /* Manifest's supplied 69 mark, pressed into the gold plate behind the right column. */
-      art:function(pre,R){var t='translate(872 388) scale(2.05)';
-        return '<defs>'+cgrad(pre+'mf',CHROME.gold,0,0,.4,1)+'</defs>'
-          +'<g transform="'+t+'"><path fill="url(#'+pre+'mf)" fill-rule="evenodd" opacity=".5" d="'+MANIFEST_D+'"/></g>'
-          +'<g transform="translate(873.4 389.4) scale(2.05)"><path fill="none" stroke="#fff" stroke-width=".55" opacity=".85" fill-rule="evenodd" d="'+MANIFEST_D+'"/></g>'
-          +'<g transform="'+t+'"><path fill="none" stroke="#3A2204" stroke-width=".4" opacity=".35" fill-rule="evenodd" d="'+MANIFEST_D+'"/></g>'; }},
+      art:function(){return '';}},
     countdown:{key:'countdown',one:true,metal:'dark',metalTheme:{sub:'#C8B4A8',accent:'#FF6A2A',logo:['#FF6A2A','#F4F6FA']},stamp:false,noBadge:true,grain:.2,label:'1 OF 1',stage:'COUNTDOWN',name:'Countdown',shareLine:'1 OF 1  ·  COUNTDOWN  ·  1 · 2 · 3',line2:'3  ·  2  ·  1  ·  BLASTOFF',finish:'metal',chrome:'countdown',shareAccent:'#FF8C4A',shareMetalButton:true,recruitedBy:'blastdotfun',litFrom:2,ban:['#FFD2A8','#FF8C4A','#FF5A1F','#FF8C4A'],
       frame:['#fff','#fff'],num:['#fff','#fff'],accent:'#FF6A2A',disc:'#050303',
       theme:{bg:['#0A0706','#1A1512'],glow:'#000',glowA:0,glow2:'#000',glow2A:0,gridO:0,ban:['#fff','#fff'],bezel:'#050303',strip:{fill:'rgba(255,255,255,.04)',stroke:'#FF8C4A',text:'#FFE2CC'},spark:'#fff'},
@@ -224,14 +216,10 @@ function makeEditionArtwork(PATHS,backgroundForEdition){
       frame:['#FF4C98','#FFFFFF','#FF4C98','#7B3CFF','#5CE1FF','#FF4C98'],num:['#FFFFFF','#FF8CC6'],accent:'#5CE1FF',disc:'#06061C',
       theme:{bg:['#06061C','#141044'],glow:'#7B3CFF',glowA:.22,glow2:'#FF4C98',glow2A:.14,gridO:0,ink:'#F8F5F7',sub:'#9C9CD0',accent:'#5CE1FF',ban:['#FF4C98','#FF4C98'],banInk:'#07070D',bezel:'#06061C',pill:'rgba(6,6,28,.85)',pillInk:'#F8F5F7',logo:['#FF4C98','#F8F5F7'],strip:{fill:'rgba(92,225,255,.08)',stroke:'#5CE1FF',text:'#E8FBFF'},spark:'#FFE98A'},
       art:function(){return '';}},
-    sui:{key:'sui',one:true,metal:true,stamp:false,noBadge:true,grain:.22,label:'1 OF 1',stage:'SUI',name:'Sui',shareLine:'1 OF 1  ·  SUI MAINNET  ·  05.03.23',line2:'SUI MAINNET  ·  MAY 03, 2023',finish:'metal',chrome:'ice',
-      frame:['#fff','#fff'],num:['#fff','#fff'],accent:'#3A7FA8',disc:'#0B0C10',
-      theme:{bg:['#fff','#fff'],glow:'#000',glowA:0,glow2:'#000',glow2A:0,gridO:0,ban:['#fff','#fff'],bezel:'#0B0C10',strip:{fill:'rgba(14,16,22,.06)',stroke:'#0E1016',text:'#0E1016'},spark:'#fff'},
-      /* an oversized Sui drop pressed into the metal plate behind the right column: tinted chrome fill, light and dark edges like an emboss */
-      art:function(pre,R){var s='<defs>'+cgrad(pre+'su',CHROME.ice,0,0,.4,1)+'</defs>',t='translate(566 -104) scale(2.45)';
-        return s+'<g transform="'+t+'"><path fill="url(#'+pre+'su)" fill-rule="evenodd" opacity=".46" d="'+SUI_D+'"/></g>'
-          +'<g transform="translate(567.6 -101.6) scale(2.45)"><path fill="none" stroke="#fff" stroke-width="1.3" opacity=".85" fill-rule="evenodd" d="'+SUI_D+'"/></g>'
-          +'<g transform="'+t+'"><path fill="none" stroke="#0E1016" stroke-width=".9" opacity=".3" fill-rule="evenodd" d="'+SUI_D+'"/></g>';}},
+    sui:{key:'sui',one:true,metal:'dark',metalTheme:{sub:'#C9D3E0',accent:'#A9B6C6',logo:['#A9B6C6','#F4F6FA']},stamp:false,noBadge:true,grain:.22,label:'1 OF 1',stage:'SUI',name:'Sui',shareLine:'1 OF 1  ·  SUI MAINNET  ·  05.03.23',line2:'SUI MAINNET  ·  MAY 03, 2023',finish:'metal',chrome:'sui',
+      frame:['#7586A5','#536179'],num:['#F4F6FA','#A9B6C6'],accent:'#A9B6C6',disc:'#191C26',ban:['#D8DFEA','#C9D3E0','#7586A5','#536179'],
+      theme:{bg:['#191C26','#1D212C'],glow:'#000',glowA:0,glow2:'#000',glow2A:0,gridO:0,ban:['#191C26','#1D212C'],bezel:'#0B0C10',strip:{fill:'rgba(255,255,255,.04)',stroke:'#7586A5',text:'#F4F6FA'},spark:'#fff'},
+      art:function(){return '';}},
     'blast-launch-day':{key:'blast',one:true,metal:'dark',stamp:false,noBadge:true,grain:.2,label:'1 OF 1',stage:'BLAST',name:'Blast launch day',line2:'BLAST LAUNCH  ·  JUL 27, 2025',shareLine:'1 OF 1  ·  BLAST LAUNCH  ·  07.27.25',finish:'metal',chrome:'obsidian',
       frame:['#fff','#fff'],num:['#fff','#fff'],accent:'#FF4C98',disc:'#050608',
       theme:{bg:['#0B0C10','#15171C'],glow:'#000',glowA:0,glow2:'#000',glow2A:0,gridO:0,ban:['#fff','#fff'],bezel:'#050608',strip:{fill:'rgba(255,255,255,.04)',stroke:'#6B7280',text:'#E6E8EE'},spark:'#fff'},

@@ -171,15 +171,8 @@ test("canonical JSON sorts keys at every depth and refuses values JSON cannot ke
   assert.throws(() => canonicalJson(undefined), TypeError);
 });
 
-// Only the X avatar origin policy changed; rendered pixels retain version 7. x-avatar.ts takes its candidate
-// URLs (original, then 400 px) from the shared X photo helper, now part of the pinned inputs, so the
-// fingerprint moved, not the pixels.
 test("renderer inputs are pinned to the renderer version", async () => {
   const hash = createHash("sha256");
-  // Source fingerprint updated for canonical ownership, module-relative assets and
-  // the removal of the unused CARD_SVG_WIDTH/HEIGHT exports (#772) and the single
-  // server-package asset root (#778);
-  // renderer version and the original pixel/record assertions remain unchanged.
   for (const [label, module] of [
     ["edition-artwork.cjs", "@blast/server/modules/mission-control/card-renderer/edition-artwork.cjs"],
     ["brand-paths.json", "@blast/core/modules/mission-control/card-renderer/brand-paths.json"],
@@ -203,8 +196,8 @@ test("renderer inputs are pinned to the renderer version", async () => {
   assert.deepEqual(
     { fingerprint: hash.digest("hex"), version: CARD_RENDERER_VERSION },
     {
-      fingerprint: "b00542d77290b6e342635626fb17572eb5fb3ab304fb4f9441a4f04c38a67e74",
-      version: "season-zero-card-renderer/7",
+      fingerprint: "08413038a7a1c64c728cb40eb0f52db32965ab47edae18b34026dcf2829080d1",
+      version: "season-zero-card-renderer/8",
     },
     "Card artwork or renderer inputs changed. If rendered pixels can differ, bump " +
       "CARD_RENDERER_VERSION (card-renderer/version.ts) so persisted images are re-rendered, " +

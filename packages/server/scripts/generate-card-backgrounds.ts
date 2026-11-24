@@ -8,9 +8,8 @@ import { CARD_EDITIONS } from "@blast/core/modules/mission-control/card-renderer
 const directory = new URL("../assets/mission-control/editions/", import.meta.url);
 await mkdir(directory, { recursive: true });
 const artwork = makeEditionArtwork(paths);
-// These supplied one-of-one backgrounds are curated assets extracted from their
-// approved card masters, rather than procedural handoff editions.
-const curatedBackgrounds = new Set(["countdown", "8-bit"]);
+// Keep the curated one-of-one backgrounds when regenerating the procedural editions.
+const curatedBackgrounds = new Set(["countdown", "8-bit", "sui"]);
 for (const edition of CARD_EDITIONS) {
   if (curatedBackgrounds.has(edition)) {
     console.log(`${edition} (curated)`);

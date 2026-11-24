@@ -4,7 +4,7 @@
  * edition backgrounds, SVG layout, fonts, or rasterizer settings change; old
  * renders are then left behind instead of being served for the new artwork.
  */
-export const CARD_RENDERER_VERSION = "season-zero-card-renderer/7" as const;
+export const CARD_RENDERER_VERSION = "season-zero-card-renderer/8" as const;
 
 /**
  * Names the pixels a presale receipt record renders to (presale-receipt-svg.ts).

@@ -13,6 +13,7 @@ test("all 14 avatar rings use the exact approved card frame gradient", async () 
     const gradient = card.match(/<linearGradient id="lc-frame"[\s\S]*?<\/linearGradient>/)?.[0];
     assert.ok(gradient, record.edition);
     assert.ok(ring.includes(gradient), record.edition);
+    assert.match(ring, /(?:fill|stroke)="url\(#lc-frame\)"/, record.edition);
     assert.match(ring, /viewBox="0 0 100 100"/);
     assert.doesNotMatch(ring, /<script|<image|http[s]?:\/\/(?!www\.w3\.org)/);
   }
