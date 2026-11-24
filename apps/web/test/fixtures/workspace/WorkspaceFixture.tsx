@@ -30,6 +30,7 @@ const slots = {
   data: {
     Coins: Data,
     Presales: Data,
+    Bonding: Data,
     Traders: Data,
     Activity: Data,
     Feed: Data,
