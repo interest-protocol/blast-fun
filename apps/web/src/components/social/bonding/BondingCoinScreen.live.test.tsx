@@ -32,10 +32,11 @@ test("a new trade flashes a price change below display precision", async (t) => 
   });
   const animations = recordAnimations();
   await act(async () => root.render(<CoinPriceFigure price="0.00012201" tradeId="1" />));
-  assert.equal(container.querySelector("button")?.textContent, "$0.000122");
+  assert.equal(container.textContent, "$0.000122");
+  assert.equal(container.querySelector("button"), null);
   assert.equal(animations.all.length, 0);
   await act(async () => root.render(<CoinPriceFigure price="0.00012202" tradeId="2" />));
-  assert.equal(container.querySelector("button")?.textContent, "$0.000122");
+  assert.equal(container.textContent, "$0.000122");
   assert.equal(animations.all.length, 1);
 });
 
@@ -198,11 +199,8 @@ test("the four curve figures advance together and a delayed trade or page read c
   await act(async () => findCurrency("USD").click());
   assert.equal(chartCurrency(), "USD 2");
   assert.equal(price(), "$0.001");
-  const inspector = () => container.querySelector('[aria-label^="Inspect full coin price"]');
-  assert.equal(inspector()?.getAttribute("aria-label"), "Inspect full coin price: $0.001");
   await act(async () => setShellPref("amountsHidden", true));
   assert.equal(price(), HIDDEN_AMOUNT);
-  assert.equal(inspector(), null);
   await act(async () => setShellPref("amountsHidden", false));
   await act(async () => findCurrency("SUI").click());
   const sellCue = tradeCue();

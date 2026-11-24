@@ -150,7 +150,6 @@ function CoinsContent() {
               type="search"
               aria-label="Search coins"
               placeholder="Name, ticker or coin type"
-              title="Name, ticker or coin type"
               maxLength={200}
               value={search}
               onChange={(event) => setSearch(event.currentTarget.value)}

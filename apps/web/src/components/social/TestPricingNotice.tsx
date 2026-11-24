@@ -1,16 +1,21 @@
-import { InspectValue } from "#web/components/blast-ui/InspectValue.tsx";
+"use client";
+
+import { Popover, PopoverSurface } from "#web/components/blast-ui/Popover.tsx";
 import styles from "./TestPricingNotice.module.css";
 
-/**
- * Kept beside the test site's content, including navigation into trading workspaces. `compact`
- * is Blast mode's form beside its balance: the label and the explanation, the same copy behind ⓘ.
- */
+const pricing = <><strong>TSUI has no real value.</strong> 1 TSUI uses SUI’s current USD price.</>;
+
 export function TestPricingNotice({ enabled, compact = false }: Readonly<{ enabled: boolean; compact?: boolean }>) {
   if (!enabled) return null;
-  if (compact) return <aside className={`${styles.notice} ${styles.compact}`} aria-label="Simulated TSUI pricing: TSUI has no real value">
-    <strong>Test pricing</strong> <InspectValue label="Test pricing calculation" value="TSUI has no real value. 1 TSUI uses SUI’s current USD price. Dollar values are simulated.">ⓘ</InspectValue>
-  </aside>;
-  return <aside className={styles.notice} aria-label="Simulated TSUI pricing">
-    <strong>Test pricing</strong> · TSUI has no real value <InspectValue label="Test pricing calculation" value="1 TSUI uses SUI’s current USD price. Dollar values are simulated.">ⓘ</InspectValue>
+  if (!compact) return <aside className={styles.notice} aria-label="Test pricing">{pricing}</aside>;
+
+  return <aside aria-label="Test pricing">
+    <Popover.Root>
+      <Popover.Trigger className={`${styles.notice} ${styles.compact}`}>Test pricing</Popover.Trigger>
+      <PopoverSurface
+        positioner={{ sideOffset: 8, collisionPadding: 16, className: styles.layer }}
+        popup={{ "aria-label": "Test pricing", className: styles.details }}
+      >{pricing}</PopoverSurface>
+    </Popover.Root>
   </aside>;
 }

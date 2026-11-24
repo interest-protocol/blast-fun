@@ -34,7 +34,7 @@ export function Transaction({ digest, explorer }: Readonly<{ digest: string; exp
   if (!url) {
     return (
       <span>
-        <code className={styles.mono} aria-hidden="true" title={digest}>{short}</code>
+        <code className={styles.mono} aria-hidden="true">{short}</code>
         <span className={primitives.srOnly}>{digest}</span>
       </span>
     );

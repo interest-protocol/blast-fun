@@ -23,6 +23,9 @@ test("expanded and collapsed Trending preserve the same ten coins, icons and ran
   assert.match(expanded, /C0, Trending coin, \$0\.0021, \+12% today\. View coin/);
   assert.match(expanded, /<b class="num">\$0\.0021<\/b>/);
   assert.doesNotMatch(collapsed, /<b[ >]|trendingValue/);
+  assert.match(expanded, /title="Trending coin"/);
+  assert.doesNotMatch(expanded, /title="[^"]*View coin/);
+  assert.match(collapsed, /title="C0 · Trending coin"/);
   assert.doesNotMatch(expanded, /Your coins|Deposit|withdraw|Sign in|Gainers|bought today/);
 });
 

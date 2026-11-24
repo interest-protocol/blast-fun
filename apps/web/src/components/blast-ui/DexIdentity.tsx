@@ -15,7 +15,7 @@ export function DexIdentity({ venue, iconOnly = false, size = 16 }: Readonly<{ v
   const src = LOGOS.get(venue.toLowerCase());
   const name = venueName(venue);
   return (
-    <span className={styles.identity} title={name}>
+    <span className={styles.identity} title={iconOnly && src ? name : undefined}>
       {src ? (
         // Local brand marks are decorative; keep the box if an asset fails to load.
         // eslint-disable-next-line @next/next/no-img-element

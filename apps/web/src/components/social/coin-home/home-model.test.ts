@@ -29,7 +29,7 @@ import {
   raiseFigures,
   sideLine,
   volumeText,
-  tapeLine,
+  tapeParts,
   usdText,
   pnlText,
   portfolioText,
@@ -180,11 +180,10 @@ test("the row's line: counts by direction (a sell never dropped), the tape's lin
   assert.deepEqual(directionCounts(activity()), [["trade_buy", 5], ["trade_sell", 2]]);
   assert.deepEqual(directionCounts(activity({ buyers: 0, sellers: 0, backers: 3, claimers: 1 })), [["presale_commit", 3], ["presale_claim", 1]]);
   assert.deepEqual(directionCounts(activity({ buyers: 0, sellers: 0 })), []);
-  const coin = { presale_id: "0x1", symbol: "ORBIT", name: "Orbit", icon_url: null, lifecycle: "migrated" };
-  assert.equal(tapeLine({ kind: "trade_sell", quote: amount({ atoms: "25000000", usd: "25.00" }), coin }), "sold $25 of ORBIT");
-  assert.equal(tapeLine({ kind: "trade_buy", quote: sui("100000000000"), coin }), "bought 100 SUI of ORBIT");
-  assert.equal(tapeLine({ kind: "presale_commit", quote: amount({ atoms: "150000000", usd: "150.00" }), coin }), "backed ORBIT with $150");
-  assert.equal(tapeLine({ kind: "presale_claim", quote: null, coin }), "claimed ORBIT");
+  assert.deepEqual(tapeParts({ kind: "trade_sell", quote: amount({ atoms: "25000000", usd: "25.00" }) }), { before: "sold $25 of", after: "" });
+  assert.deepEqual(tapeParts({ kind: "trade_buy", quote: sui("100000000000") }), { before: "bought 100 SUI of", after: "" });
+  assert.deepEqual(tapeParts({ kind: "presale_commit", quote: amount({ atoms: "150000000", usd: "150.00" }) }), { before: "backed", after: "with $150" });
+  assert.deepEqual(tapeParts({ kind: "presale_claim", quote: null }), { before: "claimed", after: "" });
   // The window's volume: bought and sold in dollars, a plus where a row was unpriced, nothing without a figure.
   assert.equal(volumeText(activity()), "$435");
   assert.equal(volumeText(activity({ bought: [amount({ usd: "1200.00" })], sold: [sui("1000000000")] })), "$1.2K+");

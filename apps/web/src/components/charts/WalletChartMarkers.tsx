@@ -2,7 +2,7 @@
 
 import { useLayoutEffect, useRef, useState } from "react";
 import { explorerAccountUrl } from "@blast/core/lib/explorer.ts";
-import { shortAddress } from "@blast/core/lib/format.ts";
+import { countWords, shortAddress } from "@blast/core/lib/format.ts";
 import { profilePagePath } from "@blast/core/modules/social/contracts/profiles.ts";
 import { traderProfileKey, type TraderProfileRequest } from "@blast/core/modules/social/contracts/trader-profiles.ts";
 import { Button } from "#web/components/blast-ui/Button.tsx";
@@ -12,6 +12,7 @@ import { useDevicePrefs } from "#web/components/blast-ui/device-prefs.ts";
 import { EASE_OUT, T3 } from "#web/components/blast-ui/motion-tokens.ts";
 import { prefersReducedMotion } from "#web/components/blast-ui/use-shell-prefs.ts";
 import { WalletLabelIcon } from "#web/components/launchpad/activity/WalletLabelIcon.tsx";
+import { WALLET_LABELS } from "#web/components/launchpad/activity/wallet-labels.ts";
 import { loadTraderProfiles } from "#web/components/launchpad/activity/trader-profiles.ts";
 import type { walletMarkerBadges, WalletRipple } from "./wallet-markers";
 import styles from "./PoolCandleChart.module.css";
@@ -66,7 +67,7 @@ export function WalletChartMarkers({ badges }: Readonly<{ badges: readonly Badge
         size="glyph"
         className={styles.walletMark}
         {...dyn({ left: badge.left, top: badge.top, width: badge.badgeWidth, height: badge.badgeHeight })}
-        title={badge.details.join("\n")}
+        title={`${countWords(badge.count, badge.side, `${badge.side}s`)} · ${badge.labels.map(label => WALLET_LABELS[label].name).join(", ")}`}
         aria-label={openingSingle ? loadingLabel : action}
         disabled={Boolean(single && pending)}
         focusableDisabled
@@ -98,7 +99,6 @@ export function WalletChartMarkers({ badges }: Readonly<{ badges: readonly Badge
                 key={address}
                 variant="ghost"
                 className={styles.walletChoice}
-                title={address}
                 aria-label={opening ? loadingLabel : name}
                 disabled={Boolean(pending)}
                 focusableDisabled

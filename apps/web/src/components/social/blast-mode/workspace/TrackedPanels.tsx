@@ -471,7 +471,7 @@ function TrackedPanelHeader({ name, panel, dispatch, dragDisabled, handleRef, se
         data-panel-drag-handle=""
         disabled={dragDisabled}
         ref={handleRef}
-        title="Drag to move this panel; Escape cancels."
+        title="Drag panel · Esc cancels"
         type="button"
       >
         <GripIcon />

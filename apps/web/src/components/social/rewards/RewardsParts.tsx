@@ -119,7 +119,7 @@ function Amounts({
 }>) {
   return (
     <span className={styles.v}>
-      <b className="num" title={hidden ? undefined : exactAmountsText(amounts, symbol, quoteSymbol)}>
+      <b className="num">
         +
         {masked(
           amounts.coin === 0
@@ -357,7 +357,7 @@ export function CoinGroup({
           {showHistorySummary ? <span>{coinSub(coin, ctx.nowMs)}</span> : null}
         </span>
         <span className={styles.v}>
-          <b aria-label={ctx.hidden ? undefined : exactAmountsText(coin.received, coin.symbol, coin.quoteSymbol)} className="num" title={ctx.hidden ? undefined : exactAmountsText(coin.received, coin.symbol, coin.quoteSymbol)}>{value.top}</b>
+          <b aria-label={ctx.hidden ? undefined : exactAmountsText(coin.received, coin.symbol, coin.quoteSymbol)} className="num">{value.top}</b>
           {value.bottom ? <span className={clsx("num", styles.muted)}>{value.bottom}</span> : null}
         </span>
       </DisclosureButton>
@@ -468,7 +468,7 @@ export function RewardsSideCard({
       data-aside-card=""
     >
       <h3 className={styles.sideH} id="rewards-side-heading">Rewards</h3>
-      <span className={clsx(styles.sideFig, "num")} title={headline.priced ? "Received, at today’s prices" : undefined}>
+      <span className={clsx(styles.sideFig, "num")} title={headline.priced ? "At today’s prices" : undefined}>
         {masked(headline.figure, ctx.hidden)}
       </span>
       <span className={styles.sideSub}>

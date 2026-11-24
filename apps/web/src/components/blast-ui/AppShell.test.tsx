@@ -39,24 +39,17 @@ test("the rail holds its six destinations and the shared Create trigger; Search 
   const html = shell();
   const rail = html.slice(html.indexOf('<nav aria-label="Primary"'), html.indexOf('class="railSpacer"'));
   assert.match(rail, /<a aria-label="Blast home"[^>]*href="\/"/);
-  assert.deepEqual([...rail.matchAll(/title="([^"]+)"/g)].map((match) => match[1]), [
-    "Collapse",
-    "Home",
-    "Swap",
-    "Bonding",
-    "Presales",
-    "Portfolio",
-    "More",
-    "Competitions",
-    "Create",
-  ]);
-  assert.match(rail, /<a aria-current="page" class="navItem" title="Home" href="\/">/);
+  assert.deepEqual([...rail.matchAll(/title="([^"]+)"/g)].map((match) => match[1]), ["Collapse"]);
+  for (const label of ["Home", "Swap", "Bonding", "Presales", "Portfolio", "More", "Competitions", "Create"]) {
+    assert.ok(rail.includes(`>${label}<`));
+  }
+  assert.match(rail, /<a aria-current="page" class="navItem" href="\/">/);
   assert.match(rail, /<button(?=[^>]*aria-haspopup="dialog")(?=[^>]*aria-label="Swap")(?=[^>]*class="navItem")[^>]*><svg[^>]*>.*?<\/svg><span>Swap<\/span><\/button>/s);
   assert.doesNotMatch(rail, /<kbd>/, "no key hints in the rail");
   const bar = html.slice(html.indexOf("<header"), html.indexOf("</header>"));
   assert.match(bar, /<button(?=[^>]*aria-keyshortcuts="\/")(?=[^>]*aria-label="Search")(?=[^>]*title="Search \(\/\)")[^>]*>/);
   assert.match(rail, /<button(?=[^>]*aria-label="Create")(?=[^>]*aria-haspopup="menu")(?=[^>]*class="navItem railCreate")[^>]*><svg[^>]*>.*?<\/svg><span>Create<\/span><\/button>/s);
-  assert.match(rail, /class="navItem" title="Portfolio" href="\/portfolio">/);
+  assert.match(rail, /class="navItem" href="\/portfolio">/);
   assert.ok(!rail.includes('title="Profile"') && !rail.includes('title="Settings"'), "Profile and Settings left the rail");
   assert.ok(!rail.includes("Notifications"));
   // Collapse toggle as the server renders it (the device's choice arrives after hydration).
@@ -84,7 +77,7 @@ test("the account bar groups portfolio value before Fund, then notifications and
   assert.equal(coinWallet.previousElementSibling?.textContent, "Back");
   assert.equal(coinMain.querySelectorAll(".pageWallet").length, 1);
   assert.ok(!bar.includes('USD') && !bar.includes('today'));
-  assert.match(shell({}, "/portfolio"), /<a aria-current="page" class="navItem" title="Portfolio" href="\/portfolio">/);
+  assert.match(shell({}, "/portfolio"), /<a aria-current="page" class="navItem" href="\/portfolio">/);
 });
 
 test("the site's shell has no Blast Mode control", () => {
@@ -254,7 +247,7 @@ test("UI-20: an accessible icon-only Create action precedes the profile and open
   const html = shell();
   const bar = html.slice(html.indexOf('<header'), html.indexOf('</header>'));
   assert.match(bar, /<button[^>]*aria-haspopup="menu"[^>]*aria-expanded="false"[^>]*aria-label="Create"[^>]*class="icon-btn createAction"[^>]*><svg[^>]*>.*?<\/svg><\/button><button[^>]*class="topbarAvatar"/s);
-  assert.equal([...html.matchAll(/title="Create"/g)].length, 2);
+  assert.equal([...html.matchAll(/title="Create"/g)].length, 1);
   assert.doesNotMatch(html, /createFab/);
   for (const path of ["/create", "/presale/0x1", "/portfolio", "/settings"]) {
     const html = shell({}, path);

@@ -1,5 +1,6 @@
 "use client";
 
+import { hoverExcerpt } from "#web/lib/hover-text.ts";
 import { Button, IconButton } from "#web/components/blast-ui/Button.tsx";
 import { NavPending } from "#web/components/blast-ui/NavigationLink.tsx";
 
@@ -13,7 +14,7 @@ import { DexIdentity } from "#web/components/blast-ui/DexIdentity.tsx";
 import { CoinVerifiedMark, CloseIcon } from "#web/components/blast-ui/Icons.tsx";
 import { usePrice } from "../prices/price-client";
 import { useShellActions } from "#web/components/blast-ui/shell-actions.tsx";
-import { bxAgo, fillPercent, NO_VALUE, signPct, timeUntil } from "@blast/core/web/format.ts";
+import { bxAgo, fillPercent, NO_VALUE, signPct, timeUntil, utc } from "@blast/core/web/format.ts";
 import type { HomeCoin, HomeWindow } from "@blast/core/web/contracts/home.ts";
 import type { SocialTradeCoin } from "@blast/core/web/contracts/trades.ts";
 
@@ -123,7 +124,7 @@ function CoinIdentity({ coin, id, buyAmount }: Readonly<{ coin: HomeCoin; id: st
           {coin.verified_team ? <CoinVerifiedMark /> : null}
         </span>
         <span className={clsx(styles.coinName, styles.coinMeta)}>
-          {distinct ? <span className={styles.coinNameText} title={coin.name}>{coin.name}</span> : null}
+          {distinct ? <span className={styles.coinNameText} title={hoverExcerpt(coin.name)}>{coin.name}</span> : null}
           {venue ? <span className={styles.coinVenue}><DexIdentity iconOnly venue={venue} /></span> : null}
         </span>
       </span>
@@ -138,7 +139,7 @@ function MarketValue({ value, loading, name }: Readonly<{ value: string | null; 
 
 function marketObservation(asOfMs: number | null, nowMs: number) {
   if (asOfMs === null || nowMs - asOfMs <= 120_000) return undefined;
-  return `Stale market data · last observed ${new Date(asOfMs).toISOString()}`;
+  return `Last price update ${utc(asOfMs)}`;
 }
 
 function MarketPrice({ amount, at, loading, observed }: Readonly<{ amount: string | null; at: number | null; loading: boolean; observed?: string }>) {
@@ -185,7 +186,7 @@ function PriceChangeCells({ coin, window, observed }: Readonly<{ coin: HomeCoin;
   const bps = window === "1h" ? coin.mobile_market?.change_1h_bps : coin.change_24h_bps;
   if (coin.price_usd === null || bps == null) return null;
   const since = window === "24h" && coin.change_24h_from_ms !== undefined
-    ? `Price change since the first priced observation at ${new Date(coin.change_24h_from_ms).toUTCString()}`
+    ? `Since the first price on ${utc(coin.change_24h_from_ms)}`
     : undefined;
   return <>
     <span className={clsx("num", styles.change, styles.desktopChange, bps >= 0 ? styles.up : styles.down)} title={since}>

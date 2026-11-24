@@ -1,5 +1,6 @@
 "use client";
 
+import { hoverExcerpt } from "#web/lib/hover-text.ts";
 import { coinLogoUrl, useCoinImages } from "#web/components/blast-ui/coin-images.ts";
 import { CoinMark } from "#web/components/blast-ui/CoinMark.tsx";
 import { coreCoin } from "@blast/core/modules/social/portfolio/core-coins.ts";
@@ -27,7 +28,7 @@ import { actorName, eventSentence, eventUsd, explorerTxUrl, followersText, parti
 export function When({ atMs, nowMs, txUrl }: Readonly<{ atMs: number; nowMs: number; txUrl?: string | null }>) {
   const hydrated = useHydrated();
   const title = hydrated ? fullDate(atMs) : `${fullDate(atMs, "UTC")} UTC`;
-  const time = <time dateTime={new Date(atMs).toISOString()} title={title}>{bxAgo(atMs, nowMs)}</time>;
+  const time = <time dateTime={new Date(atMs).toISOString()} title={txUrl ? undefined : title}>{bxAgo(atMs, nowMs)}</time>;
   if (!txUrl) return <span className={styles.when}>{time}</span>;
   return (
     <a className={styles.when} href={txUrl} rel="noopener noreferrer" target="_blank" title={title}>
@@ -49,16 +50,16 @@ function Name({ participant }: Readonly<{ participant: HomeParticipant }>) {
   if (actor.type === "account") {
     return (
       <>
-        <Link className={styles.name} title={actorName(actor)} href={actor.path}>{actorName(actor)}</Link>
+        <Link className={styles.name} title={hoverExcerpt(actorName(actor))} href={actor.path}>{actorName(actor)}</Link>
         {actor.verified ? <VerifiedBadge className="verified" /> : null}
       </>
     );
   }
   const url = explorerAccountUrl(actor.address);
   return url ? (
-    <a className={clsx(styles.name, "mono")} href={url} rel="noopener noreferrer" target="_blank" title={actor.address}>{actor.short}</a>
+    <a className={clsx(styles.name, "mono")} href={url} rel="noopener noreferrer" target="_blank" title="View wallet on explorer">{actor.short}</a>
   ) : (
-    <span className={clsx(styles.name, "mono")} title={actor.address}>{actor.short}</span>
+    <span className={clsx(styles.name, "mono")}>{actor.short}</span>
   );
 }
 

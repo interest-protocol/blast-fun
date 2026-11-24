@@ -217,12 +217,12 @@ test("chart timestamps and explanatory captions are omitted while empty and fail
   assert.match(render(history, true), /Price history could not load/);
 });
 
-test("bounded last-price text retains the full decimal and denomination for inspection", () => {
+test("the last price shows its readable amount and denomination as plain text", () => {
   const price = "0.000199795432711782189195387208639779";
   const quote = { coin_type: "test::sui::TSUI", symbol: "TSUI", price, as_of_ms: FIXTURE_NOW, points: history.points, change_24h_bps: null };
   const html = chart({ ...history, price_usd: null, points: [], quote });
   assert.match(html, /0\.0002<span>TSUI<\/span>/, "a readable price, never e-notation");
-  assert.ok(html.includes(`Inspect full coin price: ${price} TSUI`));
+  assert.doesNotMatch(html, /Inspect full coin price/);
   assert.doesNotMatch(html, /USD price unavailable/);
   assert.doesNotMatch(html, /today/);
 });

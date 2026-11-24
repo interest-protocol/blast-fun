@@ -55,7 +55,7 @@ function PresaleChip({ presale, detail = false }: Readonly<{ presale: NonNullabl
 
     >
       <PresaleMark coinType={presale.coin_type} presaleId={presale.presale_id} size={20} src={presale.icon_url} />
-      {detail ? <span className={styles.symbol} title={presale.symbol}>{presale.symbol}</span> : presale.symbol}
+      {detail ? <span className="ticker">{presale.symbol}</span> : presale.symbol}
       {presale.verified_team ? <CoinVerifiedMark size="sm" /> : null}
     </Link>
   );
@@ -280,7 +280,7 @@ function Header({ post, nowMs, labelId }: Readonly<{ post: PostView; nowMs: numb
   }
   return (
     <>
-      <span className={clsx(styles.name, styles.addr)} id={labelId} title={header.address}>
+      <span className={clsx(styles.name, styles.addr)} id={labelId}>
         {header.short}
       </span>
       <span className={styles.meta}>
@@ -399,7 +399,7 @@ function PostFooter({ item, post, nowMs }: Readonly<{ item: FeedItem; post: Post
         <div className={styles.footL}>
           <RocketButton count={post.rockets} entryId={post.entryId} />
           {post.through ? (
-            <span className={styles.thru} title="People who acted through this post">
+            <span className={styles.thru} title="Through this post">
               <PeopleIcon />
               <b className={styles.num}>{post.through.people.toLocaleString("en-US")}</b> {post.throughWord}
               <span className={styles.thruAmt}>

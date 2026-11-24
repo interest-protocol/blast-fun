@@ -1,5 +1,6 @@
 "use client";
 
+import { hoverExcerpt } from "#web/lib/hover-text.ts";
 import { pollInterval } from "#web/lib/query/polling.ts";
 import { queryKeys } from "#web/lib/query/keys.ts";
 import { wholeUsd } from "./competition-volume.ts";
@@ -110,7 +111,7 @@ function MemberRow({ member, you = false }: Readonly<{ member: CompetitionMember
           {member.rank ?? "—"}
         </span>
         <ShellAvatar size={34} viewer={{ accountId: member.account_id, avatarUrl: member.avatar_url, callsign: member.callsign }} />
-        <Link className={styles.name} href={`/@${member.callsign}`} title={name}>
+        <Link className={styles.name} href={`/@${member.callsign}`} title={hoverExcerpt(name)}>
           {you ? <>You<span className="sr"> ({name})</span></> : name}
         </Link>
         <span className={`num ${styles.volume}`}>
@@ -145,6 +146,7 @@ function MemberRow({ member, you = false }: Readonly<{ member: CompetitionMember
               </InspectValue>
               <CopyButton
                 label={`Copy wallet address ${address}`}
+                title="Copy wallet address"
                 onCopy={async () => {
                   await navigator.clipboard.writeText(address);
                   return true;

@@ -125,7 +125,7 @@ test("Home distinguishes first-observation changes from full 24-hour changes and
   try {
     assert.equal(young.window.document.querySelector(".price")?.textContent, "$1.00");
     const shortChange = young.window.document.querySelector(".desktopChange");
-    assert.match(shortChange?.getAttribute("title") ?? "", /first priced observation at Fri, 20 Nov 2026 12:00:00 GMT/);
+    assert.match(shortChange?.getAttribute("title") ?? "", /first price on Nov 20, 12:00 UTC/);
     assert.match(shortChange?.textContent ?? "", /\+10%$/);
     for (const kind of [".desktopChange", ".mobileChange"]) {
       assert.equal(young.window.document.querySelector(`${kind} [aria-hidden="true"]`)?.textContent?.trim(), "≤24h");

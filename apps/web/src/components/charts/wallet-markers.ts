@@ -4,9 +4,9 @@ import { chartTimestamp } from "./tradingview-model.ts";
 import { WALLET_LABELS, type WalletLabel } from "#web/components/launchpad/activity/wallet-labels.ts";
 
 const orderedLabels = Object.keys(WALLET_LABELS) as WalletLabel[];
-type Counts = { trades: number; labels: Map<WalletLabel, number>; wallets: Map<string, number> };
+type Counts = { trades: number; labels: Set<WalletLabel>; wallets: Map<string, number> };
 
-const emptyCounts = (): Counts => ({ trades: 0, labels: new Map(), wallets: new Map() });
+const emptyCounts = (): Counts => ({ trades: 0, labels: new Set(), wallets: new Map() });
 
 function rememberWallet(wallets: Map<string, number>, address: string, timestampMs: number) {
   wallets.set(address, Math.max(wallets.get(address) ?? timestampMs, timestampMs));
@@ -43,7 +43,7 @@ export function walletMarkers(
     const counts = group[trade.side];
     counts.trades++;
     rememberWallet(counts.wallets, trade.address, trade.timestampMs);
-    for (const label of trade.labels) counts.labels.set(label, (counts.labels.get(label) ?? 0) + 1);
+    for (const label of trade.labels) counts.labels.add(label);
     byTime.set(bucket, group);
   }
   return [...byTime].sort(([a], [b]) => a - b).flatMap(([bucket, group]) =>
@@ -51,14 +51,9 @@ export function walletMarkers(
       const { trades: count, labels: counts, wallets } = group[side];
       if (!counts.size) return [];
       const labels = orderedLabels.filter((key) => counts.has(key));
-      const description = labels.map((key) => {
-        const count = counts.get(key)!;
-        return `${count} ${WALLET_LABELS[key].name} ${side}${count === 1 ? "" : "s"}`;
-      }).join(", ");
       return [{
         key: walletMarkerKey(page.poolKey, side, bucket),
         time: chartTimestamp(pointAt(bucket)), side, count, labels, wallets, candle: buckets.get(bucket)!,
-        description: `${new Date(bucket).toISOString()} · ${page.source === "curve" ? "Bonding curve" : page.venue} · ${description}`,
       }];
     })
   );
@@ -67,7 +62,7 @@ export function walletMarkers(
 type WalletMarker = ReturnType<typeof walletMarkers>[number];
 export type PlottedWalletMarker = WalletMarker & { seriesIndex: number; price: number };
 type Point = { x: number; y: number };
-type Group = { side: "buy" | "sell"; slot: number; count: number; labels: Set<WalletLabel>; points: (Point & { key: string })[]; details: string[]; wallets: Map<string, number> };
+type Group = { side: "buy" | "sell"; slot: number; count: number; labels: Set<WalletLabel>; points: (Point & { key: string })[]; wallets: Map<string, number> };
 
 const clamp = (value: number, low: number, high: number) => Math.max(low, Math.min(high, value));
 
@@ -88,11 +83,10 @@ export function walletMarkerBadges<T extends WalletMarker>(
     if (!point || point.x < 0 || point.x >= width || point.y < 0 || point.y >= height) continue;
     const slot = Math.floor(point.x / slotWidth);
     const key = mark.side + slot;
-    const group: Group = groups.get(key) ?? { side: mark.side, slot, count: 0, labels: new Set(), points: [], details: [], wallets: new Map() };
+    const group: Group = groups.get(key) ?? { side: mark.side, slot, count: 0, labels: new Set(), points: [], wallets: new Map() };
     group.count += mark.count;
     mark.labels.forEach(label => group.labels.add(label));
     group.points.push({ ...point, key: mark.key });
-    group.details.push(mark.description);
     mark.wallets.forEach((timestampMs, address) => rememberWallet(group.wallets, address, timestampMs));
     groups.set(key, group);
   }

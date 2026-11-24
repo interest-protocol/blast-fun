@@ -146,7 +146,7 @@ export function PoolCandleChart({
             intervalMs={model.intervalMs}
             timeline={model.timeline}
             priceFormatter={model.format}
-            label={showMarkers ? [label, ...model.markers.map((m) => m.description)].join(". ") : label}
+            label={label}
             onProject={project}
             projectionKey={`${touch}:${tradeKey}`}
             onReady={({ chart, host, series: drawn }) => {
@@ -289,7 +289,7 @@ function ChartTime({ at, prefix }: Readonly<{ at: number; prefix?: string }>) {
   const date = new Date(at * 1000);
   const iso = date.toISOString();
   const time = iso.slice(11, date.getUTCSeconds() === 0 ? 16 : 19);
-  return <time className={styles.inspectionContext} dateTime={iso} title={iso.replace("T", " ").replace(".000Z", " UTC")}>{prefix}{shortUtcDate(date)} · {time} UTC</time>;
+  return <time className={styles.inspectionContext} dateTime={iso}>{prefix}{shortUtcDate(date)} · {time} UTC</time>;
 }
 
 function PriceReadout({ value, at, inspected, unit }: Readonly<{ value: string; at: number | null; inspected: boolean; unit?: string }>) {

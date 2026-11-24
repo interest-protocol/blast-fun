@@ -178,7 +178,7 @@ function ScheduleRow({ schedule, hidden, nowMs, onInspectRecipient, claim, recei
   const balance = (value: bigint | undefined, label: string) => <ScheduleBalance value={value} label={label} schedule={schedule} hidden={hidden} symbol={view.symbol} />;
   return (
     <article aria-label={`${view.name} vesting schedule`} className={overviewStyles.row} data-compact={compact || undefined} data-list-row={schedule.schedule_id}>
-      <Link className={overviewStyles.identity} href={href} title="View schedule">
+      <Link className={overviewStyles.identity} href={href}>
         <span className={styles.coinMark}><CoinMark
           coin={{ key: schedule.coin_type, coinType: schedule.coin_type, iconUrl: schedule.coin_icon_url, symbol: view.symbol, round: false }}
           size={40}

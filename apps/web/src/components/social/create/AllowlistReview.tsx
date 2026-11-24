@@ -1,5 +1,6 @@
 "use client";
 
+import { hoverExcerpt } from "#web/lib/hover-text.ts";
 import { LoadingIndicator } from "#web/components/blast-ui/LoadingIndicator.tsx";
 import { AlertCircleIcon } from "#web/components/blast-ui/Icons.tsx";
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
@@ -64,7 +65,7 @@ export function AllowlistReview({ parsed, fileName, symbol, busy, errors, upload
       {invalid ? <InvalidAllowlist errors={errors} fileName={fileName} focus={focus} parsed={parsed} symbol={symbol} uploadError={uploadError} /> : (
         <>
           <div className={cx("cr-list-header")} ref={focus} tabIndex={-1}>
-            <SheetHeading id="cr-list-title" lead={<span className={cx("cr-list-filename")} title={fileName}>{fileName}</span>} title="Review your allowlist" />
+            <SheetHeading id="cr-list-title" lead={<span className={cx("cr-list-filename")} title={hoverExcerpt(fileName)}>{fileName}</span>} title="Review your allowlist" />
             <p className={cx("cr-list-summary")}>{parsed.n.toLocaleString("en-US")} wallets · Limits: {formatAmount(parsed.minAmount)}–{formatAmount(parsed.maxAmount)} {symbol}</p>
             {!saved ? <p>Accepting replaces your existing allowlist.</p> : null}
           </div>
@@ -112,7 +113,7 @@ function InvalidAllowlist({ parsed, errors, fileName, symbol, uploadError, focus
   return <>
     <header className={cx("cr-csv-header")}>
       <div aria-labelledby="cr-list-title" ref={focus} tabIndex={-1}>
-        <SheetHeading id="cr-list-title" lead={<span className={cx("cr-csv-filename")} title={fileName}>{fileName}</span>} title="Fix your CSV" />
+        <SheetHeading id="cr-list-title" lead={<span className={cx("cr-csv-filename")} title={hoverExcerpt(fileName)}>{fileName}</span>} title="Fix your CSV" />
       </div>
       <ErrorSummary affected={affected} issueCount={issueCount} reported={errors.length > 0} rowCount={parsed.rowCount} />
       {issueCount > 5 ? <ul aria-label="Issue categories" className={cx("cr-csv-categories")}>

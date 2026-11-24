@@ -46,10 +46,7 @@
 .copyControl { position: absolute; right: 0; top: 0; }
 .copy { display: grid; place-items: center; width: max(44px, 2.75rem); height: max(44px, 2.75rem); color: var(--muted); border-radius: var(--r-button); transition: transform var(--t1) var(--ease); }
 .copy:active { transform: scale(.97); }
-.tooltip { display: none; position: absolute; z-index: 4; right: 0; bottom: calc(100% - 0.25rem); padding: 0.375rem 0.5625rem; background: var(--ink); color: var(--card); border-radius: var(--r-button); font-size: 0.75rem; width: max-content; max-width: 13.75rem; pointer-events: none; }
-.copyControl:focus-within .tooltip { display: block; }
 @media (hover: hover) and (pointer: fine) {
-  .copyControl:hover .tooltip { display: block; }
   .copy:hover { background: var(--hair); }
 }
 .copyError { display: block; font-size: 0.75rem; line-height: 1.5; color: var(--danger, #a82041); }

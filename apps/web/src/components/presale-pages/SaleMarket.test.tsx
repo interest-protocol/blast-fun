@@ -335,7 +335,7 @@ test("a graduated pool shows its latest quote price when USD is unavailable", ()
     quote: { coin_type: market.quote.type, symbol: market.quote.symbol, price: "0.0123", as_of_ms: FIXTURE_NOW },
   });
   const html = renderToStaticMarkup(withQueryClient(client, <SaleMarket nowMs={FIXTURE_NOW} sale={sale} terms={detail.terms} />));
-  assert.match(html, /Inspect full coin price: 0\.0123 USDC/);
+  assert.match(html, /<span>Price<\/span><strong>(?:(?!<\/strong>).)*0\.0123.*USDC/);
   assert.doesNotMatch(html, /\+\$0\.0137/);
   client.clear();
 });

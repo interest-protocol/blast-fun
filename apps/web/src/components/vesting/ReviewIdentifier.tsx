@@ -33,7 +33,6 @@ export function ReviewIdentifier({ label, value, coinType = false }: Readonly<{
             return false;
           }
         }} />
-        <span className={styles.tooltip} role="tooltip">{copyLabel}</span>
       </span>
       <span className={styles.copyError} role="status">
         {copyError ? "Couldn’t copy. Open the full value to select and copy it." : ""}

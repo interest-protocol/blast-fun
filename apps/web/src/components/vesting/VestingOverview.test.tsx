@@ -187,7 +187,7 @@ test("overview shows actual schedule amounts and timing without implying the vie
     assert.match(html, /<progress[^>]+aria-valuetext="50% unlocked"[^>]+value="50"/);
     assert.match(text, /Next unlock 1 Jan/);
     assert.match(html, /<time datetime="1970-01-01T00:00:06\.001Z"/i);
-    assert.match(html, /title="View schedule"/);
+    assert.match(html, /href="\/vesting\//);
     assert.doesNotMatch(html, /<details[^>]*open/);
     assert.match(html, /<button[^>]*disabled=""[^>]*aria-haspopup="dialog"[^>]*>.*?Claim vested coins/);
     assert.match(html, /aria-label="Inspect recipient for Sui"/);
@@ -206,7 +206,7 @@ test("compact rows keep availability and timing outside their native secondary d
   window.history.replaceState({}, "", "/portfolio/vestings");
   await act(async () => root.render(<AppRouterContext value={router}><QueryProvider client={client}><SocialViewerProvider signedIn callsign="compact-details-test"><VestingOverview embedded nowMs={5001} /></SocialViewerProvider></QueryProvider></AppRouterContext>));
   const row = host.querySelector<HTMLElement>("[data-list-row]")!;
-  const link = row.querySelector<HTMLAnchorElement>('a[title="View schedule"]')!;
+  const link = row.querySelector<HTMLAnchorElement>('a[href^="/vesting/"]')!;
   const details = row.querySelector<HTMLDetailsElement>("details")!;
   const summary = details.querySelector("summary")!;
   assert.equal(details.open, false);
@@ -350,7 +350,7 @@ test("unpriced AFTEST receipts keep exact availability and locked timing without
   const available = host.querySelector(`[data-list-row="${receiving.schedule_id}"]`)!;
   assert.ok(available.querySelector('[aria-label="Inspect full available AFTEST: 81,297,878.320681999 AFTEST"]'));
   assert.match(available.textContent!, /Claim vested coins/);
-  assert.equal(available.querySelector('a[title="View schedule"]')?.getAttribute("href"), `/vesting/${receiving.schedule_id}`);
+  assert.equal(available.querySelector('a[href^="/vesting/"]')?.getAttribute("href"), `/vesting/${receiving.schedule_id}`);
   const waiting = host.querySelector(`[data-list-row="${locked.schedule_id}"]`)!;
   assert.match(waiting.textContent!, /First unlock 16 Nov/);
   assert.match(waiting.querySelector("time")?.dateTime ?? "", /^2026-11-16T/);
