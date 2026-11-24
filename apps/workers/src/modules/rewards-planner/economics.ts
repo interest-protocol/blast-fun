@@ -1,7 +1,27 @@
 import { assertPrice, type Price } from "#workers/modules/reward-plan/prices.ts";
+import type { Frozen } from "#workers/modules/reward-plan/plan.ts";
 
 export const DAY_MS = 86_400_000n;
 export const MAX_POSITIVE_LEAVES = 65_536n;
+
+/** Compare the USD value of the holder budget without rounding either asset. */
+export function meetsPayoutMinimum(
+  quote: bigint,
+  quotePrice: Frozen["quotePrice"],
+  minimumUsd: number,
+  meme = 0n,
+  memePrice: Frozen["memePrice"] = null,
+): boolean {
+  if (quote <= 0n || quotePrice === null) return false;
+  const quoteNumerator = quote * BigInt(quotePrice.numerator);
+  const quoteDenominator = BigInt(quotePrice.denominator);
+  const minimum = BigInt(minimumUsd);
+  if (memePrice === null) return quoteNumerator >= minimum * quoteDenominator;
+  const memeNumerator = meme * BigInt(memePrice.numerator);
+  const memeDenominator = BigInt(memePrice.denominator);
+  return quoteNumerator * memeDenominator + memeNumerator * quoteDenominator >=
+    minimum * quoteDenominator * memeDenominator;
+}
 
 export function qualifies(weight: bigint, tokenUsd: Price): boolean {
   assertPrice(tokenUsd);

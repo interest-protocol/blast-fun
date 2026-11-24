@@ -14,7 +14,7 @@ import { urlAs } from "../../../../../packages/core/test/fixtures/modules/databa
 import { assertAccountLeaves, type CheckIdentities } from "#workers/modules/reward-plan/beneficiaries.ts";
 import { settlementEvidence } from "#workers/modules/reward-plan/gas-settlement.ts";
 import { json, frozenSchema, planCommitment, readPlan, type Frozen } from "#workers/modules/reward-plan/plan.ts";
-import { discoverPeriods, freezePeriod, fillIdentityGaps, qualifyPage, allocatePage, reservePlan } from "../rewards-planner/planner.ts";
+import { discoverPeriods, freezePeriod, fillIdentityGaps, qualifyPage, allocatePage, reservePlan, retrySkippedPeriod } from "../rewards-planner/planner.ts";
 import { buildManifest, uploadManifest, type ImmutableManifestStorage } from "../rewards-planner/manifest.ts";
 import { DAY_MS } from "../rewards-planner/economics.ts";
 import { historicalFunds, historicalTreasury } from "../rewards-planner/history.ts";
@@ -271,6 +271,7 @@ test("fresh vault planning, immutable manifests, exact reservations and signed c
     const joeyVault = "0xc0d256dae91bf37c3c551bc1ed1eeeefbe56d9de6c5c44e11d76288e66403c0d";
     const joeyInputs = {
       ...frozenPlan, vaultId: joeyVault, qualifiers: 0, globalWeight: "0",
+      payoutPolicy: "both-assets-to-holders" as const,
       memeType: "0xbcd73dc8d774982c2da4e07cd1c6803ec29e128821d1ade9e9a7ce4975b44944::joey::JOEY",
       quoteType: "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI",
     };
@@ -352,19 +353,19 @@ test("fresh vault planning, immutable manifests, exact reservations and signed c
     // A later period sees both assets because the skipped period reserved neither.
     await admin.query("UPDATE reward_test_delayed SET applied_checkpoint=1");
     await admin.query("INSERT INTO reward_test_vaults VALUES($1,$2,'launch',$3,$4,$5,1,1000,10)",[joeyVault,id("0xef"),memeType,quoteType,id("0xdd")]);
-    const joeyCollected={...collected,bcs:Buffer.from(vaultEventBcs.FeesCollected.serialize({vault_id:joeyVault,gross_meme_amount:100n,gross_quote_amount:150n,protocol_meme_amount:0n,protocol_quote_amount:0n,route_meme_amounts:[100n],route_quote_amounts:[150n]}).toBytes()).toString("base64")};
+    const joeyCollected={...collected,bcs:Buffer.from(vaultEventBcs.FeesCollected.serialize({vault_id:joeyVault,gross_meme_amount:100n,gross_quote_amount:90n,protocol_meme_amount:0n,protocol_quote_amount:0n,route_meme_amounts:[100n],route_quote_amounts:[90n]}).toBytes()).toString("base64")};
     await admin.query("INSERT INTO blast_infra_fixture.transaction_evidence VALUES($1,20,86401000,$2,true,$3)",[digest("8"),key.toSuiAddress(),json([joeyCollected])]);
-    await admin.query("INSERT INTO reward_test_collections SELECT $1,checkpoint,tx_slot,event_slot,$2,fee_split,route_meme_amounts,route_quote_amounts FROM reward_test_collections WHERE vault_id=$3",[joeyVault,digest("8"),vault.objectId]);
+    await admin.query("INSERT INTO reward_test_collections SELECT $1,checkpoint,tx_slot,event_slot,$2,fee_split,route_meme_amounts,ARRAY[90]::numeric[] FROM reward_test_collections WHERE vault_id=$3",[joeyVault,digest("8"),vault.objectId]);
     const backlogPeriod=randomUUID();
     await admin.query("INSERT INTO vault_reward_periods(period_id,network,deployment_fingerprint,vault_id,start_ms,end_ms,status) VALUES($1,'mainnet',$2,$3,1001,86401000,'planning')",[backlogPeriod,fingerprint,joeyVault]);
     const backlogPlan = await freezePeriod(planner, deployment, settings, backlogPeriod);
     const backlog = frozenSchema.parse((await readPlan(watcher, backlogPlan)).inputs);
-    assert.deepEqual([backlog.grossMeme, backlog.grossQuote], ["100", "150"], "both assets carry forward");
+    assert.deepEqual([backlog.grossMeme, backlog.grossQuote], ["100", "90"], "both assets carry forward");
     await qualifyPage(planner, backlogPlan, known);
     await allocatePage(planner, backlogPlan);
     await buildManifest(planner, backlogPlan);
     const backlogManifest = manifestSummary((await readPlan(watcher, backlogPlan)).manifest);
-    assert.deepEqual([backlogManifest.memeAmount, backlogManifest.quoteAmount], ["100", "150"], "a later round pays the queued Meme alongside holder Quote");
+    assert.deepEqual([backlogManifest.memeAmount, backlogManifest.quoteAmount], ["100", "90"], "the combined fee value qualifies below $100 in Quote");
 
     const pagedPeriod=randomUUID(), pagedPlan=randomUUID();
     await admin.query("INSERT INTO vault_reward_periods(period_id,network,deployment_fingerprint,vault_id,start_ms,end_ms,status) VALUES($1,'mainnet',$2,$3,1010,86401000,'planning')",[pagedPeriod,fingerprint,joeyVault]);
@@ -379,5 +380,21 @@ test("fresh vault planning, immutable manifests, exact reservations and signed c
     ],"both assets are paid to holders across pages in canonical address order");
     assert.equal(manifestSummary((await readPlan(watcher,pagedPlan)).manifest).memeAmount,"513",
       "one atomic unit of Meme remains unallocated after rounding");
+
+    const retryPlan = await seedJoeyPlan(7n * DAY_MS, {
+      grossMeme: "100000000", grossQuote: "416000000", qualifiers: 425, globalWeight: "425",
+      memePrice: { numerator: "1", denominator: "1000000", evidence: {} },
+      quotePrice: { numerator: "1", denominator: "1000000", evidence: {} },
+    });
+    const { period_id: retryPeriod } = await readPlan(watcher, retryPlan);
+    await admin.query("UPDATE vault_reward_periods SET status='skipped',inputs=$2 WHERE period_id=$1", [retryPeriod, json({ reason: "low-budget" })]);
+    await admin.query("UPDATE vault_reward_plans SET stage='skipped' WHERE plan_id=$1", [retryPlan]);
+    await admin.query("INSERT INTO vault_reward_holders SELECT $1,'0x'||lpad(to_hex(n),64,'0'),1 FROM generate_series(1,425) AS n", [retryPlan]);
+    await assert.rejects(retrySkippedPeriod(planner, fingerprint, vault.objectId, retryPeriod), { message: "No latest, untouched low-budget reward plan matches this period." });
+    assert.equal(await retrySkippedPeriod(planner, fingerprint, joeyVault, retryPeriod), retryPlan);
+    assert.equal((await readPlan(watcher, retryPlan)).stage, "allocating");
+    await assert.rejects(retrySkippedPeriod(planner, fingerprint, joeyVault, retryPeriod), { message: "No latest, untouched low-budget reward plan matches this period." });
+    assert.equal(await allocatePage(planner, retryPlan), true);
+    assert.equal((await readPlan(watcher, retryPlan)).stage, "proofs");
   } finally { await planner.end();await watcher.end();await admin.end();await database.drop(); }
 });
