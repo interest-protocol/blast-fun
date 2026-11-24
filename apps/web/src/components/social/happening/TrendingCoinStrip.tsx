@@ -5,6 +5,7 @@ import clsx from "clsx";
 import type { ReactNode } from "react";
 import { useShellActions } from "#web/components/blast-ui/shell-actions.tsx";
 import { SkeletonText } from "#web/components/blast-ui/Skeleton.tsx";
+import { hoverExcerpt } from "#web/lib/hover-text.ts";
 import { readablePrice } from "#web/lib/market-format.ts";
 import type { HappeningCoin } from "@blast/core/web/contracts/happening.ts";
 
@@ -55,9 +56,10 @@ function coinLabel(coin: HappeningCoin): string {
 }
 
 /** A coin's card or row: one button that opens the coin's sheet (the rail's and Home's rule), named by what it shows. */
-function OpenCoin({ coin, className, onOpen, children }: Readonly<{ coin: HappeningCoin; className: string; onOpen: (key: string) => void; children: ReactNode }>) {
-  const label = coinLabel(coin);
-  return <button aria-haspopup="dialog" aria-label={label} className={className} onClick={() => onOpen(coinKey(coin))} title={label} type="button">{children}</button>;
+function OpenCoin({ coin, expanded, className, onOpen, children }: Readonly<{ coin: HappeningCoin; expanded: boolean; className: string; onOpen: (key: string) => void; children: ReactNode }>) {
+  const name = coin.name && coin.name !== coin.symbol ? coin.name : null;
+  const title = expanded ? name : name ? `${coin.symbol} · ${name}` : coin.symbol;
+  return <button aria-haspopup="dialog" aria-label={coinLabel(coin)} className={className} onClick={() => onOpen(coinKey(coin))} title={title ? hoverExcerpt(title) : undefined} type="button">{children}</button>;
 }
 
 const coinKey = (coin: HappeningCoin) => coin.presale_id ?? "sui";
@@ -77,14 +79,14 @@ export function TrendingCoinStripView({ coins, onOpen, expanded = false, loading
   if (loading) return <StripLoading className={className} detailed={expanded} itemClass={styles.trendingRow} />;
   if (!coins || coins.length === 0) {
     const label = coins ? "No trending coins yet" : "Trending coins are unavailable right now";
-    return <div aria-label={label} className={className} data-aside-card="" role="group"><span className={styles.coinStatus} title={label}>{expanded ? label : <span className="sr">{label}</span>}</span></div>;
+    return <div aria-label={label} className={className} data-aside-card="" role="group"><span className={styles.coinStatus} title={expanded ? undefined : label}>{expanded ? label : <span className="sr">{label}</span>}</span></div>;
   }
   return (
     <div aria-label="Trending coins" className={className} data-aside-card="" role="group">
       {coins.slice(0, 10).map((coin) => {
         const change = coin.change_24h_bps;
         return (
-          <OpenCoin className={styles.trendingRow} coin={coin} key={coin.coin_type} onOpen={onOpen}>
+          <OpenCoin className={styles.trendingRow} coin={coin} expanded={expanded} key={coin.coin_type} onOpen={onOpen}>
             <Mark coin={coin} />
             {expanded ? (
               <>

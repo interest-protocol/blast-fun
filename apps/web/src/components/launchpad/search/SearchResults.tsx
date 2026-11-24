@@ -84,7 +84,7 @@ function LaunchRow({ item, onChoose }: Readonly<{ item: LaunchMatch; onChoose: (
   const { launch } = item;
   return (
     <li>
-      <Link className={styles.row} href={coinPagePath(launch.coinType)} title={`Launch ID ${launch.launchId}`} onClick={onChoose}>
+      <Link className={styles.row} href={coinPagePath(launch.coinType)} onClick={onChoose}>
         <LaunchTitle launch={launch} />
         <MatchReason item={item} />
         <span className={styles.identity}>

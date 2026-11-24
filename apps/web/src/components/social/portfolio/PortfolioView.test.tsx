@@ -378,9 +378,12 @@ test("vesting waits for its claimed total, then enables the next claim and rejec
 test("unlisted coins render their amounts and sync status without a presale action", async () => {
   const html = await render({ walletSync: "syncing", coins: [{
     key: "test-sui", name: "TEST_SUI", symbol: "TSUI", icon: "", round: true, presaleId: null,
-    usd: null, quantity: null, quantityText: "10,000,000",
+    usd: null, quantity: null, quantityText: "10,000,000.123456789", compactQuantityText: "10M",
   }] });
-  assert.match(text(html), /TEST_SUI 10,000,000 TSUI/);
+  assert.match(text(html), /TEST_SUI 10M TSUI/);
+  const balance = document.querySelector<HTMLButtonElement>('[data-k="test-sui"] [data-inspect-value]')!;
+  assert.equal(balance.title, "");
+  assert.equal(balance.getAttribute("aria-label"), "Inspect full balance: 10,000,000.123456789 TSUI");
   assert.match(html, /aria-label="Syncing your wallet coins"/);
   assert.match(html, /<div[^>]+data-k="test-sui"/);
   assert.doesNotMatch(html, /<button[^>]+data-k="test-sui"/);

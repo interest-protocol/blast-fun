@@ -48,6 +48,8 @@ test("a trade holds once, a burst stays quiet and remounting historical data can
   const slot = host.querySelector("[data-chart-last-trade]");
   assert.ok(slot);
   assert.equal(slot.textContent, "Last trade 12m agoSell · 0.25\u00a0SUI");
+  assert.equal(slot.querySelector("[data-trade-cue]")?.hasAttribute("title"), false);
+  assert.match(slot.querySelector("time")?.getAttribute("title") ?? "", /UTC$/);
   assert.equal(effects.all.length, 0);
   await render(1);
   assert.equal(slot.textContent, "Last trade just nowBuy · 0.1\u00a0SUI");
@@ -87,7 +89,7 @@ test("a trade holds once, a burst stays quiet and remounting historical data can
   await render(6, "buy", "reopened", symbol, 18_446_744_073_709_551_615n);
   const full = host.querySelector("[data-trade-cue]")!;
   assert.equal(full.textContent, `Buy · 18,446,744,073.7 ${symbol}`);
-  assert.ok(full.getAttribute("title")?.includes(`18446744073.709551615 ${symbol}`));
+  assert.equal(full.hasAttribute("title"), false);
   assert.ok(host.querySelector('[aria-hidden="true"][data-width-sample]')?.getAttribute("data-width-sample")?.endsWith(symbol));
   wallClock += 20_000;
   await act(async () => document.dispatchEvent(new dom.window.Event("visibilitychange")));

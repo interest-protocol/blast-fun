@@ -27,7 +27,8 @@ const draft: CreationInput = {
 };
 test("a valid custom summary retains the exact amount and completed dates", () => {
   const html = renderToStaticMarkup(<LiveSummary draft={draft} coin={coin} />);
-  assert.match(html, /title="0.000000003 SUI"/);
+  assert.match(html, />0\.000000003 SUI<\/div>/);
+  assert.doesNotMatch(html, /title="0\.000000003 SUI"/);
   assert.match(html, /2 release dates/);
   assert.doesNotMatch(html, /Add a valid amount|Complete schedule/);
 });
@@ -62,7 +63,8 @@ test("a single checkpoint has one date and retains its exact amount", () => {
     />,
   );
   assert.match(html, /≈ 124.9683M SUI/);
-  assert.match(html, /title="124968397.112711982 SUI"/);
+  assert.match(html, /aria-label="Inspect full vesting amount: 124968397\.112711982 SUI"/);
+  assert.doesNotMatch(html, /title="124968397\.112711982 SUI"/);
   assert.match(html, /1 release date/);
   assert.match(html, /Release date/);
   assert.doesNotMatch(html, /1 releases|First release|Final release/);

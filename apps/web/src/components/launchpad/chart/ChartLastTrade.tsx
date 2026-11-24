@@ -1,7 +1,7 @@
 "use client";
 
 import { useContext, useEffect, useLayoutEffect, useMemo, useRef, type RefObject } from "react";
-import { atomsText, HIDDEN_AMOUNT } from "@blast/core/web/format.ts";
+import { HIDDEN_AMOUNT } from "@blast/core/web/format.ts";
 import { atLeastPow10, exactAtoms, exactDecimal, multiplyExact } from "@blast/core/web/exact-amount.ts";
 import { createQuoteOf } from "@blast/core/web/contracts/create.ts";
 import { compareEventCursors } from "@blast/core/modules/launchpad-contract/cursor.ts";
@@ -95,9 +95,7 @@ function LastTradeValue({ trade, decimals, symbol, hidden, highlight, fill }: Re
 }>) {
   const side = trade.side === "sell" ? "Sell" : highlight ? "Large buy" : "Buy";
   const amount = decimals === null ? null : hidden ? HIDDEN_AMOUNT : formatAmountShort(trade.quoteAmount, decimals) + " " + symbol;
-  const exact = decimals === null ? null : atomsText(trade.quoteAmount, decimals) + " " + symbol;
-  const title = hidden ? undefined : [exact, formatTime(trade.timestampMs)].filter(Boolean).join(" · ");
-  return <span className={styles.value} data-trade-cue={trade.side} title={title}>
+  return <span className={styles.value} data-trade-cue={trade.side}>
     <span aria-hidden="true" className={styles.fill} ref={fill} />
     <span className={styles.text}>{side}{amount === null ? null : " · " + amount}</span>
   </span>;

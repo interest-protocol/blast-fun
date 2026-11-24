@@ -61,7 +61,7 @@ test("§3.1 a named commit: avatar link, name with the rosette, @handle · 6m li
   assert.match(text(html), /BLAST?\$2,000MRDN/i);
   assert.match(html, /<div class="actSummary"><span class="act">.*Blast<\/span><span class="actAmt" role="region" aria-label="Transaction amount" tabindex="0">\$2,000<\/span><\/div><a class="tchip" href="\/presale\/0x(ab)+">/s);
   assert.match(html, /<p class="why">Been using their app for months\. First presale I have joined with real size\.<\/p>/);
-  assert.match(html, /<span class="thru" title="People who acted through this post">.*<b class="num">6<\/b> blasted too<span class="thruAmt"> · <span class="num">\$3\.2K<\/span>/s);
+  assert.match(html, /<span class="thru" title="Through this post">.*<b class="num">6<\/b> blasted too<span class="thruAmt"> · <span class="num">\$3\.2K<\/span>/s);
   // While the commit dialog is not built, "Blast" is a link to the presale page; with it, a dialog button.
   assert.match(html, ctaLink("Blast", "\\/presale\\/0x(ab)+"));
   const withDialog = at(<FeedOverlaysProvider value={{ openCommit: () => undefined }}><PostCard item={feedItem()} nowMs={FIXTURE_NOW} /></FeedOverlaysProvider>);
@@ -92,7 +92,7 @@ test("§3.8 big commit: Big blast, the wallet's gradient and short address, no n
   assert.match(html, /<span class="lead"><span aria-hidden="true" class="wav"><svg[^>]*><defs><linearGradient id="wav-\d+"[^>]*><stop offset="0" stop-color="hsl\(\d+ 70% 66%\)"/);
   // No inline style anywhere: the page's CSP allows none.
   assert.doesNotMatch(html, / style="/);
-  assert.match(html, /<span class="name addr" id="post-a-5000-1-0-0-head" title="0x1a2b0+9f0e">0x1a2b…9f0e<\/span><span class="meta">· <a/);
+  assert.match(html, /<span class="name addr" id="post-a-5000-1-0-0-head">0x1a2b…9f0e<\/span><span class="meta">· <a/);
 });
 
 test("§3.4 call: CALL, backed at $0.0005, the call card with 4.2× and the empty sparkline place, View presale", () => {

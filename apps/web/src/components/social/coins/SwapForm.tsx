@@ -1,7 +1,6 @@
 "use client";
 import { focusAfterDelay } from "#web/lib/deferred-focus.ts";
 import { AmountPresets } from "./AmountPresets.tsx";
-import { InspectValue } from "#web/components/blast-ui/InspectValue.tsx";
 import { exactText, groupDigits } from "@blast/core/web/exact-amount.ts";
 
 import { instantFeedback } from "#web/components/blast-ui/feedback-motion.ts";
@@ -560,7 +559,7 @@ function SwapDetails({ id, open, onDetail, rows, rate, rateState, showRate }: Re
     <Collapse id={id} open={open}><div className={styles.txDetailSpace}><dl className={clsx(styles.terms, styles.txDet)}>
       {rows.map((row) => (
         <div key={row.label}>
-          <dt>{row.label === "Route" ? <InspectValue label="Route selection" value="Best price across Sui pools">Route</InspectValue> : row.label}</dt>
+          <dt>{row.label}</dt>
           <dd className={clsx(row.numeric && "num", row.tone === "warn" && styles.warnT, row.tone === "down" && styles.down) || undefined}>{row.value}</dd>
         </div>
       ))}

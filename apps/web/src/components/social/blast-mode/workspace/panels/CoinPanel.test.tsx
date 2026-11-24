@@ -1457,7 +1457,7 @@ test("the redesigned panel names the venue, keeps exact figures inspectable, and
     assert.match(document.querySelector("header")!.textContent!, /KSTL.*Kestrel.*Trading on Cetus/);
     assert.deepEqual([...document.querySelectorAll('[role="tab"]')].map((button) => button.getAttribute("aria-label")), ["Chart", "Trades"]);
     assert.ok(document.querySelector('[aria-label^="Inspect full observed USD price"][aria-label$=": 0.0021"]'), "the headline price keeps its exact observation");
-    assert.match(document.body.textContent!, /24h change \+12\.34%/, "the move names its window for assistive technology");
+    assert.match(document.body.textContent!, /\+12\.34% 24h/, "the move shows its window beside the percentage");
     assert.match(document.body.textContent!, /FDV \$2\.1M/);
     assert.doesNotMatch(document.body.textContent!, /Holders512/, "holders live in their own tab, not the hero");
     assert.doesNotMatch(document.querySelector("[data-chart-frame]")!.textContent!, /bought in 24h/, "participation does not consume the chart frame");

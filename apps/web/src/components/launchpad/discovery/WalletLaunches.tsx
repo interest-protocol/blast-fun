@@ -64,7 +64,7 @@ function WalletList({ address, heading, read }: Readonly<{ address: string; head
       {heading ? (
         <h3 className={styles.heading}>
           Created with{" "}
-          <span aria-hidden="true" title={address}>
+          <span aria-hidden="true">
             {shortId(address)}
           </span>
           <span className="sr-only">wallet {address}</span>

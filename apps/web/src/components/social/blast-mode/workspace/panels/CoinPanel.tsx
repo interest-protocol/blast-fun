@@ -582,7 +582,7 @@ function CoinBoardPrice({ coin, read, curveLaunch, visible, streamed }: Readonly
   return <div aria-label="Market price" role="group" className={focusStyles.boardPrice}>
     <span className={focusStyles.boardPriceFigure}>
       {figure}
-      {(stale || quoteStale) && <span className={styles.stale} title="Last observed more than 2 minutes ago">Stale</span>}
+      {(stale || quoteStale) && <span className={styles.stale} title="Over 2 minutes old">Stale</span>}
     </span>
     <PriceToday bps={loading || coin?.price_usd == null ? null : coin.change_24h_bps} loading={loading} />
   </div>;
@@ -659,15 +659,12 @@ function CoinHero({ checkedAt, coin, pending }: Readonly<{ checkedAt: number | n
       <div className={styles.price}>
         <ObservedPrice checkedAt={checkedAt} observedAt={coin?.price_as_of_ms} price={coin?.price_usd} loading={loading} hidden={hidden} />
         {stale && (
-          <span className={styles.stale} title="Last observed more than 2 minutes ago">
+          <span className={styles.stale} title="Over 2 minutes old">
             Stale
           </span>
         )}
         {loading || coin?.change_24h_bps == null ? null : (
-          <span className={styles.change} title="24h change">
-            <span className="sr">24h change </span>
-            <ChangePill bps={coin?.change_24h_bps} />
-          </span>
+          <ChangePill bps={coin.change_24h_bps} window="24h" />
         )}
       </div>
       {(loading || coin?.fdv_usd != null) && <span className={styles.fdv}>

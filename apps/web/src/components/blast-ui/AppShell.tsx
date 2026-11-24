@@ -291,7 +291,7 @@ function ShellFrame({
         <nav aria-label="Primary" className={styles.rail} data-shell-rail="">
           <RailHeader mini={prefs.railMini} />
           <RailItem current={current} href={HOME_PATH} icon={<HomeIcon />} item="home" label="Home" />
-          <button aria-haspopup="dialog" aria-label="Swap" className={styles.navItem} onClick={runOr("openTrade")} title="Swap" type="button">
+          <button aria-haspopup="dialog" aria-label="Swap" className={styles.navItem} onClick={runOr("openTrade")} type="button">
             <SwapIcon />
             <span>Swap</span>
           </button>
@@ -304,7 +304,6 @@ function ShellFrame({
             data-create-action=""
             handle={createMenu}
             payload="rail"
-            title="Create"
           >
             <PlusIcon />
             <span>Create</span>
@@ -374,7 +373,7 @@ function ShellFrame({
 
         <nav aria-label="Tabs" className={styles.tabbar}>
           <TabItem current={current} href={HOME_PATH} icon={<HomeIcon />} item="home" label="Home" />
-          <button aria-haspopup="dialog" aria-label="Swap" className={styles.tabSwap} onClick={runOr("openTrade")} title="Swap" type="button">
+          <button aria-haspopup="dialog" aria-label="Swap" className={styles.tabSwap} onClick={runOr("openTrade")} type="button">
             <SwapIcon />
             Swap
           </button>
@@ -522,7 +521,7 @@ function RailItem({
   );
   if (href === null) {
     return (
-      <button className={styles.navItem} onClick={onAction} title={label} type="button">
+      <button className={styles.navItem} onClick={onAction} type="button">
         {content}
       </button>
     );
@@ -533,7 +532,6 @@ function RailItem({
       className={styles.navItem}
       href={href}
       prefetch={prefetch}
-      title={label}
     >
       {content}
     </Link>

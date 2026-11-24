@@ -22,7 +22,7 @@ export function CoinParticipants({ symbol, activity, sale, className }: Readonly
       positioner={{ sideOffset: 8, collisionPadding: 16, className: styles.layer }}
       popup={{ className: styles.popup }}
     >
-          <Popover.Title className={styles.title}>{label} · Preview</Popover.Title>
+          <Popover.Title className={styles.title}>{label}</Popover.Title>
           <ul className={styles.people} aria-label="Activity preview">{identities.map(identity => <li key={actorKey(identity)}><ActorCell identity={identity} /></li>)}</ul>
           <Popover.Close render={<Button variant="secondary" size="sm" />}>Close</Popover.Close>
         </PopoverSurface>

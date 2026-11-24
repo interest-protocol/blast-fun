@@ -334,7 +334,7 @@ test("Data Traders searches and pages global PnL without changing Home or creati
       "c:trader15",
     );
     await page.search("trader124");
-    assert.match(document.body.textContent ?? "", /1 trader found/);
+    assert.match(document.body.textContent ?? "", /1 trader found · Ranks are global/);
     assert.match(document.body.textContent ?? "", /Rank 125/);
     await page.click("Trader 124 holdings");
     await page.edit("unsent draft");

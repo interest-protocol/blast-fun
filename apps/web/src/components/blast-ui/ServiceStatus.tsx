@@ -105,7 +105,7 @@ export function ServiceStatus({ mobile = false, navigation = false, popupId }: R
   return (
     <div className={navigation ? styles.navigation : mobile ? styles.mobile : styles.desktop}>
       <Popover.Root open={open} onOpenChange={setOpen}>
-        <Popover.Trigger ref={trigger} className={styles.trigger} aria-label={`Service status: ${label}`} title={navigation ? "Service status" : label} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}>
+        <Popover.Trigger ref={trigger} className={styles.trigger} aria-label={`Service status: ${label}`} title={navigation ? undefined : label} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}>
           <StatusIcon pending={pending} tone={tone} />
           <span className={styles.label}>{navigation ? "Service status" : label}</span>
         </Popover.Trigger>

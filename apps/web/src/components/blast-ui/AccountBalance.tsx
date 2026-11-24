@@ -27,7 +27,7 @@ export function AccountBalance({ hidden, portfolio, onRetry, size = "chip" }: Re
     <Popover.Root>
       <Popover.Trigger
         render={<DisclosureButton size={size}><BalanceChip amount={amount} compactAmount={compactAmount} loading={showLoading} partial={partialNote !== null && amount !== "Portfolio"} /></DisclosureButton>}
-        title={partialNote ?? amount}
+        title={partialNote === null ? undefined : "Some coins have no USD price"}
         aria-label={balanceTriggerLabel(amount, hidden, partialNote)}
         aria-busy={portfolio.status === "loading" || undefined}
         className={styles.accountBalance}

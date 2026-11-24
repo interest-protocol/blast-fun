@@ -119,11 +119,9 @@ export function controlsApply(source: HomeSource): boolean {
 }
 
 export const SORT_LABELS: Readonly<Record<HomeSort, string>> = { relevant: "Relevant", trending: "Volume", newest: "Newest", held: "Most held" };
-export const SORT_HINTS: Readonly<Record<HomeSort, string>> = {
-  relevant: "Most distinct participants, then activity (at most three trades per participant count), then recency",
-  trending: "The most dollars traded, backed or sold in the window, then the most people",
-  newest: "The most recently launched first",
-  held: "The most holders now",
+export const SORT_HINTS: Readonly<Partial<Record<HomeSort, string>>> = {
+  relevant: "Unique participants, then activity (up to three trades per person), then recency",
+  trending: "Trade and presale dollar volume, then unique participants",
 };
 export const WINDOW_LABELS: Readonly<Record<HomeWindow, string>> = { "1h": "1h", "24h": "24h" };
 export const AGE_LABELS: Readonly<Record<HomeAge, string>> = { "24h": "Last 24h", "7d": "Last 7 days", "30d": "Last 30 days", all: "Any time" };

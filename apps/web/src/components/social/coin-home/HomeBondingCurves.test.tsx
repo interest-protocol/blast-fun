@@ -4,6 +4,7 @@ import { QueryClient } from "@tanstack/react-query";
 import { JSDOM } from "jsdom";
 import { renderToStaticMarkup } from "react-dom/server";
 
+import { coinPagePath } from "@blast/core/modules/launchpad-coin/page-key.ts";
 import { parseDiscoveryResponse } from "@blast/core/modules/launchpad-discovery/rows.ts";
 import { BLAST_V1_COINS } from "@blast/core/modules/social/portfolio/core-coins.ts";
 import { QueryProvider } from "#web/lib/query/provider.tsx";
@@ -135,7 +136,8 @@ test("Home ranks the six V2 slots and all four V1 coins together by circulating 
   const legacyRows = dom.querySelectorAll('[aria-label="Graduated bonding curves"] li:has([aria-label="Legacy · Blast V1"])');
   assert.equal(dom.querySelectorAll('[aria-label="Legacy · Blast V1"] svg').length, 0);
   assert.deepEqual(Array.from(legacyRows, (row) => row.querySelector("a")?.textContent?.replace("Known deployer", "")), ["$MANIFESTV1Market cap $243K", "$BLASTV1OurBlastBotMarket cap $99", "$WheelsV1Blast WheelsMarket cap $99", "$HELMETV1Trench Helmet"]);
-  assert.equal(dom.querySelector('a[title="Open $BLAST (OurBlastBot)"] img')?.getAttribute("src"), "/blast-ui/coins/v1-ourblastbot.jpg");
+  const ourBlastBotPath = coinPagePath(BLAST_V1_COINS[2].coinType);
+  assert.equal(dom.querySelector(`a[href="${ourBlastBotPath}"] img`)?.getAttribute("src"), "/blast-ui/coins/v1-ourblastbot.jpg");
 });
 
 test("Home shows Known deployer beside marked curve and V1 coins", () => {

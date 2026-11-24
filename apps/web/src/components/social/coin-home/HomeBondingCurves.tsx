@@ -1,5 +1,6 @@
 "use client";
 
+import { hoverExcerpt } from "#web/lib/hover-text.ts";
 import { coinPagePath } from "@blast/core/modules/launchpad-coin/page-key.ts";
 import { useId, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -130,14 +131,14 @@ function BondingCoinRow({ coin, detail, figures, rowKey, verified }: Readonly<{
   const ticker = symbol ? `$${symbol}` : name ?? shortCoinType(coin.coinType);
   return (
     <li data-list-row={rowKey}>
-      <IntentLink className={styles.row} href={coinPagePath(coin.coinType)} title={symbol && name ? `Open ${ticker} (${name})` : `Open ${ticker}`}>
+      <IntentLink className={styles.row} href={coinPagePath(coin.coinType)}>
         <span className={styles.identity}>
           <span className={styles.tile}>
             <CoinMark coin={{ key: coin.coinType, coinType: coin.coinType, symbol: symbol ?? undefined, iconUrl: legacy?.logoUrl ?? coin.iconUrl, round: false }} size={28} />
           </span>
           <span className={styles.text}>
             <strong className={clsx("coinNamed sm", styles.heading)}>
-              <span className="ticker">{ticker}</span>
+              <span className="ticker" title={!legacy && symbol && name && name !== symbol ? hoverExcerpt(name) : undefined}>{ticker}</span>
               <span className={styles.marks}>
                 {verified ? <CoinVerifiedMark size="sm" /> : null}
                 {legacy ? <CoinLegacyMark /> : null}

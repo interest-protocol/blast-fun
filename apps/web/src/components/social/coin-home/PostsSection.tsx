@@ -1,5 +1,6 @@
 "use client";
 
+import { hoverExcerpt } from "#web/lib/hover-text.ts";
 import clsx from "clsx";
 import Link from "next/link";
 import { useRef, type ReactNode } from "react";
@@ -32,7 +33,7 @@ function PostAuthor({ item, handle = false }: Readonly<{ item: FeedItem; handle?
   const author = actor?.type === "account" ? actor.display_name ?? actor.callsign : actor?.type === "address" ? actor.short : coin?.name ?? "Blast";
   return <div className={styles.postAuthor}>
     {actor?.type === "account" ? <Avatar callsign={actor.callsign} size={30} src={actor.avatar_url} /> : actor?.type === "address" ? <WalletAvatar hue={walletHue(actor.short)} /> : coin ? <PresaleMark coinType={coin.coin_type} presaleId={coin.presale_id} src={coin.icon_url} size={34} /> : <Avatar callsign="blast" size={30} src={null} />}
-    <div className={styles.identText}>{actor?.type === "account" ? <Link className={styles.tName} title={author} href={actor.path}>{author}</Link> : <span className={styles.tName} title={author}>{author}</span>}{handle && actor?.type === "account" ? <span className={styles.coinName} title={`@${actor.callsign}`}>@{actor.callsign}</span> : null}</div>
+    <div className={styles.identText}>{actor?.type === "account" ? <Link className={styles.tName} title={hoverExcerpt(author)} href={actor.path}>{author}</Link> : <span className={styles.tName} title={hoverExcerpt(author)}>{author}</span>}{handle && actor?.type === "account" ? <span className={styles.coinName} title={`@${actor.callsign}`}>@{actor.callsign}</span> : null}</div>
   </div>;
 }
 
@@ -52,7 +53,7 @@ export function PostRow({ item, nowMs, onRead, assetAction }: Readonly<{
   return <li className={styles.item}>
     <article className={clsx(styles.row, styles.postCols)}>
       <PostAuthor item={item} />
-      <Link className={styles.postSummary} href={href} title={[summary, item.why?.text, coin?.symbol].filter(Boolean).join(" · ")}><span>{summary}</span>{item.why ? <small> {item.why.text}</small> : null}</Link>
+      <Link className={styles.postSummary} href={href} title={hoverExcerpt(item.why?.text ?? summary)}><span>{summary}</span>{item.why ? <small> {item.why.text}</small> : null}</Link>
       <div className={styles.postCoin}>{coin ? <Link className={styles.postCoinLink} title={coin.symbol} href={presaleHref(coin.presale_id)}><PresaleMark coinType={coin.coin_type} presaleId={coin.presale_id} src={coin.icon_url} size={20} /><span className={styles.holdingSymbol}>{coin.symbol}</span>{coin.verified_team ? <CoinVerifiedMark size="sm" /> : null}</Link> : null}</div>
       <Link className={styles.postWhen} href={href}><time dateTime={new Date(item.occurred_at_ms).toISOString()} title={new Date(item.occurred_at_ms).toUTCString()}>{ago(item.occurred_at_ms, nowMs)}</time></Link>
     </article>

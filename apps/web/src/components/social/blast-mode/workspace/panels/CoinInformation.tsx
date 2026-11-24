@@ -65,9 +65,10 @@ function ParticipantCount({ activity, loading, side }: Readonly<{
   if (loading) return <SkeletonText>000</SkeletonText>;
   if (!activity) return null;
   const count = activity[side];
-  return <InspectValue label={`24h ${side}`} value={`${count.toLocaleString("en-US")} distinct participants. Indexed trades on every venue from ${new Date(activity.from_ms).toISOString()} to ${new Date(activity.to_ms).toISOString()}. A participant may both buy and sell.`}>
-    {count.toLocaleString("en-US", { notation: "compact", maximumFractionDigits: 1 })}
-  </InspectValue>;
+  const exact = count.toLocaleString("en-US");
+  const compact = count.toLocaleString("en-US", { notation: "compact", maximumFractionDigits: 1 });
+  if (exact === compact) return exact;
+  return <InspectValue label={side} value={exact}>{compact}</InspectValue>;
 }
 
 function CoinMetadata({ asset, coin, loading }: Readonly<{
