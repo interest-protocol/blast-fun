@@ -1,4 +1,6 @@
+import { candleIntervalMs } from "@blast/core/modules/launchpad-contract/venue-history.ts";
 import type { ChartCandle } from "#web/components/launchpad/chart/chart-model.ts";
+import type { DrawnSeries } from "#web/components/launchpad/chart/chart-geometry.ts";
 import {
   exactDecimal,
   exactText,
@@ -26,6 +28,47 @@ export function lineCloseTime(bucket: number, openingAt: number | undefined, int
   return openingAt !== undefined && openingAt >= bucket
     ? Math.max(openingAt + 0.5, Math.min(bucket + interval - 1, priceThrough))
     : Math.max(bucket, priceFrom);
+}
+
+export function sourceLineBounds({ page, source, observedAt, holdAfterMigration }: DrawnSeries, migrationAt?: number, rolling = false) {
+  const curveEnd = source === "curve" && !holdAfterMigration ? migrationAt ?? Infinity : Infinity;
+  const priceThrough = Math.min(rolling ? Infinity : observedAt ?? Infinity, curveEnd);
+  // A venue's first bucket may span the migration, but its line starts only at the migration.
+  const priceFrom = source === "venue" ? migrationAt ?? page.migration?.timestampMs ?? -Infinity : -Infinity;
+  return { priceFrom, priceThrough };
+}
+
+type PricePoint = Readonly<{ timestampMs: number; price: string }>;
+
+/** Anchor both sources at the previous close when the chart reaches the migration. */
+export function poolLinePoints(sources: readonly DrawnSeries[], migrationAt?: number, end = Infinity, rolling = false) {
+  let curveClose: PricePoint | undefined;
+  return sources.map((history) => {
+    const { page, opening, carriedClose, source } = history;
+    const { priceFrom, priceThrough } = sourceLineBounds(history, migrationAt, rolling);
+    const through = Math.min(end, priceThrough);
+    const points = linePoints(page.candles, opening, candleIntervalMs(page.interval), priceFrom, through);
+    const carried = carriedClose && carriedClose.timestampMs <= through ? holdPreviousClose(points, carriedClose, through, false) : points;
+    const bridge = source === "venue" && migrationAt !== undefined && carried.length ? curveClose : undefined;
+    const line = bridge ? holdPreviousClose(carried, bridge, through, true) : carried;
+    if (source === "curve") curveClose = line.at(-1);
+    return line;
+  });
+}
+
+function holdPreviousClose(points: readonly PricePoint[], anchor: PricePoint, through: number, bridge: boolean): readonly PricePoint[] {
+  const first = points[0];
+  if (!first) return anchor.timestampMs < through && Number.isFinite(through)
+    ? [anchor, { ...anchor, timestampMs: through }]
+    : [anchor];
+  if (anchor.timestampMs > first.timestampMs) return points;
+  if (anchor.timestampMs === first.timestampMs) {
+    if (!bridge) return points;
+    const shift = Math.min(0.5, ((points[1]?.timestampMs ?? Infinity) - first.timestampMs) / 2);
+    return [anchor, { ...first, timestampMs: first.timestampMs + shift }, ...points.slice(1)];
+  }
+  const holdUntil = first.timestampMs - 0.5;
+  return holdUntil > anchor.timestampMs ? [anchor, { ...anchor, timestampMs: holdUntil }, ...points] : [anchor, ...points];
 }
 
 /**

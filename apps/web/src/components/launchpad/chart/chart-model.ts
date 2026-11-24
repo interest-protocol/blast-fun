@@ -157,7 +157,7 @@ export function chartSources(state: ChartState): Readonly<{ name: "curve" | "ven
 /** The latest committed checkpoint of either answered source, including one the viewer hid. */
 export function chartLatestTimestamp(state: ChartState): number {
   return Math.max(0, ...[state.curve, state.venue].flatMap((section) =>
-    section && (section.state === "available" || section.state === "stale") ? [section.provenance.timestampMs ?? 0] : [],
+    section && (section.state === "available" || section.state === "stale" || section.state === "empty") ? [section.provenance.timestampMs ?? 0] : [],
   ));
 }
 

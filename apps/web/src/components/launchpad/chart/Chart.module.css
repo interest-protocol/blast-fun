@@ -239,11 +239,12 @@
   container-type: inline-size;
   row-gap: .5rem;
   --coin-plot-height: 14.75rem;
+  --coin-line-plot-height: 12.75rem;
   --coin-readout-height: 4.625rem;
 }
 
 .chart[data-compact-chart][data-chart-style="line"] {
-  --coin-plot-height: 12.75rem;
+  --coin-plot-height: var(--coin-line-plot-height);
   --coin-readout-height: 2.75rem;
 }
 
@@ -259,9 +260,23 @@
 .previewClose { stroke-width: 1.5; }
 .previewMigration { stroke: var(--muted); stroke-dasharray: 4 4; }
 
+.preview[data-viewport="mobile"] { display: none; }
+
 @media (min-width: 761px) {
-  .chart[data-compact-chart] { --coin-plot-height: clamp(15.25rem, 32vh, 23.5rem); }
-  .chart[data-compact-chart][data-chart-style="line"] { --coin-plot-height: clamp(13.75rem, 31vh, 21rem); }
+  .chart[data-compact-chart] {
+    --coin-plot-height: clamp(15.25rem, 32vh, 23.5rem);
+    --coin-line-plot-height: clamp(13.75rem, 31vh, 21rem);
+  }
+}
+
+/* Keep the mobile layout and its line preview stable before hydration. */
+@media (max-width: 760px), (pointer: coarse) {
+  .chart[data-compact-chart][data-chart-style] {
+    --coin-plot-height: var(--coin-line-plot-height);
+    --coin-readout-height: 2.75rem;
+  }
+  .preview[data-viewport="mobile"] { display: block; }
+  .preview[data-viewport="desktop"], .compactTools .stylePicker { display: none; }
 }
 
 .chartState { min-block-size: calc(var(--coin-plot-height) + var(--coin-readout-height)); }
@@ -278,6 +293,7 @@
 .filterLayer { z-index: 1100; }
 .filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; width: 14rem; max-width: calc(100vw - 1.5rem); padding: .75rem; border-radius: var(--r-sm); background: var(--card); box-shadow: var(--sh-pop); }
 .filters .control { color: var(--muted); }
+.filters .control[data-live-range] { grid-column: 1 / -1; }
 .filterClose { grid-column: 1 / -1; justify-self: end; }
 
 @media (max-width: 760px) {

@@ -8,6 +8,7 @@ import { Button, DisclosureButton } from "#web/components/blast-ui/Button.tsx";
 import styles from "./CoinPanel.module.css";
 import visualStyles from "./CoinChartVisual.module.css";
 import { useShellPrefs } from "#web/components/blast-ui/use-shell-prefs.ts";
+import { useMobileChartLayout } from "#web/components/charts/use-mobile-chart-layout.ts";
 import type { SocialPriceHistory } from "@blast/core/web/contracts/prices.ts";
 import type { CoinHistory } from "./coin-reads";
 import { NativeCoinChart, ChartVisual } from "./NativeCoinChart";
@@ -172,6 +173,7 @@ export function CoinPriceWindow({
   history?: CoinHistory | null;
   sinceLaunch?: boolean;
 }>) {
+  const mobile = useMobileChartLayout();
   const {
     saved,
     presentation,
@@ -191,6 +193,19 @@ export function CoinPriceWindow({
       ...(native && interval ? { interval } : {}),
       viewport: null,
     });
+  const volumeControl = native ? (
+    <Button
+      variant="secondary"
+      size="sm"
+      aria-pressed={saved.volume !== false}
+      title="Toggle traded volume"
+      onClick={() => onChart({ ...saved, volume: saved.volume === false })}
+    >
+      Volume
+    </Button>
+  ) : (
+    <UnavailableControl variant="secondary" size="sm" reason="Volume needs recorded swaps for this market.">Volume</UnavailableControl>
+  );
   return (
     <div
       className={visualStyles.controls}
@@ -302,56 +317,46 @@ export function CoinPriceWindow({
           ))}
         </BlastMenuRadioGroup>
       </BlastMenu>
-      <span className={visualStyles.chartOptionsInline}>
-      <div
-        className={visualStyles.chartTypes}
-        role="group"
-        aria-label="Chart style"
-      >
-        <Button
-          variant="segment"
-          size="xs"
-          aria-pressed={saved.style !== "candles" || !native}
-          onClick={() => onChart({ ...saved, style: "line" })}
-          title="Line chart"
-        >
-          Line
-        </Button>
-        {native ? (
-          <Button
-            variant="segment"
-            size="xs"
-            aria-pressed={saved.style === "candles"}
-            title="Candlestick chart"
-            onClick={() => onChart({ ...saved, style: "candles" })}
+      {mobile ? volumeControl : <>
+        <span className={visualStyles.chartOptionsInline}>
+          <div
+            className={visualStyles.chartTypes}
+            role="group"
+            aria-label="Chart style"
           >
-            Candles
-          </Button>
-        ) : (
-          <UnavailableControl variant="segment" size="xs" reason="Candles need recorded swaps for this market.">Candles</UnavailableControl>
-        )}
-      </div>
-      {native ? (
-        <Button
-          variant="secondary"
-          size="sm"
-          aria-pressed={saved.volume !== false}
-          title="Toggle traded volume"
-          onClick={() => onChart({ ...saved, volume: saved.volume === false })}
-        >
-          Volume
-        </Button>
-      ) : (
-        <UnavailableControl variant="secondary" size="sm" reason="Volume needs recorded swaps for this market.">Volume</UnavailableControl>
-      )}
-      </span>
-      <ChartOptionsMenu
-        native={!!native}
-        candles={saved.style === "candles" && !!native}
-        volume={saved.volume !== false}
-        onStyle={(style) => onChart({ ...saved, style })}
-        onVolume={(volume) => onChart({ ...saved, volume })}
-      />
+            <Button
+              variant="segment"
+              size="xs"
+              aria-pressed={saved.style !== "candles" || !native}
+              onClick={() => onChart({ ...saved, style: "line" })}
+              title="Line chart"
+            >
+              Line
+            </Button>
+            {native ? (
+              <Button
+                variant="segment"
+                size="xs"
+                aria-pressed={saved.style === "candles"}
+                title="Candlestick chart"
+                onClick={() => onChart({ ...saved, style: "candles" })}
+              >
+                Candles
+              </Button>
+            ) : (
+              <UnavailableControl variant="segment" size="xs" reason="Candles need recorded swaps for this market.">Candles</UnavailableControl>
+            )}
+          </div>
+          {volumeControl}
+        </span>
+        <ChartOptionsMenu
+          native={!!native}
+          candles={saved.style === "candles" && !!native}
+          volume={saved.volume !== false}
+          onStyle={(style) => onChart({ ...saved, style })}
+          onVolume={(volume) => onChart({ ...saved, volume })}
+        />
+      </>}
     </div>
   );
 }
