@@ -36,6 +36,7 @@ class Source implements MarketEventSource {
 const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
 
 function setup(pools = [CURVE], requestFrom?: number, migration: MigrationMarker | null = null) {
+  let now = NOW;
   const sources: Source[] = [];
   const urls: string[] = [];
   const loads: { pool: string; resolve: (answer: ChartPoolRead) => void }[] = [];
@@ -52,10 +53,10 @@ function setup(pools = [CURVE], requestFrom?: number, migration: MigrationMarker
     pools, expected, migration: () => migration, request: () => ({ ...chartRequest({ interval: "1s", range: "all" }, NOW), ...(requestFrom === undefined ? {} : { from: requestFrom }) }),
     load: (pool) => new Promise<ChartPoolRead>((resolve) => loads.push({ pool, resolve })),
     onSection: (pool, section) => sections.push({ pool, section }), onStatus: (status) => statuses.push(status),
-    hub, visible: () => true, schedule,
+    hub, visible: () => true, schedule, now: () => now,
     publish: (run) => { publications.push(run); return () => { const index = publications.indexOf(run); if (index >= 0) publications.splice(index, 1); }; }, random: () => 0,
   });
-  return { client, sources, urls, loads, sections, statuses, timers, publications, source: () => sources.at(-1)!, flush: () => publications.splice(0).forEach((run) => run()) };
+  return { client, sources, urls, loads, sections, statuses, timers, publications, source: () => sources.at(-1)!, advance: (ms: number) => { now += ms; }, flush: () => publications.splice(0).forEach((run) => run()) };
 }
 
 test("stream opens before REST, rejects behind-fence history, then applies only later checkpoints once", async () => {
@@ -126,6 +127,34 @@ test("periodic stale REST cannot erase already-applied trades or publish an olde
   s.client.stop(); unsubscribe();
 });
 
+test("a swap advances the close while the regular history read is in flight", async () => {
+  const s = setup();
+  const prices: (ChartPriceUpdate | null)[] = [];
+  const unsubscribe = subscribeChartPrice(CURVE, expected, (price) => prices.push(price));
+  s.client.start(); s.source().ready(10); s.loads.shift()!.resolve(answer(10)); await settle();
+
+  const refresh = s.client.refresh();
+  s.source().emit("market", trade(11));
+  const latest = s.sections.at(-1)?.section;
+  assert.equal(latest?.state === "available" && latest.data.candles.at(-1)?.close, "2");
+  assert.equal(prices.at(-1)?.price, "2");
+
+  s.loads.shift()!.resolve(answer(10)); await refresh;
+  assert.equal(prices.at(-1)?.price, "2", "a periodic answer that raced the trade cannot roll it back");
+
+  s.source().emit("error");
+  assert.equal(prices.at(-1), null);
+  const recoveryRead = s.client.refresh();
+  s.loads.shift()!.resolve(answer(11)); await recoveryRead;
+  assert.equal(prices.at(-1), null, "a history-only read cannot certify live coverage");
+  const reconnect = s.timers.find((timer) => timer.ms === 500)!;
+  reconnect.run();
+  s.source().ready(12);
+  s.loads.shift()!.resolve(answer(12)); await settle();
+  assert.equal(prices.at(-1)?.provenance.checkpoint, 12);
+  s.client.stop(); unsubscribe();
+});
+
 test("one pool's newer snapshot never advances the other pool's independent cutoff", async () => {
   const s = setup([CURVE, VENUE]);
   s.client.start(); s.source().ready(10, CURVE); s.source().ready(20, VENUE);
@@ -136,6 +165,46 @@ test("one pool's newer snapshot never advances the other pool's independent cuto
   assert.equal(latest.state === "available" && latest.data.candles[0].volumeQuote, 12n);
   assert.equal(new URL(s.urls[0], "https://blast.test").searchParams.getAll("pool").length, 2);
   s.client.stop();
+});
+
+test("an unpriced trade keeps both readouts blank through history reads and a reconnect", async (t) => {
+  const s = setup();
+  const prices: (ChartPriceUpdate | null)[] = [];
+  t.after(subscribeChartPrice(CURVE, expected, (price) => prices.push(price)));
+  s.client.start(); s.source().ready(10); s.loads.shift()!.resolve(answer(10)); await settle();
+  t.after(() => s.client.stop());
+  const unpriced = trade(11);
+  s.source().emit("market", { ...unpriced, trade: { ...unpriced.trade, price: null } });
+  assert.equal(prices.at(-1), null);
+  const read = s.client.refresh();
+  s.loads.shift()!.resolve(answer(11)); await read;
+  assert.equal(prices.at(-1), null, "candles alone can omit the unpriced trade");
+  s.source().emit("error");
+  s.timers.find(({ ms }) => ms === 500)!.run();
+  s.source().emit("status", { state: "live", pool_key: CURVE, checkpoint: 12, cursor: "12:0:0:0", provenance: wireProvenance(12), price_missing: true });
+  s.loads.shift()!.resolve(answer(12)); await settle();
+  assert.equal(prices.at(-1), null);
+  s.source().emit("market", trade(13)); s.flush();
+  assert.equal(prices.at(-1)?.price, "2");
+});
+
+test("a healthy heartbeat cannot validate a delayed frame or renew old price proof", async (t) => {
+  const s = setup();
+  const prices: (ChartPriceUpdate | null)[] = [];
+  t.after(subscribeChartPrice(CURVE, expected, (price) => prices.push(price)));
+  s.client.start();
+  t.after(() => s.client.stop());
+  s.source().emit("hint", { type: "hello", heartbeat: true, provenance: wireProvenance(10) });
+  s.source().ready(10); s.loads.shift()!.resolve(answer(10)); await settle();
+  assert.equal(prices.at(-1)?.price, "1");
+  s.advance(30_000);
+  s.source().emit("heartbeat");
+  s.timers.find(({ ms }) => ms === 29_980)!.run();
+  assert.equal(prices.at(-1), null, "proof expires while the socket remains connected");
+  s.advance(1_000);
+  s.source().emit("market", trade(11)); s.flush();
+  assert.equal(prices.at(-1), null, "a frame delayed in transit cannot republish the old close");
+  assert.equal(s.source().closed, false);
 });
 
 test("disconnect invalidates prices, settles late reads harmlessly and retries with bounded backoff", async () => {
@@ -188,6 +257,29 @@ test("a burst of accepted frames produces one pending chart repaint", async () =
   s.flush();
   assert.equal(s.publications.length, 0, "an idle chart stops scheduling paints");
   s.client.stop();
+});
+
+test("a fenced close stays current without trades in the selected range", async () => {
+  const s = setup([CURVE], NOW);
+  const prices: (ChartPriceUpdate | null)[] = [];
+  const unsubscribe = subscribeChartPrice(CURVE, expected, (price) => prices.push(price));
+  const prior = { ...page().candles[0], bucketStart: NOW - 86_400_000 };
+  const history = { ...page(), candles: [prior] };
+  s.client.start();
+  s.source().ready(10);
+  s.loads.shift()!.resolve({ page: history, section: { state: "available", data: history, provenance: provenance(10) } });
+  await settle();
+  assert.equal(prices.at(-1)?.price, "1");
+  const refresh = s.client.refresh();
+  s.source().emit("market", trade(11));
+  assert.equal(prices.at(-1)?.price, "2");
+  const latest = s.sections.at(-1)?.section;
+  assert.equal(latest?.state === "available" && latest.data.candles.at(-1)?.open, prior.close);
+  s.loads.shift()!.resolve(answer(10));
+  await refresh;
+  assert.equal(prices.at(-1)?.price, "2");
+  s.client.stop();
+  unsubscribe();
 });
 
 test("bounded empty history recovers the trade's previous-close anchor before publishing its price", async () => {

@@ -3,13 +3,21 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuoteUsd } from "#web/components/social/prices/use-quote-usd.ts";
 
-import { browserMarketDependencies } from "../blast-infra-browser";
-import { chartFromSnapshot, chartPoolKeys, readChartPool, type ChartSnapshot, type ChartSource } from "./chart-client";
+import { atCheckpoint, browserMarketDependencies } from "../blast-infra-browser";
+import { chartFromSnapshot, chartPoolKeys, chartTailRequest, readChartPool, type ChartSnapshot, type ChartSource } from "./chart-client";
 import { afterChartSourceRead, chartKey, chartRequest, initialChart, type ChartControls } from "./chart-model";
 import { useCoinPriceCurrency } from "./CoinPriceCurrency";
 import { ChartStream, type ChartStreamStatus } from "./chart-stream";
+import { useChartPrice } from "./chart-live-price";
 import { useCoinChartControls } from "./chart-preferences";
 import { ChartView, type ChartSourceName } from "./ChartView";
+
+function plotForControls(state: ReturnType<typeof initialChart>, source: ChartSource, controls: ChartControls, committed: ChartSource["migration"], venuePoolKey: string | null, requestAt: number) {
+  const key = chartKey(controls);
+  const shown = state.key === key ? state : initialChart(key, venuePoolKey !== null, committed ?? state.migration);
+  const plotCurve = chartPoolKeys({ ...source, venuePoolKey, migration: shown.migration }, controls, requestAt).includes(source.curvePoolKey);
+  return { shown, plotCurve };
+}
 
 /** HTTP history plus the tab's bounded same-origin market stream. */
 export function CoinChart({
@@ -19,7 +27,8 @@ export function CoinChart({
   initialControls,
   initialSnapshot,
   livePreset,
-}: Readonly<{ source: ChartSource; compact?: boolean; coinType: string; initialControls: ChartControls; initialSnapshot?: ChartSnapshot; livePreset: boolean }>) {
+  checkpoint,
+}: Readonly<{ source: ChartSource; compact?: boolean; coinType: string; initialControls: ChartControls; initialSnapshot?: ChartSnapshot; livePreset: boolean; checkpoint?: number | null }>) {
   const currency = useCoinPriceCurrency();
   const standaloneRate = useQuoteUsd(currency ? null : source.quoteType ?? null);
   const quoteUsd = currency ? currency.quoteUsd : standaloneRate;
@@ -38,6 +47,7 @@ export function CoinChart({
   const [useEntry, setUseEntry] = useState(true);
   const venuePoolKey = source.venuePoolKey ?? state.migration?.venuePoolKey ?? null;
   const curvePoolKey = source.curvePoolKey;
+  const currentPrice = useChartPrice(venuePoolKey ?? curvePoolKey, checkpoint);
   const migrationCursor = source.migration?.cursor ?? null;
   const migrationTimestamp = source.migration?.timestampMs ?? null;
   const migrationCurve = source.migration?.curvePoolKey ?? null;
@@ -58,8 +68,8 @@ export function CoinChart({
       coin: coinType,
       expected,
       migration: () => committed ?? known.current,
-      request: () => chartRequest(controls, Date.now()),
-      load: (pool) => readChartPool(pool, controls, dependencies, Date.now()),
+      request: () => chartTailRequest(controls, Date.now()),
+      load: (pool, checkpoint) => readChartPool(pool, controls, atCheckpoint(dependencies, checkpoint), Date.now()),
       onSection: (pool, section, migration) => {
         if (stream.current !== client) return;
         const marker = committed ?? migration ?? known.current;
@@ -90,8 +100,7 @@ export function CoinChart({
   const key = chartKey(controls);
   const preview = useEntry && entry?.key === key;
   const updates = chartUpdateText(streamStatus, preview);
-  const shown = state.key === key ? state : initialChart(key, venuePoolKey !== null, committed ?? state.migration);
-  const plotCurve = chartPoolKeys({ ...source, venuePoolKey, migration: shown.migration }, controls, requestAt).includes(curvePoolKey);
+  const { shown, plotCurve } = plotForControls(state, source, controls, committed, venuePoolKey, requestAt);
 
   const change = (choice: ChartControls) => {
     stream.current?.stop();
@@ -106,6 +115,7 @@ export function CoinChart({
       compact={compact}
       preview={preview}
       state={shown}
+      currentPrice={currentPrice?.price ?? null}
       source={source}
       omitCurve={!plotCurve}
       quoteUsd={quoteUsd}

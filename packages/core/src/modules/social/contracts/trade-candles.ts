@@ -54,6 +54,7 @@ export const tradeCandlePageSchema = z
     from_ms: time,
     to_ms: time,
     candles: z.array(tradeCandleSchema).max(TRADE_CANDLE_LIMIT),
+    prior_close: decimal.nullable().optional(),
     excluded_trades: z.number().int().nonnegative(),
     truncated: z.boolean(),
     as_of: z.object({ checkpoint: time, timestamp_ms: time, lag_ms: time }),

@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { type ChartCandlePage, type ChartControls, type SourceState, chartKey, chartRequest, initialChart } from "#web/components/launchpad/chart/chart-model.ts";
 import { useCoinChartControls } from "#web/components/launchpad/chart/chart-preferences.ts";
 import { ChartView } from "#web/components/launchpad/chart/ChartView.tsx";
-import { publishChartPrice } from "#web/components/launchpad/chart/chart-live-price.ts";
+import { chartPriceRemaining, publishChartPrice, useChartPrice } from "#web/components/launchpad/chart/chart-live-price.ts";
 import { PoolCandleTradeContext } from "#web/components/launchpad/chart/chart-trade-context.ts";
 import { useCoinPriceCurrency } from "#web/components/launchpad/chart/CoinPriceCurrency.tsx";
 import { shiftDecimal } from "#web/components/launchpad/coin/coin-format.ts";
@@ -15,6 +15,7 @@ import { browserGapTimers, hintedGap, NEW_POSTS_MIN_GAP_MS, type FreshnessHint }
 import { PRICE_WINDOW_MS } from "@blast/core/web/contracts/prices.ts";
 import { candleIntervalMs } from "@blast/core/modules/launchpad-contract/venue-history.ts";
 import { compareEventCursors } from "@blast/core/modules/launchpad-contract/cursor.ts";
+import type { Provenance } from "@blast/core/modules/launchpad-contract/read.ts";
 import { TRADE_CANDLE_LIMIT, type TradeCandlePage } from "@blast/core/web/contracts/trade-candles.ts";
 import { exactText } from "@blast/core/web/exact-amount.ts";
 import { presaleFreshness } from "./presale-freshness.ts";
@@ -24,7 +25,8 @@ import type { HomeCoinMarket } from "@blast/core/web/contracts/coin-market.ts";
 import type { SocialPresaleDetail } from "@blast/core/web/contracts/presales.ts";
 
 const INITIAL_CONTROLS = { range: "24h", interval: "5m" } as const satisfies ChartControls;
-const REFRESH_MS = 60_000;
+const REFRESH_MS = 30_000;
+const MAX_LAG_MS = 60_000;
 const MAX_LIVE_FILLS = 2_048;
 
 type PoolFills = Readonly<{
@@ -32,6 +34,7 @@ type PoolFills = Readonly<{
   fills: readonly ReturnType<typeof poolFill>[];
   missingThrough: number;
   fence: number | null;
+  delayedThrough: number;
 }>;
 
 function candleSection(page: TradeCandlePage, market: Pick<HomeCoinMarket, "quote" | "decimals">, pool: Pick<NonNullable<HomeCoinMarket["pool"]>, "id" | "venue">): SourceState {
@@ -63,7 +66,7 @@ function candleSection(page: TradeCandlePage, market: Pick<HomeCoinMarket, "quot
     source: "replica" as const, network: page.network, deployment: null, checkpoint: page.as_of.checkpoint,
     timestampMs: page.as_of.timestamp_ms, observedAt: page.to_ms, lagMs: page.as_of.lag_ms,
   };
-  return provenance.lagMs > REFRESH_MS
+  return provenance.lagMs > MAX_LAG_MS
     ? { state: "stale", data, provenance, reason: "stale" }
     : { state: "available", data, provenance };
 }
@@ -96,9 +99,32 @@ function mergeTail(previous: TradeCandlePage, tail: TradeCandlePage): TradeCandl
     from_ms: from,
     to_ms: tail.to_ms,
     as_of: tail.as_of,
+    prior_close: tail.prior_close,
     candles: candles.slice(-TRADE_CANDLE_LIMIT),
     truncated: candles.length > TRADE_CANDLE_LIMIT || (previous.truncated && from < (candles[0]?.at_ms ?? from)),
   };
+}
+
+function confirmedClose(poolKey: string, venue: SourceState, page: TradeCandlePage | undefined, live: PoolFills | undefined, scale: number) {
+  if (venue.state !== "available" || live?.pool !== poolKey || live.fence === null || page?.status !== "available" ||
+      page.as_of.checkpoint < Math.max(live.fence, live.missingThrough, live.delayedThrough) || page.excluded_trades) return undefined;
+  return venue.data.candles.at(-1)?.close ?? (page.prior_close ? shiftDecimal(page.prior_close, scale) : undefined);
+}
+
+function usePublishPresaleClose(poolKey: string, close: string | undefined, provenance: Provenance | null, cursor: string | null) {
+  useLayoutEffect(() => {
+    const remaining = provenance ? chartPriceRemaining(provenance, MAX_LAG_MS, Date.now()) : 0;
+    if (!close || !provenance || remaining <= 0) return publishChartPrice(poolKey, null);
+    publishChartPrice(poolKey, { price: close, poolKey, cursor, provenance });
+    const expires = setTimeout(() => publishChartPrice(poolKey, null), remaining);
+    return () => clearTimeout(expires);
+  }, [poolKey, close, cursor, provenance]);
+  useEffect(() => () => publishChartPrice(poolKey, null), [poolKey]);
+}
+
+function presaleVenueState(section: SourceState | null, pending: boolean, error: boolean): SourceState {
+  if (section?.state === "available" && error) return { ...section, state: "stale", reason: "unavailable" };
+  return section ?? (pending ? { state: "loading" } : { state: "unavailable", reason: "unavailable" });
 }
 
 export function PresalePoolChart({ sale, market, pool }: Readonly<{
@@ -159,6 +185,9 @@ export function PresalePoolChart({ sale, market, pool }: Readonly<{
   usePresaleMarketStream(presaleId, (frame) => {
     if (frame.type !== "presale_pool_swap" || frame.pool_key !== poolKey) return;
     const fill = poolFill(frame);
+    const lagMs = Math.max(0, Date.now() - fill.time);
+    const delayed = lagMs >= MAX_LAG_MS && fill.checkpoint > (client.getQueryData<TradeCandlePage>(queryKey)?.as_of.checkpoint ?? -1);
+    if (delayed) publishChartPrice(poolKey, null);
     setLive((previous) => {
       const same = previous?.pool === poolKey ? previous : undefined;
       const known = same?.fills ?? [];
@@ -167,16 +196,27 @@ export function PresalePoolChart({ sale, market, pool }: Readonly<{
       // Every range uses the same recent fills and subtracts its own history checkpoint.
       const fills = [...known.slice(0, at + 1), fill, ...known.slice(at + 1)];
       const expired = fills.length > MAX_LIVE_FILLS ? fills.shift() : undefined;
-      return { pool: poolKey, fills, fence: same?.fence ?? streamFence.current, missingThrough: Math.max(expired?.checkpoint ?? -1, same?.missingThrough ?? -1) };
+      return {
+        pool: poolKey,
+        fills,
+        fence: same?.fence ?? streamFence.current,
+        missingThrough: Math.max(expired?.checkpoint ?? -1, same?.missingThrough ?? -1),
+        delayedThrough: Math.max(delayed ? fill.checkpoint : -1, same?.delayedThrough ?? -1),
+      };
     });
   }, (checkpoint) => {
     streamFence.current = checkpoint;
-    if (checkpoint === null) return;
+    if (checkpoint === null) {
+      setLive((previous) => previous?.pool === poolKey ? { ...previous, fence: null } : previous);
+      publishChartPrice(poolKey, null);
+      return;
+    }
     setLive((previous) => ({
       pool: poolKey,
       fills: previous?.pool === poolKey ? previous.fills : [],
       missingThrough: previous?.pool === poolKey ? previous.missingThrough : -1,
       fence: checkpoint,
+      delayedThrough: previous?.pool === poolKey ? previous.delayedThrough : -1,
     }));
     if (!ready || (client.getQueryData<TradeCandlePage>(queryKey)?.as_of.checkpoint ?? -1) >= checkpoint) return;
     const query = { queryKey, exact: true, type: "active" } as const;
@@ -252,28 +292,17 @@ export function PresalePoolChart({ sale, market, pool }: Readonly<{
     receivedAt: latest.receivedAt,
     trade: { cursor: latest.cursor, timestampMs: latest.time, side: latest.side, price: exactText(latest.price), memeAmount: latest.amount },
   } : null, [latest, poolKey, width]);
-  const livePrice = live?.pool === poolKey ? live.fills.at(-1) : undefined;
-  useEffect(() => {
-    if (!livePrice) return;
-    const observedAt = Date.now();
-    publishChartPrice(poolKey, {
-      price: exactText(livePrice.price), poolKey, cursor: livePrice.cursor,
-      provenance: {
-        source: "blast-infra", network: "mainnet", deployment: null,
-        checkpoint: livePrice.checkpoint, timestampMs: livePrice.time, observedAt,
-        lagMs: Math.max(0, observedAt - livePrice.time),
-      },
-    });
-  }, [livePrice, poolKey]);
-  const venue: SourceState = section?.state === "available" && isRefetchError
-    ? { ...section, state: "stale", reason: "unavailable" }
-    : section ?? (isPending ? { state: "loading" } : { state: "unavailable", reason: "unavailable" });
+  const venue = presaleVenueState(section, isPending, isRefetchError);
+  const close = confirmedClose(poolKey, venue, page, live, quote.decimals - decimals);
+  const currentPrice = useChartPrice(poolKey, market.as_of.checkpoint);
+  usePublishPresaleClose(poolKey, close, venue.state === "available" ? venue.provenance : null, latest?.cursor ?? null);
   const diagnostic = venue.state === "unavailable" && venue.reason !== "unavailable" ? venue.reason : undefined;
   return <PoolCandleTradeContext value={poolTrade}><ChartView
     compact
     source={{ curvePoolKey: null, venuePoolKey: poolKey, migration: null, expected: null, symbol: sale.symbol, memeDecimals: market.decimals, quoteDecimals: market.quote.decimals, quoteSymbol: market.quote.symbol }}
     state={{ ...initialChart(key, true), venue }}
     controls={controls}
+    currentPrice={currentPrice?.price ?? null}
     request={page ? { interval: page.interval, from: window === "launch" ? undefined : page.from_ms, capped: page.truncated } : chartRequest(controls, 0)}
     quoteUsd={quoteUsd}
     hidden={[]}

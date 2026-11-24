@@ -4,7 +4,7 @@ import { DateStamp } from "#web/components/blast-ui/DateStamp.tsx";
 import { pollInterval } from "#web/lib/query/polling.ts";
 import type { AsOf } from "@blast/core/web/contracts/items.ts";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 import { Button } from "#web/components/blast-ui/Button.tsx";
 import { EmptyState } from "#web/components/blast-ui/EmptyState.tsx";
@@ -12,9 +12,9 @@ import { InspectValue } from "#web/components/blast-ui/InspectValue.tsx";
 import { Pager } from "#web/components/blast-ui/Pager.tsx";
 import { SkeletonText } from "#web/components/blast-ui/Skeleton.tsx";
 import { IntentLink as Link } from "#web/components/blast-ui/NavigationLink.tsx";
-import { formatAmountShort, shiftDecimal } from "#web/components/launchpad/coin/coin-format.ts";
-import { priceCoversHeader, subscribeChartPrice, type ChartPriceUpdate } from "#web/components/launchpad/chart/chart-live-price.ts";
-import { exactDecimal, exactText, multiplyExact } from "@blast/core/web/exact-amount.ts";
+import { formatAmountShort } from "#web/components/launchpad/coin/coin-format.ts";
+import { useChartPrice } from "#web/components/launchpad/chart/chart-live-price.ts";
+import { poolPrices } from "#web/components/charts/candle-data.ts";
 import { fetchCoinMarket } from "#web/components/social/blast-mode/workspace/panels/coin-market-reads.ts";
 import { coinsByIdsQuery } from "#web/components/social/coin-home/home-client.ts";
 import { shortTicker } from "#web/components/social/coins/coin-display.ts";
@@ -22,7 +22,6 @@ import { actorName, amountShort, volumeText } from "#web/components/social/coin-
 import { Avatar } from "#web/components/social/post/PostMedia.tsx";
 import { readableUsd, subscriptZeros } from "#web/lib/market-format.ts";
 import { PUBLIC_STALE_MS } from "#web/lib/query/client.ts";
-import { priceQuery } from "#web/components/social/prices/price-client.ts";
 import { queryKeys } from "#web/lib/query/keys.ts";
 import { useAppQueryClient } from "#web/lib/query/provider.tsx";
 import type { HomeCoinMarket } from "@blast/core/web/contracts/coin-market.ts";
@@ -40,7 +39,7 @@ import type {
 import type { PriceWindow } from "@blast/core/web/contracts/prices.ts";
 
 import { SalePriceChart, type MarketExtras } from "./SalePriceChart";
-import { formatMove, poolHeadlinePrice, presaleHolderShare, priceDirection, type PriceMove } from "./sale-market-format";
+import { formatMove, presaleHolderShare, priceDirection, type PriceMove } from "./sale-market-format";
 import { PresalePoolChart } from "./PresalePoolChart";
 import { PresaleHolderSummary } from "./PresaleHolderSummary";
 import { ChartCard, CoinPriceFigure, MarketOverview, MarketPriceRow } from "#web/components/social/bonding/CoinPageParts.tsx";
@@ -434,7 +433,7 @@ export function SaleMarket({
       chart={(extras) => market?.pool ? (
         <CoinPriceCurrencyProvider quoteType={market.quote.type} quoteSymbol={market.quote.symbol}>
           <div className={coinStyles.market} data-sale-market="">
-            <PresaleMarketPrice market={market} sale={sale} move={extras.move} />
+            <PresaleMarketPrice market={market} move={extras.move} />
             <ChartCard><PresalePoolChart sale={sale} market={market} pool={market.pool} /></ChartCard>
           </div>
           {extras.note}
@@ -446,37 +445,14 @@ export function SaleMarket({
   );
 }
 
-function PresaleMarketPrice({ market, sale, move }: Readonly<{
-  market: HomeCoinMarket; sale: SocialPresaleDetail["presale"]; move?: PriceMove | null;
-}>) {
+function PresaleMarketPrice({ market, move }: Readonly<{ market: HomeCoinMarket; move?: PriceMove | null }>) {
   const currency = useCoinPriceCurrency();
-  const [live, setLive] = useState<ChartPriceUpdate | null>(null);
   const poolKey = market.pool ? `${market.pool.venue}:${market.pool.id}` : null;
-  useEffect(() => poolKey ? subscribeChartPrice(poolKey, null, setLive) : undefined, [poolKey]);
-  const usd = market.price_usd ?? sale.price_usd;
-  // This fixed window supplies the latest observation even when the chart range changes.
-  const { data: history } = useQuery({
-    ...priceQuery({ kind: "presale", id: sale.presale_id, window: "24h" }),
-    enabled: usd == null,
-    refetchInterval: (query) => pollInterval(15_000, query),
-  }, useAppQueryClient());
-  const historyPrice = poolHeadlinePrice({
-    usd, asOf: market.price_as_of_ms, coinType: sale.sale_token,
-    quoteType: market.quote.type, displayRate: currency?.currency === "quote" ? currency.rate : null, history,
-  });
-  const livePrice = confirmedHeadlinePrice(live, poolKey, market, currency?.quoteUsd);
-  const price = livePrice || historyPrice;
-  return <MarketPriceRow showCurrency={(livePrice || usd != null) && currency?.rate != null} showSound
+  const live = useChartPrice(poolKey, market.as_of.checkpoint);
+  const prices = poolPrices(market.decimals, market.quote.decimals, currency?.quoteUsd);
+  return <MarketPriceRow showCurrency={currency?.rate != null} showSound
     activity={<ChartLastTrade placement="headline" playSound />}
-    price={price && <CoinPriceFigure price={price.value} quoteSymbol={price.quoted ? market.quote.symbol : undefined}
-      tradeId={livePrice?.cursor ?? historyPrice?.asOf?.toString() ?? null} />}
-    change={move && price && !price.quoted ? { value: <>{formatMove(move)} <span>today</span></>, direction: priceDirection(move.bps) } : null} />;
-}
-
-function confirmedHeadlinePrice(live: ChartPriceUpdate | null, poolKey: string | null, market: HomeCoinMarket, quoteUsd?: string | null) {
-  if (!live || live.poolKey !== poolKey || !priceCoversHeader(live, market.as_of.checkpoint)) return null;
-  const price = exactDecimal(shiftDecimal(live.price, market.decimals - market.quote.decimals));
-  if (!price) return null;
-  const rate = exactDecimal(quoteUsd);
-  return { value: exactText(rate ? multiplyExact(price, rate) : price), quoted: rate === null, cursor: live.cursor };
+    price={live ? <CoinPriceFigure price={prices.price(live.price)} quoteSymbol={prices.usd ? undefined : market.quote.symbol}
+      tradeId={live.cursor} /> : NO_VALUE}
+    change={move && live && prices.usd ? { value: <>{formatMove(move)} <span>today</span></>, direction: priceDirection(move.bps) } : null} />;
 }

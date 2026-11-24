@@ -40,6 +40,7 @@ import { CoinPageWallet } from "#web/components/blast-ui/CoinPageWallet.tsx";
 import { CoinMark } from "#web/components/blast-ui/CoinMark.tsx";
 import { CoinLegacyMark, CoinVerifiedMark, PreviousIcon, TelegramIcon } from "#web/components/blast-ui/Icons.tsx";
 import { useCoinTrade } from "./use-coin-trade.ts";
+import { ChartPriceCheckpoint, useChartPrice } from "#web/components/launchpad/chart/chart-live-price.ts";
 import { ChartLastTrade } from "#web/components/launchpad/chart/ChartLastTrade.tsx";
 import { ChartTradeContext } from "#web/components/launchpad/chart/chart-trade-context.ts";
 import { LiveFigureCue } from "#web/components/blast-ui/LiveFigureCue.tsx";
@@ -145,7 +146,7 @@ function hasMarketSound(view: View, poolKey: string | null) {
 function MarketPrice({ units, price, tradeId = null, activity, showSound, showCurrency }: Readonly<{
   units: PriceUnits | null; price?: string | null; tradeId?: string | null; activity?: ReactNode; showSound?: boolean; showCurrency?: boolean;
 }>) {
-  return <MarketPriceRow price={price != null && units ? <PriceValue units={units} price={price} tradeId={tradeId} /> : null}
+  return <MarketPriceRow price={price != null && units ? <PriceValue units={units} price={price} tradeId={tradeId} /> : NO_VALUE}
     activity={activity} showSound={showSound} showCurrency={showCurrency} />;
 }
 
@@ -375,15 +376,15 @@ function CoinMarket({ snapshot, page, chart, activity, poolKey, checkpoint }: Re
   const graduated = snapshot.lifecycle === "migrated";
   const view = !graduated && tick ? coinView(page, tick) : snapshot;
   const tradeId = tick?.showCue ? tick.trade.cursor : null;
-  const price = graduated && tick ? tick.trade.price : view.economics?.price;
+  const price = useChartPrice(poolKey, checkpoint);
   const context = coinTradeSource(view, poolKey, lastTrade, receivedAt);
-  return <ChartTradeContext value={context}>
+  return <ChartPriceCheckpoint value={{ poolKey, checkpoint }}><ChartTradeContext value={context}>
     <div className={styles.market}>
-      <MarketPrice units={priceUnits(view)} price={price} tradeId={tradeId} showSound={hasMarketSound(view, poolKey)}
+      <MarketPrice units={priceUnits(view)} price={price?.price} tradeId={tradeId && price?.cursor ? tradeId : null} showSound={hasMarketSound(view, poolKey)}
         showCurrency={view.identity.quoteType !== null} activity={context && <ChartLastTrade placement="headline" />} />
       <CoinMarketCards graduated={graduated} view={view} tick={tick} tradeId={tradeId} chart={chart} activity={activity} />
     </div>
-  </ChartTradeContext>;
+  </ChartTradeContext></ChartPriceCheckpoint>;
 }
 
 function CoinMarketCards({ graduated, view, tick, tradeId, chart, activity }: Readonly<{
@@ -501,7 +502,7 @@ export function LegacyCoinScreen({ coinType, name, symbol, logoUrl, chart, decim
     quoteType: SUI_COIN_TYPE, quoteSymbol: "SUI", quoteDecimals: 9,
     quoteMark: <QuoteMark coinType={SUI_COIN_TYPE} coinKey="sui" symbol="SUI" />,
   };
-  // Keep the headline on the latest pool observation even when the selected chart range has no candles.
+  const price = useChartPrice(poolKey);
   const { data, isRefetchError } = useQuery({
     ...legacyCoinMarketQuery(),
     refetchInterval: (query) => pollInterval(60_000, query),
@@ -515,7 +516,7 @@ export function LegacyCoinScreen({ coinType, name, symbol, logoUrl, chart, decim
     <div className={styles.layout} data-no-trade={trade == null || undefined}>
       <CoinPriceCurrencyProvider quoteType={SUI_COIN_TYPE} quoteSymbol="SUI">
         <div className={styles.market}>
-          <MarketPrice units={units} price={isRefetchError ? undefined : market?.price} />
+          <MarketPrice units={units} price={price?.price} tradeId={price?.cursor} />
           <ChartCard><SectionBoundary subject="chart">{chart}</SectionBoundary></ChartCard>
           <MarketOverview fdv={isRefetchError ? undefined : fdvUsd} venue={poolKey.split(":")[0]} />
           <Card title="Trades">

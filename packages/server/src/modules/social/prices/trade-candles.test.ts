@@ -69,6 +69,7 @@ function database(
     ticks?: number;
     candles?: (typeof candle)[];
     excluded?: number;
+    priorClose?: string;
   } = {},
 ): ReadableDatabase {
   return {
@@ -85,6 +86,7 @@ function database(
             {
               tick_count: options.ticks ?? 3,
               excluded_trades: options.excluded ?? 0,
+              prior_close: options.priorClose,
               candles: options.candles ?? [candle],
             },
           ],
@@ -188,12 +190,14 @@ test("unsupported, incomplete, empty and too-large histories stay distinct", asy
     assert.ok(tradeCandlePageSchema.safeParse(page).success);
   }
   const empty = await readTradeCandles(
-    database({ candles: [], ticks: 0 }),
+    database({ candles: [], ticks: 0, priorClose: "0.0123" }),
     request,
     now,
   );
   assert.equal(empty.status, "available");
   assert.deepEqual(empty.candles, []);
+  assert.equal(empty.prior_close, "0.0123");
+  assert.ok(tradeCandlePageSchema.safeParse(empty).success);
   const capped = await readTradeCandles(
     database({ ticks: TRADE_TICK_LIMIT + 1 }),
     request,

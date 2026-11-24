@@ -20,27 +20,18 @@ function Stat({ term, children }: Readonly<{ term: string; children: React.React
   );
 }
 
-function priceCheckpoint(page: CoinPage): number | null {
-  const selected = page.source.kind === "venue" ? page.venue : page.curve;
-  return selected && (selected.state === "available" || selected.state === "stale")
-    ? selected.provenance.checkpoint
-    : null;
-}
-
 function PriceStat({ page, expected }: Readonly<{ page: CoinPage; expected?: ExpectedDeployment | null }>) {
   const identity = coinIdentity(page);
   const { price, known } = selectedPrice(page, 4);
   const unavailable = <span className={styles.missing}>Unavailable</span>;
   const economics = page.source.kind === "venue" ? sectionData(page.venue)?.economics : sectionData(page.curve)?.launch.economics;
-  const checkpoint = priceCheckpoint(page);
+  const checkpoint = (page.source.kind === "venue" ? page.venue : page.curve)?.provenance?.checkpoint ?? null;
   const fallbackPrice = price ?? (known ? <span className={styles.missing}>No price yet</span> : unavailable);
   const quoteDecimals = economics?.inputs.quoteDecimals ?? (identity.quoteDecimals === null ? null : BigInt(identity.quoteDecimals));
   const streamed = expected !== undefined && page.confirmed && page.source.poolKey !== null && economics && quoteDecimals !== null;
   return (
     <Stat term="Price">{streamed ? (
-      <StreamedPrice key={`${page.source.poolKey}:${expected?.deployment ?? ""}`} poolKey={page.source.poolKey!} expected={expected} checkpoint={checkpoint} memeDecimals={Number(economics.inputs.memeDecimals)} quoteDecimals={Number(quoteDecimals)} quoteSymbol={identity.quoteSymbol}>
-        {fallbackPrice}
-      </StreamedPrice>
+      <StreamedPrice key={`${page.source.poolKey}:${expected?.deployment ?? ""}`} poolKey={page.source.poolKey!} expected={expected} checkpoint={checkpoint} memeDecimals={Number(economics.inputs.memeDecimals)} quoteDecimals={Number(quoteDecimals)} quoteSymbol={identity.quoteSymbol} />
     ) : fallbackPrice}</Stat>
   );
 }

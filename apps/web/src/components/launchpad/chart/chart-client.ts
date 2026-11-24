@@ -79,8 +79,14 @@ export function chartFromSnapshot(source: ChartSource, controls: ChartControls, 
   ), empty);
 }
 
+// The history tail keeps the prior close even when the selected range has no trades.
+export function chartTailRequest(controls: ChartControls, now: number) {
+  const { interval, limit, capped } = chartRequest(controls, now);
+  return { interval, limit, capped };
+}
+
 export async function readChartPool(poolKey: string, controls: ChartControls, dependencies: MarketDataDependencies, now: number): Promise<ChartPoolRead> {
-  const read = await readPoolCandles(poolKey, chartRequest(controls, now), dependencies);
+  const read = await readPoolCandles(poolKey, chartTailRequest(controls, now), dependencies);
   if (read.status === "unavailable") return { section: sectionFromRead(read, () => false), page: null };
   if (read.data.kind === "refused") return { section: { state: "unavailable", reason: `refused:${read.data.error.code}`, provenance: read.provenance }, page: null };
   return { section: sectionFromRead({ ...read, data: read.data.value }, (page) => page.candles.length === 0), page: read.data.value };

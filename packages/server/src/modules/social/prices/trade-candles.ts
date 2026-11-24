@@ -69,7 +69,7 @@ export const TRADE_CANDLE_MARKET_SQL = `SELECT s.presale_id, s.sale_token, s.quo
  * so a busy bucket can never publish a silently incomplete OHLC or volume.
  * Numeric arithmetic stays in PostgreSQL; JS receives exact decimal strings.
  */
-function candleAggregation(ticks: string): string {
+function candleAggregation(ticks: string, priorClose = "NULL::text"): string {
   return `SELECT * FROM (
   WITH ticks AS MATERIALIZED (
 ${ticks}
@@ -88,6 +88,7 @@ ${ticks}
   ) SELECT (SELECT count(*)::int FROM ticks) AS tick_count,
     (SELECT count(*)::int FROM ticks WHERE ambiguous OR quote_type IS DISTINCT FROM $8 OR coin_amount IS NULL
       OR coin_amount <= 0 OR quote_amount IS NULL OR quote_amount <= 0) AS excluded_trades,
+    CASE WHEN NOT EXISTS (SELECT FROM ticks) THEN ${priorClose} END AS prior_close,
     coalesce((SELECT jsonb_agg(jsonb_build_object('at_ms', at_ms, 'open', trim_scale(open)::text,
       'high', trim_scale(high)::text, 'low', trim_scale(low)::text, 'close', trim_scale(close)::text,
       'volume', trim_scale(volume)::text, 'trades', trades) ORDER BY at_ms) FROM buckets), '[]'::jsonb) AS candles
@@ -104,7 +105,14 @@ export const TRADE_CANDLES_SQL =
       AND a.checkpoint >= coalesce((SELECT checkpoint FROM chain_read_v1.checkpoint_headers
         WHERE timestamp_ms >= $2::bigint ORDER BY timestamp_ms, checkpoint LIMIT 1), $4::bigint + 1)
       AND a.checkpoint <= $4::bigint
-    ORDER BY a.checkpoint DESC, a.tx_slot DESC, a.event_slot DESC LIMIT ${TRADE_TICK_LIMIT + 1}`);
+    ORDER BY a.checkpoint DESC, a.tx_slot DESC, a.event_slot DESC LIMIT ${TRADE_TICK_LIMIT + 1}`,
+  `(SELECT CASE WHEN a.quote_type = $8 AND a.coin_amount > 0 AND a.quote_amount > 0
+        THEN trim_scale((a.quote_amount * 10::numeric ^ $6::int)::numeric(180,72)
+          / a.coin_amount / (10::numeric ^ $7::int))::text END
+      FROM chain_read_v1.presale_pool_swaps a
+      WHERE a.coin_type = $1 AND a.presale_id = $9 AND a.pool_id = $10
+        AND a.checkpoint <= $4::bigint AND a.timestamp_ms <= $3::bigint
+      ORDER BY a.checkpoint DESC, a.tx_slot DESC, a.event_slot DESC LIMIT 1)`);
 
 export const BALANCE_CANDLES_SQL =
   candleAggregation(`    SELECT a.timestamp_ms, a.checkpoint, a.tx_slot, a.event_slot, a.part,
@@ -135,6 +143,7 @@ type Buckets = {
   tick_count: number;
   excluded_trades: number;
   candles: TradeCandlePage["candles"];
+  prior_close?: string | null;
 };
 
 function validDecimals(value: number | null): boolean {
@@ -249,6 +258,7 @@ export async function readTradeCandles(
   return {
     ...page,
     candles: result.candles.slice(-TRADE_CANDLE_LIMIT),
+    prior_close: result.prior_close ?? undefined,
     excluded_trades: result.excluded_trades,
     truncated: result.candles.length > TRADE_CANDLE_LIMIT,
   };

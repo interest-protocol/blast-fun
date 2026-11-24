@@ -27,7 +27,7 @@ test("graduated page leads with venue economics and pool volume instead of the e
   const page = coinScreenFixture();
   const doc = render(page);
   const overview = doc.querySelector('[aria-label="Market overview"]')!;
-  assert.match(doc.body.textContent!, /Price.*0\.0₄156.*SUI.*Chart fixture.*FDV.*\$53\.9K.*Holders.*Volume 24h.*\$310\.69.*DEX/);
+  assert.match(doc.body.textContent!, /Price—.*Chart fixture.*FDV.*\$53\.9K.*Holders.*Volume 24h.*\$310\.69.*DEX/);
   assert.match(overview.textContent!, /FDV.*Holders.*Volume 24h.*DEX/);
   assert.ok(page.coin.state === "available");
   const tag = doc.querySelector("[data-page-head] [data-coin-type-tag]");
@@ -144,7 +144,7 @@ test("venue facts remain visible when curve history cannot be read", () => {
 test("venue economics retain their own units when both coin and curve reads fail", () => {
   const page = coinScreenFixture();
   const doc = render({ ...page, curve: { state: "unavailable", reason: "down" }, coin: { state: "unavailable", reason: "down" } });
-  assert.match(doc.body.textContent!, /Price.*0\.0₄156.*Chart fixture.*FDV.*\$53\.9K.*Volume 24h.*\$310\.69/);
+  assert.match(doc.body.textContent!, /Price—.*Chart fixture.*FDV.*\$53\.9K.*Volume 24h.*\$310\.69/);
 });
 
 test("venue outage retains graduation and recovery without curve-price fallback or active trade controls", () => {
