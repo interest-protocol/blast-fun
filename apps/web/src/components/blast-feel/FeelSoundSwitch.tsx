@@ -92,4 +92,4 @@ export function FeelSoundButton({ className = "icon-btn", onToggle }: FeelSoundC
 /** The gate's wording for Settings' "Feel" section, so a caller does not re-invent it. */
 export const FEEL_SETTINGS_SECTION_TITLE = "Feel";
 export const FEEL_SETTINGS_ROW_TITLE = "Sound";
-export const FEEL_SETTINGS_ROW_DESCRIPTION = "Hear price moves, live buys and sells, taps and confirmations.";
+export const FEEL_SETTINGS_ROW_DESCRIPTION = "Hear live buys and sells, taps and confirmations.";

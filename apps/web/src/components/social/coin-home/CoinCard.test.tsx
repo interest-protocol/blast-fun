@@ -8,7 +8,6 @@ import { AppRouterContext } from "next/dist/shared/lib/app-router-context.shared
 import { QueryProvider } from "#web/lib/query/provider.tsx";
 import type { HomeCoin, HomeWindow } from "@blast/core/modules/social/contracts/home.ts";
 import { CoinCard } from "./CoinCard";
-import { HomeMarketActivity } from "./HomeMarketActivity";
 import { CoinList, type ListProps } from "./sources";
 import { installTestDom, recordAnimations } from "../../../../test/fixtures/social/test-dom.ts";
 
@@ -140,25 +139,6 @@ test("Home distinguishes first-observation changes from full 24-hour changes and
     mature.window.close();
     flat.window.close();
     down.window.close();
-  }
-});
-
-test("Home market activity skips stale or undated moves", () => {
-  const nowMs = Date.UTC(2026, 10, 20, 12);
-  const fresh = { ...coin, price_usd: "1", price_as_of_ms: nowMs, change_24h_bps: 300 };
-  const stale = { ...fresh, symbol: "STALE", price_as_of_ms: nowMs - 120_001, change_24h_bps: -5000 };
-  const undated = { ...fresh, symbol: "UNDATED", price_as_of_ms: null, change_24h_bps: 8000 };
-  const client = new QueryClient();
-  const strip = new JSDOM(renderToStaticMarkup(<AppRouterContext value={router}><QueryProvider client={client}>
-    <HomeMarketActivity coins={[stale, undated, fresh]} move={null} nowMs={nowMs} window="24h" />
-  </QueryProvider></AppRouterContext>));
-  try {
-    const link = strip.window.document.querySelector("[data-market-activity] a");
-    assert.equal(link?.getAttribute("aria-label"), "$TEST up 3% in 24h");
-    assert.match(link?.textContent ?? "", /Market activity.*TEST/);
-  } finally {
-    strip.window.close();
-    client.clear();
   }
 });
 

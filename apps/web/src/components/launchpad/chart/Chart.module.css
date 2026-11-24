@@ -239,8 +239,7 @@
   container-type: inline-size;
   row-gap: .5rem;
   --coin-plot-height: 14.75rem;
-  --coin-candle-tiles-width: min(100cqi, 24.5rem);
-  --coin-readout-height: calc(2.75rem + (var(--coin-candle-tiles-width) - 1.5rem) / 4);
+  --coin-readout-height: 4.625rem;
 }
 
 .chart[data-compact-chart][data-chart-style="line"] {
@@ -249,8 +248,8 @@
 }
 
 @media (min-width: 761px) {
-  .chart[data-compact-chart] { --coin-plot-height: 26.5rem; }
-  .chart[data-compact-chart][data-chart-style="line"] { --coin-plot-height: 22.5rem; }
+  .chart[data-compact-chart] { --coin-plot-height: clamp(15.25rem, 32vh, 23.5rem); }
+  .chart[data-compact-chart][data-chart-style="line"] { --coin-plot-height: clamp(13.75rem, 31vh, 21rem); }
 }
 
 .chartState { min-block-size: calc(var(--coin-plot-height) + var(--coin-readout-height)); }

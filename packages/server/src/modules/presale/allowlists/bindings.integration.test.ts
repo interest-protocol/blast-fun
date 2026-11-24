@@ -323,8 +323,8 @@ test("partner v1: a key's proof read serves the bound proof; an unlisted wallet 
     throw new Error("Unexpected v1 read");
   };
   const read = createPartnerV1Read({
-    defillama: unexpected, presales: unexpected, featured: unexpected, presale: unexpected, prices: unexpected,
-    discovery: unexpected, wallet_launches: unexpected, search: unexpected, market: unexpected,
+    defillama: unexpected, daily_stats: unexpected, presales: unexpected, featured: unexpected, presale: unexpected, prices: unexpected,
+    discovery: unexpected, wallet_launches: unexpected, search: unexpected, market: unexpected, coin_metadata: unexpected,
     presale_proof: bindings.proof,
   });
   const v1 = (wallet: string) => {

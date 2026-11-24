@@ -185,8 +185,10 @@ test("gateway authentication binds the exact encoded target and claims each nonc
       discovery: read,
       search: read,
       defillama: read,
+      daily_stats: read,
       wallet_launches: read,
       presale_proof: read,
+      coin_metadata: read,
     }),
   });
   const runtime = createBackendServer({

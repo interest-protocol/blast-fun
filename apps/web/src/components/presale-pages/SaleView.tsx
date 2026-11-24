@@ -353,9 +353,7 @@ function CoinHead({ detail, watch }: Readonly<{ detail: SocialPresaleDetail; wat
   const sale = detail.presale;
   const details = useSaleDetails(sale);
   const [editing, setEditing] = useState(false);
-  const cover = details.metadata?.cover;
   return <>
-    {cover && /^(https:|data:image\/)/.test(cover.url) ? <CoinCover cover={cover} /> : null}
     <CoinIdentityHeader
       coin={{ key: sale.presale_id, coinType: sale.sale_token, iconUrl: sale.icon_url, round: false }}
       name={sale.name}
@@ -1053,22 +1051,27 @@ export function SaleTermsCard({ detail }: Readonly<{ detail: SocialPresaleDetail
   );
 }
 
-/** About: the creator's tagline and their links. */
+function aboutArtwork(sale: SocialPresaleDetail["presale"], cover: SocialSaleMetadata["cover"] | undefined, phone: boolean) {
+  if (!cover) return null;
+  if (sale.phase === "trading") return /^(https:|data:image\/)/.test(cover.url) ? <CoinCover cover={cover} /> : null;
+  return phone ? <PresaleCover className={cx("sale-about-cover")} cover={cover} presaleId={sale.presale_id} /> : null;
+}
+
+/** About: the creator's tagline, artwork and links. */
 function AboutCard({ detail }: Readonly<{ detail: SocialPresaleDetail }>) {
   const sale = detail.presale;
   const { metadata } = useSaleDetails(sale);
   const phone = usePhoneLayout();
-  const cover = phone ? metadata?.cover : null;
+  const artwork = aboutArtwork(sale, metadata?.cover, phone);
   const tagline = metadata?.tagline?.trim();
-  const links = <SaleLinks about metadata={metadata} sale={sale} />;
   const hasLinks = Boolean(metadata?.site || metadata?.x_handle || metadata?.telegram || metadata?.docs_url || metadata?.audit_url);
-  if (!tagline && !hasLinks && !cover) return null;
+  if (!tagline && !hasLinks && !artwork) return null;
   return (
     <section aria-labelledby={`about-${sale.presale_id.slice(-6)}`} className={cx("card sale-card sale-about")}>
       <h2 id={`about-${sale.presale_id.slice(-6)}`}>About</h2>
-      {tagline ? <p className={cx("sale-tag")}>{metadata?.tagline}</p> : null}
-      {cover ? <PresaleCover className={cx("sale-about-cover")} cover={cover} presaleId={sale.presale_id} /> : null}
-      {hasLinks ? <span className={cx("links")}>{links}</span> : null}
+      {tagline && <p className={cx("sale-tag")}>{tagline}</p>}
+      {artwork}
+      {hasLinks && <span className={cx("links")}><SaleLinks about metadata={metadata} sale={sale} /></span>}
     </section>
   );
 }
@@ -1268,6 +1271,7 @@ function TradingSale({ detail, claims, children, nowMs }: Readonly<{ detail: Soc
         {phone ? null : claimCard}
       </SaleMarket>
     </SaleTradeFeed>
+    <AboutCard detail={detail} />
     <div className={cx("sale-pills")}><TrustBadges lpLocked sale={detail.presale} /></div>
     <TradingVesting detail={detail} />
     <BuyerVestingCard detail={detail} />
@@ -1433,7 +1437,7 @@ export function SaleView({
       {trading ? null : <SaleNotice detail={detail} now={now} />}
       <TermsCards detail={detail} />
       <SaleTermsCard detail={detail} />
-      <AboutCard detail={detail} />
+      {trading ? null : <AboutCard detail={detail} />}
       <FriendsCard detail={detail} entry={viewerEntry} narrow onSeeAll={seeAll} />
       {record}
   </>);

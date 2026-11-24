@@ -37,12 +37,13 @@ test("zero native SUI fee refusal is a wrapping alert, never a payable button or
 
 test("terminal failure stays disabled after the old error timer and quotes cannot retry it", async (t) => {
   let submits = 0;
-  const screen = await mountSwap(t, trading(async () => { submits += 1; return { status: "failed", code: "insufficient_balance", message: MESSAGE }; }), { inCoin: TSUI });
+  const message = "This trade could not be confirmed. Check your wallet before retrying.";
+  const screen = await mountSwap(t, trading(async () => { submits += 1; return { status: "failed", code: "execution_unconfirmed", message }; }), { inCoin: TSUI });
   await screen.type("100000"); await screen.settle();
   await screen.press();
   await screen.act(async () => { await new Promise((resolve) => setTimeout(resolve, 3200)); });
   assert.equal(screen.trade().disabled, true);
-  assert.equal(screen.container.querySelector('[role="alert"]')?.textContent, MESSAGE);
+  assert.equal(screen.container.querySelector('[role="alert"]')?.textContent, message);
   assert.ok(screen.trade().textContent!.length < 40, "explanations stay out of the button");
   await screen.act(async () => screen.trade().click());
   assert.equal(submits, 1);

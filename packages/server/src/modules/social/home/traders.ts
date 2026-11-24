@@ -16,7 +16,7 @@ import type { SocialAccountWalletLister } from "@blast/server/modules/social/acc
 import { lifetimePnl, pnlAssetIds, readPnlAssets } from "@blast/server/modules/social/portfolio/pnl.ts";
 import { participantOf, sideAcross, sideOf } from "@blast/server/modules/social/home/aggregate.ts";
 import { readPeople, type HomeReadContext } from "@blast/server/modules/social/home/coins.ts";
-import { Params, ROW_ORDER, SIDES_GROUP, SIDES_SELECT, homeSpan, readHomeBounds, rowsWithSql, selectHome, visibleKinds, type GroupedRow, type SideRow } from "@blast/server/modules/social/home/sql.ts";
+import { Params, ROW_ORDER, SIDES_GROUP, sidesSelect, homeSpan, readHomeBounds, rowsWithSql, selectHome, visibleKinds, type GroupedRow, type SideRow } from "@blast/server/modules/social/home/sql.ts";
 import { readPnlLedger } from "@blast/server/modules/social/portfolio/pnl-ledger.ts";
 
 /** Global public PnL since launch; the activity window only scopes each visible row's details. */
@@ -259,7 +259,7 @@ export async function readHomeTraders(db: ReadableDatabase, window: HomeWindow, 
   const whoByKey = new Map(selected.map((trader) => [trader.key, activityByAccount.get(accountByKey.get(trader.key)!)?.who ?? `c:${accountByKey.get(trader.key)!}`]));
   const sides = new Params();
   const whos = sides.add(selected.map((trader) => whoByKey.get(trader.key)!));
-  const sidesText = selectHome(rowsWithSql(request, sides), `${SIDES_SELECT} WHERE w.who = ANY(${whos}::text[]) ${SIDES_GROUP}`);
+  const sidesText = selectHome(rowsWithSql(request, sides), `${sidesSelect()} WHERE w.who = ANY(${whos}::text[]) ${SIDES_GROUP}`);
   assertChainReadThroughViews(sidesText);
   const sideRows = (await db.read<SideRow>(sidesText, sides.values)).rows;
   const sidesByWho = new Map<string, SideRow[]>();

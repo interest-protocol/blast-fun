@@ -15,6 +15,7 @@ const paths = [
   ["discovery", "launchpad/discovery"], ["search", "launchpad/search"],
   [`market/coins/${id}%3A%3Am%3A%3AC/candles`, `launchpad/market/coins/${id}%3A%3Am%3A%3AC/candles`],
   [`market/coins/${id}%3A%3Am%3A%3AC`, `launchpad/market/coins/${id}%3A%3Am%3A%3AC`],
+  [`market/coins/${id}%3A%3Am%3A%3AC/metadata`, `v1/market/coins/${id}%3A%3Am%3A%3AC/metadata`],
   ["market/status", "launchpad/market/status"],
   [`market/coins/${id}%3A%3Am%3A%3AC/holders`, `launchpad/market/coins/${id}%3A%3Am%3A%3AC/holders`],
   [`market/launches/${id}/activity`, `launchpad/market/launches/${id}/activity`],
@@ -34,7 +35,7 @@ const paths = [
   ["market/launchpad/policy", "launchpad/market/launchpad/policy"],
 ];
 const headers = { cookie: "private", authorization: "Bearer private", "x-blast-partner-key": "private", "x-blast-api-key": "private" };
-const handlers = (read: PartnerV1Handlers["presales"]): PartnerV1Handlers => ({ defillama: read, presales: read, featured: read, presale: read, presale_proof: read, prices: read, discovery: read, wallet_launches: read, search: read, market: read });
+const handlers = (read: PartnerV1Handlers["presales"]): PartnerV1Handlers => ({ defillama: read, daily_stats: read, presales: read, featured: read, presale: read, presale_proof: read, prices: read, discovery: read, wallet_launches: read, search: read, market: read, coin_metadata: read });
 
 test("v1 routes all operations without redirects, losing repeated parameters, or forwarding user credentials", async () => {
   for (const [path, source] of paths) {

@@ -25,15 +25,19 @@ test("closing mobile V1 Trade discards the pending quote and retains the draft",
   const coin = BLAST_V1_COINS[0];
   const out = { coin_type: coin.coinType, symbol: coin.symbol, name: coin.name, decimals: coin.decimals, usd_price: "0.01", icon_url: null, presale_id: null };
   const usdc = FIXTURE_COINS[0]!;
-  const wallet = { address: FIXTURE_WALLET_ADDRESS, signer: "wallet", fee: "sponsored", as_of_ms: Date.now(),
-    coins: [{ coin_type: usdc.coinType, symbol: usdc.symbol, name: usdc.name, decimals: usdc.decimals, atoms: usdc.atoms.toString(), usd_price: "1", value_usd: "860.00", icon_url: null, presale: null }] };
+  const wallet = { address: FIXTURE_WALLET_ADDRESS, signer: "wallet", fee: "sponsored", as_of_ms: Date.now(), coins: null };
   const quotes = [usdc, tradableCoinView(out)];
   const pending = Promise.withResolvers<void>();
   let held: RequestInit | undefined;
   let holdNext = false;
   t.mock.method(globalThis, "fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
-    const { pathname } = new URL(String(input), window.location.origin);
-    if (pathname === SOCIAL_WALLET_PATH) return Response.json(wallet);
+    const { pathname, searchParams } = new URL(String(input), window.location.origin);
+    if (pathname === SOCIAL_WALLET_PATH) {
+      const coinType = searchParams.get("balance_coin");
+      if (searchParams.get("identity") === "1") return Response.json(wallet);
+      if (coinType !== usdc.coinType) return Response.json({}, { status: 404 });
+      return Response.json({ address: wallet.address, coin_type: coinType, atoms: usdc.atoms.toString(), as_of_ms: Date.now() });
+    }
     if (pathname !== SOCIAL_TRADE_QUOTE_PATH) return Response.json({}, { status: 404 });
     const request = JSON.parse(String(init?.body)) as SocialTradeQuoteRequest;
     const quote = fixtureQuote(request, quotes, DEFAULT_SWAP_MODE, Date.now());
@@ -52,7 +56,7 @@ test("closing mobile V1 Trade discards the pending quote and retains the draft",
   t.after(async () => { await act(async () => root.unmount()); client.clear(); container.remove(); });
 
   await act(async () => root.render(withQueryClient(client,
-    <SocialViewerProvider signedIn callsign="fixture">
+    <SocialViewerProvider signedIn callsign="fixture" getAccessToken={async () => null}>
       <FeedOverlaysProvider value={{ tradeKit: { signedIn: true, signIn: () => {}, quote: async () => ({ status: "error" }), wallet: async () => null, send } }}>
         <LegacyCoinScreen {...coin} chart={null}
           trade={<GraduatedCoinTrade {...coin} iconUrl={coin.logoUrl} />} />

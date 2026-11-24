@@ -7,20 +7,88 @@ import { seriesChange } from "./series-change";
 import { exactChartCandle, exactChartPrice, migrationCaptionOffset, nearestPriceSeries } from "./chart-inspection-model";
 import { exactChartScale } from "./exact-chart-scale";
 import {
+  atLiveEdge,
   chartData,
   chartTimestamp,
   sparkTimeScale,
   distinctTicks,
   elapsedTimeScale,
+  keyboardChartRange,
+  liveChartRange,
   pannedPosition,
   pointerX,
+  queuedChartRange,
+  rebaseCoinChartRange,
+  resizedLiveChartRange,
   trackpadGestures,
   visibleMove,
   wheelAction,
   wheelPixels,
   withAlpha,
+  zoomChartRangeAtPixel,
 } from "./tradingview-model";
 import { scheduleLines } from "../vesting/schedule-series";
+
+test("a new coin bar keeps the live zoom and anchors a reader browsing history", () => {
+  const before = [10, 20, 30, 40, 50, 60];
+  const after = [20, 30, 35, 40, 50, 60, 70];
+  const live = { from: 3.5, to: 5.75 };
+  const history = { from: 1.25, to: 3.5 };
+  const width = 120;
+  assert.equal(atLiveEdge(live, before.length, width), true);
+  assert.equal(atLiveEdge(history, before.length, width), false);
+  assert.equal(atLiveEdge({ from: 4.5, to: 6.75 }, before.length, width), false);
+  assert.deepEqual(rebaseCoinChartRange(live, before, after, width), { from: 4.5, to: 6.75 });
+  assert.deepEqual(rebaseCoinChartRange(history, before, after, width), { from: 0.25, to: 2.5 });
+  assert.deepEqual(rebaseCoinChartRange({ from: -1, to: 3 }, before, [20, 30, 40, 50, 60, 70], width), { from: -2, to: 2 });
+});
+
+test("resizing keeps the live gutter and leaves a history range alone", () => {
+  const live = liveChartRange({ from: 2, to: 5 }, 6, 160);
+  const wider = resizedLiveChartRange(live, 6, 160, 320)!;
+  assert.equal(atLiveEdge(live, 6, 320), false);
+  assert.equal(atLiveEdge(wider, 6, 320), true);
+  assert.equal(wider.to - wider.from, live.to - live.from);
+  assert.equal(resizedLiveChartRange({ from: -1, to: 3 }, 6, 160, 320), null);
+});
+
+test("a refreshed fallback time grid keeps both historical time bounds", () => {
+  const before = [0, 10, 20];
+  const after = [0, 5, 10, 15, 20, 25];
+  assert.deepEqual(rebaseCoinChartRange({ from: 0, to: 1 }, before, after, 160), { from: 0, to: 2 });
+  assert.deepEqual(rebaseCoinChartRange({ from: -0.5, to: 0.75 }, before, after, 160), { from: -1, to: 1.5 });
+});
+
+test("an incoming bar keeps a Back to live or keyboard zoom request made before the chart draws", () => {
+  const before = [10, 20, 30, 40, 50, 60];
+  const after = [...before, 70];
+  const width = 160;
+  const history = { from: -1, to: 3 };
+  let drawn = history;
+  let queued = drawn;
+  const viewport = queuedChartRange(() => drawn, (range) => { queued = range; });
+
+  viewport.write(liveChartRange(viewport.read()!, before.length, width));
+  assert.deepEqual(drawn, history);
+  viewport.write(rebaseCoinChartRange(viewport.read()!, before, after, width));
+  assert.deepEqual(queued, { from: 3, to: 7 });
+  const pointerZoom = zoomChartRangeAtPixel(viewport.read()!, 79, width, Math.log(0.5) / 0.002);
+  assert.deepEqual(pointerZoom, { from: 3.75, to: 5.75 });
+  drawn = queued;
+  viewport.settle();
+
+  const left = keyboardChartRange("ArrowLeft", viewport.read()!, after.length, width)!;
+  assert.ok(left.to < drawn.to);
+  assert.deepEqual(keyboardChartRange("ArrowRight", left, after.length, width), drawn);
+  assert.equal(keyboardChartRange("Tab", left, after.length, width), null);
+  const zoom = keyboardChartRange("+", drawn, after.length, width)!;
+  assert.ok(zoom.to - zoom.from < drawn.to - drawn.from);
+  assert.ok(atLiveEdge(zoom, after.length, width));
+  assert.ok(keyboardChartRange("-", zoom, after.length, width)!.from < zoom.from);
+  viewport.write(zoom);
+  viewport.write(rebaseCoinChartRange(viewport.read()!, after, [...after, 80], width));
+  assert.deepEqual(queued, { from: zoom.from + 1, to: zoom.to + 1 });
+});
 
 test("a live Home price amends the tail without moving the time grid or its history", () => {
   const base = 1_795_000_000_000;

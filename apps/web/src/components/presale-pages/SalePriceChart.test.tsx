@@ -176,8 +176,10 @@ test("the coin's identity carries its essential facts and actions; the supply is
   const document = new JSDOM(html).window.document;
   const cover = document.querySelector("[data-coin-cover] > img");
   assert.equal(cover?.getAttribute("src"), "https://blob.example/nogas-cover.webp");
-  assert.ok(cover?.parentElement?.nextElementSibling?.matches("[data-coin-identity]"));
-  assert.ok(html.indexOf("A token description") > html.indexOf('id="presaleHistory"'));
+  assert.match(cover?.closest("section")?.textContent ?? "", /About.*A token description/);
+  assert.ok(!document.querySelector("[data-coin-identity] [data-coin-cover]"));
+  assert.ok(html.indexOf("data-sale-market") < html.indexOf("A token description"));
+  assert.ok(html.indexOf("A token description") < html.indexOf('id="presaleHistory"'));
   const tokenomics = renderToStaticMarkup(<TokenomicsCard sale={sale.presale} terms={sale.terms!} />);
   assert.match(tokenomics.replace(/<[^>]+>/g, " ").replace(/\s+/g, " "), /Tokenomics 1B KSTL, fixed supply Presale buyers 45% 450M KSTL/);
   client.clear();

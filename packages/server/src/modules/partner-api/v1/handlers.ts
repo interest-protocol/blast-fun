@@ -1,6 +1,6 @@
 import { readLegacyMarket } from "@blast/server/modules/launchpad-market/legacy-fdv.ts";
 import { routeSegments } from "@blast/core/modules/backend-api/route-path.ts";
-import { marketSourceBucket, WALLET_LAUNCHES_READ, webPath } from "@blast/server/modules/partner-api/v1/paths.ts";
+import { DAILY_STATS_READ, marketSourceBucket, WALLET_LAUNCHES_READ, webPath } from "@blast/server/modules/partner-api/v1/paths.ts";
 import { withRouteLimits } from "@blast/core/modules/web-security/route-limits.ts";
 import { runtimeConfig } from "@blast/server/config/runtime-config.ts";
 import type { RateLimitPort } from "@blast/core/lib/web-security/rate-limits.ts";
@@ -17,6 +17,8 @@ import { socialRouteKit } from "@blast/server/modules/social/route-kit/shared-ru
 import type { PartnerV1Handlers } from "@blast/server/modules/partner-api/v1/route.ts";
 import { createDefillamaRead } from "@blast/core/modules/defillama/reads.ts";
 import { defillamaReportingReads } from "@blast/core/modules/defillama/runtime.ts";
+import { handleCoinMetadataRequest } from "./coin-metadata.ts";
+import { handleDailyStatsRequest } from "./daily-stats.ts";
 
 const limitCodes = { rateLimited: "LAUNCHPAD_RATE_LIMITED", unavailable: "LAUNCHPAD_READ_UNAVAILABLE" } as const;
 
@@ -43,12 +45,20 @@ export function createPartnerV1Handlers(
   let proof: ReturnType<typeof presaleAllowlistProofRoute> | undefined;
   return {
     defillama: (request, client) => withRouteLimits(client, ["defillama_read"], () => defillama(request), { ...limitCodes, limiter }),
+    daily_stats: (request, client) =>
+      withRouteLimits(client, [DAILY_STATS_READ.bucket], () => handleDailyStatsRequest(request), { ...limitCodes, limiter }),
     presales: (request, client) => presales.list.GET(request, client),
     featured: (request, client) => presales.featured.GET(request, client),
     presale: (request, client) => presales.presale.GET(request, client),
     presale_proof: (request, client) => (proof ??= presaleAllowlistProofRoute(limiter))(request, client),
     prices: (request, client) => prices.GET(request, client),
     market,
+    coin_metadata: (request, client) => withRouteLimits(
+      client,
+      ["launchpad_market_coin"],
+      () => handleCoinMetadataRequest(request),
+      { rateLimited: "rate_limited", unavailable: "unavailable", limiter },
+    ),
     discovery: (request, client) => withRouteLimits(client, ["launchpad_discovery"], () => handleDiscoveryRequest(request, undefined, undefined, undefined, publicReadCache("market"), readLegacyMarket), { ...limitCodes, limiter }),
     wallet_launches: (request, client) =>
       withRouteLimits(client, ["launchpad_wallet_launches"], () => handleWalletLaunchesRequest(request, walletOf(request)), { ...limitCodes, limiter }),

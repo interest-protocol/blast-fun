@@ -12,10 +12,12 @@ import { normalizeStructTag, parseStructTag } from "@mysten/sui/utils";
 import type { FrontendFee } from "./frontend-fees.ts";
 import { vaultIncome, type VaultIncome } from "./vault-accounting.ts";
 import {
+  DAY_SECONDS,
   METRICS,
   type Amounts,
   type Contract,
   type Coverage,
+  type DailyLaunchStats,
   type Item,
   type ScopeCoverage,
   type Profile,
@@ -58,6 +60,8 @@ export class DefillamaAccounting {
   readonly #vaults = new Map<string, Vault>();
   readonly #contracts = new Map<string, Contract>();
   readonly #totals = new Map<string, Totals>();
+  #created = 0;
+  #graduated = 0;
 
   constructor(profile: Profile, start: number, end: number) {
     this.#profile = profile;
@@ -144,7 +148,13 @@ export class DefillamaAccounting {
     }
   }
 
-  result(): { items: Item[]; contracts: Contract[]; coverage: Coverage; scope_coverage: ScopeCoverage } {
+  result(): {
+    items: Item[];
+    contracts: Contract[];
+    coverage: Coverage;
+    scope_coverage: ScopeCoverage;
+    daily_launch_stats?: DailyLaunchStats;
+  } {
     const items = [...this.#totals.values()]
       .map(({ item, amounts, unresolved }) => {
         for (const key of METRICS) {
@@ -174,6 +184,17 @@ export class DefillamaAccounting {
     const coverage = metricCoverage(launchUnresolved || vaultUnresolved);
     return {
       items,
+      ...(this.#end - this.#start === DAY_SECONDS * 1000 && {
+        daily_launch_stats: {
+          launches: this.#created,
+          graduations: this.#graduated,
+          volume: items.flatMap(({ component, coin_type, metrics }) =>
+            component === "curve_swaps" && metrics.volume !== null && metrics.volume !== "0"
+              ? [{ quote_coin_type: coin_type, amount_atomic: metrics.volume }]
+              : [],
+          ),
+        },
+      }),
       contracts: [...this.#contracts.values()].sort((a, b) =>
         a.object_id.localeCompare(b.object_id),
       ),
@@ -201,6 +222,7 @@ export class DefillamaAccounting {
       this.#launches.set(payload.launch_id, launch);
       this.#register(payload.launch_id, "curve", meme, quote, timestamp);
       if (this.#included(meme, timestamp)) {
+        this.#created++;
         this.#fee("creation", SUI, payload.creation_fee, 0n, launch.partnered);
       }
       return;
@@ -217,6 +239,8 @@ export class DefillamaAccounting {
     }
     if (event.kind === "Bought" || event.kind === "Sold") {
       this.#curveSwap(event, launch);
+    } else if (event.kind === "Migrated") {
+      this.#graduated++;
     } else if (event.kind === "ProtocolFeesAccrued") {
       this.#evidence(
         "migration_minted_allocations",

@@ -39,6 +39,11 @@ test("native BCS fees, exact quote volume and opening settlement are counted onc
     account.apply(event);
   }
   const result = account.result();
+  assert.deepEqual(result.daily_launch_stats, {
+    launches: 1,
+    graduations: 0,
+    volume: [{ quote_coin_type: quote, amount_atomic: "9007199254741093" }],
+  });
   const swap = result.items.find(
     (item) => item.component === "curve_swaps" && item.coin_type === quote,
   )!;
@@ -65,6 +70,26 @@ test("native BCS fees, exact quote volume and opening settlement are counted onc
   assert.equal(result.coverage.fees.status, "complete");
   assert.equal(result.coverage.holders_revenue.status, "not_applicable");
   assert.equal(result.contracts[0]?.tvl, "read_user_quote_custody");
+});
+
+test("daily counts use actual launch and graduation events on their own UTC days", () => {
+  const account = new DefillamaAccounting(profile, start, end);
+  for (const event of [
+    launchEvent("LaunchTicketCreated", {}, start - 2),
+    launchEvent("LaunchCreated", {}, start - 1),
+    launchEvent("Migrated", {}, start),
+    launchEvent("LaunchTicketCreated", { ticket_id: objectId("7") }, end - 1),
+    launchEvent("LaunchCreated", { launch_id: objectId("8"), ticket_id: objectId("7") }, end),
+  ]) {
+    account.apply(event);
+  }
+  assert.deepEqual(account.result().daily_launch_stats, {
+    launches: 0,
+    graduations: 1,
+    volume: [],
+  });
+  const hourly = new DefillamaAccounting(profile, start, start + 3_600_000);
+  assert.equal(hourly.result().daily_launch_stats, undefined);
 });
 
 test("mutable partner allocation blocks net metrics even when a later claim pays a known share", () => {
@@ -218,7 +243,7 @@ test("incomplete identities, malformed BCS and unreconciled vault receipts fail 
 
 test("UTC boundaries, excluded packages and empty verified days preserve zero versus unavailable", () => {
   assert.deepEqual(dayInterval(day, end), { start, end });
-  for (const bad of ["2026-02-30", "2026-2-01", "2026-10-20Z", "bogus"]) {
+  for (const bad of ["2026-02-30", "2026-2-01", "2026-10-20Z", "0000-01-01", "bogus"]) {
     assert.throws(() => dayInterval(bad, end));
   }
   assert.throws(() => dayInterval(day, end - 1), /day_not_complete/);
@@ -236,6 +261,7 @@ test("UTC boundaries, excluded packages and empty verified days preserve zero ve
   ]) account.apply(event);
   assert.deepEqual(account.result().items, []);
   assert.deepEqual(account.result().contracts, []);
+  assert.deepEqual(account.result().daily_launch_stats, { launches: 0, graduations: 0, volume: [] });
   assert.equal(account.result().coverage.volume.status, "complete");
   const boundary = new DefillamaAccounting(profile, start, end);
   for (const event of [...creation(), launchEvent("Bought", { quote_in: 100n }, end)]) {

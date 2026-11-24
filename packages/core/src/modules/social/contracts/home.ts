@@ -111,6 +111,14 @@ export function withHomeMarketDetails(path: string): string {
   return `${withHomeMobileMarket(path, true)}&${HOME_DEX_VOLUME_PARAM}=1&${HOME_ROLLING_CHANGE_PARAM}=1`;
 }
 
+export const HOME_RECENT_BUYS_PARAM = "recent_buys";
+export const HOME_RECENT_BUY_MS = 30_000;
+
+/** Opt into confirmed buy details on the same Discover read. */
+export function withHomeDiscoverDetails(path: string): string {
+  return `${withHomeMarketDetails(path)}&${HOME_RECENT_BUYS_PARAM}=1`;
+}
+
 /** The activity window every count, total and preview is scoped to. */
 export const HOME_WINDOWS = ["1h", "24h"] as const;
 export type HomeWindow = (typeof HOME_WINDOWS)[number];
@@ -225,6 +233,8 @@ export type HomeCoin = HomeWire<z.infer<typeof homeCoinSchema>>;
 export type HomeDexVolume = NonNullable<HomeCoin["dex_volume"]>;
 
 export type HomeCoinsPage = HomeWire<z.infer<typeof homeCoinsPageSchema>>;
+
+export type HomeRecentBuy = NonNullable<HomeCoinsPage["recent_buys"]>[number];
 
 export type HomeCoinsByIds = HomeWire<z.infer<typeof homeCoinsByIdsSchema>>;
 

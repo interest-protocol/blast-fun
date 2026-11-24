@@ -45,6 +45,7 @@ export default function SalePricePlot({
   );
   return (
     <TradingViewChart
+      liveViewport
       series={series}
       timeline={time.timeline}
       priceFormatter={scale.format}

@@ -4,7 +4,7 @@ import type { SocialFeedPage } from "@blast/core/modules/social/contracts/feed.t
 import type { SocialItemResponse } from "@blast/core/modules/social/contracts/item-routes.ts";
 import type { SocialProfileCalls } from "@blast/core/modules/social/contracts/profile-page.ts";
 import { socialProfilePath, withProfileBio, type SocialProfile } from "@blast/core/modules/social/contracts/profiles.ts";
-import { HOME_DEFAULT_WINDOW, socialHomePath, socialHomeCoinsPath, socialHomeTradersPath, withHomeMarketDetails, type HomeQuery, type HomeWindow, type HomeCoinsPage, type HomeCoinsByIds, type HomeTradersPage } from "@blast/core/modules/social/contracts/home.ts";
+import { HOME_DEFAULT_WINDOW, socialHomePath, socialHomeCoinsPath, socialHomeTradersPath, withHomeDiscoverDetails, type HomeQuery, type HomeWindow, type HomeCoinsPage, type HomeCoinsByIds, type HomeTradersPage } from "@blast/core/modules/social/contracts/home.ts";
 import { readPrivateBackendPage } from "./private-page-read.ts";
 import { testPresaleIds, withoutTestCoins, withoutTestHappening, withoutTestPosts } from "#web/lib/test-launches.ts";
 
@@ -42,7 +42,7 @@ export async function readHappeningFromBackend(): Promise<SocialHappeningRespons
 }
 
 export function readHomeFromBackend(query: Partial<HomeQuery> = {}): Promise<HomeCoinsPage | null> {
-  return socialRead<HomeCoinsPage>(withHomeMarketDetails(socialHomePath(query))).then((page) => page && withoutTestCoins(page));
+  return socialRead<HomeCoinsPage>(withHomeDiscoverDetails(socialHomePath(query))).then((page) => page && withoutTestCoins(page));
 }
 
 export function readHomeCoinsFromBackend(ids: readonly string[], window: HomeWindow, holderLimit?: number): Promise<HomeCoinsByIds | null> {

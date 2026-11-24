@@ -143,11 +143,33 @@ after(async () => {
     outsider?.end(),
     warehouseOutsider?.end(),
     warehouse?.end(),
+    admin?.end(),
   ]);
-  await admin?.query(`DROP DATABASE IF EXISTS ${warehouseName} WITH(FORCE)`);
-  await admin?.end();
-  await database?.drop();
+  if (!database) return;
+
+  const maintenanceUrl = new URL(database.url);
+  const databaseName = maintenanceUrl.pathname.slice(1);
+  maintenanceUrl.pathname = "/postgres";
+  const maintenance = new Pool({ connectionString: maintenanceUrl.toString(), max: 1 });
+  try {
+    if (warehouseName) await dropClosedDatabase(maintenance, warehouseName);
+    await dropClosedDatabase(maintenance, databaseName);
+  } finally {
+    await maintenance.end();
+  }
 });
+
+async function dropClosedDatabase(pool: Pool, name: string): Promise<void> {
+  // A pool can finish ending before PostgreSQL finishes closing its sessions.
+  await waitUntil(async () => {
+    const { rows } = await pool.query<{ disconnected: boolean }>(
+      "SELECT NOT EXISTS (SELECT FROM pg_stat_activity WHERE datname = $1) AS disconnected",
+      [name],
+    );
+    return rows[0].disconnected;
+  });
+  await pool.query(`DROP DATABASE IF EXISTS ${name}`);
+}
 
 test("resolves only existing accounts with member precedence and no creation", async () => {
   await newAccount();
@@ -1283,24 +1305,7 @@ test("a non-superuser warehouse owner can upgrade without inherited definer righ
     );
   } finally {
     await Promise.all([capability.end(), operator.end()]);
-    const deadline = Date.now() + 1000;
-    while (
-      Number(
-        (
-          await admin.query(
-            "SELECT count(*) FROM pg_stat_activity WHERE datname=$1",
-            [name],
-          )
-        ).rows[0].count,
-      ) > 0
-    ) {
-      assert.ok(
-        Date.now() < deadline,
-        "owned warehouse connections must close before drop",
-      );
-      await delay(10);
-    }
-    await admin.query(`DROP DATABASE ${name}`);
+    await dropClosedDatabase(admin, name);
     await admin.query(`DROP ROLE ${role}`);
   }
 });

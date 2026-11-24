@@ -205,10 +205,14 @@ test("a failed balance read offers Try again, and the retry restores the balance
   const panel = await mount(t, ok);
   panel.wallet.state.fail = true;
   await panel.reread();
-  const again = () => [...dom.document.querySelectorAll("button")].find((button) => button.textContent === "Try again");
-  await waitFor(again, "the unreadable balance offers a retry");
+  const again = await waitFor(
+    () => [...dom.document.querySelectorAll<HTMLButtonElement>('[role="status"] button')].find((button) =>
+      button.textContent === "Try again" && button.closest('[role="status"]')?.textContent?.startsWith("Balance unavailable."),
+    ),
+    "the unreadable balance offers a retry",
+  );
   panel.wallet.state.fail = false;
-  await act(async () => again()!.click());
+  await act(async () => again.click());
   await waitFor(() => !panel.max().disabled && /Balance 100 WAL/.test(panel.text()), "the retry read the balance");
 });
 

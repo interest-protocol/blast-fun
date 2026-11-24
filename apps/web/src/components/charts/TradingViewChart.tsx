@@ -1,14 +1,15 @@
 "use client";
 
 import { shortUtcDate } from "#web/components/blast-ui/date-label.ts";
+import { Button } from "#web/components/blast-ui/Button.tsx";
 
-import { useEffectEvent, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useEffectEvent, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type Ref } from "react";
 import clsx from "clsx";
 import type {
   IChartApi,
   IPriceLine,
+  IRange,
   Logical,
-  LogicalRange,
   LineStyle,
   ISeriesApi,
   SeriesDataItemTypeMap,
@@ -23,16 +24,26 @@ import {
 } from "#web/components/blast-ui/use-shell-prefs.ts";
 import { chartNumber } from "./chart-price";
 import {
+  atLiveEdge,
   chartTimestamp,
   distinctTicks,
+  keyboardChartRange,
+  liveChartRange,
+  LIVE_GUTTER_PX,
+  panChartRange,
   pannedPosition,
   pointerX,
+  queuedChartRange,
+  rebaseCoinChartRange,
+  resizedLiveChartRange,
   restoredChartRange,
   trackpadGestures,
   visibleMove,
   wheelAction,
   wheelPixels,
   withAlpha,
+  zoomChartRange,
+  zoomChartRangeAtPixel,
   type SavedChartView,
 } from "./tradingview-model";
 import { chartProjectionQueue } from "./chart-projection.ts";
@@ -45,8 +56,6 @@ const DEFAULT_MARGINS = { top: 0.12, bottom: 0.12 };
 const loadTradingView = () => import("lightweight-charts");
 function coinTimeScale({ TickMarkType: ticks }: Awaited<ReturnType<typeof loadTradingView>>, intervalMs: number) {
   return {
-    fixLeftEdge: true,
-    fixRightEdge: true,
     tickMarkMaxCharacterLength: intervalMs < 60_000 ? 8 : 6,
     tickMarkFormatter: (time: Time, type: TickMarkType) => {
       const date = new Date(Number(time) * 1000);
@@ -57,6 +66,7 @@ function coinTimeScale({ TickMarkType: ticks }: Awaited<ReturnType<typeof loadTr
   };
 }
 type Kind = "Line" | "Area" | "Candlestick" | "Histogram";
+type CoinChartView = Readonly<{ logical: IRange<number>; times: readonly number[]; width: number }>;
 /** A volume pane's overlay scale: bars keep their height, the axis column stays the price's alone. */
 export const VOLUME_SCALE = "volume";
 /** The "Migration" label's width plus its inset: with less room to the plot's right edge it sits left of the line. */
@@ -91,6 +101,8 @@ type Props = Readonly<{
   interactive?: boolean;
   /** Readable axes and separate credit for the full-width coin board. */
   coinAxes?: boolean;
+  /** Keep the latest bar within reach while the reader moves or zooms the chart. */
+  liveViewport?: boolean;
   intervalMs?: number;
   scaleMargins?: Readonly<{ top: number; bottom: number }>;
   /** A price label; `significant` asks for more digits when zoomed-in ticks would otherwise read the same. */
@@ -124,6 +136,7 @@ export function TradingViewChart({
   compact = false,
   interactive = !compact,
   coinAxes = false,
+  liveViewport = coinAxes,
   intervalMs = 60_000,
   scaleMargins = DEFAULT_MARGINS,
   priceFormatter,
@@ -137,15 +150,16 @@ export function TradingViewChart({
 }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const active = useRef<ChartHandle | null>(null);
-  const savedView = useRef<Readonly<{ rollingWindow: boolean; view: SavedChartView }> | null>(null);
+  const returnLive = useRef<(() => void) | null>(null);
+  const savedView = useRef<Readonly<{ rollingWindow: boolean; view: SavedChartView | CoinChartView }> | null>(null);
   const [failed, setFailed] = useState(false);
+  const [browsing, setBrowsing] = useState(false);
   const zoomHint = useZoomHint();
-  // The reader's platform names the key; the server, knowing none, says Ctrl.
-  const zoomKey = useSyncExternalStore(noSubscribe, platformZoomKey, () => "Ctrl");
   const preferences = useShellPrefs();
   const dark = useIsDark();
   const hidden = hidePrices ?? preferences.amountsHidden;
   const showCoinTag = coinAxes && !hidden;
+  const coinViewport = liveViewport && interactive;
   const ready = useEffectEvent((handle: ChartHandle) => onReady?.(handle));
   const project = useEffectEvent((handle: ChartHandle, settled: boolean) => onProject?.(handle, settled));
   const select = useEffectEvent((at: number) => onSelect?.(at));
@@ -153,7 +167,7 @@ export function TradingViewChart({
   const hideHint = useEffectEvent(() => zoomHint.hide());
 
   const model = useMemo(() => ({ series, timeline, priceFormatter, latestPrice }), [series, timeline, priceFormatter, latestPrice]);
-  const mountKey = livePool ? series.map((s) => `${s.type}:${s.pane ?? 0}`).join("|") : model;
+  const mountKey = livePool || coinViewport ? series.map((s) => `${s.type}:${s.pane ?? 0}`).join("|") : model;
   const readModel = useEffectEvent(() => model);
   const writeModel = useRef<((next: typeof model) => void) | null>(null);
 
@@ -165,14 +179,46 @@ export function TradingViewChart({
     let disposed = false;
     let mounting = false;
     let readyFrame = 0;
-    let viewReady = !rollingWindow;
+    let viewReady = !rollingWindow && !coinViewport;
     const previousView = !compact && savedView.current?.rollingWindow === rollingWindow ? savedView.current.view : null;
     let cleanupReady: void | (() => void);
     let times: number[] = [];
     const crosshairTone = coinAxes ? "--muted" : "--faint";
+    const liveOptions = coinViewport ? { rightOffsetPixels: LIVE_GUTTER_PX } : {};
+    let previousBrowsing: boolean | undefined;
+    let previousWidth = 0;
     const { schedule, afterChartWrite, cancel } = chartProjectionQueue(() => {
-      if (handle && !disposed) project(handle, true);
+      if (!handle || disposed) return;
+      viewport.settle();
+      if (coinViewport && viewReady) {
+        const width = handle.chart.timeScale().width();
+        const logical = viewport.read();
+        const resized = logical && resizedLiveChartRange(logical, times.length, previousWidth, width);
+        previousWidth = width;
+        if (resized) viewport.write(resized);
+        const visible = resized ?? logical;
+        const next = Boolean(visible && width && !atLiveEdge(visible, times.length, width));
+        if (next !== previousBrowsing) {
+          previousBrowsing = next;
+          setBrowsing(next);
+        }
+      }
+      project(handle, true);
     });
+    const viewport = queuedChartRange(
+      () => chart?.timeScale().getVisibleLogicalRange() ?? null,
+      (range) => {
+        chart?.timeScale().setVisibleLogicalRange(range);
+        afterChartWrite();
+      },
+    );
+    returnLive.current = () => {
+      const range = viewport.read();
+      const width = chart?.timeScale().width();
+      if (!range || !width) return;
+      viewport.write(liveChartRange(range, times.length, width));
+      node.focus({ preventScroll: true });
+    };
     async function mount() {
       const library = await loadTradingView();
       if (disposed || !node!.clientWidth || !node!.clientHeight) return;
@@ -240,6 +286,7 @@ export function TradingViewChart({
           minBarSpacing: 0.001,
           lockVisibleTimeRangeOnResize: true,
           ...(coinAxes ? coinTimeScale(library, intervalMs) : {}),
+          ...liveOptions,
         },
         localization: {
           locale: "en-GB",
@@ -263,7 +310,7 @@ export function TradingViewChart({
       // one value on the hidden timeline so quiet seconds still occupy space.
       const setTimeline = (points: readonly number[]) => timelineSeries.setData(points.map((at, index) => {
         const time = chartTimestamp(at);
-        return rollingWindow && index === points.length - 1 ? { time, value: 0 } : { time };
+        return (rollingWindow || coinViewport) && index === points.length - 1 ? { time, value: 0 } : { time };
       }));
       setTimeline(times);
       // A full chart's uncoloured price line follows the move in view; the
@@ -278,7 +325,7 @@ export function TradingViewChart({
       // A scale takes its tick labels from its first series, while the last-price tag may belong to a later one (the
       // board draws one series per price source), so each series checks every tag in its pane.
       const drawn: ISeriesApi<Kind>[] = [];
-      const syncLatestPrice = coinPriceMarker(css, library.LineStyle.Dotted, showCoinTag);
+      const syncLatestPrice = coinPriceMarker(css, library.LineStyle.Dashed, showCoinTag);
       const clearOfTags = (pane: number | undefined) => (price: number) =>
         drawn.every((other, index) => (series[index]!.pane ?? 0) !== (pane ?? 0) || clearOfTag(other, price,
           showCoinTag && index === current.latestPrice?.seriesIndex ? current.latestPrice.price : undefined));
@@ -296,10 +343,11 @@ export function TradingViewChart({
         for (const index of toned)
           drawn[index]!.applyOptions(moveColors(series[index]!, tones[move]));
       };
+      const scale = chart.timeScale();
       writeModel.current = (next) => {
         if (next === current) return;
-        const range = chart!.timeScale().getVisibleRange();
-        const logical = chart!.timeScale().getVisibleLogicalRange();
+        const range = scale.getVisibleRange();
+        const logical = viewport.read();
         const previousTimes = times;
         const previousSeries = series;
         current = next;
@@ -316,13 +364,13 @@ export function TradingViewChart({
         }
         syncLatestPrice?.(drawn, current.latestPrice);
         // Let the native first fit run before interpreting the viewport as a reader's zoom.
-        if (viewReady && timelineChanged && range && previousTimes.length && times.length) {
-          preserveLiveView(chart!, range, logical, previousTimes, times);
+        if (viewReady && timelineChanged && previousTimes.length && times.length) {
+          if (coinViewport && logical) viewport.write(rebaseCoinChartRange(logical, previousTimes, times, scale.width()));
+          else if (range) preserveLiveView(chart!, range, logical, previousTimes, times);
         }
-        retone(chart!.timeScale().getVisibleRange());
+        retone(scale.getVisibleRange());
         afterChartWrite();
       };
-      const scale = chart.timeScale();
       handle = {
         chart,
         series: drawn,
@@ -381,6 +429,17 @@ export function TradingViewChart({
     node.addEventListener("pointermove", schedule);
     node.addEventListener("pointerup", schedule);
     node.addEventListener("wheel", schedule, { passive: true });
+    const keydown = (event: KeyboardEvent) => {
+      if (event.target !== node || event.altKey || event.ctrlKey || event.metaKey) return;
+      const range = viewport.read();
+      const width = chart?.timeScale().width();
+      if (!range || !width) return;
+      const next = keyboardChartRange(event.key, range, times.length, width);
+      if (!next) return;
+      event.preventDefault();
+      viewport.write(next);
+    };
+    if (coinViewport) node.addEventListener("keydown", keydown);
     const wheel = (event: WheelEvent) => {
       if (!interactive || !chart) return;
       const action = wheelAction(event);
@@ -389,12 +448,15 @@ export function TradingViewChart({
       if (action === "pan") {
         // The live bar spacing: zooming changes it without updating the options.
         const scale = chart.timeScale();
-        const range = scale.getVisibleLogicalRange();
-        if (range) scale.scrollToPosition(pannedPosition(scale.scrollPosition(), wheelPixels(event.deltaX, event.deltaMode), scale.width() / Math.max(range.to - range.from, 1)), false);
+        const delta = wheelPixels(event.deltaX, event.deltaMode);
+        const range = viewport.read();
+        if (!range) return;
+        if (coinViewport) viewport.write(panChartRange(range, delta, scale.width()));
+        else scale.scrollToPosition(pannedPosition(scale.scrollPosition(), delta, scale.width() / Math.max(range.to - range.from, 1)), false);
         return;
       }
       hideHint();
-      zoomAt(chart, wheelPixels(event.deltaY, event.deltaMode), event.clientX, node);
+      zoomAt(chart, wheelPixels(event.deltaY, event.deltaMode), event.clientX, node, coinViewport ? viewport : undefined);
     };
     node.addEventListener("wheel", wheel, { passive: false });
     // Safari on a Mac sends a trackpad pinch as gesture events, not Ctrl + wheel. On a
@@ -409,7 +471,7 @@ export function TradingViewChart({
       if (!interactive || !chart) return;
       event.preventDefault();
       const { scale, clientX } = event as GestureLike;
-      if (scale > 0) zoomAt(chart, Math.log(pinch / scale) / 0.002, clientX, node);
+      if (scale > 0) zoomAt(chart, Math.log(pinch / scale) / 0.002, clientX, node, coinViewport ? viewport : undefined);
       pinch = scale;
     };
     const gestures = trackpadGestures(window, navigator);
@@ -420,12 +482,14 @@ export function TradingViewChart({
     return () => {
       disposed = true;
       active.current = null;
+      returnLive.current = null;
       writeModel.current = null;
       resize.disconnect();
       node.removeEventListener("pointermove", schedule);
       node.removeEventListener("pointerup", schedule);
       node.removeEventListener("wheel", schedule);
       node.removeEventListener("wheel", wheel);
+      node.removeEventListener("keydown", keydown);
       if (gestures) {
         node.removeEventListener("gesturestart", gestureStart);
         node.removeEventListener("gesturechange", gestureChange);
@@ -433,13 +497,18 @@ export function TradingViewChart({
       cancel();
       cancelAnimationFrame(readyFrame);
       cleanupReady?.();
-      const range = viewReady ? chart?.timeScale().getVisibleRange() : null;
-      if (range && times.length)
+      const scale = viewReady ? chart?.timeScale() : undefined;
+      const logical = coinViewport && scale ? viewport.read() : null;
+      const range = scale?.getVisibleRange();
+      if (scale && logical && times.length) {
+        savedView.current = { rollingWindow, view: { logical, times, width: scale.width() } };
+      } else if (range && times.length) {
         savedView.current = { rollingWindow, view: {
           range: { from: Number(range.from), to: Number(range.to) },
           first: times[0]! / 1000,
           last: times.at(-1)! / 1000,
         } };
+      }
       chart?.remove();
       delete node.dataset.ready;
     };
@@ -449,6 +518,7 @@ export function TradingViewChart({
     compact,
     interactive,
     coinAxes,
+    coinViewport,
     showCoinTag,
     intervalMs,
     scaleMargins,
@@ -466,34 +536,70 @@ export function TradingViewChart({
     if (active.current) project(active.current, false);
   }, [projectionKey]);
 
+  return <ChartSurface
+    host={host}
+    className={className}
+    compact={compact}
+    label={label}
+    coinViewport={coinViewport}
+    showFooter={coinAxes || coinViewport}
+    showLiveButton={coinViewport && browsing && !failed}
+    onReturnLive={() => returnLive.current?.()}
+    interactive={interactive}
+    showZoomHint={zoomHint.visible}
+    failed={failed}
+  />;
+}
+
+function ChartSurface({ host, className, compact, label, coinViewport, showFooter, showLiveButton, onReturnLive, interactive, showZoomHint, failed }: Readonly<{
+  host: Ref<HTMLDivElement>;
+  className?: string;
+  compact: boolean;
+  label?: string;
+  coinViewport: boolean;
+  showFooter: boolean;
+  showLiveButton: boolean;
+  onReturnLive: () => void;
+  interactive: boolean;
+  showZoomHint: boolean;
+  failed: boolean;
+}>) {
+  const zoomKey = useSyncExternalStore(noSubscribe, platformZoomKey, () => "Ctrl");
+  const accessibleLabel = label ?? (coinViewport ? "Price chart" : undefined);
+  const credit = !compact && (
+    <a
+      className={styles.credit}
+      title="TradingView Lightweight Charts™ · Copyright (с) 2025 TradingView, Inc."
+      href="https://www.tradingview.com/"
+      target="_blank"
+      rel="noreferrer"
+    >
+      TradingView
+    </a>
+  );
   return (
-    <div className={clsx(styles.host, coinAxes && styles.coinAxes, className)}>
+    <div className={clsx(styles.host, showFooter && styles.hasFooter, className)}>
       <div
         className={clsx(styles.canvas, compact && styles.compact)}
         data-tradingview-plot=""
         ref={host}
-        role={label ? "img" : undefined}
-        aria-label={label}
+        tabIndex={coinViewport ? 0 : undefined}
+        role={accessibleLabel ? "img" : undefined}
+        aria-label={accessibleLabel}
+        aria-description={coinViewport ? "Arrow keys pan. Plus/minus zoom." : undefined}
       />
-      {!compact ? (
-        <a
-          className={styles.credit}
-          title="TradingView Lightweight Charts™ · Copyright (с) 2025 TradingView, Inc."
-          href="https://www.tradingview.com/"
-          target="_blank"
-          rel="noreferrer"
-        >
-          TradingView
-        </a>
-      ) : null}
+      {showFooter ? <div className={styles.footer}>
+        {showLiveButton && <Button variant="secondary" size="sm" className={styles.backToLive} onClick={onReturnLive}>Back to live</Button>}
+        {credit}
+      </div> : credit}
       {interactive ? (
-        <span className={styles.zoomHint} data-visible={zoomHint.visible || undefined} aria-hidden="true">
+        <span className={styles.zoomHint} data-visible={showZoomHint || undefined} aria-hidden="true">
           {zoomKey} + scroll to zoom
         </span>
       ) : null}
       {failed ? (
         <span className={styles.failure} role="status">
-          Chart could not load. Refresh to retry.
+          Chart unavailable. Refresh to retry.
         </span>
       ) : null}
     </div>
@@ -503,7 +609,7 @@ export function TradingViewChart({
 /** A single native price line keeps the latest close and its scale label at the same coordinate while panning. */
 function coinPriceMarker(css: CSSStyleDeclaration, lineStyle: LineStyle, enabled: boolean) {
   if (!enabled) return;
-  const color = withAlpha(readChartColor(css, "--muted"), 0.6);
+  const color = readChartColor(css, "--muted");
   const axisLabelColor = readChartColor(css, "--ink-2");
   const axisLabelTextColor = readChartColor(css, "--card");
   let marker: { owner: ISeriesApi<Kind>; line: IPriceLine } | undefined;
@@ -532,14 +638,20 @@ function sameTimes(left: readonly number[], right: readonly number[]) {
   return left.length === right.length && left.every((time, index) => time === right[index]);
 }
 
-function restoreView(chart: IChartApi, previous: SavedChartView | null, times: number[]) {
-  const range = previous && times.length ? restoredChartRange(previous, times.at(-1)! / 1000) : null;
-  if (range) chart.timeScale().setVisibleRange({ from: chartTimestamp(range.from * 1000), to: chartTimestamp(range.to * 1000) });
-  else chart.timeScale().fitContent();
+function restoreView(chart: IChartApi, previous: SavedChartView | CoinChartView | null, times: number[]) {
+  const scale = chart.timeScale();
+  if (!previous || !times.length) return scale.fitContent();
+  if ("logical" in previous) {
+    const range = rebaseCoinChartRange(previous.logical, previous.times, times, previous.width);
+    return scale.setVisibleLogicalRange(resizedLiveChartRange(range, times.length, previous.width, scale.width()) ?? range);
+  }
+  const range = restoredChartRange(previous, times.at(-1)! / 1000);
+  if (range) scale.setVisibleRange({ from: chartTimestamp(range.from * 1000), to: chartTimestamp(range.to * 1000) });
+  else scale.fitContent();
 }
 
 /** Keep fractional bar positions so an incoming bucket cannot round away the reader's zoom. */
-function preserveLiveView(chart: IChartApi, range: { from: Time; to: Time }, logical: LogicalRange | null, before: number[], after: number[]) {
+function preserveLiveView(chart: IChartApi, range: { from: Time; to: Time }, logical: IRange<number> | null, before: number[], after: number[]) {
   const view = { range: { from: Number(range.from), to: Number(range.to) }, first: before[0]! / 1000, last: before.at(-1)! / 1000 };
   if (!logical || (view.range.from <= view.first && view.range.to >= view.last)) {
     restoreView(chart, view, after);
@@ -702,17 +814,14 @@ function configureSeries(
 type GestureLike = Event & { scale: number; clientX: number };
 
 /** Zooms the time scale around the pointer; `delta` is wheel pixels, positive to zoom out. */
-function zoomAt(chart: IChartApi, delta: number, clientX: number, node: HTMLElement) {
+function zoomAt(chart: IChartApi, delta: number, clientX: number, node: HTMLElement, viewport?: ReturnType<typeof queuedChartRange>) {
   const scale = chart.timeScale();
-  const range = scale.getVisibleLogicalRange();
+  const range = viewport?.read() ?? scale.getVisibleLogicalRange();
   if (!range) return;
   const x = pointerX(clientX, node.getBoundingClientRect().left);
+  if (viewport) return viewport.write(zoomChartRangeAtPixel(range, x, scale.width(), delta));
   const anchor = (x === null ? null : scale.coordinateToLogical(x)) ?? (range.from + range.to) / 2;
-  const factor = Math.exp(Math.max(-1, Math.min(1, delta * 0.002)));
-  scale.setVisibleLogicalRange({
-    from: (anchor - (anchor - range.from) * factor) as Logical,
-    to: (anchor + (range.to - anchor) * factor) as Logical,
-  });
+  scale.setVisibleLogicalRange(zoomChartRange(range, anchor, delta));
 }
 
 const noSubscribe = () => () => {};

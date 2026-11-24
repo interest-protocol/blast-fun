@@ -5,6 +5,7 @@ import { installTestDom, setInputValue, testEvent } from "../../../test/fixtures
 import { fixtureDetail } from "../../../../../packages/core/test/fixtures/presale-pages/presale-fixtures.ts";
 import { FIXTURE_COINS, FIXTURE_WALLET_ADDRESS, DEFAULT_SWAP_MODE } from "../../../test/fixtures/social/coins/coins-fixture-model.ts";
 import { fixtureQuote } from "../../../test/fixtures/social/coins/swap-fixture.ts";
+import { SOCIAL_WALLET_PATH } from "@blast/core/web/contracts/coins.ts";
 import type { SocialTradeQuoteRequest } from "@blast/core/modules/social/contracts/trades.ts";
 
 const { document, window } = installTestDom();
@@ -19,6 +20,7 @@ const { useTradeQuoteQuery } = await import("../social/trade/trade-quote-query.t
 const { tradeQuoteReader } = await import("../social/trades/trades-client.ts");
 const { requestTradeQuote } = await import("../social/trades/trades-client.ts");
 const { SaleTradePanel } = await import("./SaleTradePanel.tsx");
+const getAccessToken = async () => null;
 
 async function mount(t: TestContext, withOverlayQuotes = false) {
   t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 1_791_000_000_000 });
@@ -35,24 +37,36 @@ async function mount(t: TestContext, withOverlayQuotes = false) {
   window.matchMedia = (query) => query === railQuery ? railMedia : originalMedia(query);
   const original = fixtureDetail("kstl");
   const detail = { ...original, presale: { ...original.presale, sale_token: FIXTURE_COINS[2]!.coinType } };
-  const wallet = { address: FIXTURE_WALLET_ADDRESS, signer: "wallet", fee: "wallet", as_of_ms: Date.now(), coins: FIXTURE_COINS.slice(0, 2).map((coin) => ({ coin_type: coin.coinType, name: coin.name, symbol: coin.symbol, decimals: coin.decimals, atoms: coin.atoms.toString(), usd_price: String(coin.price), value_usd: "0.00", icon_url: coin.iconUrl, presale: null })) };
+  const wallet = { address: FIXTURE_WALLET_ADDRESS, signer: "wallet", fee: "wallet", coins: null };
+  const balanceSignals: (AbortSignal | null)[] = [];
   let quotes = 0;
   let wallets = 0;
+  let holdBalance = false;
   let holdWallet = false;
   let holdQuote = false;
   let overlayAsset = FIXTURE_COINS[3]!.coinType;
   const asks: SocialTradeQuoteRequest[] = [];
   const pendingWallets: (() => void)[] = [];
+  const pendingBalances: (() => void)[] = [];
   const pendingQuotes: (() => void)[] = [];
   globalThis.fetch = async (input, init) => {
-    const path = String(input);
-    if (path.startsWith("/api/social/me/wallet")) {
+    const { pathname, searchParams } = new URL(String(input), window.location.origin);
+    if (pathname === SOCIAL_WALLET_PATH) {
+      const coinType = searchParams.get("balance_coin");
+      if (coinType !== null) {
+        const coin = FIXTURE_COINS.slice(0, 2).find(({ coinType: owned }) => owned === coinType);
+        if (!coin) return Response.json({}, { status: 404 });
+        balanceSignals.push(init?.signal ?? null);
+        if (holdBalance) await new Promise<void>((resolve) => pendingBalances.push(resolve));
+        return Response.json({ address: wallet.address, coin_type: coinType, atoms: coin.atoms.toString(), as_of_ms: Date.now() });
+      }
+      assert.equal(searchParams.get("identity"), "1");
       wallets += 1;
       if (holdWallet) await new Promise<void>((resolve) => pendingWallets.push(resolve));
-      return Response.json({ ...wallet, listing: { page: 1, page_size: 20, total: wallet.coins.length, value_usd: "1000.00", extra_coins: [] } });
+      return Response.json({ ...wallet, as_of_ms: Date.now() });
     }
-    if (path === `/api/social/presales/${detail.presale.presale_id}`) return Response.json(detail);
-    if (path === "/api/social/trades/quote") {
+    if (pathname === `/api/social/presales/${detail.presale.presale_id}`) return Response.json(detail);
+    if (pathname === "/api/social/trades/quote") {
       quotes += 1;
       const request = JSON.parse(String(init?.body)) as SocialTradeQuoteRequest;
       asks.push(request);
@@ -95,7 +109,7 @@ async function mount(t: TestContext, withOverlayQuotes = false) {
     return <output aria-label="Visible market quote">{snapshot.quote?.out_coin ?? "pending"}</output>;
   }
   const render = async () => {
-    await act(async () => root.render(withQueryClient(client, <ShellActionsProvider><SocialViewerProvider signedIn callsign="pilot"><SaleTradePanel sale={detail.presale} />{withOverlayQuotes && !railMedia.matches ? <OverlayQuote /> : null}</SocialViewerProvider></ShellActionsProvider>)));
+    await act(async () => root.render(withQueryClient(client, <ShellActionsProvider><SocialViewerProvider signedIn callsign="pilot" getAccessToken={getAccessToken}><SaleTradePanel sale={detail.presale} />{withOverlayQuotes && !railMedia.matches ? <OverlayQuote /> : null}</SocialViewerProvider></ShellActionsProvider>)));
     await flush();
   };
   await render();
@@ -106,12 +120,14 @@ async function mount(t: TestContext, withOverlayQuotes = false) {
   };
   const input = () => container.querySelector<HTMLInputElement>("[data-coin-focus]")!;
   return {
-    container, input, close, flush, advance, asks,
+    container, input, close, flush, advance, asks, balanceSignals,
     quotes: () => quotes,
     wallets: () => wallets,
+    holdBalance: () => { holdBalance = true; },
     holdWallet: () => { holdWallet = true; },
     holdQuote: () => { holdQuote = true; },
     async answerWallet() { await act(async () => { pendingWallets.shift()!(); }); await flush(); },
+    async answerBalance() { await act(async () => { pendingBalances.shift()!(); }); await flush(); },
     async answerQuote() { await act(async () => { pendingQuotes.shift()!(); }); await flush(); },
     async selectOverlayAsset(coin: string) { overlayAsset = coin; await render(); },
     submit: () => container.querySelector<HTMLButtonElement>("[data-trade]")!,
@@ -189,17 +205,18 @@ test("tab suspension cancels a pending base quote and unmount removes its subscr
 test("wallet facts from an earlier visible session cannot authorize a later return", async (t) => {
   const h = await mount(t);
   await h.populate();
-  h.holdWallet();
+  h.holdBalance();
   await h.desktop(false);
   await h.desktop(true);
-  assert.equal(h.wallets(), 2);
+  assert.equal(h.balanceSignals.length, 2);
   await h.desktop(false);
   await h.desktop(true);
   await h.advance(300);
-  await h.answerWallet();
-  assert.equal(h.wallets(), 3, "after the older in-flight read settles, this return reads current facts");
+  assert.equal(h.balanceSignals.length, 3, "the return asks for its own exact balance");
+  assert.equal(h.balanceSignals[1]?.aborted, true, "hiding cancels the earlier balance read");
+  await h.answerBalance();
   assert.equal(h.submit().disabled, true, "the earlier session's response cannot enable the returned form");
-  await h.answerWallet();
+  await h.answerBalance();
   assert.equal(h.submit().disabled, false);
 });
 

@@ -24,10 +24,16 @@ type ReadRoute = Readonly<{
 
 export { PRESALE_READ, PRESALE_PROOF_READ, WALLET_LAUNCHES_READ } from "@blast/core/modules/backend-api/public-read-routes.ts";
 
+const COIN_METADATA_READ = { name: "coin_metadata", path: "/api/v1/market/coins/:coinType/metadata", params: { coinType: COIN_TYPE }, prefix: "/api/v1", bucket: "launchpad_market_coin" } as const satisfies ReadRoute;
+export const PARTNER_COIN_METADATA_PATH = COIN_METADATA_READ.path;
+export const DAILY_STATS_READ = { name: "daily_stats", path: "/api/v1/market/launchpad/daily-stats", prefix: "/api/v1", bucket: "defillama_read" } as const satisfies ReadRoute;
+
 const ROUTES = [
   ...NON_MARKET_READ_ROUTES,
+  DAILY_STATS_READ,
   { name: "market", path: "/api/v1/market/status", prefix: "/api/launchpad", bucket: "launchpad_market_status" },
   { name: "market", path: "/api/v1/market/coins/:coinType", params: { coinType: COIN_TYPE }, prefix: "/api/launchpad", bucket: "launchpad_market_coin" },
+  COIN_METADATA_READ,
   { name: "market", path: "/api/v1/market/coins/:coinType/candles", params: { coinType: COIN_TYPE }, prefix: "/api/launchpad", bucket: "launchpad_market_candles" },
   { name: "market", path: "/api/v1/market/coins/:coinType/holders", params: { coinType: COIN_TYPE }, prefix: "/api/launchpad", bucket: "launchpad_market_holders" },
   { name: "market", path: "/api/v1/market/launches/:launchId/activity", params: { launchId: SUI_OBJECT_ID_SOURCE }, prefix: "/api/launchpad", bucket: "launchpad_market_activity" },
@@ -79,8 +85,10 @@ export function canonicalFirstPartyAlias(path: string): string {
 }
 
 const PARTNER_MATCHERS = ROUTES.map(withPattern);
-// First-party callers reach every partner read except the proof, which keeps its private gateway route.
-const FIRST_PARTY_MATCHERS = [...FIRST_PARTY_ROUTES, ...ROUTES.filter((route) => route !== PRESALE_PROOF_READ)].map(withPattern);
+const FIRST_PARTY_MATCHERS = [
+  ...FIRST_PARTY_ROUTES,
+  ...ROUTES.filter((route) => route !== PRESALE_PROOF_READ && route !== COIN_METADATA_READ && route !== DAILY_STATS_READ),
+].map(withPattern);
 
 const MARKET_SOURCE_MATCHERS = FIRST_PARTY_MATCHERS.filter((route) => route.name === "market")
   .map((route) => ({ bucket: route.bucket, pattern: routePattern(webPath(route), "params" in route ? route.params : undefined) }));

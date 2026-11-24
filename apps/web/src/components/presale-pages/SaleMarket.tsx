@@ -304,9 +304,11 @@ export function SaleMarketView({
   const holders = <SaleHolders coin={coin} liquidity={liquidity} loading={loading} failed={failed} summary={!!activity} onRetry={onRetry} />;
   return (
     <>
-      {chart ? chart({ overview, note, move: dayMove(market) }) : <>{overview}{note}</>}
+      {chart ? chart({ note, move: dayMove(market) }) : note}
+      {activity?.(holders)}
+      {overview}
       {children}
-      {activity ? activity(holders) : (
+      {!activity && (
         <section className={cx("card sale-sec")} aria-label="Token holders">
           <div className={cx("sec-title")}>
             <h2>Top holders</h2>
@@ -434,7 +436,6 @@ export function SaleMarket({
           <div className={coinStyles.market} data-sale-market="">
             <PresaleMarketPrice market={market} sale={sale} move={extras.move} />
             <ChartCard><PresalePoolChart sale={sale} market={market} pool={market.pool} /></ChartCard>
-            {extras.overview}
           </div>
           {extras.note}
         </CoinPriceCurrencyProvider>

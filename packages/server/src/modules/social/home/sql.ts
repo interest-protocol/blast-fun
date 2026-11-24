@@ -204,16 +204,17 @@ export type SideRow = Readonly<{
   unpriced: string;
   tokens: string | null;
   latest_ms: string;
+  recent_buy?: readonly [string, string, string, string, string, string] | null;
 }>;
 
 /** Per (sale, who, kind, quote asset): count, exact atoms, priced USD, unpriced rows, tokens and the latest time. */
-export const SIDES_SELECT = `SELECT w.sale, w.who, w.kind, w.quote_type, w.sale_quote, w.sale_quote_symbol, w.sale_quote_decimals,
+export const sidesSelect = (extraColumns = "") => `SELECT w.sale, w.who, w.kind, w.quote_type, w.sale_quote, w.sale_quote_symbol, w.sale_quote_decimals,
       count(*)::text AS n, coalesce(sum(w.quote_amount), 0)::text AS atoms, sum(w.usd_value)::text AS usd,
       count(*) FILTER (WHERE w.usd_value IS NULL)::text AS unpriced,
-      sum(w.coin_amount)::text AS tokens, max(w.timestamp_ms)::text AS latest_ms
+      sum(w.coin_amount)::text AS tokens, max(w.timestamp_ms)::text AS latest_ms${extraColumns}
     FROM home_who w`;
 
-/** The `GROUP BY` of `SIDES_SELECT`. */
+/** The grouping of the sides read. */
 export const SIDES_GROUP = `GROUP BY w.sale, w.who, w.kind, w.quote_type, w.sale_quote, w.sale_quote_symbol, w.sale_quote_decimals`;
 
 /** One grouped participant, as `groupedSql` yields it. */

@@ -6,10 +6,8 @@
 @media (pointer: coarse) {
   .back > a:first-child { min-inline-size: 44px; min-block-size: 44px; }
 }
-.cover { position: relative; width: 100%; aspect-ratio: 3 / 1; max-height: min(24vh, 15rem); margin-top: 1.25rem; border-radius: var(--r-md); overflow: hidden; background: var(--raised); }
-.cover img, .aboutCover img { display: block; width: 100%; height: 100%; object-fit: cover; }
-.coverFill + img { position: relative; object-fit: contain; }
-.coverFill { position: absolute; inset: 0; filter: blur(1.25rem); opacity: .4; transform: scale(1.08); }
+.aboutCover { aspect-ratio: 3 / 1; margin-bottom: 1rem; border-radius: var(--r-sm); overflow: hidden; background: var(--raised); }
+.aboutCover img { display: block; width: 100%; height: 100%; object-fit: contain; }
 .identity { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: .875rem; padding-block: var(--page-title-top, 1.625rem) var(--page-title-gap, 1.25rem); }
 .identity:has(.identityActions) { grid-template-columns: auto minmax(0, 1fr) auto; }
 .identityActions { align-self: start; }
@@ -20,17 +18,15 @@
 .byline { min-width: 0; padding-block-start: .375rem; display: flex; flex-wrap: wrap; align-items: center; gap: .625rem; }
 .creator { min-width: 0; overflow-wrap: anywhere; }
 .status { border-radius: var(--r-inner); background: var(--chip); color: var(--ink-2); padding: .25rem .5rem; font-size: .75rem; }
-.layout { display: grid; grid-template-columns: minmax(0, 1fr) 22.5rem; gap: 1.25rem; align-items: start; grid-template-areas: "market aside" "activity aside" "details aside"; }
-.layout[data-market-offline] { grid-template-areas: "market aside" "details aside"; }
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 22.5rem; gap: 1.25rem; align-items: start; grid-template-areas: "market aside" "details aside"; }
 .layout[data-no-market] { grid-template-areas: "details aside"; }
-.layout[data-no-trade] { grid-template-columns: minmax(0, 1fr); grid-template-areas: "market" "activity" "details"; }
+.layout[data-no-trade] { grid-template-columns: minmax(0, 1fr); grid-template-areas: "market" "details"; }
 .market, .details, .aside { display: grid; gap: 1.25rem; min-width: 0; container-type: inline-size; }
 .market { grid-area: market; }
 .details { grid-area: details; }
 .aside { grid-area: aside; }
 
-.activity { grid-area: activity; min-width: 0; }
-.activityPanel { margin-top: 1rem; }
+.activityPanel { margin-top: .625rem; }
 .progressCard .raised b { font-size: 1.5rem; }
 .progressCard .stats { margin-top: .75rem; }
 .progressCard .stats > div { padding: .25rem 0; background: transparent; }
@@ -47,6 +43,9 @@
 :global([data-amounts="hidden"]) .priceFigure > * { display: none; }
 :global([data-amounts="hidden"]) .priceFigure::after { content: "••••"; }
 .marketPrice .amount { flex-wrap: wrap; }
+@media (max-width: 360px) {
+  .marketPrice:has(.amount) { flex-basis: 100%; }
+}
 .marketPrice .amount > span:last-child { font-family: var(--font); font-size: .875rem; font-weight: 500; letter-spacing: 0; color: var(--muted); }
 .stats .amount { max-inline-size: 100%; overflow-wrap: anywhere; }
 .migrationState { display: grid; gap: .5rem; }
@@ -90,30 +89,20 @@
 /* 31.25rem for the chart, 22.5rem for trading and 1.25rem between them. */
 @container coin-page (width < 55rem) {
   .back .tradeJump { display: inline-flex; }
-  .layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: "market" "aside" "activity" "details"; }
-  .layout[data-market-offline] { grid-template-areas: "market" "aside" "details"; }
+  .layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: "market" "aside" "details"; }
   .layout[data-no-market] { grid-template-areas: "aside" "details"; }
 }
 
 .heroMark { display: inline-flex; flex: none; padding: .25rem; background: var(--bg); border-radius: var(--r-md); }
 .heroMark > span { width: 5.25rem; height: 5.25rem; }
 .heroMark img, .heroMark svg { width: 100%; height: 100%; }
-.page[data-has-cover], .cover + .identity { --page-title-top: .75rem; --page-title-gap: 1rem; }
-.page[data-has-cover] .heroMark, .cover + .identity .heroMark { margin-top: -3.25rem; }
 .pair .facts { margin-top: 1rem; }
 @media (min-width: 761px) {
-  .market { row-gap: 0; }
-  .marketPriceRow { order: -2; padding: 1.25rem; border-radius: var(--r-md); background: var(--card); }
-  .marketStats { order: -1; }
-  .market:has(.marketStats) .marketPriceRow { padding-bottom: 0; border-end-start-radius: 0; border-end-end-radius: 0; }
-  .marketPriceRow ~ .marketStats { border-start-start-radius: 0; border-start-end-radius: 0; }
-  .marketChart:not(:first-child) { margin-block-start: 1.25rem; }
+  .marketPriceRow { padding: .75rem 1.25rem; border-radius: var(--r-md); background: var(--card); }
+  .marketPrice { display: flex; flex-wrap: wrap; align-items: baseline; }
 }
 /* A shorter laptop keeps the chart in view while long amounts can still wrap. */
 @media (min-width: 761px) and (max-height: 850px) {
-  .cover { max-height: min(18vh, 10rem); }
-  .marketPriceRow { padding-block: .75rem; }
-  .marketPrice { display: flex; flex-wrap: wrap; align-items: baseline; gap: .5rem; }
   .progressCard { padding-block: .75rem; }
   .progressCard .raised > span { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 .5rem; min-width: 0; }
   .progressCard progress, .progressCard .stats { margin-top: .5rem; }
@@ -122,10 +111,9 @@
   .progressCard .stats dd { margin: 0; }
 }
 @media (max-width: 760px) {
-  .cover, .aside { display: none; }
-  .aboutCover { aspect-ratio: 2 / 1; margin-bottom: 1rem; border-radius: var(--r-sm); overflow: hidden; }
-  .page, .page[data-has-cover], .cover + .identity { --page-title-top: 0.375rem; --page-title-gap: 0.625rem; }
-  .page[data-has-cover] .heroMark, .cover + .identity .heroMark { margin-top: 0; }
+  .aside { display: none; }
+  .aboutCover { aspect-ratio: 2 / 1; }
+  .page { --page-title-top: 0.375rem; --page-title-gap: 0.625rem; }
   .back { flex-wrap: wrap; gap: 0 .5rem; padding-top: 0; }
   .back > a:first-child { min-height: 2.75rem; }
   .byline { gap: 0.375rem; }
@@ -133,14 +121,14 @@
   .identity:has(.identityActions) { grid-template-columns: auto minmax(0, 1fr); }
   .identityActions { grid-column: 2; }
   .heroMark > span { width: 3.25rem; height: 3.25rem; }
-  .layout { grid-template-columns: minmax(0, 1fr); gap: 1rem; grid-template-areas: "market" "activity" "details"; }
-  .layout[data-market-offline] { grid-template-areas: "market" "details"; }
+  .layout { grid-template-columns: minmax(0, 1fr); gap: 1rem; grid-template-areas: "market" "details"; }
   .layout[data-no-market] { grid-template-areas: "details"; }
   .market { gap: 0.75rem; }
-  .marketPriceRow { order: -2; }
-  .marketPrice { gap: 0.25rem; }
+  .marketPrice { display: flex; flex: 1 1 8rem; flex-wrap: wrap; align-items: baseline; gap: .125rem .375rem; }
   .marketPrice strong { font-size: 1.75rem; line-height: 1.15; }
-  .priceControls { gap: .25rem; }
+  .marketPrice > [data-chart-last-trade="headline"] { flex-basis: 100%; }
+  .marketPrice > [data-chart-last-trade="headline"][data-idle] { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; }
+  .priceControls { flex: none; gap: .25rem; }
   .progressCard .raised { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 0.375rem; }
   .progressCard .raised small { display: inline; font-size: 0.8125rem; }
   .progressCard .raised > span > b { display: block; overflow-wrap: anywhere; }
@@ -149,7 +137,7 @@
   .progressCard progress { margin-top: 0.5rem; }
   .pair { grid-template-columns: minmax(0, 1fr); }
   .card { padding: 1rem; }
-  .marketChart { padding: .75rem .5rem; --coin-chart-heading-inset: .5rem; }
+  .marketChart { padding: .5rem; --coin-chart-heading-inset: .5rem; }
   .page:has(.tradeDock) { padding-bottom: 6rem; }
   .tradeDock {
     position: fixed;

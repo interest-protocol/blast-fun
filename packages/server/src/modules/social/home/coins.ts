@@ -2,6 +2,7 @@ import { DISPLAY_PRICES } from "@blast/core/modules/social/prices/test-sui.ts";
 import { verifiedTeamSql } from "@blast/server/modules/social/read-model/verified-team.ts";
 import { socialParameter } from "@blast/server/modules/social/route-kit/validation.ts";
 import { z } from "zod";
+import { compareEventCursors } from "@blast/core/modules/launchpad-contract/cursor.ts";
 import { assertChainReadThroughViews } from "@blast/core/modules/database/modules.ts";
 import type { ReadableDatabase } from "@blast/core/modules/database/transaction.ts";
 import { coinLabel } from "@blast/core/modules/social/contracts/financial-wire.ts";
@@ -13,6 +14,7 @@ import { SocialRouteError } from "@blast/core/modules/social/route-kit/errors.ts
 import {
   HOME_COINS_MAX_IDS,
   HOME_PREVIEW_ROWS,
+  HOME_RECENT_BUY_MS,
   HOME_SPARK_POINTS,
   HOME_TOP_HOLDERS,
   HOME_WINDOW_MS,
@@ -25,6 +27,7 @@ import {
   type HomeDexVolume,
   type HomeParticipant,
   type HomeQuery,
+  type HomeRecentBuy,
   type HomeWindow,
 } from "@blast/core/modules/social/contracts/home.ts";
 import { tradesInApp } from "@blast/core/modules/social/contracts/trades.ts";
@@ -41,6 +44,7 @@ import {
   countsOf,
   participantOf,
   previewOf,
+  quoteAssetOf,
   shareBps,
   totalsOf,
   type IdentityRow,
@@ -54,7 +58,7 @@ import {
   GROUPED_SELECT,
   Params,
   SIDES_GROUP,
-  SIDES_SELECT,
+  sidesSelect,
   homeSpan,
   readHomeBounds,
   rowsWithSql,
@@ -203,10 +207,16 @@ export async function readCoinFacts(db: ReadableDatabase, scope: SaleScope, cloc
 }
 
 /** The window's sums per (sale, identity, kind, quote asset). */
-export async function readSides(db: ReadableDatabase, request: RowsRequest): Promise<readonly SideRow[]> {
+export async function readSides(db: ReadableDatabase, request: RowsRequest, recentBuyFromMs?: number): Promise<readonly SideRow[]> {
   if (request.sales.kind === "ids" && request.sales.presaleIds.length === 0) return [];
   const params = new Params();
-  const text = selectHome(rowsWithSql(request, params), `${SIDES_SELECT} ${SIDES_GROUP}`);
+  const rows = rowsWithSql(request, params);
+  // Keep one event's fields together, ordered by timestamp and cursor, in the existing aggregate.
+  const recentBuy = recentBuyFromMs === undefined ? "" : `,
+    (max(ARRAY[w.timestamp_ms, w.checkpoint, w.tx_slot, w.event_slot, w.part, w.quote_amount]::numeric[])
+      FILTER (WHERE w.kind = 'trade_buy' AND w.timestamp_ms > ${params.add(recentBuyFromMs)}::bigint
+        AND w.quote_amount > 0))::text[] AS recent_buy`;
+  const text = selectHome(rows, `${sidesSelect(recentBuy)} ${SIDES_GROUP}`);
   assertChainReadThroughViews(text);
   return (await db.read<SideRow>(text, params.values)).rows;
 }
@@ -497,6 +507,7 @@ export type HomeReadContext = Readonly<{
   includeLiveInputs?: boolean;
   includeRollingChange?: boolean;
   includeDexVolume?: boolean;
+  includeRecentBuys?: boolean;
 }>;
 
 function withTrackedPoolMarket(
@@ -620,6 +631,32 @@ async function readSparks(db: ReadableDatabase, facts: readonly FactsRow[], cloc
   return new Map(histories.flatMap((history) => ([[history.presale_id ?? history.coin_type, history.points] as const])));
 }
 
+/** One confirmed amount per returned coin, with its actual quote asset. */
+function recentPageBuys(sides: readonly SideRow[], coins: readonly HomeCoin[]): HomeRecentBuy[] {
+  const page = new Set(coins.map(coin => coin.presale_id ?? coin.coin_type));
+  const buys = new Map<string, HomeRecentBuy>();
+  for (const row of sides) {
+    if (!row.recent_buy || !page.has(row.sale)) continue;
+    const [timestamp, checkpoint, tx, event, part, atoms] = row.recent_buy;
+    const asset = quoteAssetOf(row.quote_type, row);
+    if (!asset.symbol || asset.decimals === null || !/^[1-9][0-9]{0,19}$/.test(atoms)) continue;
+    const id = `${checkpoint}:${tx}:${event}:${part}`;
+    const occurred = Number(timestamp);
+    const previous = buys.get(row.sale);
+    if (previous && (previous.occurred_at_ms > occurred ||
+      (previous.occurred_at_ms === occurred && compareEventCursors(id, previous.activity_id) <= 0))) continue;
+    buys.set(row.sale, {
+      coin_key: row.sale,
+      activity_id: id,
+      occurred_at_ms: occurred,
+      quote_atoms: atoms,
+      quote_symbol: asset.symbol,
+      quote_decimals: asset.decimals,
+    });
+  }
+  return [...buys.values()];
+}
+
 /** One Discover page (contract in `contracts/home.ts`). */
 export async function readHomeDiscover(db: ReadableDatabase, query: HomeQuery, context: HomeReadContext): Promise<HomeCoinsPage> {
   const cursor = query.cursor === null ? null : decodeHomeCursor(query.cursor, query.sort);
@@ -631,7 +668,7 @@ export async function readHomeDiscover(db: ReadableDatabase, query: HomeQuery, c
   const actors: ActorScope = { kind: "everyone" };
   const [facts, sides] = await Promise.all([
     readCoinFacts(db, scope, bounds.clockMs, context),
-    readSides(db, { span, bounds, kinds, sales: scope, actors }),
+    readSides(db, { span, bounds, kinds, sales: scope, actors }, context.includeRecentBuys ? context.nowMs - HOME_RECENT_BUY_MS : undefined),
   ]);
   const counts = countsOf(sides);
   const candidates = [...facts.values()]
@@ -654,7 +691,9 @@ export async function readHomeDiscover(db: ReadableDatabase, query: HomeQuery, c
     : candidates;
   const { page, nextCursor, pageNumber, pages, total, ranked } = pageOf(rankedCandidates, query.sort, cursor, query.limit, query.page);
   const coins = await assembleCoins(db, { candidates: page, sides, span, bounds, kinds, actors, scope: "pool", context, dexVolumes });
-  return { coins, page: pageNumber, pages, total, ...(query.ranked ? { ranked } : {}), next_cursor: nextCursor, window: query.window, clock_ms: bounds.clockMs, as_of: asOf };
+  const recentBuys = context.includeRecentBuys ? recentPageBuys(sides, coins) : [];
+  return { coins, page: pageNumber, pages, total, ...(query.ranked ? { ranked } : {}), next_cursor: nextCursor, window: query.window, clock_ms: bounds.clockMs, as_of: asOf,
+    ...(recentBuys.length > 0 && { recent_buys: recentBuys }) };
 }
 
 /**

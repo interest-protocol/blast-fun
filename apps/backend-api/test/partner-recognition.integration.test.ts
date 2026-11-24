@@ -212,6 +212,7 @@ test(
           keys: reader,
           handlers: () => ({
             defillama: read,
+            daily_stats: read,
             presales: read,
             featured: read,
             presale: read,
@@ -221,6 +222,7 @@ test(
             market: read,
             wallet_launches: read,
             presale_proof: read,
+            coin_metadata: read,
           }),
         });
         const request = () =>

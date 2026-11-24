@@ -228,14 +228,16 @@ test(
         .volume,
       String(9_007_199_254_740_993n * 201n),
     );
-    const first = await publishSnapshot(writer, snapshot);
+    const previousFormat = { ...snapshot, daily_launch_stats: undefined };
+    const first = await publishSnapshot(writer, previousFormat);
     assert.equal(first.revision, 1);
-    assert.deepEqual(await publishSnapshot(writer, snapshot), first);
+    assert.deepEqual(await publishSnapshot(writer, previousFormat), first);
     const nextDay = "2026-10-21";
     const base = await loadReplayBase(writer, profile, nextDay);
     assert.equal(base?.source.checkpoint, "105");
     await assert.rejects(loadReplayBase(reader, profile, nextDay), /permission denied/);
     const reads = reportingReads(reader, profile);
+    assert.equal((await reads.publication({ date: day })).summary.daily_launch_stats, undefined);
     const read = createDefillamaRead(
       () => reads,
       () => end + 1000,
@@ -332,7 +334,13 @@ test(
     for (const metric of ["dailyFees", "dailyRevenue", "dailySupplySideRevenue"]) {
       assert.deepEqual(rolledUp[metric], fees[metric]);
     }
-    assert.equal((await reads.publication({ date: day })).id, second.id);
+    const latest = await reads.publication({ date: day });
+    assert.equal(latest.id, second.id);
+    assert.deepEqual(latest.summary.daily_launch_stats, {
+      launches: 201,
+      graduations: 0,
+      volume: [{ quote_coin_type: quote, amount_atomic: "1810447050202939593" }],
+    });
 
     let cursor = page1.next_cursor;
     let count = 100;

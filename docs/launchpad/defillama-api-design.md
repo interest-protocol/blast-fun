@@ -190,6 +190,12 @@ backfill on a miss. Reader connections are read-only, max two per process, with
 lookahead. Metadata bounds history to 10,000 published dates and fails closed
 beyond that bound.
 
+Daily publications also store the [partner launchpad stats](../security/partner-read-api.md#daily-launchpad-stats)
+in their summary. The scheduled publisher revisits yesterday when its stats
+are missing. To populate an earlier day after upgrading the publisher, rerun
+`npm run defillama:publish -- YYYY-MM-DD` for that date. Each successful
+republication creates a revision using the existing immutable reporting store.
+
 The offline publisher reads finalized native BCS from a **physical read
 replica**, enforces exact deployment identity, journal floor, successful
 transactions, and the intake watermark/fault barrier inside one repeatable-read

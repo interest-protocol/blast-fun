@@ -73,8 +73,10 @@ test("stale wallet and Privy credentials cause no session work or Set-Cookie on 
     discovery: read,
     search: read,
     defillama: read,
+    daily_stats: read,
     wallet_launches: read,
     presale_proof: read,
+    coin_metadata: read,
   };
   const api = createBackendApi({
     namespace,
@@ -150,6 +152,8 @@ test("admitted reads preserve the owner request and the public, partner and HEAD
     assert.equal(port, prepaid);
     return {
       prices,
+      coin_metadata: unused,
+      daily_stats: unused,
       defillama: unused,
       discovery: unused,
       featured: unused,

@@ -12,6 +12,7 @@ import {
   portfolioPnlMultipleSchema,
 } from "./portfolio.ts";
 import { socialSaleMetadataSchema } from "./sales.ts";
+import { EVENT_CURSOR } from "../../launchpad-contract/cursor.ts";
 import { COIN_TYPE, SUI_OBJECT_ID_PATTERN } from "@blast/core/lib/sui/ids.ts";
 
 const homeIntegerSchema = z
@@ -914,6 +915,15 @@ export const homeCoinsPageSchema = homeCoinsPageContractSchema.required({
   pages: true,
   total: true,
   next_cursor: true,
+}).extend({
+  recent_buys: z.array(z.strictObject({
+    coin_key: z.string().min(1),
+    activity_id: z.string().regex(EVENT_CURSOR),
+    occurred_at_ms: feedItemDefinitions.millis,
+    quote_atoms: z.string().regex(/^[1-9][0-9]{0,19}$/),
+    quote_symbol: z.string().min(1),
+    quote_decimals: z.number().int().min(0).max(255),
+  })).max(50).optional(),
 });
 export const homeCoinsByIdsSchema = homeCoinsPageContractSchema.required({
   missing: true,

@@ -12,6 +12,7 @@ import {
   socialHomeDiscussionPath,
   socialHomePath,
   socialHomeTradersPath,
+  withHomeDiscoverDetails,
   withHomeMarketDetails,
   type HomeCoinsByIds,
   type HomeCoinsPage,
@@ -49,7 +50,7 @@ function readHomeJson<Body>(path: string, what: string, contract: SocialResponse
 
 export function fetchHomePage(query: HomeQuery, cursor: string | null, signal?: AbortSignal, marketDetails = false): Promise<HomeCoinsPage> {
   const path = socialHomePath({ ...query, cursor });
-  return readHomeJson<HomeCoinsPage>(marketDetails ? withHomeMarketDetails(path) : path, "The coins", homeCoinsPageReadSchema, signal);
+  return readHomeJson<HomeCoinsPage>(marketDetails ? withHomeDiscoverDetails(path) : path, "The coins", homeCoinsPageReadSchema, signal);
 }
 
 /** How long the test-sale lookup may take before the rows waiting on it show unfiltered. */
@@ -98,7 +99,7 @@ export function fetchHomeFollowing(options: SocialApiOptions, body: HomeFollowin
  */
 export function discoverQuery(query: HomeQuery, marketDetails = false) {
   const path = socialHomePath(query);
-  const key = marketDetails ? withHomeMarketDetails(path) : path;
+  const key = marketDetails ? withHomeDiscoverDetails(path) : path;
   return queryOptions({
     queryKey: queryKeys.home.discover(key),
     queryFn: async ({ signal }): Promise<HomeCoinsPage> => withoutTestCoins(await fetchHomePage(query, null, signal, marketDetails)),
