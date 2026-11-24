@@ -59,6 +59,71 @@ test("a declined signature submits nothing", async () => {
   assert.equal(fixture.calls.execute, 0);
 });
 
+test("wallet signing diagnostics distinguish causes and keep private provider details out of analytics", async (t) => {
+  const events: unknown[] = [];
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "window");
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: { va: (...args: unknown[]) => events.push(args) },
+  });
+  t.after(() => {
+    if (previous) {
+      Object.defineProperty(globalThis, "window", previous);
+    } else {
+      Reflect.deleteProperty(globalThis, "window");
+    }
+  });
+
+  const { fixture, review, signer } = await prepared();
+  async function attempt(error: unknown, kind: LaunchpadSigner["kind"] = "wallet") {
+    return signAndSubmitOnce({
+      client: fixture.client,
+      review,
+      signer: { ...signer, kind, async signTransaction() { throw error; } },
+    });
+  }
+
+  assert.deepEqual(await attempt(new Error("Failed to open new window")), {
+    status: "signature-failed",
+    message: "The wallet could not sign. Reconnect it and retry. Nothing was submitted. Code: sign_failed.",
+  });
+  await attempt(new Error("No session found"));
+  await attempt(new Error("Wrapper", {
+    cause: new Error(`No account with address ${signer.address} is connected to Slush.`),
+  }));
+  await attempt(new Error(`The account ${signer.address} does not support the chain "sui:mainnet".`));
+  await attempt({ privyErrorCode: "must_be_authenticated", message: "Authorization: Bearer fake-session-token" }, "privy");
+  await attempt({ code: 4900, message: "fake-wallet-payload" });
+  await attempt(new TypeError("Failed to fetch"));
+  await attempt({ code: "arbitrary-private-value", message: "unrecognized private provider text" });
+  await attempt({ message: null, cause: null });
+  await attempt(new Error("No account with address ".padEnd(513, "x")));
+  let causeReads = 0;
+  const cyclic = {
+    get cause(): unknown {
+      assert.ok(++causeReads <= 4, "stop reading the wallet error after four levels");
+      return cyclic;
+    },
+  };
+  await attempt(cyclic);
+  assert.deepEqual(await attempt(Object.assign(new Error("Cancelled"), { code: 4001 })), { status: "rejected" });
+
+  assert.deepEqual(events, [
+    ["event", { name: "wallet_signature_failed", data: { signer: "wallet", reason: "wallet_popup_open_failed" }, options: undefined }],
+    ["event", { name: "wallet_signature_failed", data: { signer: "wallet", reason: "wallet_session_missing" }, options: undefined }],
+    ["event", { name: "wallet_signature_failed", data: { signer: "wallet", reason: "wallet_account_unauthorized" }, options: undefined }],
+    ["event", { name: "wallet_signature_failed", data: { signer: "wallet", reason: "wallet_network_unsupported" }, options: undefined }],
+    ["event", { name: "wallet_signature_failed", data: { signer: "privy", reason: "privy_session_invalid", provider_code: "must_be_authenticated" }, options: undefined }],
+    ["event", { name: "wallet_signature_failed", data: { signer: "wallet", reason: "wallet_disconnected", provider_code: 4900 }, options: undefined }],
+    ["event", { name: "wallet_signature_failed", data: { signer: "wallet", reason: "wallet_network_request_failed" }, options: undefined }],
+    ["event", { name: "wallet_signature_failed", data: { signer: "wallet", reason: "unrecognized_wallet_error" }, options: undefined }],
+    ["event", { name: "wallet_signature_failed", data: { signer: "wallet", reason: "unrecognized_wallet_error" }, options: undefined }],
+    ["event", { name: "wallet_signature_failed", data: { signer: "wallet", reason: "unrecognized_wallet_error" }, options: undefined }],
+    ["event", { name: "wallet_signature_failed", data: { signer: "wallet", reason: "unrecognized_wallet_error" }, options: undefined }],
+  ]);
+  assert.equal(fixture.calls.execute, 0);
+});
+
 test("a signer that returns different bytes is never submitted", async () => {
   const { fixture, review, signer } = await prepared();
   const altered: LaunchpadSigner = {
