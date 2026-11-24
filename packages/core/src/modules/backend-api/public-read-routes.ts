@@ -10,6 +10,24 @@ type ReadRoute = Readonly<{
   bucket: RateBucket;
 }>;
 
+export const PARTNER_COIN_SEGMENT_LIMIT = 512;
+export const PARTNER_COIN_SEGMENT = `[A-Za-z0-9_:%]{1,${PARTNER_COIN_SEGMENT_LIMIT}}`;
+
+export const COIN_METADATA_READ = {
+  name: "coin_metadata",
+  path: "/api/v1/market/coins/:coinType/metadata",
+  params: { coinType: PARTNER_COIN_SEGMENT },
+  prefix: "/api/v1",
+  bucket: "launchpad_market_coin",
+} as const satisfies ReadRoute;
+
+export const DAILY_STATS_READ = {
+  name: "daily_stats",
+  path: "/api/v1/market/launchpad/daily-stats",
+  prefix: "/api/v1",
+  bucket: "defillama_read",
+} as const satisfies ReadRoute;
+
 export const PRESALE_READ = {
   name: "presale",
   path: "/api/v1/presales/:presale_id",
@@ -43,6 +61,8 @@ export const WALLET_LAUNCHES_READ = {
 } as const satisfies ReadRoute;
 
 export const NON_MARKET_READ_ROUTES = [
+  COIN_METADATA_READ,
+  DAILY_STATS_READ,
   {
     name: "defillama",
     path: "/api/v1/defillama/:dataset",

@@ -1,7 +1,14 @@
 import { SUI_OBJECT_ID_SOURCE } from "@blast/core/lib/sui/ids.ts";
 import { MIGRATOR_VENUES, VENUES } from "@blast/core/modules/launchpad-contract/venues.ts";
 import type { RateBucket } from "@blast/core/lib/web-security/rate-limits.ts";
-import { NON_MARKET_READ_ROUTES, PRESALE_ALLOWLIST_CSV_READ, PRESALE_PROOF_READ } from "@blast/core/modules/backend-api/public-read-routes.ts";
+import {
+  COIN_METADATA_READ,
+  DAILY_STATS_READ,
+  NON_MARKET_READ_ROUTES,
+  PARTNER_COIN_SEGMENT,
+  PRESALE_ALLOWLIST_CSV_READ,
+  PRESALE_PROOF_READ,
+} from "@blast/core/modules/backend-api/public-read-routes.ts";
 import {
   routePattern,
   type RouteParamPatterns,
@@ -11,8 +18,6 @@ import {
 /** V1 owns this explicit route registry; never derive it from frontend routes. */
 const VENUE_SEGMENT = `(?:${VENUES.join("|")})`;
 const MIGRATOR_VENUE_SEGMENT = `(?:${MIGRATOR_VENUES.join("|")})`;
-export const PARTNER_COIN_SEGMENT_LIMIT = 512;
-const COIN_TYPE = `[A-Za-z0-9_:%]{1,${PARTNER_COIN_SEGMENT_LIMIT}}`;
 
 type ReadRoute = Readonly<{
   name: string;
@@ -22,20 +27,22 @@ type ReadRoute = Readonly<{
   bucket: RateBucket;
 }>;
 
-export { PRESALE_READ, PRESALE_PROOF_READ, WALLET_LAUNCHES_READ } from "@blast/core/modules/backend-api/public-read-routes.ts";
+export {
+  DAILY_STATS_READ,
+  PARTNER_COIN_SEGMENT_LIMIT,
+  PRESALE_PROOF_READ,
+  PRESALE_READ,
+  WALLET_LAUNCHES_READ,
+} from "@blast/core/modules/backend-api/public-read-routes.ts";
 
-const COIN_METADATA_READ = { name: "coin_metadata", path: "/api/v1/market/coins/:coinType/metadata", params: { coinType: COIN_TYPE }, prefix: "/api/v1", bucket: "launchpad_market_coin" } as const satisfies ReadRoute;
 export const PARTNER_COIN_METADATA_PATH = COIN_METADATA_READ.path;
-export const DAILY_STATS_READ = { name: "daily_stats", path: "/api/v1/market/launchpad/daily-stats", prefix: "/api/v1", bucket: "defillama_read" } as const satisfies ReadRoute;
 
 const ROUTES = [
   ...NON_MARKET_READ_ROUTES,
-  DAILY_STATS_READ,
   { name: "market", path: "/api/v1/market/status", prefix: "/api/launchpad", bucket: "launchpad_market_status" },
-  { name: "market", path: "/api/v1/market/coins/:coinType", params: { coinType: COIN_TYPE }, prefix: "/api/launchpad", bucket: "launchpad_market_coin" },
-  COIN_METADATA_READ,
-  { name: "market", path: "/api/v1/market/coins/:coinType/candles", params: { coinType: COIN_TYPE }, prefix: "/api/launchpad", bucket: "launchpad_market_candles" },
-  { name: "market", path: "/api/v1/market/coins/:coinType/holders", params: { coinType: COIN_TYPE }, prefix: "/api/launchpad", bucket: "launchpad_market_holders" },
+  { name: "market", path: "/api/v1/market/coins/:coinType", params: { coinType: PARTNER_COIN_SEGMENT }, prefix: "/api/launchpad", bucket: "launchpad_market_coin" },
+  { name: "market", path: "/api/v1/market/coins/:coinType/candles", params: { coinType: PARTNER_COIN_SEGMENT }, prefix: "/api/launchpad", bucket: "launchpad_market_candles" },
+  { name: "market", path: "/api/v1/market/coins/:coinType/holders", params: { coinType: PARTNER_COIN_SEGMENT }, prefix: "/api/launchpad", bucket: "launchpad_market_holders" },
   { name: "market", path: "/api/v1/market/launches/:launchId/activity", params: { launchId: SUI_OBJECT_ID_SOURCE }, prefix: "/api/launchpad", bucket: "launchpad_market_activity" },
   { name: "market", path: "/api/v1/market/pools/:venue/:poolId", params: { venue: VENUE_SEGMENT, poolId: SUI_OBJECT_ID_SOURCE }, prefix: "/api/launchpad", bucket: "launchpad_market_pool" },
   { name: "market", path: "/api/v1/market/pools/:venue/:poolId/candles", params: { venue: VENUE_SEGMENT, poolId: SUI_OBJECT_ID_SOURCE }, prefix: "/api/launchpad", bucket: "launchpad_market_candles" },

@@ -217,6 +217,56 @@ test("admitted reads preserve the owner request and the public, partner and HEAD
   }
 });
 
+test("market paths with dedicated partner handlers reach their own reads", async () => {
+  const date = "2026-11-23";
+  const coin = encodeURIComponent(`0x${"a".repeat(64)}::long_coin_module_name::LONG_COIN_NAME`);
+  const statsPath = `/api/v1/market/launchpad/daily-stats?date=${date}`;
+  const metadataPath = `/api/v1/market/coins/${coin}/metadata`;
+  const stats = { date, launches: 1, graduations: 0, volume: [] };
+  const metadata = { symbol: "TEST" };
+  const unused = async () => new Response(null, { status: 404 });
+  const reads = createReadHandlers(() => ({
+    prices: unused,
+    coin_metadata: async (request) => {
+      assert.equal(request.url, `https://backend.test${metadataPath}`);
+      return Response.json(metadata);
+    },
+    daily_stats: async (request) => {
+      assert.equal(request.url, `https://backend.test${statsPath}`);
+      return Response.json(stats);
+    },
+    defillama: unused,
+    discovery: unused,
+    featured: unused,
+    market: unused,
+    presale: unused,
+    presale_allowlist_csv: unused,
+    presale_proof: unused,
+    presales: unused,
+    search: unused,
+    wallet_launches: unused,
+  }));
+  try {
+    for (const [path, endpoint, body] of [
+      [statsPath, "defillama_read", stats],
+      [metadataPath, "launchpad_market_coin", metadata],
+    ] as const) {
+      const response = await reads.readPartner({
+        kind: "admitted",
+        request: new Request(`https://backend.test${path}`),
+        client: testClient("198.51.100.7"),
+        endpoint,
+        prepaid: { consume: async () => assert.fail("The fixture does not charge quota") },
+        headers: new Headers(),
+      });
+      assert.equal(response.status, 200, path);
+      assert.deepEqual(await response.json(), body);
+    }
+  } finally {
+    await reads.dispose();
+  }
+});
+
 test("an aborted read waits for the owner and hands its late body to the transport", async () => {
   const http = createReadHttp();
   const started = Promise.withResolvers<void>();
