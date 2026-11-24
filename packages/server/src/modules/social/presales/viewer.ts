@@ -196,6 +196,7 @@ export async function readViewerPresales(
   presaleIds: readonly string[],
   claimWallet: string | null = ownAddresses.length === 1 ? ownAddresses[0]! : null,
   includeCommitFields = false,
+  optionalFollowing?: Readonly<{ database: ReadableDatabase; onUnavailable: () => void }>,
 ): Promise<SocialPresaleViewerResponse> {
   const ids = [...new Set(presaleIds)];
   const followedParams = new Params();
@@ -204,11 +205,18 @@ export async function readViewerPresales(
   const mineParams = new Params();
   const addresses = mineParams.add([...new Set(ownAddresses)]);
   const presales = mineParams.add(ids);
-  const [followed, mine] = await Promise.all([
-    db.read<FollowedRow>(followedSql(followedParams, viewer, scope), followedParams.values),
+  const [mine, followed] = await Promise.all([
     ownAddresses.length ? db.read<MineRow>(mineSql(mineParams, addresses, presales, claimWallet), mineParams.values) : null,
+    (optionalFollowing?.database ?? db)
+      .read<FollowedRow>(followedSql(followedParams, viewer, scope), followedParams.values)
+      .then((result) => result.rows)
+      .catch((error: unknown) => {
+        if (!optionalFollowing) throw error;
+        optionalFollowing.onUnavailable();
+        return [];
+      }),
   ]);
-  return { presales: entries(followed.rows, mine?.rows ?? [], ids, includeCommitFields), rows: null };
+  return { presales: entries(followed, mine?.rows ?? [], ids, includeCommitFields), rows: null };
 }
 
 /**
@@ -223,11 +231,12 @@ export async function readViewerBackedPresales(
   status: PresaleListStatus,
   nowMs: number,
   claimWallet: string | null = ownAddresses.length === 1 ? ownAddresses[0]! : null,
+  followingDatabase: ReadableDatabase = db,
 ): Promise<SocialPresaleViewerResponse> {
   const params = new Params();
   const viewer = params.add(viewerAccountId);
   const scope = statusFilterSql(status, () => `${params.add(nowMs)}::bigint`);
-  const followed = await db.read<FollowedRow>(followedSql(params, viewer, scope), params.values);
+  const followed = await followingDatabase.read<FollowedRow>(followedSql(params, viewer, scope), params.values);
   const counts = new Map<string, number>();
   for (const row of followed.rows) counts.set(row.presale_id, (counts.get(row.presale_id) ?? 0) + 1);
   const summaries = await readSummaries(db, [...counts.keys()]);

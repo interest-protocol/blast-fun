@@ -4,6 +4,7 @@ import test from "node:test";
 import { MemoryRateLimiter } from "@blast/core/modules/web-security/route-limits.ts";
 import { createSocialRouteKit } from "@blast/server/modules/social/route-kit/route.ts";
 import type { SocialAccount } from "@blast/core/modules/social/contracts/me.ts";
+import { socialPresaleViewerResponseSchema } from "@blast/core/modules/social/contracts/presale-schemas.ts";
 import { socialPresaleRoutes as publicRoutes } from "./shared-runtime.ts";
 import { socialPresaleRoutes as viewerRoutes } from "./viewer-runtime.ts";
 
@@ -29,8 +30,10 @@ for (const order of ["public-first", "viewer-first"] as const) {
     const names = [
       "social.presale-routes",
       "social.presale-viewer-routes",
+      "social.presale-follow-reader",
       "social.route-kit",
       "database.replica-pool",
+      "runtimeConfig",
     ];
     const saved = names.map(
       (name) =>
@@ -40,6 +43,8 @@ for (const order of ["public-first", "viewer-first"] as const) {
         ] as const,
     );
     const recorded: unknown[][] = [];
+    let allowFollowing = true;
+    let ownReadFails = false;
     const kit = createSocialRouteKit({
       tradingVisible: () => true,
       expectedOrigin: "https://blast.fun",
@@ -60,14 +65,22 @@ for (const order of ["public-first", "viewer-first"] as const) {
     try {
       for (const [slot] of saved) delete slots[slot];
       slots[Symbol.for("blast.social.route-kit")] = kit;
+      slots[Symbol.for("blast.runtimeConfig")] = { presaleFollow: { fleetSlots: 4, processSlots: 2 } };
       slots[Symbol.for("blast.database.replica-pool")] = {
+        options: { max: 10 },
         connect: async () => ({
-          query: async (query: { text: string; values: unknown[] }) => {
-            if (query.text.includes("SELECT mine.address"))
+          query: async (query: string | { text: string; values: unknown[] }, values: unknown[] = []) => {
+            const text = typeof query === "string" ? query : query.text;
+            if (text.includes("pg_try_advisory_xact_lock")) {
+              return { rows: allowFollowing ? [{ slot: 0 }] : [] };
+            }
+            if (text.includes("SELECT mine.address"))
               return { rows: [{ address: ADDRESS }, { address: OTHER }] };
-            if (query.text.includes("claim_wallet_participated"))
-              recorded.push(query.values);
-            return { rows: [] };
+            if (text.includes("claim_wallet_participated")) {
+              if (ownReadFails) throw new Error("Buyer position unavailable");
+              recorded.push(typeof query === "string" ? values : query.values);
+            }
+            return { command: text, rows: [] };
           },
           on() {},
           removeListener() {},
@@ -78,7 +91,7 @@ for (const order of ["public-first", "viewer-first"] as const) {
       const second = order === "public-first" ? viewerRoutes() : publicRoutes();
       assert.notEqual(first, second);
       assert.equal(viewerRoutes(), order === "public-first" ? second : first);
-      const request = () =>
+      const request = (body: { presale_ids: string[] } | { status: "live" } = { presale_ids: [SALE] }) =>
         new Request("https://blast.fun/api/social/presales/viewer", {
           method: "POST",
           headers: {
@@ -87,10 +100,11 @@ for (const order of ["public-first", "viewer-first"] as const) {
             cookie: `__Host-blast_wallet=${"A".repeat(43)}`,
             "content-type": "application/json",
           },
-          body: JSON.stringify({ presale_ids: [SALE] }),
+          body: JSON.stringify(body),
         });
       const viewer = await viewerRoutes().viewer.POST(request(), testClient());
       assert.equal(viewer.status, 200, await viewer.text());
+      assert.equal(viewer.headers.get("X-Blast-Presale-Following"), null);
       assert.equal(recorded.length, 1);
       assert.ok(
         recorded[0]!.includes(ADDRESS),
@@ -105,6 +119,18 @@ for (const order of ["public-first", "viewer-first"] as const) {
         null,
         "public factory retains its existing ambiguous-wallet fallback",
       );
+      allowFollowing = false;
+      recorded.length = 0;
+      const partial = await viewerRoutes().viewer.POST(request(), testClient());
+      assert.equal(partial.status, 200);
+      assert.equal(partial.headers.get("X-Blast-Presale-Following"), "unavailable");
+      assert.deepEqual(socialPresaleViewerResponseSchema.parse(await partial.json()).presales[SALE]?.following, []);
+      assert.ok(recorded[0]?.includes(ADDRESS), "the partial answer still reads the signing wallet");
+      const followingList = await viewerRoutes().viewer.POST(request({ status: "live" }), testClient());
+      assert.equal(followingList.status, 503);
+      ownReadFails = true;
+      const failedPosition = await viewerRoutes().viewer.POST(request(), testClient());
+      assert.equal(failedPosition.status, 503);
     } finally {
       for (const [slot, value] of saved) {
         if (value === undefined) delete slots[slot];

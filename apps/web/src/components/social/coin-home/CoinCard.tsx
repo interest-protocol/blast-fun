@@ -1,6 +1,7 @@
 "use client";
 
 import { Button, IconButton } from "#web/components/blast-ui/Button.tsx";
+import { NavPending } from "#web/components/blast-ui/NavigationLink.tsx";
 
 import clsx from "clsx";
 import Link from "next/link";
@@ -117,7 +118,7 @@ function CoinIdentity({ coin, id, buyAmount }: Readonly<{ coin: HomeCoin; id: st
         </span> : null}
         <span className="coinNamed">
           <Link aria-label={distinct ? `Open ${coin.name} (${coin.symbol})` : `Open ${coin.symbol}`} className={styles.symbol} href={href} id={id} prefetch={false}>
-            {coin.symbol}
+            <NavPending label={`Opening ${coin.symbol}`}>{coin.symbol}</NavPending>
           </Link>
           {coin.verified_team ? <CoinVerifiedMark /> : null}
         </span>

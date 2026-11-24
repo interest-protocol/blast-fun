@@ -54,6 +54,7 @@ import {
 } from "@blast/server/modules/sponsor/service.ts";
 import { publicReadNamespace } from "@blast/server/modules/public-reads/namespace.ts";
 import { configuredFeePolicy } from "@blast/server/modules/social/create/chain.ts";
+import { DEFAULT_PRESALE_FOLLOW_LIMITS, type PresaleFollowLimits } from "@blast/server/modules/social/presales/follow-reader.ts";
 import {
   creatorClaimSignerFromEnvironment,
   type CreatorClaimSigner,
@@ -125,6 +126,7 @@ export type RuntimeConfig = Readonly<{
   defillama: DefillamaSettings | null;
   /** Null when shared public caching is not configured: reads go uncached. */
   publicReadNamespaces: Readonly<Record<"presales" | "prices" | "market", string>> | null;
+  presaleFollow: PresaleFollowLimits;
   /** The partner quota namespace, hashed from the raw `BLAST_REDIS_NAMESPACE` and deployment identity. */
   quotaNamespace: string;
 }>;
@@ -191,6 +193,10 @@ export function parseRuntimeConfig(environment: Environment): RuntimeConfig {
     cardImages: cardImageSettingsFromEnvironment(environment),
     defillama: defillamaSettings(environment, deployment),
     publicReadNamespaces: publicReadNamespaces(environment),
+    presaleFollow: {
+      fleetSlots: concurrencyFromEnvironment(environment, "BLAST_PRESALE_FOLLOW_FLEET_LIMIT", DEFAULT_PRESALE_FOLLOW_LIMITS.fleetSlots, 32),
+      processSlots: concurrencyFromEnvironment(environment, "BLAST_PRESALE_FOLLOW_PROCESS_LIMIT", DEFAULT_PRESALE_FOLLOW_LIMITS.processSlots, 16),
+    },
     quotaNamespace: quotaNamespace(environment.BLAST_REDIS_NAMESPACE, deploymentIdentity(environment)),
   };
 }

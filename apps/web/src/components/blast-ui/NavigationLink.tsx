@@ -2,10 +2,16 @@
 
 import Link, { useLinkStatus } from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition, type ComponentProps } from "react";
+import { useState, useTransition, type ComponentProps, type ReactNode } from "react";
 
-export function NavPending() {
+export function NavPending({ label, children }: Readonly<{ label?: string; children?: ReactNode }> = {}) {
   const { pending } = useLinkStatus();
+  if (label) return (
+    <>
+      <span data-pending={pending ? "" : undefined}>{children}</span>
+      <span className="sr-only" aria-atomic="true" aria-live="polite">{pending ? label : ""}</span>
+    </>
+  );
   return pending ? <i data-pending="" hidden /> : null;
 }
 
