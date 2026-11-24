@@ -139,10 +139,10 @@ test("a matching trade hint updates the migration pool's candles in the open cha
   const prices: (string | null)[] = [];
   const off = subscribeChartPrice(poolKey, null, (value) => prices.push(value?.price ?? null));
   t.after(off);
-  const swap = (checkpoint: number, key: string, quoteAtoms: string) =>
+  const swap = (checkpoint: number, key: string, quoteAtoms: string, coinAtoms = "100") =>
     act(async () => streams[0]!.receive({
       type: "presale_pool_swap", presale_id: sale.presale_id, cursor: `${checkpoint}:0:1:0`,
-      timestamp_ms: clock + checkpoint - 100, side: "buy", pool_key: key, coin_atoms: "100", quote_atoms: quoteAtoms,
+      timestamp_ms: clock + checkpoint - 100, side: "buy", pool_key: key, coin_atoms: coinAtoms, quote_atoms: quoteAtoms,
     }, "presale"));
   await act(async () => streams[0]!.receive({ type: "pong", presale_checkpoint: 105 }));
   assert.equal(prices.at(-1), "0.001", "the fenced history supplies the current close");
@@ -169,7 +169,11 @@ test("a matching trade hint updates the migration pool's candles in the open cha
   await settle();
   assert.deepEqual(prices, ["1.99", "1.23"], "each distinct selected pool fill reaches the headline");
   assert.equal(reads.length, beforeSwaps, "live fills and related hints make no candle requests");
+  await swap(109, poolKey, "1167", "10000000000");
+  assert.equal(readout(), "0.000117", "the current chart close rounds the same way as the headline");
+  const low = [...container.querySelectorAll("dt")].find((term) => term.textContent === "Low");
+  assert.equal(low?.nextElementSibling?.textContent, readout(), "the current low and close are equal and use the same precision");
   now += 61_000;
-  await swap(109, poolKey, "456");
+  await swap(110, poolKey, "456");
   assert.equal(prices.at(-1), null, "a delayed fill clears the price until history catches up");
 });
