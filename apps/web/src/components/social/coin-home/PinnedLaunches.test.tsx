@@ -15,7 +15,7 @@ const { createRoot } = await import("react-dom/client");
 const { QueryClient } = await import("@tanstack/react-query");
 const { QueryProvider } = await import("#web/lib/query/provider.tsx");
 const { featuredPresalesQuery } = await import("../queries.ts");
-const { bondingFeaturedQuery } = await import("../bonding/bonding-client.ts");
+const { bondingCatalogQuery, bondingFeaturedQuery } = await import("../bonding/bonding-client.ts");
 const { PinnedLaunches } = await import("./PinnedLaunches.tsx");
 
 const presales = fixtureList("live", "ending").presales;
@@ -27,7 +27,13 @@ async function curves(featured: boolean, id = `0x${"01".repeat(32)}`) {
   return parseDiscoveryResponse(await response.json());
 }
 
-async function mount(t: TestContext, seed: Readonly<{ presales?: typeof presales; curves?: Awaited<ReturnType<typeof curves>>; now?: number; fetch?: typeof fetch; seeded?: Readonly<{ presales?: typeof presales; curves?: BondingHeroSeed }> }>) {
+async function rankedCurves() {
+  const engine = discoveryFixtureEngine({ state: () => "serving", now: () => FIXTURE_TIMESTAMP_MS });
+  const response = await handleDiscoveryRequest(new Request("https://blast.test/api/launchpad/discovery?catalog=bonding&sort=progress&limit=12"), engine);
+  return parseDiscoveryResponse(await response.json());
+}
+
+async function mount(t: TestContext, seed: Readonly<{ presales?: typeof presales; curves?: Awaited<ReturnType<typeof curves>>; ranking?: Awaited<ReturnType<typeof rankedCurves>>; now?: number; fetch?: typeof fetch; seeded?: Readonly<{ presales?: typeof presales; curves?: BondingHeroSeed }> }>) {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = seed.fetch ?? (async () => Response.json({ details: { tagline: null, cover: null, links: [] } }));
   const container = document.createElement("div");
@@ -36,6 +42,7 @@ async function mount(t: TestContext, seed: Readonly<{ presales?: typeof presales
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   if (seed.presales) client.setQueryData(featuredPresalesQuery().queryKey, seed.presales);
   if (seed.curves) client.setQueryData(bondingFeaturedQuery().queryKey, seed.curves);
+  if (seed.ranking) client.setQueryData(bondingCatalogQuery("bonding", "progress", "", null).queryKey, seed.ranking);
   t.after(async () => {
     await act(async () => root.unmount());
     client.clear();
@@ -47,9 +54,46 @@ async function mount(t: TestContext, seed: Readonly<{ presales?: typeof presales
   return container;
 }
 
-test("Home draws nothing without a pin, and the Bonding stand-in is not a pin", async (t) => {
+test("Home draws nothing when the only ranked curve has reached its target", async (t) => {
   const none = await mount(t, { presales: [], curves: await curves(false) });
   assert.equal(none.querySelector("section"), null);
+});
+
+test("Home appends the highest ranked live curve after the two pinned presales", async (t) => {
+  const container = await mount(t, { presales, curves: await curves(false), ranking: await rankedCurves() });
+  const slides = [...container.querySelectorAll(".slide:not([data-visual-copy])")];
+  assert.equal(slides.length, 3);
+  assert.match(slides[2]?.textContent ?? "", /Closest to graduation · 83\.33%/);
+  assert.match(slides[2]?.textContent ?? "", /Pixel 7/);
+  assert.equal(slides[2]?.querySelector("a")?.getAttribute("href"), `/coin/${encodeURIComponent(`0x${"12".repeat(31)}ff::meme::MEME`)}`);
+});
+
+test("Home shows the closest coin once when Blast has already pinned it", async (t) => {
+  const container = await mount(t, { presales, curves: await curves(true, `0x${"12".repeat(32)}`), ranking: await rankedCurves() });
+  assert.equal(container.querySelectorAll(".slide:not([data-visual-copy])").length, 3);
+  assert.doesNotMatch(container.textContent ?? "", /Closest to graduation/);
+});
+
+test("Home continues past a ranked page containing only curves that reached their target", async (t) => {
+  const ranked = await rankedCurves();
+  assert.equal(ranked.section.state, "available");
+  const { section } = ranked;
+  const container = await mount(t, {
+    presales,
+    curves: await curves(false),
+    ranking: {
+      ...ranked,
+      section: { ...section, data: { rows: section.data.rows.slice(0, 1), nextCursor: "next-page" } },
+    },
+    fetch: async (input) => {
+      if (String(input).includes("cursor=next-page")) {
+        return Response.json({ ...ranked, section: { ...section, data: { rows: section.data.rows.slice(1), nextCursor: null } } });
+      }
+      return Response.json({ details: null });
+    },
+  });
+  await waitFor(() => container.textContent?.includes("Closest to graduation"), "the live curve");
+  assert.match(container.textContent ?? "", /Pixel 7/);
 });
 
 test("shuffled presales come first, then pinned curves in their original order", async (t) => {
