@@ -110,6 +110,7 @@ test("every published route consumes exactly its pre-admitted endpoint bucket", 
     "presales/featured",
     `presales/${id}`,
     `presales/${id}/proof`,
+    `presales/${id}/allowlist.csv`,
     "prices",
     "discovery",
     "search",
@@ -133,7 +134,7 @@ test("every published route consumes exactly its pre-admitted endpoint bucket", 
     "market/launchpad/policy",
     "market/launchpad/daily-stats",
   ];
-  assert.equal(paths.length, 32);
+  assert.equal(paths.length, 33);
   for (const suffix of paths) {
     const path = "/api/v1/" + suffix;
     const route = partnerV1Route(path)!;
@@ -224,6 +225,12 @@ test("one API instance reuses handlers per admitted bucket without sharing autho
         daily_stats: read,
         wallet_launches: read,
         presale_proof: read,
+        async presale_allowlist_csv() {
+          await limiter.consume("presale_allowlist_csv", { ip: "198.51.100.10" });
+          return new Response("wallet,cap\r\n", {
+            headers: { "Content-Type": "text/csv; charset=utf-8" },
+          });
+        },
         coin_metadata: read,
       };
     },
@@ -246,6 +253,8 @@ test("one API instance reuses handlers per admitted bucket without sharing autho
 
   const handle = createBackendApi(dependencies);
   assert.equal((await partnerRead(handle, "market/status")).status, 401);
+  const csvPath = `presales/0x${"f".repeat(64)}/allowlist.csv`;
+  assert.equal((await partnerRead(handle, csvPath)).status, 401);
   assert.equal(
     factories.length,
     0,
@@ -301,4 +310,14 @@ test("one API instance reuses handlers per admitted bucket without sharing autho
     "A separate API instance must construct its own handler dependency scope.",
   );
   assert.notEqual(factories[2], factories[0]);
+
+  const csv = await partnerRead(handle, csvPath, { headers });
+  assert.equal(csv.status, 200);
+  assert.equal(csv.headers.get("content-type"), "text/csv; charset=utf-8");
+  assert.equal(await csv.text(), "wallet,cap\r\n");
+  assert.equal(
+    commands.filter((command) => command.some((part) => part.includes(":presale_allowlist_csv:")))
+      .length,
+    1,
+  );
 });

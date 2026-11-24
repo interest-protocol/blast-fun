@@ -1,7 +1,7 @@
 import { SUI_OBJECT_ID_SOURCE } from "@blast/core/lib/sui/ids.ts";
 import { MIGRATOR_VENUES, VENUES } from "@blast/core/modules/launchpad-contract/venues.ts";
 import type { RateBucket } from "@blast/core/lib/web-security/rate-limits.ts";
-import { NON_MARKET_READ_ROUTES, PRESALE_PROOF_READ } from "@blast/core/modules/backend-api/public-read-routes.ts";
+import { NON_MARKET_READ_ROUTES, PRESALE_ALLOWLIST_CSV_READ, PRESALE_PROOF_READ } from "@blast/core/modules/backend-api/public-read-routes.ts";
 import {
   routePattern,
   type RouteParamPatterns,
@@ -87,7 +87,7 @@ export function canonicalFirstPartyAlias(path: string): string {
 const PARTNER_MATCHERS = ROUTES.map(withPattern);
 const FIRST_PARTY_MATCHERS = [
   ...FIRST_PARTY_ROUTES,
-  ...ROUTES.filter((route) => route !== PRESALE_PROOF_READ && route !== COIN_METADATA_READ && route !== DAILY_STATS_READ),
+  ...ROUTES.filter((route) => route !== PRESALE_PROOF_READ && route !== COIN_METADATA_READ && route !== DAILY_STATS_READ && route !== PRESALE_ALLOWLIST_CSV_READ),
 ].map(withPattern);
 
 const MARKET_SOURCE_MATCHERS = FIRST_PARTY_MATCHERS.filter((route) => route.name === "market")

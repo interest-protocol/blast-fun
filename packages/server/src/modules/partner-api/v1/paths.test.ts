@@ -50,3 +50,10 @@ test("coin metadata is partner-only and uses the coin summary quota", () => {
   assert.equal(firstPartyReadRoute(path), null);
   assert.equal(partnerEndpointBucket(path), "launchpad_market_coin");
 });
+
+test("the bulk CSV has no first-party route and uses a dedicated partner budget", () => {
+  const csv = `${PATH}/${ID}/allowlist.csv`;
+  assert.equal(partnerV1Route(csv)?.name, "presale_allowlist_csv");
+  assert.equal(partnerEndpointBucket(csv), "presale_allowlist_csv");
+  assert.equal(firstPartyReadRoute(csv), null);
+});

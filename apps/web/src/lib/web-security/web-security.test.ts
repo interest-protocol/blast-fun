@@ -508,6 +508,7 @@ test("all named versioned rate policies publish exact defaults and scopes", () =
       presale_sponsor: { scope: "account", version: 1, windows: [{ limit: 30, windowSeconds: 600 }] },
       presale_sponsor_exec: { scope: "account", version: 1, windows: [{ limit: 100, windowSeconds: 86_400 }] },
       presale_allowlist: { scope: "account_or_api_key", version: 1, windows: [{ limit: 20, windowSeconds: 3_600 }] },
+      presale_allowlist_csv: { scope: "api_key", version: 1, windows: [{ limit: 10, windowSeconds: 60 }] },
       presale_proof: { scope: "ip", version: 1, windows: [{ limit: 120, windowSeconds: 60 }] },
       presale_bridge_quote: { scope: "ip", version: 1, windows: [{ limit: 60, windowSeconds: 60 }] },
       presale_bridge_register: { scope: "ip", version: 1, windows: [{ limit: 20, windowSeconds: 600 }] },

@@ -155,6 +155,7 @@ const handlers = (): PartnerV1Handlers => {
     daily_stats: read,
     wallet_launches: read,
     presale_proof: read,
+    presale_allowlist_csv: read,
     coin_metadata: read,
   };
 };

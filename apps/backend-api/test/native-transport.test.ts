@@ -188,6 +188,7 @@ test("gateway authentication binds the exact encoded target and claims each nonc
       daily_stats: read,
       wallet_launches: read,
       presale_proof: read,
+      presale_allowlist_csv: read,
       coin_metadata: read,
     }),
   });
