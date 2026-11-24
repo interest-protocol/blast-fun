@@ -1,5 +1,6 @@
 "use client";
 
+import { isPresaleId } from "@blast/core/modules/presale/presale-id.ts";
 import clsx from "clsx";
 import { Button, IconButton, IconButtonLink, type ControlSize } from "./Button";
 import { usePathname, useRouter } from "next/navigation";
@@ -106,6 +107,12 @@ function useHasNavigated(pathname: string | null): boolean {
 }
 
 const PageTransition = React.ViewTransition ?? React.Fragment;
+
+function pageTransitionName(pathname: string | null, home: boolean) {
+  if (home) return "blast-home";
+  const asset = pathname?.match(/^\/(coin|presale)\/([^/]+)\/?$/);
+  return asset && (asset[1] === "coin" || isPresaleId(asset[2]!)) ? "blast-asset" : "blast-page";
+}
 
 /** Peer portfolio sections keep their mounted summary and list controls. */
 function pageIdentity(pathname: string | null): string {
@@ -243,6 +250,8 @@ function ShellFrame({
   const accountMenu = useMenuHandle<undefined>();
   const createMenu = useMenuHandle<CreateMenuPayload>();
   const home = homeOverride ?? isHomePath(pathname);
+  const transitionName = pageTransitionName(pathname, home);
+  const transitionProps = "ViewTransition" in React ? { name: transitionName, default: "blast-route", update: "none" } : {};
   const noAside = pageHidesAside(pathname, home, aside);
   const [missingPage, setMissingPage] = useState(false);
   const current = missingPage ? null : currentItem !== undefined ? currentItem : shellNavKeyFor(pathname, viewer?.callsign ?? null);
@@ -350,8 +359,8 @@ function ShellFrame({
 
         <main className={styles.main} data-shell-column="" id="main">
           {banner}
-          <PageTransition {...("ViewTransition" in React ? { name: "blast-page", default: "blast-route", update: "none" } : {})} key={pageIdentity(pathname)}>
-            <div className={styles.view} id="view">
+          <PageTransition {...transitionProps} key={pageIdentity(pathname)}>
+            <div className={styles.view} data-route-transition={transitionName} id="view">
               <CoinPageWalletContext value={<ShellWallet {...wallet} available={Boolean(account)} pending={viewerLoading} size="sm" />}>
                 <MissingPageProvider onChange={setMissingPage}>{children}</MissingPageProvider>
               </CoinPageWalletContext>
