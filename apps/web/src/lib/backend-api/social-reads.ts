@@ -1,5 +1,5 @@
 import "server-only";
-import type { SocialHappeningResponse } from "@blast/core/modules/social/contracts/happening.ts";
+import { SOCIAL_HAPPENING_DISCOVER_PATH, type SocialHappeningResponse } from "@blast/core/modules/social/contracts/happening.ts";
 import type { SocialFeedPage } from "@blast/core/modules/social/contracts/feed.ts";
 import type { SocialItemResponse } from "@blast/core/modules/social/contracts/item-routes.ts";
 import type { SocialProfileCalls } from "@blast/core/modules/social/contracts/profile-page.ts";
@@ -35,7 +35,7 @@ export function readProfileCallsFromBackend(callsign: string): Promise<SocialPro
 }
 
 export async function readHappeningFromBackend(): Promise<SocialHappeningResponse | null> {
-  const read = await socialRead<SocialHappeningResponse>("/api/social/happening");
+  const read = await socialRead<SocialHappeningResponse>(SOCIAL_HAPPENING_DISCOVER_PATH);
   if (!read) return null;
   const testIds = await testPresaleIds(read, async (ids) => (await readHomeCoinsFromBackend(ids, HOME_DEFAULT_WINDOW, 1))?.coins ?? null);
   return withoutTestHappening(read, testIds);

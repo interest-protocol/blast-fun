@@ -16,7 +16,7 @@ import { HOME_AGES, HOME_SORTS, HOME_ROWS_CHOICES, HOME_SOURCES, HOME_WINDOWS, t
 import styles from "./CoinHome.module.css";
 import { HOME_SECTIONS_MENU_ID, type SectionChange } from "./HomeSections";
 import { HOME_SECTIONS_DEFAULT, moveHomeSection, HOME_SECTION_TITLES, isHomeSectionShown, setHomeSectionShown, shownHomeSections, type HomeSectionPrefs } from "./home-sections";
-import { AGE_LABELS, SORT_HINTS, SORT_LABELS, HOME_DEFAULT_VIEW, MIN_PARTICIPANT_CHOICES, SOURCE_LABELS, WINDOW_LABELS, activeFilterCount, controlsApply, type HomeViewState } from "./home-state";
+import { AGE_LABELS, SORT_HINTS, SORT_LABELS, HOME_DEFAULT_FEED, MIN_PARTICIPANT_CHOICES, SOURCE_LABELS, WINDOW_LABELS, controlsApply, type HomeFeedState, type HomeViewState } from "./home-state";
 
 const SOURCE_OPTIONS = HOME_SOURCES.map((key) => [key, SOURCE_LABELS[key]] as const);
 
@@ -57,10 +57,10 @@ export function Pick<Key extends string>({ label, value, options, labels, onPick
   </BlastMenu>;
 }
 
-type ViewProps = Readonly<{ state: HomeViewState; onChange: (next: HomeViewState) => void }>;
+type ViewProps = Readonly<{ state: HomeFeedState; onChange: (next: HomeFeedState) => void }>;
 
 /** The window (1h, 24h), which applies to every section. */
-export function WindowPick({ state, onChange, size }: ViewProps & Readonly<{ size?: ControlSize }>) {
+export function WindowPick({ state, onChange, size }: Readonly<{ state: HomeViewState; onChange: (next: HomeViewState) => void; size?: ControlSize }>) {
   return <Pick label="Activity window" labels={WINDOW_LABELS} onPick={(window) => onChange({ ...state, window })} options={HOME_WINDOWS} size={size} value={state.window} />;
 }
 
@@ -113,24 +113,29 @@ export function HomeSettingsMenu({ sections, onSections, showLabel }: Readonly<{
 
 export function CoinsListControls({ state, onChange }: ViewProps) {
   const discover = controlsApply(state.source);
-  const changed = state.window !== HOME_DEFAULT_VIEW.window || (discover && (state.sort !== HOME_DEFAULT_VIEW.sort || activeFilterCount(state) > 0));
-  const label = ["Filters", discover ? SORT_LABELS[state.sort] : null, WINDOW_LABELS[state.window], changed ? "active" : null].filter(Boolean).join(", ");
+  const mixed = discover && state.sort === "mixed";
+  const changed = !mixed && (discover || state.window !== HOME_DEFAULT_FEED.window);
+  const label = ["Filters", discover ? SORT_LABELS[state.sort] : null, mixed ? null : WINDOW_LABELS[state.window], changed ? "active" : null].filter(Boolean).join(", ");
   return <FilterMenu active={changed} label={label}>
-    {discover ? <label>Sort<SelectField aria-label="Sort" value={state.sort} onChange={event => onChange({ ...state, sort: event.target.value as HomeViewState["sort"] })}>
+    {discover ? <label>View<SelectField aria-label="View" value={state.sort} onChange={event => {
+      const sort = event.target.value as HomeFeedState["sort"];
+      onChange(sort === "mixed" ? HOME_DEFAULT_FEED : { ...state, sort });
+    }}>
+      <option value="mixed">{SORT_LABELS.mixed}</option>
       {HOME_SORTS.map(key => <option key={key} title={SORT_HINTS[key]} value={key}>{SORT_LABELS[key]}</option>)}
     </SelectField></label> : null}
-    <label>Activity window<SelectField aria-label="Activity window" value={state.window} onChange={event => onChange({ ...state, window: event.target.value as HomeViewState["window"] })}>
+    {!mixed ? <label>Activity window<SelectField aria-label="Activity window" value={state.window} onChange={event => onChange({ ...state, window: event.target.value as HomeFeedState["window"] })}>
       {HOME_WINDOWS.map(key => <option key={key} value={key}>{WINDOW_LABELS[key]}</option>)}
-    </SelectField></label>
-    {discover ? <>
+    </SelectField></label> : null}
+    {discover && !mixed ? <>
       <label>Participants<SelectField aria-label="Participants" value={state.minParticipants} onChange={event => onChange({ ...state, minParticipants: Number(event.target.value) })}>
         {MIN_PARTICIPANT_CHOICES.map(value => <option key={value} value={value}>{value ? `${value} or more` : "Any"}</option>)}
       </SelectField></label>
-      <label>Launched<SelectField aria-label="Launched" value={state.age} onChange={event => onChange({ ...state, age: event.target.value as HomeViewState["age"] })}>
+      <label>Launched<SelectField aria-label="Launched" value={state.age} onChange={event => onChange({ ...state, age: event.target.value as HomeFeedState["age"] })}>
         {HOME_AGES.map(key => <option key={key} value={key}>{AGE_LABELS[key]}</option>)}
       </SelectField></label>
       <label><Checkbox checked={state.tradable} onChange={event => onChange({ ...state, tradable: event.target.checked })} />Trades in the app only</label>
     </> : null}
-    {changed ? <Button onClick={() => onChange(discover ? HOME_DEFAULT_VIEW : { ...state, window: HOME_DEFAULT_VIEW.window })} size="sm">Reset filters</Button> : null}
+    {changed ? <Button onClick={() => onChange(discover ? HOME_DEFAULT_FEED : { ...state, window: HOME_DEFAULT_FEED.window })} size="sm">Reset filters</Button> : null}
   </FilterMenu>;
 }

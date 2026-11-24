@@ -15,7 +15,7 @@ import { freshTestDatabase } from "../../../../../core/test/fixtures/modules/dat
 import { autocommitReader } from "@blast/core/modules/database/transaction.ts";
 import { PostgresSocialAccounts } from "@blast/server/modules/social/accounts/repository.ts";
 import { createSocialConfigReader } from "@blast/core/modules/social/config/reader.ts";
-import { HAPPENING_TAPE_MAX, type SocialHappeningResponse } from "@blast/core/modules/social/contracts/happening.ts";
+import { HAPPENING_TAPE_MAX, SOCIAL_HAPPENING_DISCOVER_PATH, SOCIAL_HAPPENING_PATH, type SocialHappeningResponse } from "@blast/core/modules/social/contracts/happening.ts";
 import { createSocialValidator } from "@blast/core/modules/social/contracts/validate.ts";
 import type { SocialViewerStateResponse } from "@blast/core/modules/social/contracts/viewer-state.ts";
 import { createSocialRouteKit } from "@blast/server/modules/social/route-kit/route.ts";
@@ -106,7 +106,7 @@ const commit = (actor: string, presaleId: string, dollars: number | null, at: nu
 type Fixture = Readonly<{
   admin: Pool;
   now: number;
-  happening(options?: Readonly<{ trades?: boolean; headers?: Record<string, string> }>): Promise<Response>;
+  happening(options?: Readonly<{ trades?: boolean; recent?: boolean; headers?: Record<string, string> }>): Promise<Response>;
   viewerState(callsign: string, body: unknown): Promise<Response>;
 }>;
 
@@ -206,7 +206,7 @@ async function withFixture(run: (fixture: Fixture) => Promise<void>, hidden: (no
       admin,
       now,
       happening: (options = {}) =>
-        (options.trades ? all : hidden).GET(new Request(`${ORIGIN}/api/social/happening`, { headers: { "x-forwarded-for": "203.0.113.7", ...options.headers } }), testClient("203.0.113.7")),
+        (options.trades ? all : hidden).GET(new Request(`${ORIGIN}${options.recent ? SOCIAL_HAPPENING_DISCOVER_PATH : SOCIAL_HAPPENING_PATH}`, { headers: { "x-forwarded-for": "203.0.113.7", ...options.headers } }), testClient("203.0.113.7")),
       viewerState: (callsign, body) =>
         viewerState.POST(new Request(`${ORIGIN}/api/social/viewer-state`, {
           method: "POST",
@@ -286,6 +286,18 @@ test("T-011-AC-2 (AC-062, AC-063, AC-047): last hour counts every wallet, USD on
     assert.deepEqual(body.last_hour, { wallets: 4, usd: "350.00", usd_complete: false });
   }));
 
+test("Discover ranks live presales by the newest confirmed commit per sale, even beyond the tape", { skip }, () =>
+  withFixture(async ({ happening, now }) => {
+    assert.equal("recent_presales" in await happeningOf(await happening()), false);
+    const body = await happeningOf(await happening({ recent: true }));
+    assert.deepEqual(ids(body.fastest), [P.openLater, P.openSoon]);
+    assert.deepEqual(body.recent_presales?.map(({ presale, last_commit_ms }) => [presale.presale_id, last_commit_ms]), [
+      [P.openSoon, now - MINUTE],
+      [P.openLater, now - 5 * MINUTE],
+    ]);
+    assert.ok(body.tape.every((event) => event.presale_id !== P.openLater));
+  }, (now) => Array.from({ length: HAPPENING_TAPE_MAX }, (_, i) => commit(W.anon, P.openSoon, 1, now - MINUTE - i * 1_000))));
+
 test("T-011-AC-3 (AC-124, AC-165, AC-042): public cache, no viewer field, replica, as_of; a token changes nothing", { skip }, () =>
   withFixture(async ({ happening, now }) => {
     const plain = await happeningOf(await happening());
@@ -325,16 +337,20 @@ test("UI-05 tape: newest first, named by the naming rule at the event, claims in
 
 test("UI-05 watermark: activity past a pipeline's committed checkpoint is left out; the windows end at the chain clock", { skip }, () =>
   withFixture(async ({ admin, happening, now }) => {
-    // The presale pipeline committed only up to the 61-minute-old commit, ten minutes ago.
+    // The presale pipeline committed only up to the 61-minute-old commit, nine minutes ago.
     const cut = (await admin.query<{ c: string }>(
       "SELECT checkpoint::text AS c FROM blast_infra_fixture.activity WHERE usd_value = 9000",
     )).rows[0]!.c;
-    await admin.query(advanceWatermark(Number(cut), 10 * MINUTE, "presale"));
-    const body = await happeningOf(await happening({ trades: true }));
-    assert.ok(body.clock_ms >= now - 10 * MINUTE - 1_000 && body.clock_ms <= now - 10 * MINUTE + 30_000, String(body.clock_ms - now));
+    await admin.query(advanceWatermark(Number(cut), 9 * MINUTE, "presale"));
+    const body = await happeningOf(await happening({ trades: true, recent: true }));
+    assert.ok(body.clock_ms >= now - 9 * MINUTE - 1_000 && body.clock_ms <= now - 9 * MINUTE + 30_000, String(body.clock_ms - now));
     // Only commits at or below the cut and before the clock count: Cy's (5 minutes ago) is past both; the
     // 61-minute-old one is inside the hour before the clock.
     assert.deepEqual(body.last_hour, { wallets: 3, usd: "9350.00", usd_complete: false });
+    assert.deepEqual(body.recent_presales?.map(({ presale, last_commit_ms }) => [presale.presale_id, last_commit_ms]), [
+      [P.openLater, now - 10 * MINUTE],
+      [P.openSoon, now - 30 * MINUTE],
+    ]);
     assert.ok(body.tape.every((event) => event.kind !== "presale_claim"));
     // The trade is past the clock, so it is left out too.
     assert.ok(body.tape.every((event) => event.kind !== "trade_buy"));
@@ -384,7 +400,7 @@ const HIDDEN_TEXT = new RegExp(`${HIDDEN.excluded.slice(2)}|${HIDDEN.incomplete.
 test("T-043 hidden sales: a hidden sale's commit, claim or coin trade never reaches the tape or a list, trading hidden or visible", { skip }, () =>
   withFixture(async ({ happening }) => {
     for (const trades of [false, true]) {
-      const body = await happeningOf(await happening({ trades }));
+      const body = await happeningOf(await happening({ trades, recent: true }));
       const text = JSON.stringify(body);
       assert.doesNotMatch(text, HIDDEN_TEXT);
       assert.ok(body.tape.every((event) => event.presale_id !== null && SHOWN_SALES.includes(event.presale_id) && event.symbol !== ""), text);
