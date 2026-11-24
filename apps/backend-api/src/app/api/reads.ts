@@ -1,7 +1,11 @@
 import { publicErrorResponse } from "@blast/core/lib/http-errors.ts";
 import { recordMetric } from "@blast/core/lib/metrics.ts";
 import type { RateBucket, RateLimitPort } from "@blast/core/lib/web-security/rate-limits.ts";
-import type { PartnerV1Read } from "@blast/server/modules/partner-api/v1/paths.ts";
+import {
+  firstPartyReadRoute,
+  partnerV1Route,
+  type PartnerV1Read,
+} from "@blast/server/modules/partner-api/v1/paths.ts";
 import { projectedResponse, v1Projection } from "@blast/server/modules/partner-api/v1/presales.ts";
 import {
   anonymousPartnerHeaders,
@@ -59,15 +63,18 @@ export function createReadHandlers(createHandlers: (limiter: RateLimitPort) => P
     // Admission validated Origin; downstream public reads are anonymous.
     headers.delete("origin");
     const owners = handlersFor(endpoint, prepaid);
-    if (path.startsWith("/api/v1/market/")) {
-      return serve("market", "/api/launchpad");
+    const route = partner ? partnerV1Route(path) : firstPartyReadRoute(path);
+    if (route?.name === "market") {
+      return serve(route.name, route.sourcePath);
     }
-    return http.handle(request, ({ name, prefix }) => serve(name, prefix));
+    return http.handle(request, ({ name, prefix }) =>
+      serve(name, prefix + path.slice("/api/v1".length)),
+    );
 
-    async function serve(name: PartnerV1Read, prefix: string) {
+    async function serve(name: PartnerV1Read, sourcePath: string) {
       const url = new URL(request.url);
       const projection = partner ? v1Projection(name, path) : null;
-      url.pathname = prefix + path.slice("/api/v1".length);
+      url.pathname = sourcePath;
       const answer = await owners[name](
         new Request(url, { method: "GET", headers, signal: request.signal }),
         client,

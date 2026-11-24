@@ -1,3 +1,4 @@
+import { PARTNER_COIN_SEGMENT_LIMIT } from "@blast/core/modules/backend-api/public-read-routes.ts";
 import * as Context from "effect/Context";
 import * as Layer from "effect/Layer";
 import * as HttpRouter from "effect/http/HttpRouter";
@@ -14,7 +15,8 @@ export function createReadHttp() {
   );
   const { handler, dispose } = HttpRouter.toWebHandler(routes, {
     disableLogger: true,
-    routerConfig: EXACT_ROUTER_CONFIG,
+    // Routing escapes percent signs in segments already bounded by admission.
+    routerConfig: { ...EXACT_ROUTER_CONFIG, maxParamLength: PARTNER_COIN_SEGMENT_LIMIT * 3 },
   });
   return { handle, dispose };
 
