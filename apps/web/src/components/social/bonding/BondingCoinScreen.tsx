@@ -398,9 +398,9 @@ function CoinMarketCards({ graduated, view, tick, tradeId, chart, activity }: Re
   return <>
     {phoneProgress && stats}
     {chart && <ChartCard>{chart}</ChartCard>}
-    {activity}
     {!phoneProgress && stats}
     {phoneProgress && facts ? <div className={`${styles.card} ${styles.progressFacts}`}>{facts}</div> : null}
+    {activity}
   </>;
 }
 
@@ -517,12 +517,12 @@ export function LegacyCoinScreen({ coinType, name, symbol, logoUrl, chart, decim
         <div className={styles.market}>
           <MarketPrice units={units} price={isRefetchError ? undefined : market?.price} />
           <ChartCard><SectionBoundary subject="chart">{chart}</SectionBoundary></ChartCard>
+          <MarketOverview fdv={isRefetchError ? undefined : fdvUsd} venue={poolKey.split(":")[0]} />
           <Card title="Trades">
             <SectionBoundary subject="trades" key={poolKey}>
               <IndexedPoolTrades poolKey={poolKey} units={units} />
             </SectionBoundary>
           </Card>
-          <MarketOverview fdv={isRefetchError ? undefined : fdvUsd} venue={poolKey.split(":")[0]} />
         </div>
       </CoinPriceCurrencyProvider>
       {trade == null ? null : <CoinTradePlacement execution={<SectionBoundary subject="execution">{trade}</SectionBoundary>} symbol={symbol} />}
