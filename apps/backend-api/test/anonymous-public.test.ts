@@ -160,6 +160,7 @@ test("admitted reads preserve the owner request and the public, partner and HEAD
       featured: unused,
       market: unused,
       presale: unused,
+      presale_allowlist_csv: unused,
       presale_proof: unused,
       presales: unused,
       search: unused,
