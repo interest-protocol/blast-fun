@@ -307,7 +307,7 @@
       "additionalProperties": false
     },
     "quote_price": {
-      "description": "R3-40: a SUI sale's quote price row (chain_read_v1.prices): USD a whole coin and when it was taken, for a display-only dollar equivalent; null for a USDC sale or without a row.",
+      "description": "Indexed USD price for a whole coin of the presale's exact quote type, with its observation time. Null when the quote is valued at one dollar or there is no indexed price.",
       "oneOf": [
         {
           "type": "null"

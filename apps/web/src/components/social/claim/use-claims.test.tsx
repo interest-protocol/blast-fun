@@ -87,7 +87,8 @@ test("claiming from a presale side box completes in place while its private read
     assert.equal(container.querySelectorAll("[data-claim]").length, 1);
     await act(async () => container.querySelector<HTMLButtonElement>("[data-side-box] [data-claim]")!.click());
     assert.equal(container.querySelector("[data-claim]") === null, true, "the side box removes the completed action");
-    assert.match(container.textContent ?? "", key === "hlcn" ? /Refunded/ : /Claimed/);
+    if (key === "hlcn") assert.match(container.textContent ?? "", /Refunded/);
+    else assert.equal(container.querySelector('[role="status"]')?.textContent, "Claim confirmed. Updating balances.");
     assert.equal(response.presales[sale.presale_id]!.mine.claimed, false, "the old indexed response remains unchanged");
   }
 });

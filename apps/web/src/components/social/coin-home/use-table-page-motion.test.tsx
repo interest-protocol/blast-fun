@@ -151,8 +151,14 @@ test("live trader rows wait for their answer; failed trader and post pages disca
     const top = this.hasAttribute("data-table-footer") ? height - 20 : 0;
     return { top, bottom: top + height, height, left: 0, right: 100, width: 100, x: 0, y: top, toJSON() {} };
   });
-  let answer: (response: Response) => void = () => undefined;
-  t.mock.method(globalThis, "fetch", () => new Promise<Response>(resolve => { answer = resolve; }));
+  const pendingReads = new Map<string, (response: Response) => void>();
+  t.mock.method(globalThis, "fetch", (path: string) => new Promise<Response>(resolve => { pendingReads.set(path, resolve); }));
+  const answer = async (matches: (path: string) => boolean, response: Response) => {
+    const path = await waitFor(() => [...pendingReads.keys()].find(matches), "the requested page read");
+    const resolve = pendingReads.get(path)!;
+    pendingReads.delete(path);
+    await act(async () => resolve(response));
+  };
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   const container = dom.document.createElement("div"); container.setAttribute("data-blast-ui", ""); dom.document.body.append(container);
   const root = createRoot(container);
@@ -169,13 +175,13 @@ test("live trader rows wait for their answer; failed trader and post pages disca
   frame(); frame();
   const beforeAnswer = motion.all.length;
   assert.equal(container.querySelectorAll('ol[aria-label="PnL leaderboard"] > li').length, 5);
-  await act(async () => { answer(Response.json(leaderboard(10))); });
+  await answer(path => path.includes("/traders"), Response.json(leaderboard(10)));
   await waitFor(() => container.querySelectorAll('ol[aria-label="PnL leaderboard"] > li').length === 10, "ten answered traders");
   assert.equal(container.querySelectorAll('ol[aria-label="PnL leaderboard"] > li').length, 10);
   height = 150; resize();
   assert.ok(motion.all.length > beforeAnswer, "delayed row-count answers retain their pointer measurement");
   await pick("20 per page");
-  await act(async () => { answer(new Response("{}", { status: 503 })); });
+  await answer(path => path.includes("/traders"), new Response("{}", { status: 503 }));
   await waitFor(() => container.textContent?.includes("Traders couldn’t load"), "trader failure");
   assert.match(container.textContent!, /Traders couldn’t load/);
   assert.equal(container.querySelector('[data-table-footer]'), null);
@@ -188,7 +194,7 @@ test("live trader rows wait for their answer; failed trader and post pages disca
   await click(container.querySelector('[aria-label="Next page"]')!);
   await waitFor(() => container.querySelector('[aria-busy="true"]'), "pending posts");
   frame(); frame();
-  await act(async () => { answer(new Response("{}", { status: 503 })); });
+  await answer(path => path.includes("cursor=cursor-1"), new Response("{}", { status: 503 }));
   await waitFor(() => container.textContent?.includes("Posts couldn’t load"), "post failure");
   assert.match(container.textContent!, /Posts couldn’t load/);
   assert.equal(container.querySelector('[aria-current="page"]')?.textContent, "1");
