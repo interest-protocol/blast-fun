@@ -1,6 +1,4 @@
 import { bpsPercent } from "@blast/core/lib/bps.ts";
-import { divideExact, exactDecimal, exactText } from "@blast/core/web/exact-amount.ts";
-import type { SocialPriceHistory } from "@blast/core/web/contracts/prices.ts";
 import type { HomeHolder } from "@blast/core/web/contracts/home.ts";
 import { readablePrice } from "#web/lib/market-format.ts";
 
@@ -27,24 +25,4 @@ export function presaleHolderShare(holder: HomeHolder) {
   if (holder.share_bps === null) return null;
   if (holder.share_bps === 0 && holder.balance !== "0") return "<0.01%";
   return bpsPercent(BigInt(holder.share_bps));
-}
-
-export function poolHeadlinePrice({ usd, asOf, coinType, quoteType, displayRate, history }: Readonly<{
-  usd: string | null;
-  asOf: number | null;
-  coinType: string;
-  quoteType: string;
-  displayRate: string | null;
-  history: SocialPriceHistory | null | undefined;
-}>) {
-  if (usd == null) {
-    const quote = history?.quote;
-    return history?.coin_type === coinType && quote?.coin_type === quoteType
-      ? { value: quote.price, asOf: quote.as_of_ms, quoted: true }
-      : null;
-  }
-  const rate = exactDecimal(displayRate);
-  const price = exactDecimal(usd);
-  const converted = rate && price ? divideExact(price, rate) : null;
-  return converted ? { value: exactText(converted), asOf, quoted: true } : { value: usd, asOf, quoted: false };
 }

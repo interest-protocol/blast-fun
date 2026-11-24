@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { MARKET_STREAM_BUDGET } from "@blast/core/modules/launchpad-contract/market-stream.ts";
 
 import { marketHintTransport } from "#web/lib/live-stream/market-hints.ts";
 import { HIDDEN_GRACE_MS, MarketStreamHub, STABLE_MS, UNSERVED_RETRY_MS, type MarketEventSource, type MarketStreamState, type MarketTrade } from "./market-stream-hub.ts";
@@ -25,7 +26,7 @@ class Source implements MarketEventSource {
   close(): void { this.closed = true; }
   emit(type: string, value: unknown = {}): void { for (const listener of this.listeners.get(type) ?? []) listener({ data: JSON.stringify(value) }); }
   fence(checkpoint: number, poolKey = CURVE): void { this.emit("status", { state: "live", pool_key: poolKey, checkpoint, cursor: `${checkpoint}:0:0:0`, provenance: wireProvenance(checkpoint) }); }
-  hello(): void { this.emit("hint", { type: "hello", provenance: wireProvenance(1) }); }
+  hello(heartbeat = false): void { this.emit("hint", { type: "hello", provenance: wireProvenance(1), heartbeat }); }
   pools(): string[] { return new URL(this.url, "https://blast.test").searchParams.getAll("pool"); }
 }
 
@@ -81,6 +82,29 @@ test("two subscribers to the same pool share one EventSource, and it closes afte
   assert.equal(s.source().closed, true);
   assert.equal(s.timers.length, 0);
   assert.equal(s.listening(), false);
+});
+
+test("a missing heartbeat invalidates the live stream and requires a new fence", async () => {
+  const s = setup();
+  const chart = watcher();
+  const subscription = s.hub.subscribe({ pools: chart.pools, expected, listener: chart.listener });
+  const old = s.source();
+  old.fence(10);
+  old.hello(true);
+  s.fire(3 * MARKET_STREAM_BUDGET.heartbeatMs);
+  assert.equal(old.closed, true);
+  assert.equal(chart.states.at(-1), "reconnecting");
+  old.emit("market", trade(11));
+  assert.equal(chart.trades.length, 0);
+
+  s.fire(500);
+  s.source().hello();
+  s.source().fence(12);
+  assert.equal(chart.states.at(-1), "live");
+  assert.deepEqual(chart.fences, [[CURVE, 10], [CURVE, 12]]);
+  subscription.stop();
+  await settle();
+  assert.equal(s.timers.length, 0);
 });
 
 test("a late subscriber to a live pool starts from what the stream already delivered", async () => {

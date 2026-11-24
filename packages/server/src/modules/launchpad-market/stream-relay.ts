@@ -38,6 +38,7 @@ type Topic = {
   clients: Set<Client>;
   fence?: Frame;
   cursor?: string;
+  priceMissing?: boolean;
   deadline?: ReturnType<typeof setTimeout>;
 };
 const encoder = new TextEncoder();
@@ -50,6 +51,7 @@ const event = (name: string, value: unknown, id?: string) =>
   encoder.encode(
     `${id ? `id: ${id}\n` : ""}event: ${name}\ndata: ${JSON.stringify(value)}\n\n`,
   );
+const HEARTBEAT = event("heartbeat", {});
 const object = (value: unknown): Frame => {
   if (!value || typeof value !== "object" || Array.isArray(value))
     throw new Error("Invalid market frame.");
@@ -123,7 +125,7 @@ function validateTrade(frame: Frame): void {
     )
   )
     throw new Error();
-  parsePriceString(trade.price, "trade.price");
+  if (trade.price !== null) parsePriceString(trade.price, "trade.price");
   parseAtomic(trade.quote_amount, "trade.quote_amount", 128);
   parseAtomic(trade.meme_amount, "trade.meme_amount", 128);
   if (trade.volume_usd !== null)
@@ -295,7 +297,7 @@ export class MarketStreamRelay {
   #beat(): void {
     if (this.#awaitingPong) return this.#end("upstream-silent");
     for (const client of this.#clients)
-      this.#send(client, encoder.encode(": keepalive\n\n"));
+      this.#send(client, HEARTBEAT);
     if (!this.#ready) return;
     try {
       this.#awaitingPong = true;
@@ -410,7 +412,7 @@ export class MarketStreamRelay {
     )
       throw new Error();
     this.#ready = true;
-    this.#hello = { type: "hello", provenance: frame.provenance };
+    this.#hello = { type: "hello", provenance: frame.provenance, heartbeat: true };
     this.#hint(this.#hello);
     this.#subscribe("subscribe", [...this.#topics.keys()], true);
     this.#awaitingPong = true;
@@ -490,6 +492,13 @@ export class MarketStreamRelay {
   }
 
   #deliver(pool: string, topic: Topic, frame: Frame, cursor: string): void {
+    if (frame.type === "snapshot" && Array.isArray(frame.trades)) {
+      const latest = frame.trades.map(object).find((trade) => trade.kind !== "opening_round_fill");
+      topic.priceMissing = latest !== undefined && latest.price == null;
+    } else if (frame.type === "trade") {
+      const trade = object(frame.trade);
+      topic.priceMissing = trade.price === null;
+    }
     topic.cursor = cursor;
     topic.fence = {
       state: "live",
@@ -497,6 +506,7 @@ export class MarketStreamRelay {
       checkpoint: frame.checkpoint,
       cursor,
       provenance: frame.provenance,
+      ...(topic.priceMissing ? { price_missing: true } : {}),
     };
     if (frame.type === "snapshot") {
       clearTimeout(topic.deadline);

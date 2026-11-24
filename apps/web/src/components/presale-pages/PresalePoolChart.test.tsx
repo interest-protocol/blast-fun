@@ -15,7 +15,8 @@ const { PresalePoolChart } = await import("./PresalePoolChart");
 const { subscribeChartPrice } = await import("#web/components/launchpad/chart/chart-live-price.ts");
 
 test("a matching trade hint updates the migration pool's candles in the open chart", async (t) => {
-  let now = Date.now();
+  const clock = 1_800_000_020_000;
+  let now = clock;
   t.mock.method(Date, "now", () => now);
   t.mock.method(Math, "random", () => 0);
   const streams: EventStream[] = [];
@@ -34,7 +35,6 @@ test("a matching trade hint updates the migration pool's candles in the open cha
   Object.defineProperty(globalThis, "EventSource", { configurable: true, value: EventStream });
 
   const { presale: sale } = fixtureDetail("kstl");
-  const clock = 1_800_000_020_000;
   const bucket = clock - clock % 300_000;
   const pool = { id: `0x${"3".repeat(64)}`, venue: "bluefin", coin_atoms: "1", quote_atoms: "2", as_of_ms: clock };
   const quote = { type: sale.quote_type, symbol: sale.quote_symbol, decimals: sale.quote_decimals };
@@ -136,8 +136,8 @@ test("a matching trade hint updates the migration pool's candles in the open cha
   await settle();
   assert.equal(page()?.as_of.checkpoint, 105);
   const poolKey = `${pool.venue}:${pool.id}`;
-  const prices: string[] = [];
-  const off = subscribeChartPrice(poolKey, null, (value) => { if (value) prices.push(value.price); });
+  const prices: (string | null)[] = [];
+  const off = subscribeChartPrice(poolKey, null, (value) => prices.push(value?.price ?? null));
   t.after(off);
   const swap = (checkpoint: number, key: string, quoteAtoms: string) =>
     act(async () => streams[0]!.receive({
@@ -145,6 +145,8 @@ test("a matching trade hint updates the migration pool's candles in the open cha
       timestamp_ms: clock + checkpoint - 100, side: "buy", pool_key: key, coin_atoms: "100", quote_atoms: quoteAtoms,
     }, "presale"));
   await act(async () => streams[0]!.receive({ type: "pong", presale_checkpoint: 105 }));
+  assert.equal(prices.at(-1), "0.001", "the fenced history supplies the current close");
+  prices.length = 0;
   const beforeSwaps = reads.length;
   await swap(106, `cetus:${pool.id}`, "264");
   await emit(106, sale.presale_id, "trade_buy");
@@ -155,4 +157,7 @@ test("a matching trade hint updates the migration pool's candles in the open cha
   await settle();
   assert.deepEqual(prices, ["1.99", "1.23"], "each distinct selected pool fill reaches the headline");
   assert.equal(reads.length, beforeSwaps, "live fills and related hints make no candle requests");
+  now += 61_000;
+  await swap(109, poolKey, "456");
+  assert.equal(prices.at(-1), null, "a delayed fill clears the price until history catches up");
 });

@@ -323,7 +323,7 @@ test("the coin page reads the coin market on Home's public root, keyed by the sa
   client.clear();
 });
 
-test("a graduated pool shows its latest quote price when USD is unavailable", () => {
+test("a graduated pool shows a dash until its current close is confirmed", () => {
   const client = createTestQueryClient();
   const detail = fixtureDetail("kstl");
   const sale = { ...detail.presale, price_usd: null };
@@ -335,7 +335,7 @@ test("a graduated pool shows its latest quote price when USD is unavailable", ()
     quote: { coin_type: market.quote.type, symbol: market.quote.symbol, price: "0.0123", as_of_ms: FIXTURE_NOW },
   });
   const html = renderToStaticMarkup(withQueryClient(client, <SaleMarket nowMs={FIXTURE_NOW} sale={sale} terms={detail.terms} />));
-  assert.match(html, /<span>Price<\/span><strong>(?:(?!<\/strong>).)*0\.0123.*USDC/);
+  assert.match(html, /<span>Price<\/span><strong>—<\/strong>/);
   assert.doesNotMatch(html, /\+\$0\.0137/);
   client.clear();
 });

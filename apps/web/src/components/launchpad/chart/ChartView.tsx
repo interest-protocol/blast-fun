@@ -65,8 +65,8 @@ const hasData = (section: SourceState | null): section is Extract<Section<ChartC
 const clock = (ms: number) => formatTime(ms);
 
 /** A price in quote per whole token, cut to seven significant digits; in USD when the quote's rate is known. */
-function tokenPrice(price: string, source: ChartViewSource, quoteUsd?: string | null): string {
-  if (source.memeDecimals === null || source.quoteDecimals === null) return NO_VALUE;
+function tokenPrice(price: string | null, source: ChartViewSource, quoteUsd?: string | null): string {
+  if (price === null || source.memeDecimals === null || source.quoteDecimals === null) return NO_VALUE;
   const rate = exactDecimal(quoteUsd);
   const whole = rate && exactDecimal(shiftDecimal(price, source.memeDecimals - source.quoteDecimals));
   if (rate && whole) return readableUsd(exactText(multiplyExact(whole, rate)));
@@ -185,6 +185,7 @@ function useChartViewControls({
   updates,
   emptyMessage,
   livePreset = false,
+  currentPrice,
   diagnostic,
   onControls,
   onToggle,
@@ -202,6 +203,7 @@ function useChartViewControls({
   updates: string | null;
   emptyMessage?: string;
   livePreset?: boolean;
+  currentPrice?: string | null;
   diagnostic?: string;
   onControls: (controls: ChartControls) => void;
   onToggle: (source: ChartSourceName, shown: boolean) => void;
@@ -209,11 +211,11 @@ function useChartViewControls({
 }>) {
   const live = controls.range === "live";
   const now = useChartClock(1_000, live);
-  const drawing = chartDrawing({ state, source, omitCurve, historyRequest, hidden, live, now });
+  const drawing = chartDrawing({ state, source, omitCurve, historyRequest, hidden, live, now, currentPrice });
   return { source, quoteUsd, controls, pending, updates, emptyMessage, livePreset, diagnostic, onControls, onToggle, onRefresh, ...drawing };
 }
 
-function chartDrawing({ state, source, omitCurve, historyRequest, hidden, live, now }: Readonly<{
+function chartDrawing({ state, source, omitCurve, historyRequest, hidden, live, now, currentPrice }: Readonly<{
   state: ChartState;
   source: ChartViewSource;
   omitCurve?: boolean;
@@ -221,6 +223,7 @@ function chartDrawing({ state, source, omitCurve, historyRequest, hidden, live, 
   hidden: readonly ChartSourceName[];
   live: boolean;
   now: number | null;
+  currentPrice?: string | null;
 }>) {
   const chainTime = chartLatestTimestamp(state);
   const liveEnd = live ? candleBucketStart("1s", Math.max(now ?? 0, chainTime)) + 1_000 : null;
@@ -244,11 +247,15 @@ function chartDrawing({ state, source, omitCurve, historyRequest, hidden, live, 
     }] : [],
   );
   const latest = drawn.at(-1);
+  const close = latest?.page.candles.at(-1)?.close ?? latest?.carriedClose?.price ?? null;
+  const hasLatest = latest !== undefined &&
+    sources.find(({ name }) => name === latest.source)?.section?.state === "available" &&
+    (currentPrice === undefined || (currentPrice === close && latest.source === (venuePoolKey ? "venue" : "curve")));
   // A bounded range runs to blast-infra's committed checkpoint time; all history ends at its last candle.
   const hasPriceUnits = source.memeDecimals !== null && source.quoteDecimals !== null;
   const geometry = hasPriceUnits ? chartGeometry(drawn, migration, request.from, liveEnd ?? (request.from === undefined ? null : chainTime || null)) : null;
   const missingPriceUnits = Boolean(latest) && !hasPriceUnits;
-  return { venuePoolKey, request, migration, sources, selectable, drawn, label, shown, geometry, hasPriceUnits, missingPriceUnits, latest: latest?.page.candles.at(-1)?.close ?? latest?.carriedClose?.price ?? null };
+  return { venuePoolKey, request, migration, sources, selectable, drawn, label, shown, geometry, hasPriceUnits, missingPriceUnits, latestAvailable: hasLatest, latest: close };
 }
 
 function priceSource(
@@ -260,7 +267,8 @@ function priceSource(
   holdCurveAfterMigration: boolean,
 ) {
   if (!hasData(read)) return { name, section: read, opening: undefined };
-  const candles = liveStart === null ? read.data.candles : read.data.candles.filter(({ bucketStart }) => bucketStart >= liveStart);
+  const from = request.from;
+  const candles = from === undefined ? read.data.candles : read.data.candles.filter(({ bucketStart }) => bucketStart >= from);
   const carryFrom = name === "venue" && liveStart !== null ? Math.max(liveStart, migrationAt ?? liveStart) : liveStart;
   const mayCarry = name === "venue" || migrationAt === undefined || holdCurveAfterMigration || (carryFrom !== null && carryFrom < migrationAt);
   const previous = liveStart !== null && mayCarry
@@ -268,6 +276,9 @@ function priceSource(
     : undefined;
   const carriedClose = previous && carryFrom !== null ? { timestampMs: carryFrom, price: previous.close } : undefined;
   const page = { ...read.data, candles };
+  if (!candles.length && !carriedClose && read.state === "available") {
+    return { name, section: { ...read, state: "empty" as const, data: page }, opening: undefined };
+  }
   const opening = chartOpening(page, request, launch);
   const first = candles[0];
   if (!opening || !first) return { name, section: { ...read, data: page }, opening, carriedClose };
@@ -285,7 +296,7 @@ function priceSource(
 
 export function ChartView(props: Parameters<typeof useChartViewControls>[0] & Readonly<{ compact?: boolean; preview?: boolean }>) {
   const view = useChartViewControls(props);
-  const { source, venuePoolKey, quoteUsd, controls, updates, migration, selectable, drawn, shown, geometry, missingPriceUnits, latest } = view;
+  const { source, venuePoolKey, quoteUsd, controls, updates, migration, selectable, drawn, shown, geometry, missingPriceUnits, latest, latestAvailable } = view;
   if (props.compact) return <CompactChart view={view} preview={props.preview} />;
   return (
     <div className={styles.chart}>
@@ -298,7 +309,7 @@ export function ChartView(props: Parameters<typeof useChartViewControls>[0] & Re
       ) : null}
 
       {geometry ? (
-        <ChartFigure key={`${controls.range}:${controls.interval}`} presentation={controls.range === "live" ? "line" : undefined} quoteUsd={quoteUsd} drawn={drawn} migrationAt={migration?.timestampMs} venuePoolKey={venuePoolKey} geometry={geometry} latest={latest} source={source} controls={controls} />
+        <ChartFigure key={`${controls.range}:${controls.interval}`} presentation={controls.range === "live" ? "line" : undefined} quoteUsd={quoteUsd} drawn={drawn} migrationAt={migration?.timestampMs} venuePoolKey={venuePoolKey} geometry={geometry} latest={latest} latestAvailable={latestAvailable} source={source} controls={controls} />
       ) : null}
 
       {geometry && exactDecimal(quoteUsd) ? <p className={styles.note}>USD prices use the current {source.quoteSymbol} rate.</p> : null}
@@ -418,12 +429,13 @@ function SourceCandles({ name, section, label, source, quoteUsd, request, range,
   );
 }
 
-function ChartFigure({ drawn, migrationAt, venuePoolKey, geometry, latest, source, controls, compact = false, presentation, quoteUsd, candleTrade, preview }: Readonly<{
+function ChartFigure({ drawn, migrationAt, venuePoolKey, geometry, latest, latestAvailable, source, controls, compact = false, presentation, quoteUsd, candleTrade, preview }: Readonly<{
   drawn: readonly DrawnSeries[];
   migrationAt?: number;
   venuePoolKey: string | null;
   geometry: NonNullable<ReturnType<typeof chartGeometry>>;
   latest: string | null;
+  latestAvailable: boolean;
   source: ChartViewSource;
   controls: ChartControls;
   compact?: boolean;
@@ -466,10 +478,10 @@ function ChartFigure({ drawn, migrationAt, venuePoolKey, geometry, latest, sourc
   return (
     <figure className={styles.figure}>
       {compact ? null : <p className={styles.axis} aria-hidden="true">
-        {latest ? <>Last {tokenPrice(latest, source, quoteUsd)} · </> : null}High {tokenPrice(geometry.highest, source, quoteUsd)} · Low {tokenPrice(geometry.lowest, source, quoteUsd)}
+        <>Last {tokenPrice(latestAvailable ? latest : null, source, quoteUsd)} · </>High {tokenPrice(geometry.highest, source, quoteUsd)} · Low {tokenPrice(geometry.lowest, source, quoteUsd)}
       </p>}
       <div className={compact ? styles.compactCanvas : styles.canvas}>
-        <PoolCandleChart walletTrades={walletTrades} ripple={ripple} trade={candleTrade} label={label} compact={compact} rollingWindow={controls.range === "live"} presentation={presentation} memeDecimals={source.memeDecimals} quoteDecimals={source.quoteDecimals} quoteUsd={quoteUsd} sources={drawn} migrationAt={migrationAt} migrationLabel={venue ? <>Graduated to <DexIdentity venue={venue} /></> : graduation} quoteSymbol={source.quoteSymbol} from={geometry.start} to={geometry.end} preview={initialPlot} />
+        <PoolCandleChart latestAvailable={latestAvailable} walletTrades={walletTrades} ripple={ripple} trade={candleTrade} label={label} compact={compact} rollingWindow={controls.range === "live"} presentation={presentation} memeDecimals={source.memeDecimals} quoteDecimals={source.quoteDecimals} quoteUsd={quoteUsd} sources={drawn} migrationAt={migrationAt} migrationLabel={venue ? <>Graduated to <DexIdentity venue={venue} /></> : graduation} quoteSymbol={source.quoteSymbol} from={geometry.start} to={geometry.end} preview={initialPlot} />
       </div>
     </figure>
   );
@@ -545,11 +557,11 @@ function CompactChart({ view, preview }: Readonly<{ view: ChartViewControls; pre
 }
 
 function CompactChartBody({ view, style, preview }: Readonly<{ view: ChartViewControls; style: ChartStyle; preview?: boolean }>) {
-  const { source, quoteUsd, controls, migration, venuePoolKey, drawn, geometry, latest } = view;
+  const { source, quoteUsd, controls, migration, venuePoolKey, drawn, geometry, latest, latestAvailable } = view;
   const candleTrade = useCandleTrade();
   if (!geometry) return <CompactEmptyChart view={view} />;
   return <>
-    <ChartFigure compact candleTrade={candleTrade} presentation={style} quoteUsd={quoteUsd} drawn={drawn} migrationAt={migration?.timestampMs} venuePoolKey={venuePoolKey} geometry={geometry} latest={latest} source={source} controls={controls} preview={preview} />
+    <ChartFigure compact candleTrade={candleTrade} presentation={style} quoteUsd={quoteUsd} drawn={drawn} migrationAt={migration?.timestampMs} venuePoolKey={venuePoolKey} geometry={geometry} latest={latest} latestAvailable={latestAvailable} source={source} controls={controls} preview={preview} />
     <CompactSourceNotices view={view} />
   </>;
 }

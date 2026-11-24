@@ -21,6 +21,7 @@ import { Switch } from "#web/components/blast-ui/Checkbox.tsx";
 import { InfoIcon } from "#web/components/blast-ui/Icons.tsx";
 import { Popover, PopoverSurface } from "#web/components/blast-ui/Popover.tsx";
 import { Segmented } from "#web/components/blast-ui/Segmented.tsx";
+import { NO_VALUE } from "@blast/core/web/format.ts";
 import { comparePrices } from "@blast/core/modules/launchpad-contract/venue-history.ts";
 import { dyn } from "#web/components/blast-ui/csp-style.ts";
 import { shiftDecimal } from "#web/components/launchpad/coin/coin-format.ts";
@@ -67,6 +68,7 @@ export function PoolCandleChart({
   sources,
   compact = false,
   rollingWindow,
+  latestAvailable = true,
   presentation,
   migrationAt,
   migrationLabel = "Migration",
@@ -88,6 +90,7 @@ export function PoolCandleChart({
   trade?: CandleTrade | null;
   compact?: boolean;
   rollingWindow?: boolean;
+  latestAvailable?: boolean;
   /** A compact host owns its single visible style control. */
   presentation?: "line" | "candles";
   migrationAt?: number;
@@ -114,6 +117,9 @@ export function PoolCandleChart({
     () => poolChartModel({ sources, migrationAt, from, to, rollingWindow, memeDecimals, quoteDecimals, quoteUsd, mode, showVolume, compact, walletTrades: walletTrades ?? NO_WALLET_TRADES }),
     [sources, migrationAt, from, to, rollingWindow, memeDecimals, quoteDecimals, quoteUsd, mode, showVolume, compact, walletTrades],
   );
+  const plottedSeries = useMemo(() => latestAvailable || compact ? model.series : model.series.map((series) => ({
+    ...series, options: { ...series.options, lastValueVisible: false },
+  })), [compact, latestAvailable, model.series]);
   const inspectedPrice = priceAt(model.pointPrices, model.pointVolumes, mode, amountsHidden);
   const guide = inspectedPrice?.guide;
   const tradeLabel = candleTradeLabel(trade, sources, memeDecimals, amountsHidden);
@@ -127,7 +133,7 @@ export function PoolCandleChart({
     projectTrade(handle, model.series, settled);
   };
   const walletToggle = <WalletTagsToggle available={Boolean(walletTrades)} checked={showWalletTags} onChange={setWalletTags} />;
-  const readout = { compact, plotMode: mode, hidden: amountsHidden, inspected: inspectedPrice, model, quoteSymbol, walletToggle };
+  const readout = { latestAvailable, compact, plotMode: mode, hidden: amountsHidden, inspected: inspectedPrice, model, quoteSymbol, walletToggle };
   return (
     <>
       <PoolChartControls compact={compact} mobile={mobile} mode={mode} onModeChange={setMode} showVolume={showVolume} onToggleVolume={() => setShowVolume((value) => !value)} />
@@ -136,10 +142,10 @@ export function PoolCandleChart({
         <div className={styles.plot} data-coin-plot={compact || undefined}>
           <TradingViewChart
             coinAxes={compact}
-            latestPrice={model.latestTag}
+            latestPrice={latestAvailable ? model.latestTag : undefined}
             livePool
             rollingWindow={rollingWindow}
-            series={model.series}
+            series={plottedSeries}
             intervalMs={model.intervalMs}
             timeline={model.timeline}
             priceFormatter={model.format}
@@ -286,6 +292,7 @@ function PoolReadout({ compact, plotMode, preview, walletToggle, inspected, ...v
 }
 
 type PoolReadoutValuesProps = Readonly<{
+  latestAvailable: boolean;
   hidden: boolean;
   inspected?: { at: number; value?: string; candle?: ExactCandle; volume?: string };
   model: ReturnType<typeof poolChartModel>;
@@ -293,9 +300,10 @@ type PoolReadoutValuesProps = Readonly<{
   quoteSymbol?: string;
 }>;
 
-function PoolReadoutValues({ hidden, inspected, model, mode, quoteSymbol }: PoolReadoutValuesProps) {
+function PoolReadoutValues({ latestAvailable, hidden, inspected, model, mode, quoteSymbol }: PoolReadoutValuesProps) {
   if (hidden) return null;
   const unit = model.usd ? "USD" : quoteSymbol;
+  if (!latestAvailable && inspected?.value === undefined && !inspected?.candle) return <PriceReadout value={null} at={null} inspected={false} />;
   if (mode === "candles") {
     const candle = inspected ? inspected.candle : model.latestCandle;
     const at = inspected?.at ?? model.latest?.bucket;
@@ -315,17 +323,17 @@ function ChartTime({ at, prefix }: Readonly<{ at: number; prefix?: string }>) {
   return <time className={styles.inspectionContext} dateTime={iso}>{prefix}{shortUtcDate(date)} · {time} UTC</time>;
 }
 
-function PriceReadout({ value, at, inspected, unit }: Readonly<{ value: string; at: number | null; inspected: boolean; unit?: string }>) {
-  const price = chartPrice(value, 3);
+function PriceReadout({ value, at, inspected, unit }: Readonly<{ value: string | null; at: number | null; inspected: boolean; unit?: string }>) {
+  const price = value === null ? NO_VALUE : withUnit(chartPrice(value, 3), unit);
   return <>
     <div className={styles.lineContext}>
       <span className={styles.inspectionAmount}>
         <span className={styles.inspectionContext}>{inspected ? "Price" : "Last close"}</span>
-        <span data-chart-inspected-price={inspected ? "" : undefined} data-chart-latest-price={inspected ? undefined : ""}>{withUnit(price, unit)}</span>
+        <span data-chart-inspected-price={inspected ? "" : undefined} data-chart-latest-price={inspected ? undefined : ""}>{price}</span>
       </span>
       {at !== null && <ChartTime at={at} prefix={inspected ? undefined : "As of "} />}
     </div>
-    <ExactValues label="price" at={at} entries={[["Price", withUnit(value, unit)]]} />
+    {value !== null && <ExactValues label="price" at={at} entries={[["Price", withUnit(value, unit)]]} />}
   </>;
 }
 

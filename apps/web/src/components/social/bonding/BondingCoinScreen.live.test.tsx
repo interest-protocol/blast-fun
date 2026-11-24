@@ -19,6 +19,7 @@ const { priceQuery } = await import("#web/components/social/prices/price-client.
 const { useCoinPriceCurrency } = await import("#web/components/launchpad/chart/CoinPriceCurrency.tsx");
 const { setShellPref } = await import("#web/components/blast-ui/use-shell-prefs.ts");
 const { ChartLastTrade } = await import("#web/components/launchpad/chart/ChartLastTrade.tsx");
+const { publishChartPrice, useChartPrice } = await import("#web/components/launchpad/chart/chart-live-price.ts");
 const { BondingCoinScreen } = await import("./BondingCoinScreen.tsx");
 const { CoinPriceFigure } = await import("./CoinPageParts.tsx");
 
@@ -45,7 +46,44 @@ function ChartCurrencyProbe() {
   return <output aria-label="Chart currency">{selection?.unit} {selection?.quoteUsd}</output>;
 }
 
-test("the four curve figures advance together and a delayed trade or page read cannot undo the buy", async (t) => {
+test("both coin price consumers hide a stream close behind the page's confirmed checkpoint", async (t) => {
+  const page = coinScreenFixture("live");
+  assert.ok(page.curve.state === "available");
+  const curve = page.curve;
+  const checkpoint = curve.provenance.checkpoint!;
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  const client = createTestQueryClient();
+  t.after(async () => {
+    await act(async () => root.unmount());
+    publishChartPrice(CURVE_POOL_KEY, null);
+    client.clear();
+  });
+
+  function LastClose() {
+    return <output>{useChartPrice(CURVE_POOL_KEY)?.price ?? "—"}</output>;
+  }
+  const slots = { activity: null, chart: <LastClose />, discovery: null, execution: null, holders: null, market: null, overview: null, theses: null };
+  const render = (at: number) => act(async () => root.render(<QueryProvider client={client}>
+    <BondingCoinScreen page={{ ...page, curve: { ...curve, provenance: { ...curve.provenance, checkpoint: at } } }} details={null} slots={slots} />
+  </QueryProvider>));
+  const publish = (at: number, price: string) => act(async () => publishChartPrice(CURVE_POOL_KEY, {
+    provenance: { ...curve.provenance, checkpoint: at }, poolKey: CURVE_POOL_KEY, cursor: null, price,
+  }));
+  const header = () => container.querySelector('[aria-label="Price chart"]')?.previousElementSibling?.querySelector("strong")?.textContent;
+  const values = () => [header(), container.querySelector("output")?.textContent];
+  await render(checkpoint);
+  await publish(checkpoint, "1.25");
+  assert.ok(header() && header() !== "—");
+  assert.equal(values()[1], "1.25");
+  await render(checkpoint + 1);
+  assert.deepEqual(values(), ["—", "—"]);
+  await publish(checkpoint + 1, "1.5");
+  assert.ok(header() && header() !== "—");
+  assert.equal(values()[1], "1.5");
+});
+
+test("curve progress advances and a delayed trade or page read cannot undo the buy", async (t) => {
   const page = coinScreenFixture("live");
   assert.ok(page.curve.state === "available");
   const read = page.curve;
@@ -105,10 +143,10 @@ test("the four curve figures advance together and a delayed trade or page read c
   const findCurrency = (unit: string) => [...container.querySelectorAll<HTMLButtonElement>('[aria-label="Price currency"] button')].find((button) => button.textContent === unit)!;
   const chartCurrency = () => container.querySelector('[aria-label="Chart currency"]')?.textContent?.trim();
   assert.equal(chartCurrency(), "USD 2");
-  assert.ok(price()?.startsWith("$"));
+  assert.equal(price(), "—");
   await act(async () => findCurrency("SUI").click());
   assert.equal(chartCurrency(), "SUI");
-  assert.ok(price()?.endsWith("SUI"));
+  assert.equal(price(), "—");
   const baseline = figures();
   const headline = () => container.querySelector('[data-chart-last-trade="headline"]');
   const tradeCue = () => headline()?.querySelector("[data-trade-cue]") ?? null;
@@ -118,7 +156,7 @@ test("the four curve figures advance together and a delayed trade or page read c
   assert.equal(tradeCue(), null);
   await send(9, summary);
   await send(10, after);
-  assert.deepEqual(figures(), ["1,500SUI", "50%", 50, "0.001SUI", "$2M"]);
+  assert.deepEqual(figures(), ["1,500SUI", "50%", 50, "—", "$2M"]);
   const firstCue = tradeCue();
   assert.equal(container.querySelector('[aria-label="Price chart"] [data-chart-last-trade]'), null);
   assert.equal(container.querySelectorAll("[data-trade-cue]").length, 1);
@@ -127,7 +165,7 @@ test("the four curve figures advance together and a delayed trade or page read c
   await send(9, summary);
   await send(10, summary);
   assert.equal(tradeCue(), firstCue);
-  assert.deepEqual(figures(), ["1,500SUI", "50%", 50, "0.001SUI", "$2M"]);
+  assert.deepEqual(figures(), ["1,500SUI", "50%", 50, "—", "$2M"]);
   // A second equally small buy still gets a new cue when all displayed figures stay the same.
   await send(11, after);
   assert.equal(tradeCue()?.textContent, firstCue.textContent);
@@ -139,9 +177,9 @@ test("the four curve figures advance together and a delayed trade or page read c
   await send(13, { ...summary, pool_id: otherId, pool_key: `blast_curve:${otherId}` });
   await send(14, curvePoolSummary("migrated"));
   await render({ ...page, curve: { ...read, provenance: { ...read.provenance, checkpoint: null } } });
-  assert.deepEqual(figures(), ["1,500SUI", "50%", 50, "0.001SUI", "$2M"]);
+  assert.deepEqual(figures(), ["1,500SUI", "50%", 50, "—", "$2M"]);
   await render({ ...page });
-  assert.deepEqual(figures(), ["1,500SUI", "50%", 50, "0.001SUI", "$2M"]);
+  assert.deepEqual(figures(), ["1,500SUI", "50%", 50, "—", "$2M"]);
   await render({ ...page, curve: { ...read, provenance: { ...read.provenance, checkpoint } } });
   assert.deepEqual(figures(), baseline);
   assert.equal(tradeCue(), secondCue, "confirming history preserves the observed buy");
@@ -195,25 +233,22 @@ test("the four curve figures advance together and a delayed trade or page read c
   await swap(20, "sell", "cetus:0x" + "12".repeat(32));
   assert.equal(tradeCue(), null, "an unrelated venue trade stays silent");
   await swap(21, "sell");
-  assert.deepEqual(headlines(), ["0.0005SUI", "$37.2K"]);
+  assert.deepEqual(headlines(), ["—", "$37.2K"]);
   await act(async () => findCurrency("USD").click());
   assert.equal(chartCurrency(), "USD 2");
-  assert.equal(price(), "$0.001");
-  await act(async () => setShellPref("amountsHidden", true));
-  assert.equal(price(), HIDDEN_AMOUNT);
-  await act(async () => setShellPref("amountsHidden", false));
+  assert.equal(price(), "—");
   await act(async () => findCurrency("SUI").click());
   const sellCue = tradeCue();
   assert.equal(sellCue?.getAttribute("data-trade-cue"), "sell");
   await swap(21, "sell");
   assert.equal(tradeCue(), sellCue, "a second receipt for the same swap cannot flash twice");
   await swap(22, "buy", VENUE_POOL_KEY, checkpoint, "0.6", "38100");
-  assert.deepEqual(headlines(), ["0.0006SUI", "$38.1K"]);
+  assert.deepEqual(headlines(), ["—", "$38.1K"]);
   await swap(21, "sell");
-  assert.deepEqual(headlines(), ["0.0006SUI", "$38.1K"], "a late swap in the same checkpoint cannot undo both figures");
+  assert.deepEqual(headlines(), ["—", "$38.1K"], "a late swap in the same checkpoint cannot undo both figures");
   assert.equal(tradeCue()?.getAttribute("data-trade-cue"), "buy");
   await swap(23, "buy", VENUE_POOL_KEY, checkpoint, "0.7", null);
-  assert.deepEqual(headlines(), ["0.0007SUI", undefined], "a missing USD rate cannot label an older cap as current");
+  assert.deepEqual(headlines(), ["—", undefined], "a missing USD rate cannot label an older cap as current");
   assert.ok(graduated.venue);
   await render({ ...graduated, venue: { ...graduated.venue, provenance: { ...graduated.venue.provenance!, checkpoint } } });
   assert.deepEqual(headlines(), baselineVenue, "the complete venue snapshot takes over once it catches up");
@@ -226,5 +261,5 @@ test("the four curve figures advance together and a delayed trade or page read c
   await waitFor(() => findCurrency("USD").disabled, "USD is unavailable when its rate disappears");
   assert.equal(findCurrency("SUI").getAttribute("aria-pressed"), "true");
   assert.equal(chartCurrency(), "SUI");
-  assert.ok(price()?.endsWith("SUI"));
+  assert.equal(price(), "—");
 });

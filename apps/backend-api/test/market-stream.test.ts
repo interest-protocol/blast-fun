@@ -92,6 +92,33 @@ const read = async (reader: ReadableStreamDefaultReader<Uint8Array>) => {
   };
 };
 
+test("an unpriced fill reaches live clients and is preserved in the next subscriber's fence", async () => {
+  const socket = new Socket();
+  const relay = new MarketStreamRelay(() => socket, expected);
+  const live = relay.stream(request()).body!.getReader();
+  try {
+    await read(live);
+    socket.hello();
+    socket.receive(snapshot());
+    await read(live);
+    const fill = trade();
+    socket.receive({ ...fill, trade: { ...fill.trade, price: null } });
+    const received = await read(live);
+    assert.equal(received.event, "market");
+    assert.equal((received.data.trade as { price: unknown }).price, null);
+
+    const later = relay.stream(request()).body!.getReader();
+    try {
+      await read(later);
+      assert.equal((await read(later)).data.price_missing, true);
+    } finally {
+      await later.cancel();
+    }
+  } finally {
+    await live.cancel();
+  }
+});
+
 test("market stream is an exact browser-only signed GET/HEAD with one or two canonical pools", () => {
   assert.equal(privateRoute("GET", MARKET_STREAM_PATH, "browser")?.workBudgetMs, 300_000);
   assert.equal(privateRoute("HEAD", MARKET_STREAM_PATH, "browser")?.maxBodyBytes, 0);
@@ -657,7 +684,9 @@ test("one shared stream combines sanitized activity hints with pool updates and 
   const combined = relay.stream(new Request(request().url + "&activity=true")).body!.getReader();
   await read(combined);
   socket.hello();
-  assert.equal((await read(combined)).data.type, "hello");
+  const hello = (await read(combined)).data;
+  assert.equal(hello.type, "hello");
+  assert.equal(hello.heartbeat, true);
   assert.deepEqual(socket.sent[0], {
     op: "subscribe",
     topics: ["activity", `pool:${pool()}`],
@@ -730,7 +759,7 @@ test("upstream heartbeat silence forces recovery instead of keeping stale prices
     socket.receive(snapshot());
     await read(reader);
     beat!();
-    await reader.read(); // Shared heartbeat comment.
+    assert.equal((await read(reader)).event, "heartbeat");
     socket.receive({ type: "pong" });
     beat!();
     await reader.read();
