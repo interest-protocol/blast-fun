@@ -6,6 +6,7 @@ import { shellViewerOf } from "#web/components/blast-ui/shell-viewer.ts";
 import type { HeaderSession } from "#web/components/social/use-header-session.ts";
 
 const SIGNED_OUT: HeaderSession = { signedIn: false, viewer: null, viewerLoading: false, viewerError: false };
+const HEADER_SESSION_TIMEOUT_MS = 1_000;
 
 /** A request-local read through the existing me handler; credentials never reach client props. */
 export async function readHeaderSession(
@@ -29,7 +30,8 @@ export async function readHeaderSession(
   if (privyToken) headers.set("authorization", `Bearer ${privyToken}`);
   // Bun restores trusted SSR metadata only after verifying the separate read-only proof.
   try {
-    const response = await readMe(new Request(request.url, { headers }));
+    const signal = AbortSignal.any([request.signal, AbortSignal.timeout(HEADER_SESSION_TIMEOUT_MS)]);
+    const response = await readMe(new Request(request.url, { headers, signal }));
     if (response.status === 401 && !privyEnabled) return SIGNED_OUT;
     if (!response.ok) return null;
     const { account }: SocialMeResponse = await response.json();

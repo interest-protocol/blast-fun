@@ -110,6 +110,22 @@ test("provider/database failures, throttling and missing accounts stay unresolve
   assert.equal(await readHeaderSession(request, async () => Response.json({ account: null }), true), null);
 });
 
+test("a stalled header session read is canceled and stays unresolved", { timeout: 5_000 }, async () => {
+  const request = new Request(`${origin}/api/social/me`, {
+    headers: { cookie: `__Host-blast_wallet=${walletToken}` },
+  });
+  let abortReason: unknown;
+  const session = await readHeaderSession(request, ({ signal }) => new Promise<never>((_, reject) => {
+    signal.addEventListener("abort", () => {
+      abortReason = signal.reason;
+      reject(abortReason);
+    }, { once: true });
+  }), true);
+
+  assert.equal(session, null);
+  assert.ok(abortReason instanceof DOMException);
+  assert.equal(abortReason.name, "TimeoutError");
+});
 
 test("Me denies the verified caller's quota before either compound account reader", async () => {
   const calls: string[] = [];
