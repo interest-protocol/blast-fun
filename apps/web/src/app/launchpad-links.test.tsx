@@ -49,10 +49,3 @@ test("the sitemap and robots.txt read the site origin the same way: both CDN-cac
   assert.equal(rules.host, origin);
   for (const entry of entries) assert.equal(new URL(entry.url).origin, origin);
 });
-
-test("the mission page uses its own canonical URL", async () => {
-  const { generateMetadata } = await import("./(mission-control)/mission/page");
-  const entry = await generateMetadata({ searchParams: Promise.resolve({}) });
-  assert.equal(entry.alternates?.canonical, "/mission");
-  assert.equal(new URL(String(entry.openGraph?.url)).pathname, "/mission");
-});

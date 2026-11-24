@@ -3,6 +3,12 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   reactCompiler: true,
+  async redirects() {
+    return [
+      { source: "/mission", destination: "/", permanent: true },
+      { source: "/closed", destination: "/", permanent: true },
+    ];
+  },
   outputFileTracingRoot: fileURLToPath(new URL("../..", import.meta.url)),
   outputFileTracingIncludes: {
     "/coin/*/share-image": [

@@ -21,7 +21,7 @@ test("social pages and API routes follow the social flag independently of the le
     assert.equal(decideMissionControlRoute("/", experience, false), "allow");
     for (const path of SOCIAL_PAGES) {
       assert.equal(decideMissionControlRoute(path, experience, true), PROFILE_PAGES.includes(path) ? "redirect-profile" : "allow", path);
-      assert.equal(decideMissionControlRoute(path, experience, false), "rewrite-mission", path);
+      assert.equal(decideMissionControlRoute(path, experience, false), "not-found", path);
     }
     for (const path of SOCIAL_APIS) {
       assert.equal(decideMissionControlRoute(path, experience, true), "allow", path);
@@ -30,7 +30,7 @@ test("social pages and API routes follow the social flag independently of the le
     }
     for (const path of PROFILE_ALIASES) {
       assert.equal(decideMissionControlRoute(path, experience, true), "rewrite-profile", path);
-      assert.equal(decideMissionControlRoute(path, experience, false), "rewrite-mission", path);
+      assert.equal(decideMissionControlRoute(path, experience, false), "not-found", path);
     }
   }
   for (const path of [...SOCIAL_PAGES, "/api/socials", "/api/socialx/me"]) assert.equal(notFoundAnswersJson(path), false, path);

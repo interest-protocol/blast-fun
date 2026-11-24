@@ -98,17 +98,15 @@ test("hidden mode blocks Mission Control APIs and assets, including dotted paths
   ]) assert.equal(decideMissionControlRoute(path, false), "not-found", path);
 });
 
-test("hidden mode keeps published cards public with the landing and legal pages", () => {
-  for (const path of ["/mission", "/privacy", "/terms", CARD, `${CARD}/image`]) {
+test("hidden mode keeps published cards public with the legal pages", () => {
+  for (const path of ["/privacy", "/terms", CARD, `${CARD}/image`]) {
     assert.equal(decideMissionControlRoute(path, false), "allow", path);
-  }
-  for (const path of ["/card/nova.png", "/crew/nova_7", "/new", "/closed", "/teams"]) {
-    assert.equal(decideMissionControlRoute(path, false), "rewrite-mission", path);
   }
 });
 
-test("Vercel Cron maintenance routes run whether or not Mission Control is on", () => {
+test("gate cookie renewal and Vercel Cron maintenance run whether or not Mission Control is on", () => {
   for (const enabled of [false, true]) {
+    assert.equal(decideMissionControlRoute("/api/gate", enabled), "allow");
     assert.equal(decideMissionControlRoute("/api/mission-control/maintenance/cleanup", enabled), "allow");
   }
 });
@@ -120,17 +118,10 @@ test("legacy APIs outside the retired paths still honor the API flag", () => {
   }
 });
 
-test("the retired closed page and unowned paths go to the Mission Control entry, not the launchpad", () => {
-  assert.equal(decideMissionControlRoute("/closed", true), "redirect-mission");
-  assert.equal(decideMissionControlRoute("/new", true), "rewrite-mission");
-  assert.equal(decideMissionControlRoute("/arcade", true), "rewrite-mission");
-  assert.equal(decideMissionControlRoute("/crew/nova-7", true), "rewrite-mission");
-  assert.equal(decideMissionControlRoute("/card/nova.png", true), "rewrite-mission");
-  assert.equal(decideMissionControlRoute(`${CARD}/secret`, true), "rewrite-mission");
-  assert.equal(decideMissionControlRoute("/known-callsign", true), "rewrite-mission");
-  assert.equal(decideMissionControlRoute("/unknown-callsign", true), "rewrite-mission");
-  assert.equal(decideMissionControlRoute("/mission/secret", true), "rewrite-mission");
-  assert.equal(decideMissionControlRoute("/coins", true), "rewrite-mission");
+test("malformed card and referral URLs cannot reach the dynamic card routes", () => {
+  for (const path of ["/card/nova.png", `${CARD}/secret`, "/referral/ab/image"]) {
+    assert.equal(decideMissionControlRoute(path, true), "not-found", path);
+  }
 });
 
 const PRESALE_ID = `0x${"ab".repeat(32)}`;

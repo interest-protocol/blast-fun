@@ -214,7 +214,7 @@ test("invalid social settings behave like the default", () => {
     const unset = outcome({ experience });
     const invalid = outcome({ social: "TRUE", experience });
     for (const path of PATHS) assert.deepEqual(comparable(invalid[path]!), comparable(unset[path]!), path);
-    assert.equal(unset["/crew/kai"]!.rewrite, `${ORIGIN}/mission`);
+    assert.equal(unset["/crew/kai"]!.status, 404);
     assert.equal(unset["/"]!.next, true);
   }
 });
