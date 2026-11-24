@@ -39,7 +39,11 @@ const SALE_ID = `0x${"24".repeat(32)}`;
 const UNAVAILABLE_SALE_ID = `0x${"42".repeat(32)}`;
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "next/headers") return { shortCircuit: true, url: "data:text/javascript,export const headers = async () => new Headers();" };
+    if (specifier === "next/headers")
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export const headers = async () => new Headers(); export const cookies = async () => new Map();",
+      };
     if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (specifier === "#web/lib/backend-api/coin-page.ts")
       return {
