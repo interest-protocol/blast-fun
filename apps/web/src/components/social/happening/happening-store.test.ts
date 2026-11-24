@@ -77,7 +77,7 @@ test("UI-05 store: polls only while subscribed, never sooner than 5 s after the 
   assert.deepEqual(h.fetched, [], "the server's read is fresh: the gate starts at subscribe");
   h.advance(5_000);
   await h.signal();
-  assert.deepEqual(h.fetched, ["/api/social/happening"]);
+  assert.deepEqual(h.fetched, ["/api/social/happening?recent_presales=1"]);
   off();
   assert.equal(h.subscribed(), false);
   const hidden = harness({ visible: false });
@@ -138,7 +138,7 @@ test("UI-05 store: without a server read it reads at once; an older server read 
   h.store.subscribe(() => undefined);
   await new Promise((resolve) => setImmediate(resolve));
   await new Promise((resolve) => setImmediate(resolve));
-  assert.deepEqual(h.fetched, ["/api/social/happening"]);
+  assert.deepEqual(h.fetched, ["/api/social/happening?recent_presales=1"]);
   assert.equal(h.store.getSnapshot().read?.clock_ms, first.clock_ms);
   h.store.seed(next);
   h.store.seed(first);

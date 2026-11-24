@@ -5,7 +5,7 @@ import type { QueryClient } from "@tanstack/react-query";
 
 import { PUBLIC_STALE_MS, getQueryClient } from "#web/lib/query/client.ts";
 import { queryKeys } from "#web/lib/query/keys.ts";
-import { HAPPENING_TAPE_MAX, SOCIAL_HAPPENING_PATH, type HappeningTapeEvent, type SocialHappeningResponse } from "@blast/core/web/contracts/happening.ts";
+import { HAPPENING_TAPE_MAX, SOCIAL_HAPPENING_DISCOVER_PATH, type HappeningTapeEvent, type SocialHappeningResponse } from "@blast/core/web/contracts/happening.ts";
 
 import { liveFreshness, recordHintPainted } from "../home/activity-hints";
 import { browserGapTimers, hintedGap, NEW_POSTS_MIN_GAP_MS, NEW_POSTS_POLL_MS, type FreshnessHint } from "../home/feed-freshness";
@@ -56,7 +56,7 @@ const LEAVE_MS = T3;
 
 /** One public read of Home's happening data; throws on anything but a well-formed 200. */
 export async function fetchHappening(signal?: AbortSignal): Promise<SocialHappeningResponse> {
-  const response = await gatedFetch(SOCIAL_HAPPENING_PATH, { headers: { accept: "application/json" }, credentials: "same-origin", signal });
+  const response = await gatedFetch(SOCIAL_HAPPENING_DISCOVER_PATH, { headers: { accept: "application/json" }, credentials: "same-origin", signal });
   const body: unknown = await response.json().catch(() => null);
   if (response.status !== 200) throw responseError(body, response, "Live activity could not load. Try again shortly.");
   const parsed = happeningReadSchema.safeParse(body);

@@ -92,6 +92,27 @@
           "additionalProperties": false
         }
       ]
+    },
+    "recent_presales": {
+      "maxItems": 5,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "presale": {
+            "$ref": "https://blast-v2.invalid/social/contracts/feed-item.schema.json#/$defs/presale"
+          },
+          "last_commit_ms": {
+            "$ref": "https://blast-v2.invalid/social/contracts/feed-item.schema.json#/$defs/millis"
+          }
+        },
+        "required": [
+          "presale",
+          "last_commit_ms"
+        ],
+        "additionalProperties": false
+      },
+      "description": "Open presales with a confirmed commit in the last hour, newest commit first."
     }
   },
   "required": [

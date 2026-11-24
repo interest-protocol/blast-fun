@@ -22,7 +22,7 @@ import styles from "./CoinHome.module.css";
 import { homeAnalytics } from "./home-analytics";
 import { rememberHomeFilters, restoreHomeFilters } from "./home-filter-preferences";
 import { parseHomeSections, serializeHomeSections, type HomeSectionKey, type HomeSectionPrefs } from "./home-sections";
-import { HOME_DEFAULT_VIEW, activeFilterCount, discoverQueryOf, viewSearchOf, viewStateOf, withView, type HomeViewState } from "./home-state";
+import { HOME_DEFAULT_FEED, HOME_DEFAULT_VIEW, activeFilterCount, discoverQueryOf, viewSearchOf, viewStateOf, withView, type HomeFeedState } from "./home-state";
 import { setHomeRows, useHomeRows } from "./use-home-rows";
 import { FollowedTape } from "./FollowedTape";
 import { CoinsListControls, HomeSearch, HomeSettingsMenu, SourceTabs } from "./HomeControls";
@@ -35,6 +35,7 @@ import { createRankingsStore, RankingsSlot } from "./rankings-store.ts";
 import { DiscoverList, DiscoverPending, FollowingList, WatchlistList, type ListProps } from "./sources";
 import { TableCard } from "./TableFooter";
 import { HomeBondingCurves } from "./HomeBondingCurves";
+import { MixedDiscovery } from "./MixedDiscovery";
 import { TradersSection } from "./TradersSection";
 import { setHomeSections, useHomeSections } from "./use-home-sections";
 
@@ -56,7 +57,7 @@ function replaceViewUrl(url: string | URL): void {
 }
 
 /** The URL owns the view. After hydration, a plain Home visit can use the saved filters. */
-function useViewState(initial: HomeViewState): readonly [HomeViewState, (next: HomeViewState) => void] {
+function useViewState(initial: HomeFeedState): readonly [HomeFeedState, (next: HomeFeedState) => void] {
   const params = useSearchParams();
   const pathname = usePathname();
   const state = useMemo(() => (params === null ? initial : viewStateOf(new URLSearchParams(params.toString()))), [params, initial]);
@@ -80,7 +81,7 @@ function useViewState(initial: HomeViewState): readonly [HomeViewState, (next: H
     }, 0);
     return () => window.clearTimeout(timer);
   }, [params, pathname]);
-  const set = useCallback((next: HomeViewState) => {
+  const set = useCallback((next: HomeFeedState) => {
     const url = new URL(`${canonicalHomePath(pathname)}${viewSearchOf(next)}`, window.location.href);
     if (url.href !== window.location.href) {
       controlsUrl.current = url.href;
@@ -93,7 +94,7 @@ function useViewState(initial: HomeViewState): readonly [HomeViewState, (next: H
 export type CoinHomeProps = Readonly<{
   /** The confirmed server result for the initial Discover view, when available. */
   initial: HomeCoinsPage | null;
-  initialState: HomeViewState;
+  initialState: HomeFeedState;
   /** The server's happening read (the presales section) and the presale items it named; null when hidden or failed. */
   happening: SocialHappeningResponse | null;
   presales: HomeCoinsByIds | null;
@@ -114,11 +115,11 @@ type DiscoverSeed = CoinHomeProps["initial"] | Promise<CoinHomeProps["initial"]>
 type CoinHomeReadProps = Omit<CoinHomeProps, "initial"> & Readonly<{ initial: DiscoverSeed }>;
 
 /** Brings the Coins section's top under the sticky bar after a page turn (its `scroll-margin-top`), so the new page starts where the reader looks. */
-function scrollToCoins(): void {
+function scrollToCoins(animate = true): void {
   const section = document.querySelector<HTMLElement>('[data-section="coins"]');
   if (!section) return;
   const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
-  section.scrollIntoView({ block: "start", behavior: reduce ? "auto" : "smooth" });
+  section.scrollIntoView({ block: "start", behavior: animate && !reduce ? "smooth" : "instant" });
 }
 
 /**
@@ -151,7 +152,7 @@ export function CoinHome({ initial, initialState, happening, presales, pinned, t
       : parseHomeSections(serializeHomeSections(saved.sections));
     setHomeSections(restoredSections);
   }, { restoreOnMount: "history-traversal" });
-  const change = (asked: HomeViewState) => {
+  const change = (asked: HomeFeedState) => {
     const next = withView(state, asked);
     if (next.source !== state.source) homeAnalytics.source(next);
     else homeAnalytics.controls(next, activeFilterCount(next));
@@ -177,14 +178,20 @@ export function CoinHome({ initial, initialState, happening, presales, pinned, t
   const panelId = (source: HomeSource) => `${id}-${source}`;
   // The shown list's live switch, drawn on the Coins header's line.
   const [rankingsStore] = useState(createRankingsStore);
+  const mixed = state.source === "discover" && state.sort === "mixed";
   const query = useMemo(() => discoverQueryOf(state, rows), [state, rows]);
   const matchesInitial = initial !== null && JSON.stringify(discoverQueryOf(initialState, initialRows)) === JSON.stringify(query);
+  const showRankings = () => {
+    change({ ...state, sort: "trending", window: query.window });
+    document.getElementById(`${panelId("discover")}-tab`)?.focus({ preventScroll: true });
+    scrollToCoins(false);
+  };
   const list: ListProps = useMemo(() => ({
     source: state.source,
     window: state.window,
     nowMs: now,
     trading,
-    sort: state.sort,
+    sort: state.sort === "mixed" ? undefined : state.sort,
     defaultSort: HOME_DEFAULT_VIEW.sort,
     streamPrices: true,
     onSort: (sort) => change({ ...state, sort }),
@@ -193,7 +200,7 @@ export function CoinHome({ initial, initialState, happening, presales, pinned, t
     onPage,
     onRows,
     onWindow: (window) => change({ ...state, window, page: 1 }),
-    onReset: () => change(HOME_DEFAULT_VIEW),
+    onReset: () => change(HOME_DEFAULT_FEED),
   // eslint-disable-next-line react-hooks/exhaustive-deps -- `change` closes over the same state the keys name.
   }), [state, rows, now, trading, onPage, onRows]);
   const specs: Readonly<Record<HomeSectionKey, SectionSpec>> = {
@@ -205,9 +212,7 @@ export function CoinHome({ initial, initialState, happening, presales, pinned, t
           <HomeSearch />
           <div className={styles.coinControls}>
             <CoinsListControls onChange={change} state={state} />
-            <span className={styles.rowTools}>
-              {state.source === "watchlist" ? null : <HeaderRankingControls store={rankingsStore} />}
-            </span>
+            {!mixed && state.source !== "watchlist" ? <span className={styles.rowTools}><HeaderRankingControls store={rankingsStore} /></span> : null}
           </div>
         </div>
       ),
@@ -216,7 +221,7 @@ export function CoinHome({ initial, initialState, happening, presales, pinned, t
           {HOME_SOURCES.map((source) => (
             <section aria-labelledby={`${panelId(source)}-tab`} hidden={state.source !== source} id={panelId(source)} key={source} role="tabpanel">
               {state.source === source ? (
-                source === "discover" ? <DiscoverSource initial={initial} matchesInitial={matchesInitial} props={list} query={query} />
+                source === "discover" ? <DiscoverSource read={matchesInitial ? initial : null} props={list} query={query} happening={happening} onRankings={mixed ? showRankings : undefined} />
                   : source === "following" ? <FollowingList onDiscover={() => change({ ...state, source: "discover" })} props={list} />
                     : <WatchlistList props={list} />
               ) : null}
@@ -261,16 +266,24 @@ export function CoinHome({ initial, initialState, happening, presales, pinned, t
   );
 }
 
-function DiscoverSource({ initial, matchesInitial, props, query }: Readonly<{ initial: DiscoverSeed; matchesInitial: boolean; props: ListProps; query: HomeQuery }>) {
-  if (!initial || !("then" in initial)) return <DiscoverList initial={matchesInitial ? initial : null} props={props} query={query} />;
+type DiscoverProps = Readonly<{
+  read: DiscoverSeed;
+  props: ListProps;
+  query: HomeQuery;
+  happening: SocialHappeningResponse | null;
+  onRankings?: () => void;
+}>;
+
+function DiscoverSource({ read, props, query, happening, onRankings }: DiscoverProps) {
+  if (onRankings) return <MixedDiscovery initial={read} query={query} happening={happening} now={props.nowMs} onRankings={onRankings} />;
   return (
     <Suspense fallback={<DiscoverPending props={props} />}>
-      <DiscoverWithSeed read={matchesInitial ? initial : null} props={props} query={query} />
+      <DiscoverWithSeed read={read} props={props} query={query} />
     </Suspense>
   );
 }
 
-function DiscoverWithSeed({ read, props, query }: Readonly<{ read: Promise<HomeCoinsPage | null> | null; props: ListProps; query: HomeQuery }>) {
-  const initial = read ? use(read) : null;
+function DiscoverWithSeed({ read, props, query }: Pick<DiscoverProps, "read" | "props" | "query">) {
+  const initial = read && "then" in read ? use(read) : read;
   return <DiscoverList initial={initial} props={props} query={query} />;
 }

@@ -134,7 +134,7 @@ export async function testPresalesAmong(ids: Iterable<string>, readCoins: ReadSa
  * the same answer, or one of `testIds` (see `testPresaleIds`).
  */
 export function withoutTestHappening<Read extends SocialHappeningResponse>(read: Read, testIds: ReadonlySet<string> = new Set()): Read {
-  const lists = [read.fastest, read.opening_soon, read.today];
+  const lists = [read.fastest, read.opening_soon, read.today, read.recent_presales ?? []];
   const test = lists.flat().filter(({ presale }) => isTestQuoteSymbol(presale.quote_symbol) || testIds.has(presale.presale_id)).map(({ presale }) => presale);
   const presaleIds = new Set([...testIds, ...test.map((presale) => presale.presale_id)]);
   const coinTypes = new Set(test.flatMap((presale) => (presale.coin_type ? [presale.coin_type] : [])));
@@ -147,6 +147,7 @@ export function withoutTestHappening<Read extends SocialHappeningResponse>(read:
     fastest: keep(read.fastest),
     opening_soon: keep(read.opening_soon),
     today: keep(read.today),
+    ...(read.recent_presales && { recent_presales: keep(read.recent_presales) }),
     tape: read.tape.filter((event) => !isTestQuoteSymbol(event.quote_symbol) && !isTest(event)),
     ...(read.top_coins
       ? { top_coins: { trending: read.top_coins.trending.filter((coin) => !isTest(coin)), gainers: read.top_coins.gainers.filter((coin) => !isTest(coin)) } }

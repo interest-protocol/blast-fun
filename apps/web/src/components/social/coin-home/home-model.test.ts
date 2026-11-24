@@ -8,6 +8,7 @@ import {
   discoverQueryOf,
   sameListView,
   withView,
+  HOME_DEFAULT_FEED,
   HOME_DEFAULT_VIEW,
   resultsAnnouncement,
   viewSearchOf,
@@ -130,20 +131,23 @@ test("a sale opens its presale page, a curve coin its coin page, and a coin with
 });
 
 test("the view state round-trips through the URL, with defaults left out and unknown values read as defaults", () => {
-  assert.deepEqual(viewStateOf(new URLSearchParams("")), HOME_DEFAULT_VIEW);
+  assert.deepEqual(viewStateOf(new URLSearchParams("")), HOME_DEFAULT_FEED);
   const defaultQuery = discoverQueryOf(viewStateOf(new URLSearchParams("")));
-  assert.equal(defaultQuery.sort, "held");
+  assert.equal(defaultQuery.sort, "trending");
   assert.equal(defaultQuery.window, "1h");
+  assert.equal(discoverQueryOf(HOME_DEFAULT_FEED, 20).limit, 10);
   assert.equal(viewStateOf(new URLSearchParams("w=24h")).window, "24h");
   assert.equal(viewSearchOf(viewStateOf(new URLSearchParams("w=1h"))), "");
   assert.equal(viewSearchOf(viewStateOf(new URLSearchParams("sort=relevant"))), "?sort=relevant");
   const state = { source: "following", sort: "newest", window: "24h", minParticipants: 5, age: "7d", tradable: true, page: 3 } as const;
   assert.equal(viewSearchOf(state), "?src=following&sort=newest&w=24h&min=5&age=7d&tradable=1&page=3");
   assert.deepEqual(viewStateOf(new URLSearchParams(viewSearchOf(state))), state);
-  assert.equal(viewSearchOf(HOME_DEFAULT_VIEW), "");
-  assert.deepEqual(viewStateOf(new URLSearchParams("src=x&sort=cap&w=7d&min=3&age=1d&tradable=yes&page=0")), HOME_DEFAULT_VIEW);
+  assert.equal(viewSearchOf(HOME_DEFAULT_FEED), "");
+  assert.equal(viewSearchOf(HOME_DEFAULT_VIEW), "?sort=held");
+  assert.deepEqual(viewStateOf(new URLSearchParams("src=x&sort=cap&w=7d&min=3&age=1d&tradable=yes&page=0")), HOME_DEFAULT_FEED);
   // The page: an integer from 1; anything else (0, a fraction, a word, beyond the last page allowed) is page 1.
   assert.equal(viewStateOf(new URLSearchParams("page=12")).page, 12);
+  assert.equal(viewStateOf(new URLSearchParams("page=12")).sort, "held");
   for (const bad of ["page=0", "page=1.5", "page=two", "page=10000", "page=-2"]) assert.equal(viewStateOf(new URLSearchParams(bad)).page, 1, bad);
   assert.equal(activeFilterCount(state), 3);
   assert.equal(activeFilterCount(HOME_DEFAULT_VIEW), 0);
