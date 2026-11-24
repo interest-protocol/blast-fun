@@ -12,48 +12,44 @@ import { collectFrontendFees } from "../../../packages/core/src/modules/defillam
 import type { FrontendFee } from "../../../packages/core/src/modules/defillama/frontend-fees.ts";
 
 const amount = z.string().regex(/^[1-9][0-9]*$/);
-const receipt = z
-  .object({
-    id: z
-      .string()
-      .regex(/^[1-9A-HJ-NP-Za-km-z]+:(event|command):(?:0|[1-9][0-9]*)$/),
-    venue: z.enum(["cetus", "aftermath"]),
-    coin: z.string().min(1),
-    amount,
-  })
-  .strict();
+const receipt = z.strictObject({
+  id: z
+    .string()
+    .regex(/^[1-9A-HJ-NP-Za-km-z]+:(event|command):(?:0|[1-9][0-9]*)$/),
+  venue: z.enum(["cetus", "aftermath"]),
+  coin: z.string().min(1),
+  amount,
+});
 const breakdown = z.record(z.string(), z.record(z.string(), amount));
-const inputSchema = z
-  .object({
+const inputSchema = z.strictObject({
+  date: z.string(),
+  first_checkpoint: z.number().int().positive().safe(),
+  policy_evidence: z.string().min(1),
+  receipt_evidence: z.string().min(1),
+  expected_receipts: z.array(receipt),
+  publication: z.object({
     date: z.string(),
-    first_checkpoint: z.number().int().positive().safe(),
-    policy_evidence: z.string().min(1),
-    receipt_evidence: z.string().min(1),
-    expected_receipts: z.array(receipt),
-    publication: z.object({
-      date: z.string(),
-      snapshot_id: z.string().min(1),
-      start_timestamp: z.number(),
-      end_timestamp: z.number(),
-      frontend_fee_coverage: z.object({
-        status: z.literal("complete"),
-        reason: z.null(),
-      }),
-      frontend_fee_policy: z.unknown(),
-      source: z.object({
-        checkpoint: z.string().regex(/^[1-9][0-9]*$/),
-        digest: z.string().min(1),
-      }),
+    snapshot_id: z.string().min(1),
+    start_timestamp: z.number(),
+    end_timestamp: z.number(),
+    frontend_fee_coverage: z.object({
+      status: z.literal("complete"),
+      reason: z.null(),
     }),
-    fees: z.object({
-      date: z.string(),
-      snapshot_id: z.string().min(1),
-      dailyFees: breakdown,
-      dailyRevenue: breakdown,
-      dailySupplySideRevenue: breakdown,
+    frontend_fee_policy: z.unknown(),
+    source: z.object({
+      checkpoint: z.string().regex(/^[1-9][0-9]*$/),
+      digest: z.string().min(1),
     }),
-  })
-  .strict();
+  }),
+  fees: z.object({
+    date: z.string(),
+    snapshot_id: z.string().min(1),
+    dailyFees: breakdown,
+    dailyRevenue: breakdown,
+    dailySupplySideRevenue: breakdown,
+  }),
+});
 const boundary = z.object({
   sequenceNumber: z.number().int().nonnegative(),
   digest: z.string(),

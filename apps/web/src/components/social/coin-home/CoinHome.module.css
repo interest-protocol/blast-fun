@@ -13,6 +13,8 @@
 /* ---------- the page ---------- */
 .home { container: home / inline-size; min-width: 0; display: flex; flex-direction: column; --page-title-gap: 1.75rem; }
 .board { min-width: 0; display: flex; flex-direction: column; gap: 1.75rem; }
+.pending [data-list-pending] { animation: pending-content 1ms step-end var(--loading-delay) backwards; }
+@keyframes pending-content { from { opacity: 0; } }
 /* A section with no rows keeps its title and source tabs but drops its list controls; while lists are late it goes, and the page's one line speaks for it. */
 .rowTools { display: contents; }
 .home [data-section]:has([data-list-empty], [data-list-none]) .rowTools { display: none; }

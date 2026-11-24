@@ -16,7 +16,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { useHydrated } from "#web/components/ui-libraries/use-hydrated.tsx";
 import { IntentLink as Link } from "#web/components/blast-ui/NavigationLink.tsx";
 import { redirect } from "next/navigation";
-import { useEffect, useId, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode, type RefObject } from "react";
 
 import { captureLists, savedList, useListRestoration } from "#web/components/blast-ui/list-restoration.ts";
 import { PresaleCalendar } from "./PresaleCalendar";
@@ -436,9 +436,9 @@ function PresaleSearchCoverage({ search, matches, count, partial }: Readonly<{ s
   </p>;
 }
 
-function PresaleListContent({ revealFloor, onShown, search, onClearSearch, layout, loaded, loading, rows, catalogCount, error, now, viewer, more, moreFailure, onRetry, onMore, scope, status, signedIn, showAllHref, onShowAll, browseAction }: Readonly<{
+function PresaleListContent({ revealFloor, shownCountRef, search, onClearSearch, layout, loaded, loading, rows, catalogCount, error, now, viewer, more, moreFailure, onRetry, onMore, scope, status, signedIn, showAllHref, onShowAll, browseAction }: Readonly<{
   revealFloor: number;
-  onShown: (count: number) => void;
+  shownCountRef: RefObject<number>;
   search: string;
   onClearSearch: () => void;
   scope: PresaleScope;
@@ -461,7 +461,8 @@ function PresaleListContent({ revealFloor, onShown, search, onClearSearch, layou
   onMore: () => void;
 }>) {
   const hasNext = loaded.next !== null;
-  const { gridRef, shown, reveal, canReveal } = useCardRows({ cards: layout === "cards", rows, searching: search !== "", hasNext, more, moreFailed: moreFailure !== null, loading, floor: revealFloor, onShown, onMore });
+  const { gridRef, shown, reveal, canReveal } = useCardRows({ cards: layout === "cards", rows, searching: search !== "", hasNext, more, moreFailed: moreFailure !== null, loading, floor: revealFloor, onMore });
+  useLayoutEffect(() => { shownCountRef.current = shown.length; }, [shownCountRef, shown.length]);
   if (loading && loaded.rows.length === 0) {
     return <PresaleRowsSkeleton />;
   }
@@ -563,10 +564,9 @@ export function PresalesList(props: PresalesListProps) {
   const paging = useRef<string | null>(null);
   // Cards to keep showing after Back: the number that were shown. Any new read of the list clears it.
   const [revealFloor, setRevealFloor] = useState(0);
-  // Cards the grid shows now; saved with the list so Back brings the same number.
-  const [revealed, setRevealed] = useState(0);
   const restorationId = `presales:${viewer.callsign ?? "public"}`;
-  const listRoot = useListRestoration(restorationId, { selection, loaded, search, revealed }, saved => {
+  const shownCountRef = useRef(0);
+  const listRoot = useListRestoration(restorationId, () => ({ selection, loaded, search, revealed: shownCountRef.current }), saved => {
     request.current?.abort();
     restored.current = true;
     setSelection(saved.selection);
@@ -756,7 +756,7 @@ export function PresalesList(props: PresalesListProps) {
         layout={layout}
         key={`${status}:${sort}:${scope}`}
         revealFloor={revealFloor}
-        onShown={setRevealed}
+        shownCountRef={shownCountRef}
         scope={scope}
         status={status}
         signedIn={watchlist?.signedIn ?? viewer.signedIn}

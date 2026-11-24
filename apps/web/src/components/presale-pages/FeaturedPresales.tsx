@@ -85,7 +85,7 @@ export function FeaturedPresales({ sales, now, viewer = null }: Readonly<{ sales
   if (!first) return null;
   return <section aria-label="Selected presales" className={styles.catalogFeatured}>
     {phone ? <FeaturedSale now={now} sale={first} viewer={viewer} /> : (
-      <FeaturedCarousel count={sales.length}>
+      <FeaturedCarousel>
         {sales.map((sale) => <FeaturedSale key={sale.presale_id} now={now} sale={sale} viewer={viewer} />)}
       </FeaturedCarousel>
     )}

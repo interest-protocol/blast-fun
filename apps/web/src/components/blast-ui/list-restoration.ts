@@ -139,7 +139,7 @@ function restorePosition(root: HTMLElement, position: Position): void {
 /** Restore content first, then anchor once its local loading has settled. No timed scroll retries. */
 export function useListRestoration<T>(
   identity: string,
-  value: T,
+  value: T | (() => T),
   restore: (value: T) => void,
   { restoreOnMount = "always" }: Readonly<{ restoreOnMount?: "always" | "history-traversal" }> = {},
 ) {
@@ -163,7 +163,10 @@ export function useListRestoration<T>(
       const positionKey = historyOnly ? previous?.positionKey ?? window.crypto.randomUUID() : undefined;
       if (positionKey && !retainPosition) pendingScrollPositions.delete(positionKey);
       const position = retainPosition && previous ? previous.position : positionOf(element, target);
-      const saved = { value: current.current.value, position, ...(positionKey ? { positionKey } : {}) };
+      // A snapshot reader can include committed child state at the moment history is written.
+      const { value } = current.current;
+      const snapshot = typeof value === "function" ? (value as () => T)() : value;
+      const saved = { value: snapshot, position, ...(positionKey ? { positionKey } : {}) };
       window.history.replaceState({ ...state, [STATE_KEY]: { ...state[STATE_KEY], [identity]: saved } }, "");
     };
     const saveCurrent = () => {

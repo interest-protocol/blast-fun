@@ -51,17 +51,7 @@ export function useMarketStream(
   refresh: () => void,
   hub?: MarketStreamHub | null,
 ) {
-  // The coin's pool outlives each read: a window change or a failed poll empties the read, not the stream.
-  const [known, setKnown] = useState<Readonly<{ coinType: string; poolKey: string; kind: StreamedChart["kind"] }> | null>(null);
-  const pool = history ? chartPool(history) : null;
-  if (history && pool && history.coin_type === coinType && (known?.coinType !== coinType || known.poolKey !== pool || known.kind !== history.kind)) {
-    setKnown({ coinType, poolKey: pool, kind: history.kind });
-  }
-  // Swap candles from a pool the stream does not serve (Aftermath, or none) stay on polls.
-  const unserved = history?.kind === "trades" && pool === null;
-  const target = enabled && !unserved && known?.coinType === coinType ? known.poolKey : null;
-  // Market candles take the pool's candle frames; swap candles take its swaps and never parse a candle.
-  const candles = known?.kind === "market";
+  const { target, candles } = useChartStreamTarget(coinType, history, enabled);
   const [stream, setStream] = useState<Stream | null>(null);
   // Listeners read the newest history without resubscribing on each read. An empty read keeps the last
   // one: a venue pool's candle frames are checked against its migration, and null would fail them.
@@ -152,9 +142,28 @@ export function useMarketStream(
     return () => clock.clear(timer);
   }, [behind, history, refresh, clock]);
 
-  const trade = current?.trade ?? null;
+  const price = useStreamedPrice(current?.trade ?? null, live);
+  return { live, history: view.history, price };
+}
+
+function useChartStreamTarget(coinType: string, history: StreamedChart | null, enabled: boolean) {
+  // The coin's pool outlives each read: a window change or a failed poll empties the read, not the stream.
+  const [known, setKnown] = useState<Readonly<{ coinType: string; poolKey: string; kind: StreamedChart["kind"] }> | null>(null);
+  const pool = history ? chartPool(history) : null;
+  if (history && pool && history.coin_type === coinType && (known?.coinType !== coinType || known.poolKey !== pool || known.kind !== history.kind)) {
+    setKnown({ coinType, poolKey: pool, kind: history.kind });
+  }
+  // Swap candles from a pool the stream does not serve (Aftermath, or none) stay on polls.
+  const unserved = history?.kind === "trades" && pool === null;
+  const target = enabled && !unserved && known?.coinType === coinType ? known.poolKey : null;
+  // Market candles take the pool's candle frames; swap candles take its swaps and never parse a candle.
+  const candles = known?.kind === "market";
+  return { target, candles };
+}
+
+function useStreamedPrice(trade: StreamedTrade | null, live: boolean): StreamedPrice | null {
   const quoteUsd = useQuoteUsd(trade && !trade.quote?.quoteUsd ? (trade.quote?.quote ?? null) : null);
-  const price = useMemo((): StreamedPrice | null => {
+  return useMemo((): StreamedPrice | null => {
     if (!trade?.quote) return null;
     const { memeDecimals, quoteDecimals } = trade.quote;
     const usd = trade.quote.quoteUsd ?? quoteUsd;
@@ -162,8 +171,6 @@ export function useMarketStream(
     const estimate = usd === null ? null : estimateUsdPrice(trade.quote.price ?? trade.price, memeDecimals, quoteDecimals, usd);
     return estimate === null ? null : { usd: estimate, observedAt: trade.timestampMs, checkpoint: trade.checkpoint, paused: !live };
   }, [trade, quoteUsd, live]);
-
-  return { live, history: view.history, price };
 }
 
 /** The history with the stream's frames or swaps on top; `behind` when only a newer read can continue it. */

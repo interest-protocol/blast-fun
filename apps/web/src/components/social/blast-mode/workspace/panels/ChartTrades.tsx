@@ -28,42 +28,60 @@ const noSubscribe = () => () => {};
 const noVersion = () => 0;
 const noRanks: ReadonlyMap<string, number> = new Map();
 
-/** One optional overlay shares the panel's bounded public activity read. */
-export function ChartTrades({ activity, coin, children, loadPosts, postMarketId }: Readonly<{
-  activity: ChartActivityRead; coin: CoinRecord | null; children: ReactNode;
+type ChartTradeSources = Readonly<{
+  activity: ChartActivityRead;
+  coin: CoinRecord | null;
   loadPosts?: (signal: AbortSignal) => Promise<HomeDiscussionPage | null>;
   postMarketId?: string | null;
-}>) {
+}>;
+
+/** One optional overlay shares the panel's bounded public activity read. */
+export function ChartTrades({ children, ...sources }: ChartTradeSources & Readonly<{ children: ReactNode }>) {
   const [enabled, setEnabled] = useState(false);
   const [filters, setFilters] = useState<TradeFilters>(DEFAULT_TRADE_FILTERS);
   const slots = useContext(CoinDetailsSlots);
-  const active = enabled && slots.visible !== false;
-  const marketTrades = useMarketChartTrades(coin, slots.visible !== false);
-  const kols = useContext(ListedKolsContext);
-  const store = useChartViewerStore();
-  const page = activity.status === "ready" ? activity.value : null;
-  const { posts, discussion } = useChartPosts(active && filters.posts, loadPosts, postMarketId);
-  const callsigns = chartCallsigns(page, discussion);
-  const following = useChartFollowing(active && filters.groups.following, callsigns, store);
-  const ranking = useChartPnlRanks(active && filters.groups.top, coin?.coin_type ?? null);
-  const social = active ? selectChartAnnotations({ page, discussion, marketId: postMarketId, filters, kols, ranks: ranking.ranks, store }) : emptyTrades;
-  const trades = marketTrades.extra.length ? mergeChartAnnotations(social, marketTrades.extra) : social;
-  const missingFollows = followingStatusMissing(active && filters.groups.following, callsigns, store);
-  const effectiveFilters = { ...filters, posts: filters.posts && !!loadPosts };
-  const notice = <ChartReadNotice active={active} activity={activity} filters={effectiveFilters} kolAvailable={kols.length > 0} ranking={ranking} following={following} store={store} missingFollows={!!missingFollows} posts={posts} marketNotice={marketTrades.notice} />;
-  const peopleReady = socialOverlaysReady(page, effectiveFilters, ranking, following.pending || !!missingFollows, !!store, kols.length > 0, posts, discussion);
-  const ready = (!active || peopleReady) && marketTrades.ready;
-  const shown = active || marketTrades.on;
-  const value = { trades, coin, enabled: shown, notice, ready, ...chartCoverage(page) };
-  const control = <OverlaysControl enabled={enabled} setEnabled={setEnabled} filters={filters} setFilters={setFilters} signedIn={!!store} postsAvailable={!!loadPosts} notice={notice}
-    mine={marketTrades.mine} big={marketTrades.big}
+  const visible = slots.visible !== false;
+  const active = enabled && visible;
+  const market = useMarketChartTrades(sources.coin, visible);
+  const people = useSocialChartOverlay(sources, active, filters);
+  const notice = <>{people.notice}{market.notice}</>;
+  const value = {
+    ...people.coverage,
+    trades: market.extra.length ? mergeChartAnnotations(people.trades, market.extra) : people.trades,
+    coin: sources.coin,
+    enabled: active || market.on,
+    notice,
+    ready: people.ready && market.ready,
+  };
+  const control = <OverlaysControl enabled={enabled} setEnabled={setEnabled} filters={filters} setFilters={setFilters} signedIn={people.signedIn} postsAvailable={!!sources.loadPosts} notice={notice}
+    mine={market.mine} big={market.big}
     onPeople={(on) => { const next = toggledPeople(enabled, filters, on); setFilters(next.filters); setEnabled(next.enabled); }}
     onTheses={(on) => { const next = toggledTheses(enabled, filters, on); setFilters(next.filters); setEnabled(next.enabled); }}
-    onMine={marketTrades.setMine} onBig={marketTrades.setBig} />;
+    onMine={market.setMine} onBig={market.setBig} />;
   return <ChartTradesContext value={value}>
     {slots.chart ? createPortal(control, slots.chart) : control}
     {children}
   </ChartTradesContext>;
+}
+
+function useSocialChartOverlay({ activity, coin, loadPosts, postMarketId }: ChartTradeSources, active: boolean, filters: TradeFilters) {
+  const kols = useContext(ListedKolsContext);
+  const store = useChartViewerStore();
+  const signedIn = !!store;
+  const page = activity.status === "ready" ? activity.value : null;
+  const { posts, discussion } = useChartPosts(active && filters.posts, loadPosts, postMarketId);
+  const callsigns = chartCallsigns(page, discussion);
+  const followingActive = active && filters.groups.following;
+  const following = useChartFollowing(followingActive, callsigns, store);
+  const missingFollows = followingStatusMissing(followingActive, callsigns, store);
+  const ranking = useChartPnlRanks(active && filters.groups.top, coin?.coin_type ?? null);
+  const trades = active ? selectChartAnnotations({ page, discussion, marketId: postMarketId, filters, kols, ranks: ranking.ranks, store }) : emptyTrades;
+  const effectiveFilters = { ...filters, posts: filters.posts && !!loadPosts };
+  const kolAvailable = kols.length > 0;
+  const ready = !active || socialOverlaysReady(page, effectiveFilters, ranking, following.pending || missingFollows, signedIn, kolAvailable, posts, discussion);
+  const notice = <ChartReadNotice active={active} activity={activity} filters={effectiveFilters} kolAvailable={kolAvailable}
+    ranking={ranking} following={following} store={store} missingFollows={missingFollows} posts={posts} />;
+  return { trades, coverage: chartCoverage(page), ready, notice, signedIn };
 }
 
 /** "People you follow" from the Overlays menu: from off it shows only followed accounts' trades; on, it flips Following. */
@@ -298,16 +316,15 @@ function overlaySelection(signedIn: boolean, enabled: boolean, filters: TradeFil
   return { people, theses, on };
 }
 
-function ChartReadNotice({ active, activity, filters, kolAvailable, ranking, following, store, missingFollows, posts, marketNotice }: Readonly<{
+function ChartReadNotice({ active, activity, filters, kolAvailable, ranking, following, store, missingFollows, posts }: Readonly<{
   active: boolean; activity: ChartActivityRead; filters: TradeFilters; kolAvailable: boolean;
   ranking: ReturnType<typeof useChartPnlRanks>; following: ReturnType<typeof useChartFollowing>;
   store: ReturnType<typeof useChartViewerStore>; missingFollows: boolean;
-  posts: ReturnType<typeof useCoinRead<HomeDiscussionPage | null>>; marketNotice: ReactNode;
+  posts: ReturnType<typeof useCoinRead<HomeDiscussionPage | null>>;
 }>) {
   return <>
     {active && <TradeReadStatus activity={activity} filters={filters} kolAvailable={kolAvailable} ranking={ranking} following={{ signedIn: !!store, pending: following.pending, unavailable: missingFollows, retry: following.retry }} />}
     {active && filters.posts && <ChartPostStatus read={posts} />}
-    {marketNotice}
   </>;
 }
 

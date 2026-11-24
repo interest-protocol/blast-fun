@@ -23,8 +23,8 @@ test("carousel position follows scrolling and disappears for a single presale", 
   const container = document.createElement("div"); document.body.append(container);
   const root = createRoot(container);
   t.after(async () => { await act(async () => root.unmount()); container.remove(); });
-  const render = async (count: number) => act(async () => root.render(<FeaturedCarousel count={count}><div>First presale</div>{count > 1 ? <div>Second presale</div> : null}</FeaturedCarousel>));
-  await render(2);
+  const render = async (secondSlide: boolean) => act(async () => root.render(<FeaturedCarousel><div>First presale</div>{secondSlide ? <div>Second presale</div> : null}</FeaturedCarousel>));
+  await render(true);
   const track = container.querySelector<HTMLElement>('[aria-roledescription="carousel"]')!;
   Object.defineProperties(track, { clientWidth: { value: 300 }, scrollWidth: { value: 1236, configurable: true } });
   track.scrollLeft = 312;
@@ -38,7 +38,7 @@ test("carousel position follows scrolling and disappears for a single presale", 
   assert.equal(container.querySelector<HTMLButtonElement>('[aria-label="Next featured presales"]')?.disabled, false);
   track.scrollLeft = 0;
   Object.defineProperty(track, "scrollWidth", { value: 300 });
-  await render(1);
+  await render(false);
   assert.equal(progress(), null);
   assert.equal(container.querySelector('[class*="arrows"]')?.hasAttribute("hidden"), true);
 });
@@ -47,7 +47,7 @@ test("a completed carousel fill advances and wraps; pause, focus and pointer-dow
   const container = document.createElement("div"); document.body.append(container);
   const root = createRoot(container);
   t.after(async () => { await act(async () => root.unmount()); container.remove(); });
-  await act(async () => root.render(<FeaturedCarousel count={2}><a href="#first">First</a><a href="#second">Second</a></FeaturedCarousel>));
+  await act(async () => root.render(<FeaturedCarousel><a href="#first">First</a><a href="#second">Second</a></FeaturedCarousel>));
   const track = container.querySelector<HTMLElement>('[aria-roledescription="carousel"]')!;
   Object.defineProperties(track, { clientWidth: { value: 300 }, scrollWidth: { value: 1236 } });
   track.scrollLeft = 312;
@@ -93,7 +93,7 @@ test("reduced motion starts with manual navigation and allows explicit playback"
   const container = document.createElement("div"); document.body.append(container);
   const root = createRoot(container);
   t.after(async () => { await act(async () => root.unmount()); window.reducedMotion = false; container.remove(); });
-  await act(async () => root.render(<FeaturedCarousel count={2}><div>First</div><div>Second</div></FeaturedCarousel>));
+  await act(async () => root.render(<FeaturedCarousel><div>First</div><div>Second</div></FeaturedCarousel>));
   assert.ok(container.querySelector('[aria-label="Play featured presales"]'));
   assert.ok(container.querySelector('[data-static="true"]'));
   await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Play featured presales"]')!.click());
@@ -110,7 +110,7 @@ test("visibility and open purchase details freeze the slide clock, and navigatio
     if (hiddenDescriptor) Object.defineProperty(document, "hidden", hiddenDescriptor);
     else Reflect.deleteProperty(document, "hidden");
   });
-  await act(async () => root.render(<FeaturedCarousel count={2}><div data-kind="commit"><details><summary>Allocation details</summary>Breakdown</details></div><p>Second</p></FeaturedCarousel>));
+  await act(async () => root.render(<FeaturedCarousel><div data-kind="commit"><details><summary>Allocation details</summary>Breakdown</details></div><p>Second</p></FeaturedCarousel>));
   const track = container.querySelector<HTMLElement>('[aria-roledescription="carousel"]')!;
   Object.defineProperties(track, { clientWidth: { value: 300 }, scrollWidth: { value: 1236 } });
   track.scrollLeft = 312;

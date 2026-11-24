@@ -1,14 +1,12 @@
 "use client";
 
 import clsx from "clsx";
-import { createContext, useContext, type ReactNode } from "react";
+import { useContext } from "react";
 
-import { Avatar, type AvatarProps } from "./Avatar";
+import { Avatar } from "./Avatar";
 
 import type { ShellViewer } from "./shell-viewer";
-
-export type RenderAvatar = (props: AvatarProps) => ReactNode;
-export const ShellAvatarRenderer = createContext<RenderAvatar | undefined>(undefined);
+import { ShellAvatarRenderer } from "./shell-avatar-renderer.ts";
 
 /** A round account avatar at one of the design's sizes (`.av`), decorative. */
 export function ShellAvatar({ viewer, size }: Readonly<{ viewer: Pick<ShellViewer, "accountId" | "avatarUrl"> & Partial<Pick<ShellViewer, "callsign">>; size: 32 | 34 | 40 }>) {

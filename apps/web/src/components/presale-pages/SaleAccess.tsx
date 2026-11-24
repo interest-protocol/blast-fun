@@ -1,9 +1,7 @@
 "use client";
 
-import { skipToken, useQuery } from "@tanstack/react-query";
 import type { MouseEvent, ReactNode } from "react";
 
-import { opensAt } from "@blast/core/web/format.ts";
 import type { SocialPresaleDetail } from "@blast/core/web/contracts/presales.ts";
 import { Button } from "#web/components/blast-ui/Button.tsx";
 import { DateStamp } from "#web/components/blast-ui/DateStamp.tsx";
@@ -11,48 +9,13 @@ import { DiagnosticText } from "#web/components/blast-ui/DiagnosticText.tsx";
 import { DexIdentity } from "#web/components/blast-ui/DexIdentity.tsx";
 import { SkeletonBox, SkeletonRegion } from "#web/components/blast-ui/Skeleton.tsx";
 import { Ticker, TickerText } from "#web/components/blast-ui/Ticker.tsx";
-import { allowlistLeafQuery, walletQuery } from "#web/components/social/queries.ts";
-import { useSignInGate, useSocialViewer } from "#web/components/social/SignInGate.tsx";
-import { useHydrated } from "#web/components/ui-libraries/use-hydrated.tsx";
-import { diagnosticMessage, publicErrorCopy, PublicError } from "#web/lib/errors.ts";
-import { useAppQueryClient } from "#web/lib/query/provider.tsx";
+import { useSignInGate } from "#web/components/social/SignInGate.tsx";
+import { diagnosticMessage, publicErrorCopy } from "#web/lib/errors.ts";
 
 import { cx } from "./cx";
 import { DashIcon, InfoIcon, LockIcon, PeopleIcon, TickIcon } from "./icons";
-import { saleAccess, type SaleAccess } from "./sale-access";
-
-const noToken = async () => null;
-
-/**
- * The viewer's access to an upcoming whitelisted sale: their Blast wallet (the
- * shared `/me/wallet` read the commit flow uses) and its allowlist leaf (the
- * shared proof query), each read once per session. A public sale, or a
- * signed-out viewer, reads nothing.
- */
-export function useSaleAccess(detail: SocialPresaleDetail): Readonly<{ access: SaleAccess; retry: () => void; retrying: boolean }> {
-  const gate = useSignInGate();
-  const { getAccessToken } = useSocialViewer();
-  const hydrated = useHydrated();
-  const queries = useAppQueryClient();
-  const sale = detail.presale;
-  const token = getAccessToken ?? noToken;
-  const viewer = !hydrated || gate.sessionPending ? "pending" : gate.signedIn ? "signed_in" : "signed_out";
-  const asks = sale.allowlisted && viewer === "signed_in";
-  const wallet = useQuery({ ...walletQuery(token), enabled: asks }, queries);
-  const address = wallet.data?.address ?? null;
-  const leafRead = allowlistLeafQuery(token, sale.presale_id, address ?? "");
-  // No address, no proof read: skipToken also keeps a manual refetch from asking for an empty wallet.
-  const leaf = useQuery({ ...leafRead, queryFn: asks && address !== null ? leafRead.queryFn : skipToken }, queries);
-  const access = saleAccess(detail, {
-    viewer,
-    // A read wallet with no address is a Blast wallet still being made; a failed read carries its code.
-    wallet: wallet.isPending ? undefined : address ?? { failed: wallet.isError ? (wallet.error instanceof PublicError ? wallet.error.code : null) : "wallet_missing" },
-    leaf: leaf.isError ? { status: "error" } : leaf.data,
-  });
-  // Ask again whichever read the answer is missing: the wallet when there is no address, else its proof.
-  const retry = () => void (address === null ? wallet.refetch() : leaf.refetch());
-  return { access, retry, retrying: wallet.isFetching || leaf.isFetching };
-}
+import type { SaleAccess } from "./sale-access";
+import { useSaleAccess } from "./use-sale-access";
 
 function Mark({ kind }: Readonly<{ kind: SaleAccess["kind"] }>) {
   if (kind === "checking") return <SkeletonBox className={cx("access-mark")} round />;
@@ -74,7 +37,7 @@ function Status({ access }: Readonly<{ access: SaleAccess }>) {
 }
 
 /** The status line's title and its muted second line (omitted when there is nothing to say). */
-export function statusText(access: SaleAccess): readonly [string, string | null] {
+function statusText(access: SaleAccess): readonly [string, string | null] {
   switch (access.kind) {
     case "listed":
       return ["You’re on the whitelist", `Wallet ${access.wallet}`];
@@ -146,12 +109,6 @@ function Body({ access, detail }: Readonly<{ access: SaleAccess; detail: SocialP
         </p>
       );
   }
-}
-
-/** When a listed or open-sale viewer can buy; the countdown itself is the main card's. */
-export function opensNote(access: SaleAccess, startMs: number): string | null {
-  if (access.kind !== "listed" && access.kind !== "open") return null;
-  return opensAt(startMs) === null ? "You can buy once the creator opens the sale." : "You can buy when the sale opens.";
 }
 
 /**

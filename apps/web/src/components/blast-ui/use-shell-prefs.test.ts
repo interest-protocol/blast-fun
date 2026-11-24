@@ -27,10 +27,7 @@ function page({ reduced, viewTransitions = true }: Readonly<{ reduced: boolean; 
   const animations: Animation[] = [];
   const stored = new Map<string, string>();
   const log: string[] = [];
-  let finish: () => void = () => undefined;
-  const finished = new Promise<void>((resolve) => {
-    finish = resolve;
-  });
+  const transitions: ReturnType<typeof Promise.withResolvers<void>>[] = [];
   globals.document = {
     documentElement: {
       classList: { add: (name: string) => classes.add(name), remove: (name: string) => classes.delete(name) },
@@ -44,8 +41,10 @@ function page({ reduced, viewTransitions = true }: Readonly<{ reduced: boolean; 
     startViewTransition: viewTransitions
       ? (update: () => void) => {
           log.push(`transition (theming: ${classes.has("blast-theming")})`);
+          const finished = Promise.withResolvers<void>();
+          transitions.push(finished);
           update();
-          return { ready: Promise.resolve(), finished, updateCallbackDone: Promise.resolve() };
+          return { ready: Promise.resolve(), finished: finished.promise, updateCallbackDone: Promise.resolve() };
         }
       : undefined,
   };
@@ -56,7 +55,7 @@ function page({ reduced, viewTransitions = true }: Readonly<{ reduced: boolean; 
   globals.innerWidth = 1000;
   globals.innerHeight = 800;
   const origin = { getBoundingClientRect: () => ({ left: 100, top: 200, width: 40, height: 40 }) } as unknown as Element;
-  return { classes, animations, stored, log, origin, finish, finished };
+  return { classes, animations, stored, log, origin, finish: (index = 0) => transitions[index]?.resolve() };
 }
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -87,6 +86,20 @@ test("without reduced motion the new theme still grows from the pressed control,
   // Centred on the control (120, 220), reaching the viewport's farthest corner (1000, 800).
   assert.deepEqual(reveal!.keyframes, { clipPath: ["circle(0px at 120px 220px)", `circle(${Math.hypot(880, 580)}px at 120px 220px)`] });
   view.finish();
+  await settle();
+  assert.ok(!view.classes.has("blast-theming"));
+});
+
+test("finishing an earlier theme transition leaves the latest theme animation in control", async () => {
+  const view = page({ reduced: false });
+  applyTheme("dark", view.origin);
+  await settle();
+  applyTheme("light", view.origin);
+  view.finish(0);
+  await settle();
+  assert.ok(view.classes.has("blast-theming"));
+  assert.equal(view.stored.get("blast.theme"), JSON.stringify("light"));
+  view.finish(1);
   await settle();
   assert.ok(!view.classes.has("blast-theming"));
 });

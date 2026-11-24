@@ -153,6 +153,16 @@ test("OA-28 M1: the dismiss button closes its own toast through sonner", () => {
   }
 });
 
+test("pending feedback stays visible with a named status and no success icon", () => {
+  showToast("Opening wallet…", { id: "test-loading", tone: "pending" });
+  const entry = latest();
+  assert.equal(entry.duration, Infinity);
+  const html = markup(entry);
+  assert.match(html, /aria-label="Opening wallet…"[^>]*role="status"/);
+  assert.match(html, /<b>Opening wallet…<\/b>/);
+  assert.doesNotMatch(html, /class="tick"/);
+});
+
 test("an error has an alert icon, separate recovery copy and a persistent, dismissible retry action", () => {
   let attempts = 0;
   showToast("Claim failed", { id: "claim-test", tone: "error", sub: "Nothing was claimed. Try again.", action: { label: "Retry", onClick: () => { attempts++; } } });

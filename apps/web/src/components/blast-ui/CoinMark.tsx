@@ -7,7 +7,7 @@ import { CREATE_TEST_SUI_QUOTE_TYPE, CREATE_SUI_QUOTE_TYPE, CREATE_QUOTE_TYPE } 
 
 import { CoinArtwork } from "./CoinArtwork";
 import { coinArtworkIdentity } from "./coin-artwork-identity";
-import { identityBackground } from "./IdentityGradient";
+import { identityBackground } from "./identity-gradient.ts";
 
 type CoinMarkIdentity = Readonly<{
   key: string;

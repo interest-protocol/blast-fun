@@ -13,7 +13,7 @@ import { PORTFOLIO_LOADING } from "#web/components/blast-ui/portfolio.ts";
 import { SignInSheet } from "#web/components/sign-in/SignIn.tsx";
 
 import { AccountAvatar } from "./AccountAvatar";
-import type { RenderAvatar } from "#web/components/blast-ui/ShellAvatar.tsx";
+import type { RenderAvatar } from "#web/components/blast-ui/shell-avatar-renderer.ts";
 import { useClaimHost } from "./claim/ClaimHost";
 import { useCommitHost } from "./commit/CommitHost";
 import { useTradeHost } from "./trade/TradeHost";
@@ -27,7 +27,7 @@ import { useSocialViewer } from "./SignInGate";
 import { useSocialAccount } from "./use-social-account";
 import { useHeaderSession, type HeaderSession } from "./use-header-session";
 import { BalancesProvider, useBalances } from "./coins/balances";
-import { CoinsHost } from "./coins/CoinsHost";
+import { CoinsOverlay } from "./coins/CoinsOverlay";
 import { UnreadNotificationsProvider, useUnreadNotificationsState } from "./notifications/use-unread-notifications";
 import { useNotificationArrivals } from "./notifications/use-notification-arrivals";
 import { SearchSheet } from "./search/SearchSheet";
@@ -122,7 +122,7 @@ function SocialShellContent({
         <>
           <SignInSheet />
           <SearchSheet />
-          <CoinsHost />
+          <CoinsOverlay />
           <CelebrationHost />
           <LiveQueries />
           {commit.node}

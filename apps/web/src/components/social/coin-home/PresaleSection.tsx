@@ -137,7 +137,7 @@ function SaleCard({ coin, nowMs }: Readonly<{ coin: SaleCoin; nowMs: number }>) 
 }
 
 /** The cards' geometry while the first read is out. */
-function SaleCardsLoading({ count }: Readonly<{ count: number }>) {
+export function SaleCardsLoading({ count = CARDS_PER_PAGE }: Readonly<{ count?: number }>) {
   return (
     <ul aria-busy="true" aria-label="Loading presales" className={styles.saleCards} data-list-pending="" role="status">
       {Array.from({ length: count }, (_, key) => (

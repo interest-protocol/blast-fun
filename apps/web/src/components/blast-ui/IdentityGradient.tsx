@@ -1,6 +1,7 @@
 "use client";
 
 import { useId } from "react";
+import { identityHue } from "./identity-gradient.ts";
 
 /** The wallet avatar's existing gradient, stable for an identity at every size. */
 export function IdentityGradient({ identity }: Readonly<{ identity: string }>) {
@@ -17,16 +18,4 @@ export function IdentityGradient({ identity }: Readonly<{ identity: string }>) {
       <rect fill={`url(#${id})`} height="1" width="1" />
     </>
   );
-}
-
-/** The same gradient as CSS, for a coin mark whose image has not decoded yet (blast-ui.css, coin marks). */
-export function identityBackground(identity: string): string {
-  const hue = identityHue(identity);
-  return `linear-gradient(135deg, hsl(${hue} 70% 66%), hsl(${(hue + 52) % 360} 64% 50%))`;
-}
-
-function identityHue(identity: string): number {
-  let hue = 0;
-  for (const character of identity) hue = (hue + character.charCodeAt(0)) % 360;
-  return hue;
 }
