@@ -145,6 +145,13 @@ function routeRequest(request: NextRequest): NextResponse {
   if (decision === "not-found") {
     return applyBrowserSecurity(notFound(request.nextUrl.pathname), nonce);
   }
+  if (decision === "render-not-found") {
+    // Send unknown spellings to a fixed page so they cannot resolve to an API handler.
+    return applyBrowserSecurity(
+      NextResponse.rewrite(new URL("/404", request.url), { status: 404, request: { headers: requestHeaders } }),
+      nonce,
+    );
+  }
   if (decision === "allow" && PRERENDERED_PAGES.has(request.nextUrl.pathname)) {
     return applyBrowserSecurity(NextResponse.next(), null);
   }

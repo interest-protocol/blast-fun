@@ -2,6 +2,7 @@ import { SOCIAL_PAGE_PATHS } from "@blast/core/lib/social-page-routes.ts";
 
 export type MissionControlRouteDecision =
   | "allow"
+  | "render-not-found"
   /** `/` while the social feed is on: an internal rewrite to `SOCIAL_ENTRY`. */
   | "rewrite-social"
   /** `/@<callsign>` while the social feed is on: an internal rewrite to the profile page (`socialProfileTarget`). */
@@ -27,6 +28,10 @@ const RETIRED_MISSION_CONTROL_API_PATHS = new Set([
   "/api/mission-control/completion/wallet-proof",
   "/api/mission-control/owner/share",
 ]);
+const PUBLIC_PAGE_NAMESPACES = [
+  SOCIAL_PAGE_PATHS.coin, SOCIAL_PAGE_PATHS.launch, SOCIAL_PAGE_PATHS.bonding,
+  SOCIAL_PAGE_PATHS.presales, SOCIAL_PAGE_PATHS.signIn, SOCIAL_PAGE_PATHS.settings, "/vesting",
+];
 const PUBLIC_API_NAMESPACES = ["/api/launchpad", "/api/presale", "/api/account", "/api/vesting"];
 
 const SOCIAL_PAGE_NAMESPACES = [SOCIAL_ENTRY, "/crew", "/p", SOCIAL_PAGE_PATHS.notifications, SOCIAL_PAGE_PATHS.create, SOCIAL_PAGE_PATHS.portfolio, SOCIAL_PAGE_PATHS.invites, "/competitions"];
@@ -81,8 +86,12 @@ export function decideMissionControlRoute(
     return CARD_PAGE.test(pathname) || CARD_IMAGE.test(pathname) || PNL_CARD.test(pathname) ? "allow" : "not-found";
   }
   if (isWithin(pathname, "/referral")) return REFERRAL_IMAGE.test(pathname) ? "allow" : "not-found";
-  // The App Router owns public pages and renders its 404 for unmatched URLs.
-  return "allow";
+  return isPublicPage(pathname) ? "allow" : "render-not-found";
+}
+
+function isPublicPage(pathname: string): boolean {
+  return pathname === "/privacy" || pathname === "/terms" ||
+    PUBLIC_PAGE_NAMESPACES.some((prefix) => isWithin(pathname, prefix));
 }
 
 function decideApiRoute(pathname: string, experienceEnabled: boolean, socialEnabled: boolean): MissionControlRouteDecision {
