@@ -1,6 +1,6 @@
 "use client";
 
-import type { ChartCandlePage } from "#web/components/launchpad/chart/chart-model.ts";
+import type { DrawnSeries } from "#web/components/launchpad/chart/chart-geometry.ts";
 
 import type { AutoscaleInfoProvider } from "lightweight-charts";
 import { shortUtcDate } from "#web/components/blast-ui/date-label.ts";
@@ -28,9 +28,10 @@ import { chartPrice } from "./chart-price";
 import styles from "./PoolCandleChart.module.css";
 import { candleTradeLabel, mountCandleTrade, projectCandleTrade, type CandleTrade } from "./candle-trade.ts";
 import { useShellPrefs } from "#web/components/blast-ui/use-shell-prefs.ts";
-import { combinedVolumes, lineCloseTime, linePoints, poolPrices } from "./candle-data";
+import { combinedVolumes, lineCloseTime, poolLinePoints, poolPrices, sourceLineBounds } from "./candle-data";
 import { migrationCaptionOffset, type ExactCandle, type ExactSeries } from "./chart-inspection-model";
 import { useChartInspection } from "./use-chart-inspection";
+import { useMobileChartLayout } from "./use-mobile-chart-layout";
 
 import { saveChartPreference, useChartPreference } from "#web/components/launchpad/chart/chart-preferences.ts";
 import { walletMarkerBadges, walletMarkers, type PlottedWalletMarker, type WalletChartTrade, type WalletRipple } from "./wallet-markers";
@@ -45,12 +46,7 @@ function subscribeCoarsePointer(onChange: () => void) {
   return () => query.removeEventListener("change", onChange);
 }
 
-type Source = Readonly<{
-  source: "curve" | "venue";
-  page: ChartCandlePage;
-  opening?: Readonly<{ timestampMs: number; price: string }>;
-  observedAt?: number | null;
-}>;
+type Source = DrawnSeries;
 function poolTimeline(sources: readonly Source[], intervalMs: number, from?: number, to?: number, migrationAt?: number) {
   const timestamps = sources.flatMap(({ page }) =>
     page.candles.map((candle) => candle.bucketStart),
@@ -107,20 +103,22 @@ export function PoolCandleChart({
 }>) {
   const [localMode, setMode] = useState<"line" | "candles">("candles");
   const [localVolume, setShowVolume] = useState(true);
-  const mode = presentation ?? localMode;
-  const showVolume = presentation ? presentation === "candles" : localVolume;
+  const mobile = useMobileChartLayout();
+  const mode = mobile ? "line" : presentation ?? localMode;
+  const showVolume = presentation ? mode === "candles" : localVolume;
   const { showWalletTags, setWalletTags } = useWalletTags();
   const { amountsHidden } = useShellPrefs();
   const { priceAt, observe } = useChartInspection();
   const labels = usePoolLabels(compact, showVolume, migrationAt);
   const model = useMemo(
-    () => poolChartModel({ sources, migrationAt, from, to, memeDecimals, quoteDecimals, quoteUsd, mode, showVolume, compact, walletTrades: walletTrades ?? NO_WALLET_TRADES }),
-    [sources, migrationAt, from, to, memeDecimals, quoteDecimals, quoteUsd, mode, showVolume, compact, walletTrades],
+    () => poolChartModel({ sources, migrationAt, from, to, rollingWindow, memeDecimals, quoteDecimals, quoteUsd, mode, showVolume, compact, walletTrades: walletTrades ?? NO_WALLET_TRADES }),
+    [sources, migrationAt, from, to, rollingWindow, memeDecimals, quoteDecimals, quoteUsd, mode, showVolume, compact, walletTrades],
   );
   const inspectedPrice = priceAt(model.pointPrices, model.pointVolumes, mode, amountsHidden);
   const guide = inspectedPrice?.guide;
   const tradeLabel = candleTradeLabel(trade, sources, memeDecimals, amountsHidden);
-  const { mountTrade, projectTrade, tradeKey } = useTradeOverlay(tradeLabel);
+  const tradeAt = tradeLabel ? tradePlotTime(sources[tradeLabel.index]!, tradeLabel.bucketStart, mode, migrationAt) : undefined;
+  const { mountTrade, projectTrade, tradeKey } = useTradeOverlay(tradeLabel, tradeAt);
   const { badges, touch, projectWalletMarkers } = useWalletChartBadges(model.markers);
   const showMarkers = showWalletTags && model.markers.length > 0;
   const project = (handle: ChartHandle, settled: boolean) => {
@@ -129,15 +127,12 @@ export function PoolCandleChart({
     projectTrade(handle, model.series, settled);
   };
   const walletToggle = <WalletTagsToggle available={Boolean(walletTrades)} checked={showWalletTags} onChange={setWalletTags} />;
-  const readout = compact && <div className={styles.readout} data-mode={mode}>
-    <PoolReadout hidden={amountsHidden} inspected={inspectedPrice} model={model} mode={mode} quoteSymbol={quoteSymbol} />
-    {walletToggle}
-  </div>;
+  const readout = { compact, plotMode: mode, hidden: amountsHidden, inspected: inspectedPrice, model, quoteSymbol, walletToggle };
   return (
     <>
-      <PoolChartControls compact={compact} mode={mode} onModeChange={setMode} showVolume={showVolume} onToggleVolume={() => setShowVolume((value) => !value)} />
+      <PoolChartControls compact={compact} mobile={mobile} mode={mode} onModeChange={setMode} showVolume={showVolume} onToggleVolume={() => setShowVolume((value) => !value)} />
       <div data-chart-stage="">
-        {mode === "line" && readout}
+        <PoolReadout {...readout} mode="line" preview={preview} />
         <div className={styles.plot} data-coin-plot={compact || undefined}>
           <TradingViewChart
             coinAxes={compact}
@@ -164,7 +159,7 @@ export function PoolCandleChart({
             <span className={styles.tradeAmount} />
           </span>
         </div>
-        {mode === "candles" && readout}
+        <PoolReadout {...readout} mode="candles" />
         {!compact && walletToggle}
       </div>
     </>
@@ -179,8 +174,9 @@ function WalletTagsToggle({ available, checked, onChange }: Readonly<{ available
   </label>;
 }
 
-function PoolChartControls({ compact, mode, onModeChange, showVolume, onToggleVolume }: Readonly<{
+function PoolChartControls({ compact, mobile, mode, onModeChange, showVolume, onToggleVolume }: Readonly<{
   compact: boolean;
+  mobile: boolean;
   mode: "line" | "candles";
   onModeChange: (mode: "line" | "candles") => void;
   showVolume: boolean;
@@ -188,7 +184,7 @@ function PoolChartControls({ compact, mode, onModeChange, showVolume, onToggleVo
 }>) {
   if (compact) return null;
   return <div className={styles.controls} role="group" aria-label="Price chart controls">
-    <Segmented label="Chart style" options={CHART_STYLES} value={mode} onChange={onModeChange} size="sm" />
+    {!mobile && <Segmented label="Chart style" options={CHART_STYLES} value={mode} onChange={onModeChange} size="sm" />}
     <Button variant="ghost" size="sm" aria-pressed={showVolume} onClick={onToggleVolume}>
       Volume
     </Button>
@@ -250,7 +246,15 @@ function useWalletChartBadges(markers: readonly PlottedWalletMarker[]) {
   return { badges, touch, projectWalletMarkers };
 }
 
-function useTradeOverlay(tradeLabel: ReturnType<typeof candleTradeLabel>) {
+function tradePlotTime(history: Source, bucket: number, mode: "line" | "candles", migrationAt?: number) {
+  if (mode === "candles") return chartTimestamp(bucket);
+  const { page, opening } = history;
+  const { priceFrom, priceThrough } = sourceLineBounds(history, migrationAt);
+  const openingAt = bucket === page.candles[0]?.bucketStart ? opening?.timestampMs : undefined;
+  return chartTimestamp(lineCloseTime(bucket, openingAt, candleIntervalMs(page.interval), priceFrom, priceThrough));
+}
+
+function useTradeOverlay(tradeLabel: ReturnType<typeof candleTradeLabel>, at?: number) {
   const overlay = useRef<ReturnType<typeof mountCandleTrade> | null>(null);
   const mountTrade = useCallback((slot: HTMLSpanElement | null) => {
     if (!slot) return;
@@ -262,18 +266,34 @@ function useTradeOverlay(tradeLabel: ReturnType<typeof candleTradeLabel>) {
     if (!tradeLabel) overlay.current?.hide();
   }, [tradeLabel]);
   function projectTrade(handle: ChartHandle, series: readonly ChartSeries[], settled: boolean) {
-    overlay.current?.place(tradeLabel, projectCandleTrade(handle, series, tradeLabel?.index), settled);
+    overlay.current?.place(tradeLabel, projectCandleTrade(handle, series, tradeLabel?.index, at), settled);
   }
   return { mountTrade, projectTrade, tradeKey: tradeLabel?.cursor ?? "" };
 }
 
-function PoolReadout({ hidden, inspected, model, mode, quoteSymbol }: Readonly<{
+function PoolReadout({ compact, plotMode, preview, walletToggle, inspected, ...values }: PoolReadoutValuesProps & Readonly<{
+  compact: boolean;
+  plotMode: "line" | "candles";
+  preview?: ReactNode;
+  walletToggle: ReactNode;
+}>) {
+  const mobilePreview = values.mode === "line" && plotMode === "candles" && Boolean(preview);
+  if (!compact || (values.mode !== plotMode && !mobilePreview)) return null;
+  return <div className={styles.readout} data-mode={values.mode} data-mobile-preview={mobilePreview || undefined}>
+    <PoolReadoutValues {...values} inspected={mobilePreview ? undefined : inspected} />
+    {walletToggle}
+  </div>;
+}
+
+type PoolReadoutValuesProps = Readonly<{
   hidden: boolean;
   inspected?: { at: number; value?: string; candle?: ExactCandle; volume?: string };
   model: ReturnType<typeof poolChartModel>;
   mode: "line" | "candles";
   quoteSymbol?: string;
-}>) {
+}>;
+
+function PoolReadoutValues({ hidden, inspected, model, mode, quoteSymbol }: PoolReadoutValuesProps) {
   if (hidden) return null;
   const unit = model.usd ? "USD" : quoteSymbol;
   if (mode === "candles") {
@@ -363,9 +383,12 @@ function configurePoolPanes(chart: ChartHandle["chart"]) {
 
 function latestPrice(source: Source | undefined, price: (raw: string) => string) {
   const candle = source?.page.candles.at(-1);
-  if (!candle) return undefined;
+  const carried = source?.carriedClose;
+  const close = candle?.close ?? carried?.price;
+  const bucket = candle?.bucketStart ?? carried?.timestampMs;
+  if (close === undefined || bucket === undefined) return undefined;
   const observedAt = source?.observedAt;
-  return { at: observedAt == null ? null : chartTimestamp(observedAt), bucket: chartTimestamp(candle.bucketStart), value: price(candle.close) };
+  return { at: observedAt == null ? null : chartTimestamp(observedAt), bucket: chartTimestamp(bucket), value: price(close) };
 }
 
 function usePoolLabels(compact: boolean, showVolume: boolean, migrationAt?: number) {
@@ -395,13 +418,6 @@ function usePoolLabels(compact: boolean, showVolume: boolean, migrationAt?: numb
   return { volumeTop, markerLabel, marker, projectLabels };
 }
 
-function sourceLineBounds({ page, source, observedAt }: Source, migrationAt?: number) {
-  const priceThrough = Math.min(observedAt ?? Infinity, source === "curve" ? migrationAt ?? Infinity : Infinity);
-  // A venue's first bucket may span the migration, but its line starts only at the migration.
-  const priceFrom = source === "venue" ? migrationAt ?? page.migration?.timestampMs ?? -Infinity : -Infinity;
-  return { priceFrom, priceThrough };
-}
-
 function scaledWalletMarkers(trades: readonly WalletChartTrade[], history: Source, mode: "line" | "candles", seriesIndex: number,
   interval: number, priceFrom: number, priceThrough: number, coordinate: (raw: string) => number): PlottedWalletMarker[] {
   if (!trades.length) return [];
@@ -425,13 +441,14 @@ function latestPoolMarker(latest: ReturnType<typeof latestPrice>, points: readon
 }
 
 function poolChartModel({
-  sources, migrationAt, from, to, memeDecimals, quoteDecimals, quoteUsd, mode, showVolume, compact, walletTrades,
+  sources, migrationAt, from, to, rollingWindow, memeDecimals, quoteDecimals, quoteUsd, mode, showVolume, compact, walletTrades,
 }: Readonly<{
   walletTrades: readonly WalletChartTrade[];
   sources: readonly Source[];
   migrationAt?: number;
   from?: number;
   to?: number;
+  rollingWindow?: boolean;
   memeDecimals: number | null;
   quoteDecimals: number | null;
   quoteUsd: string | null;
@@ -442,11 +459,10 @@ function poolChartModel({
   const { usd, price } = poolPrices(memeDecimals, quoteDecimals, quoteUsd);
   const quantity = (value: bigint) =>
     shiftDecimal(value.toString(), -(quoteDecimals ?? 0));
-  const prices = sources.flatMap(({ page, opening }) =>
-    mode === "line"
-      ? [...page.candles.map((candle) => price(candle.close)), ...(opening ? [price(opening.price)] : [])]
-      : page.candles.flatMap((candle) => [candle.open, candle.high, candle.low, candle.close].map(price)),
-  );
+  const lines = mode === "line" ? poolLinePoints(sources, migrationAt, to, rollingWindow) : [];
+  const prices = mode === "line"
+    ? lines.flatMap((points) => points.map((point) => price(point.price)))
+    : sources.flatMap(({ page }) => page.candles.flatMap((candle) => [candle.open, candle.high, candle.low, candle.close].map(price)));
   const scale = exactChartScale(prices);
   const autoscaleInfoProvider: AutoscaleInfoProvider = scale.flat
     ? () => ({ priceRange: { minValue: 0, maxValue: 100 } })
@@ -471,12 +487,12 @@ function poolChartModel({
   const down = compact ? "var(--coin-chart-down)" : "var(--down)";
   const lineStyle = compact ? { lineColor: "var(--ink)", topColor: "transparent", bottomColor: "transparent" } : {};
   // The newest source owns the latest readout (after migration, the venue).
-  const tagged = sources.findLastIndex(({ page }) => page.candles.length > 0);
+  const tagged = sources.findLastIndex(({ page, carriedClose }) => page.candles.length > 0 || carriedClose);
   const latest = latestPrice(sources[tagged], price);
   const markers: PlottedWalletMarker[] = [];
   let seriesIndex = 0;
   const series: ChartSeries[] = sources.flatMap((history, sourceIndex) => {
-    const { source, page, opening } = history;
+    const { source, page } = history;
     const { priceFrom, priceThrough } = sourceLineBounds(history, migrationAt);
     const interval = candleIntervalMs(page.interval);
     markers.push(...scaledWalletMarkers(walletTrades, history, mode, seriesIndex, interval, priceFrom, priceThrough, raw => scale.coordinate(price(raw))));
@@ -490,13 +506,14 @@ function poolChartModel({
     const hollow = !compact && source === "venue";
     // Only opt out. A tagged series still follows the chart's hidden-amounts rule.
     const tag = compact || sourceIndex !== tagged ? { lastValueVisible: false } : {};
+    const line = lines[sourceIndex];
     const priceSeries: ChartSeries[] =
       mode === "line"
-        ? page.candles.length === 0 ? [] : [
+        ? !line?.length ? [] : [
             {
               type: "Area" as const,
               data: chartData(
-                linePoints(page.candles, opening, interval, priceFrom, priceThrough).map(({ timestampMs, price: raw }) => ({
+                line.map(({ timestampMs, price: raw }) => ({
                   time: chartTimestamp(timestampMs),
                   value: pointValue(timestampMs, raw),
                 })),
@@ -505,7 +522,7 @@ function poolChartModel({
                 priceLineVisible: false,
                 ...tag,
                 ...lineStyle,
-                pointMarkersVisible: page.candles.length === 1 && !opening,
+                pointMarkersVisible: line.length === 1,
                 autoscaleInfoProvider,
               },
             },

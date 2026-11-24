@@ -20,7 +20,9 @@ export type DrawnSeries = Readonly<{
   source: "curve" | "venue";
   page: ChartCandlePage;
   opening?: Readonly<{ timestampMs: number; price: string }>;
+  carriedClose?: Readonly<{ timestampMs: number; price: string }>;
   observedAt?: number | null;
+  holdAfterMigration?: boolean;
 }>;
 
 export type DrawnCandle = Readonly<{
@@ -76,21 +78,25 @@ export function chartGeometry(
   from: number | undefined,
   chainTime: number | null,
 ): ChartGeometry | null {
-  const drawn = series.filter(({ page }) => page.candles.length > 0);
+  const drawn = series.filter(({ page, carriedClose }) => page.candles.length > 0 || carriedClose);
   if (drawn.length === 0) return null;
   const interval = drawn[0].page.interval;
   const ms = candleIntervalMs(interval);
   const all = drawn.flatMap(({ page }) => page.candles);
+  const carries = drawn.flatMap(({ carriedClose }) => carriedClose ? [carriedClose] : []);
   const start = Math.min(
     from ?? Infinity,
     ...all.map((candle) => candle.bucketStart),
+    ...carries.map(({ timestampMs }) => timestampMs),
     ...drawn.flatMap(({ opening }) => opening ? [candleBucketStart(interval, opening.timestampMs)] : []),
   );
-  const end = Math.max(chainTime ?? 0, ...all.map((candle) => candle.bucketStart + ms));
+  const end = Math.max(chainTime ?? 0, ...all.map((candle) => candle.bucketStart + ms), start + 1);
   const x = (time: number) => ((time - start) / (end - start)) * CHART_WIDTH;
 
-  const highest = all.reduce((top, candle) => (place(candle.high) > place(top) ? candle.high : top), all[0].high);
-  const lowest = all.reduce((bottom, candle) => (place(candle.low) < place(bottom) ? candle.low : bottom), all[0].low);
+  const highPrices = [...all.map(({ high }) => high), ...carries.map(({ price }) => price)];
+  const lowPrices = [...all.map(({ low }) => low), ...carries.map(({ price }) => price)];
+  const highest = highPrices.reduce((top, price) => place(price) > place(top) ? price : top);
+  const lowest = lowPrices.reduce((bottom, price) => place(price) < place(bottom) ? price : bottom);
   const [high, low] = [place(highest), place(lowest)];
   const pad = high === low ? Math.max(high * 0.05, Number.MIN_VALUE) : 0;
   const y = (price: string) => PRICE_TOP + ((high + pad - place(price)) / (high - low + 2 * pad)) * (PRICE_BOTTOM - PRICE_TOP);

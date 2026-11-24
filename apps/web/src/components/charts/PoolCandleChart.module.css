@@ -94,6 +94,11 @@
   align-content: start;
   min-block-size: var(--coin-readout-height, 8.25rem);
 }
+.readout[data-mobile-preview] { display: none; }
+@media (max-width: 760px), (pointer: coarse) {
+  .readout[data-mobile-preview] { display: grid; }
+  .readout[data-mode="candles"] { display: none; }
+}
 .lineContext, .candleContext {
   display: flex;
   flex-wrap: wrap;

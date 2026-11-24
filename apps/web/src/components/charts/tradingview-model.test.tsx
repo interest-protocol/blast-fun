@@ -50,6 +50,12 @@ test("resizing keeps the live gutter and leaves a history range alone", () => {
   assert.equal(atLiveEdge(wider, 6, 320), true);
   assert.equal(wider.to - wider.from, live.to - live.from);
   assert.equal(resizedLiveChartRange({ from: -1, to: 3 }, 6, 160, 320), null);
+
+  const narrowFit = { from: 0, to: 349.808 };
+  assert.equal(atLiveEdge(narrowFit, 302, 258), false);
+  const settled = resizedLiveChartRange(narrowFit, 302, 0, 258, true)!;
+  assert.equal(atLiveEdge(settled, 302, 258), true);
+  assert.equal(resizedLiveChartRange({ from: -40, to: 290 }, 302, 0, 258, true), null);
 });
 
 test("a refreshed fallback time grid keeps both historical time bounds", () => {

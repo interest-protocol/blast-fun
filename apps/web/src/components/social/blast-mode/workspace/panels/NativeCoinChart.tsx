@@ -16,6 +16,7 @@ import visualStyles from "./CoinChartVisual.module.css";
 import { useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { chartVisual, axisPrice, type Observation } from "./chart-visual";
 import { useShellPrefs } from "#web/components/blast-ui/use-shell-prefs.ts";
+import { useMobileChartLayout } from "#web/components/charts/use-mobile-chart-layout.ts";
 import { DateStamp } from "#web/components/blast-ui/DateStamp.tsx";
 import { InspectValue } from "#web/components/blast-ui/InspectValue.tsx";
 import { TradingViewPlot } from "./TradingViewPlot";
@@ -336,6 +337,7 @@ export function ChartVisual({
   volumeUnits?: string;
   migrationAt?: number;
 }>) {
+  const mobile = useMobileChartLayout();
   const hidden = useShellPrefs().amountsHidden;
   const gradient = useId();
   const frameRef = useRef<HTMLDivElement>(null);
@@ -506,7 +508,7 @@ export function ChartVisual({
           hidden={hidden}
           selected={selected}
           onSelect={setSelected}
-          style={style}
+          style={mobile ? "line" : style}
           volume={volume}
           migrationAt={migrationAt}
         />

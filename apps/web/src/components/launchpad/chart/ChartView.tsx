@@ -16,7 +16,8 @@ import { useLaunchWallet, useWalletTrades } from "../activity/wallet-trades";
 import { tradeWalletLabels } from "../activity/wallet-labels";
 import { walletMarkerKey, type WalletChartTrade, type WalletRipple } from "#web/components/charts/wallet-markers.ts";
 import { useMemo, useState } from "react";
-import { usePhoneLayout, useShellPrefs } from "#web/components/blast-ui/use-shell-prefs.ts";
+import { useShellPrefs } from "#web/components/blast-ui/use-shell-prefs.ts";
+import { useMobileChartLayout } from "#web/components/charts/use-mobile-chart-layout.ts";
 import { saveChartPreference, useChartPreference } from "./chart-preferences";
 
 import { candleBucketStart, comparePrices } from "@blast/core/modules/launchpad-contract/venue-history.ts";
@@ -168,12 +169,9 @@ function limitedNote(page: ChartCandlePage, request: ChartRequest, range: ChartR
 }
 
 /**
- * The coin's price chart: each source pool's own candles from blast-infra,
- * never merged, around the committed migration. The canvas draws only raw
- * candles at their own buckets, so a missing interval stays empty and the
- * tables below list the same candles and gaps. A
- * source that cannot be read is Unavailable, or Stale from its last answer,
- * on its own.
+ * Each pool keeps its own candles and gap records around the committed migration.
+ * The Live line can carry the close before the window without adding a candle.
+ * A read failure keeps the source's last answer marked stale.
  */
 function useChartViewControls({
   state,
@@ -211,44 +209,78 @@ function useChartViewControls({
 }>) {
   const live = controls.range === "live";
   const now = useChartClock(1_000, live);
+  const drawing = chartDrawing({ state, source, omitCurve, historyRequest, hidden, live, now });
+  return { source, quoteUsd, controls, pending, updates, emptyMessage, livePreset, diagnostic, onControls, onToggle, onRefresh, ...drawing };
+}
+
+function chartDrawing({ state, source, omitCurve, historyRequest, hidden, live, now }: Readonly<{
+  state: ChartState;
+  source: ChartViewSource;
+  omitCurve?: boolean;
+  historyRequest: ChartRequest;
+  hidden: readonly ChartSourceName[];
+  live: boolean;
+  now: number | null;
+}>) {
   const chainTime = chartLatestTimestamp(state);
   const liveEnd = live ? candleBucketStart("1s", Math.max(now ?? 0, chainTime)) + 1_000 : null;
   const liveStart = liveEnd === null ? null : liveEnd - LIVE_CHART_SPAN_MS;
   const request = liveStart === null ? historyRequest : { ...historyRequest, from: liveStart };
   const migration = state.migration;
+  const holdCurveAfterMigration = live && migration !== null && state.venue?.state === "empty";
   const venuePoolKey = source.venuePoolKey ?? migration?.venuePoolKey ?? null;
-  const sources = chartSources(state).filter(({ name }) => name !== "curve" || (!omitCurve && source.curvePoolKey !== null)).map(({ name, section: read }) => {
-    const section = liveStart !== null && hasData(read)
-      ? { ...read, data: { ...read.data, candles: read.data.candles.filter(({ bucketStart }) => bucketStart >= liveStart) } }
-      : read;
-    if (!hasData(section)) return { name, section, opening: undefined };
-    const opening = chartOpening(section.data, request, source.opening);
-    const first = section.data.candles[0];
-    // The first indexed trade can fall in a later bucket. Its pre-trade price is still the launch price.
-    if (!opening || !first) return { name, section, opening };
-    const { price } = opening;
-    const candle = {
-      ...first,
-      open: price,
-      high: comparePrices(price, first.high) > 0 ? price : first.high,
-      low: comparePrices(price, first.low) < 0 ? price : first.low,
-    };
-    return { name, section: { ...section, data: { ...section.data, candles: [candle, ...section.data.candles.slice(1)] } }, opening };
-  });
+  const sources = chartSources(state)
+    .filter(({ name }) => name !== "curve" || (!omitCurve && source.curvePoolKey !== null))
+    .map((read) => priceSource(read, request, liveStart, source.opening, migration?.timestampMs, holdCurveAfterMigration));
   const label = (name: ChartSourceName) => sourceLabel(name, venuePoolKey);
-  const selectable = sources.filter(({ section }) => hasData(section) && section.data.candles.length > 0);
+  const selectable = sources.filter(({ section, carriedClose }) => hasData(section) && (section.data.candles.length > 0 || carriedClose));
   const shown = (name: ChartSourceName) =>
     (selectable.length === 1 && selectable[0]?.name === name) || !hidden.includes(name);
 
-  const drawn: DrawnSeries[] = sources.flatMap(({ name, section, opening }) =>
-    hasData(section) && shown(name) ? [{ source: name, page: section.data, opening, observedAt: section.provenance.timestampMs }] : [],
+  const drawn: DrawnSeries[] = sources.flatMap(({ name, section, opening, carriedClose }) =>
+    hasData(section) && (section.data.candles.length || carriedClose) && shown(name) ? [{
+      source: name, page: section.data, opening, carriedClose, observedAt: section.provenance.timestampMs,
+      holdAfterMigration: name === "curve" && holdCurveAfterMigration,
+    }] : [],
   );
-  const latest = [...drawn].reverse().find(({ page }) => page.candles.length)?.page.candles.at(-1)?.close ?? null;
+  const latest = drawn.at(-1);
   // A bounded range runs to blast-infra's committed checkpoint time; all history ends at its last candle.
   const hasPriceUnits = source.memeDecimals !== null && source.quoteDecimals !== null;
   const geometry = hasPriceUnits ? chartGeometry(drawn, migration, request.from, liveEnd ?? (request.from === undefined ? null : chainTime || null)) : null;
-  const missingPriceUnits = drawn.some(({ page }) => page.candles.length > 0) && !hasPriceUnits;
-  return { source, venuePoolKey, quoteUsd, controls, request, pending, updates, emptyMessage, livePreset, diagnostic, onControls, onToggle, onRefresh, migration, sources, selectable, drawn, label, shown, geometry, hasPriceUnits, missingPriceUnits, latest };
+  const missingPriceUnits = Boolean(latest) && !hasPriceUnits;
+  return { venuePoolKey, request, migration, sources, selectable, drawn, label, shown, geometry, hasPriceUnits, missingPriceUnits, latest: latest?.page.candles.at(-1)?.close ?? latest?.carriedClose?.price ?? null };
+}
+
+function priceSource(
+  { name, section: read }: ReturnType<typeof chartSources>[number],
+  request: ChartRequest,
+  liveStart: number | null,
+  launch: ChartViewSource["opening"],
+  migrationAt: number | undefined,
+  holdCurveAfterMigration: boolean,
+) {
+  if (!hasData(read)) return { name, section: read, opening: undefined };
+  const candles = liveStart === null ? read.data.candles : read.data.candles.filter(({ bucketStart }) => bucketStart >= liveStart);
+  const carryFrom = name === "venue" && liveStart !== null ? Math.max(liveStart, migrationAt ?? liveStart) : liveStart;
+  const mayCarry = name === "venue" || migrationAt === undefined || holdCurveAfterMigration || (carryFrom !== null && carryFrom < migrationAt);
+  const previous = liveStart !== null && mayCarry
+    ? read.data.candles.findLast(({ bucketStart }) => bucketStart < liveStart)
+    : undefined;
+  const carriedClose = previous && carryFrom !== null ? { timestampMs: carryFrom, price: previous.close } : undefined;
+  const page = { ...read.data, candles };
+  const opening = chartOpening(page, request, launch);
+  const first = candles[0];
+  if (!opening || !first) return { name, section: { ...read, data: page }, opening, carriedClose };
+
+  // The first indexed trade can fall in a later bucket. Its pre-trade price is still the launch price.
+  const { price } = opening;
+  const candle = {
+    ...first,
+    open: price,
+    high: comparePrices(price, first.high) > 0 ? price : first.high,
+    low: comparePrices(price, first.low) < 0 ? price : first.low,
+  };
+  return { name, section: { ...read, data: { ...page, candles: [candle, ...candles.slice(1)] } }, opening, carriedClose };
 }
 
 export function ChartView(props: Parameters<typeof useChartViewControls>[0] & Readonly<{ compact?: boolean; preview?: boolean }>) {
@@ -266,7 +298,7 @@ export function ChartView(props: Parameters<typeof useChartViewControls>[0] & Re
       ) : null}
 
       {geometry ? (
-        <ChartFigure key={`${controls.range}:${controls.interval}`} quoteUsd={quoteUsd} drawn={drawn} migrationAt={migration?.timestampMs} venuePoolKey={venuePoolKey} geometry={geometry} latest={latest} source={source} controls={controls} />
+        <ChartFigure key={`${controls.range}:${controls.interval}`} presentation={controls.range === "live" ? "line" : undefined} quoteUsd={quoteUsd} drawn={drawn} migrationAt={migration?.timestampMs} venuePoolKey={venuePoolKey} geometry={geometry} latest={latest} source={source} controls={controls} />
       ) : null}
 
       {geometry && exactDecimal(quoteUsd) ? <p className={styles.note}>USD prices use the current {source.quoteSymbol} rate.</p> : null}
@@ -282,7 +314,7 @@ function ChartRangeFields({ view, compact = false }: Readonly<{ view: ReturnType
   const { controls, onControls } = view;
   return (
     <>
-      <label className={styles.control}>
+      <label className={styles.control} data-live-range={controls.range === "live" || undefined}>
         <span>Range</span>
         <SelectField size={compact ? "lg" : "md"} value={controls.range} onChange={(event) => {
           const range = event.target.value as ChartRange;
@@ -427,13 +459,17 @@ function ChartFigure({ drawn, migrationAt, venuePoolKey, geometry, latest, sourc
   const markerVisible = migrationAt !== undefined && migrationAt >= geometry.start && migrationAt <= geometry.end;
   const event = markerVisible ? ` ${graduation} on ${clock(migrationAt)}.` : "";
   const label = `${source.symbol} ${metric}. ${RANGE_WORDS[controls.range]}, ${controls.interval} intervals.${event}`;
+  const initialPlot = preview ? <>
+    {!line && <ChartPreview geometry={geometry} sources={drawn} migrationAt={migrationAt} line={false} viewport="desktop" />}
+    <ChartPreview geometry={geometry} sources={drawn} migrationAt={migrationAt} rolling={controls.range === "live"} line viewport={line ? undefined : "mobile"} />
+  </> : null;
   return (
     <figure className={styles.figure}>
       {compact ? null : <p className={styles.axis} aria-hidden="true">
         {latest ? <>Last {tokenPrice(latest, source, quoteUsd)} · </> : null}High {tokenPrice(geometry.highest, source, quoteUsd)} · Low {tokenPrice(geometry.lowest, source, quoteUsd)}
       </p>}
       <div className={compact ? styles.compactCanvas : styles.canvas}>
-        <PoolCandleChart walletTrades={walletTrades} ripple={ripple} trade={candleTrade} label={label} compact={compact} rollingWindow={controls.range === "live"} presentation={presentation} memeDecimals={source.memeDecimals} quoteDecimals={source.quoteDecimals} quoteUsd={quoteUsd} sources={drawn} migrationAt={migrationAt} migrationLabel={venue ? <>Graduated to <DexIdentity venue={venue} /></> : graduation} quoteSymbol={source.quoteSymbol} from={geometry.start} to={geometry.end} preview={preview ? <ChartPreview geometry={geometry} interval={controls.interval} line={line} /> : null} />
+        <PoolCandleChart walletTrades={walletTrades} ripple={ripple} trade={candleTrade} label={label} compact={compact} rollingWindow={controls.range === "live"} presentation={presentation} memeDecimals={source.memeDecimals} quoteDecimals={source.quoteDecimals} quoteUsd={quoteUsd} sources={drawn} migrationAt={migrationAt} migrationLabel={venue ? <>Graduated to <DexIdentity venue={venue} /></> : graduation} quoteSymbol={source.quoteSymbol} from={geometry.start} to={geometry.end} preview={initialPlot} />
       </div>
     </figure>
   );
@@ -478,10 +514,9 @@ type ChartViewControls = ReturnType<typeof useChartViewControls>;
 type ChartStyle = "line" | "candles";
 
 function useChartStyle() {
-  const phone = usePhoneLayout();
   const saved = useChartPreference("style");
   const [selected, setStyle] = useState<ChartStyle | null>(null);
-  const preferred = saved === "line" || saved === "candles" ? saved : phone ? "line" : "candles";
+  const preferred = saved === "line" ? "line" : "candles";
   return [selected ?? preferred, (next: ChartStyle) => {
     saveChartPreference("style", next);
     setStyle(next);
@@ -489,16 +524,17 @@ function useChartStyle() {
 }
 
 function CompactChart({ view, preview }: Readonly<{ view: ChartViewControls; preview?: boolean }>) {
+  const mobile = useMobileChartLayout();
   const [preferredStyle, setStyle] = useChartStyle();
   const live = view.controls.range === "live";
-  const style = live ? "candles" : preferredStyle;
+  const style = mobile || live ? "line" : preferredStyle;
   const { source, quoteUsd, geometry } = view;
   const unit = geometry && (exactDecimal(quoteUsd) ? "USD" : source.quoteSymbol);
   return <div className={styles.chart} data-compact-chart="" data-chart-style={style}>
     <div className={styles.compactHead}>
       <h2>Price{unit ? <span> · {unit}</span> : null}</h2>
       <div className={styles.compactTools}>
-        {geometry && !live && <Segmented label="Chart style" size="touch" variant="outline" options={CHART_STYLES} value={style} onChange={setStyle} />}
+        {geometry && !live && !mobile && <Segmented className={styles.stylePicker} label="Chart style" size="touch" variant="outline" options={CHART_STYLES} value={style} onChange={setStyle} />}
         <ChartFilters view={view} style={style} />
       </div>
     </div>

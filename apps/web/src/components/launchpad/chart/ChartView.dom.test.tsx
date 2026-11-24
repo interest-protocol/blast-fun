@@ -16,11 +16,11 @@ const hook = registerHooks({ resolve(specifier, context, next) {
         let settled = false;
         const handle = {
           chart: {
-            timeScale: () => ({ getVisibleLogicalRange: () => ({from: 0, to: 12}), options: () => ({ barSpacing: 8 }), timeToCoordinate: time => time === series[0]?.data.at(-1)?.time ? Number((settled ? undefined : document.documentElement.dataset.testSyncCandleX) ?? document.documentElement.dataset.testCandleX ?? 83) : null, width: () => 100 }),
+            timeScale: () => ({ getVisibleLogicalRange: () => ({from: 0, to: 12}), options: () => ({ barSpacing: 8 }), timeToCoordinate: time => series[0]?.data.some(point => point.time === time) ? Number((settled ? undefined : document.documentElement.dataset.testSyncCandleX) ?? document.documentElement.dataset.testCandleX ?? 83) : null, width: () => 100 }),
             panes: () => series.some(s => s.pane === 1) ? [{}, {}] : [{}],
             paneSize: () => ({ width: 100, height: 140 })
           },
-          series: series.map(s => ({ priceToCoordinate: price => price === (s.data.at(-1)?.close ?? s.data.at(-1)?.value) ? 40 : null }))
+          series: series.map(s => ({ priceToCoordinate: price => s.data.some(point => price === (point.close ?? point.value)) ? 40 : null }))
         };
         onProject(handle, false);
         if (document.documentElement.dataset.testProjectionSettled !== "false") {
@@ -29,7 +29,7 @@ const hook = registerHooks({ resolve(specifier, context, next) {
           return () => { mounted = false; };
         }
       }, [series, projectionKey]);
-      return React.createElement('div', {'data-latest-series': latestPrice?.seriesIndex, 'data-series': series.map(s=>s.type).join(','), 'data-tags': series.map(s=>String(s.options?.lastValueVisible)).join(','), 'data-points': series[0]?.data.map(p => p.time + ':' + priceFormatter(p.value ?? p.close)).join(',')}, preview); }`)}`,
+      return React.createElement('div', {'data-latest-series': latestPrice?.seriesIndex, 'data-series': series.map(s=>s.type).join(','), 'data-tags': series.map(s=>String(s.options?.lastValueVisible)).join(','), 'data-points': series[0]?.data.map(p => p.time + ':' + priceFormatter(p.value ?? p.close)).join(','), 'data-last-points': series.at(-1)?.data.map(p => p.time + ':' + priceFormatter(p.value ?? p.close)).join(',')}, preview); }`)}`,
   };
   return next(specifier, context);
 } });
@@ -337,7 +337,7 @@ test("a migrated coin tags only the venue's last price, in both chart styles", a
     assert.equal(plot().getAttribute("data-tags"), "false,false,false");
     assert.equal(plot().getAttribute("data-latest-series"), "1", "the neutral latest-price line belongs to the venue candles");
     await act(async () => button("Line chart").click());
-    assert.match(preview()?.firstElementChild?.getAttribute("d") ?? "", /^M[\d.]+ [\d.]+h0M[\d.]+ [\d.]+h0$/);
+    assert.equal(preview()?.firstElementChild?.getAttribute("d"), "M0 212L333.3 212M333.3 212L666.7 212L666.7 34L1000 34");
     assert.equal(plot().getAttribute("data-series"), "Area,Area");
     assert.equal(plot().getAttribute("data-tags"), "false,false");
     assert.equal(plot().getAttribute("data-latest-series"), "1", "the neutral latest-price line belongs to the venue line");
@@ -347,10 +347,22 @@ test("a migrated coin tags only the venue's last price, in both chart styles", a
   }
 });
 
-test("Live ages out old candles during a quiet market", async (t) => {
+test("Live carries the last close across the five-minute window on desktop and mobile", async (t) => {
   const start = 1_800_000_000_000;
   let now = start;
   t.mock.method(Date, "now", () => now);
+  const media = "(max-width: 760px), (pointer: coarse)";
+  const layout = Object.assign(new dom.window.EventTarget(), {
+    matches: false, media, onchange: null, addListener() {}, removeListener() {},
+  });
+  const matchMedia = dom.window.matchMedia.bind(dom.window);
+  t.mock.method(dom.window, "matchMedia", (query: string) => query === media ? layout : matchMedia(query));
+  async function setMobile(matches: boolean) {
+    await act(async () => {
+      layout.matches = matches;
+      layout.dispatchEvent(new dom.window.Event("change"));
+    });
+  }
   const poolKey = "blast_curve:0x1";
   const candle = (bucketStart: number, close: string) => ({
     bucketStart, open: close, high: close, low: close, close, volumeQuote: 20n, volumeMeme: 10n, volumeUsd: null, buys: 1, sells: 0, trades: 1,
@@ -369,12 +381,23 @@ test("Live ages out old candles during a quiet market", async (t) => {
     usePublishWalletTrades(noRows, row);
     return null;
   }
-  const render = (updates: string | null, trade: { cursor: string; timestampMs: number; side: "buy"; price: string; quoteAmount: bigint; memeAmount: bigint } | null = null, history: ActivityRow | null = null) => act(async () => root.render(
+  const render = (updates: string | null, trade: { cursor: string; timestampMs: number; side: "buy"; price: string; quoteAmount: bigint; memeAmount: bigint } | null = null, history: ActivityRow | null = null, graduated?: "traded" | "quiet") => {
+    const migration = graduated ? {
+      cursor: "1:0:0:0", timestampMs: now - (graduated === "quiet" ? 315_000 : 65_000) + 550,
+      curvePoolKey: poolKey, venuePoolKey: `cetus:0x${"c3".repeat(32)}`,
+    } : null;
+    const checkpoint = { ...provenance, observedAt: now, timestampMs: now };
+    const curve = { ...page, migration, candles: trade ? [candle(trade.timestampMs, trade.price)] : page.candles };
+    const venue = migration && (graduated === "traded" ? {
+      state: "available" as const, provenance: checkpoint,
+      data: { ...page, poolKey: migration.venuePoolKey, source: "venue" as const, venue: "cetus" as const, migration, candles: [candle(now - 65_000, "93")] },
+    } : { state: "empty" as const, provenance: checkpoint });
+    return act(async () => root.render(
     <WalletTradesProvider deployer={null}><TradeHistory row={history} /><ChartTradeContext value={{ trade, poolKey, receivedAt: trade ? performance.now() : null, decimals: 9, symbol: "SUI" }}><ChartView
       compact
       livePreset
-      source={{ expected: null, curvePoolKey: poolKey, venuePoolKey: null, migration: null, symbol: "PIP", quoteSymbol: "SUI", memeDecimals: 9, quoteDecimals: 9 }}
-      state={{ key: "1s|live", curve: { state: "available", data: trade ? { ...page, candles: [candle(trade.timestampMs, trade.price)] } : page, provenance: { ...provenance, observedAt: now, timestampMs: now } }, venue: null, migration: null }}
+      source={{ expected: null, curvePoolKey: poolKey, venuePoolKey: migration?.venuePoolKey ?? null, migration, symbol: "PIP", quoteSymbol: "SUI", memeDecimals: 9, quoteDecimals: 9 }}
+      state={{ key: "1s|live", curve: { state: "available", data: curve, provenance: checkpoint }, venue, migration }}
       controls={controls}
       request={chartRequest(controls, start)}
       hidden={[]}
@@ -384,17 +407,24 @@ test("Live ages out old candles during a quiet market", async (t) => {
       onToggle={() => {}}
       onRefresh={() => {}}
     /></ChartTradeContext></WalletTradesProvider>,
-  ));
+    ));
+  };
   await render(null);
   const plot = container.querySelector("[data-series]");
-  assert.equal(plot?.getAttribute("data-series"), "Candlestick,Histogram");
-  assert.equal(plot?.getAttribute("data-points"), "1799999701:92");
+  assert.equal(plot?.getAttribute("data-series"), "Area");
+  assert.match(plot?.getAttribute("data-points") ?? "", /^1799999701:92.*1800000001:92$/);
   assert.ok(container.querySelector('button[aria-label="Chart range: Live, last 5 minutes"]'));
+  await setMobile(true);
+  assert.equal(container.querySelector("[data-compact-chart]")?.getAttribute("data-chart-style"), "line");
+  assert.equal(container.querySelector("[data-series]")?.getAttribute("data-series"), "Area");
+  await setMobile(false);
+  assert.equal(container.querySelector("[data-series]")?.getAttribute("data-series"), "Area");
 
   now += 1_000;
   await act(async () => document.dispatchEvent(new dom.window.Event("visibilitychange")));
-  assert.equal(container.querySelector("[data-series]"), null);
-  assert.match(container.textContent ?? "", /No trades in this range/);
+  assert.equal(container.querySelector("[data-series]")?.getAttribute("data-points"), "1799999702:92,1800000002:92");
+  assert.equal(container.querySelector("[data-candle-trade-amount]"), null);
+  assert.match(container.textContent ?? "", /Last close/);
 
   await render("Trade updates delayed.");
   assert.match(container.querySelector('[role="status"]')?.textContent ?? "", /Trade updates delayed/);
@@ -407,6 +437,14 @@ test("Live ages out old candles during a quiet market", async (t) => {
     source: "user", actor: null, lifecycle: null, amounts: { quote: 100_000_000n, meme: 1_000_000_000n } });
   assert.equal(container.querySelector("[data-chart-last-trade] [data-trade-cue]")?.textContent, "Sell · 0.1\u00a0SUI");
   assert.equal(container.querySelector("[data-candle-trade-amount]"), null, "the earlier buy callout leaves when newer history wins");
+
+  await render(null, null, null, "traded");
+  assert.match(container.querySelector("[data-series]")?.getAttribute("data-last-points") ?? "",
+    /1799999936\.55:92,1799999936\.5505:93,1800000002:93/);
+
+  now += 25_000;
+  await render(null, null, null, "quiet");
+  assert.equal(container.querySelector("[data-series]")?.getAttribute("data-points"), "1799999727:92,1800000027:92");
 });
 
 test("panning the live candle out of the price pane hides its amount", async () => {
