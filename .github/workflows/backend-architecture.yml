@@ -52,17 +52,21 @@ jobs:
           node --test --test-concurrency=1 scripts/dependency-security.test.mjs scripts/zod-collection-limits.test.mjs 2>&1 | tee ci-artifacts/backend-architecture/dependency-regressions.log
       - name: Check backend code style
         run: npm run format:check --workspace @blast/backend-api 2>&1 | tee ci-artifacts/backend-architecture/style.log
-      - name: Check backend types and transport contracts
+      # Contributor gate already runs these commands for pull requests.
+      - name: Check backend types and unit tests for manual runs
+        if: github.event_name == 'workflow_dispatch'
         run: |
           npm run typecheck --workspace @blast/server 2>&1 | tee ci-artifacts/backend-architecture/shared-server-types.log
           npm test --workspace @blast/server 2>&1 | tee ci-artifacts/backend-architecture/shared-server-contracts.log
-          # Tests that mock imports with node:module's registerHooks run only under Node, in `npm test` above; Bun has no registerHooks.
+          npm run typecheck --workspace @blast/backend-api 2>&1 | tee ci-artifacts/backend-architecture/types.log
+          npm test --workspace @blast/backend-api 2>&1 | tee ci-artifacts/backend-architecture/contracts.log
+      - name: Check Bun compatibility and transport contracts
+        run: |
+          # Tests that mock imports with node:module's registerHooks run only under Node in `npm test`.
           # maintenance.test.ts sets process.env at module scope, which leaks across files in Bun's single process; it runs under Node only.
           mapfile -t shared_server_tests < <(rg --files-without-match 'registerHooks' packages/server/src -g '*.test.ts' -g '!*.integration.test.ts' -g '!**/mission-control/maintenance/maintenance.test.ts')
           test "${#shared_server_tests[@]}" -gt 0
           bun test --max-concurrency 1 --timeout 30000 "${shared_server_tests[@]}" 2>&1 | tee ci-artifacts/backend-architecture/shared-server-bun-contracts.log
-          npm run typecheck --workspace @blast/backend-api 2>&1 | tee ci-artifacts/backend-architecture/types.log
-          npm test --workspace @blast/backend-api 2>&1 | tee ci-artifacts/backend-architecture/contracts.log
           npm run test:frontend-transport --workspace @blast/backend-api 2>&1 | tee ci-artifacts/backend-architecture/frontend-transport.log
           node --test --test-concurrency=1 scripts/backend-image-contract.test.mjs 2>&1 | tee ci-artifacts/backend-architecture/image-contract-tests.log
           npm run test:context --workspace @blast/backend-api 2>&1 | tee ci-artifacts/backend-architecture/context.log
