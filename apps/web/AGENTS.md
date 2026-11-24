@@ -22,6 +22,14 @@ and shortened value are one copy button with shared hover, focus, and feedback.
 Copy the exact underlying wallet or coin tag. Keep profile navigation separate.
 Check hover and clipboard values on both a presale and a bonding coin page.
 
+## Navigation and state
+
+Use Next.js links and router methods for navigation. Put shareable filters in
+the URL and transient UI state in React. Use browser history state when Back
+or Forward must restore something specific to that visit, such as a list’s
+scroll position. Reuse [list restoration](src/components/blast-ui/list-restoration.ts)
+for lists that need this behavior.
+
 ## Platform first
 
 Reuse Blast UI primitives. For behavior they do not cover or changes to a

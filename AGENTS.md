@@ -17,6 +17,10 @@
 
 ## Before changing behavior
 
+- **Simplicity.** Start with the framework, an existing project helper, or an
+  installed library. Before adding a custom hook or wrapper, name the concrete
+  behavior those options miss. For a framework workaround, record what would
+  let us delete it and how to check that behavior.
 - **Scale.** For endpoints and calls between browsers, servers, Sui nodes and
   third parties, follow [latency and capacity](docs/architecture/latency-and-capacity.md)
   for 10,000 visible tabs. Compute display estimates in the browser and perform
