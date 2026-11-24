@@ -1,6 +1,6 @@
-import { useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
-import { chartSearch, DEFAULT_CHART_CONTROLS, parseChartControls, parseLiveChartControls, type ChartControls } from "./chart-model";
+import { CHART_CONTROLS_COOKIE, chartSearch, DEFAULT_CHART_CONTROLS, preferredChartControls, type ChartControls } from "./chart-model";
 
 import { listOriginHistoryState } from "#web/components/blast-ui/list-restoration.ts";
 
@@ -37,39 +37,45 @@ export function saveChartPreference(name: Preference, value: string): void {
   }
 }
 
+function saveChartControlsCookie(value: string): void {
+  const saved = new URLSearchParams(value);
+  const fields = new URLSearchParams();
+  for (const key of ["interval", "range"]) {
+    const field = saved.get(key);
+    if (field && field.length <= 3 && saved.getAll(key).length === 1) fields.set(key, field);
+  }
+  try {
+    document.cookie = `${CHART_CONTROLS_COOKIE}=${encodeURIComponent(fields.toString())}; Path=/coin; Max-Age=31536000; SameSite=Lax${location.protocol === "https:" ? "; Secure" : ""}`;
+  } catch {
+    // The URL and local preference still work when cookies are disabled.
+  }
+}
+
 export function saveChartControls(current: ChartControls, next: ChartControls): void {
   const fields = new URLSearchParams(snapshot("controls"));
   if (next.range !== current.range) fields.set("range", next.range);
   if (next.interval !== current.interval) fields.set("interval", next.interval);
-  saveChartPreference("controls", fields.toString());
+  const value = fields.toString();
+  saveChartPreference("controls", value);
+  saveChartControlsCookie(value);
 }
 
-export function preferredChartControls(saved: string, search: string, initial: ChartControls, live = true, livePreset = live): ChartControls {
-  if (!saved) return initial;
-  const fields = (value: string) => {
-    const query = new URLSearchParams(value);
-    const interval = query.getAll("interval");
-    const range = query.getAll("range");
-    return { interval: interval.length === 1 ? interval[0] : undefined, range: range.length === 1 ? range[0] : undefined };
-  };
-  const parse = live ? parseLiveChartControls : parseChartControls;
-  const query = fields(search);
-  if (!livePreset && query.range === "live") return initial;
-  return parse(query, parse(fields(saved), initial));
-}
-
-export function useCoinChartControls(compact: boolean | undefined, initialControls: ChartControls, live = true, livePreset = live) {
+export function useCoinChartControls(compact: boolean | undefined, initialControls: ChartControls, live = true, livePreset = live, seeded = false) {
   const saved = useChartPreference("controls");
-  const ready = !compact || saved !== null;
+  useEffect(() => {
+    if (compact && saved) saveChartControlsCookie(saved);
+  }, [compact, saved]);
+  const ready = seeded || !compact || saved !== null;
   const { interval: initialInterval, range: initialRange } = initialControls;
   const preferred = useMemo(
     () => {
       const initial = { interval: initialInterval, range: initialRange };
-      return compact && saved && typeof window !== "undefined"
+      // A legacy local-only choice is mirrored for the next entry. Keep the current server plot intact.
+      return !seeded && compact && saved && typeof window !== "undefined"
         ? preferredChartControls(saved, window.location.search, initial, live, livePreset)
         : initial;
     },
-    [compact, saved, initialInterval, initialRange, live, livePreset],
+    [seeded, compact, saved, initialInterval, initialRange, live, livePreset],
   );
   const [selected, setControls] = useState<ChartControls | null>(null);
   const controls = !livePreset && selected?.range === "live" ? preferred : selected ?? preferred;

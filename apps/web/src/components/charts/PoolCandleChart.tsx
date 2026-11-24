@@ -84,6 +84,7 @@ export function PoolCandleChart({
   trade,
   walletTrades,
   ripple,
+  preview,
 }: Readonly<{
   walletTrades?: readonly WalletChartTrade[];
   ripple?: WalletRipple | null;
@@ -102,6 +103,7 @@ export function PoolCandleChart({
   memeDecimals?: number | null;
   quoteDecimals?: number | null;
   quoteUsd?: string | null;
+  preview?: ReactNode;
 }>) {
   const [localMode, setMode] = useState<"line" | "candles">("candles");
   const [localVolume, setShowVolume] = useState(true);
@@ -147,6 +149,7 @@ export function PoolCandleChart({
             timeline={model.timeline}
             priceFormatter={model.format}
             label={label}
+            preview={preview}
             onProject={project}
             projectionKey={`${touch}:${tradeKey}`}
             onReady={({ chart, host, series: drawn }) => {

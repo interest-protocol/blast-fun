@@ -33,6 +33,7 @@ import type { SectionState } from "../primitives/data-state";
 import primitives from "../primitives/primitives.module.css";
 import type { ChartSource } from "./chart-client";
 import { chartGeometry, type DrawnSeries } from "./chart-geometry";
+import { ChartPreview } from "./ChartPreview";
 import { CHART_INTERVALS, LIVE_CHART_INTERVALS, CHART_RANGES, LIVE_CHART_CONTROLS, LIVE_CHART_SPAN_MS, candleGaps, chartLatestTimestamp, chartOpening, chartSources, pageTruncated, type ChartCandlePage, type ChartControls, type ChartRange, type ChartRequest, type ChartState, type CandleGap, type SourceState } from "./chart-model";
 import { useChartClock } from "./use-chart-clock.ts";
 import styles from "./Chart.module.css";
@@ -177,6 +178,7 @@ function limitedNote(page: ChartCandlePage, request: ChartRequest, range: ChartR
 function useChartViewControls({
   state,
   source,
+  omitCurve,
   quoteUsd,
   controls,
   request: historyRequest,
@@ -192,6 +194,7 @@ function useChartViewControls({
 }: Readonly<{
   state: ChartState;
   source: ChartViewSource;
+  omitCurve?: boolean;
   quoteUsd?: string | null;
   controls: ChartControls;
   request: ChartRequest;
@@ -214,7 +217,7 @@ function useChartViewControls({
   const request = liveStart === null ? historyRequest : { ...historyRequest, from: liveStart };
   const migration = state.migration;
   const venuePoolKey = source.venuePoolKey ?? migration?.venuePoolKey ?? null;
-  const sources = chartSources(state).filter(({ name }) => name !== "curve" || source.curvePoolKey !== null).map(({ name, section: read }) => {
+  const sources = chartSources(state).filter(({ name }) => name !== "curve" || (!omitCurve && source.curvePoolKey !== null)).map(({ name, section: read }) => {
     const section = liveStart !== null && hasData(read)
       ? { ...read, data: { ...read.data, candles: read.data.candles.filter(({ bucketStart }) => bucketStart >= liveStart) } }
       : read;
@@ -248,10 +251,10 @@ function useChartViewControls({
   return { source, venuePoolKey, quoteUsd, controls, request, pending, updates, emptyMessage, livePreset, diagnostic, onControls, onToggle, onRefresh, migration, sources, selectable, drawn, label, shown, geometry, hasPriceUnits, missingPriceUnits, latest };
 }
 
-export function ChartView(props: Parameters<typeof useChartViewControls>[0] & Readonly<{ compact?: boolean }>) {
+export function ChartView(props: Parameters<typeof useChartViewControls>[0] & Readonly<{ compact?: boolean; preview?: boolean }>) {
   const view = useChartViewControls(props);
   const { source, venuePoolKey, quoteUsd, controls, updates, migration, selectable, drawn, shown, geometry, missingPriceUnits, latest } = view;
-  if (props.compact) return <CompactChart view={view} />;
+  if (props.compact) return <CompactChart view={view} preview={props.preview} />;
   return (
     <div className={styles.chart}>
       <ChartControlsPanel view={view} />
@@ -383,7 +386,7 @@ function SourceCandles({ name, section, label, source, quoteUsd, request, range,
   );
 }
 
-function ChartFigure({ drawn, migrationAt, venuePoolKey, geometry, latest, source, controls, compact = false, presentation, quoteUsd, candleTrade }: Readonly<{
+function ChartFigure({ drawn, migrationAt, venuePoolKey, geometry, latest, source, controls, compact = false, presentation, quoteUsd, candleTrade, preview }: Readonly<{
   drawn: readonly DrawnSeries[];
   migrationAt?: number;
   venuePoolKey: string | null;
@@ -395,6 +398,7 @@ function ChartFigure({ drawn, migrationAt, venuePoolKey, geometry, latest, sourc
   presentation?: "line" | "candles";
   candleTrade?: ReturnType<typeof useCandleTrade>;
   quoteUsd?: string | null;
+  preview?: boolean;
 }>) {
   const deployer = useLaunchWallet();
   const activity = useWalletTrades();
@@ -429,7 +433,7 @@ function ChartFigure({ drawn, migrationAt, venuePoolKey, geometry, latest, sourc
         {latest ? <>Last {tokenPrice(latest, source, quoteUsd)} · </> : null}High {tokenPrice(geometry.highest, source, quoteUsd)} · Low {tokenPrice(geometry.lowest, source, quoteUsd)}
       </p>}
       <div className={compact ? styles.compactCanvas : styles.canvas}>
-        <PoolCandleChart walletTrades={walletTrades} ripple={ripple} trade={candleTrade} label={label} compact={compact} rollingWindow={controls.range === "live"} presentation={presentation} memeDecimals={source.memeDecimals} quoteDecimals={source.quoteDecimals} quoteUsd={quoteUsd} sources={drawn} migrationAt={migrationAt} migrationLabel={venue ? <>Graduated to <DexIdentity venue={venue} /></> : graduation} quoteSymbol={source.quoteSymbol} from={geometry.start} to={geometry.end} />
+        <PoolCandleChart walletTrades={walletTrades} ripple={ripple} trade={candleTrade} label={label} compact={compact} rollingWindow={controls.range === "live"} presentation={presentation} memeDecimals={source.memeDecimals} quoteDecimals={source.quoteDecimals} quoteUsd={quoteUsd} sources={drawn} migrationAt={migrationAt} migrationLabel={venue ? <>Graduated to <DexIdentity venue={venue} /></> : graduation} quoteSymbol={source.quoteSymbol} from={geometry.start} to={geometry.end} preview={preview ? <ChartPreview geometry={geometry} interval={controls.interval} line={line} /> : null} />
       </div>
     </figure>
   );
@@ -484,7 +488,7 @@ function useChartStyle() {
   }] as const;
 }
 
-function CompactChart({ view }: Readonly<{ view: ChartViewControls }>) {
+function CompactChart({ view, preview }: Readonly<{ view: ChartViewControls; preview?: boolean }>) {
   const [preferredStyle, setStyle] = useChartStyle();
   const live = view.controls.range === "live";
   const style = live ? "candles" : preferredStyle;
@@ -499,17 +503,17 @@ function CompactChart({ view }: Readonly<{ view: ChartViewControls }>) {
       </div>
     </div>
     <ChartLastTrade />
-    <CompactChartBody view={view} style={style} />
+    <CompactChartBody view={view} style={style} preview={preview} />
     {view.updates && (geometry || !live) && <p className={styles.note} role="status">{view.updates}</p>}
   </div>;
 }
 
-function CompactChartBody({ view, style }: Readonly<{ view: ChartViewControls; style: ChartStyle }>) {
+function CompactChartBody({ view, style, preview }: Readonly<{ view: ChartViewControls; style: ChartStyle; preview?: boolean }>) {
   const { source, quoteUsd, controls, migration, venuePoolKey, drawn, geometry, latest } = view;
   const candleTrade = useCandleTrade();
   if (!geometry) return <CompactEmptyChart view={view} />;
   return <>
-    <ChartFigure compact candleTrade={candleTrade} presentation={style} quoteUsd={quoteUsd} drawn={drawn} migrationAt={migration?.timestampMs} venuePoolKey={venuePoolKey} geometry={geometry} latest={latest} source={source} controls={controls} />
+    <ChartFigure compact candleTrade={candleTrade} presentation={style} quoteUsd={quoteUsd} drawn={drawn} migrationAt={migration?.timestampMs} venuePoolKey={venuePoolKey} geometry={geometry} latest={latest} source={source} controls={controls} preview={preview} />
     <CompactSourceNotices view={view} />
   </>;
 }

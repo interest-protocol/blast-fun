@@ -4,9 +4,9 @@ import test from "node:test";
 import type { Candle, MigratedChart, MigrationMarker, PoolCandlePage } from "@blast/core/modules/launchpad-contract/venue-history.ts";
 import type { Provenance } from "@blast/core/modules/launchpad-contract/read.ts";
 
-import { afterChartRead, candleGaps, chartRequest, chartSearch, initialChart, parseChartControls } from "./chart-model.ts";
+import { afterChartRead, candleGaps, chartRequest, chartSearch, initialChart, parseChartControls, preferredChartControls } from "./chart-model.ts";
 
-import { preferredChartControls } from "./chart-preferences.ts";
+import { chartPoolKeys } from "./chart-client.ts";
 
 const NOW = 1_790_338_482_000;
 
@@ -81,6 +81,15 @@ test("an interval without trades is a gap between candles, never a candle", () =
 
 const VENUE_KEY = `cetus:0x${"c3".repeat(32)}`;
 const MIGRATION: MigrationMarker = { cursor: "22:2:2:0", timestampMs: T0 + 250_000, curvePoolKey: CURVE_KEY, venuePoolKey: VENUE_KEY };
+test("a graduated range omits the curve only after the entire migration bucket", () => {
+  const source = { curvePoolKey: CURVE_KEY, venuePoolKey: VENUE_KEY, migration: MIGRATION };
+  const start = chartRequest({ interval: "5m", range: "24h" }, MIGRATION.timestampMs + 86_400_000);
+  assert.deepEqual(chartPoolKeys(source, { interval: "5m", range: "24h" }, start.from! + 86_400_000 + 299_999), [CURVE_KEY, VENUE_KEY]);
+  assert.deepEqual(chartPoolKeys(source, { interval: "5m", range: "24h" }, start.from! + 86_700_000), [VENUE_KEY]);
+  assert.deepEqual(chartPoolKeys(source, { interval: "5m", range: "all" }, start.from! + 86_700_000), [CURVE_KEY, VENUE_KEY]);
+  assert.deepEqual(chartPoolKeys(source, { interval: "1s", range: "live" }, start.from! + 86_700_000), [CURVE_KEY, VENUE_KEY]);
+});
+
 const PROVENANCE: Provenance = {
   source: "blast-infra",
   network: "localnet",

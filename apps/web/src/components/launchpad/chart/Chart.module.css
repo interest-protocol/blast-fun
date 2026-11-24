@@ -247,6 +247,18 @@
   --coin-readout-height: 2.75rem;
 }
 
+.preview {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  color: var(--ink);
+}
+.previewCandle[data-direction="up"] { color: var(--coin-chart-up); }
+.previewCandle[data-direction="down"] { color: var(--coin-chart-down); }
+.previewVolume { fill: var(--muted); opacity: .35; }
+.previewClose { stroke-width: 1.5; }
+.previewMigration { stroke: var(--muted); stroke-dasharray: 4 4; }
+
 @media (min-width: 761px) {
   .chart[data-compact-chart] { --coin-plot-height: clamp(15.25rem, 32vh, 23.5rem); }
   .chart[data-compact-chart][data-chart-style="line"] { --coin-plot-height: clamp(13.75rem, 31vh, 21rem); }

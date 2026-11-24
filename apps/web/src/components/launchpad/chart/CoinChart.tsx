@@ -4,13 +4,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuoteUsd } from "#web/components/social/prices/use-quote-usd.ts";
 
 import { browserMarketDependencies } from "../blast-infra-browser";
-import { readChartPool, type ChartSource } from "./chart-client";
+import { chartFromSnapshot, chartPoolKeys, readChartPool, type ChartSnapshot, type ChartSource } from "./chart-client";
 import { afterChartSourceRead, chartKey, chartRequest, initialChart, type ChartControls } from "./chart-model";
 import { useCoinPriceCurrency } from "./CoinPriceCurrency";
 import { ChartStream, type ChartStreamStatus } from "./chart-stream";
 import { useCoinChartControls } from "./chart-preferences";
 import { ChartView, type ChartSourceName } from "./ChartView";
-import { MIGRATOR_POOL_KEY } from "@blast/core/modules/launchpad-contract/venues.ts";
 
 /** HTTP history plus the tab's bounded same-origin market stream. */
 export function CoinChart({
@@ -18,27 +17,25 @@ export function CoinChart({
   compact,
   coinType,
   initialControls,
+  initialSnapshot,
   livePreset,
-}: Readonly<{ source: ChartSource; compact?: boolean; coinType: string; initialControls: ChartControls; livePreset: boolean }>) {
+}: Readonly<{ source: ChartSource; compact?: boolean; coinType: string; initialControls: ChartControls; initialSnapshot?: ChartSnapshot; livePreset: boolean }>) {
   const currency = useCoinPriceCurrency();
   const standaloneRate = useQuoteUsd(currency ? null : source.quoteType ?? null);
   const quoteUsd = currency ? currency.quoteUsd : standaloneRate;
-  const { controls, ready, commit } = useCoinChartControls(compact, initialControls, true, livePreset);
-  const [state, setState] = useState(() =>
-    initialChart(chartKey(initialControls), (source.venuePoolKey ?? source.migration?.venuePoolKey ?? null) !== null, source.migration),
-  );
+  const [entry] = useState(initialSnapshot);
+  const { controls, ready, commit } = useCoinChartControls(compact, initialControls, true, livePreset, entry !== undefined);
+  const [state, setState] = useState(() => chartFromSnapshot(source, initialControls, initialSnapshot));
   const [hidden, setHidden] = useState<readonly ChartSourceName[]>([]);
   const [pending, setPending] = useState(false);
-  const network = source.expected?.network ?? null;
-  const deployment = source.expected?.deployment ?? null;
-  const dependencies = useMemo(
-    () => browserMarketDependencies(network && deployment ? { network, deployment } : null),
-    [network, deployment],
-  );
+  const { network, deployment } = source.expected ?? { network: null, deployment: null };
+  const expected = useMemo(() => network && deployment ? { network, deployment } : null, [network, deployment]);
+  const dependencies = useMemo(() => browserMarketDependencies(expected), [expected]);
   const stream = useRef<ChartStream | null>(null);
   const [streamStatus, setStreamStatus] = useState<ChartStreamStatus>("connecting");
   const known = useRef(state.migration);
-  const [requestAt, setRequestAt] = useState<number | null>(null);
+  const [requestAt, setRequestAt] = useState(entry?.readAt ?? 0);
+  const [useEntry, setUseEntry] = useState(true);
   const venuePoolKey = source.venuePoolKey ?? state.migration?.venuePoolKey ?? null;
   const curvePoolKey = source.curvePoolKey;
   const migrationCursor = source.migration?.cursor ?? null;
@@ -52,12 +49,14 @@ export function CoinChart({
   useEffect(() => {
     if (!ready) return;
     const key = chartKey(controls);
-    const pools = [curvePoolKey, ...(venuePoolKey && MIGRATOR_POOL_KEY.test(venuePoolKey) ? [venuePoolKey] : [])];
+    const seed = useEntry && entry?.key === key ? entry : undefined;
+    const startedAt = seed?.readAt ?? Date.now();
+    const pools = chartPoolKeys({ curvePoolKey, venuePoolKey, migration: committed ?? known.current }, controls, startedAt);
     // The tab's market stream hub keeps the connection through short hides and closes it after longer ones.
     const client = new ChartStream({
       pools,
       coin: coinType,
-      expected: network && deployment ? { network, deployment } : null,
+      expected,
       migration: () => committed ?? known.current,
       request: () => chartRequest(controls, Date.now()),
       load: (pool) => readChartPool(pool, controls, dependencies, Date.now()),
@@ -65,6 +64,7 @@ export function CoinChart({
         if (stream.current !== client) return;
         const marker = committed ?? migration ?? known.current;
         known.current = marker;
+        if (seed?.pools.some(([key, read]) => key === pool && read.section === section)) return;
         const name = pool === curvePoolKey ? "curve" : "venue";
         setState((shown) => {
           const current = shown.key === key ? shown : initialChart(key, venuePoolKey !== null, marker);
@@ -75,24 +75,27 @@ export function CoinChart({
       onStatus: setStreamStatus,
     });
     stream.current = client;
-    client.start();
+    client.start(seed?.pools);
     return () => {
       client.stop();
       if (stream.current === client) stream.current = null;
     };
-  }, [coinType, controls, curvePoolKey, venuePoolKey, committed, dependencies, network, deployment, ready]);
+  }, [coinType, controls, curvePoolKey, venuePoolKey, committed, dependencies, expected, ready, entry, useEntry]);
 
   const refresh = () => {
     setPending(true);
     return (stream.current?.refresh() ?? Promise.resolve()).finally(() => setPending(false));
   };
 
-  const updates = chartUpdateText(streamStatus);
   const key = chartKey(controls);
+  const preview = useEntry && entry?.key === key;
+  const updates = chartUpdateText(streamStatus, preview);
   const shown = state.key === key ? state : initialChart(key, venuePoolKey !== null, committed ?? state.migration);
+  const plotCurve = chartPoolKeys({ ...source, venuePoolKey, migration: shown.migration }, controls, requestAt).includes(curvePoolKey);
 
   const change = (choice: ChartControls) => {
     stream.current?.stop();
+    setUseEntry(false);
     const next = commit(choice);
     // Candles read for other controls are never shown under these: the chart starts over.
     setState((shown) => initialChart(chartKey(next), shown.venue !== null, shown.migration));
@@ -101,11 +104,13 @@ export function CoinChart({
   return (
     <ChartView
       compact={compact}
+      preview={preview}
       state={shown}
       source={source}
+      omitCurve={!plotCurve}
       quoteUsd={quoteUsd}
       controls={controls}
-      request={chartRequest(controls, requestAt ?? 0)}
+      request={chartRequest(controls, requestAt)}
       hidden={hidden}
       pending={pending}
       updates={updates}
@@ -126,6 +131,6 @@ const STREAM_TEXT: Readonly<Record<ChartStreamStatus, string | null>> = {
   connecting: "Connecting price updates…",
 };
 
-function chartUpdateText(status: ChartStreamStatus): string | null {
-  return STREAM_TEXT[status];
+function chartUpdateText(status: ChartStreamStatus, preview: boolean): string | null {
+  return preview && status === "connecting" ? null : STREAM_TEXT[status];
 }

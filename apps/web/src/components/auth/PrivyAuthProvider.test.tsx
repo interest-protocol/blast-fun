@@ -26,7 +26,7 @@ registerHooks({
           import { styled } from ${JSON.stringify(styledUrl)};
           const Dialog = styled.section({ display: "flex" });
           export function PrivyProvider({ appId, config, children }) {
-            return createElement(Dialog, { "aria-label": appId, "data-wallet-connect": config.externalWallets?.walletConnect?.enabled },
+            return createElement(Dialog, { "aria-label": appId, "data-wallet-connect": config.externalWallets?.walletConnect?.enabled, "data-wallet-list": config.appearance?.walletList?.join(",") ?? "default" },
               config.loginMethods.map(method => createElement("button", { key: method }, method)),
               children);
           }
@@ -37,6 +37,51 @@ registerHooks({
   },
 });
 const { PrivyAuthProvider } = await import("./PrivyAuthProvider.tsx");
+const { usePreparePrivyWalletPicker, useRestorePrivyWallet } = await import("./privy-wallet-picker.ts");
+
+test("public startup discovers extensions, restores the paired chain, and expands the same provider for the wallet picker", async () => {
+  const host = document.createElement("div");
+  const root = createRoot(host);
+  const extensions = "detected_ethereum_wallets,detected_solana_wallets";
+  const savedWallets = {
+    ethereum: { chainType: "ethereum", connectorType: "wallet_connect_v2" },
+    solana: { chainType: "solana", connectorType: "solana_adapter", walletClientType: "phantom" },
+    coinbase_wallet: { chainType: "ethereum", connectorType: "coinbase_wallet" },
+    base_account: { chainType: "ethereum", connectorType: "base_account" },
+  } as const;
+  type Saved = keyof typeof savedWallets | null;
+  function Surface({ picker, restore }: { picker: boolean; restore: Saved }) {
+    useRestorePrivyWallet(restore ? savedWallets[restore] : undefined);
+    usePreparePrivyWalletPicker(picker);
+    return null;
+  }
+  const render = (picker: boolean, restore: Saved) => act(async () => root.render(
+    <PrivyAuthProvider appId="blast" nonce={null} deferWalletPicker>
+      <PrivyAuthProvider appId="blast" nonce={null}><Surface picker={picker} restore={restore} /></PrivyAuthProvider>
+    </PrivyAuthProvider>,
+  ));
+  try {
+    await render(false, null);
+    const owner = host.querySelector("section")!;
+    assert.equal(host.querySelectorAll("section").length, 1);
+    assert.equal(owner.dataset.walletList, extensions);
+    await render(false, "ethereum");
+    assert.equal(owner.dataset.walletList, extensions + ",wallet_connect_qr");
+    await render(false, "solana");
+    assert.equal(owner.dataset.walletList, extensions + ",wallet_connect_qr_solana", "Solana QR restores under the remote peer's brand");
+    for (const dedicated of ["coinbase_wallet", "base_account"] as const) {
+      await render(false, dedicated);
+      assert.equal(owner.dataset.walletList, extensions + "," + dedicated);
+    }
+    await render(false, null);
+    assert.equal(owner.dataset.walletList, extensions, "leaving the restored wallet clears its chain");
+    await render(true, "solana");
+    assert.equal(owner.dataset.walletList, "default");
+    assert.equal(host.querySelector("section"), owner);
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
 
 test("sign-in keeps X, Google and document styles when wallet options change", async () => {
   const root = createRoot(document.getElementById("mount")!);
