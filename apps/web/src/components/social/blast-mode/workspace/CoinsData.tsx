@@ -112,7 +112,8 @@ function CoinsContent() {
   const filters = controls.navigation.expanded_ids.includes("filters");
   const [search, setSearch] = useState("");
   // One search read once typing pauses, not one per keystroke.
-  const term = useDebouncedValue(search.trim(), SEARCH_PAUSE_MS);
+  const query = search.trim();
+  const term = useDebouncedValue(query, SEARCH_PAUSE_MS);
   // Not a saved source: the full ecosystem list is a look, and any list choice leaves it.
   const [ecosystem, setEcosystem] = useState(false);
   const region = useRef<HTMLDivElement>(null);
@@ -139,6 +140,7 @@ function CoinsContent() {
       navigation: { ...controls.navigation, scroll_top: 0, anchor: null },
     });
   };
+  const listSource = query ? "search" : ecosystem ? "ecosystem" : state.source;
   return (
     <ShowEcosystem.Provider value={showEcosystem}>
       <div className={styles.discoveryControls}>
@@ -155,7 +157,7 @@ function CoinsContent() {
               onChange={(event) => setSearch(event.currentTarget.value)}
             />
           </FieldGroup>
-          {!search.trim() && <FiltersButton
+          {!query && <FiltersButton
                 controls={`${id}-filters`}
                 count={ecosystem ? 0 : trayChanges(state)}
                 open={filters}
@@ -175,8 +177,8 @@ function CoinsContent() {
               />}
         </div>
         {/* The pills stay through a search (an empty result included): picking one leaves the search for that list. */}
-        <DiscoveryCategories searching={!!search.trim()} ecosystem={ecosystem} state={state} change={(next) => { setSearch(""); change(next); }} />
-        {!search.trim() && (
+        <DiscoveryCategories searching={!!query} ecosystem={ecosystem} state={state} change={(next) => { setSearch(""); change(next); }} />
+        {!query && (
           <>
             {ecosystem ? (
               <p className={styles.rankingNote}>Ecosystem coins</p>
@@ -184,35 +186,7 @@ function CoinsContent() {
               <p className={styles.rankingNote}>{SOURCE_LABELS.following} · {state.window}</p>
             )}
             <Collapse id={`${id}-filters`} open={filters}>
-              <div className={styles.filterPanel}>
-                <div className={styles.filterRow}>
-                  <span>Lists</span>
-                  <MoreCoinLists state={state} change={change} ecosystem={ecosystem} showEcosystem={() => setEcosystem(true)} />
-                </div>
-                {!ecosystem && state.source === "discover" && (
-                  <div className={styles.filterRow}>
-                    <span>Sort</span>
-                    <Pick
-                      label="Sort"
-                      value={state.sort}
-                      options={HOME_SORTS}
-                      labels={SORT_LABELS}
-                      onPick={(sort) => change({ ...state, sort })}
-                    />
-                  </div>
-                )}
-                {!ecosystem && (
-                  <>
-                    <div className={styles.filterRow}>
-                      <span>Window</span>
-                      <WindowPick state={state} onChange={change} />
-                    </div>
-                    <CoinsTools />
-                    {controlsApply(state.source) && <CoinsFilters state={state} change={change} />}
-                  </>
-                )}
-                {!ecosystem && trayChanges(state) > 0 && <Button variant="ghost" size="sm" className={styles.clearFilters} type="button" onClick={() => change({ ...HOME_DEFAULT_VIEW, window: HOME_DEFAULT_WINDOW, source: state.source, sort: state.sort })}>Clear filters</Button>}
-              </div>
+              <DiscoveryFilterTray state={state} change={change} ecosystem={ecosystem} showEcosystem={() => setEcosystem(true)} />
             </Collapse>
           </>
         )}
@@ -223,19 +197,71 @@ function CoinsContent() {
         className={styles.listRegion}
         id={`${id}-${ecosystem ? "ecosystem" : state.source}`}
         role="region"
-        aria-label={search.trim() ? "Coin search results" : ecosystem ? "Ecosystem coins" : `${SOURCE_LABELS[state.source]} coins`}
+        aria-label={listSource === "search" ? "Coin search results" : listSource === "ecosystem" ? "Ecosystem coins" : `${SOURCE_LABELS[listSource]} coins`}
       >
-        {search.trim() ? (
-          term ? <AssetSearch key={term} term={term} /> : <RowsSkeleton label="Searching coins" />
-        ) : ecosystem ? (
-          <EcosystemCoins rows={controls.rows} />
-        ) : state.source === "discover" ? (
-          <DiscoverCoins controls={controls} state={state} />
-        ) : (
-          <PersonalCoins controls={controls} browse={() => change({ ...state, source: "discover", sort: "trending" })} />
-        )}
+        <CoinListResults
+          source={listSource}
+          term={term}
+          controls={controls}
+          state={state}
+          browse={() => change({ ...state, source: "discover", sort: "trending" })}
+        />
       </div>
     </ShowEcosystem.Provider>
+  );
+}
+
+function CoinListResults({ source, term, controls, state, browse }: Readonly<{
+  source: HomeViewState["source"] | "search" | "ecosystem";
+  term: string;
+  controls: DataControls["Coins"];
+  state: HomeViewState;
+  browse: () => void;
+}>) {
+  if (source === "search") {
+    return term ? <AssetSearch key={term} term={term} /> : <RowsSkeleton label="Searching coins" />;
+  }
+  if (source === "ecosystem") return <EcosystemCoins rows={controls.rows} />;
+  if (source === "discover") return <DiscoverCoins controls={controls} state={state} />;
+  return <PersonalCoins controls={controls} browse={browse} />;
+}
+
+function DiscoveryFilterTray({ state, change, ecosystem, showEcosystem }: Readonly<{
+  state: HomeViewState;
+  change: (next: HomeViewState) => void;
+  ecosystem: boolean;
+  showEcosystem: () => void;
+}>) {
+  return (
+    <div className={styles.filterPanel}>
+      <div className={styles.filterRow}>
+        <span>Lists</span>
+        <MoreCoinLists state={state} change={change} ecosystem={ecosystem} showEcosystem={showEcosystem} />
+      </div>
+      {!ecosystem && state.source === "discover" && (
+        <div className={styles.filterRow}>
+          <span>Sort</span>
+          <Pick
+            label="Sort"
+            value={state.sort}
+            options={HOME_SORTS}
+            labels={SORT_LABELS}
+            onPick={(sort) => change({ ...state, sort })}
+          />
+        </div>
+      )}
+      {!ecosystem && (
+        <>
+          <div className={styles.filterRow}>
+            <span>Window</span>
+            <WindowPick state={state} onChange={change} />
+          </div>
+          <CoinsTools />
+          {controlsApply(state.source) && <CoinsFilters state={state} change={change} />}
+        </>
+      )}
+      {!ecosystem && trayChanges(state) > 0 && <Button variant="ghost" size="sm" className={styles.clearFilters} type="button" onClick={() => change({ ...HOME_DEFAULT_VIEW, window: HOME_DEFAULT_WINDOW, source: state.source, sort: state.sort })}>Clear filters</Button>}
+    </div>
   );
 }
 

@@ -57,6 +57,7 @@ function changed(): void {
 }
 const hintSnapshot = () => hasWalletSessionHint(document.cookie);
 const noHint = () => false;
+const loadWalletSigner = () => import("#web/components/sign-in/sui-wallet-signer.ts");
 
 /** Provides the wallet session to the viewer, the `me` read, the sign-in sheet and sign-out. */
 export function WalletSessionProvider({ children }: Readonly<{ children: ReactNode }>) {
@@ -70,7 +71,7 @@ export function WalletSessionProvider({ children }: Readonly<{ children: ReactNo
     if (!hasWalletSessionHint(document.cookie)) return;
     await endWalletSession();
     // Sign-in keeps the wallet connected for trades; sign-out drops it. Loaded on demand: dApp Kit stays out of this bundle.
-    await import("#web/components/sign-in/sui-wallet-signer.ts").then(({ forgetWalletConnection }) => forgetWalletConnection()).catch(() => undefined);
+    await loadWalletSigner().then(({ forgetWalletConnection }) => forgetWalletConnection()).catch(() => undefined);
     changed();
   }, []);
   const value = useMemo<WalletSession>(() => ({ available: true, active, signIn, end, refresh: changed }), [active, signIn, end]);

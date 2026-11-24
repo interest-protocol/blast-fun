@@ -60,11 +60,10 @@ export function PinnedLaunches({ now, nowMs, initialPinSeed, presales: seededPre
   const pinnedCurves = curves.data?.featured === true ? (pageOf(curves.data)?.rows ?? []) : [];
   const { row: nearest, metrics } = useClosestLiveCurve(curves.data, client);
   const closestCurve = nearest && !pinnedCurves.some((row) => row.coinType === nearest.coinType) ? nearest : undefined;
-  const count = sales.length + pinnedCurves.length + Number(closestCurve !== undefined);
-  if (count === 0) return null;
+  if (sales.length === 0 && pinnedCurves.length === 0 && !closestCurve) return null;
   return (
     <section aria-label="Launch highlights" className={`${carousel.catalogFeatured} ${styles.bar}`}>
-      <FeaturedCarousel count={count} hideControlsOnMobile kind="launches">
+      <FeaturedCarousel kind="launches">
         {sales.map((sale) => <FeaturedSale className={styles.sale} key={sale.presale_id} now={now} sale={sale} viewer={null} />)}
         {pinnedCurves.map((row) => <FeaturedCurve className={`card ${styles.curve}`} key={row.launchId} featured metrics={curves.data?.metrics?.[row.launchId]} row={row} seed={seededCurves?.details[row.launchId]} />)}
         {closestCurve ? <FeaturedCurve className={`card ${styles.curve}`} key={closestCurve.launchId} featured={false} metrics={metrics?.[closestCurve.launchId]} row={closestCurve} seed={seededCurves?.details[closestCurve.launchId]} /> : null}

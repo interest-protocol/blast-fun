@@ -11,6 +11,7 @@ import { HOME_SECTIONS_COOKIE, isHomeSectionShown, parseHomeSections, type HomeS
 import { presaleIdsOf } from "#web/components/social/coin-home/presale-ids.ts";
 import { discoverQueryOf, viewStateOf, type HomeFeedState } from "#web/components/social/coin-home/home-state.ts";
 import { recordMetric } from "@blast/core/lib/metrics.ts";
+import { HOME_DEFAULT_WINDOW } from "@blast/core/web/contracts/home.ts";
 import { requestLaunchFlags } from "#web/lib/launch-flags.server.ts";
 import { readBondingHeroFromBackend } from "#web/lib/backend-api/bonding.ts";
 import { readFeaturedPresalesFromBackend } from "#web/lib/backend-api/presales.ts";
@@ -28,27 +29,36 @@ const coinsPending = Symbol("coins pending");
 
 const failed = (read: string) => () => { recordMetric("social.home", { outcome: "error", read }); return null; };
 
-/** Load the other sections alongside Discover so a slow Coins read only suspends its own panel. */
+/** Start visible reads together. Only the launch highlights gate the first paint. */
 async function loadHome(state: HomeFeedState, sections: HomeSectionPrefs, rows: number) {
   await connection();
   const shown = (key: Parameters<typeof isHomeSectionShown>[1]) => isHomeSectionShown(sections, key);
-  const coins = shown("coins") && state.source === "discover"
-    ? readHomeFromBackend(discoverQueryOf(state, rows)).catch(failed("discover"))
+  const discover = shown("coins") && state.source === "discover";
+  const mixed = discover && state.sort === "mixed";
+  const coins = discover ? readHomeFromBackend(discoverQueryOf(state, rows)).catch(failed("discover")) : null;
+  const happening = shown("presales") || mixed ? homeHappening() : null;
+  const presales = shown("presales") && happening
+    ? happening.then(({ read, nowMs }) => readHomeCoinsFromBackend(presaleIdsOf(read, nowMs).ids, state.window)).catch(failed("presales"))
     : null;
-  const happening = homeHappening();
-  return Promise.all([
-    happening,
-    shown("presales") ? happening.then(({ read }) => readHomeCoinsFromBackend(presaleIdsOf(read, Date.now()).ids, state.window)).catch(failed("presales")) : null,
-    shown("traders") ? readHomeTradersFromBackend(state.window).catch(failed("traders")) : null,
-    shown("posts") ? readFeedPageFromBackend().catch(failed("posts")) : null,
-    // Blast's pins lead the page, so they are in the first paint: both lists and the curves' details come from the backend's 10 s shared caches.
+  const traders = shown("traders") ? readHomeTradersFromBackend(HOME_DEFAULT_WINDOW).catch(failed("traders")) : null;
+  const posts = shown("posts") ? readFeedPageFromBackend().catch(failed("posts")) : null;
+  const [pinnedPresales, pinnedCurves] = await Promise.all([
     readFeaturedPresalesFromBackend().catch(failed("pinned-presales")),
     readBondingHeroFromBackend().then((seed) => seed ?? failed("pinned-curves")()),
-  ]).then(async ([{ read }, presales, traders, posts, pinnedPresales, pinnedCurves]) => {
-    // A ready result can paint directly. An unfinished read streams into the card.
+  ]);
+  const marketSeed = async () => {
     const initial = await Promise.race([coins, coinsPending] as const);
-    return { coins: initial === coinsPending ? coins : initial, happening: read, presales, traders, posts, pinned: { presales: pinnedPresales, curves: pinnedCurves, seed: crypto.randomUUID() } };
-  });
+    return { market: initial === coinsPending ? coins : initial };
+  };
+  const activity = happening?.then(({ read }) => read) ?? null;
+  // Pass ready market rows when activity streams in without waiting for a slow market read.
+  const mixedInitial = mixed && activity ? activity.then(async (read) => ({ activity: read, ...await marketSeed() })) : null;
+  const { market: initial } = await marketSeed();
+  return {
+    coins: initial,
+    happening: activity, mixedInitial, presales, traders, posts,
+    pinned: { presales: pinnedPresales, curves: pinnedCurves, seed: crypto.randomUUID() },
+  };
 }
 
 /**
@@ -78,6 +88,7 @@ export default async function SocialHomePage({ searchParams }: Readonly<{ search
       initial={loaded.coins}
       initialRows={rows}
       initialState={state}
+      mixedInitial={loaded.mixedInitial}
       nowMs={requestNow()}
       pinned={loaded.pinned}
       presales={loaded.presales}

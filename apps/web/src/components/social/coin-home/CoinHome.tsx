@@ -2,9 +2,9 @@
 
 import { canonicalHomePath } from "#web/components/blast-ui/nav.ts";
 import { usePathname, useSearchParams } from "next/navigation";
-import { Suspense, use, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { Suspense, use, useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 
-import { HOME_SOURCES, type HomeCoinsByIds, type HomeCoinsPage, type HomeQuery, type HomeSource, type HomeTradersPage } from "@blast/core/web/contracts/home.ts";
+import { HOME_SOURCES, HOME_TRADERS_LIMIT, type HomeCoinsByIds, type HomeCoinsPage, type HomeQuery, type HomeSource, type HomeTradersPage } from "@blast/core/web/contracts/home.ts";
 import type { SocialHappeningResponse } from "@blast/core/web/contracts/happening.ts";
 import type { SocialFeedPage } from "@blast/core/web/contracts/feed.ts";
 import type { SocialPresaleSummary } from "@blast/core/web/contracts/presales.ts";
@@ -14,7 +14,9 @@ import { blastModeCovering, onUncover } from "../blast-mode/live/mode-cover";
 import { EmptyState } from "#web/components/blast-ui/EmptyState.tsx";
 import { usePhoneLayout } from "#web/components/blast-ui/use-shell-prefs.ts";
 import { PageHeader } from "#web/components/blast-ui/PageHeader.tsx";
-import { ListsLate, useListsLate } from "#web/components/blast-ui/ServiceStatus.tsx";
+import { PendingPanel } from "#web/components/blast-ui/PendingPanel.tsx";
+import { ListsLate } from "#web/components/blast-ui/ServiceStatus.tsx";
+import { useListsLate } from "#web/components/blast-ui/service-status.ts";
 
 import { useListRestoration } from "#web/components/blast-ui/list-restoration.ts";
 import { useSocialViewer } from "../SignInGate";
@@ -27,12 +29,12 @@ import { setHomeRows, useHomeRows } from "./use-home-rows";
 import { FollowedTape } from "./FollowedTape";
 import { CoinsListControls, HomeSearch, HomeSettingsMenu, SourceTabs } from "./HomeControls";
 import { HomeSections, type SectionChange, type SectionSpec } from "./HomeSections";
-import { PresaleSection } from "./PresaleSection";
+import { PresaleSection, SaleCardsLoading } from "./PresaleSection";
 import { PinnedLaunches } from "./PinnedLaunches";
 import { PostsSection } from "./PostsSection";
 import { HeaderRankingControls } from "./RankingControls";
 import { createRankingsStore, RankingsSlot } from "./rankings-store.ts";
-import { DiscoverList, DiscoverPending, FollowingList, WatchlistList, type ListProps } from "./sources";
+import { DiscoverList, DiscoverPending, FollowingList, ListSkeleton, WatchlistList, type ListProps } from "./sources";
 import { TableCard } from "./TableFooter";
 import { HomeBondingCurves } from "./HomeBondingCurves";
 import { MixedDiscovery } from "./MixedDiscovery";
@@ -111,8 +113,17 @@ export type CoinHomeProps = Readonly<{
   trading: boolean;
 }>;
 
-type DiscoverSeed = CoinHomeProps["initial"] | Promise<CoinHomeProps["initial"]>;
-type CoinHomeReadProps = Omit<CoinHomeProps, "initial"> & Readonly<{ initial: DiscoverSeed }>;
+type SectionSeed<Data> = Data | null | Promise<Data | null>;
+type DiscoverSeed = SectionSeed<HomeCoinsPage>;
+type MixedSeed = Readonly<{ activity: SocialHappeningResponse | null; market: DiscoverSeed }>;
+type CoinHomeReadProps = Omit<CoinHomeProps, "initial" | "happening" | "presales" | "traders" | "posts"> & Readonly<{
+  initial: DiscoverSeed;
+  mixedInitial?: Promise<MixedSeed> | null;
+  happening: SectionSeed<SocialHappeningResponse>;
+  presales: SectionSeed<HomeCoinsByIds>;
+  traders: SectionSeed<HomeTradersPage>;
+  posts?: SectionSeed<SocialFeedPage>;
+}>;
 
 /** Brings the Coins section's top under the sticky bar after a page turn (its `scroll-margin-top`), so the new page starts where the reader looks. */
 function scrollToCoins(animate = true): void {
@@ -132,7 +143,7 @@ function scrollToCoins(animate = true): void {
  * trades), Posts and Top traders (tables) — movable and hideable from
  * Customize Home, the hidden ones never read. The page has no right column.
  */
-export function CoinHome({ initial, initialState, happening, presales, pinned, traders, posts = null, sections, initialRows, nowMs, trading }: CoinHomeReadProps) {
+export function CoinHome({ initial, mixedInitial, initialState, happening, presales, pinned, traders, posts = null, sections, initialRows, nowMs, trading }: CoinHomeReadProps) {
   const [state, setState] = useViewState(initialState);
   const phone = usePhoneLayout();
   const prefs = useHomeSections(sections);
@@ -180,7 +191,7 @@ export function CoinHome({ initial, initialState, happening, presales, pinned, t
   const [rankingsStore] = useState(createRankingsStore);
   const mixed = state.source === "discover" && state.sort === "mixed";
   const query = useMemo(() => discoverQueryOf(state, rows), [state, rows]);
-  const matchesInitial = initial !== null && JSON.stringify(discoverQueryOf(initialState, initialRows)) === JSON.stringify(query);
+  const matchesInitial = JSON.stringify(discoverQueryOf(initialState, initialRows)) === JSON.stringify(query);
   const showRankings = () => {
     change({ ...state, sort: "trending", window: query.window });
     document.getElementById(`${panelId("discover")}-tab`)?.focus({ preventScroll: true });
@@ -204,7 +215,11 @@ export function CoinHome({ initial, initialState, happening, presales, pinned, t
   // eslint-disable-next-line react-hooks/exhaustive-deps -- `change` closes over the same state the keys name.
   }), [state, rows, now, trading, onPage, onRows]);
   const specs: Readonly<Record<HomeSectionKey, SectionSpec>> = {
-    posts: { children: <PostsSection initial={posts} nowMs={now} /> },
+    posts: { children: (
+      <Suspense fallback={<HomePending rows={3} />}>
+        <HomeRead read={posts}>{(data) => <PostsSection initial={data} nowMs={now} />}</HomeRead>
+      </Suspense>
+    ) },
     coins: {
       tools: (
         <div className={styles.coinHead}>
@@ -221,7 +236,7 @@ export function CoinHome({ initial, initialState, happening, presales, pinned, t
           {HOME_SOURCES.map((source) => (
             <section aria-labelledby={`${panelId(source)}-tab`} hidden={state.source !== source} id={panelId(source)} key={source} role="tabpanel">
               {state.source === source ? (
-                source === "discover" ? <DiscoverSource read={matchesInitial ? initial : null} props={list} query={query} happening={happening} onRankings={mixed ? showRankings : undefined} />
+                source === "discover" ? <DiscoverSource read={matchesInitial ? initial : null} mixedInitial={matchesInitial ? mixedInitial : null} props={list} query={query} happening={happening} onRankings={mixed ? showRankings : undefined} />
                   : source === "following" ? <FollowingList onDiscover={() => change({ ...state, source: "discover" })} props={list} />
                     : <WatchlistList props={list} />
               ) : null}
@@ -230,12 +245,24 @@ export function CoinHome({ initial, initialState, happening, presales, pinned, t
         </TableCard>
       ),
     },
-    traders: { title: "PnL leaderboard", children: <TradersSection initial={traders} initialMs={nowMs} nowMs={now} window={state.window} /> },
+    traders: { title: "PnL leaderboard", children: (
+      <Suspense fallback={<HomePending rows={HOME_TRADERS_LIMIT} />}>
+        <HomeRead read={traders}>{(data) => <TradersSection initial={data} initialMs={nowMs} nowMs={now} window={state.window} />}</HomeRead>
+      </Suspense>
+    ) },
     bonding: {
       children: <HomeBondingCurves nowMs={now} />,
     },
     presales: {
-      children: <PresaleSection happening={happening} initial={presales} initialMs={nowMs} nowMs={now} window={state.window} />,
+      children: (
+        <Suspense fallback={<div className={styles.pending}><SaleCardsLoading /></div>}>
+          <HomeRead read={happening}>{(activity) => (
+            <HomeRead read={presales}>{(data) => (
+              <PresaleSection happening={activity} initial={data} initialMs={nowMs} nowMs={now} window={state.window} />
+            )}</HomeRead>
+          )}</HomeRead>
+        </Suspense>
+      ),
     },
   };
   const customize = <HomeSettingsMenu onSections={changeSections} sections={prefs} showLabel={phone} />;
@@ -268,22 +295,39 @@ export function CoinHome({ initial, initialState, happening, presales, pinned, t
 
 type DiscoverProps = Readonly<{
   read: DiscoverSeed;
+  mixedInitial?: Promise<MixedSeed> | null;
   props: ListProps;
   query: HomeQuery;
-  happening: SocialHappeningResponse | null;
+  happening: SectionSeed<SocialHappeningResponse>;
   onRankings?: () => void;
 }>;
 
-function DiscoverSource({ read, props, query, happening, onRankings }: DiscoverProps) {
-  if (onRankings) return <MixedDiscovery initial={read} query={query} happening={happening} now={props.nowMs} onRankings={onRankings} />;
+function DiscoverSource({ read, mixedInitial, props, query, happening, onRankings }: DiscoverProps) {
+  if (onRankings) {
+    const renderMixed = (market: DiscoverSeed, activity: SocialHappeningResponse | null) => (
+      <MixedDiscovery initial={market} query={query} happening={activity} now={props.nowMs} onRankings={onRankings} />
+    );
+    return (
+      <div className={styles.pending}>
+        <Suspense fallback={<PendingPanel label="Loading Discover" />}>
+          {mixedInitial
+            ? <HomeRead read={mixedInitial}>{(seed) => renderMixed(seed?.market ?? null, seed?.activity ?? null)}</HomeRead>
+            : <HomeRead read={happening}>{(activity) => renderMixed(read, activity)}</HomeRead>}
+        </Suspense>
+      </div>
+    );
+  }
   return (
-    <Suspense fallback={<DiscoverPending props={props} />}>
-      <DiscoverWithSeed read={read} props={props} query={query} />
+    <Suspense fallback={<div className={styles.pending}><DiscoverPending props={props} /></div>}>
+      <HomeRead read={read}>{(data) => <DiscoverList initial={data} props={props} query={query} />}</HomeRead>
     </Suspense>
   );
 }
 
-function DiscoverWithSeed({ read, props, query }: Pick<DiscoverProps, "read" | "props" | "query">) {
-  const initial = read && "then" in read ? use(read) : read;
-  return <DiscoverList initial={initial} props={props} query={query} />;
+function HomePending({ rows }: Readonly<{ rows: number }>) {
+  return <div className={styles.pending}><TableCard><ListSkeleton rows={rows} /></TableCard></div>;
+}
+
+function HomeRead<Data>({ read, children }: Readonly<{ read: SectionSeed<Data>; children: (data: Data | null) => ReactNode }>) {
+  return children(read && typeof read === "object" && "then" in read ? use(read) : read);
 }

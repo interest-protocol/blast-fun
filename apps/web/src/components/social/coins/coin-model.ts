@@ -68,6 +68,16 @@ function parseKeyedScreen(value: object, kind: "coin" | "wd" | "trade"): CoinScr
  */
 export const ALL_COINS_KEY = "all";
 
+export function coinDraftKey(kind: "open" | "trade", owner?: string): string {
+  return owner ? `coins:page-${kind}:${owner}` : `coins:${kind}`;
+}
+
+export function parseSavedCoinScreen(screen: string | undefined): CoinScreen | null {
+  if (!screen) return null;
+  try { return parseCoinScreen(JSON.parse(screen)); }
+  catch { return null; }
+}
+
 /** What the shell opens: `openDeposit()`, `openWithdraw()`, `openCoin(key)`, `openCoin("all")`. */
 export function firstScreen(action: "deposit" | "withdraw" | "coin", key: string | null): CoinScreen {
   if (action === "deposit") return { kind: "dep" };
@@ -110,6 +120,7 @@ export type WalletCoinView = Readonly<{
   presale: Readonly<{ presaleId: string; venue: string; trading: boolean; inPresale?: boolean; quoteSymbol?: string; quoteType?: string; multiple: number | null }> | null;
 }>;
 
+export type CoinOpening = Readonly<{ screen: CoinScreen; coins?: readonly WalletCoinView[] }>;
 export type WalletCoinCatalogPage = Readonly<{ coins: readonly WalletCoinView[]; nextCursor: string | null }>;
 
 /** Public metadata, without a wallet balance, so a swap can be composed before sign-in. */

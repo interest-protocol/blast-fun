@@ -59,8 +59,6 @@ type CardRowsInput<Row> = Readonly<{
   loading: boolean;
   /** Cards to keep showing after a restore (Back): the number that were shown. */
   floor: number;
-  /** Told how many cards are shown, so a saved list can bring the same number back. */
-  onShown: (count: number) => void;
   /** Read the next page. Callers may overlap; the reader ignores a read already in flight. */
   onMore: () => void;
 }>;
@@ -72,7 +70,7 @@ type CardRowsInput<Row> = Readonly<{
  * ones fall short. A search never reads on its own: it could walk the whole
  * catalogue. The last row is partial only when the results ran out.
  */
-export function useCardRows<Row>({ cards, rows, searching, hasNext, more, moreFailed, loading, floor, onShown, onMore }: CardRowsInput<Row>) {
+export function useCardRows<Row>({ cards, rows, searching, hasNext, more, moreFailed, loading, floor, onMore }: CardRowsInput<Row>) {
   const [gridRef, columns] = useGridColumns();
   const [wanted, setWanted] = useState(() => cardStep(columns));
   const limit = fullRows(Math.max(wanted, floor), columns);
@@ -83,8 +81,6 @@ export function useCardRows<Row>({ cards, rows, searching, hasNext, more, moreFa
   useEffect(() => {
     if (filling && !more && !loading) onMore();
   }, [filling, more, loading, onMore]);
-  const count = shown.length;
-  useEffect(() => onShown(count), [count, onShown]);
   function reveal() {
     if (!cards) return onMore();
     // A failed fill retries the rows already wanted; otherwise add a step.

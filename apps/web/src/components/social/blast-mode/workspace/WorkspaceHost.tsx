@@ -501,6 +501,37 @@ function usePresalePresentation(snapshot: WorkspaceV1, store: WorkspaceStore, mo
   return { presaleId, activePresaleId: documentVisible ? presaleId : null, presaleTarget, setPresaleTarget, setPresaleRequest, openPresale, closePresale };
 }
 
+/** Measure the compare grid and select the panels that own live reads at this viewport. */
+function usePanelPages(snapshot: WorkspaceV1, mobile: boolean, viewport: string) {
+  const [width, height] = viewport.split(":").map(Number) as [number, number];
+  const covered = mobile && !snapshot.data.collapsed;
+  const [workspaceElement, setWorkspaceElement] = useState<HTMLDivElement | null>(null);
+  const [workspaceSize, setWorkspaceSize] = useState<{ width: number; height: number } | null>(null);
+  useLayoutEffect(() => {
+    if (!workspaceElement || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry) setWorkspaceSize({ width: entry.contentRect.width, height: entry.contentRect.height });
+    });
+    observer.observe(workspaceElement);
+    return () => observer.disconnect();
+  }, [workspaceElement]);
+  const pageSize = workspaceSize ? compareAvailablePageSize(workspaceSize.width, workspaceSize.height) : comparePageSize(width, height, !snapshot.data.collapsed);
+  const page = comparePage(snapshot.visible_order, snapshot.focused_panel_id, pageSize);
+  const paged = !mobile && snapshot.presentation === "compare" && snapshot.visible_order.length > pageSize;
+  let rendered = paged ? page.ids : snapshot.visible_order;
+  if (covered) {
+    rendered = [];
+  } else if (snapshot.presentation === "focus") {
+    const selected = mobile ? snapshot.mobile_panel_id : snapshot.focused_panel_id;
+    rendered = snapshot.visible_order.filter(id => id === selected);
+  } else if (mobile) {
+    // All cards mount in the swipe feed, but only the selected one owns live reads.
+    const selected = snapshot.mobile_panel_id ?? snapshot.visible_order[0];
+    rendered = snapshot.visible_order.filter(id => id === selected);
+  }
+  return { covered, page, pageSize, paged, rendered, setWorkspaceElement };
+}
+
 function useWorkspaceContent({
   store,
   owner,
@@ -551,7 +582,6 @@ function useWorkspaceContent({
     if (mobile) setMobilePickerActivated(false);
   }
   const viewport = useSyncExternalStore(subscribeViewport, viewportSize, serverViewport);
-  const [width, height] = viewport.split(":").map(Number) as [number, number];
   const laptop = discoverDefaultCollapsed(Number.parseInt(viewport, 10));
   const snapshot = useMemo(() => {
     const shown = offeredData(savedSnapshot);
@@ -560,28 +590,7 @@ function useWorkspaceContent({
     return laptop && !chosen ? { ...shown, data: { ...shown.data, collapsed: true } } : shown;
   }, [savedSnapshot, mobilePickerActivated, mobile, chosen, laptop]);
   const { presaleId, activePresaleId, presaleTarget, setPresaleTarget, setPresaleRequest, openPresale, closePresale } = usePresalePresentation(snapshot, store, mobile, documentVisible, setDataCollapsed);
-  const covered = mobile && !snapshot.data.collapsed;
-  const [workspaceElement, setWorkspaceElement] = useState<HTMLDivElement | null>(null);
-  const [workspaceSize, setWorkspaceSize] = useState<{ width: number; height: number } | null>(null);
-  useLayoutEffect(() => {
-    if (!workspaceElement || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(([entry]) => {
-      if (entry) setWorkspaceSize({ width: entry.contentRect.width, height: entry.contentRect.height });
-    });
-    observer.observe(workspaceElement);
-    return () => observer.disconnect();
-  }, [workspaceElement]);
-  const pageSize = workspaceSize ? compareAvailablePageSize(workspaceSize.width, workspaceSize.height) : comparePageSize(width, height, !snapshot.data.collapsed);
-  const page = comparePage(snapshot.visible_order, snapshot.focused_panel_id, pageSize);
-  const paged = !mobile && snapshot.presentation === "compare" && snapshot.visible_order.length > pageSize;
-  // Phones mount every card in the swipe feed, but only the selected card owns live reads.
-  const rendered = snapshot.presentation === "focus"
-    ? snapshot.visible_order.filter(id => id === (mobile ? snapshot.mobile_panel_id : snapshot.focused_panel_id) && !covered)
-    : mobile
-    ? snapshot.visible_order.filter(
-        (id) => id === (snapshot.mobile_panel_id ?? snapshot.visible_order[0]) && !covered,
-      )
-    : paged ? page.ids : snapshot.visible_order;
+  const { covered, page, pageSize, paged, rendered, setWorkspaceElement } = usePanelPages(snapshot, mobile, viewport);
   const [removed, setRemoved] = useState<{ panel: PanelSetup; slot: number } | null>(null);
   const dataCollapseTrigger = useRef<HTMLButtonElement>(null);
   const dataExpandTrigger = useRef<HTMLButtonElement>(null);

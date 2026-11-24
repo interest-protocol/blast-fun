@@ -206,6 +206,16 @@ test("Back to the list shows the cards that were revealed, in order", async (t) 
   assert.equal(view.count(), 60);
 });
 
+test("Back reads the revealed count from an older list entry", async (t) => {
+  const view = await mount(t, { total: 50, columns: 3, pageSize: 50 });
+  window.dispatchEvent(new window.Event("blast:capture-lists"));
+  const id = "presales:public";
+  const saved = window.history.state.blastLists[id];
+  window.history.replaceState({ blastLists: { [id]: { ...saved, value: { ...saved.value, revealed: 36 } } } }, "");
+  await act(async () => { window.dispatchEvent(new window.Event("popstate")); });
+  assert.equal(view.count(), 36);
+});
+
 test("Back in the reported case reads nothing twice and shows no duplicate", async (t) => {
   const view = await mount(t, { total: 60, hidden: [3, 7, 11, 15], columns: 3 });
   assert.equal(view.count(), 18);
