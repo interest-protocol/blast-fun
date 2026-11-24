@@ -75,6 +75,18 @@ jobs:
           docker version
           npm run test:integration --workspace @blast/server 2>&1 | tee ci-artifacts/backend-architecture/shared-server-physical.log
           npm run test:integration --workspace @blast/backend-api 2>&1 | tee ci-artifacts/backend-architecture/physical.log
+      - name: Check database roles and signing workers
+        run: |
+          npm run test:integration --workspace @blast/core -- \
+            src/modules/database/runtime-roles.integration.test.ts \
+            src/modules/database/final-stack.integration.test.ts \
+            2>&1 | tee ci-artifacts/backend-architecture/database-roles.log
+          npm run test:integration --workspace @blast/workers -- \
+            src/modules/coin-registration/coin-registration.integration.test.ts \
+            src/modules/opening-round/opening-round.integration.test.ts \
+            src/modules/vault-rewards/rewards.integration.test.ts \
+            src/modules/vault-buyback/buyback.integration.test.ts \
+            2>&1 | tee ci-artifacts/backend-architecture/signing-workers.log
       - name: Build the actual production image with BuildKit
         env:
           DOCKER_BUILDKIT: "1"
