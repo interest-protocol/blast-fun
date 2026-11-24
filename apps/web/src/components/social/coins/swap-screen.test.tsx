@@ -290,7 +290,8 @@ test("R3-33-AC-3: the picker — search, the three preferred chips, Your coins w
     if (symbol === "SUI" || symbol === "USDC") {
       assert.equal(descriptor?.textContent, symbol === "SUI" ? "Sui ecosystem" : "Stablecoin");
     } else {
-      assert.equal(descriptor?.getAttribute("title"), coin.coinType);
+      assert.equal(descriptor?.textContent, coin.coinType);
+      assert.equal(descriptor?.getAttribute("title"), symbol === "KSTL" ? "0x5555…5551::coin::KSTL" : "0x5555…5552::coin::LUMN");
     }
     assert.equal(row.getAttribute("aria-selected"), String(coin.coinType === USDC.coinType));
   }
