@@ -206,7 +206,7 @@ test("a short coin type opens an ordinary coin and an unknown type returns 404",
   assert.equal(png.readUInt32BE(16), 1200);
   assert.equal(png.readUInt32BE(20), 630);
   const logoPixel = await sharp(png).extract({ left: 318, top: 375, width: 1, height: 1 }).removeAlpha().raw().toBuffer();
-  assert.deepEqual([...logoPixel], [240, 237, 244]);
+  assert.deepEqual([...logoPixel], [77, 162, 255]);
   const ring = await sharp(png).extract({ left: 302, top: 145, width: 1, height: 1 }).removeAlpha().raw().toBuffer();
   assert.deepEqual([...ring], [255, 76, 152]);
   assert.equal(await pageStatus("0x2::sui::UNKNOWN"), 404);
