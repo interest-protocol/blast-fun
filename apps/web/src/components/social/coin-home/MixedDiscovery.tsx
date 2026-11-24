@@ -109,7 +109,7 @@ function DiscoveryRow({ entry }: Readonly<{ entry: MixedDiscoveryEntry }>) {
               {entry.detail ? <>{" "}<span className={styles.discoverySeparator} aria-hidden="true">· </span></> : null}
               <span className={entry.change.tone === "flat" ? undefined : styles[entry.change.tone]}>
                 <span className="sr-only">1-hour price change </span>
-                {!entry.detail ? <span aria-hidden="true">1h </span> : null}{entry.change.text}
+                <span aria-hidden="true">Price </span>{entry.change.text}
               </span>
             </> : null}
           </span>

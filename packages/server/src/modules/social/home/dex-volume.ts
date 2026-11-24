@@ -62,9 +62,10 @@ export async function readDexVolumes(
   window: HomeWindow,
   bounds: HomeBounds,
   kinds: readonly string[],
+  minFromMs = 0,
 ): Promise<ReadonlyMap<string, HomeDexVolume>> {
   const toMs = bounds.dexClockMs;
-  if (toMs === undefined || coins.length === 0 || !kinds.includes("trade_buy") || !kinds.includes("trade_sell")) {
+  if (toMs === undefined || toMs <= minFromMs || coins.length === 0 || !kinds.includes("trade_buy") || !kinds.includes("trade_sell")) {
     return new Map();
   }
   const native = coins.filter((coin) => !coin.tracked_pool_only).map((coin) => coin.coin_type);
@@ -72,7 +73,7 @@ export async function readDexVolumes(
     ? coins.filter((coin) => TRACKED_POOL_TYPES.has(coin.coin_type)).map((coin) => coin.coin_type)
     : [];
   if (native.length === 0 && tracked.length === 0) return new Map();
-  const values = [native, toMs - HOME_WINDOW_MS[window], toMs, bounds.marketCheckpoint];
+  const values = [native, Math.max(toMs - HOME_WINDOW_MS[window], minFromMs), toMs, bounds.marketCheckpoint];
   const { rows } = tracked.length > 0
     ? await db.read<VolumeRow>(TRACKED_VOLUME_SQL, [...values, tracked])
     : await db.read<VolumeRow>(VOLUME_SQL, values);

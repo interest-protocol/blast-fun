@@ -120,7 +120,7 @@ export function withView(current: HomeFeedState, next: HomeFeedState): HomeFeedS
 /** The Discover read a view state asks for, at the device's rows per page. */
 export function discoverQueryOf(state: HomeFeedState, rows: number = HOME_PAGE_DEFAULT): HomeQuery {
   if (state.sort === "mixed") {
-    return { ...HOME_DEFAULT_QUERY, sort: "trending", window: "1h", limit: HOME_PAGE_DEFAULT };
+    return { ...HOME_DEFAULT_QUERY, window: "1h", limit: 20, traction: true };
   }
   return { ...HOME_DEFAULT_QUERY, sort: state.sort, window: state.window, minParticipants: state.minParticipants, age: state.age, tradable: state.tradable, limit: rows, page: state.page };
 }
