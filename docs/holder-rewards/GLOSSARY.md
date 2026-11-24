@@ -37,7 +37,7 @@ _Avoid_: Fee wallet, vault
 ### Planning
 
 **Period**:
-One day of a Vault's history that at most one Round rewards. Periods follow each other from the Vault's creation. Holder Quote needs at least $100 after the Gas Reserve and at least $1 per Qualifying Holder. Every Round pays Quote to at least one Holder. If holders receive no Quote, the Period is skipped and both assets stay in the Vault.
+One day of a Vault's history that at most one Round rewards. Periods follow each other from the Vault's creation. The combined USD value of holder Meme and Quote after the Gas Reserve needs to reach at least $100 and at least $1 per Qualifying Holder. Every Round pays Quote to at least one Holder. If holders receive no Quote, the Period is skipped and both assets stay in the Vault.
 _Avoid_: Epoch, day, cycle
 
 **Cut**:

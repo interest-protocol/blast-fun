@@ -11,7 +11,7 @@ import { objectIdSchema } from "#workers/lib/validation.ts";
 import { answerEvery, type AddressIdentity, type CheckIdentities } from "#workers/modules/reward-plan/beneficiaries.ts";
 import { completeCut, MissingRewardHistory, requireRewardCut } from "#workers/modules/reward-plan/evidence.ts";
 import { PAGE_SIZE, CLAIM_WINDOW_MS, frozenSchema, json, planCommitment, type Cut, type Frozen, type Plan } from "#workers/modules/reward-plan/plan.ts";
-import { DAY_MS, MAX_POSITIVE_LEAVES, gasReserveFits, minimumWeight } from "./economics.ts";
+import { DAY_MS, MAX_POSITIVE_LEAVES, gasReserveFits, meetsPayoutMinimum, minimumWeight } from "./economics.ts";
 import { historicalFunds, historicalTreasury, nativeEvent } from "./history.ts";
 
 export type PlannerSettings = Readonly<{ fingerprint: string; gasReserveBps: number; maxAgeMs: number; maxConfidenceBps: number; exclusions: readonly string[] }>;
@@ -25,11 +25,12 @@ async function boundary(tx: TransactionContext, timestamp: string): Promise<Cut>
   if (!row) throw new MissingRewardHistory("daily-boundary");
   return { checkpoint: row.checkpoint, digest: row.digest, timestampMs: row.timestamp_ms };
 }
-async function price(tx: TransactionContext, settings: PlannerSettings, coin: string, cut: Cut, endMs: string) {
+async function price(tx: TransactionContext, settings: PlannerSettings, coin: string, cut: Cut, endMs: string, allowUnavailable = false) {
   const { rows } = await tx.read<{ observation: unknown }>(
     "SELECT chain_read_v1.usd_observation('mainnet',$1,$2,$3,$4,4294967295,4294967295,$5,$6,$7) AS observation",
     [settings.fingerprint, coin, cut.checkpoint, cut.digest, endMs, settings.maxAgeMs, settings.maxConfidenceBps]);
   const value = z.looseObject({ available: z.literal(true), numerator: z.string().regex(/^[1-9][0-9]*$/), denominator: z.string().regex(/^[1-9][0-9]*$/), exponent: z.number().int().min(-255).max(255) }).safeParse(rows[0]?.observation);
+  if (allowUnavailable && z.object({ available: z.literal(false) }).safeParse(rows[0]?.observation).success) return null;
   if (!value.success) throw new MissingRewardHistory("financial-price");
   let numerator = BigInt(value.data.numerator), denominator = BigInt(value.data.denominator);
   if (value.data.exponent < 0) denominator *= 10n ** BigInt(-value.data.exponent);
@@ -38,10 +39,6 @@ async function price(tx: TransactionContext, settings: PlannerSettings, coin: st
 }
 
 const MINIMUM_PAYOUT_USD = 100;
-
-function meetsPayoutMinimum(amount: bigint, price: Frozen["quotePrice"], minimumUsd: number): boolean {
-  return price !== null && amount * BigInt(price.numerator) >= BigInt(minimumUsd) * BigInt(price.denominator);
-}
 
 async function launchTeamWallets(tx: TransactionContext, deployment: BlastDeployment, vault: Vault, cut: Cut): Promise<string[]> {
   const prefix = `${deployment.packages.launchpad.originalPackageId}::events::LaunchCreated<`;
@@ -148,14 +145,18 @@ export async function freezePeriod(pool: Pool, deployment: BlastDeployment, sett
     const roundStart = previous[0]?.end_checkpoint ?? start.checkpoint;
     if (BigInt(roundStart) >= BigInt(end.checkpoint)) throw new MissingRewardHistory("round-overlap");
     const reserve = funds.quote * BigInt(settings.gasReserveBps) / 10000n;
-    const quotePrice = funds.quote === 0n ? null : await price(tx, settings, vault.quote_type, end, period.end_ms);
-    const canPayHolders = meetsPayoutMinimum(funds.quote - reserve, quotePrice, MINIMUM_PAYOUT_USD);
-    const memePrice = canPayHolders ? await price(tx, settings, vault.meme_type, end, period.end_ms) : null;
+    const quote = funds.quote - reserve;
+    const quotePrice = quote === 0n ? null : await price(tx, settings, vault.quote_type, end, period.end_ms);
+    const quoteMeetsMinimum = meetsPayoutMinimum(quote, quotePrice, MINIMUM_PAYOUT_USD);
+    const memePrice = quote > 0n && (funds.meme > 0n || quoteMeetsMinimum)
+      ? await price(tx, settings, vault.meme_type, end, period.end_ms, !quoteMeetsMinimum)
+      : null;
+    const canPayHolders = memePrice !== null && meetsPayoutMinimum(quote, quotePrice, MINIMUM_PAYOUT_USD, funds.meme, memePrice);
     const holderExclusions = canPayHolders ? await excludedHolders(tx, deployment, vault, end) : [];
     const exclusions = [...new Set([...settings.exclusions, ...holderExclusions, ...policy.destinations, vault.vault_id, vault.origin_id, vault.pool_id])].sort();
     exclusions.forEach((value) => objectIdSchema.parse(value));
     const frozen = frozenSchema.parse({ network: "mainnet", fingerprint: settings.fingerprint, vaultId: vault.vault_id, memeType: vault.meme_type, quoteType: vault.quote_type, poolId: vault.pool_id, originId: vault.origin_id, number: vault.next_round,
-      startMs: period.start_ms, endMs: period.end_ms, start, end, roundStart, treasury: policy.treasury, exclusions, memePrice, quotePrice, grossMeme: funds.meme.toString(), grossQuote: funds.quote.toString(), reserve: reserve.toString(), gasReserveBps: settings.gasReserveBps, claimWindowMs: CLAIM_WINDOW_MS, globalWeight: "0", qualifiers: 0, sourceEvidence: funds.evidence, payoutPolicy: "both-assets-to-holders" });
+      startMs: period.start_ms, endMs: period.end_ms, start, end, roundStart, treasury: policy.treasury, exclusions, memePrice, quotePrice, grossMeme: funds.meme.toString(), grossQuote: funds.quote.toString(), reserve: reserve.toString(), gasReserveBps: settings.gasReserveBps, claimWindowMs: CLAIM_WINDOW_MS, globalWeight: "0", qualifiers: 0, sourceEvidence: funds.evidence, payoutPolicy: "combined-value-to-holders" });
     const planId = randomUUID();
     await tx.forModule("rewards-planner").write("vault_reward_plans", "INSERT INTO vault_reward_plans(plan_id,period_id,number,stage,inputs) VALUES($1,$2,$3,'qualifying',$4)", [planId, periodId, frozen.number, json(frozen)]);
     return planId;
@@ -186,17 +187,50 @@ function rewardFloor(f: Frozen): bigint {
   return minimumWeight({ numerator: BigInt(f.memePrice.numerator), denominator: BigInt(f.memePrice.denominator) });
 }
 
-function holderQuoteBudget(f: Frozen): bigint {
-  const quote = BigInt(f.grossQuote) - BigInt(f.reserve);
-  return f.qualifiers > 0 && f.memePrice !== null && meetsPayoutMinimum(quote, f.quotePrice, Math.max(MINIMUM_PAYOUT_USD, f.qualifiers)) ? quote : 0n;
+function meetsHolderBudget(f: Frozen, minimumUsd: number): boolean {
+  if (f.memePrice === null) return false;
+  const meme = f.payoutPolicy === "combined-value-to-holders" ? BigInt(f.grossMeme) : 0n;
+  return meetsPayoutMinimum(BigInt(f.grossQuote) - BigInt(f.reserve), f.quotePrice, minimumUsd, meme, f.memePrice);
 }
 
-function canQualifyHolders(f: Frozen): boolean {
-  return f.memePrice !== null && meetsPayoutMinimum(BigInt(f.grossQuote) - BigInt(f.reserve), f.quotePrice, MINIMUM_PAYOUT_USD);
+function holderQuoteBudget(f: Frozen): bigint {
+  if (f.qualifiers === 0 || !meetsHolderBudget(f, Math.max(MINIMUM_PAYOUT_USD, f.qualifiers))) return 0n;
+  return BigInt(f.grossQuote) - BigInt(f.reserve);
 }
 
 async function skipPeriod(tx: TransactionContext, periodId: string, reason: "no-qualifiers" | "low-budget"): Promise<void> {
   await tx.forModule("rewards-planner").write("vault_reward_periods", "UPDATE vault_reward_periods SET status='skipped',inputs=$2 WHERE period_id=$1", [periodId, json({ reason })]);
+}
+
+/** Reuse a completed holder snapshot when only the old Quote budget check stopped it. */
+export async function retrySkippedPeriod(pool: Pool, fingerprint: string, vaultId: string, periodId: string): Promise<string> {
+  return withTransaction(pool, async (tx) => {
+    const { rows } = await tx.read<Pick<Plan, "plan_id" | "inputs">>(
+      `SELECT p.plan_id,p.inputs FROM vault_reward_plans p JOIN vault_reward_periods d USING(period_id)
+       WHERE d.period_id=$1 AND d.deployment_fingerprint=$2 AND d.vault_id=$3
+       AND d.status='skipped' AND d.inputs->>'reason'='low-budget' AND p.stage='skipped'
+       AND p.manifest IS NULL AND p.storage_url IS NULL AND p.storage_hash IS NULL AND p.storage_verified_at IS NULL
+       AND NOT EXISTS (SELECT 1 FROM vault_reward_periods n WHERE n.deployment_fingerprint=$2 AND n.vault_id=$3 AND n.start_ms>=d.end_ms)
+       AND NOT EXISTS (SELECT 1 FROM vault_reward_allocations a WHERE a.plan_id=p.plan_id)
+       AND NOT EXISTS (SELECT 1 FROM vault_reward_actions a WHERE a.plan_id=p.plan_id)
+       FOR UPDATE OF p,d`, [periodId, fingerprint, vaultId]);
+    const plan = rows[0];
+    if (!plan) throw new Error("No latest, untouched low-budget reward plan matches this period.");
+    const f = frozenSchema.parse(plan.inputs);
+    if (f.fingerprint !== fingerprint || f.vaultId !== vaultId) throw new Error("The frozen plan does not match the vault and deployment.");
+    const updated = { ...f, payoutPolicy: "combined-value-to-holders" } as const;
+    if (f.payoutPolicy !== "both-assets-to-holders" || holderQuoteBudget(f) !== 0n || holderQuoteBudget(updated) === 0n) {
+      throw new Error("The frozen budget does not qualify for a combined-value retry.");
+    }
+    const { rows: holders } = await tx.read<{ count: string; weight: string }>(
+      "SELECT count(*)::text AS count,coalesce(sum(weight),0)::text AS weight FROM vault_reward_holders WHERE plan_id=$1", [plan.plan_id]);
+    if (holders[0]?.count !== String(f.qualifiers) || holders[0]?.weight !== f.globalWeight) {
+      throw new Error("The frozen holder snapshot is incomplete.");
+    }
+    await tx.forModule("rewards-planner").write("vault_reward_plans", "UPDATE vault_reward_plans SET stage='allocating',inputs=$2 WHERE plan_id=$1", [plan.plan_id, json(updated)]);
+    await tx.forModule("rewards-planner").write("vault_reward_periods", "UPDATE vault_reward_periods SET status='planning' WHERE period_id=$1", [periodId]);
+    return plan.plan_id;
+  }, { isolationLevel: "REPEATABLE READ", retry: true });
 }
 
 /**
@@ -227,7 +261,7 @@ function qualifyingHolders(holders: readonly Holder[], f: Frozen): Holder[] {
 async function nextQuestions(pool: Pool, planId: string) {
   return withTransaction(pool, async (tx) => {
     const { f, cursor } = await qualifyingPlan(tx, planId, false);
-    if (!canQualifyHolders(f)) return { gaps: [], qualifying: [], cut: BigInt(f.end.checkpoint) };
+    if (!meetsHolderBudget(f, MINIMUM_PAYOUT_USD)) return { gaps: [], qualifying: [], cut: BigInt(f.end.checkpoint) };
     const floor = rewardFloor(f);
     const { rows: gaps } = await tx.read<{ owner: string; end_checkpoint: string }>(
       `SELECT owner,end_checkpoint::text FROM chain_read_v1.reward_identity_gaps('mainnet',$1,$2,$3,$4,$5::text[],$6,$7,$8::numeric)`,
@@ -271,7 +305,7 @@ export async function fillIdentityGaps(pool: Pool, planId: string, check: CheckI
 export async function qualifyPage(pool: Pool, planId: string, known: KnownIdentities): Promise<boolean> {
   return withTransaction(pool, async (tx) => {
     const { plan, f, cursor } = await qualifyingPlan(tx, planId, true);
-    const canQualify = canQualifyHolders(f);
+    const canQualify = meetsHolderBudget(f, MINIMUM_PAYOUT_USD);
     const holders = canQualify ? await holderPage(tx, f, cursor) : [];
     const accounts = qualifyingHolders(holders, f).filter((h) => {
       const answer = known.get(h.owner);
