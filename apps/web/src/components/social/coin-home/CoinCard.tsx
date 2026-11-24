@@ -36,6 +36,7 @@ export type CoinCardProps = Readonly<{
   rank?: number;
   marketLoading?: boolean;
   livePrice?: DisplayPrice;
+  buyAmount?: string;
   window: HomeWindow;
   nowMs: number;
   /** The trading flag: without it no trade control is drawn. */
@@ -44,7 +45,7 @@ export type CoinCardProps = Readonly<{
 }>;
 
 /** The ticker link covers the row. Buy has its own target above the link. */
-export function CoinCard({ coin, rank, window, nowMs, trading, watchlist = false, marketLoading = false, livePrice }: CoinCardProps) {
+export function CoinCard({ coin, rank, window, nowMs, trading, watchlist = false, marketLoading = false, livePrice, buyAmount }: CoinCardProps) {
   const marketCoin = useMemo(() => coinAtPrice(coin, livePrice), [coin, livePrice]);
   const valuationAt = livePrice && !coin.live_inputs ? coin.price_as_of_ms : marketCoin.price_as_of_ms;
   const id = useId();
@@ -59,7 +60,7 @@ export function CoinCard({ coin, rank, window, nowMs, trading, watchlist = false
         data-surface=""
       >
         {rank === undefined ? null : <span className={clsx("num", styles.rank)}>{rank.toLocaleString("en-US")}</span>}
-        <CoinIdentity coin={coin} id={id} />
+        <CoinIdentity coin={coin} id={id} buyAmount={buyAmount} />
         {tradingCoin ? <MarketCells window={window} coin={marketCoin} nowMs={nowMs} loading={marketLoading} valuationAt={valuationAt} /> : <SaleCells coin={coin} nowMs={nowMs} />}
         {canBuy || watchlist ? <span className={styles.rowActions}>
           {canBuy ? <RowBuy coin={coin} /> : null}
@@ -103,7 +104,7 @@ function tradeCoinOf(coin: HomeCoin): SocialTradeCoin {
 }
 
 /** The identity: the coin icon, linked symbol, name and the venue's logo (its name for assistive technology and on hover). */
-function CoinIdentity({ coin, id }: Readonly<{ coin: HomeCoin; id: string }>) {
+function CoinIdentity({ coin, id, buyAmount }: Readonly<{ coin: HomeCoin; id: string; buyAmount?: string }>) {
   const venue = coin.venue && coin.lifecycle !== "cancelled" ? coin.venue : null;
   const href = homeCoinHref(coin) ?? coinPagePath(coin.coin_type);
   const distinct = coin.name.trim().toLowerCase() !== coin.symbol.trim().toLowerCase();
@@ -111,6 +112,9 @@ function CoinIdentity({ coin, id }: Readonly<{ coin: HomeCoin; id: string }>) {
     <span className={styles.ident}>
       <PresaleMark coinType={coin.coin_type} presaleId={homeCoinKey(coin)} size={44} src={coin.icon_url} />
       <span className={styles.identText}>
+        {buyAmount ? <span aria-hidden="true" className={styles.buyAnchor}>
+          <span className={clsx("num", styles.buyCue)} data-home-buy="">+{buyAmount}</span>
+        </span> : null}
         <span className="coinNamed">
           <Link aria-label={distinct ? `Open ${coin.name} (${coin.symbol})` : `Open ${coin.symbol}`} className={styles.symbol} href={href} id={id} prefetch={false}>
             {coin.symbol}

@@ -2,7 +2,7 @@
 
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import clsx from "clsx";
-import { useEffect, useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { Button, ButtonLink, IconButton } from "#web/components/blast-ui/Button.tsx";
 import { CloseIcon } from "#web/components/blast-ui/Icons.tsx";
@@ -19,12 +19,12 @@ import { useSignInGate, useSocialViewer } from "../SignInGate";
 import { useWatchlistSnapshot, useWatchlistRetry, useWatchStar } from "../watchlist/Watchlist";
 import { CoinCard } from "./CoinCard";
 import styles from "./CoinHome.module.css";
-import { HomeMarketActivity } from "./HomeMarketActivity";
 import { coinsByIdsQuery, discoverQuery, followingCoinsQuery } from "./home-client";
 import { resultsAnnouncement, SORT_LABELS } from "./home-state";
 import { homeCoinKey } from "./home-model";
 import { TableFooter } from "./TableFooter";
 import { countWords } from "@blast/core/web/format.ts";
+import { amtExact, atLeastPow10, exactAtoms, qtyExact } from "@blast/core/web/exact-amount.ts";
 import type { FeedFreshnessSource } from "../home/feed-freshness";
 import { useHomeLive } from "./use-home-live";
 import { newerHomePrice, useHomePrices } from "./use-home-prices";
@@ -107,11 +107,10 @@ export function ListHead({ sort, defaultSort = "relevant", onSort, window }: Pic
  * With no rows (a `result` in their place) the pager, count go;
  * a settled `empty` result drops the column header and its sorts too.
  */
-export function CoinList({ coins, props, result, empty = false, end, viewKey, rankings, checkpoint = 0, showMarketActivity = false }: Readonly<{ coins: readonly RankedCoin[]; props: ListProps; result?: ReactNode; empty?: boolean; end?: ReactNode; viewKey?: string; rankings?: Rankings; checkpoint?: number; showMarketActivity?: boolean }>) {
+export function CoinList({ coins, props, result, empty = false, end, viewKey, rankings, checkpoint = 0, buy }: Readonly<{ coins: readonly RankedCoin[]; props: ListProps; result?: ReactNode; empty?: boolean; end?: ReactNode; viewKey?: string; rankings?: Rankings; checkpoint?: number; buy?: Readonly<{ coinKey: string; amount: string }> }>) {
   const list = useRankMotion(JSON.stringify([viewKey ?? [props.source, props.window, props.sort, props.page, props.rows], rankings?.motionVersion]));
   const hasResult = Boolean(result);
-  const activityScope = useMemo(() => showMarketActivity && !hasResult ? { checkpoint, viewKey } : undefined, [checkpoint, hasResult, showMarketActivity, viewKey]);
-  const { latest, move } = useHomePrices(coins, props.streamPrices === true && !hasResult, activityScope);
+  const latest = useHomePrices(coins, props.streamPrices === true && !hasResult);
   // Home shows new-coin admissions in the Coins header.
   const slotted = useRankingsSlot(rankings);
   const controls = rankings && !slotted ? <RankingControls rankings={rankings} /> : null;
@@ -124,14 +123,14 @@ export function CoinList({ coins, props, result, empty = false, end, viewKey, ra
   return (
     <>
       {controls}
-      {showMarketActivity ? <HomeMarketActivity coins={coins} key={viewKey} move={move} nowMs={props.nowMs} window={props.window} /> : null}
-      {coins.length > 0 ? <span className={styles.phoneWindow}>Price change · {props.window}</span> : null}
+      {coins.length > 0 ? <span className={styles.phoneWindow}>{props.window === "1h" ? "1 hour" : "24 hours"}</span> : null}
       {header}
       <ol className={clsx(styles.list, styles.rankedList)} data-volume-sort={props.source === "discover" && props.sort === "trending" || undefined} ref={list} {...rankings?.interactionProps}>
         {coins.map((coin, index) => (
           <CoinCard
             key={homeCoinKey(coin)}
             coin={coin}
+            buyAmount={buy?.coinKey === homeCoinKey(coin) ? buy.amount : undefined}
             rank={(props.page - 1) * props.rows + index + 1}
             livePrice={props.streamPrices ? newerHomePrice(latest, coin, coin.readCheckpoint ?? checkpoint) : undefined}
             nowMs={props.nowMs}
@@ -202,11 +201,35 @@ function holdNewCoins(query: HomeQuery): boolean {
   return query.sort === "newest" && query.page === 1 && query.cursor === null;
 }
 
+function useHomeBuyCue(query: HomeQuery, settled: boolean, showBuys: boolean | undefined, freshness: FeedFreshnessSource | undefined, coins: readonly RankedCoin[]) {
+  const view = JSON.stringify(query);
+  const [buyCue, setBuyCue] = useState<{ view: string; coinKey: string; symbol: string; amount: string }>();
+  const nextCueAt = useRef(0);
+  useEffect(() => {
+    if (!buyCue) return;
+    const timeout = window.setTimeout(() => setBuyCue(undefined), 900);
+    return () => window.clearTimeout(timeout);
+  }, [buyCue]);
+  useHomeLive(query, settled, freshness, buys => {
+    const now = performance.now();
+    if (now < nextCueAt.current || !showBuys) return;
+    const listed = new Map(coins.map(coin => [homeCoinKey(coin), coin.symbol]));
+    const buy = buys.filter(event => listed.has(event.coin_key))
+      .sort((a, b) => b.occurred_at_ms - a.occurred_at_ms)[0];
+    if (!buy) return;
+    const value = exactAtoms(buy.quote_atoms, buy.quote_decimals);
+    if (!value) return;
+    const amount = atLeastPow10(value, 0) ? qtyExact(value) : amtExact(value);
+    nextCueAt.current = now + 1_000;
+    setBuyCue({ view, coinKey: buy.coin_key, symbol: listed.get(buy.coin_key)!, amount: `${amount}\u00a0${buy.quote_symbol}` });
+  });
+  return settled && buyCue?.view === view ? buyCue : undefined;
+}
+
 export function DiscoverList({ query, initial, props, freshness }: Readonly<{ query: HomeQuery; initial: HomeCoinsPage | null; props: ListProps; freshness?: FeedFreshnessSource }>) {
   const client = useAppQueryClient();
   const read = useQuery({ ...discoverQuery(query, true), initialData: initial ?? undefined }, client);
   const settled = settledHomePage(read);
-  useHomeLive(query, settled !== undefined, freshness);
   // Keep populated rows during a view change, but only show an empty message for the current view.
   const previous = read.isPlaceholderData && read.data?.coins.length ? read.data : undefined;
   const data = settled ?? previous;
@@ -215,6 +238,7 @@ export function DiscoverList({ query, initial, props, freshness }: Readonly<{ qu
     checkpoint: settled?.as_of?.checkpoint,
   });
   const coins = previous?.coins ?? rankings.coins;
+  const buy = useHomeBuyCue(query, settled !== undefined, props.streamPrices, freshness, coins);
   useLastPage(props.page, settled?.pages, props.onPage);
 
   const refresh = () => void read.refetch({ cancelRefetch: false });
@@ -225,12 +249,13 @@ export function DiscoverList({ query, initial, props, freshness }: Readonly<{ qu
 
   return (
     <>
+      <span className="sr-only" role="status">{buy ? `${buy.symbol} buy for ${buy.amount}` : ""}</span>
       {data ? <ResultsAnnouncement props={props} count={data.total} pages={data.pages} /> : null}
       <FreshnessNote asOf={data?.as_of} />
       <CoinList
         checkpoint={previous?.as_of?.checkpoint}
+        buy={buy}
         rankings={rankings}
-        showMarketActivity={!read.isPlaceholderData}
         viewKey={JSON.stringify([query, read.isPlaceholderData])}
         coins={coins}
         end={listPager(props, props.page, data?.pages ?? 1, data?.total, read.isPlaceholderData)}

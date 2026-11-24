@@ -27,6 +27,7 @@ import {
   type HomeThreadPage,
   type HomeTradersPage,
 } from "@blast/core/modules/social/contracts/home.ts";
+import { homeCoinsPageReadSchema } from "@blast/core/modules/social/contracts/home-read-schemas.ts";
 import type { HomeCoinMarket, HomeHoldersPage } from "@blast/core/modules/social/contracts/coin-market.ts";
 import { CREATE_TEST_SUI_QUOTE_TYPE } from "@blast/core/modules/social/contracts/create.ts";
 import { INDEXED_POOL_COINS } from "@blast/core/modules/social/portfolio/core-coins.ts";
@@ -350,6 +351,30 @@ test("Home origin cache spends the edge freshness budget and keeps trade-filtere
     assert.equal(refreshed.coins.find((coin) => coin.presale_id === P.orbit)?.symbol, "REFRESHED");
   }, { cached: true, elapsedMs: () => elapsed });
 });
+
+test("Discover exposes only the latest confirmed buy per coin in its opt-in response", { skip }, () =>
+  withFixture(async ({ admin, discover, now }) => {
+    const older = buy(W.mayaA, ORBIT, 80, now - 6_000);
+    const latest = buy(W.mayaA, ORBIT, 1.25, now - 6_000, { quote_type: SUI, quote_amount: "1250000000" });
+    const other = buy(W.leo, EMAN, 4, now - 5_000, { presale_id: P.eman });
+    const recentSell = sell(W.leo, ORBIT, 200, now - 4_000);
+    const uncommitted = buy(W.mayaA, ORBIT, 999, now - 3_000);
+    await seedChainRead(admin, { activity: [older, latest, other, recentSell, uncommitted] });
+    await admin.query(advanceWatermark(recentSell.checkpoint));
+
+    const read = await discover("?recent_buys=1");
+    assert.equal(read.status, 200);
+    const page = homeCoinsPageReadSchema.parse(await read.json());
+    assert.deepEqual(page.recent_buys?.find(buy => buy.coin_key === P.orbit), {
+      coin_key: P.orbit, activity_id: `${latest.checkpoint}:0:0:0`, occurred_at_ms: now - 6_000,
+      quote_atoms: "1250000000", quote_symbol: "SUI", quote_decimals: 9,
+    });
+    assert.equal(page.recent_buys?.find(buy => buy.coin_key === P.eman)?.quote_atoms, "4000000");
+    assert.equal(page.recent_buys?.length, 2);
+    assert.equal((await ok<HomeCoinsPage>(await discover(), "home-coins-page")).recent_buys, undefined);
+    const hidden = await discover("?recent_buys=1", { trades: false });
+    assert.equal(homeCoinsPageReadSchema.parse(await hidden.json()).recent_buys, undefined);
+  }));
 
 test("Home lists opt in to circulating market cap and rolling change from a known hourly baseline", { skip }, () =>
   withFixture(async ({ admin, coins, discover, following, now }) => {
