@@ -49,7 +49,7 @@ export function MixedDiscovery({ initial, query, happening, now, onRankings }: R
     for (const query of errors) void query.refetch();
     if (sales.failed) void happeningStore().refresh();
   };
-  const failed = errors.length > 0 || sales.failed;
+  const failed = errors.length > 0 || sales.failed === true;
   const staleCurves = closest.data?.section.state === "stale" || fresh.data?.section.state === "stale";
   const latestHappening = sales.read ?? happening;
   const entries = mixedDiscoveryEntries({ market: market.data?.coins ?? [], closest: closest.data, fresh: fresh.data, happening: latestHappening, now });

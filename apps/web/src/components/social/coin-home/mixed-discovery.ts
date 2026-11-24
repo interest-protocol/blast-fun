@@ -41,7 +41,8 @@ export function mixedDiscoveryEntries({ market, closest, fresh, happening, now }
   const tradingTypes = new Set(market.map(({ coin_type }) => coin_type));
   const curves = bondingEntries(closest, fresh, tradingTypes, now);
   const sales = (happening?.recent_presales ?? []).flatMap(({ presale, last_commit_ms }) => {
-    if (tradingTypes.has(presale.coin_type) || presale.end_ms <= now || last_commit_ms < now - HAPPENING_LAST_HOUR_MS) return [];
+    if (presale.coin_type && tradingTypes.has(presale.coin_type)) return [];
+    if (presale.end_ms <= now || last_commit_ms < now - HAPPENING_LAST_HOUR_MS) return [];
     if (saleLifecycleAt(presale.lifecycle, presale.start_ms, now) !== "open") return [];
     return [presaleEntry(presale, last_commit_ms, now)];
   });
@@ -103,7 +104,7 @@ function tradingEntry(coin: HomeCoin): MixedDiscoveryEntry | null {
   };
 }
 
-function bondingEntries(closest: DiscoveryResponse | undefined, fresh: DiscoveryResponse | undefined, trading: ReadonlySet<string | undefined>, now: number): MixedDiscoveryEntry[] {
+function bondingEntries(closest: DiscoveryResponse | undefined, fresh: DiscoveryResponse | undefined, trading: ReadonlySet<string>, now: number): MixedDiscoveryEntry[] {
   const eligible = (row: DiscoveryRow) => !trading.has(row.coinType) && (row.lifecycle === "live" || row.lifecycle === "migration_ready");
   const near = (pageOf(closest)?.rows ?? []).filter(row => eligible(row) && (row.progressBps ?? 0) >= ALMOST_GRADUATED_BPS);
   const leader = near[0];
