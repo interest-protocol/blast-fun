@@ -22,7 +22,7 @@ function queryKind(sql: string): Kind {
   if (sql.includes("FROM chain_read_v1.watermark")) return sql.includes("observed_ms") ? "asOf" : "bounds";
   if (sql.includes("SELECT count(DISTINCT a.actor)")) return "lastHour";
   if (sql.startsWith("SELECT l.activity_id")) return "tape";
-  if (sql.startsWith("SELECT * FROM ((SELECT")) return "candidates";
+  if (sql.includes("'open' AS role")) return "candidates";
   if (sql.includes("FROM social_presale_pins")) return "pins";
   if (sql.startsWith("SELECT market.*")) return "topCoins";
   if (sql.includes("coalesce(p.sale_symbol,'') AS symbol")) return "chips";
