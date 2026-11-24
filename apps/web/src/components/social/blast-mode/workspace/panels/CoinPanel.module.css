@@ -20,7 +20,6 @@
 .hero .priceFigure { font-weight:600; }
 .pricePending { display:inline-block; font-size:1.5rem; font-weight:600; line-height:1.75rem; }
 .stale { padding:1px 0.375rem; border-radius:var(--r-inner); background:var(--warn-soft); color:var(--warn); font-size:0.7188rem; font-weight:600; line-height:1rem; }
-.change { display:inline-flex; align-items:center; }
 .fdv { display:inline-flex; align-items:baseline; gap:0.25rem; margin-left:auto; color:var(--muted); font-size:0.75rem; font-weight:500; white-space:nowrap; font-variant-numeric:tabular-nums; }
 .fdv :global(button) { min-width:0; min-height:0; padding:0; color:var(--ink-2); font-weight:500; }
 

@@ -837,7 +837,7 @@ function Recipients({ form, list, lead, colors }: Readonly<{ form: Form; list: R
               {self ? (
                 <>
                   <b className={cx("cr-me")}>You</b>
-                  <span className={cx("cr-wallet")} title={form.state.selfAddress ?? undefined}>{form.state.selfAddress ? shortAddress(form.state.selfAddress, 10, 8) : "Your wallet"}</span>
+                  <span className={cx("cr-wallet")}>{form.state.selfAddress ? shortAddress(form.state.selfAddress, 10, 8) : "Your wallet"}</span>
                 </>
               ) : (
                 <>
@@ -928,7 +928,7 @@ function RaiseSplitCard({ form }: Readonly<{ form: Form }>) {
         ]}
       />
       <div className={cx("cr-tiles")}>
-        <Tile color={shades[0]!} label="Liquidity pool" locked sub="Paired with the pool’s tokens" value={<span className={cx("cr-tile-value")} title="What is left after the shares below">{pctText(Math.max(0, terms.lpBps))}</span>} />
+        <Tile color={shades[0]!} label="Liquidity pool" locked sub="Paired with the pool’s tokens" value={<span className={cx("cr-tile-value")}>{pctText(Math.max(0, terms.lpBps))}</span>} />
         <Tile color={blast} label="Blast" locked sub="Paid only if the sale succeeds" value={<Locked text={pctText(fees.raise_bps)} />} />
       </div>
       <Recipients colors={shades.slice(1)} form={form} list="raise_recipients" />

@@ -1,5 +1,6 @@
 "use client";
 
+import { hoverExcerpt } from "#web/lib/hover-text.ts";
 import clsx from "clsx";
 import { IntentLink as Link } from "#web/components/blast-ui/NavigationLink.tsx";
 import { useCallback, useLayoutEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
@@ -87,7 +88,7 @@ export function FollowedPile({ presaleId, withCount = false }: Readonly<{ presal
   if (!backers || backers.count === 0) return null;
   const faces = backers.accounts.slice(0, 3);
   const pile = (
-    <span className={styles.pile} title={withCount ? undefined : backedTitle(faces.map((face) => face.display_name ?? face.callsign))}>
+    <span className={styles.pile} title={withCount ? undefined : hoverExcerpt(backedTitle(faces.map((face) => face.display_name ?? face.callsign)))}>
       {faces.map((face) => (
         <Avatar callsign={face.callsign} key={face.callsign} size={26} src={face.avatar_url} />
       ))}

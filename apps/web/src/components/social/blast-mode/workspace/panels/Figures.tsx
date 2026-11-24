@@ -48,7 +48,7 @@ export function ChangePill({
         </svg>
       )}
       {text}
-      {window ? <span className={styles.window}>{window}</span> : null}
+      {window ? <span className={styles.window}> {window}</span> : null}
     </span>
   );
 }

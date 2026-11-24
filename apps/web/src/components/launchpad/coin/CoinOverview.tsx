@@ -161,7 +161,7 @@ export function CoinOverview(props: Readonly<{ page: CoinPage; fees?: ReactNode 
             <Fact term="Creator">
               {coin?.creator ? (
                 <>
-                  <code className={styles.id} title={coin.creator}>{shortId(coin.creator)}</code>
+                  <code className={styles.id}>{shortId(coin.creator)}</code>
                   {coin.creatorSource === "claim" ? " (claimed account)" : ""}
                 </>
               ) : (
@@ -171,7 +171,7 @@ export function CoinOverview(props: Readonly<{ page: CoinPage; fees?: ReactNode 
             <Fact term="Partner">
               {launch.partner ? (
                 <>
-                  <code className={styles.id} title={launch.partner.partnerId}>{shortId(launch.partner.partnerId)}</code>{" "}
+                  <code className={styles.id}>{shortId(launch.partner.partnerId)}</code>{" "}
                   {launch.partner.status === "admitted"
                     ? "Admitted"
                     : launch.partner.status === "removal_scheduled"

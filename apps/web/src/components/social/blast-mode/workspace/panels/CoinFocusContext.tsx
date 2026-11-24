@@ -1,5 +1,6 @@
 "use client";
 
+import { hoverExcerpt } from "#web/lib/hover-text.ts";
 import { holderRows } from "./holder-rows.ts";
 import { Button } from "#web/components/blast-ui/Button.tsx";
 import { Segmented } from "#web/components/blast-ui/Segmented.tsx";
@@ -237,7 +238,7 @@ function HolderRow({ holder, decimals, symbol }: Readonly<{ holder: HomeHolderPo
   return <tr className={styles.holderRow}>
     <td className={styles.holderWho}>
       <ActorAvatar identity={identity} size={26} />
-      <b title={identity.kind === "account" ? identity.name : identity.short}>{identity.kind === "account" ? identity.name : identity.short}</b>
+      <b title={identity.kind === "account" ? hoverExcerpt(identity.name) : undefined}>{identity.kind === "account" ? identity.name : identity.short}</b>
       {tag && <span className={styles.relation}>{tag}</span>}
     </td>
     <td className={styles.holderPosition}>
@@ -246,7 +247,7 @@ function HolderRow({ holder, decimals, symbol }: Readonly<{ holder: HomeHolderPo
     </td>
     <td className={styles.holderPnl} data-direction={direction(pnl)}><b>{masked(signedUsd(pnl))}</b></td>
     <td className={styles.holderEntry}>{masked(holder.average_entry_usd === null ? NO_VALUE : bxPx(Number(holder.average_entry_usd)))}</td>
-    <td className={holderStyles.thesis} title={holder.why ?? undefined}>{holder.why}</td>
+    <td className={holderStyles.thesis} title={holder.why ? hoverExcerpt(holder.why) : undefined}>{holder.why}</td>
   </tr>;
 }
 

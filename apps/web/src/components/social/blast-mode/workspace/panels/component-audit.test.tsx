@@ -28,13 +28,12 @@ test("coin information compacts long participant counts while retaining exact co
   for (const compact of [true, false]) {
     const dom = render(coin, compact);
     try {
-      const buyers = dom.window.document.querySelector<HTMLButtonElement>('[aria-label^="Inspect full 24h buyers:"]')!;
-      const sellers = dom.window.document.querySelector<HTMLButtonElement>('[aria-label^="Inspect full 24h sellers:"]')!;
+      const buyers = dom.window.document.querySelector<HTMLButtonElement>('[aria-label^="Inspect full buyers:"]')!;
+      const sellers = dom.window.document.querySelector<HTMLButtonElement>('[aria-label^="Inspect full sellers:"]')!;
       assert.equal(buyers.textContent, "1.2M");
       assert.equal(sellers.textContent, "1.2B");
-      assert.match(buyers.getAttribute("aria-label")!, /1,234,567 distinct participants/);
-      assert.match(sellers.getAttribute("aria-label")!, /1,234,567,890 distinct participants/);
-      assert.match(sellers.getAttribute("aria-label")!, /Indexed trades on every venue from .* to .* A participant may both buy and sell/);
+      assert.equal(buyers.getAttribute("aria-label"), "Inspect full buyers: 1,234,567");
+      assert.equal(sellers.getAttribute("aria-label"), "Inspect full sellers: 1,234,567,890");
       assert.equal(dom.window.document.querySelector("h2")?.textContent, compact ? "Activity" : undefined);
       assert.equal(dom.window.document.querySelector('[aria-label$="Copy full coin address"]') !== null, !compact);
     } finally { dom.window.close(); }
@@ -42,10 +41,10 @@ test("coin information compacts long participant counts while retaining exact co
   const zero = render({ ...coin, activity: { ...activity, buyers: 0, sellers: 0, participants: 0, events: 0 } }, true);
   const unknown = render({ ...coin, decimals: null, activity: null }, false);
   try {
-    assert.equal(zero.window.document.querySelector('[aria-label^="Inspect full 24h buyers:"]')?.textContent, "0");
-    assert.equal(zero.window.document.querySelector('[aria-label^="Inspect full 24h sellers:"]')?.textContent, "0");
+    assert.deepEqual([...zero.window.document.querySelectorAll("dd")].map((cell) => cell.textContent), ["0", "0"]);
+    assert.equal(zero.window.document.querySelector("button"), null);
     assert.doesNotMatch(unknown.window.document.body.textContent!, /Decimals|Buyers|Sellers|Unavailable|All venues/);
-    assert.equal(unknown.window.document.querySelector('[aria-label^="Inspect full 24h "]'), null);
+    assert.equal(unknown.window.document.querySelector("[data-inspect-value]"), null);
     assert.match(unknown.window.document.querySelector("[data-coin-type-tag] code")?.textContent ?? "", /^0x[\da-f]{4}…[\da-f]{4}$/);
   } finally { zero.window.close(); unknown.window.close(); }
 });

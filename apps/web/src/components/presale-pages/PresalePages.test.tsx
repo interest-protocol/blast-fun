@@ -210,7 +210,7 @@ test("R3-23: the sale page's trust pills read the operator-set flags in the boar
   const meridian = renderToStaticMarkup(signedIn(<SaleView detail={fixtureDetail("mrdn")} nowMs={FIXTURE_NOW} viewerEntry={null} />));
   const words = text(meridian);
   assert.match(words, /Meridian \$MRDN Known deployer Live Audited/);
-  assert.match(meridian, /class="coinVerifiedPill" title="Known deployer"><svg aria-hidden="true" class="coinVerified lg"/, "the pill owns the hover title and its helmet is decorative");
+  assert.match(meridian, /class="coinVerifiedPill"><svg aria-hidden="true" class="coinVerified lg"/, "the pill supplies the visible label and its helmet is decorative");
   assert.doesNotMatch(words, /LP locked/, "a sale that has not launched has no pool to lock yet");
   const ondine = renderToStaticMarkup(signedIn(<SaleView detail={fixtureDetail("ondn")} nowMs={FIXTURE_NOW} viewerEntry={null} />));
   assert.match(text(ondine), /Project team unconfirmed/);

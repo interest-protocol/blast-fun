@@ -19,6 +19,7 @@ export function CopyAddress({ value, label, copyLabel, name }: Readonly<{
       className={styles.control}
       failureMessage="Couldn’t copy the address."
       label={`${label} ${name ?? preview}. ${copyLabel}`}
+      title={copyLabel}
       onCopy={async () => {
         await navigator.clipboard.writeText(value);
         return true;

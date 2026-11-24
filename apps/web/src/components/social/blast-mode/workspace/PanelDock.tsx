@@ -115,7 +115,7 @@ export function LayoutPicker({ snapshot, dispatch }: Readonly<{ snapshot: Worksp
       label="Tracked asset limit"
       placement={() => ({ side: "bottom", align: "end", sideOffset: 6, avoid: "flip", originX: "100%" })}
       trigger={
-        <BlastMenuTrigger render={<IconButton aria-label={`Tracked asset limit: ${current}`} variant="ghost" size="sm" />} aria-label={`Tracked asset limit: ${current}`} className={styles.layoutTrigger} title="Tracked asset limit; visible cards adapt to the space">
+        <BlastMenuTrigger render={<IconButton aria-label={`Tracked asset limit: ${current}`} variant="ghost" size="sm" />} aria-label={`Tracked asset limit: ${current}`} className={styles.layoutTrigger} title="Tracked asset limit">
           <LayoutGlyph count={current} />
         </BlastMenuTrigger>
       }

@@ -1,5 +1,6 @@
 "use client";
 
+import { hoverExcerpt } from "#web/lib/hover-text.ts";
 import { IntentLink as Link } from "#web/components/blast-ui/NavigationLink.tsx";
 
 import type { FeedItemBacker } from "@blast/core/web/contracts/items.ts";
@@ -7,7 +8,7 @@ import type { FeedItemBacker } from "@blast/core/web/contracts/items.ts";
 import { useSocialViewer } from "../SignInGate";
 import { useViewerBackers } from "../ViewerState";
 import { facepile } from "./post-model";
-import { decimal, usd } from "./post-format";
+import { decimal, short, usd0 } from "./post-format";
 import styles from "./PostCard.module.css";
 import { Avatar } from "./PostMedia";
 
@@ -38,12 +39,12 @@ export function Facepile({
         {faces.map((backer) => {
           const name = faceName(backer, viewer.callsign);
           const amount = decimal(backer.usd);
-          const inLine = amount === null ? "in" : `${usd(Math.round(amount))} in`;
+          const inLine = amount === null || !Number.isFinite(amount) ? "in" : `${amount >= 1_000_000 ? short(amount) : usd0(amount)} in`;
           return (
             <Link aria-label={`${name}, ${inLine}`} className={styles.face} href={backer.path} key={backer.callsign}>
               <Avatar callsign={backer.callsign} size={30} src={backer.avatar_url} />
               <span aria-hidden="true" className={styles.tip} role="tooltip">
-                <b>{name}</b>
+                <b>{hoverExcerpt(name)}</b>
                 <span>@{backer.callsign} · {inLine}</span>
               </span>
             </Link>

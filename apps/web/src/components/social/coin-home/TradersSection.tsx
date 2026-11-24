@@ -1,5 +1,6 @@
 "use client";
 
+import { hoverExcerpt } from "#web/lib/hover-text.ts";
 import { coinPagePath } from "@blast/core/modules/launchpad-coin/page-key.ts";
 import { Button, DisclosureButton, IconButton } from "#web/components/blast-ui/Button.tsx";
 import { DiagnosticText } from "#web/components/blast-ui/DiagnosticText.tsx";
@@ -43,7 +44,7 @@ function Holdings({ trader }: Readonly<{ trader: HomeTrader }>) {
   if (trader.holdings === undefined) return null;
   if (trader.holdings.length === 0) return null;
   return <div>
-    <div className={styles.holdingHead}><span>Token / amount</span><span>{trader.holdings.some((holding) => holding.value_usd !== null) ? "Value · USD" : null}</span><span>{trader.holdings.some((holding) => holding.share_bps !== null) ? <MetricHelp why="Share of fully valued indexed liquid launch-token holdings; excludes cash, other tokens and presale commitments.">Holdings share</MetricHelp> : null}</span><span>{!(trader.performance_public ?? trader.portfolio.public) || trader.holdings.some((holding) => holding.pnl_usd !== null) ? "Unrealized PnL" : null}</span></div>
+    <div className={styles.holdingHead}><span>Token / amount</span><span>{trader.holdings.some((holding) => holding.value_usd !== null) ? "Value · USD" : null}</span><span>{trader.holdings.some((holding) => holding.share_bps !== null) ? <MetricHelp why="Share of priced Blast launch tokens held for trading.">Holdings share</MetricHelp> : null}</span><span>{!(trader.performance_public ?? trader.portfolio.public) || trader.holdings.some((holding) => holding.pnl_usd !== null) ? "Unrealized PnL" : null}</span></div>
     {trader.holdings.slice(0, 10).map((holding) => <div className={styles.holdingRow} key={holding.launch_id ?? holding.presale_id}>
       <div><HoldingIdentity holding={holding} /><span className={styles.holdingAmount}>{coinFigure(holding.balance, holding.symbol, holding.decimals, 4)}</span></div>
       <span className="num">{portfolioText(holding.value_usd)}</span>
@@ -73,7 +74,7 @@ function TraderRow({ trader, open, toggle }: Readonly<{ trader: HomeTrader; open
   return <li className={styles.item} data-expanded={open || undefined}>
     <article className={clsx(styles.row, styles.traderCols)} aria-labelledby={`${id}-name`}>
       <span className={clsx("num", styles.rank)}>{performancePublic && trader.rank != null ? trader.rank : null}</span>
-      <div className={styles.traderIdentity}><Face participant={trader} size={30} /><div className={styles.identText}><Link className={styles.tName} title={name} href={actor.path} id={`${id}-name`}>{name}</Link><Link href={actor.path} title={`@${actor.callsign}`} className={styles.coinName}>@{actor.callsign}</Link></div></div>
+      <div className={styles.traderIdentity}><Face participant={trader} size={30} /><div className={styles.identText}><Link className={styles.tName} title={hoverExcerpt(name)} href={actor.path} id={`${id}-name`}>{name}</Link><Link href={actor.path} title={`@${actor.callsign}`} className={styles.coinName}>@{actor.callsign}</Link></div></div>
       <span className={styles.traderPnl}><Pnl value={trader.portfolio.pnl_usd} private={!performancePublic} full /></span>
       <div className={styles.topHoldings}><TopHoldings trader={trader} publicHoldings={holdingsPublic} /></div>
       {canExpand ? <DisclosureButton iconOnly size="sm" type="button" className={styles.expand} aria-expanded={open} aria-controls={`${id}-card`} aria-label={`${open ? "Close" : "Open"} ${name} holdings`} onClick={toggle}></DisclosureButton> : null}
@@ -154,9 +155,8 @@ function traderCount(data: HomeTradersPage | undefined, error: boolean) {
   return traderTotal(data);
 }
 
-/** The footer's count: `4 traders ranked`, `1 trader found`. */
 function traderTotal(data: HomeTradersPage): string {
-  return `${countWords(data.total, "trader", "traders")}${data.search ? " found" : " ranked"}`;
+  return `${countWords(data.total, "trader", "traders")}${data.search ? " found · Ranks are global" : " ranked"}`;
 }
 
 export function TradersSection(props: TraderReadProps & Readonly<{ nowMs: number }>) {
@@ -172,7 +172,7 @@ export function TradersSection(props: TraderReadProps & Readonly<{ nowMs: number
   // Search stays while a search is on (to change or clear it); with no search, an empty or failed board drops it.
   const searchable = search !== "" || pending || issue !== null || (!query.isError && query.data?.total !== 0);
   return <>
-    {searchable ? <><p className={styles.traderBasis}><MetricHelp why="Realized plus unrealized USD PnL since launch on Blast-launched coins across all venues and linked wallets, using the same indexed history and cost basis as profile PnL. Gas is excluded. Missing or stale USD prices and incomplete history make performance unavailable. Recent activity does not affect eligibility. Missing or private performance is excluded. Search preserves global ranks.">PnL · Since launch</MetricHelp></p>
+    {searchable ? <><p className={styles.traderBasis}><MetricHelp why="Realized and unrealized across linked wallets on Blast coins. Excludes gas.">PnL · Since launch</MetricHelp></p>
     <TraderSearch search={search} loading={query.isFetching || pending} onEdit={cancel} onSearch={submit} /></> : null}
     <div role="status" className="sr">
       {traderCount(query.data, query.isError)}

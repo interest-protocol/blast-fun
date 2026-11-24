@@ -95,7 +95,7 @@ test("invalid CSV keeps a concise summary separate from all source diagnostics",
     await act(async () => root.render(<AllowlistReview busy={false} errors={[]} fileName={fileName} onAccept={() => assert.fail("Invalid files cannot be accepted")} onClose={() => {}} parsed={parseAllowlist(text)} symbol="USDC" uploadError={null} />));
     const filename = dom.document.querySelector("[title]")!;
     assert.equal(filename.textContent, fileName);
-    assert.equal(filename.getAttribute("title"), fileName);
+    assert.equal(filename.getAttribute("title"), `${"a".repeat(24)}…`);
     const summary = dom.document.querySelector('[role="alert"]')!;
     assert.match(summary.textContent!, /50 rows need attention out of 100/);
     assert.doesNotMatch(summary.textContent!, /not-a-sui-address/);
@@ -208,7 +208,7 @@ test("long filenames remain available and upload errors stay visible above the w
       await act(async () => root.render(<AllowlistReview parsed={parseAllowlist(csv)} fileName={fileName} symbol="USDC" busy={false} errors={[]} uploadError="Your list couldn't upload. Your current list is unchanged." onAccept={() => {}} onClose={() => {}} />));
       const filename = document.querySelector('[title]')!;
       assert.equal(filename.textContent, fileName);
-      assert.equal(filename.getAttribute("title"), fileName);
+      assert.equal(filename.getAttribute("title"), `${"a".repeat(24)}…`);
       if (invalid) {
         assert.match(document.querySelector(".cr-csv-header")!.textContent!, /Your list couldn't upload/);
       } else {

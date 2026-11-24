@@ -1,3 +1,4 @@
+import { InspectValue } from "#web/components/blast-ui/InspectValue.tsx";
 import type { WalletCoinView } from "#web/components/social/coins/coin-model.ts";
 import {
   formatVestingAmount,
@@ -92,14 +93,14 @@ export function LiveSummary({
         <h2>Your vesting</h2>
         <span>Sui Mainnet · All times {timezone}</span>
       </div>
-      <div className={createStyles.summaryAmount} title={summary.totalLabel}>
-        {summary.compact}
+      <div className={createStyles.summaryAmount}>
+        <SummaryAmount compact={summary.compact} exact={summary.totalLabel} />
       </div>
       <p>Locked in full at creation</p>
       <dl className={styles.details}>
         <div>
           <dt>Recipient</dt>
-          <dd title={draft.beneficiary}>{recipient}</dd>
+          <dd>{recipient}</dd>
         </div>
         <div>
           <dt>Schedule</dt>
@@ -144,6 +145,11 @@ export function LiveSummary({
     </>
   );
 }
+function SummaryAmount({ compact, exact }: Readonly<{ compact: string; exact: string }>) {
+  if (compact === exact) return compact;
+  return <InspectValue label="vesting amount" value={exact}>{compact}</InspectValue>;
+}
+
 function ReleaseExplanation({
   summary,
   cliffDays,
@@ -177,7 +183,7 @@ function CancellationSummary({ draft }: Readonly<{ draft: CreationInput }>) {
     <>
       <div>
         <dt>Refund wallet</dt>
-        <dd title={draft.refund}>
+        <dd>
           {draft.refund
             ? `${draft.refund.slice(0, 8)}…${draft.refund.slice(-6)}`
             : "Add refund wallet"}
@@ -185,7 +191,7 @@ function CancellationSummary({ draft }: Readonly<{ draft: CreationInput }>) {
       </div>
       <div>
         <dt>Who can cancel</dt>
-        <dd title={draft.capRecipient}>
+        <dd>
           {draft.capRecipient
             ? `${draft.capRecipient.slice(0, 8)}…${draft.capRecipient.slice(-6)}`
             : "Choose authority"}

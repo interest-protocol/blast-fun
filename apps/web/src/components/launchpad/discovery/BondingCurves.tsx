@@ -15,7 +15,7 @@ import { queryKeys } from "#web/lib/query/keys.ts";
 import { readRailPage } from "./discovery-client";
 import { shortCoinType } from "#web/components/social/coins/coin-display.ts";
 import { bpsPercent } from "@blast/core/lib/bps.ts";
-import { compactQuoteAmount, formatQuoteAmount, quoteSymbol } from "./discovery-model";
+import { compactQuoteAmount, quoteSymbol } from "./discovery-model";
 import styles from "./BondingCurves.module.css";
 
 /** The two curve stages Blast mode's Discover rail lists (owner ruling 2026-11-20: no Graduated stage there, no refresh button); Home shows three columns (`HomeBondingCurves`). */
@@ -210,7 +210,6 @@ function BondingRow({ view, row, nowMs, onOpen }: Readonly<{ view: Stage; row: D
   const progress = row.progressBps === null ? null : bpsPercent(row.progressBps);
   const detail = rowDetail(view, row, nowMs);
   const detailName = view === "new" ? "Launched " : "";
-  const exact = view === "near_graduation" && row.quoteRemaining !== null ? `${formatQuoteAmount(row.quoteRemaining, row.quoteDecimals, row.quoteType)} ${quoteSymbol(row.quoteType)} to go` : undefined;
   const body = (
     <>
       <span className={styles.tile}>
@@ -220,7 +219,7 @@ function BondingRow({ view, row, nowMs, onOpen }: Readonly<{ view: Stage; row: D
         <strong>{row.verifiedTeam ? <span className="coinNamed sm"><span className="nm">{title}</span><CoinVerifiedMark size="sm" /></span> : title}</strong>
         {subtitle && <span>{subtitle}</span>}
       </span>
-      <BondingRowFigures progress={progress} detail={detail} detailName={detailName} exact={exact} />
+      <BondingRowFigures progress={progress} detail={detail} detailName={detailName} />
     </>
   );
   // The whole row is one button that opens the coin in the middle; its content passes the pointer through.
@@ -250,10 +249,10 @@ function timeAgo(ms: number, nowMs: number): string {
   return text === "now" ? "Just now" : `${text} ago`;
 }
 
-function BondingRowFigures({ progress, detail, detailName, exact }: Readonly<{ progress: string | null; detail: string | null; detailName: string; exact?: string }>) {
+function BondingRowFigures({ progress, detail, detailName }: Readonly<{ progress: string | null; detail: string | null; detailName: string }>) {
   if (!progress && !detail) return null;
   return <span className={styles.figs}>
     {progress && <b className="num">{progress}<span className="sr"> to graduation</span></b>}
-    {detail && <span className="num" title={exact}>{detailName && <span className="sr">{detailName}</span>}{detail}</span>}
+    {detail && <span className="num">{detailName && <span className="sr">{detailName}</span>}{detail}</span>}
   </span>;
 }

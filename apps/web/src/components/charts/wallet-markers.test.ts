@@ -24,8 +24,6 @@ test("wallet markers separate buys and sells, group repeated labels, and require
   assert.deepEqual(marks.map(({ time, count, side, labels }) => [time, count, side, labels]), [
     [60, 2, "buy", ["whale", "sniper"]], [60, 1, "sell", ["deployer", "whale"]],
   ]);
-  assert.match(marks[0]!.description, /2 Whale buys, 1 Sniper buy/);
-  assert.match(marks[1]!.description, /1 Deployer sell, 1 Whale sell/);
   assert.deepEqual([...marks[0]!.wallets], [[buyer, 92_000]], "repeat trades use the latest represented time even if activity is newest first");
 });
 

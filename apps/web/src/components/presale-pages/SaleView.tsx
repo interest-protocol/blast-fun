@@ -214,7 +214,7 @@ function SaleName({ sale }: Readonly<{ sale: SocialPresaleDetail["presale"] }>) 
   return (
     <div className={cx("sale-name-row")}>
       <h1 className={cx("sale-name")}>{distinct ? sale.name : ticker} <span className={cx("sale-ticker")}>{distinct ? ticker : null}</span></h1>
-      {sale.verified_team ? <span className="coinVerifiedPill" title={COIN_VERIFIED_LABEL}><CoinVerifiedMark decorative size="lg" />{COIN_VERIFIED_LABEL}</span> : null}
+      {sale.verified_team ? <span className="coinVerifiedPill"><CoinVerifiedMark decorative size="lg" />{COIN_VERIFIED_LABEL}</span> : null}
     </div>
   );
 }
@@ -232,7 +232,7 @@ function SaleCreator({ creator }: Readonly<{ creator: SocialPresaleDetail["creat
           href={`/@${account.callsign}`}
           prefetch={false}
           size="xs"
-          title={`View profile for ${name}`}
+          title="View profile"
         >
           <PersonAvatar person={account} size={18} />
         </IconButtonLink>

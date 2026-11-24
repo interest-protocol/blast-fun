@@ -183,7 +183,7 @@ function TradePresets({ presets, trade, facts, busy, presetDisabled, change }: R
       {TRADE_PRESET_SLOTS.map(slot => { const value = presets[side][slot - 1]!; return <Button variant="secondary" size="chip" className={styles.chip} type="button" key={slot}
         data-trade-preset={slot} aria-keyshortcuts={String(slot)}
         aria-pressed={isTradePresetSelected({ side, ...trade[side] }, value, facts)}
-        title={`${tradePresetLabel(side, value)} · ${slot}`}
+        title={`Key ${slot}`}
         disabled={busy || ((side === "sell" || value === "max") && presetDisabled)}
         onClick={() => {
           const next = tradePresetDraft(side, value, facts);

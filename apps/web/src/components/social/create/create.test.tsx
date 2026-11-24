@@ -201,7 +201,7 @@ test("each step holds its board's cards, in order, with no error shown before a 
   assert.match(raise, /450,000,000 tokens/);
   assert.match(raise, /Paired with the pool’s tokens/);
   assert.equal(raise.match(/\$187,500/g)?.length, 1, "the pool's cash is stated once on Raise");
-  assert.match(raise, new RegExp(`<b class="[^"]*cr-me[^"]*">You</b><span class="[^"]*cr-wallet[^"]*" title="${WALLET}">${WALLET.slice(0, 10)}…${WALLET.slice(-8)}</span>`));
+  assert.match(raise, new RegExp(`<b class="[^"]*cr-me[^"]*">You</b><span class="[^"]*cr-wallet[^"]*">${WALLET.slice(0, 10)}…${WALLET.slice(-8)}</span>`));
   assert.match(raise, /<b class="[^"]*cr-me[^"]*">Holders<\/b><span class="[^"]*cr-wallet[^"]*">Daily rewards to every holder<\/span>/);
 });
 

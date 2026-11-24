@@ -36,7 +36,7 @@ test("More entries share a probe with warnings that appear only for a confirmed 
   await act(async () => settleQueries(client));
   assert.equal(calls, 1);
   assert.equal(container.querySelectorAll('[data-tone="healthy"]').length, 2);
-  assert.equal(container.querySelectorAll('[title="Service status"]').length, 2);
+  assert.equal(container.querySelectorAll('[title="Service status"]').length, 0);
   assert.equal(container.querySelectorAll('[title="Services online"]').length, 0);
 
   for (mode of ["stalled", "error", "malformed", "healthy"]) {

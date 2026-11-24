@@ -55,5 +55,5 @@ function CurrentPnlMetric({ read, hidden, symbol }: Readonly<{ read: ReturnType<
   else if (read.status === "pending") content = <span role="status" aria-label="Loading current PnL"><SkeletonText>+$000 · 00%</SkeletonText></span>;
   else if (read.status === "error") content = <Button variant="ghost" size="sm" className={styles.positionAction} aria-label="Retry current PnL" type="button" onClick={read.retry}>Retry</Button>;
   else if (result) content = <span className={styles.pnl} data-direction={result.tone}><InspectValue label="current unrealized PnL across linked wallets" value={`${result.amount}${result.percent ? ` (${result.percent})` : ""} · acquisition cost $${read.value!.basis_usd}`}>{terminalUsd(`${result.tone === "up" ? "+" : ""}${read.value!.pnl_usd}`)}{result.percent && <span className={styles.pnlPercent}> {result.percent}</span>}</InspectValue></span>;
-  return <div className={styles.positionPnl}><dt title={`Current unrealized profit or loss for ${symbol} only, across your linked wallets`}>Unrealized PnL</dt><dd>{content}</dd></div>;
+  return <div className={styles.positionPnl}><dt title={`${symbol} across your linked wallets`}>Unrealized PnL</dt><dd>{content}</dd></div>;
 }

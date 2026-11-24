@@ -1,4 +1,5 @@
 "use client";
+import { hoverExcerpt } from "#web/lib/hover-text.ts";
 import { Button, DisclosureButton } from "#web/components/blast-ui/Button.tsx";
 import { useContext, useId, type ReactNode } from "react";
 import { useShellPrefs } from "#web/components/blast-ui/use-shell-prefs.ts";
@@ -130,7 +131,7 @@ export function PanelIdentity({
           onClick={select}
           aria-label={`Select coin for ${label} panel`}
           aria-describedby={stageId}
-          title={`${label}${name ? ` · ${name}` : ""}`}
+          title={hoverExcerpt(`${label}${name ? ` · ${name}` : ""}`)}
         >
           {identity}
         </DisclosureButton>
@@ -162,7 +163,7 @@ function CompactPanelIdentity({ mark, symbolLine, select, label, name, stageId, 
     {mark}
     <div className={styles.names}>
       <div className={styles.identityTitle}>
-        {select ? <DisclosureButton variant="ghost" size="sm" className={styles.selector} type="button" onClick={select} aria-label={`Select coin for ${label} panel`} aria-describedby={stageId} title={`${label}${name ? ` · ${name}` : ""}`}>{symbolLine}</DisclosureButton> : symbolLine}
+        {select ? <DisclosureButton variant="ghost" size="sm" className={styles.selector} type="button" onClick={select} aria-label={`Select coin for ${label} panel`} aria-describedby={stageId} title={hoverExcerpt(`${label}${name ? ` · ${name}` : ""}`)}>{symbolLine}</DisclosureButton> : symbolLine}
         {socials}
       </div>
       <div className={styles.identityMeta}>
