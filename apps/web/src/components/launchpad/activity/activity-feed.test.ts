@@ -8,6 +8,7 @@ import { parseInfraProvenance } from "@blast/core/modules/launchpad-contract/pro
 
 import { createActivityFeed, linkTarget, listStart, type ActivityFeedReads } from "./activity-feed";
 import { flowDisplay, listDisplay, type FlowOutcome, type PageOutcome } from "./activity-model";
+import { createTradeTape } from "./trade-tape";
 
 const LAUNCH = COIN_FIXTURE.launchId;
 const NOW = 1_790_235_061_630;
@@ -37,6 +38,46 @@ function recordingReads() {
   };
   return { asked, reads };
 }
+
+test("the server page initializes the recent trades tape and only flow reads on mount", async () => {
+  const { asked, reads } = recordingReads();
+  const page = activityPage(null);
+  assert.equal(page.kind, "rows");
+  assert.ok(page.provenance.checkpoint);
+  const checkpoint = page.provenance.checkpoint + 1;
+  const initialActivity = { ...page, provenance: { ...page.provenance, checkpoint } };
+  const feed = createActivityFeed({ reads, start: null, initialActivity });
+  const tape = createTradeTape(feed);
+  const initial = tape.serverSnapshot();
+  assert.equal(initial.rows[0]?.position, "326274000:1:1:0");
+  assert.equal(initial.rows.length, 4);
+  assert.equal(initial.entering, null);
+  assert.equal(tape.snapshot(), initial);
+  assert.equal(feed.readThrough(), checkpoint);
+
+  await Promise.all([feed.initialize(), feed.initialize()]);
+  assert.deepEqual(asked, { activity: [], flow: 1 });
+  await feed.refresh(false);
+  assert.deepEqual(asked, { activity: [null], flow: 2 });
+  assert.equal(feed.readThrough(), checkpoint, "a browser answer from behind the seed cannot rewind it");
+});
+
+test("recent trades show on the browser fallback while flow is pending", async () => {
+  const flow = Promise.withResolvers<FlowOutcome>();
+  const initialActivity: PageOutcome<ActivityRow> = { kind: "failed", reason: "not_ready" };
+  const reads: ActivityFeedReads = {
+    activity: async (cursor) => activityPage(cursor),
+    flow: () => flow.promise,
+  };
+  const feed = createActivityFeed({ reads, start: null, initialActivity });
+  const initialized = feed.initialize();
+  await Promise.resolve();
+  assert.equal(feed.state().activity.view?.rows[0]?.position, "326274000:1:1:0");
+  assert.equal(flowDisplay(feed.state().flow).kind, "loading");
+  flow.resolve(FLOW_FAILED);
+  await initialized;
+  assert.equal(flowDisplay(feed.state().flow).kind, "unavailable");
+});
 
 test("an older first-page read that answers after a newer one is dropped, for the list and the flow", async () => {
   const answers = { activity: [] as ((page: PageOutcome<ActivityRow>) => void)[], flow: [] as ((flow: FlowOutcome) => void)[] };
@@ -83,12 +124,16 @@ test("every refresh of an anchored feed starts the list at the link; older pages
 
 test("a hinted refresh reads the first page and the flow at the hint's checkpoint; pages back never name one", async () => {
   const asked: { list: string; at: number | null }[] = [];
+  const pinnedFlow = Promise.withResolvers<FlowOutcome>();
   const reads: ActivityFeedReads = {
     activity: async (cursor, at) => (asked.push({ list: "activity", at }), activityPage(cursor)),
-    flow: async (at) => (asked.push({ list: "flow", at }), FLOW_FAILED),
+    flow: async (at) => (asked.push({ list: "flow", at }), at === null ? FLOW_FAILED : pinnedFlow.promise),
   };
   const feed = createActivityFeed({ reads, start: null });
   await feed.refresh(false, 326274009);
+  assert.equal(listDisplay(feed.state().activity).kind, "rows");
+  assert.equal(flowDisplay(feed.state().flow).kind, "loading");
+  pinnedFlow.resolve(FLOW_FAILED);
   await feed.refresh(false);
   await feed.more();
   assert.deepEqual(asked, [

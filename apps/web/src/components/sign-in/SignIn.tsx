@@ -10,6 +10,7 @@ import { Button } from "#web/components/blast-ui/Button.tsx";
 import { GoogleLogo, HelmetMark, MahaloLogo, NightlyLogo, ScallopLogo, SlushLogo, WalletIcon, XLogo } from "#web/components/blast-ui/Icons.tsx";
 import { Sheet, SheetClose, SheetHeading } from "#web/components/blast-ui/Sheet.tsx";
 import { useShellAction } from "#web/components/blast-ui/shell-actions.tsx";
+import { usePreparePrivyWalletPicker } from "#web/components/auth/privy-wallet-picker.ts";
 import { usePrivySessionMounted } from "#web/components/presale/providers/PrivySessionProvider.tsx";
 import { useSocialViewer } from "#web/components/social/SignInGate.tsx";
 import { useWalletSession } from "#web/components/social/WalletSession.tsx";
@@ -247,6 +248,7 @@ export function SignInSheet() {
 function PrivySignInSheet() {
   const viewer = useSocialViewer();
   const [open, setOpen] = useState(false);
+  usePreparePrivyWalletPicker(open && !viewer.signedIn);
   const flow = useSignInFlow((outcome) => setOpen(!outcome.signedIn));
   const { reset } = flow;
 
@@ -299,6 +301,7 @@ export function SignInCard({ returnTo }: Readonly<{ returnTo: string }>) {
 
 function PrivySignInCard({ returnTo }: Readonly<{ returnTo: string }>) {
   const viewer = useSocialViewer();
+  usePreparePrivyWalletPicker(!viewer.signedIn);
   const flow = useSignInFlow(() => undefined);
   // react-doctor-disable-next-line react-doctor/clickjacking-redirect-risk -- The page passes only signInReturnPath-allowlisted local paths; CSP forbids framing.
   if (viewer.signedIn) redirect(returnTo);

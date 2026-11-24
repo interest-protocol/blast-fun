@@ -3,6 +3,7 @@
 import { usePrivy } from "@privy-io/react-auth";
 import { useCallback, useEffect, type ReactNode } from "react";
 
+import { useRestorePrivyWallet } from "#web/components/auth/privy-wallet-picker.ts";
 import type { ActivitySession } from "#web/components/analytics/account-activity.ts";
 import { AccountActivity } from "#web/components/analytics/AccountActivity.tsx";
 import { isAccountActivityEnabled } from "#web/components/analytics/activity-enabled.ts";
@@ -41,6 +42,7 @@ export function SocialSession({ children }: Readonly<{ children: ReactNode }>) {
 
 function SocialSessionViewer({ children }: Readonly<{ children: ReactNode }>) {
   const privy = usePrivy();
+  useRestorePrivyWallet(privy.ready && privy.authenticated ? privy.user?.wallet : undefined);
   const wallet = useWalletSession();
   const account = useSocialAccountRead();
   const client = useAppQueryClient();

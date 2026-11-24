@@ -3,7 +3,7 @@
 import { shortUtcDate } from "#web/components/blast-ui/date-label.ts";
 import { Button } from "#web/components/blast-ui/Button.tsx";
 
-import { useEffectEvent, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type Ref } from "react";
+import { useEffectEvent, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode, type Ref } from "react";
 import clsx from "clsx";
 import type {
   IChartApi,
@@ -110,6 +110,7 @@ type Props = Readonly<{
   hidden?: boolean;
   className?: string;
   label?: string;
+  preview?: ReactNode;
   onReady?: (handle: ChartHandle) => void | (() => void);
   onProject?: ChartProjection;
   projectionKey?: unknown;
@@ -128,6 +129,36 @@ type Props = Readonly<{
  * Every axis and readout label is written by `chartPrice`, never in exponent form.
  */
 export function TradingViewChart({
+  className,
+  label,
+  preview,
+  compact = false,
+  interactive = !compact,
+  coinAxes = false,
+  liveViewport = coinAxes,
+  ...plot
+}: Props) {
+  const coinViewport = liveViewport && interactive;
+  const { host, returnLive, failed, browsing, firstFramePainted, showZoomHint } = useTradingViewPlot({
+    ...plot, preview, compact, interactive, coinAxes, liveViewport,
+  });
+  return <ChartSurface
+    host={host}
+    className={className}
+    compact={compact}
+    label={label}
+    preview={firstFramePainted ? null : preview}
+    coinViewport={coinViewport}
+    showFooter={coinAxes || coinViewport}
+    showLiveButton={coinViewport && browsing && !failed}
+    onReturnLive={() => returnLive.current?.()}
+    interactive={interactive}
+    showZoomHint={showZoomHint}
+    failed={failed}
+  />;
+}
+
+function useTradingViewPlot({
   series,
   livePool = false,
   latestPrice,
@@ -141,8 +172,7 @@ export function TradingViewChart({
   scaleMargins = DEFAULT_MARGINS,
   priceFormatter,
   hidden: hidePrices,
-  className,
-  label,
+  preview,
   onReady,
   onProject,
   projectionKey,
@@ -154,6 +184,7 @@ export function TradingViewChart({
   const savedView = useRef<Readonly<{ rollingWindow: boolean; view: SavedChartView | CoinChartView }> | null>(null);
   const [failed, setFailed] = useState(false);
   const [browsing, setBrowsing] = useState(false);
+  const [firstFramePainted, setFirstFramePainted] = useState(false);
   const zoomHint = useZoomHint();
   const preferences = useShellPrefs();
   const dark = useIsDark();
@@ -161,6 +192,9 @@ export function TradingViewChart({
   const showCoinTag = coinAxes && !hidden;
   const coinViewport = liveViewport && interactive;
   const ready = useEffectEvent((handle: ChartHandle) => onReady?.(handle));
+  const handoffPreview = useEffectEvent(() => preview && !firstFramePainted
+    ? requestAnimationFrame(() => setFirstFramePainted(true))
+    : 0);
   const project = useEffectEvent((handle: ChartHandle, settled: boolean) => onProject?.(handle, settled));
   const select = useEffectEvent((at: number) => onSelect?.(at));
   const showHint = useEffectEvent(() => zoomHint.show());
@@ -407,6 +441,8 @@ export function TradingViewChart({
         viewReady = true;
         cleanupReady = ready(handle);
         afterChartWrite();
+        // Pane configuration schedules a canvas draw. Let it paint before exposing it.
+        readyFrame = handoffPreview();
       });
     }
     const resize = new ResizeObserver(() => {
@@ -536,26 +572,15 @@ export function TradingViewChart({
     if (active.current) project(active.current, false);
   }, [projectionKey]);
 
-  return <ChartSurface
-    host={host}
-    className={className}
-    compact={compact}
-    label={label}
-    coinViewport={coinViewport}
-    showFooter={coinAxes || coinViewport}
-    showLiveButton={coinViewport && browsing && !failed}
-    onReturnLive={() => returnLive.current?.()}
-    interactive={interactive}
-    showZoomHint={zoomHint.visible}
-    failed={failed}
-  />;
+  return { host, returnLive, failed, browsing, firstFramePainted, showZoomHint: zoomHint.visible };
 }
 
-function ChartSurface({ host, className, compact, label, coinViewport, showFooter, showLiveButton, onReturnLive, interactive, showZoomHint, failed }: Readonly<{
+function ChartSurface({ host, className, compact, label, preview, coinViewport, showFooter, showLiveButton, onReturnLive, interactive, showZoomHint, failed }: Readonly<{
   host: Ref<HTMLDivElement>;
   className?: string;
   compact: boolean;
   label?: string;
+  preview?: ReactNode;
   coinViewport: boolean;
   showFooter: boolean;
   showLiveButton: boolean;
@@ -565,7 +590,7 @@ function ChartSurface({ host, className, compact, label, coinViewport, showFoote
   failed: boolean;
 }>) {
   const zoomKey = useSyncExternalStore(noSubscribe, platformZoomKey, () => "Ctrl");
-  const accessibleLabel = label ?? (coinViewport ? "Price chart" : undefined);
+  const accessibility = chartSurfaceAccessibility(label, coinViewport, Boolean(preview));
   const credit = !compact && (
     <a
       className={styles.credit}
@@ -583,11 +608,9 @@ function ChartSurface({ host, className, compact, label, coinViewport, showFoote
         className={clsx(styles.canvas, compact && styles.compact)}
         data-tradingview-plot=""
         ref={host}
-        tabIndex={coinViewport ? 0 : undefined}
-        role={accessibleLabel ? "img" : undefined}
-        aria-label={accessibleLabel}
-        aria-description={coinViewport ? "Arrow keys pan. Plus/minus zoom." : undefined}
+        {...accessibility}
       />
+      {preview && <div className={styles.preview} aria-hidden="true">{preview}</div>}
       {showFooter ? <div className={styles.footer}>
         {showLiveButton && <Button variant="secondary" size="sm" className={styles.backToLive} onClick={onReturnLive}>Back to live</Button>}
         {credit}
@@ -604,6 +627,17 @@ function ChartSurface({ host, className, compact, label, coinViewport, showFoote
       ) : null}
     </div>
   );
+}
+
+function chartSurfaceAccessibility(label: string | undefined, coinViewport: boolean, hasPreview: boolean) {
+  const accessibleLabel = label ?? (coinViewport ? "Price chart" : undefined);
+  const keyboard = coinViewport && !hasPreview;
+  return {
+    role: accessibleLabel ? "img" as const : undefined,
+    "aria-label": accessibleLabel,
+    tabIndex: keyboard ? 0 : undefined,
+    "aria-description": keyboard ? "Arrow keys pan. Plus/minus zoom." : undefined,
+  };
 }
 
 /** A single native price line keeps the latest close and its scale label at the same coordinate while panning. */
