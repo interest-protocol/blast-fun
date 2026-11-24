@@ -66,7 +66,7 @@ test("traders search the server, preserve global ranks, paginate beyond ten, and
   assert.match(container.textContent ?? "", /Trader 15/);
   assert.equal(requests.at(-1)?.searchParams.get("page"), "4");
   await search("trader124");
-  assert.match(container.textContent ?? "", /1 trader found/);
+  assert.match(container.textContent ?? "", /1 trader found · Ranks are global/);
   const single = container.querySelector('nav[aria-label="Pages of traders"]');
   assert.ok(single, "one page keeps the pager, as the Main board's ‹ 1 ›");
   assert.equal(single.textContent, "1");

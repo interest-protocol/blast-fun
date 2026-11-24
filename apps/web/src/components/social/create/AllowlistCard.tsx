@@ -2,9 +2,7 @@
 
 import type { ReactNode } from "react";
 import { Popover, PopoverSurface } from "#web/components/blast-ui/Popover.tsx";
-import { Tooltip, TooltipSurface } from "#web/components/blast-ui/Tooltip.tsx";
 import { Button, ButtonLink } from "#web/components/blast-ui/Button.tsx";
-import { TOOLTIP_DELAY_MS } from "#web/components/blast-ui/TooltipGroup.tsx";
 import { CrErr, CrSwitch } from "./fields";
 import { CheckIcon } from "./create-icons";
 import { cx } from "./cx";
@@ -21,16 +19,13 @@ export type AllowlistActions = Readonly<{
 }>;
 
 function Info({ label, children }: Readonly<{ label: string; children: ReactNode }>) {
-  return <Popover.Root><Tooltip.Root>
-    <Tooltip.Trigger render={<Popover.Trigger />} delay={TOOLTIP_DELAY_MS} aria-label={label} className={cx("cr-info")}>ⓘ</Tooltip.Trigger>
-    <TooltipSurface
+  return <Popover.Root>
+    <Popover.Trigger aria-label={label} className={cx("cr-info")}>ⓘ</Popover.Trigger>
+    <PopoverSurface
       positioner={{ sideOffset: 8, collisionPadding: 16, className: cx("cr-info-layer") }}
-      popup={{ className: cx("cr-info-popup") }}
-    >{children}</TooltipSurface>
-  </Tooltip.Root><PopoverSurface
-    positioner={{ sideOffset: 8, collisionPadding: 16, className: cx("cr-info-layer") }}
-    popup={{ "aria-label": label, className: cx("cr-info-popup") }}
-  >{children}</PopoverSurface></Popover.Root>;
+      popup={{ "aria-label": label, className: cx("cr-info-popup") }}
+    >{children}</PopoverSurface>
+  </Popover.Root>;
 }
 
 export function AllowlistCard({ actions, busy, count, error, input, onUpload, symbol }: Readonly<{
@@ -38,7 +33,7 @@ export function AllowlistCard({ actions, busy, count, error, input, onUpload, sy
 }>) {
   const pending = busy || actions?.pending;
   return <div className={cx("cr-allowlist")}>
-    <div className={cx("cr-allowlist-heading")}><b>Allowlist</b><Info label="CSV format">One wallet per row: address,amount. Amounts are maximum contributions in {symbol}. Use plain numbers without thousands separators. You can review before accepting.</Info></div>
+    <div className={cx("cr-allowlist-heading")}><b>Allowlist</b><Info label="CSV format">Use one address,amount pair per row. Enter each wallet’s limit in {symbol} without thousands separators.</Info></div>
     <div className={cx("cr-file-card")}>
       <span aria-hidden="true" className={cx("cr-file-mark")}>CSV</span>
       <div className={cx("cr-file-details")}><strong>{count !== null ? actions?.fileName ?? "Your allowlist" : "Add your wallet list"}</strong><span>{count !== null ? `${count.toLocaleString("en-US")} wallets · Maximums in ${symbol}` : "CSV with wallet addresses and limits"}</span></div>
@@ -50,7 +45,7 @@ export function AllowlistCard({ actions, busy, count, error, input, onUpload, sy
       </div>
     </div>
     <CrErr message={error} path="allowlist" />
-    <div className={cx("cr-holder-row")}><div><span className={cx("cr-allowlist-heading")}><b>Include Blast card holders</b><Info label="How card holders are added">Optional. Adds one wallet per account with a Blast card: Privy first, otherwise Slush. New wallets receive the arithmetic mean of your original CSV limits, rounded down to the smallest {symbol} unit. Existing CSV limits are kept; duplicate wallets count once.</Info></span>{actions?.holderSummary ? <span className={cx("cr-holder-summary")}>{actions.holderSummary}</span> : null}</div><CrSwitch checked={actions?.includeHolders ?? false} disabled={pending || !actions?.canToggle} label="Include Blast card holders" onChange={(value) => actions?.onToggle(value)} /></div>
+    <div className={cx("cr-holder-row")}><div><span className={cx("cr-allowlist-heading")}><b>Include Blast card holders</b><Info label="How card holders are added">Adds one wallet per card holder, using Privy first, then Slush. New wallets get the average CSV limit, rounded down to the smallest {symbol} unit. Existing limits stay as entered.</Info></span>{actions?.holderSummary ? <span className={cx("cr-holder-summary")}>{actions.holderSummary}</span> : null}</div><CrSwitch checked={actions?.includeHolders ?? false} disabled={pending || !actions?.canToggle} label="Include Blast card holders" onChange={(value) => actions?.onToggle(value)} /></div>
   </div>;
 }
 

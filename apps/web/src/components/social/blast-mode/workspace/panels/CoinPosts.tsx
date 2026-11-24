@@ -1,4 +1,5 @@
 "use client";
+import { hoverExcerpt } from "#web/lib/hover-text.ts";
 import { Button } from "#web/components/blast-ui/Button.tsx";
 
 import { useCallback, useId, useRef, useState } from "react";
@@ -78,7 +79,7 @@ function CoinPostRow({ item, nowMs, onSelect }: Readonly<{
           {identity.kind === "account" && identity.verified ? <VerifiedBadge className={styles.verified} /> : null}
           {item.actor?.type === "account" ? <span>@{item.actor.callsign}</span> : null}
         </span>
-        <span className={styles.postText} title={summary}>{summary}</span>
+        <span className={styles.postText} title={hoverExcerpt(summary)}>{summary}</span>
       </Button>
       <time className={styles.postTime} dateTime={at.toISOString()}><InspectValue label="post time" value={at.toUTCString()}>{ago(item.occurred_at_ms, nowMs)}</InspectValue></time>
     </li>

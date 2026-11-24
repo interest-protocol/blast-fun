@@ -125,7 +125,7 @@ function PnlCoinRow({ asset, hidden, historyComplete, onCreate }: Readonly<{
   const status = !historyComplete ? "Updating" : asset.tracked_balance === "0" ? "Closed" : "Open";
   return <li>
     <div className={styles.pnlCoin}>
-      <Link href={asset.launch_id ? coinPagePath(asset.coin_type ?? asset.launch_id) : presalePath(asset.presale_id!)} title={asset.coin_type}>{asset.symbol}</Link>
+      <Link href={asset.launch_id ? coinPagePath(asset.coin_type ?? asset.launch_id) : presalePath(asset.presale_id!)}>{asset.symbol}</Link>
       <span className="status">{status}</span>
     </div>
     <Figures figures={asset} hidden={hidden} />

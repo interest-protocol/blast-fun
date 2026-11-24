@@ -1,5 +1,6 @@
 "use client";
 
+import { hoverExcerpt } from "#web/lib/hover-text.ts";
 import { Popover, PopoverSurface } from "#web/components/blast-ui/Popover.tsx";
 import { useState } from "react";
 
@@ -28,9 +29,8 @@ function BackerAvatar({ person }: Readonly<{ person: SocialPresalePerson }>) {
       positioner={{ className: styles.positioner, collisionPadding: 12, positionMethod: "fixed", side: "top", sideOffset: 6 }}
       popup={{ className: styles.popup, initialFocus: false, finalFocus: false }}
     >
-          <Popover.Title className={styles.name}>{name}</Popover.Title>
-          <Popover.Description className={styles.description}>backed this.</Popover.Description>
-        </PopoverSurface>
+      <Popover.Title className={styles.name}>{hoverExcerpt(name)}</Popover.Title>
+    </PopoverSurface>
   </Popover.Root>;
 }
 
@@ -53,7 +53,7 @@ export function PresaleSocialProof({ following }: Readonly<{ following: readonly
               <ul className={styles.list}>
                 {remaining.map(person => <li className={styles.person} key={person.callsign}>
                   <span aria-hidden="true" className={styles.avatar}><AccountAvatar accountId={person.callsign} avatarUrl={person.avatar_url} size={24} /></span>
-                  <span><span className={styles.name}>{person.display_name ?? person.callsign}</span><span className={styles.description}>backed this.</span></span>
+                  <span className={styles.name}>{person.display_name ?? person.callsign}</span>
                 </li>)}
               </ul>
             </PopoverSurface>

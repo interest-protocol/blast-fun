@@ -13,7 +13,7 @@ import { Avatar } from "../post/PostMedia";
 import { useSocialViewer } from "../SignInGate";
 import styles from "./CoinHome.module.css";
 import { followingTapeQuery } from "./home-client";
-import { firstName, tapeLine, tapeParts } from "./home-model";
+import { firstName, tapeParts } from "./home-model";
 
 /**
  * The tape (the critic's one borrowing from Perpsplexity's trench): one
@@ -46,7 +46,7 @@ function TapeItem({ event, nowMs }: Readonly<{ event: HomeTapeEvent; nowMs: numb
   return (
     <li className={styles.tapeItem}>
       {actor.type === "account" ? <Avatar callsign={actor.callsign} size={26} src={actor.avatar_url} /> : null}
-      <span className={styles.tapeText} title={`${firstName(actor)} ${tapeLine(event)}`}>
+      <span className={styles.tapeText}>
         {actor.type === "account" ? <Link className={styles.tapeName} href={actor.path}>{firstName(actor)}</Link> : null}
         {actor.type === "account" && actor.verified ? <VerifiedBadge className="verified" /> : null}
         {` ${parts.before} `}

@@ -1,5 +1,6 @@
 "use client";
 
+import { InspectValue } from "#web/components/blast-ui/InspectValue.tsx";
 import { DateStamp } from "#web/components/blast-ui/DateStamp.tsx";
 import { PARTIAL_BALANCE_NOTE } from "#web/components/blast-ui/account-balance-model.ts";
 import { Button, ButtonLink, DisclosureSummary, IconButton } from "#web/components/blast-ui/Button.tsx";
@@ -627,7 +628,7 @@ function CoinMeta({ page, range, meta }: Readonly<{ page: PortfolioCoinControls;
       <span className={!page.loading && page.total === 0 ? "sr" : undefined} aria-label={page.loading ? "Finding your coins" : undefined} aria-busy={page.loading || undefined} aria-live="polite" ref={range} role="status" tabIndex={-1}>
         {page.loading ? <SkeletonText>1–20 of 100 coins</SkeletonText> : coinRange(page)}
       </span>
-      {page.onHideSmall ? <label className={styles.smallBalances} title="Hides holdings of less than one token. Core coins and balances without token units stay visible."><Checkbox checked={page.hideSmall ?? true} onChange={event => page.onHideSmall?.(event.target.checked)} />{HIDE_SMALL}</label> : null}
+      {page.onHideSmall ? <label className={styles.smallBalances} title="Under 1 token, except core coins and balances without units."><Checkbox checked={page.hideSmall ?? true} onChange={event => page.onHideSmall?.(event.target.checked)} />{HIDE_SMALL}</label> : null}
     </div>
   );
 }
@@ -683,12 +684,15 @@ function CoinRow({ coin, price, hidden, onOpen }: Readonly<{ coin: HoldingCoin; 
   const row = coinRow(coin, price, hidden);
   const change = row.change;
   const target = coinRowTarget(coin);
+  const amount = !hidden && coin.compactQuantityText ? `${coin.compactQuantityText} ${coin.symbol}` : row.amount;
   const content = (
     <>
       <CoinMark coin={{ key: coin.key, coinType: coin.coinType, symbol: coin.symbol, iconUrl: coin.icon, round: coin.round }} size={40} />
       <span className={styles.t}>
         {coin.verifiedTeam ? <span className={styles.named}><b>{row.name}</b><CoinVerifiedMark /></span> : <b>{row.name}</b>}
-        <span className="num" title={row.amount}>{!hidden && coin.compactQuantityText ? `${coin.compactQuantityText} ${coin.symbol}` : row.amount}</span>
+        <span className="num">{!target && amount !== row.amount
+          ? <InspectValue label="balance" value={row.amount}>{amount}</InspectValue>
+          : amount}</span>
       </span>
       <CoinTrend coin={coin} price={price} change={change} />
       <span className={styles.v}>
@@ -702,7 +706,7 @@ function CoinRow({ coin, price, hidden, onOpen }: Readonly<{ coin: HoldingCoin; 
   // A page is a real link (new tab, long-press); the sheet is a dialog button; an unpriced, uncurated coin opens nothing.
   if (target?.kind === "page") return <IntentLink aria-label={label} className={styles.row} data-list-row={coin.key} data-k={coin.key} href={target.href}>{content}</IntentLink>;
   if (target) return <button aria-haspopup="dialog" aria-label={label} className={styles.row} data-list-row={coin.key} data-k={coin.key} onClick={onOpen} type="button">{content}</button>;
-  return <div title={row.amount} className={styles.row} data-list-row={coin.key} data-k={coin.key}>{content}</div>;
+  return <div className={styles.row} data-list-row={coin.key} data-k={coin.key}>{content}</div>;
 }
 
 function CoinTrend({ coin, price, change }: Readonly<{ coin: HoldingCoin; price: SocialPriceHistory | null | undefined; change: ReturnType<typeof coinRow>["change"] }>) {

@@ -53,7 +53,7 @@ function RailLoader() {
   const read = useDiscoverRailCoins(true);
   useReportDiscoveryCoins("Coins", read.data?.coins ?? [], read.isSuccess, true);
   if (read.isError) return <nav aria-label="Coins shortcuts" className={styles.discoveryIcons}>
-    <IconButton variant="ghost" size="md" aria-label="Coins shortcuts could not load. Retry" title="Coins shortcuts could not load. Retry" onClick={() => void read.refetch()}>
+    <IconButton variant="ghost" size="md" aria-label="Coins shortcuts could not load. Retry" title="Retry coin shortcuts" onClick={() => void read.refetch()}>
       <AlertCircleIcon />
     </IconButton>
   </nav>;

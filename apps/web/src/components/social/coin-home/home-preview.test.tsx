@@ -23,9 +23,11 @@ test("trader summaries exclude private or missing PnL, preserve zero and gate ho
   assert.match(publicRow, /TOKEN/);
   assert.match(publicRow, /\$0/);
   assert.match(publicRow, /aria-expanded="false"/);
-  assert.match(publicRow, /PnL · Since launch/);
   assert.doesNotMatch(publicRow, /Blast coins · All venues/);
-  assert.match(publicRow, /aria-label="Realized plus unrealized USD PnL since launch on Blast-launched coins across all venues and linked wallets/);
+  const board = new JSDOM(publicRow).window.document;
+  const metric = [...board.querySelectorAll("button")].find(button => button.textContent === "PnL · Since launch");
+  const description = board.getElementById(metric?.getAttribute("aria-describedby") ?? "");
+  assert.equal(description?.textContent, "Realized and unrealized across linked wallets on Blast coins. Excludes gas.");
   const hiddenHoldings = render({ ...base, holdings_public: false });
   assert.match(hiddenHoldings, /Private/);
   assert.doesNotMatch(hiddenHoldings, /TOKEN/);

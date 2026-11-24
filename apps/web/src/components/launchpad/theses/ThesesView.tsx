@@ -30,7 +30,7 @@ function Post({ post, symbol }: Readonly<{ post: PublicPost; symbol: string | nu
           <span className={styles.kind}>{KIND_LABELS[post.kind]}</span>
           {post.stance ? <span className={styles.stance} data-stance={post.stance}>{STANCE_LABELS[post.stance]}</span> : null}
           <span className={styles.author}>
-            Author <code title={post.authorIdentityId}>{shortId(post.authorIdentityId)}</code>
+            Author <code>{shortId(post.authorIdentityId)}</code>
           </span>
         </h3>
         <p className={styles.body}>{post.body}</p>
@@ -54,7 +54,7 @@ function Post({ post, symbol }: Readonly<{ post: PublicPost; symbol: string | nu
               <div key={fact.term} className={styles.fact}>
                 <dt className={styles.term}>{fact.term}</dt>
                 <dd className={styles.detail}>
-                  {fact.full ? <code title={fact.full}>{fact.detail}</code> : fact.detail}
+                  {fact.full ? <code>{fact.detail}</code> : fact.detail}
                   {fact.checkedAt ? <> <DateStamp at={fact.checkedAt} label="verification time" />.</> : null}
                 </dd>
               </div>

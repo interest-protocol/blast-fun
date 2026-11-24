@@ -178,7 +178,6 @@ function TradersLive() {
       className={styles.live}
       onClick={() => dispatch.patchDataControls("Traders", { ...controls, live: !controls.live })}
       role="switch"
-      title={controls.live ? "Live rankings: on" : "Live rankings: paused"}
       type="button"
     >
       {controls.live ? "Live" : "Paused"}
@@ -188,7 +187,7 @@ function TradersLive() {
 
 function traderResultCount(data: HomeTradersPage) {
   if (data.total === 0) return null;
-  return `${data.total} ${data.total === 1 ? "trader" : "traders"}${data.search ? " found" : " ranked"}`;
+  return `${data.total} ${data.total === 1 ? "trader" : "traders"}${data.search ? " found · Ranks are global" : " ranked"}`;
 }
 
 function TradersResult({
@@ -224,7 +223,7 @@ function TradersResult({
         </p>}
         {/* The metric and Live describe rows; an empty board or search has none to describe (audit inventory). */}
         {data.traders.length === 0 ? null : <span className={styles.noteTools}>
-          <MetricHelp why="Global all-time realized plus unrealized USD PnL across eligible public traders. Uses profile cost basis and fresh prices. Missing or private performance is excluded. Search preserves global ranks.">
+          <MetricHelp why="Realized and unrealized PnL from public profiles.">
             PnL · All time
           </MetricHelp>
           <TradersLive />

@@ -27,7 +27,6 @@ function DiscoveryRowLink({
         href={coinPagePath(row.coinType)}
         data-launch-id={row.launchId}
         aria-current={selected ? "page" : undefined}
-        title={`Launch ID ${row.launchId}`}
         onClick={() => onChoose?.(row.launchId)}
       >
         <span className={styles.icon}>

@@ -40,11 +40,7 @@ export function WalletAddressField({
           type="button"
           className="btn btn-line btn-sm"
           disabled={!address}
-          title={
-            address
-              ? `Fill ${label} with ${address}`
-              : "Connect a wallet to fill this address"
-          }
+          title={address ? undefined : "Connect a wallet first"}
           onClick={() => {
             destination.invalidate();
             form.update({ [field]: address! });
@@ -74,7 +70,7 @@ export function WalletAddressField({
       />
       <p id={`vesting-${field}-help`}>
         {own ? (
-          <span className={styles.ownWallet} title={address!}>
+          <span className={styles.ownWallet}>
             Your wallet · {short(address!)}.{" "}
           </span>
         ) : null}

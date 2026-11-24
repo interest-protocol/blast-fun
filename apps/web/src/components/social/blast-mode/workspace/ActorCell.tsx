@@ -68,7 +68,7 @@ export function ActorCell({
         {identity.kind === "account" ? (
           <>
             <span className={styles.nameLine}>
-              <IntentLink className={styles.name} href={`/@${identity.callsign}`} title={`@${identity.callsign} — open profile (B returns to Blast mode)`}>
+              <IntentLink className={styles.name} href={`/@${identity.callsign}`} title={`View @${identity.callsign}`}>
                 {identity.name}
               </IntentLink>
               {identity.verified ? <VerifiedBadge className={styles.verified} /> : null}

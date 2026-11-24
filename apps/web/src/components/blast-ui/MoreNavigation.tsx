@@ -53,7 +53,6 @@ export function MoreNavigation({ mobile = false, createMenu }: MoreNavigationPro
     "data-current": (mobile ? current || portfolioCurrent : current && !open) || undefined,
     "data-more-navigation": "",
     onClick: () => setOpen(value => !value),
-    title: "More",
   };
 
   return (
@@ -108,7 +107,6 @@ export function MoreNavigation({ mobile = false, createMenu }: MoreNavigationPro
               className={clsx(shellStyles.navItem, styles.destination)}
               href="/portfolio"
               onClick={() => setOpen(false)}
-              title="Portfolio"
             >
               <PieIcon />
               <span>Portfolio</span>
@@ -120,7 +118,6 @@ export function MoreNavigation({ mobile = false, createMenu }: MoreNavigationPro
             className={clsx(shellStyles.navItem, styles.destination)}
             href="/competitions"
             onClick={() => { if (mobile) setOpen(false); }}
-            title="Competitions"
           >
             <TrophyIcon />
             <span>Competitions</span>

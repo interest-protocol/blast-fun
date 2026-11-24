@@ -1,5 +1,6 @@
 "use client";
 
+import { hoverExcerpt } from "#web/lib/hover-text.ts";
 import { diagnosticMessage } from "#web/lib/errors.ts";
 
 import { useFeedbackReveal } from "#web/components/blast-ui/feedback-motion.ts";
@@ -73,7 +74,7 @@ export function CallsList({ calls, onRetry }: Readonly<{ calls: Loadable<SocialP
             <span className={styles.t}>
               {row.presale.verified_team ? <span className={styles.named}><b>{row.presale.name}</b><CoinVerifiedMark /></span> : <b>{row.presale.name}</b>}
               <span>{row.sub}</span>
-              {row.why ? <span className={styles.why} title={row.why}>{row.why}</span> : null}
+              {row.why ? <span className={styles.why} title={hoverExcerpt(row.why)}>{row.why}</span> : null}
             </span>
             {row.result ? <CallSpark presaleId={row.presale.presale_id} up={row.result.tone === "up"} /> : null}
             <span className={styles.v}>

@@ -8,7 +8,6 @@ import { CoinVerifiedMark } from "#web/components/blast-ui/Icons.tsx";
 import { IntentLink } from "#web/components/blast-ui/NavigationLink.tsx";
 import {
   compactQuoteAmount,
-  formatQuoteAmount,
   quoteSymbol,
 } from "#web/components/launchpad/discovery/discovery-model.ts";
 import { readableUsd } from "#web/lib/market-format.ts";
@@ -104,7 +103,7 @@ export function FeaturedCurve({
           <span className={styles.tagline}>{details.data.tagline}</span>
         ) : null}
         {row.quoteRemaining !== null ? (
-          <span className={styles.featuredRaise} title={`${formatQuoteAmount(row.quoteRemaining, row.quoteDecimals, row.quoteType)} ${quoteSymbol(row.quoteType)}`}>
+          <span className={styles.featuredRaise}>
             {compactQuoteAmount(row.quoteRemaining, row.quoteDecimals, row.quoteType)}{" "}
             {quoteSymbol(row.quoteType)} <small>to graduate</small>
           </span>

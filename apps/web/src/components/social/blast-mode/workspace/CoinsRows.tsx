@@ -1,4 +1,5 @@
 "use client";
+import { hoverExcerpt } from "#web/lib/hover-text.ts";
 import { coinPagePath } from "@blast/core/modules/launchpad-coin/page-key.ts";
 import { Button, IconButton } from "#web/components/blast-ui/Button.tsx";
 import { workspaceScrollOwner } from "./scroll-owner";
@@ -94,7 +95,7 @@ export function CoinPageLink({
       aria-label={`Open ${symbol} page`}
       className={className}
       href={launchId ? coinPagePath(coinType ?? launchId) : presalePath(presaleId!)}
-      title={`Open ${symbol} page (B returns to Blast mode)`}
+      title={hoverExcerpt(`Open ${symbol} page`)}
     >
       {children}
     </IntentLink>
@@ -235,7 +236,7 @@ function CoinRow({
       data-on-screen={open}
       data-view={view}
       data-workspace-row={canonical ?? undefined}
-      title={about}
+      title={hoverExcerpt(about)}
     >
       {/* The whole head opens the coin in the middle; everything about it is there, so the row has no details of its own. A coin with no canonical type opens nothing, so its row is plain. */}
       <div

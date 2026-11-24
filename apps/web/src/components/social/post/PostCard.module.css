@@ -228,7 +228,6 @@ a.name:active { opacity: .6; } /* the gate's `.prow a.n` */
 .detail .actLine { margin-top: 0.25rem; }
 .detail .actAmt { min-width: 0; max-width: 100%; white-space: nowrap; overflow-x: auto; }
 .detail .tchip { max-width: 100%; min-width: 0; height: auto; min-height: 2rem; padding-block: 0.3125rem; }
-.detail .symbol { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .detail :is(.headline, .sub, .actAt, .callT, .pnl, .pileTxt, .mThru) { min-width: 0; overflow-wrap: anywhere; }
 .detail .pfoot { margin-top: 0.25rem; padding-top: 0.5rem; flex-wrap: wrap; }
 .detail .footL { flex-wrap: wrap; gap: 0.5rem; }

@@ -1,5 +1,6 @@
 "use client";
 
+import { hoverExcerpt } from "#web/lib/hover-text.ts";
 import { spreadMs } from "#web/lib/query/polling.ts";
 import { coreCoin } from "@blast/core/modules/social/portfolio/core-coins.ts";
 import { CoinMark } from "#web/components/blast-ui/CoinMark.tsx";
@@ -123,8 +124,8 @@ function FundingAmounts({ sale, funding, targetOnly = false, card = false }: Rea
 
 /** The sale's bold name, with the verified-coin mark after it when Blast checked the team; the name ellipsises, the mark stays whole. */
 function SaleTitle({ sale }: Readonly<{ sale: SocialPresaleSummary }>) {
-  if (!sale.verified_team) return <b title={sale.name}>{sale.name}</b>;
-  return <span className={cx("sr-title")}><b title={sale.name}>{sale.name}</b><CoinVerifiedMark /></span>;
+  if (!sale.verified_team) return <b title={hoverExcerpt(sale.name)}>{sale.name}</b>;
+  return <span className={cx("sr-title")}><b title={hoverExcerpt(sale.name)}>{sale.name}</b><CoinVerifiedMark /></span>;
 }
 
 /** A list row (`a.card.srow2`): mark, name, when, fill, backers and up to three followed backers. */

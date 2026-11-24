@@ -272,7 +272,7 @@ function Frame({ id, list, wallet, children }: Readonly<{ id: string; list: keyo
           {title}
           {wallet ? (
             <>
-              <span aria-hidden="true" title={wallet}> · {shortId(wallet)}</span>
+              <span aria-hidden="true"> · {shortId(wallet)}</span>
               <span className="sr-only">, wallet {wallet}</span>
             </>
           ) : null}

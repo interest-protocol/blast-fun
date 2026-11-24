@@ -569,7 +569,7 @@ function AvailableCoinBalance({ form }: Readonly<{ form: CreationForm }>) {
   if (!coin) return null;
   if (form.hidden) return <span>Available <b className="num">{HIDDEN_AMOUNT}</b></span>;
   const exact = formatVestingAmount(balance ? balance.atoms : ZERO_ATOMS, coin.metadataAvailable === false ? null : coin.decimals);
-  return <span title={exact} aria-label={`Available: ${exact} ${coin.symbol}`}>
+  return <span aria-label={`Available: ${exact} ${coin.symbol}`}>
     Available <b className="num">{balance ? compactBalance(balance) : "0"} {coin.metadataAvailable === false ? "atoms" : coin.symbol}</b>
   </span>;
 }

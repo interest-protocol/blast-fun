@@ -5,7 +5,6 @@ import { HIDDEN_AMOUNT } from "@blast/core/web/format.ts";
 import { CoinTypeTag } from "#web/components/blast-ui/CoinTypeTag.tsx";
 import { CoinMark } from "#web/components/blast-ui/CoinMark.tsx";
 import { PageHeader } from "#web/components/blast-ui/PageHeader.tsx";
-import { InspectValue } from "#web/components/blast-ui/InspectValue.tsx";
 import { LiveFigureCue } from "#web/components/blast-ui/LiveFigureCue.tsx";
 import { DexIdentity } from "#web/components/blast-ui/DexIdentity.tsx";
 import { Segmented } from "#web/components/blast-ui/Segmented.tsx";
@@ -66,11 +65,11 @@ export function CoinPriceFigure({ price, tradeId, quoteSymbol, quoteMark }: Read
   const { amountsHidden } = useShellPrefs();
   if (amountsHidden) return <>{HIDDEN_AMOUNT}</>;
   const formatted = readablePrice(price);
-  return <span className={styles.priceFigure}><InspectValue label="coin price" value={quoteSymbol ? `${price} ${quoteSymbol}` : `$${price}`}>
+  return <span className={styles.priceFigure}>
     <LiveFigureCue tradeId={tradeId} value={price}>
       {quoteSymbol ? <span className={styles.amount}>{formatted}{quoteMark ?? <span>{quoteSymbol}</span>}</span> : `$${formatted}`}
     </LiveFigureCue>
-  </InspectValue></span>;
+  </span>;
 }
 
 export function MarketPriceRow({ price, change, activity, showSound = false, showCurrency = true }: Readonly<{

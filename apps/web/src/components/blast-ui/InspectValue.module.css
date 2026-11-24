@@ -33,7 +33,6 @@
   z-index: 1100;
   max-width: calc(100vw - 2rem);
 }
-.tip,
 .popup {
   box-sizing: border-box;
   width: max-content;
@@ -44,26 +43,14 @@
   transition:
     opacity var(--t1) var(--ease),
     transform var(--t1) var(--ease);
-}
-.tip {
-  color: var(--tip-fg);
-  background: var(--tip-bg);
-}
-.popup {
   color: var(--ink);
   background: var(--card);
   border: 1px solid var(--hair);
 }
-.tip[data-starting-style],
-.tip[data-ending-style],
 .popup[data-starting-style],
 .popup[data-ending-style] {
   opacity: 0;
   transform: translateY(-0.1875rem);
-}
-/* The next tooltip in a group (moving across prices) is already there: no entrance. */
-.tip[data-instant] {
-  transition: none;
 }
 .caption {
   display: block;
@@ -86,17 +73,14 @@
 .actions button {
   min-height: max(44px, 2.75rem);
 }
-/* Reduced motion: the tooltip and the inspector fade where they stand. */
+/* Reduced motion: the inspector fades in place. */
 @media (prefers-reduced-motion: reduce) {
   .trigger {
     transition: opacity var(--t1) var(--ease-std);
   }
-  .tip,
   .popup {
     transition: opacity var(--t1) var(--ease-std);
   }
-  .tip[data-starting-style],
-  .tip[data-ending-style],
   .popup[data-starting-style],
   .popup[data-ending-style] {
     transform: none;

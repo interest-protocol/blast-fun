@@ -85,8 +85,9 @@ test("vesting accepts unlisted, unpriced, metadata-free and presale coins with e
       '[aria-label="Exact balance: 9007199254740993 atoms TOKEN"]',
     ),
   );
-  assert.ok(container.querySelector(`[title="${UNLISTED.coinType}"]`));
-  assert.ok(container.querySelector(`[title="${twin.coinType}"]`));
+  assert.ok(container.querySelector('[title="0xaaaa…aaaa::coin::TOKEN"]'));
+  assert.equal(container.querySelector(`[title="${UNLISTED.coinType}"]`), null);
+  assert.ok(container.querySelector('[title="0xbbbb…bbbb::coin::TOKEN"]'));
   assert.equal(
     container
       .querySelector('input[role="combobox"]')

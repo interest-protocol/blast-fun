@@ -187,12 +187,6 @@ export function tapeParts(event: Pick<HomeTapeEvent, "kind" | "quote">): Readonl
   }
 }
 
-/** The whole line, for a label: `sold $25 of ORBIT`. */
-export function tapeLine(event: Pick<HomeTapeEvent, "kind" | "quote" | "coin">): string {
-  const { before, after } = tapeParts(event);
-  return [before, event.coin.symbol, after].filter((part) => part !== "").join(" ");
-}
-
 /** Compact dollars that never round a positive amount to `$0`: `$1.2K`, `$435`, `$0.05`, `$0.0₆1`. */
 function dollars(value: number): string {
   return value > 0 && value < 1 ? readableUsd(numberDecimal(value)) : short(value);

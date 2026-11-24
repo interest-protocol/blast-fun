@@ -1,5 +1,7 @@
 "use client";
 
+import { hoverExcerpt } from "#web/lib/hover-text.ts";
+
 import { coinPagePath } from "@blast/core/modules/launchpad-coin/page-key.ts";
 import { pollInterval } from "#web/lib/query/polling.ts";
 import { useDebouncedValue } from "#web/lib/use-debounced-value.ts";
@@ -42,7 +44,6 @@ import {
 } from "./bonding-client.ts";
 import {
   compactQuoteAmount,
-  formatQuoteAmount,
   quoteSymbol,
 } from "#web/components/launchpad/discovery/discovery-model.ts";
 import { shortCoinType } from "../coins/coin-display.ts";
@@ -574,7 +575,6 @@ function BondingCard({
       <IntentLink
         className={styles.card}
         href={coinPagePath(row.coinType)}
-        title={`Open ${title}`}
       >
         <span className={styles.head}>
           <CoinMark
@@ -588,7 +588,7 @@ function BondingCard({
             size={44}
           />
           <span className={styles.title}>
-            <b>{row.verifiedTeam ? <span className="coinNamed"><span className="nm">{title}</span><CoinVerifiedMark /></span> : title}</b>
+            <b title={row.name ? hoverExcerpt(row.name) : undefined}>{row.verifiedTeam ? <span className="coinNamed"><span className="nm">{title}</span><CoinVerifiedMark /></span> : title}</b>
             <span>
               {row.symbol ? `$${row.symbol} · ` : ""}
               {view === "graduated" ? `graduated ${age}` : age}
@@ -607,13 +607,7 @@ function PriceChangeBadge({ bps }: Readonly<{ bps?: string | null }>) {
   if (bps == null) return null;
   const change = priceChange(bps);
   return (
-    <span
-      className={styles.change}
-      title={`${change} USD price change over 24 hours; five-minute historical sampling`}
-    >
-      {change}
-      <span className="sr-only"> over 24 hours</span>
-    </span>
+    <span className={styles.change}>{change} · 24h</span>
   );
 }
 
@@ -628,7 +622,7 @@ function GraduationProgress({ row }: Readonly<{ row: DiscoveryRow }>) {
           <span className="sr-only"> to graduation</span>
         </b>
         {row.quoteRemaining !== null ? (
-          <span className="num" title={`${formatQuoteAmount(row.quoteRemaining, row.quoteDecimals, row.quoteType)} ${quoteSymbol(row.quoteType)}`}>
+          <span className="num">
             {compactQuoteAmount(row.quoteRemaining, row.quoteDecimals, row.quoteType)}{" "}
             {quoteSymbol(row.quoteType)} to go
           </span>

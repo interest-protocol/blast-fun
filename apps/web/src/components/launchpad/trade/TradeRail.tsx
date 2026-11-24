@@ -429,7 +429,7 @@ function AmountUnit({
   return buying ? (
     <QuoteMark quote={asset.quote} />
   ) : (
-    <span className={styles.symbol} title={asset.symbol}>{asset.symbol}</span>
+    <span className={styles.symbol}>{asset.symbol}</span>
   );
 }
 
@@ -496,7 +496,7 @@ function TradeReceive({ asset, received, buying, compactSell }: Readonly<{
       <div className={swapStyles.amtTop}><span className={swapStyles.lbl}>{receiveLabel(asset, buying, compactSell)}</span></div>
       <div className={swapStyles.amtRow}>
         <AmountFit value={receivedText}>
-          <b className={clsx(swapStyles.amtVal, "num", compactSell && styles.sellReceiveValue, exact === undefined && swapStyles.zero)} title={exact}>
+          <b className={clsx(swapStyles.amtVal, "num", compactSell && styles.sellReceiveValue, exact === undefined && swapStyles.zero)}>
             {exact === undefined ? receivedText : <InspectValue label="receive amount" value={exact}>{receivedText}</InspectValue>}
           </b>
         </AmountFit>

@@ -20,6 +20,8 @@ import { ClientOnly } from "#web/components/ui-libraries/use-hydrated.tsx";
 import { formatVestingAmount } from "@blast/core/modules/vesting/model.ts";
 import { HIDDEN_AMOUNT } from "@blast/core/web/format.ts";
 import { CoinMark } from "#web/components/blast-ui/CoinMark.tsx";
+import { hoverExcerpt } from "#web/lib/hover-text.ts";
+import { shortCoinType } from "./coin-display.ts";
 import { CoinIdentity } from "#web/components/social/coins/CoinIdentity.tsx";
 import { useShellPrefs } from "#web/components/blast-ui/use-shell-prefs.ts";
 import { isSmallBalance } from "@blast/core/modules/social/portfolio/small-balance.ts";
@@ -606,7 +608,7 @@ function PickerCoin({
 function CoinTypeLine({ coinType }: Readonly<{ coinType: string }>) {
   const split = Math.max(0, coinType.indexOf("::"));
   return (
-    <span className={styles.pickerType} title={coinType}>
+    <span className={styles.pickerType} title={hoverExcerpt(shortCoinType(coinType))}>
       <span>{coinType.slice(0, split)}</span>
       <span>{coinType.slice(split)}</span>
     </span>
@@ -617,7 +619,7 @@ function VestingBalance({ coin, hidden, known }: Readonly<{ coin: WalletCoinView
   if (!known) return <><b aria-hidden="true">—</b><span>Balance unavailable</span></>;
   if (hidden) return <><b className="num">{HIDDEN_AMOUNT}</b><span>Balance hidden</span></>;
   const exact = formatVestingAmount(coin.atoms, coin.metadataAvailable === false ? null : coin.decimals);
-  return <><b className="num" title={`${exact} ${coin.symbol}`}>{compactAmount.format(coin.amount)}</b><span aria-label={`Exact balance: ${exact} ${coin.symbol}`}>Balance</span></>;
+  return <><b className="num">{compactAmount.format(coin.amount)}</b><span aria-label={`Exact balance: ${exact} ${coin.symbol}`}>Balance</span></>;
 }
 
 function usePickerHoldings(

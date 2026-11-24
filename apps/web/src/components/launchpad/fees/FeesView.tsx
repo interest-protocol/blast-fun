@@ -82,7 +82,7 @@ function Shares({ caption, rows, units }: Readonly<{ caption: string; rows: read
 function Partner({ partnerId }: Readonly<{ partnerId: string }>) {
   return (
     <>
-      <code className={styles.mono} aria-hidden="true" title={partnerId}>{shortId(partnerId)}</code>
+      <code className={styles.mono} aria-hidden="true">{shortId(partnerId)}</code>
       <span className={primitives.srOnly}>{partnerId}</span>
     </>
   );

@@ -255,6 +255,11 @@ test("a signed-in visitor has Balance and Fund on a legacy coin page on mobile",
   assert.match(wallet?.textContent ?? "", /\$4,760\.34.*Fund/);
 });
 
+function marketDexName(dom: DocumentFragment) {
+  const labels = dom.querySelectorAll('[aria-label="Market overview"] dt');
+  return Array.from(labels).find(label => label.textContent === "DEX")?.nextElementSibling?.textContent;
+}
+
 test("all four legacy coin pages show the known deployer helmet, shared chart and their DEX", async () => {
   const expected = ["MANIFEST/Cetus", "Blast Wheels/Bluefin", "OurBlastBot/Bluefin", "Trench Helmet/Cetus"];
   const actual = await Promise.all(BLAST_V1_COINS.map(async ({ coinType, name, symbol }) => {
@@ -269,7 +274,7 @@ test("all four legacy coin pages show the known deployer helmet, shared chart an
     const displayName = name.toLowerCase() === symbol.toLowerCase() ? "" : name;
     assert.equal(heading.textContent, `${displayName}$${symbol}${badge.textContent}V1`);
     assert.equal(badge.nextElementSibling?.textContent, "V1");
-    return `${name}/${dom.querySelector('[aria-label="Market overview"] dd:last-child [title]')?.getAttribute("title")}`;
+    return `${name}/${marketDexName(dom)}`;
   }));
   assert.deepEqual(actual, expected);
 });
@@ -282,7 +287,7 @@ test("JustOneSui has a Cetus chart and is marked as a verified community", async
   assert.ok(heading?.querySelector('[aria-label="Verified community"]'));
   assert.equal(heading?.querySelector('[aria-label="Known deployer"], [aria-label="Legacy · Blast V1"]'), null);
   assert.ok(dom.querySelector('section[aria-label="Price chart"]'));
-  assert.ok(dom.querySelector('[aria-label="Market overview"] [title="Cetus"]'));
+  assert.equal(marketDexName(dom), "Cetus");
 });
 
 test("WP2: the server reads keyed blast-infra; the browser's market slots are handed no blast-infra origin", async () => {
