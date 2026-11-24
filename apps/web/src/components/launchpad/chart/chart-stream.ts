@@ -64,7 +64,14 @@ export class ChartStream {
     for (const pool of options.pools) this.pools.set(pool, { fence: null, cutoff: null, page: null, section: null, loading: false, buffered: [], retryAttempts: 0, cancelRetry: null, inflight: null, untouched: null });
   }
 
-  start(): void {
+  start(initial?: readonly (readonly [string, ChartPoolRead])[]): void {
+    for (const [key, answer] of initial ?? []) {
+      const checkpoint = answer.section.provenance?.checkpoint ?? null;
+      const migration = this.options.migration();
+      if (!this.pools.has(key) || answer.page?.poolKey !== key || checkpoint === null ||
+          (migration && !sameChartMigration(migration, answer.page.migration))) continue;
+      this.acceptRead(key, answer.page, answer.section, checkpoint);
+    }
     const hub = this.options.hub === undefined ? tabMarketStream() : this.options.hub;
     // Without a stream (no EventSource) the chart stays on its HTTP polls.
     if (hub) {
@@ -81,7 +88,9 @@ export class ChartStream {
       });
     } else this.options.onStatus("unavailable");
     // HTTP remains the fallback and periodically observes indexer lag/corrections during quiet markets.
-    if (this.visible()) void this.refresh();
+    if (this.visible()) {
+      for (const [key, pool] of this.pools) if (pool.page === null) void this.load(key);
+    }
     this.poll();
   }
 

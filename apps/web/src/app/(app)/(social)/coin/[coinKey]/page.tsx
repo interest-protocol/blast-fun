@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { requestLaunchFlags } from "#web/lib/launch-flags.server.ts";
 import { PageHeader } from "#web/components/blast-ui/PageHeader.tsx";
 import { Ticker } from "#web/components/blast-ui/Ticker.tsx";
@@ -8,10 +8,14 @@ import { CoinTypeTag } from "#web/components/blast-ui/CoinTypeTag.tsx";
 
 import { BondingCoinScreen, LegacyCoinScreen } from "#web/components/social/bonding/BondingCoinScreen.tsx";
 import { LegacyCoinChart } from "#web/components/social/coins/LegacyCoinChart.tsx";
-import { DEFAULT_CHART_CONTROLS, parseChartControls, parseLiveChartControls } from "#web/components/launchpad/chart/chart-model.ts";
+import { CHART_CONTROLS_COOKIE, DEFAULT_CHART_CONTROLS, parseChartControls, parseLiveChartControls, preferredChartControls } from "#web/components/launchpad/chart/chart-model.ts";
 import { CoinLive } from "#web/components/launchpad/coin/CoinLive.tsx";
 import { coinIdentity, pageLifecycle, venueRoute } from "#web/components/launchpad/coin/coin-view.ts";
-import { coinTerminalSlots, type CoinActionSlots } from "#web/components/launchpad/coin/CoinSlots.tsx";
+import { coinChartOptions, coinTerminalSlots, type CoinActionSlots } from "#web/components/launchpad/coin/CoinSlots.tsx";
+import { readActivityPage } from "#web/components/launchpad/activity/activity-client.ts";
+import { listStart } from "#web/components/launchpad/activity/activity-feed.ts";
+import { readChartSnapshot } from "#web/components/launchpad/chart/chart-client.ts";
+import { initialMarketDependencies, wantsInitialMarket } from "#web/modules/launchpad-coin/initial-market.ts";
 import { CoinMigrationSlot } from "#web/components/launchpad/migration/CoinMigrationSlot.tsx";
 import { openingBidActions } from "#web/components/launchpad/opening/opening-slot.tsx";
 import { CoinTradeExecution, GraduatedCoinTrade } from "#web/components/launchpad/trade/CoinTrade.tsx";
@@ -87,7 +91,7 @@ export default async function CoinPage({ params, searchParams }: { params: Param
     redirect(presalePath(resolved.presaleId) + suffix);
   }
   if (resolved.kind === "generic") return renderGenericCoin(resolved, searchParams);
-  return renderLaunchCoin(resolved.launchId, resolved.transfer, searchParams);
+  return renderLaunchCoin((await params).coinKey, resolved.launchId, resolved.transfer, searchParams);
 }
 
 async function renderGenericCoin(coin: Readonly<{ coinType: string; name: string; symbol: string }>, searchParams?: SearchParams) {
@@ -117,6 +121,7 @@ async function renderGenericCoin(coin: Readonly<{ coinType: string; name: string
 }
 
 async function renderLaunchCoin(
+  coinKey: string,
   launchId: string,
   { read, browserMarket, explorer, details, verifiedTeam }: CoinPageTransfer,
   searchParams?: SearchParams,
@@ -130,7 +135,7 @@ async function renderLaunchCoin(
   // Complete migration mounts in its `migration` contract while MigrationReady.
   // They need a released, connected deployment; until then each says why
   // nothing can be signed.
-  const [flags, requestHeaders] = await Promise.all([requestLaunchFlags(), headers()]);
+  const [flags, requestHeaders, requestCookies, query] = await Promise.all([requestLaunchFlags(), headers(), cookies(), searchParams]);
   const tradeAvailability = serverTradeAvailability(webConfig(), flags.trading && flags.launchpad);
   const connection = {
     privyAppId: webConfig().privyAppId,
@@ -145,19 +150,29 @@ async function renderLaunchCoin(
     ),
     ...MIGRATION_ACTIONS,
   };
-  // The browser reads market data (the chart's candles, the holder snapshot
-  // and the activity) through this app's `/api/launchpad/market` routes; it
-  // is never handed blast-infra's origin.
-  // One read of the query feeds both URL-held choices: the chart's interval
-  // and range (a direct link reads the same history) and a durable activity
-  // link, which opens Activity (on mobile, the Theses view that holds it) at
-  // its record.
-  const search = (await searchParams) ?? {};
+  const search = query ?? {};
   const identity = coinIdentity(page);
-  const chartControls = parseLiveChartControls(search, pageLifecycle(page) === "migrated"
-    ? { ...DEFAULT_CHART_CONTROLS, range: "24h" } : DEFAULT_CHART_CONTROLS);
+  const defaults = pageLifecycle(page) === "migrated" ? { ...DEFAULT_CHART_CONTROLS, range: "24h" } as const : DEFAULT_CHART_CONTROLS;
+  const urlControls = parseLiveChartControls(search, defaults);
+  const savedControls = requestCookies.get(CHART_CONTROLS_COOKIE)?.value ?? "";
+  const chartQuery = new URLSearchParams();
+  for (const name of ["interval", "range"]) {
+    const value = search[name];
+    for (const field of typeof value === "string" ? [value] : value ?? []) chartQuery.append(name, field);
+  }
+  const chartControls = preferredChartControls(savedControls, chartQuery.toString(), urlControls);
   const anchor = activityLink(launchId, search.activity);
-  const slots = coinTerminalSlots(page, actions, browserMarket, { chartControls, activity: { explorer, anchor }, theses: THESES, quoteLabel: "", compact: true });
+  const market = browserMarket && page.confirmed && wantsInitialMarket(new Headers(requestHeaders), `/coin/${coinKey}`)
+    ? initialMarketDependencies(browserMarket.expected, new Headers(requestHeaders))
+    : null;
+  const chart = coinChartOptions(page, browserMarket, chartControls);
+  const [initialChart, initialActivity] = await Promise.all([
+    market && typeof chart !== "string" ? readChartSnapshot(chart.source, chart.initialControls, market, Date.now()) : undefined,
+    market ? readActivityPage(launchId, listStart(launchId, anchor), market) : undefined,
+  ]);
+  const slots = coinTerminalSlots(page, actions, browserMarket, {
+    chartControls, initialChart, initialActivity, activity: { explorer, anchor }, theses: THESES, quoteLabel: "", compact: true,
+  });
   const execution = <CoinTradeExecution key={launchId} page={page} availability={tradeAvailability} connection={connection}>{slots.execution}</CoinTradeExecution>;
   return (
     <>

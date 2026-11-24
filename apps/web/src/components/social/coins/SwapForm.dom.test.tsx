@@ -245,6 +245,63 @@ test("sign-in keeps the swap amount and pair, asks for a fresh quote, and never 
   }
 });
 
+test("the pay balance keeps one slot through session restore, signer resolution and exact coin reads", async () => {
+  const host = dom.document.createElement("div");
+  const root = createRoot(host);
+  const client = createTestQueryClient();
+  const originalFetch = globalThis.fetch;
+  const address = "0x" + "c".repeat(64);
+  let answer: ((atoms: string) => void) | undefined;
+  globalThis.fetch = async (input) => {
+    const url = new URL(String(input), "https://blast.test");
+    assert.equal(url.pathname, "/api/social/me/wallet");
+    return new Promise<Response>((resolve) => {
+      answer = (atoms) => resolve(Response.json({ address, coin_type: url.searchParams.get("balance_coin"), atoms, as_of_ms: Date.now() }));
+    });
+  };
+  const render = (signedIn: boolean, sessionPending: boolean, walletAddress: string | null, inCoin = FIXTURE_COINS[1]!) =>
+    act(async () => root.render(withQueryClient(client,
+      <SocialViewerProvider signedIn={signedIn} callsign={null} getAccessToken={async () => "fixture"}>
+        <SwapForm active persistent inCoin={inCoin} outCoin={FIXTURE_COINS[2]!} field={typedAmount("", inCoin.decimals)}
+          onField={() => {}} detail={false} onDetail={() => {}} onFlip={() => {}} onPick={() => {}}
+          trading={{ signedIn, sessionPending, walletAddress, onSignIn() {}, listCoins: async () => [],
+            requestQuote: async () => ({ status: "error" }), trade: async () => ({ status: "traded" }) }}
+          walletFee="sponsored" hidden={false} />
+      </SocialViewerProvider>,
+    )));
+  const slot = () => host.querySelector('[id$="-balance"]');
+  try {
+    await render(false, true, null);
+    const first = slot()!;
+    const action = host.querySelector<HTMLButtonElement>("[data-trade]")!;
+    assert.equal(action.textContent, "Swap");
+    assert.equal(action.disabled, true);
+    assert.ok(first.querySelector('[aria-label="Checking balance"]'));
+    await render(true, true, null);
+    assert.equal(slot(), first);
+    assert.equal(answer, undefined, "no private read before the signer resolves");
+    await render(true, false, address);
+    assert.ok(answer);
+    assert.equal(action.textContent, "Swap", "the action stays in place while the private read finishes");
+    assert.equal(action.disabled, true);
+    assert.equal(slot(), first);
+    assert.ok(first.querySelector('[aria-label="Checking balance"]'));
+    await act(async () => { answer!("42000000000"); await settleQueries(client); });
+    assert.equal(slot(), first);
+    assert.match(first.textContent ?? "", /42.*SUI/);
+    await render(true, false, address, FIXTURE_COINS[0]!);
+    assert.ok(first.querySelector('[aria-label="Checking balance"]'));
+    assert.doesNotMatch(first.textContent ?? "", /42/);
+    await render(false, false, null);
+    assert.equal(slot(), first);
+    assert.equal(first.textContent, "Balance —");
+  } finally {
+    await act(async () => root.unmount());
+    globalThis.fetch = originalFetch;
+    client.clear();
+  }
+});
+
 test("a rejected trade releases the busy controls and asks the person to check their wallet", async () => {
   const inCoin = FIXTURE_COINS[1]!;
   const outCoin = FIXTURE_COINS[0]!;

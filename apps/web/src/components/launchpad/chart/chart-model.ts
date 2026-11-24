@@ -25,6 +25,8 @@ export type ChartControls = Readonly<{ interval: ChartInterval; range: ChartRang
 export const DEFAULT_CHART_CONTROLS = { interval: "5m", range: "all" } as const satisfies ChartControls;
 export const LIVE_CHART_CONTROLS = { interval: "1s", range: "live" } as const satisfies ChartControls;
 
+export const CHART_CONTROLS_COOKIE = "blast-chart-controls";
+
 type SearchValue = string | readonly string[] | undefined;
 
 /** The controls a coin page URL names (`?interval=…&range=…`); a missing or unknown one is the default. */
@@ -48,6 +50,20 @@ export function parseLiveChartControls(
   if (search.range === "live" || (search.range === undefined && fallback.range === "live")) return LIVE_CHART_CONTROLS;
   const controls = parseChartControls(search, fallback);
   return search.interval === "1s" ? { ...controls, interval: "1s" } : controls;
+}
+
+export function preferredChartControls(saved: string, search: string, initial: ChartControls, live = true, livePreset = live): ChartControls {
+  if (!saved) return initial;
+  const fields = (value: string) => {
+    const query = new URLSearchParams(value);
+    const interval = query.getAll("interval");
+    const range = query.getAll("range");
+    return { interval: interval.length === 1 ? interval[0] : undefined, range: range.length === 1 ? range[0] : undefined };
+  };
+  const parse = live ? parseLiveChartControls : parseChartControls;
+  const query = fields(search);
+  if (!livePreset && query.range === "live") return initial;
+  return parse(query, parse(fields(saved), initial));
 }
 
 /** The query string of a direct link to these controls. */

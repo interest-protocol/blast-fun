@@ -7,10 +7,11 @@ import { installTestDom, recordAnimations } from "../../../../test/fixtures/soci
 const dom = installTestDom();
 const { act } = await import("react");
 const { createRoot } = await import("react-dom/client");
+const { renderToStaticMarkup } = await import("react-dom/server");
 const hook = registerHooks({ resolve(specifier, context, next) {
   if (specifier === "./TradingViewChart" && context.parentURL?.endsWith("/charts/PoolCandleChart.tsx")) return {
     shortCircuit: true,
-    url: `data:text/javascript,${encodeURIComponent(`import React from ${JSON.stringify(import.meta.resolve("react"))}; export const VOLUME_SCALE = 'volume'; export const MIGRATION_LABEL_ROOM_PX = 72; export function TradingViewChart({series, priceFormatter, onProject, projectionKey, latestPrice}) {
+    url: `data:text/javascript,${encodeURIComponent(`import React from ${JSON.stringify(import.meta.resolve("react"))}; export const VOLUME_SCALE = 'volume'; export const MIGRATION_LABEL_ROOM_PX = 72; export function TradingViewChart({series, priceFormatter, onProject, projectionKey, latestPrice, preview}) {
       React.useLayoutEffect(() => {
         let settled = false;
         const handle = {
@@ -28,7 +29,7 @@ const hook = registerHooks({ resolve(specifier, context, next) {
           return () => { mounted = false; };
         }
       }, [series, projectionKey]);
-      return React.createElement('div', {'data-latest-series': latestPrice?.seriesIndex, 'data-series': series.map(s=>s.type).join(','), 'data-tags': series.map(s=>String(s.options?.lastValueVisible)).join(','), 'data-points': series[0]?.data.map(p => p.time + ':' + priceFormatter(p.value ?? p.close)).join(',')}); }`)}`,
+      return React.createElement('div', {'data-latest-series': latestPrice?.seriesIndex, 'data-series': series.map(s=>s.type).join(','), 'data-tags': series.map(s=>String(s.options?.lastValueVisible)).join(','), 'data-points': series[0]?.data.map(p => p.time + ':' + priceFormatter(p.value ?? p.close)).join(',')}, preview); }`)}`,
   };
   return next(specifier, context);
 } });
@@ -63,7 +64,8 @@ test("an open chart keeps its initial saved controls until it is mounted again",
 });
 
 test("changing the interval leaves an untouched range at its coin default", async () => {
-  const { preferredChartControls, saveChartControls } = await import("./chart-preferences.ts");
+  const { preferredChartControls } = await import("./chart-model.ts");
+  const { saveChartControls } = await import("./chart-preferences.ts");
   const key = "blast.coin-chart.controls";
   try {
     saveChartControls({ interval: "5m", range: "all" }, { interval: "15m", range: "all" });
@@ -130,10 +132,11 @@ test("compact style controls update a single plot and show trades on its live ca
       if (!receipts.has(cursor)) receipts.set(cursor, performance.now());
       return receipts.get(cursor)!;
     };
-    const render = (hidden: readonly "curve"[], trade: Omit<typeof buy, "side"> & { side: "buy" | "sell" } = buy, market = poolKey, close = "2", empty = false) => act(async () => root.render(
+    const compactChart = (hidden: readonly "curve"[], trade: Omit<typeof buy, "side"> & { side: "buy" | "sell" } = buy, market = poolKey, close = "2", empty = false) => (
       <WalletTradesProvider deployer={actor}><Tape /><ChartTradeContext value={{ trade, poolKey: market, receivedAt: receivedAt(trade.cursor), decimals: 9, symbol: "SUI" }}>
       <ChartView
         compact
+        preview
         source={{ expected: null, curvePoolKey: poolKey, venuePoolKey, migration: null, symbol: "PIP", quoteSymbol: "SUI", memeDecimals: 9, quoteDecimals: 9, opening: { timestampMs: 1_790_337_617_000, price: "0.5" } }}
         quoteUsd="0.70"
         state={{
@@ -150,8 +153,12 @@ test("compact style controls update a single plot and show trades on its live ca
         onControls={() => {}}
         onToggle={() => {}}
         onRefresh={() => {}}
-      /></ChartTradeContext></WalletTradesProvider>,
-    ));
+      /></ChartTradeContext></WalletTradesProvider>
+    );
+    const render = (...args: Parameters<typeof compactChart>) => act(async () => root.render(compactChart(...args)));
+    const initial = renderToStaticMarkup(compactChart([]));
+    assert.match(initial, /<svg[^>]*data-chart-preview=""[^>]*>.*<path d="M\d+/);
+    assert.doesNotMatch(renderToStaticMarkup(compactChart([], buy, poolKey, "2", true)), /data-chart-preview/);
     await render([], buy, poolKey, "2", true);
     const cue = container.querySelector("[data-trade-cue]");
     assert.equal(cue?.textContent, "Buy · 0.1\u00a0SUI", "an observed trade remains readable without plotted geometry");
@@ -309,6 +316,7 @@ test("a migrated coin tags only the venue's last price, in both chart styles", a
     await act(async () => root.render(
       <ChartView
         compact
+        preview
         source={{ expected: null, curvePoolKey: migration.curvePoolKey, venuePoolKey: migration.venuePoolKey, migration, symbol: "PIP", quoteSymbol: "SUI", memeDecimals: 9, quoteDecimals: 9 }}
         state={{ key: "1m|all", curve: { state: "available", data: curve, provenance }, venue: { state: "available", data: venue, provenance }, migration }}
         controls={controls}
@@ -323,10 +331,13 @@ test("a migrated coin tags only the venue's last price, in both chart styles", a
     ));
     const plot = () => container.querySelector("[data-series]")!;
     const button = (name: string) => [...container.querySelectorAll("button")].find(b => b.textContent === name)!;
+    const preview = () => plot().querySelector("[data-chart-preview]");
+    assert.match(preview()?.lastElementChild?.getAttribute("d") ?? "", /^M333\.3 30V300$/);
     assert.equal(plot().getAttribute("data-series"), "Candlestick,Candlestick,Histogram");
     assert.equal(plot().getAttribute("data-tags"), "false,false,false");
     assert.equal(plot().getAttribute("data-latest-series"), "1", "the neutral latest-price line belongs to the venue candles");
     await act(async () => button("Line chart").click());
+    assert.match(preview()?.firstElementChild?.getAttribute("d") ?? "", /^M[\d.]+ [\d.]+h0M[\d.]+ [\d.]+h0$/);
     assert.equal(plot().getAttribute("data-series"), "Area,Area");
     assert.equal(plot().getAttribute("data-tags"), "false,false");
     assert.equal(plot().getAttribute("data-latest-series"), "1", "the neutral latest-price line belongs to the venue line");

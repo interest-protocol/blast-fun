@@ -24,7 +24,7 @@ registerHooks({
             return {
               onMount() { if (!mounted) { mounted = true; resources.listeners += 2; } },
               onUnmount() { if (mounted) { mounted = false; resources.listeners -= 2; } },
-              get() { return ["Phantom", "WalletConnect"]; }
+              get() { return [{ walletBranding: { id: "walletconnect_solana" }, wallet: { name: "WalletConnect" } }]; }
             };
           }
         `)}`,
@@ -41,7 +41,7 @@ registerHooks({
               connectors?.onMount();
               return () => connectors?.onUnmount();
             }, [connectors]);
-            return createElement("section", { "data-app": appId, "data-wallets": connectors?.get().join(","), "data-theme": config.appearance?.theme }, children);
+            return createElement("section", { "data-app": appId, "data-wallets": connectors?.get().map(c => c.wallet.name).join(","), "data-theme": config.appearance?.theme }, children);
           }
         `)}`,
       };
@@ -99,7 +99,7 @@ test("T-008: Strict Mode navigation and remounting retain bounded connectors and
       ));
       assert.equal(resources.factories, before + 1, "navigation and discarded renders reuse the document's connectors");
       assert.equal(resources.listeners, 2);
-      assert.equal(document.querySelector("section")?.getAttribute("data-wallets"), "Phantom,WalletConnect");
+      assert.equal(document.querySelector("section")?.getAttribute("data-wallets"), "WalletConnect");
       assert.match(document.body.textContent!, /session mounted/);
       await act(async () => root.render(null));
       assert.equal(resources.listeners, 0, "leaving the provider releases its registry listeners");

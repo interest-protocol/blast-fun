@@ -90,6 +90,24 @@ test("stream opens before REST, rejects behind-fence history, then applies only 
   assert.equal(s.timers.length, 0);
 });
 
+test("a seeded pool starts from its own fence and only a behind pool reads again", async () => {
+  const s = setup([CURVE, VENUE]);
+  s.client.start([[CURVE, answer(10)], [VENUE, answer(18, VENUE)]]);
+  assert.equal(s.loads.length, 0);
+  s.source().ready(10, CURVE);
+  s.source().ready(20, VENUE);
+  assert.deepEqual(s.loads.map(({ pool }) => pool), [VENUE]);
+  s.source().emit("market", trade(10));
+  s.source().emit("market", trade(11, 3));
+  s.loads[0].resolve(answer(20, VENUE));
+  await settle();
+  s.flush();
+  const curve = s.sections.filter(({ pool }) => pool === CURVE).at(-1)?.section;
+  assert.equal(curve?.state === "available" && curve.data.candles[0].volumeQuote, 12n);
+  assert.equal(s.statuses.at(-1), "streaming");
+  s.client.stop();
+});
+
 test("periodic stale REST cannot erase already-applied trades or publish an older header price", async () => {
   const s = setup();
   const prices: (ChartPriceUpdate | null)[] = [];

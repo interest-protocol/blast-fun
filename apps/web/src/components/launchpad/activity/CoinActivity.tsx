@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
-import { isActivityTrade, type WindowName } from "@blast/core/modules/launchpad-contract/activity.ts";
+import { isActivityTrade, type ActivityRow, type WindowName } from "@blast/core/modules/launchpad-contract/activity.ts";
 import type { ExpectedDeployment } from "@blast/core/modules/launchpad-contract/provenance.ts";
 import { POOL_KEY } from "@blast/core/modules/launchpad-contract/venues.ts";
 
@@ -13,8 +13,8 @@ import { readActivityPage, readFlow } from "./activity-client";
 import { browserAnchorPorts, keepAnchorInView } from "./anchor-keeper";
 import { createActivityFeed, linkTarget, listStart, shownActivity } from "./activity-feed";
 import { followLiveTrades } from "./activity-live";
+import type { PageOutcome } from "./activity-model";
 import { usePublishWalletTrades } from "./wallet-trades";
-import type { ActivityRow } from "@blast/core/modules/launchpad-contract/activity.ts";
 import { useTraderProfiles } from "./trader-profiles";
 import { createTradeTape } from "./trade-tape";
 import { ActivityView, type ActivityUnits, type TransactionExplorer } from "./ActivityView";
@@ -44,6 +44,12 @@ export type ActivitySource = Readonly<{
   livePools?: readonly string[];
 }>;
 
+type CoinActivityProps = Readonly<{
+  source: ActivitySource;
+  compact?: boolean;
+  initialActivity?: PageOutcome<ActivityRow>;
+}>;
+
 /**
  * The coin page's Activity destination in the browser. It reads the
  * classified launch activity — the curve's history and, after migration, the
@@ -57,22 +63,29 @@ export type ActivitySource = Readonly<{
  * a gap or reconnect asks for one pinned read, and the poll slows to 30 s
  * while the stream is live.
  */
-export function CoinActivity({ source, compact }: Readonly<{ source: ActivitySource; compact?: boolean }>) {
+export function CoinActivity(props: CoinActivityProps) {
+  const { source } = props;
+  const start = listStart(source.launchId, source.anchor);
+  const key = JSON.stringify([source.launchId, source.expected?.network, source.expected?.deployment, start]);
+  return <CoinActivityFeed key={key} {...props} start={start} />;
+}
+
+function CoinActivityFeed({ source, compact, initialActivity, start }: CoinActivityProps & Readonly<{ start: string | null }>) {
   const [flowWindow, setFlowWindow] = useState<WindowName>("24h");
   const { launchId, anchor } = source;
   const network = source.expected?.network ?? null;
   const deployment = source.expected?.deployment ?? null;
-  const start = listStart(launchId, anchor);
-  const feed = useMemo(() => {
+  const [feed] = useState(() => {
     const dependencies = browserMarketDependencies(network && deployment ? { network, deployment } : null);
     return createActivityFeed({
       start,
+      initialActivity,
       reads: {
         activity: (cursor, at) => readActivityPage(launchId, cursor, atCheckpoint(dependencies, at)),
         flow: (at) => readFlow(launchId, atCheckpoint(dependencies, at)),
       },
     });
-  }, [network, deployment, launchId, start]);
+  });
   const tape = useMemo(() => createTradeTape(feed), [feed]);
   const state = useSyncExternalStore(feed.subscribe, feed.state, feed.state);
   const activity = useMemo(() => shownActivity(state), [state]);
@@ -86,7 +99,6 @@ export function CoinActivity({ source, compact }: Readonly<{ source: ActivitySou
   const recent = useSyncExternalStore(showTape ? tape.subscribe : skipSubscription, tape.snapshot, tape.serverSnapshot);
   const traderProfiles = useTraderProfiles(launchId, state.activity, showTape, recent.rows, recent.leaving);
 
-  const refresh = (manual: boolean, at: number | null = null) => feed.refresh(manual, at);
   // Only the newest page follows the stream; a link's page stays on its reads.
   const pools = start === null ? [...new Set(source.livePools ?? [])].filter((pool) => POOL_KEY.test(pool)).slice(0, 2) : [];
   const poolsKey = pools.join(",");
@@ -110,11 +122,10 @@ export function CoinActivity({ source, compact }: Readonly<{ source: ActivitySou
       random: Math.random,
     });
   }, [feed, launchId, network, deployment, poolsKey]);
-  // A new feed (another launch or link) reads at once.
   useMarketPoll({
-    key: `${launchId}|${start ?? ""}`,
     live,
-    onRefresh: (at) => void refresh(false, at),
+    onInitialRefresh: () => void feed.initialize(),
+    onRefresh: (at) => void feed.refresh(false, at),
   });
 
   // A durable link's record is usually below the fold: bring it (or the note
@@ -144,7 +155,7 @@ export function CoinActivity({ source, compact }: Readonly<{ source: ActivitySou
       explorer={source.explorer}
       anchor={anchor}
       pending={state.pending}
-      onRefresh={() => void refresh(true)}
+      onRefresh={() => void feed.refresh(true)}
       onMoreActivity={() => void feed.more()}
       onShowNewerActivity={() => feed.showNewer()}
       onWindow={setFlowWindow}

@@ -46,6 +46,7 @@ export type TradeTape = ReturnType<typeof createTradeTape>;
 
 /** Pace the compact list independently of ingestion, which still sees every frame immediately. */
 export function createTradeTape(feed: Pick<ActivityFeed, "state" | "subscribe">, ports = browser) {
+  const seedRows = feed.state().activity.view?.rows.filter(isActivityTrade);
   return createRecentTradeTape({
     subscribe: feed.subscribe,
     state() {
@@ -55,7 +56,7 @@ export function createTradeTape(feed: Pick<ActivityFeed, "state" | "subscribe">,
         ? { rows: display.view.rows.filter(isActivityTrade), quiet: Boolean(display.stale || activity.newer) }
         : null;
     },
-  }, RECENT_TRADES_LIMIT, ports);
+  }, RECENT_TRADES_LIMIT, ports, seedRows);
 }
 
 type TradeTapeFeed<Row> = Readonly<{
@@ -63,8 +64,14 @@ type TradeTapeFeed<Row> = Readonly<{
   subscribe: (sync: () => void) => () => void;
 }>;
 
-export function createRecentTradeTape<Row extends PositionedTrade>(feed: TradeTapeFeed<Row>, limit: number, ports = browser) {
-  let snapshot: TradeTapeSnapshot<Row> = EMPTY;
+export function createRecentTradeTape<Row extends PositionedTrade>(
+  feed: TradeTapeFeed<Row>,
+  limit: number,
+  ports = browser,
+  seedRows?: readonly Row[],
+) {
+  const initial: TradeTapeSnapshot<Row> = seedRows ? { ...EMPTY, rows: seedRows.slice(0, limit) } : EMPTY;
+  let snapshot = initial;
   let ready = false;
   let focused = false;
   let cancelBeat: (() => void) | null = null;
@@ -121,7 +128,7 @@ export function createRecentTradeTape<Row extends PositionedTrade>(feed: TradeTa
 
   return {
     snapshot: () => snapshot,
-    serverSnapshot: () => EMPTY,
+    serverSnapshot: () => initial,
     subscribe(listener: () => void) {
       listeners.add(listener);
       if (listeners.size === 1) {
@@ -139,7 +146,7 @@ export function createRecentTradeTape<Row extends PositionedTrade>(feed: TradeTa
         cancelBeat = null;
         focused = false;
         ready = false;
-        snapshot = EMPTY;
+        snapshot = initial;
       };
     },
     hold(hold: boolean) {

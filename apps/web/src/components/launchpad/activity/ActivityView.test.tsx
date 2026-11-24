@@ -22,6 +22,7 @@ import {
 } from "./activity-model";
 import { WalletTradesProvider } from "./wallet-trades";
 import { ActivityView, type ActivityViewProps } from "./ActivityView";
+import { CoinActivity } from "./CoinActivity";
 
 const NOW = 1_790_235_061_630;
 const UNITS = {
@@ -321,6 +322,21 @@ test("compact trades preserve delayed-data warnings and keep lifecycle records i
   assert.equal((preview.match(/<li\b/g) ?? []).length, 4);
   assert.match(text(html), /Launch activity/);
   assert.doesNotMatch(text(html), /Lifecycle:|Migration allocation|Net SUI flow/);
+});
+
+test("the coin renders the recent trades from the server page before hydration", () => {
+  const { rows, next, provenance } = activity("migrated").view!;
+  const html = renderToStaticMarkup(<WalletTradesProvider deployer={null}>
+    <CoinActivity
+      compact
+      source={{ launchId: COIN_FIXTURE.launchId, expected: null, units: UNITS, explorer: EXPLORER, anchor: null }}
+      initialActivity={{ kind: "rows", rows, next, provenance, lagging: false }}
+    />
+  </WalletTradesProvider>);
+  const preview = html.match(/<ol[^>]*aria-label="Recent trades"[^>]*>(.*?)<\/ol>/s)?.[1] ?? "";
+  assert.equal((preview.match(/<li\b/g) ?? []).length, 4);
+  assert.ok(preview.includes(rows[0]!.digest));
+  assert.doesNotMatch(html, /Reading trades/);
 });
 
 test("a vault claim preserves the trades and appears only in the full activity ledger", () => {

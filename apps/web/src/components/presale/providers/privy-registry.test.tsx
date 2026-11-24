@@ -61,6 +61,14 @@ test("T-008: real SDK discovers added and removed wallets after absence while un
   try {
     await render();
     assert.deepEqual(names(), ["WalletConnect"]);
+    const extension = { ...lateWallet, chains: ["sui:mainnet"] };
+    wallets.add(extension);
+    for (const listener of listeners.register) listener(extension);
+    await render();
+    assert.equal(walletConnectInstances.size, 1, "a Sui extension cannot replace the Solana connector");
+    wallets.delete(extension);
+    for (const listener of listeners.unregister) listener(extension);
+
     for (let visit = 0; visit < 8; visit++) {
       await act(async () => root.render(null));
       assert.equal(listeners.register.size, 0);
@@ -70,6 +78,24 @@ test("T-008: real SDK discovers added and removed wallets after absence while un
       assert.equal(listeners.register.size, 1);
       assert.equal(listeners.unregister.size, 1);
     }
+    // The live SDK has already discovered this extension. Re-rendering the owner
+    // must keep the existing WalletConnect client.
+    wallets.add(lateWallet);
+    for (const listener of listeners.register) listener(lateWallet);
+    await render();
+    assert.deepEqual(names(), ["Late wallet", "WalletConnect"]);
+    assert.equal(walletConnectInstances.size, 1);
+    const repeatedExtension = { ...lateWallet };
+    wallets.add(repeatedExtension);
+    for (const listener of listeners.register) listener(repeatedExtension);
+    await render();
+    assert.equal(walletConnectInstances.size, 1, "another extension advertising the same name preserves the client");
+    wallets.delete(repeatedExtension);
+    await act(async () => root.render(null));
+    wallets.delete(lateWallet);
+    await render();
+    assert.equal(walletConnectInstances.size, 2, "a change missed during absence is reconciled");
+
     for (let visit = 0; visit < 3; visit++) {
       await act(async () => root.render(null));
       wallets.add(lateWallet);
@@ -85,11 +111,11 @@ test("T-008: real SDK discovers added and removed wallets after absence while un
       await render();
       assert.deepEqual(names(), ["WalletConnect"], "wallets removed during absence do not remain in the list");
     }
-    assert.equal(walletConnectInstances.size, 7, "only six actual membership changes replace the initial connector");
+    assert.equal(walletConnectInstances.size, 8, "each missed membership change reconciles the connector list");
     await render("different-app");
-    assert.equal(walletConnectInstances.size, 8, "app IDs own independent configurations");
+    assert.equal(walletConnectInstances.size, 9, "app IDs own independent configurations");
     await render();
-    assert.equal(walletConnectInstances.size, 8, "returning to the first app reuses its current configuration");
+    assert.equal(walletConnectInstances.size, 9, "returning to the first app reuses its current configuration");
   } finally {
     await act(async () => root.unmount());
     assert.equal(listeners.register.size, 0);
@@ -103,7 +129,7 @@ test("T-008: real SDK discovers added and removed wallets after absence while un
   const secondRoot = createRoot(document.getElementById("mount")!);
   try {
     await act(async () => secondRoot.render(<PrivySessionProvider appId="registry-app" nonce={null}><span>Second document</span></PrivySessionProvider>));
-    assert.equal(walletConnectInstances.size, 9, "browser documents own independent configurations");
+    assert.equal(walletConnectInstances.size, 10, "browser documents own independent configurations");
   } finally {
     await act(async () => secondRoot.unmount());
     assert.equal(listeners.register.size, 0);

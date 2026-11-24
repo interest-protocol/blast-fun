@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { curvePrice, formatPrice } from "@interest-protocol/blast-sdk/launchpad";
 
+import type { ActivityRow } from "@blast/core/modules/launchpad-contract/activity.ts";
 import type { CoinPage } from "@blast/core/modules/launchpad-coin/contracts.ts";
 import type { ExpectedDeployment } from "@blast/core/modules/launchpad-contract/provenance.ts";
 import { MIGRATOR_POOL_KEY } from "@blast/core/modules/launchpad-contract/venues.ts";
@@ -11,9 +12,10 @@ import { CoinHeader } from "./CoinHeader";
 import { CoinOverview } from "./CoinOverview";
 import { coinIdentity, describeReason, pageLifecycle, sectionData, venueRoute } from "./coin-view";
 import { CoinActivity, type ActivitySource } from "../activity/CoinActivity";
+import type { PageOutcome } from "../activity/activity-model";
 import type { TransactionExplorer } from "../activity/ActivityView";
 import { CoinChart } from "../chart/CoinChart";
-import type { ChartSource } from "../chart/chart-client";
+import type { ChartSnapshot, ChartSource } from "../chart/chart-client";
 import { DEFAULT_CHART_CONTROLS, type ChartControls } from "../chart/chart-model";
 import { CoinFees } from "../fees/CoinFees";
 import type { FeesSource } from "../fees/fees-client";
@@ -39,6 +41,8 @@ export type ActivityOptions = Readonly<{ explorer: TransactionExplorer | null; a
 /** The page request's own choices for its slots; each defaults when absent. */
 export type CoinSlotOptions = Readonly<{
   chartControls?: ChartControls;
+  initialChart?: ChartSnapshot;
+  initialActivity?: PageOutcome<ActivityRow>;
   compact?: boolean;
   quoteLabel?: string;
   activity?: ActivityOptions;
@@ -107,9 +111,9 @@ function marketPools(page: CoinPage): string[] {
  * this app's market routes. Without blast-infra or a confirmed launch it is
  * Unavailable, never empty.
  */
-function activitySlot(page: CoinPage, market: BrowserMarket | null, options: ActivityOptions, quoteLabel?: string, compact?: boolean) {
+function activitySlot(page: CoinPage, market: BrowserMarket | null, options: ActivityOptions, quoteLabel?: string, compact?: boolean, initialActivity?: PageOutcome<ActivityRow>) {
   const source = activitySource(page, market, options, quoteLabel);
-  if (typeof source !== "string") return <CoinActivity source={source} compact={compact} />;
+  if (typeof source !== "string") return <CoinActivity source={source} compact={compact} initialActivity={initialActivity} />;
   return (
     <DataState state={{ status: "unavailable", reason: source }} subject="launch activity" recovery="">
       {() => null}
@@ -221,21 +225,33 @@ function chartSource(page: CoinPage, market: BrowserMarket | null): (ChartSource
  * through this app's market routes, around the committed migration. Without
  * blast-infra, a confirmed launch or a known coin type, it is Unavailable.
  */
-function CoinChartSlot({ page, market, controls, compact }: Readonly<{ page: CoinPage; market: BrowserMarket | null; controls: ChartControls; compact?: boolean }>) {
+export function coinChartOptions(page: CoinPage, market: BrowserMarket | null, controls: ChartControls) {
   const source = chartSource(page, market);
-  if (typeof source !== "string") {
-    const { coinType, ...chart } = source;
-    const graduated = pageLifecycle(page) === "migrated" || page.source.kind === "venue" || chart.migration !== null;
-    const livePreset = graduated
-      ? chart.venuePoolKey !== null && MIGRATOR_POOL_KEY.test(chart.venuePoolKey)
-      : page.source.kind === "curve";
-    const initialControls: ChartControls = controls.range === "live" && !livePreset
-      ? { ...DEFAULT_CHART_CONTROLS, range: graduated ? "24h" : "all" }
-      : controls;
-    return <CoinChart key={coinType} source={chart} coinType={coinType} initialControls={initialControls} compact={compact} livePreset={livePreset} />;
+  if (typeof source === "string") return source;
+  const { coinType, ...chart } = source;
+  const graduated = pageLifecycle(page) === "migrated" || page.source.kind === "venue" || chart.migration !== null;
+  const livePreset = graduated
+    ? chart.venuePoolKey !== null && MIGRATOR_POOL_KEY.test(chart.venuePoolKey)
+    : page.source.kind === "curve";
+  const initialControls: ChartControls = controls.range === "live" && !livePreset
+    ? { ...DEFAULT_CHART_CONTROLS, range: graduated ? "24h" : "all" }
+    : controls;
+  return { coinType, source: chart, livePreset, initialControls };
+}
+
+function CoinChartSlot({ page, market, controls, compact, initialSnapshot }: Readonly<{
+  page: CoinPage;
+  market: BrowserMarket | null;
+  controls: ChartControls;
+  compact?: boolean;
+  initialSnapshot?: ChartSnapshot;
+}>) {
+  const chart = coinChartOptions(page, market, controls);
+  if (typeof chart !== "string") {
+    return <CoinChart key={chart.coinType} {...chart} compact={compact} initialSnapshot={initialSnapshot} />;
   }
   return (
-    <DataState state={{ status: "unavailable", reason: source }} subject="price chart" recovery="">
+    <DataState state={{ status: "unavailable", reason: chart }} subject="price chart" recovery="">
       {() => null}
     </DataState>
   );
@@ -261,10 +277,10 @@ export function coinTerminalSlots(
   return {
     ...placeholderTerminalSlots(page.launchId),
     market: <CoinHeader page={page} expected={market ? market.expected : undefined} />,
-    chart: <CoinChartSlot page={page} market={market} controls={chartControls} compact={options.compact} />,
+    chart: <CoinChartSlot page={page} market={market} controls={chartControls} compact={options.compact} initialSnapshot={options.initialChart} />,
     overview: <CoinOverview page={page} fees={<CoinFeesSlot page={page} market={market} quoteLabel={options.quoteLabel} />} />,
     theses: thesesSlot(page, options.theses ?? READ_ONLY_THESES),
-    activity: activitySlot(page, market, activity, options.quoteLabel, options.compact),
+    activity: activitySlot(page, market, activity, options.quoteLabel, options.compact, options.initialActivity),
     holders: <CoinHoldersSlot page={page} market={market} compact={options.compact} />,
     execution: <CoinExecution page={page} actions={actions} market={market} />,
   };

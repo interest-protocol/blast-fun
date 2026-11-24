@@ -52,7 +52,9 @@ export type ActivityFeed = Readonly<{
   start: string | null;
   state: () => ActivityFeedState;
   subscribe: (listener: () => void) => () => void;
-  /** Re-reads the list's first page and the flow, at a hint's checkpoint (`at`) or null; true when either answered. */
+  /** Starts the first visible read once, reusing a successful server page. */
+  initialize: () => Promise<boolean>;
+  /** Re-reads the list and flow. A live hint waits only for the list's answer. */
   refresh: (manual: boolean, at?: number | null) => Promise<boolean>;
   /** Reads the page after the list's last row. */
   more: () => Promise<void>;
@@ -102,11 +104,23 @@ export function shownActivity(state: ActivityFeedState): ListState<ActivityRow> 
  * refresh); an older first-page read answering after a newer one is dropped.
  * When to re-read (a poll) is the shared rule of `use-market-poll.ts`.
  */
-export function createActivityFeed(options: Readonly<{ reads: ActivityFeedReads; start: string | null }>): ActivityFeed {
-  const { reads, start } = options;
-  let current: ActivityFeedState = { activity: initialList(), live: [], flow: INITIAL_FLOW, pending: null };
+export function createActivityFeed(options: Readonly<{
+  reads: ActivityFeedReads;
+  start: string | null;
+  initialActivity?: PageOutcome<ActivityRow>;
+}>): ActivityFeed {
+  const { reads, start, initialActivity } = options;
+  const seed = initialActivity?.kind === "rows" ? initialActivity : null;
+  const initial = initialList<ActivityRow>();
+  let current: ActivityFeedState = {
+    activity: seed ? afterRefresh(initial, seed, activityKey) : initial,
+    live: [],
+    flow: INITIAL_FLOW,
+    pending: null,
+  };
   const listeners = new Set<() => void>();
-  const tickets = { activity: 0, flow: 0 };
+  const tickets = { activity: 0, flow: 0, manual: 0 };
+  let initialized: Promise<boolean> | null = null;
 
   const update = (change: (state: ActivityFeedState) => ActivityFeedState) => {
     const next = change(current);
@@ -115,22 +129,47 @@ export function createActivityFeed(options: Readonly<{ reads: ActivityFeedReads;
     for (const listener of listeners) listener();
   };
 
-  const refresh = async (manual: boolean, at: number | null = null): Promise<boolean> => {
-    const mine = { activity: ++tickets.activity, flow: ++tickets.flow };
-    if (manual) update((state) => ({ ...state, pending: "refresh" }));
-    const [activityRead, flowRead] = await Promise.all([reads.activity(start, at), reads.flow(at)]);
+  const readThrough = () => {
+    const { view, newer } = current.activity;
+    const checkpoints = [view?.provenance.checkpoint, newer?.provenance.checkpoint].filter((checkpoint) => typeof checkpoint === "number");
+    return checkpoints.length ? Math.max(...checkpoints) : null;
+  };
+
+  const readActivity = async (at: number | null): Promise<boolean> => {
+    const mine = ++tickets.activity;
+    const outcome = await reads.activity(start, at);
+    const coveredThrough = readThrough();
+    const checkpoint = outcome.kind === "rows" ? outcome.provenance.checkpoint : null;
+    if (coveredThrough !== null && checkpoint !== null && checkpoint < coveredThrough) return false;
     update((state) => {
-      const activity = mine.activity === tickets.activity ? afterRefresh(state.activity, activityRead, activityKey) : state.activity;
-      // An answer, shown or offered as newer, replaces the provisional rows it covers.
-      return {
-        ...state,
-        activity,
-        live: activity === state.activity ? state.live : uncovered(activity, state.live),
-        flow: mine.flow === tickets.flow ? afterFlow(state.flow, flowRead) : state.flow,
-        pending: manual && state.pending === "refresh" ? null : state.pending,
-      };
+      if (mine !== tickets.activity) return state;
+      const activity = afterRefresh(state.activity, outcome, activityKey);
+      return { ...state, activity, live: uncovered(activity, state.live) };
     });
-    return activityRead.kind !== "failed" || flowRead.kind !== "failed";
+    return outcome.kind !== "failed";
+  };
+
+  const readFlow = async (at: number | null): Promise<boolean> => {
+    const mine = ++tickets.flow;
+    const outcome = await reads.flow(at).catch((): FlowOutcome => ({ kind: "failed", reason: "unavailable" }));
+    update((state) => mine === tickets.flow ? { ...state, flow: afterFlow(state.flow, outcome) } : state);
+    return outcome.kind !== "failed";
+  };
+
+  const refresh = async (manual: boolean, at: number | null = null): Promise<boolean> => {
+    const mine = manual ? ++tickets.manual : null;
+    if (manual) update((state) => ({ ...state, pending: "refresh" }));
+    try {
+      const activity = readActivity(at);
+      const flow = readFlow(at);
+      if (at !== null && !manual) return activity;
+      const answered = await Promise.all([activity, flow]);
+      return answered.some(Boolean);
+    } finally {
+      if (mine === tickets.manual) {
+        update((state) => state.pending === "refresh" ? { ...state, pending: null } : state);
+      }
+    }
   };
 
   const more = async (): Promise<void> => {
@@ -152,6 +191,7 @@ export function createActivityFeed(options: Readonly<{ reads: ActivityFeedReads;
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
+    initialize: () => initialized ??= seed ? readFlow(null) : refresh(false),
     refresh,
     more,
     // Shown newer rows replace the list: provisional rows they cover go with it.
@@ -167,11 +207,7 @@ export function createActivityFeed(options: Readonly<{ reads: ActivityFeedReads;
       });
       return overflowed;
     },
-    readThrough: () => {
-      const { view, newer } = current.activity;
-      const checkpoints = [view?.provenance.checkpoint, newer?.provenance.checkpoint].filter((checkpoint) => typeof checkpoint === "number");
-      return checkpoints.length ? Math.max(...checkpoints) : null;
-    },
+    readThrough,
   };
 }
 
