@@ -6,6 +6,7 @@ import { compareEventCursors } from "@blast/core/modules/launchpad-contract/curs
 import { assertChainReadThroughViews } from "@blast/core/modules/database/modules.ts";
 import type { ReadableDatabase } from "@blast/core/modules/database/transaction.ts";
 import { coinLabel } from "@blast/core/modules/social/contracts/financial-wire.ts";
+import { tradingRelevance } from "@blast/core/modules/social/discovery/relevance.ts";
 import type { PresaleTermsReader } from "@blast/core/modules/presale/terms/index.ts";
 import { blastV1Coin } from "@blast/core/modules/social/portfolio/core-coins.ts";
 import { namedWalletsSql } from "@blast/core/modules/social/read-model/naming.ts";
@@ -662,8 +663,11 @@ export async function readHomeDiscover(db: ReadableDatabase, query: HomeQuery, c
   const cursor = query.cursor === null ? null : decodeHomeCursor(query.cursor, query.sort);
   const [bounds, asOf] = await Promise.all([readHomeBounds(db, context.nowMs), readAsOf(db)]);
   if (!asOf) throw new SocialRouteError("service_unavailable");
-  const span = homeSpan(query.window, bounds);
-  const kinds = visibleKinds(context.hiddenKinds);
+  const windowSpan = homeSpan(query.window, bounds);
+  const now = context.nowMs;
+  const floor = now - HOME_WINDOW_MS["1h"];
+  const span = query.traction ? { ...windowSpan, fromMs: floor, toMs: Math.max(floor, windowSpan.toMs) } : windowSpan;
+  const kinds = visibleKinds(context.hiddenKinds).filter(kind => !query.traction || kind === "trade_buy" || kind === "trade_sell");
   const scope: SaleScope = { kind: "discover" };
   const actors: ActorScope = { kind: "everyone" };
   const [facts, sides] = await Promise.all([
@@ -680,19 +684,26 @@ export async function readHomeDiscover(db: ReadableDatabase, query: HomeQuery, c
       nowMs: bounds.clockMs,
     }));
   // Volume-based sorts need the same aggregate as the cell for all eligible candidates.
-  const dexVolumes = context.includeDexVolume && (query.sort === "trending" || query.sort === "held")
-    ? await readDexVolumes(db, candidates.map(({ facts }) => facts), span.window, bounds, kinds)
+  const dexVolumes = context.includeDexVolume && (query.traction || query.sort === "trending" || query.sort === "held")
+    ? await readDexVolumes(db, candidates.map(({ facts }) => facts), span.window, bounds, kinds, query.traction ? floor : undefined)
     : undefined;
-  const rankedCandidates = dexVolumes?.size
-    ? candidates.map((candidate) => {
-      const volume = dexVolumes.get(candidate.coinType);
-      return volume ? { ...candidate, inputs: { ...candidate.inputs, volume: Number(volume.usd ?? 0) } } : candidate;
-    })
-    : candidates;
+  const rankedCandidates = candidates.flatMap(candidate => {
+    const volume = dexVolumes?.get(candidate.coinType);
+    if (query.traction) {
+      const score = tradingRelevance({
+        volumeUsd: Number(volume?.usd) || candidate.inputs.volume,
+        traders: candidate.inputs.breadth,
+        lastTradeMs: candidate.latestMs,
+        now,
+      });
+      return score > 0 ? [{ ...candidate, score: Math.round(score * 1_000) }] : [];
+    }
+    return [volume ? { ...candidate, inputs: { ...candidate.inputs, volume: Number(volume.usd ?? 0) } } : candidate];
+  });
   const { page, nextCursor, pageNumber, pages, total, ranked } = pageOf(rankedCandidates, query.sort, cursor, query.limit, query.page);
   const coins = await assembleCoins(db, { candidates: page, sides, span, bounds, kinds, actors, scope: "pool", context, dexVolumes });
   const recentBuys = context.includeRecentBuys ? recentPageBuys(sides, coins) : [];
-  return { coins, page: pageNumber, pages, total, ...(query.ranked ? { ranked } : {}), next_cursor: nextCursor, window: query.window, clock_ms: bounds.clockMs, as_of: asOf,
+  return { coins, page: pageNumber, pages: query.traction ? 1 : pages, total, ...(query.ranked ? { ranked } : {}), next_cursor: query.traction ? null : nextCursor, window: query.window, clock_ms: bounds.clockMs, as_of: asOf,
     ...(recentBuys.length > 0 && { recent_buys: recentBuys }) };
 }
 

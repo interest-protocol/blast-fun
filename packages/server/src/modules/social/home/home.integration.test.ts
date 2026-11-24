@@ -689,6 +689,21 @@ test("Discover: one item per coin, counts by identity, directions kept apart, ho
     assert.doesNotMatch(JSON.stringify(page), /00000000-0000-4000/);
   }));
 
+test("Homepage traction shortlists actual recent traders without changing other Discover sorts", { skip }, () =>
+  withFixture(async ({ admin, discover, now }) => {
+    const query = "?window=1h&sort=relevant&traction=1";
+    const active = await ok<HomeCoinsPage>(await discover(query), "home-coins-page");
+    assert.deepEqual(symbols(active.coins), ["CROWD", "ORBIT", "EMAN"]);
+    assert.deepEqual([active.coins[1]?.activity.participants, active.coins[1]?.activity.backers, active.next_cursor], [6, 0, null]);
+    const regular = await ok<HomeCoinsPage>(await discover("?window=1h&sort=relevant"), "home-coins-page");
+    assert.ok(symbols(regular.coins).includes("HELMET"));
+    assert.equal((await discover("?window=24h&traction=1")).status, 400);
+    const hidden = await ok<HomeCoinsPage>(await discover(query, { trades: false }), "home-coins-page");
+    assert.deepEqual(hidden.coins, []);
+    await admin.query("UPDATE watermarks SET timestamp_ms_hi_inclusive = $1", [now - 2 * HOUR]);
+    assert.deepEqual((await ok<HomeCoinsPage>(await discover(query), "home-coins-page")).coins, []);
+  }));
+
 test("Discover: the window, the sorts, the filters and the keyset page are coherent over every coin", { skip }, () =>
   withFixture(async ({ discover }) => {
     const hour = await ok<HomeCoinsPage>(await discover("?window=1h"), "home-coins-page");

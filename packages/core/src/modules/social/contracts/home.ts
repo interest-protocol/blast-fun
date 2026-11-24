@@ -333,6 +333,8 @@ export type HomeQuery = Readonly<{
   cursor: string | null;
   /** Also answer `ranked` (`ranked=1`). Only Blast mode Discover asks, so a client loaded before the field never receives it. */
   ranked?: boolean;
+  /** Home Discover's first-page one-hour trade candidates, selected by traction. */
+  traction?: boolean;
 }>;
 
 export const HOME_DEFAULT_QUERY: HomeQuery = Object.freeze({
@@ -371,6 +373,7 @@ function setPageParams(params: URLSearchParams, query: Partial<HomeQuery>) {
     params.set("page", String(query.page));
   if (query.cursor) params.set("cursor", query.cursor);
   if (query.ranked) params.set("ranked", "1");
+  if (query.traction) params.set("traction", "1");
 }
 
 /** `GET /api/social/home/coins` for these sales (order kept). */

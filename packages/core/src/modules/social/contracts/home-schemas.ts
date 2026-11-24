@@ -786,10 +786,23 @@ export const socialHappeningResponseSchema = z
       .array(z.strictObject({
         presale: feedItemDefinitions.presale,
         last_commit_ms: feedItemDefinitions.millis,
+        backers_1h: homeIntegerSchema.min(1).optional(),
+        committed_1h: z.string().regex(/^[0-9]+$/).optional(),
       }))
-      .max(5)
+      .max(10)
       .describe("Open presales with a confirmed commit in the last hour, newest commit first.")
       .optional(),
+    active_curves: z.array(z.strictObject({
+      coin_type: z.string().min(1),
+      name: z.string().min(1),
+      symbol: z.string().min(1),
+      icon_url: z.string().nullable(),
+      verified_team: z.boolean(),
+      created_ms: feedItemDefinitions.millis,
+      last_action_ms: feedItemDefinitions.millis,
+      participants: homeIntegerSchema.min(1),
+      volume_usd: z.string().regex(/^[0-9]+(?:\.[0-9]+)?$/),
+    })).max(20).describe("Live curves with confirmed economic activity in the last hour, shared Home Discover candidates.").optional(),
     today: z
       .array(happeningPresaleSchema)
       .max(8)

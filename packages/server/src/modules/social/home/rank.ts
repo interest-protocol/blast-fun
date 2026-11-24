@@ -269,7 +269,7 @@ function parsePage(raw: string | null): number {
 
 /** `tradable`: absent is false; `1` true; `0` false; anything else refused. */
 /** `1` or `0`, absent meaning `0`. */
-function parseFlag(raw: string | null, parameter: "tradable" | "ranked"): boolean {
+function parseFlag(raw: string | null, parameter: "tradable" | "ranked" | "traction"): boolean {
   socialParameter(z.enum(["1", "0"]).nullable(), raw, parameter);
   return raw === "1";
 }
@@ -292,9 +292,13 @@ export function parseHomeQuery(params: URLSearchParams): HomeQuery {
   if (cursor !== null && cursor.length === 0) throw invalid("cursor");
   const page = parsePage(single(params, "page"));
   if (cursor !== null && page > 1) throw invalid("page");
+  const window = parseChoice(single(params, "window"), HOME_DEFAULT_QUERY.window, isHomeWindow, "window");
+  const sort = parseChoice(single(params, "sort"), HOME_DEFAULT_QUERY.sort, isHomeSort, "sort");
+  const traction = parseFlag(single(params, "traction"), "traction");
+  if (traction && (window !== "1h" || sort !== "relevant" || page !== 1 || cursor !== null)) throw invalid("traction");
   return {
-    window: parseChoice(single(params, "window"), HOME_DEFAULT_QUERY.window, isHomeWindow, "window"),
-    sort: parseChoice(single(params, "sort"), HOME_DEFAULT_QUERY.sort, isHomeSort, "sort"),
+    window,
+    sort,
     minParticipants: parseMinParticipants(single(params, "min_participants")),
     age: parseChoice(single(params, "age"), HOME_DEFAULT_QUERY.age, isHomeAge, "age"),
     tradable: parseFlag(single(params, "tradable"), "tradable"),
@@ -302,5 +306,6 @@ export function parseHomeQuery(params: URLSearchParams): HomeQuery {
     page,
     cursor,
     ...(parseFlag(single(params, "ranked"), "ranked") ? { ranked: true } : {}),
+    ...(traction ? { traction: true } : {}),
   };
 }
