@@ -248,6 +248,30 @@ async function get(path: string) {
   return { status: response.status, html: await response.text() };
 }
 
+test("old splash links permanently redirect to Home with their referral and campaign tags", async () => {
+  const query = "?ref=kai&utm_source=a%2Bb&utm_source=crew";
+  for (const path of ["/mission", "/closed"]) {
+    const redirect = await fetch(new URL(path + query, origin), { headers: platformHeaders, redirect: "manual" });
+    assert.equal(redirect.status, 308, path);
+    const target = new URL(redirect.headers.get("location")!, origin);
+    assert.equal(target.href, new URL("/" + query, origin).href, path);
+    const home = await fetch(target, { headers: platformHeaders, redirect: "manual" });
+    assert.equal(home.status, 200, path);
+    assert.match(home.headers.get("set-cookie") ?? "", /__Host-blast_referral=kai\b/);
+    assert.equal(JSDOM.fragment(await home.text()).querySelector("h1")?.textContent, "Home");
+  }
+});
+
+test("unknown URLs serve the app's 404 with a link home", async () => {
+  for (const path of ["/missing-blast-page", "/mission/missing", "/closed/missing"]) {
+    const { status, html } = await get(path);
+    assert.equal(status, 404, path);
+    const doc = JSDOM.fragment(html);
+    assert.equal(doc.querySelector("h1")?.textContent, "Page not found", path);
+    assert.ok(doc.querySelector('main a[href="/"]'), path);
+  }
+});
+
 test("unknown, foreign and malformed launch IDs answer HTTP 404", async () => {
   await setState({ indexed: "live", fresh: "live", infra: "ok", venue: "ok" });
   for (const id of [

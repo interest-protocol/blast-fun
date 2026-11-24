@@ -6,7 +6,6 @@ import { isBlastExperienceEnabled } from "#web/lib/experience.ts";
 import { isSocialEnabled } from "@blast/core/lib/social-flag.ts";
 import {
   decideMissionControlRoute,
-  MISSION_CONTROL_ENTRY,
   notFoundAnswersJson,
   SOCIAL_ENTRY,
   socialProfileTarget,
@@ -37,13 +36,7 @@ function browserSecurityHeaders(nonce: string | null): Readonly<Record<string, s
   });
 }
 
-/**
- * A gated route's 404: the presale's published `not_found` body on its and the
- * launchpad's API namespaces, an empty body on pages. The message is the
- * presale route kit's fixed text, so one code carries one message whichever
- * layer answers (proxy.test.ts compares them); the route kit itself is not
- * imported here, because it loads database modules.
- */
+/** Disabled social API routes return their published error body. Other gated routes return an empty 404. */
 function notFound(pathname: string): NextResponse {
   const headers = { "Cache-Control": "no-store" };
   if (!notFoundAnswersJson(pathname)) return new NextResponse(null, { status: 404, headers });
@@ -161,12 +154,6 @@ function routeRequest(request: NextRequest): NextResponse {
       nonce,
     );
   }
-  if (decision === "redirect-mission") {
-    return applyBrowserSecurity(
-      NextResponse.redirect(new URL(MISSION_CONTROL_ENTRY, request.url)),
-      nonce,
-    );
-  }
   if (decision === "redirect-profile" && request.headers.get(PROFILE_REWRITE_HEADER) === "1") {
     // The page request behind a `/@<callsign>` rewrite reaches the proxy
     // again under the page's own path: serve it, do not redirect it back.
@@ -188,22 +175,10 @@ function routeRequest(request: NextRequest): NextResponse {
       nonce,
     );
   }
-  if (decision === "rewrite-social") {
-    // A rewrite does not run the proxy again for its target, so the forwarded
-    // headers carry this request's nonce and CSP to the feed page.
-    // The query string (referral and campaign tags) reaches that page, and
-    // the address bar keeps `/`.
-    const target = request.nextUrl.clone();
-    target.pathname = SOCIAL_ENTRY;
-    return applyBrowserSecurity(
-      NextResponse.rewrite(target, { request: { headers: requestHeaders } }),
-      nonce,
-    );
-  }
+  const target = request.nextUrl.clone();
+  target.pathname = SOCIAL_ENTRY;
   return applyBrowserSecurity(
-    NextResponse.rewrite(new URL(MISSION_CONTROL_ENTRY, request.url), {
-      request: { headers: requestHeaders },
-    }),
+    NextResponse.rewrite(target, { request: { headers: requestHeaders } }),
     nonce,
   );
 }

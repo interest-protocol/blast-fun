@@ -2,8 +2,6 @@ import { SOCIAL_PAGE_PATHS } from "@blast/core/lib/social-page-routes.ts";
 
 export type MissionControlRouteDecision =
   | "allow"
-  | "redirect-mission"
-  | "rewrite-mission"
   /** `/` while the social feed is on: an internal rewrite to `SOCIAL_ENTRY`. */
   | "rewrite-social"
   /** `/@<callsign>` while the social feed is on: an internal rewrite to the profile page (`socialProfileTarget`). */
@@ -12,18 +10,8 @@ export type MissionControlRouteDecision =
   | "redirect-profile"
   | "not-found";
 
-/** The brand landing, kept at the historical entry URL. */
-export const MISSION_CONTROL_ENTRY = "/mission";
 /** The social feed's home page (`src/app/(app)/(social)/feed`): `/` shows it while the social feed is on. */
 export const SOCIAL_ENTRY = SOCIAL_PAGE_PATHS.feed;
-const ALWAYS_ALLOWED_PATHS = new Set([
-  "/",
-  MISSION_CONTROL_ENTRY,
-  "/privacy",
-  "/terms",
-  // The API gate's cookie re-issue (docs/security/bot-protection.md).
-  "/api/gate",
-]);
 // Vercel Cron calls these with CRON_SECRET; they keep running while hidden.
 const MAINTENANCE_API_PREFIX = "/api/mission-control/maintenance/";
 const CARD_PAGE = /^\/card\/[0-9a-f-]{36}$/i;
@@ -39,9 +27,7 @@ const RETIRED_MISSION_CONTROL_API_PATHS = new Set([
   "/api/mission-control/completion/wallet-proof",
   "/api/mission-control/owner/share",
 ]);
-const LAUNCHPAD_NAMESPACES = [SOCIAL_PAGE_PATHS.coin, SOCIAL_PAGE_PATHS.launch, SOCIAL_PAGE_PATHS.bonding, "/api/launchpad"];
-
-const PRESALE_NAMESPACES = [SOCIAL_PAGE_PATHS.presales, SOCIAL_PAGE_PATHS.signIn, SOCIAL_PAGE_PATHS.settings, "/api/presale", "/api/account", "/vesting", "/api/vesting"];
+const PUBLIC_API_NAMESPACES = ["/api/launchpad", "/api/presale", "/api/account", "/api/vesting"];
 
 const SOCIAL_PAGE_NAMESPACES = [SOCIAL_ENTRY, "/crew", "/p", SOCIAL_PAGE_PATHS.notifications, SOCIAL_PAGE_PATHS.create, SOCIAL_PAGE_PATHS.portfolio, SOCIAL_PAGE_PATHS.invites, "/competitions"];
 const SOCIAL_API_NAMESPACE = "/api/social";
@@ -84,30 +70,33 @@ export function decideMissionControlRoute(
   if (RETIRED_MISSION_CONTROL_API_PATHS.has(pathname) || RETIRED_NAMESPACES.some((prefix) => isWithin(pathname, prefix))) {
     return "not-found";
   }
-  if (isWithin(pathname, SOCIAL_API_NAMESPACE)) return socialEnabled ? "allow" : "not-found";
-  const socialDecision = socialEnabled ? decideSocialPage(pathname) : null;
-  if (socialDecision) return socialDecision;
-  if (
-    ALWAYS_ALLOWED_PATHS.has(pathname) ||
-    LAUNCHPAD_NAMESPACES.some((prefix) => isWithin(pathname, prefix)) ||
-    PRESALE_NAMESPACES.some((prefix) => isWithin(pathname, prefix)) ||
-    pathname.startsWith(MAINTENANCE_API_PREFIX)
-  ) {
-    return "allow";
+  if (pathname.startsWith("/api/")) return decideApiRoute(pathname, experienceEnabled, socialEnabled);
+
+  if (pathname === "/") return socialEnabled ? "rewrite-social" : "allow";
+  const socialDecision = decideSocialPage(pathname);
+  if (socialDecision) return socialEnabled ? socialDecision : "not-found";
+
+  // Only published card and referral URL formats may reach their dynamic routes.
+  if (isWithin(pathname, "/card")) {
+    return CARD_PAGE.test(pathname) || CARD_IMAGE.test(pathname) || PNL_CARD.test(pathname) ? "allow" : "not-found";
   }
-  // Published cards remain available regardless of the legacy API flag.
-  if (CARD_PAGE.test(pathname) || CARD_IMAGE.test(pathname) || PNL_CARD.test(pathname) || REFERRAL_IMAGE.test(pathname)) return "allow";
-  return decideLegacyRoute(pathname, experienceEnabled);
+  if (isWithin(pathname, "/referral")) return REFERRAL_IMAGE.test(pathname) ? "allow" : "not-found";
+  // The App Router owns public pages and renders its 404 for unmatched URLs.
+  return "allow";
 }
 
-function decideLegacyRoute(pathname: string, experienceEnabled: boolean): MissionControlRouteDecision {
-  if (pathname.startsWith("/api/")) return experienceEnabled ? "allow" : "not-found";
-  if (experienceEnabled && pathname === "/closed") return "redirect-mission";
-  return "rewrite-mission";
+function decideApiRoute(pathname: string, experienceEnabled: boolean, socialEnabled: boolean): MissionControlRouteDecision {
+  if (isWithin(pathname, SOCIAL_API_NAMESPACE)) return socialEnabled ? "allow" : "not-found";
+  if (
+    experienceEnabled ||
+    pathname === "/api/gate" ||
+    pathname.startsWith(MAINTENANCE_API_PREFIX) ||
+    PUBLIC_API_NAMESPACES.some((prefix) => isWithin(pathname, prefix))
+  ) return "allow";
+  return "not-found";
 }
 
 function decideSocialPage(pathname: string): MissionControlRouteDecision | null {
-  if (pathname === "/") return "rewrite-social";
   // Profiles live at `/@<callsign>`; the page's own path redirects there.
   if (PROFILE_ALIAS.test(pathname)) return "rewrite-profile";
   if (PROFILE_PAGE.test(pathname)) return "redirect-profile";
