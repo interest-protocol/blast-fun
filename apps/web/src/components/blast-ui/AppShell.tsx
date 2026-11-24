@@ -15,7 +15,6 @@ import { RailLinks } from "./RailLinks";
 import styles from "./AppShell.module.css";
 import { BlastMenuTrigger, useMenuHandle, type MenuHandle } from "./BlastMenu";
 import { CreateMenu } from "./CreateMenu";
-import { signalListTraversal } from "./list-restoration";
 import { MoreNavigation } from "./MoreNavigation";
 import {
   BellIcon,
@@ -44,8 +43,7 @@ import type { ShellViewer } from "./shell-viewer";
 import { ShellAvatar, ShellAvatarRenderer, type RenderAvatar } from "./ShellAvatar";
 import { ToastProvider, useToast } from "./Toasts";
 import { TooltipGroup } from "./TooltipGroup";
-import { reportViewTransitionError } from "./view-transition-error.ts";
-import { applyTheme, prefersReducedMotion, setShellPref, useShellPrefs } from "./use-shell-prefs";
+import { applyTheme, setShellPref, useShellPrefs } from "./use-shell-prefs";
 
 /**
  * The canonical UI's app shell (FEATURE-MAP §1; the 2026-10-27 Rail, Topbar
@@ -117,53 +115,6 @@ function pageTransitionName(pathname: string | null, home: boolean) {
 function pageIdentity(pathname: string | null): string {
   const path = pathname ?? "";
   return portfolioTabAt(path) === null ? path : PORTFOLIO_PATH;
-}
-
-function useHistoryPageTransition(pathname: string | null) {
-  const path = useRef(pathname);
-  useLayoutEffect(() => { path.current = pathname; }, [pathname]);
-  useEffect(() => {
-    let replaying = false;
-    let active: ViewTransition | undefined;
-    let finishUpdate: (() => void) | undefined;
-    const onPopState = (event: PopStateEvent) => {
-      const before = document.getElementById("view");
-      if (replaying || !event.state?.__NA || !before || pageIdentity(location.pathname) === pageIdentity(path.current) || !document.startViewTransition || prefersReducedMotion()) return;
-      event.stopImmediatePropagation();
-      // Replaying popstate can remount the shell before its own listener observes the traversal.
-      if (isHomePath(location.pathname)) signalListTraversal(event.state);
-      active?.skipTransition();
-      finishUpdate?.();
-      document.documentElement.setAttribute("data-blast-traversing", "");
-      // shortcut: Next 16.3 restores history outside React transitions; remove when cached traversals activate ViewTransition.
-      const transition = document.startViewTransition(() => new Promise<void>((resolve) => {
-        const done = () => { observer.disconnect(); window.clearTimeout(timer); resolve(); };
-        const observer = new MutationObserver(() => { if (!before.isConnected) done(); });
-        observer.observe(document.body, { childList: true, subtree: true });
-        const timer = window.setTimeout(() => { transition.skipTransition(); done(); }, 2_000);
-        finishUpdate = done;
-        replaying = true;
-        // React Compiler cannot lower finally; reset the guard on both paths.
-        try { window.dispatchEvent(new PopStateEvent("popstate", { state: event.state })); }
-        catch (error) { replaying = false; throw error; }
-        replaying = false;
-        if (!before.isConnected) done();
-      }));
-      active = transition;
-      void transition.ready.catch(reportViewTransitionError);
-      void transition.updateCallbackDone.catch(() => { /* A failed update also rejects finished. */ });
-      void transition.finished.finally(() => {
-        if (active === transition) document.documentElement.removeAttribute("data-blast-traversing");
-      }).catch(reportViewTransitionError);
-    };
-    window.addEventListener("popstate", onPopState, true);
-    return () => {
-      window.removeEventListener("popstate", onPopState, true);
-      active?.skipTransition();
-      finishUpdate?.();
-      document.documentElement.removeAttribute("data-blast-traversing");
-    };
-  }, []);
 }
 
 /** A page's first surface: the right column's first card lines up with it. */
@@ -239,7 +190,6 @@ function ShellFrame({
     observer.observe(header);
     return () => observer.disconnect();
   }, []);
-  useHistoryPageTransition(pathname);
   const navigated = useHasNavigated(pathname);
   const router = useRouter();
   const prefs = useShellPrefs();
@@ -358,7 +308,7 @@ function ShellFrame({
         <main className={styles.main} data-shell-column="" id="main">
           {banner}
           <PageTransition {...transitionProps} key={pageIdentity(pathname)}>
-            <div className={styles.view} data-route-transition={transitionName} id="view">
+            <div className={styles.view} id="view">
               <CoinPageWalletContext value={<ShellWallet {...wallet} available={Boolean(account)} pending={viewerLoading} size="sm" />}>
                 <MissingPageProvider onChange={setMissingPage}>{children}</MissingPageProvider>
               </CoinPageWalletContext>

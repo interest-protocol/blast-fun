@@ -28,17 +28,14 @@ function recordTraversal(state: { blastLists?: unknown; blastListContent?: unkno
 export function useListTraversal(matchesPath: (pathname: string) => boolean): void {
   useLayoutEffect(() => {
     const traversed = (event: PopStateEvent) => {
-      if (matchesPath(window.location.pathname)) signalListTraversal(event.state);
+      if (!matchesPath(window.location.pathname)) return;
+      recordTraversal(event.state);
+      // The router may have mounted the destination during this event.
+      window.dispatchEvent(new window.Event(LIST_TRAVERSAL_EVENT));
     };
     window.addEventListener("popstate", traversed, true);
     return () => window.removeEventListener("popstate", traversed, true);
   }, [matchesPath]);
-}
-
-export function signalListTraversal(state: PopStateEvent["state"]): void {
-  recordTraversal(state);
-  // The router may have mounted the destination while popstate was already being dispatched.
-  window.dispatchEvent(new window.Event(LIST_TRAVERSAL_EVENT));
 }
 
 function currentTraversal() {
