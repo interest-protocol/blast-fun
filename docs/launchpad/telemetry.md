@@ -386,7 +386,7 @@ another launch's and an uncheckpointed transaction, and an unknown digest. `npm 
 as the dev fixture node (`/__fixture/transactions/{digest}`,
 `/__fixture/chain`; `fresh: "down"` takes the node offline and `chain:
 "other"` puts it on another chain), so a development server started with
-`BLAST_LAUNCHPAD_ENABLED=true` and `LAUNCHPAD_FIXTURE_CHAIN_ORIGIN` verifies reports against them. The
+`LAUNCHPAD_FIXTURE_CHAIN_ORIGIN` verifies reports against them. The
 `/dev/launchpad/launch` harness lands its own completed creation there
 before reporting it: the page posts it same-origin to the dev-only
 `POST /dev/launchpad/launch/fixture-transactions` (404 in production;

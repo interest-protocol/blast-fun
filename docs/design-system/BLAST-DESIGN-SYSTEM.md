@@ -85,8 +85,7 @@ Competitions, Swap, phones and the shared library sheet.
   - The rail shows Home, Swap, Bonding, Presales, Portfolio and More.
     Presales uses the ticket icon and links to `/presale`. Bonding uses the
     curve icon and links to `/bonding`. Both pages have their own title.
-    Bonding is also current on `/launch` and bonding coin pages. The shell
-    shows Bonding when the launchpad is enabled. On a not-found page,
+    Bonding is also current on `/launch` and bonding coin pages. On a not-found page,
     `MissingPageMarker` clears the current item from the first paint.
     Search exposes its `/` shortcut through `title` and `aria-keyshortcuts`.
   - Top bar: 64px, 28px sides, right-aligned 8px apart, all `size="chip"`: the

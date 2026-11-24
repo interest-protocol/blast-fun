@@ -1,6 +1,6 @@
 // HTTP status of the permanent coin route on a running server. The file starts
 // indexed fixtures, the native backend, and a production web build/server, with
-// the launchpad and its parent social shell enabled, and stops them at the end.
+// the social shell enabled, and stops them at the end.
 // To test servers you already run, set
 // COIN_ROUTE_ORIGIN and COIN_FIXTURE_ORIGIN. From the root:
 //   npm run test:integration -w @blast/web -- 'src/app/(launchpad)/coin/coin-route.integration.test.ts'
@@ -115,8 +115,6 @@ before(async () => {
     BLAST_BACKEND_LISTEN_HOST: "127.0.0.1",
     BLAST_PARTNER_CAPACITY_CONFIG: capacityFixture(["coin-route-fixture"]),
     PARTNER_VERIFIER_DATABASE_URL: await partnerVerifierFixture(databaseUrl, databaseRoles),
-    BLAST_LAUNCHPAD_ENABLED: "true",
-    BLAST_PRESALE_ENABLED: "true",
     BLAST_SOCIAL_ENABLED: "true",
     // The web build has no released signing chain or live fullnode.
     BLAST_NETWORK: "",
@@ -295,6 +293,9 @@ test("a tag URL resolves a migrated Blast launch, a migrated presale, and Sui", 
   assert.equal(sale.status, 307);
   assert.equal(sale.headers.get("location"), `/presale/${SALE_ID}?from=home`);
   await sale.body?.cancel();
+  const detail = await get(`/presale/${SALE_ID}`);
+  assert.equal(detail.status, 200);
+  assert.match(JSDOM.fragment(detail.html).textContent ?? "", /Fixture Sale/);
 
   const saleAlias = await fetch(new URL(`/coin/${SALE_ID}?from=home&tab=sale&tab=claims&ref=`, origin), { headers: platformHeaders, redirect: "manual" });
   assert.equal(saleAlias.status, 307);

@@ -9,8 +9,7 @@
 // `next start` here, so every request reaches the app: the uncached origin
 // cost on the replica (and blast-infra's projection for terms, kept 5 min).
 //
-// Start the local fixture app with BLAST_SOCIAL_ENABLED=true and
-// BLAST_PRESALE_ENABLED=true, then run from apps/web:
+// Start the local fixture app with BLAST_SOCIAL_ENABLED=true, then run from apps/web:
 //
 //   k6 run -e BASE_URLS=http://127.0.0.1:3917 -e PRESALES_IDS=… loadtest/scenarios/social-presales.js
 //

@@ -9,9 +9,3 @@
 .icon svg { width: 1.25rem; height: 1.25rem; }
 .text { gap: 0.125rem; padding-top: 1px; }
 .text > span { line-height: 1.4; text-wrap: pretty; }
-.text .soon { height: 1.125rem; margin-left: 0.4375rem; padding: 0 0.4375rem; border-radius: 62.4375rem; background: var(--chip); color: var(--ink-2); font-size: var(--text-2xs); font-weight: 700; letter-spacing: .05em; text-transform: uppercase; display: inline-flex; align-items: center; }
-.item[aria-disabled="true"] { cursor: default; }
-.item[aria-disabled="true"] .icon { color: var(--faint); }
-.item[aria-disabled="true"] .text b { color: var(--muted); }
-.item[aria-disabled="true"] .text > span { color: var(--faint); }
-@media (hover: hover) { .item[aria-disabled="true"]:hover { background: none; } }

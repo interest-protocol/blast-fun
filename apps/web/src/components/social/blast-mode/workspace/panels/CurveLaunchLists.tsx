@@ -5,7 +5,6 @@ import { useQuery } from "@tanstack/react-query";
 
 import { Button } from "#web/components/blast-ui/Button.tsx";
 import { EmptyState } from "#web/components/blast-ui/EmptyState.tsx";
-import { useLaunchpadEnabled } from "#web/components/blast-ui/launchpad-flag.tsx";
 import { SkeletonText } from "#web/components/blast-ui/Skeleton.tsx";
 import { POLL_MS } from "#web/components/launchpad/blast-infra-browser.ts";
 import { CoinActivity } from "#web/components/launchpad/activity/CoinActivity.tsx";
@@ -25,9 +24,8 @@ import { curveLaunchQuery, curvePoolQuery, mayTradeOnCurve } from "./curve-launc
  * answer is still pending.
  */
 export function useCurveListLaunch(asset: CoinAsset, coin: CoinRecord | null, visible: boolean): string | null | undefined {
-  const launchpad = useLaunchpadEnabled();
   const client = useAppQueryClient();
-  const candidate = launchpad && mayTradeOnCurve(asset, coin);
+  const candidate = mayTradeOnCurve(asset, coin);
   const read = useQuery({ ...curveLaunchQuery(client, asset), enabled: candidate && visible }, client);
   if (!candidate) return null;
   // Undefined while the first answer is on its way, so the header can wait for it instead of showing a dash;

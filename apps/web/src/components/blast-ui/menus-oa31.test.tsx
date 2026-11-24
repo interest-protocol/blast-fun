@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { LaunchpadFlagProvider } from "#web/components/blast-ui/launchpad-flag.tsx";
 import test, { type TestContext } from "node:test";
 
 import { installTestDom, recordAnimations, testEvent, type TestElement } from "../../../test/fixtures/social/test-dom.ts";
@@ -51,20 +50,20 @@ function ActionHost({ onDeposit, onFund, onNotifications }: Readonly<{ onDeposit
   return null;
 }
 
-async function mount(t: TestContext, { signedIn = true, viewerLoading = false, onSignOut, onDeposit = () => undefined, onFund = () => undefined, onNotifications = () => undefined, launchpad = true }: Readonly<{ signedIn?: boolean; viewerLoading?: boolean; onSignOut?: () => Promise<void>; onDeposit?: () => void; onFund?: () => void; onNotifications?: () => void; launchpad?: boolean }> = {}): Promise<void> {
+async function mount(t: TestContext, { signedIn = true, viewerLoading = false, onSignOut, onDeposit = () => undefined, onFund = () => undefined, onNotifications = () => undefined }: Readonly<{ signedIn?: boolean; viewerLoading?: boolean; onSignOut?: () => Promise<void>; onDeposit?: () => void; onFund?: () => void; onNotifications?: () => void }> = {}): Promise<void> {
   const container = document.createElement("div");
   container.setAttribute("data-blast-ui", "");
   document.body.appendChild(container);
   const root = createRoot(container as unknown as Element);
   await act(async () =>
     root.render(
-      <AppRouterContext value={router as never}><LaunchpadFlagProvider value={launchpad}>
+      <AppRouterContext value={router as never}>
         <RouterContext value={linkRouter}><PathnameContext value="/">
           <AppShell portfolio={{ status: "ready", summary: { total_usd: 4760.34, today: null, breakdown: { coins: 3660.34, committed: 850, claimable: 250 } } }} overlays={<ActionHost onDeposit={onDeposit} onFund={onFund} onNotifications={onNotifications} />} onSignOut={onSignOut} signInHref="/sign-in" signedIn={signedIn} viewer={signedIn && !viewerLoading ? KAI : null} viewerLoading={viewerLoading}>
             <p>page</p>
           </AppShell>
         </PathnameContext></RouterContext>
-      </LaunchpadFlagProvider></AppRouterContext>,
+      </AppRouterContext>,
     ),
   );
   t.after(async () => {
@@ -279,7 +278,7 @@ test("phone More belongs to the bottom bar, reveals Portfolio and Competitions, 
   assert.ok(panel.hasAttribute("inert"));
 });
 
-test("UI-20: the Create menu: Presale links to the Create page; Bonding curve links to Launch while the launchpad is on", async (t) => {
+test("UI-20: the Create menu: Presale links to the Create page; Bonding curve links to Launch", async (t) => {
   await mount(t);
   await press(button(CREATE_MENU_ID));
   await settle();
@@ -288,25 +287,6 @@ test("UI-20: the Create menu: Presale links to the Create page; Bonding curve li
   assert.equal(curve!.localName, "a");
   assert.equal(curve!.getAttribute("href"), "/launch");
   assert.doesNotMatch(curve!.textContent, /Soon/);
-});
-
-test("UI-20: with the launchpad off the bonding curve is disabled, reachable by the arrows, and does nothing", async (t) => {
-  await mount(t, { launchpad: false });
-  await press(button(CREATE_MENU_ID));
-  await settle();
-  const menu = menuOf(CREATE_MENU_ID)!;
-  assert.equal(menu.getAttribute("aria-label"), "Actions");
-  assert.ok(!menu.parentElement!.hasAttribute("data-anchored"), "Create uses the shared bottom sheet on phones");
-  const [presale, curve] = rows(CREATE_MENU_ID);
-  assert.equal(presale!.localName, "a");
-  assert.equal(presale!.getAttribute("href"), "/create");
-  assert.equal(curve!.localName, "div", "not a button, so it never presses (OA-31's press states)");
-  assert.equal(curve!.getAttribute("aria-disabled"), "true");
-  assert.match(curve!.textContent, /Bonding curveSoon/);
-  await key("ArrowDown");
-  assert.equal(document.activeElement, curve, "the arrows reach it");
-  await press(curve!);
-  assert.equal(button(CREATE_MENU_ID).getAttribute("aria-expanded"), "true", "pressing it does nothing");
 });
 
 test("the rail Create opens the shared choices beside the rail and Escape returns focus", async (t) => {

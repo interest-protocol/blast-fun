@@ -46,7 +46,6 @@ export type WebConfig = Readonly<{
   /** The released deployment on `BLAST_NETWORK` browsers sign against, or null. */
   signingChain: SigningChainConfig | null;
   presaleDeployment: PresaleDeploymentState;
-  /** `enabled` is the deployment's setting; a request uses `presaleConfigFor` with its own flags. */
   presale: PresaleConfig;
   /** `NODE_ENV` is development: the CSP allows the dev server's eval and websocket. */
   development: boolean;

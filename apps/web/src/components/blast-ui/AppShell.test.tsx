@@ -9,7 +9,6 @@ import { PathnameContext } from "next/dist/shared/lib/hooks-client-context.share
 
 import { CoinPageWallet } from "./CoinPageWallet";
 import { AppShell } from "./AppShell";
-import { LaunchpadFlagProvider } from "./launchpad-flag";
 import type { PortfolioSummaryState } from "./portfolio";
 import type { ShellViewer } from "./shell-viewer";
 import { shellViewerOf } from "./shell-viewer";
@@ -137,13 +136,7 @@ test("Presales and Bonding have distinct links, icons, and current states in bot
     assert.notEqual(presales.querySelector("svg")!.innerHTML, bonding.querySelector("svg")!.innerHTML);
   }
 
-  const disabled = new JSDOM(at("/presale", (
-    <LaunchpadFlagProvider value={false}>
-      <AppShell portfolio={{ status: "unavailable" }} signInHref="/sign-in" signedIn={false} viewer={null}><p>page</p></AppShell>
-    </LaunchpadFlagProvider>
-  ))).window.document;
-  assert.equal(disabled.querySelectorAll('nav a[href="/bonding"]').length, 0);
-  assert.equal(disabled.querySelectorAll('nav a[href="/presale"][aria-current="page"]').length, 2);
+
 });
 
 test("signed in: the account menu has one trigger, the top bar's avatar, where a visitor sees Sign in", () => {

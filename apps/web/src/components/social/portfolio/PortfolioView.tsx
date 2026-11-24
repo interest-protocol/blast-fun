@@ -47,7 +47,6 @@ import { projectClaimPosition } from "../claim/claim-projection";
 import { splitShades } from "../create/create-colors.ts";
 import { useShellClaimPath } from "../feed-ui/shell-bridge";
 import { WalletLaunches } from "../../launchpad/discovery/WalletLaunches";
-import { useLaunchpadEnabled } from "#web/components/blast-ui/launchpad-flag.tsx";
 import { LaunchRewards, type CreatorAccountRead, type CreatorWalletRead } from "../launch-rewards/LaunchRewards";
 import { presaleListQuery } from "../queries";
 import { PositionsList, VestingsList } from "./HoldingsLists";
@@ -518,12 +517,10 @@ function LaunchesBody({ data }: Readonly<{ data: PortfolioViewData }>) {
  */
 function ClaimsBody({ data, nowMs, claims }: Readonly<{ data: PortfolioViewData; nowMs: number; claims: ReturnType<typeof useToastedClaims> }>) {
   const wallets = launchWalletsOf(data);
-  // Every launchpad list reads `/api/launchpad`: none while the launchpad is off.
-  const launchpad = useLaunchpadEnabled();
   const organize = data.mode === "ready";
   const vestings = <PortfolioVestingOverview claims={claims} data={data} nowMs={nowMs} organize={organize} />;
   if (data.mode === "visitor" || data.mode === "no-account") return vestings;
-  const launches = launchpad && (wallets === null || wallets.length);
+  const launches = wallets === null || wallets.length > 0;
   const earnings = data.creatorEarnings;
   return <div className={styles.claims}>
     <section aria-labelledby={organize ? undefined : "pf-vesting"} className={styles.claimsPart}>

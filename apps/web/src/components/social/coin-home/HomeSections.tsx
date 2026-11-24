@@ -72,7 +72,6 @@ type Props = Readonly<{
   /** Drawn where the sections would be when every one is hidden. */
   empty: ReactNode;
   customizing?: boolean;
-  launchpad?: boolean;
 }>;
 
 /** How far the pointer travels before a section lifts. */
@@ -121,7 +120,7 @@ function finishEntrances(element: HTMLElement): void {
   }
 }
 
-export function HomeSections({ prefs, onChange, sections, empty, customizing = false, launchpad = false }: Props) {
+export function HomeSections({ prefs, onChange, sections, empty, customizing = false }: Props) {
   const id = useId();
   const root = useRef<HTMLDivElement>(null);
   useTablePageMotion(root);
@@ -143,7 +142,7 @@ export function HomeSections({ prefs, onChange, sections, empty, customizing = f
   const elements = (): readonly HTMLElement[] => [...(root.current?.querySelectorAll<HTMLElement>(":scope > [data-section]") ?? [])];
   const elementOf = (key: HomeSectionKey) => elements().find((element) => keyOf(element) === key) ?? null;
 
-  const positionOf = (key: HomeSectionKey) => shownHomeSections(latest.current, launchpad).indexOf(key);
+  const positionOf = (key: HomeSectionKey) => shownHomeSections(latest.current).indexOf(key);
 
   const reorder = (next: HomeSectionPrefs, change: SectionChange | null, hold: HomeSectionKey | null, tell: string | null) => {
     if (next === latest.current) return;
@@ -188,7 +187,7 @@ export function HomeSections({ prefs, onChange, sections, empty, customizing = f
       const index = all.indexOf(element);
       const step = sectionSlotStep(dragged, boxOf(all[index - 1]), boxOf(all[index + 1]));
       if (step === 0) break;
-      reorder(placeHomeSection(latest.current, state.key, index + step, launchpad), null, state.key, null);
+      reorder(placeHomeSection(latest.current, state.key, index + step), null, state.key, null);
       element = elementOf(state.key) ?? element;
     }
     state.y = want - element.offsetTop;
@@ -218,7 +217,7 @@ export function HomeSections({ prefs, onChange, sections, empty, customizing = f
       settle.onfinish = () => section.removeAttribute("data-lifted");
     }
     const position = positionOf(state.key);
-    if (live.current) live.current.textContent = sectionMovedMessage(state.key, position, shownHomeSections(latest.current, launchpad).length);
+    if (live.current) live.current.textContent = sectionMovedMessage(state.key, position, shownHomeSections(latest.current).length);
     if (!cancel && latest.current !== state.from) onChange(latest.current, { key: state.key, action: "move", position });
   };
 
@@ -282,9 +281,9 @@ export function HomeSections({ prefs, onChange, sections, empty, customizing = f
     if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
     event.preventDefault();
     refocus.current = event.currentTarget;
-    const next = moveHomeSection(latest.current, key, event.key === "ArrowUp" ? -1 : 1, launchpad);
-    const position = shownHomeSections(next, launchpad).indexOf(key);
-    reorder(next, { key, action: "move", position }, null, sectionMovedMessage(key, position, shownHomeSections(next, launchpad).length));
+    const next = moveHomeSection(latest.current, key, event.key === "ArrowUp" ? -1 : 1);
+    const position = shownHomeSections(next).indexOf(key);
+    reorder(next, { key, action: "move", position }, null, sectionMovedMessage(key, position, shownHomeSections(next).length));
   };
 
   const hide = (key: HomeSectionKey) => {
@@ -314,7 +313,7 @@ export function HomeSections({ prefs, onChange, sections, empty, customizing = f
     };
   }, []);
 
-  const shown = shownHomeSections(prefs, launchpad);
+  const shown = shownHomeSections(prefs);
   return (
     <div className={styles.sections} ref={root}>
       {shown.map((key) => {

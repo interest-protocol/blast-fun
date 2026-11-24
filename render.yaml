@@ -60,15 +60,11 @@ projects:
                 sync: false
               - key: BLAST_INFRA_READ_ORIGIN
                 sync: false
-              - key: BLAST_LAUNCHPAD_ENABLED
-                sync: false
               - key: BLAST_NETWORK
                 sync: false
               - key: BLAST_PARTNER_CAPACITY_CONFIG
                 sync: false
               - key: BLAST_PARTNER_RELEASE_FIXTURE_UUID
-                sync: false
-              - key: BLAST_PRESALE_ENABLED
                 sync: false
               - key: BLAST_QUOTA_REDIS_URL
                 sync: false
@@ -238,8 +234,6 @@ projects:
                 value: committed-markets
               - key: BLAST_INFRA_READ_ORIGIN
                 value: https://blast-infra-reader.onrender.com
-              - key: BLAST_LAUNCHPAD_ENABLED
-                sync: false
               - key: BLAST_WORKER_ALERT_WEBHOOK_URL
                 sync: false
               - key: BLAST_WORKER_DELIVERY_BATCH_SIZE
@@ -286,8 +280,6 @@ projects:
                 value: committed-markets
               - key: BLAST_INFRA_READ_ORIGIN
                 value: https://blast-infra-reader.onrender.com
-              - key: BLAST_LAUNCHPAD_ENABLED
-                sync: false
               - key: BLAST_WORKER_FUNDING_ALERT_MIST
                 sync: false
               - key: WATCHER_DATABASE_URL

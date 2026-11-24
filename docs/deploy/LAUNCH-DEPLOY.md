@@ -39,13 +39,9 @@ project. The analytics file does not restore the retired application.
 
 ### Presale redeployments and rollback
 
-Before releasing or rolling back the frontend, check the intended values of
-`BLAST_PRESALE_ENABLED`, `BLAST_SOCIAL_ENABLED`, `BLAST_TRADING_ENABLED`, and
-`BLAST_LAUNCHPAD_ENABLED`. Both `true` and the legacy value `team` enable a
-surface publicly. Before deploying the version that retires password access,
-confirm that each legacy `team` setting is intended for public access. Use
-`false` or leave a flag unset to disable that surface. Keep the bridge at its
-existing disabled setting.
+Launchpad and presale routes are permanent. Check `BLAST_SOCIAL_ENABLED` and
+`BLAST_TRADING_ENABLED` before release or rollback. Both `true` and `team`
+enable their respective surface publicly. Keep the bridge at its existing disabled setting.
 
 Deployments retain their environment snapshot. Verify the snapshot before using
 Instant Rollback. Verify a private candidate on a protected preview backed by

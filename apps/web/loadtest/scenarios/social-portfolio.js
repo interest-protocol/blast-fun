@@ -10,8 +10,7 @@
 // (the replica reads, the cost-basis ledger included, and the fullnode
 // balance fan-out, which the egress guard answers locally).
 //
-// Start the local fixture app with BLAST_SOCIAL_ENABLED=true and
-// BLAST_PRESALE_ENABLED=true, then run from apps/web:
+// Start the local fixture app with BLAST_SOCIAL_ENABLED=true, then run from apps/web:
 //
 //   k6 run -e BASE_URLS=http://127.0.0.1:3917 loadtest/scenarios/social-portfolio.js
 //

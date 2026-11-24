@@ -177,7 +177,7 @@ test("provider-compatible CSP is restrictive and nonce-bound", () => {
     "wss://www.walletlink.org",
     "https://*.rpc.privy.systems",
     "https://challenges.cloudflare.com",
-    // The browser's swap estimate (Cetus's aggregator), with the presale off.
+    // The browser's swap estimate (Cetus's aggregator).
     "https://api-sui.cetus.zone",
   ]) {
     assert.ok(directive("connect-src").includes(source), source);
@@ -230,7 +230,6 @@ function connectSources(csp: string): string[] {
 }
 
 const PRESALE_ENVIRONMENT = {
-  BLAST_PRESALE_ENABLED: "true",
   NEXT_PUBLIC_PRESALE_BRIDGE_ENABLED: "1",
   NEXT_PUBLIC_PRESALE_SOLANA_RPC_URL: "https://solana.rpc.test/key",
   NEXT_PUBLIC_PRESALE_EVM_RPC_URLS: JSON.stringify({ base: "https://base.rpc.test/v2/key", ethereum: "https://eth.rpc.test" }),
@@ -278,8 +277,7 @@ test("connect-src adds exactly the presale's mainnet origins, without wildcards"
   );
   // blast-infra is never a source: the presale adds only its own origins.
   assert.ok(!mainnet.csp.some((source) => /infra/.test(source)));
-  // Presale off, or no network: nothing is added.
-  assert.deepEqual(withPresale({ ...PRESALE_ENVIRONMENT, BLAST_NETWORK: "mainnet", BLAST_PRESALE_ENABLED: "false" }).csp, base);
+  // No network or bridge origins: nothing is added.
   assert.deepEqual(withPresale({ ...PRESALE_ENVIRONMENT, NEXT_PUBLIC_PRESALE_BRIDGE_ENABLED: "0" }).csp, base);
 
   for (const source of mainnet.csp.slice(1)) {

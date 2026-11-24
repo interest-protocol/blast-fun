@@ -15,7 +15,7 @@ import { HOME_AGES, HOME_SORTS, HOME_ROWS_CHOICES, HOME_SOURCES, HOME_WINDOWS, t
 
 import styles from "./CoinHome.module.css";
 import { HOME_SECTIONS_MENU_ID, type SectionChange } from "./HomeSections";
-import { HOME_SECTIONS_DEFAULT, availableHomeSections, moveHomeSection, HOME_SECTION_TITLES, isHomeSectionShown, setHomeSectionShown, shownHomeSections, type HomeSectionPrefs } from "./home-sections";
+import { HOME_SECTIONS_DEFAULT, moveHomeSection, HOME_SECTION_TITLES, isHomeSectionShown, setHomeSectionShown, shownHomeSections, type HomeSectionPrefs } from "./home-sections";
 import { AGE_LABELS, SORT_HINTS, SORT_LABELS, HOME_DEFAULT_VIEW, MIN_PARTICIPANT_CHOICES, SOURCE_LABELS, WINDOW_LABELS, activeFilterCount, controlsApply, type HomeViewState } from "./home-state";
 
 const SOURCE_OPTIONS = HOME_SOURCES.map((key) => [key, SOURCE_LABELS[key]] as const);
@@ -81,9 +81,9 @@ export function RowsPick({ rows, onRows, what = "coins" }: Readonly<{ rows: numb
 }
 
 /** Customize Home: a gear in the page header; its popover's title counts the hidden sections above their visibility and order. */
-export function HomeSettingsMenu({ launchpad, sections, onSections, showLabel }: Readonly<{ launchpad: boolean; sections: HomeSectionPrefs; onSections: (next: HomeSectionPrefs, change: SectionChange | null) => void; showLabel: boolean }>) {
-  const available = availableHomeSections(sections, launchpad);
-  const visible = shownHomeSections(sections, launchpad);
+export function HomeSettingsMenu({ sections, onSections, showLabel }: Readonly<{ sections: HomeSectionPrefs; onSections: (next: HomeSectionPrefs, change: SectionChange | null) => void; showLabel: boolean }>) {
+  const available = sections.order;
+  const visible = shownHomeSections(sections);
   const hiddenCount = available.length - visible.length;
   return <Popover.Root>
     <Popover.Trigger
@@ -102,8 +102,8 @@ export function HomeSettingsMenu({ launchpad, sections, onSections, showLabel }:
             const position = visible.indexOf(key);
             return <div className={styles.sectionRow} key={key}>
               <label><Checkbox checked={shown} onChange={(event) => onSections(setHomeSectionShown(sections, key, event.target.checked), { key, action: event.target.checked ? "show" : "hide", position })} />{HOME_SECTION_TITLES[key]}</label>
-              <IconButton aria-label={`Move ${HOME_SECTION_TITLES[key]} up`} disabled={!shown || position === 0} onClick={() => onSections(moveHomeSection(sections, key, -1, launchpad), { key, action: "move", position: position - 1 })} size="sm">↑</IconButton>
-              <IconButton aria-label={`Move ${HOME_SECTION_TITLES[key]} down`} disabled={!shown || position === visible.length - 1} onClick={() => onSections(moveHomeSection(sections, key, 1, launchpad), { key, action: "move", position: position + 1 })} size="sm">↓</IconButton>
+              <IconButton aria-label={`Move ${HOME_SECTION_TITLES[key]} up`} disabled={!shown || position === 0} onClick={() => onSections(moveHomeSection(sections, key, -1), { key, action: "move", position: position - 1 })} size="sm">↑</IconButton>
+              <IconButton aria-label={`Move ${HOME_SECTION_TITLES[key]} down`} disabled={!shown || position === visible.length - 1} onClick={() => onSections(moveHomeSection(sections, key, 1), { key, action: "move", position: position + 1 })} size="sm">↓</IconButton>
             </div>;
           })}
           <Button onClick={() => onSections(HOME_SECTIONS_DEFAULT, null)} size="sm">Restore defaults</Button>

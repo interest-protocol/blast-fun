@@ -118,8 +118,7 @@ unreachable or slow engine is `502 unreachable`, a body that is not JSON
 `502 bad_gateway`, and a refusal of this server's key (401/403)
 `502 unavailable`, so a reader never sees the key or blast-infra's words
 about it. Unconfigured (`BLAST_INFRA_ORIGIN` unset) is `503 unconfigured`.
-The routes sit under `/api/launchpad`, so they answer only with
-`BLAST_LAUNCHPAD_ENABLED=true`. Outside a production build with no
+Outside a production build with no
 `RATE_LIMIT_SUBJECT_PEPPER` (the fixtures' `next dev`), nothing is counted.
 
 The chart takes the launch's venue side from one rule (`venueRoute` in
@@ -338,7 +337,7 @@ it is Unavailable. An unconfirmed launch is Unavailable.
   otherwise the destination says posting is unavailable here. Writes also
   need the launchpad runtime ([identity](identity.md#operations)).
 
-`/dev/launchpad/theses` (development only; a dev server started with `BLAST_LAUNCHPAD_ENABLED=true`) mounts the same list and form for
+`/dev/launchpad/theses` (development only) mounts the same list and form for
 the coin fixture launch, or `?launchId=`, against the dev server's real
 routes, with a fixture Privy signer (paste a token the dev server's fixture
 Privy issued, and that user's embedded wallet) and two fixture wallets
@@ -427,7 +426,7 @@ each viewer; slots that need faster data should refresh their own.
 
 ```bash
 npm run dev:coin-fixtures -w @blast/web   # blast-infra /v1 and launch objects on :3112
-BLAST_LAUNCHPAD_ENABLED=true BLAST_INFRA_ORIGIN=http://127.0.0.1:3112 \
+BLAST_INFRA_ORIGIN=http://127.0.0.1:3112 \
 LAUNCHPAD_FIXTURE_CHAIN_ORIGIN=http://127.0.0.1:3112 npm run dev -w @blast/web
 curl -X POST http://127.0.0.1:3112/__fixture/state \
   -d '{"indexed":"live","fresh":"migration_ready","infra":"ok","venue":"ok","holders":"complete"}'

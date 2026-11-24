@@ -13,7 +13,6 @@ export type PresaleTheme = (typeof PRESALE_THEMES)[number];
 // Scope records the environment variable's name. PresaleClientConfig defines
 // which validated values cross the React Server Component boundary.
 export const PRESALE_CONFIG_VARIABLES = {
-  BLAST_PRESALE_ENABLED: { scope: "server", secret: false },
   BLAST_NETWORK: { scope: "server", secret: false },
   NEXT_PUBLIC_PRESALE_BRIDGE_ENABLED: { scope: "public", secret: false },
   NEXT_PUBLIC_PRESALE_SOLANA_RPC_URL: { scope: "public", secret: false },
@@ -37,12 +36,6 @@ export type PresaleSetting<T> =
   | Readonly<{ status: "unavailable"; variable: PresaleConfigVariable; reason: PresaleUnavailableReason }>;
 
 export type PresaleConfig = Readonly<{
-  /**
-   * The presale routes are open. `readPresaleConfig` sets it for
-   * `BLAST_PRESALE_ENABLED=true` only (the public setting); a request's own
-   * value comes from `presaleConfigFor` (`launch-flags.ts`).
-   */
-  enabled: boolean;
   network: PresaleSetting<PresaleNetwork>;
   bridge: Readonly<{
     /** `NEXT_PUBLIC_PRESALE_BRIDGE_ENABLED=1` shows the cross-chain rail. */
@@ -71,7 +64,6 @@ export type PresaleClientConfig = Omit<PresaleConfig, "bridge"> &
 
 export function presaleClientConfig(config: PresaleConfig): PresaleClientConfig {
   return {
-    enabled: config.enabled,
     network: config.network,
     bridge: { enabled: config.bridge.enabled },
     swap: config.swap,
@@ -165,7 +157,6 @@ export function readPresaleConfig(environment: Environment): PresaleConfig {
   const url = (raw: string) => webUrl(raw)?.href ?? null;
 
   return {
-    enabled: environment.BLAST_PRESALE_ENABLED === "true",
     network: setting(environment, "BLAST_NETWORK", oneOf(PRESALE_NETWORKS)),
     bridge: {
       enabled: environment.NEXT_PUBLIC_PRESALE_BRIDGE_ENABLED === "1",
@@ -200,19 +191,13 @@ export function readPresaleConfig(environment: Environment): PresaleConfig {
   };
 }
 
-/** `config` (`webConfig().presale`) for one request: `enabled` is the request's presale flag (`launchFlagsFor`). */
-export function presaleConfigFor(config: PresaleConfig, enabled: boolean): PresaleConfig {
-  return config.enabled === enabled ? config : Object.freeze({ ...config, enabled });
-}
-
 /**
  * The origins browsers may connect to for the presale on mainnet: the Sui
  * fullnode, the Cetus aggregator, and the Solana and EVM RPCs while the
  * bridge rail is on. Never blast-infra: the browser reaches it only through
- * this app's routes. Empty while the presale is off. No wildcards: every configured RPC host passed `PLAIN_HOST`.
+ * this app's routes. No wildcards: every configured RPC host passed `PLAIN_HOST`.
  */
 export function presaleConnectSources(config: PresaleConfig): string[] {
-  if (!config.enabled) return [];
   const sources: string[] = [];
   if (config.network.status === "available") {
     sources.push(SUI_MAINNET_GRPC_URL);

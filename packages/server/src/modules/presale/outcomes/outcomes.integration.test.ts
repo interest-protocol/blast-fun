@@ -214,251 +214,239 @@ async function outcomeRows(admin: Pool): Promise<OutcomeRow[]> {
 }
 
 test(
-  "working path, launchpad off: a new visitor gets a cookie, commits, and its outcome is the sender's with links only where proven",
+  "a new visitor gets a cookie, commits, and its outcome is the sender's with links only where proven",
   { skip },
   async () => {
-    const launchpadFlag = process.env.BLAST_LAUNCHPAD_ENABLED;
-    const presaleFlag = process.env.BLAST_PRESALE_ENABLED;
-    delete process.env.BLAST_LAUNCHPAD_ENABLED;
-    process.env.BLAST_PRESALE_ENABLED = "true";
-    try {
-      await withDatabase(async ({ admin, web }) => {
-        // Commitments arrive two seconds before the fixture checkpoint.
-        const routes = presaleOutcomes(
-          web,
-          () => new Date(timestampMs - 2_000),
-        );
-        const statuses: Array<[string, number, unknown]> = [];
-        async function send(label: string, response: Promise<Response>) {
-          const answered = await response;
-          statuses.push([
-            label,
-            answered.status,
-            answered.status === 204 ? null : await answered.json(),
-          ]);
-        }
+    await withDatabase(async ({ admin, web }) => {
+      // Commitments arrive two seconds before the fixture checkpoint.
+      const routes = presaleOutcomes(
+        web,
+        () => new Date(timestampMs - 2_000),
+      );
+      const statuses: Array<[string, number, unknown]> = [];
+      async function send(label: string, response: Promise<Response>) {
+        const answered = await response;
+        statuses.push([
+          label,
+          answered.status,
+          answered.status === 204 ? null : await answered.json(),
+        ]);
+      }
 
-        // A new visitor: the presale page asks for its cookie, then commits before submitting.
-        const minted = await routes.visitor(
-          post("/api/presale/outcomes/visitor", undefined), testClient("198.51.100.7"),
-        );
-        assert.equal(minted.status, 204);
-        const visitorOne = /^__Host-blast_vid=([0-9a-f-]{36});/.exec(
-          minted.headers.get("set-cookie") ?? "",
-        )?.[1];
-        assert.ok(visitorOne);
-        const again = await routes.visitor(
-          post("/api/presale/outcomes/visitor", undefined, cookie(visitorOne)), testClient("198.51.100.7"),
-        );
-        assert.equal(
-          again.headers.get("set-cookie"),
-          null,
-          "an existing cookie is kept",
-        );
+      // A new visitor: the presale page asks for its cookie, then commits before submitting.
+      const minted = await routes.visitor(
+        post("/api/presale/outcomes/visitor", undefined), testClient("198.51.100.7"),
+      );
+      assert.equal(minted.status, 204);
+      const visitorOne = /^__Host-blast_vid=([0-9a-f-]{36});/.exec(
+        minted.headers.get("set-cookie") ?? "",
+      )?.[1];
+      assert.ok(visitorOne);
+      const again = await routes.visitor(
+        post("/api/presale/outcomes/visitor", undefined, cookie(visitorOne)), testClient("198.51.100.7"),
+      );
+      assert.equal(
+        again.headers.get("set-cookie"),
+        null,
+        "an existing cookie is kept",
+      );
 
-        const commit = { presale_id: presaleId, tx_digest: digests.commit };
-        const second = {
-          presale_id: presaleId,
-          tx_digest: digests.secondCommit,
-        };
-        await send(
-          "commit",
-          routes.commitments(
-            post(
-              "/api/presale/outcomes/commitments",
-              commit,
-              cookie(visitorOne),
-            ), testClient("198.51.100.7")
-          ),
-        );
-        await send(
-          "commit again",
-          routes.commitments(
-            post(
-              "/api/presale/outcomes/commitments",
-              commit,
-              cookie(visitorOne),
-            ), testClient("198.51.100.7")
-          ),
-        );
-        await send(
+      const commit = { presale_id: presaleId, tx_digest: digests.commit };
+      const second = {
+        presale_id: presaleId,
+        tx_digest: digests.secondCommit,
+      };
+      await send(
+        "commit",
+        routes.commitments(
+          post(
+            "/api/presale/outcomes/commitments",
+            commit,
+            cookie(visitorOne),
+          ), testClient("198.51.100.7")
+        ),
+      );
+      await send(
+        "commit again",
+        routes.commitments(
+          post(
+            "/api/presale/outcomes/commitments",
+            commit,
+            cookie(visitorOne),
+          ), testClient("198.51.100.7")
+        ),
+      );
+      await send(
+        "commit, no cookie",
+        routes.commitments(post("/api/presale/outcomes/commitments", commit), testClient("198.51.100.7")),
+      );
+      // Two visitors commit the second digest: contested, so neither is linked by commitment.
+      await send(
+        "second, visitor two",
+        routes.commitments(
+          post(
+            "/api/presale/outcomes/commitments",
+            second,
+            cookie(VISITOR_TWO),
+          ), testClient("198.51.100.7")
+        ),
+      );
+      await send(
+        "second, visitor three",
+        routes.commitments(
+          post(
+            "/api/presale/outcomes/commitments",
+            second,
+            cookie(VISITOR_THREE),
+          ), testClient("198.51.100.7")
+        ),
+      );
+
+      // Another visitor reports the commit first: still the sender's, linked to the committer.
+      await send(
+        "outcome by another visitor",
+        routes.outcomes(
+          post("/api/presale/outcomes", commit, cookie(VISITOR_TWO)), testClient("198.51.100.7")
+        ),
+      );
+      await send(
+        "outcome again",
+        routes.outcomes(
+          post("/api/presale/outcomes", commit, {
+            ...cookie(VISITOR_THREE),
+            ...bearer(DID_COMMITTER),
+          }), testClient("198.51.100.7")
+        ),
+      );
+      // The contested digest: wallet-only, until the sender's own Privy session links its account and visitor.
+      await send(
+        "second, contested",
+        routes.outcomes(
+          post("/api/presale/outcomes", second, cookie(VISITOR_TWO)), testClient("198.51.100.7")
+        ),
+      );
+      await send(
+        "second, another account",
+        routes.outcomes(
+          post("/api/presale/outcomes", second, {
+            ...cookie(VISITOR_TWO),
+            ...bearer(DID_EMBEDDED),
+          }), testClient("198.51.100.7")
+        ),
+      );
+      await send(
+        "second, sender's session",
+        routes.outcomes(
+          post("/api/presale/outcomes", second, {
+            ...cookie(VISITOR_THREE),
+            ...bearer(DID_COMMITTER),
+          }), testClient("198.51.100.7")
+        ),
+      );
+      await send(
+        "pending",
+        routes.outcomes(
+          post("/api/presale/outcomes", {
+            presale_id: presaleId,
+            tx_digest: digests.pending,
+          }), testClient("198.51.100.7")
+        ),
+      );
+      await send(
+        "other presale",
+        routes.outcomes(
+          post("/api/presale/outcomes", {
+            presale_id: presaleId,
+            tx_digest: digests.otherPresale,
+          }), testClient("198.51.100.7")
+        ),
+      );
+      assert.deepEqual(statuses, [
+        ["commit", 201, { status: "recorded" }],
+        ["commit again", 200, { status: "duplicate" }],
+        [
           "commit, no cookie",
-          routes.commitments(post("/api/presale/outcomes/commitments", commit), testClient("198.51.100.7")),
-        );
-        // Two visitors commit the second digest: contested, so neither is linked by commitment.
-        await send(
-          "second, visitor two",
-          routes.commitments(
-            post(
-              "/api/presale/outcomes/commitments",
-              second,
-              cookie(VISITOR_TWO),
-            ), testClient("198.51.100.7")
-          ),
-        );
-        await send(
-          "second, visitor three",
-          routes.commitments(
-            post(
-              "/api/presale/outcomes/commitments",
-              second,
-              cookie(VISITOR_THREE),
-            ), testClient("198.51.100.7")
-          ),
-        );
-
-        // Another visitor reports the commit first: still the sender's, linked to the committer.
-        await send(
-          "outcome by another visitor",
-          routes.outcomes(
-            post("/api/presale/outcomes", commit, cookie(VISITOR_TWO)), testClient("198.51.100.7")
-          ),
-        );
-        await send(
-          "outcome again",
-          routes.outcomes(
-            post("/api/presale/outcomes", commit, {
-              ...cookie(VISITOR_THREE),
-              ...bearer(DID_COMMITTER),
-            }), testClient("198.51.100.7")
-          ),
-        );
-        // The contested digest: wallet-only, until the sender's own Privy session links its account and visitor.
-        await send(
-          "second, contested",
-          routes.outcomes(
-            post("/api/presale/outcomes", second, cookie(VISITOR_TWO)), testClient("198.51.100.7")
-          ),
-        );
-        await send(
-          "second, another account",
-          routes.outcomes(
-            post("/api/presale/outcomes", second, {
-              ...cookie(VISITOR_TWO),
-              ...bearer(DID_EMBEDDED),
-            }), testClient("198.51.100.7")
-          ),
-        );
-        await send(
-          "second, sender's session",
-          routes.outcomes(
-            post("/api/presale/outcomes", second, {
-              ...cookie(VISITOR_THREE),
-              ...bearer(DID_COMMITTER),
-            }), testClient("198.51.100.7")
-          ),
-        );
-        await send(
-          "pending",
-          routes.outcomes(
-            post("/api/presale/outcomes", {
-              presale_id: presaleId,
-              tx_digest: digests.pending,
-            }), testClient("198.51.100.7")
-          ),
-        );
-        await send(
-          "other presale",
-          routes.outcomes(
-            post("/api/presale/outcomes", {
-              presale_id: presaleId,
-              tx_digest: digests.otherPresale,
-            }), testClient("198.51.100.7")
-          ),
-        );
-        assert.deepEqual(statuses, [
-          ["commit", 201, { status: "recorded" }],
-          ["commit again", 200, { status: "duplicate" }],
-          [
-            "commit, no cookie",
-            422,
-            {
-              error: {
-                code: "no_visitor",
-                message: "No visitor session was found.",
-              },
+          422,
+          {
+            error: {
+              code: "no_visitor",
+              message: "No visitor session was found.",
             },
-          ],
-          ["second, visitor two", 201, { status: "recorded" }],
-          ["second, visitor three", 201, { status: "recorded" }],
-          ["outcome by another visitor", 201, { status: "recorded" }],
-          ["outcome again", 200, { status: "duplicate" }],
-          ["second, contested", 201, { status: "recorded" }],
-          ["second, another account", 200, { status: "duplicate" }],
-          ["second, sender's session", 200, { status: "duplicate" }],
-          [
-            "pending",
-            404,
-            { error: { code: "not_found", message: "Not found." } },
-          ],
-          [
-            "other presale",
-            404,
-            { error: { code: "not_found", message: "Not found." } },
-          ],
-        ]);
+          },
+        ],
+        ["second, visitor two", 201, { status: "recorded" }],
+        ["second, visitor three", 201, { status: "recorded" }],
+        ["outcome by another visitor", 201, { status: "recorded" }],
+        ["outcome again", 200, { status: "duplicate" }],
+        ["second, contested", 201, { status: "recorded" }],
+        ["second, another account", 200, { status: "duplicate" }],
+        ["second, sender's session", 200, { status: "duplicate" }],
+        [
+          "pending",
+          404,
+          { error: { code: "not_found", message: "Not found." } },
+        ],
+        [
+          "other presale",
+          404,
+          { error: { code: "not_found", message: "Not found." } },
+        ],
+      ]);
 
-        // The sponsored execute route links its reservation's account, with no browser call.
-        assert.deepEqual(
-          await routes.recorder.recordSponsoredCommit({
-            presaleId,
-            txDigest: digests.sponsored,
-            privyDid: DID_EMBEDDED,
-          }),
-          { status: "recorded" },
-        );
+      // The sponsored execute route links its reservation's account, with no browser call.
+      assert.deepEqual(
+        await routes.recorder.recordSponsoredCommit({
+          presaleId,
+          txDigest: digests.sponsored,
+          privyDid: DID_EMBEDDED,
+        }),
+        { status: "recorded" },
+      );
 
-        const chain = {
-          presale_id: presaleId,
-          checkpoint,
-          completed_at: new Date(timestampMs),
-        };
-        assert.deepEqual(await outcomeRows(admin), [
-          // The first report decided the link (the on-time commitment); a later session cannot replace it, but adds its account.
-          {
-            tx_digest: digests.commit,
-            event_seq: 1,
-            ...chain,
-            sender_wallet: senders.committer,
-            visitor_id: visitorOne,
-            visitor_link: "signed_commitment",
-            privy_did: DID_COMMITTER,
-          },
-          {
-            tx_digest: digests.secondCommit,
-            event_seq: 0,
-            ...chain,
-            sender_wallet: senders.committer,
-            visitor_id: VISITOR_THREE,
-            visitor_link: "privy_session",
-            privy_did: DID_COMMITTER,
-          },
-          {
-            tx_digest: digests.sponsored,
-            event_seq: 0,
-            ...chain,
-            sender_wallet: senders.embedded,
-            visitor_id: null,
-            visitor_link: null,
-            privy_did: DID_EMBEDDED,
-          },
-        ]);
-        const left = await admin.query<{ n: number }>(
-          "SELECT count(*)::int AS n FROM presale_outcome_commitments",
-        );
-        assert.equal(
-          left.rows[0]?.n,
-          0,
-          "every commitment went with its digest's decision",
-        );
-      });
-    } finally {
-      if (launchpadFlag === undefined)
-        delete process.env.BLAST_LAUNCHPAD_ENABLED;
-      else process.env.BLAST_LAUNCHPAD_ENABLED = launchpadFlag;
-      if (presaleFlag === undefined) delete process.env.BLAST_PRESALE_ENABLED;
-      else process.env.BLAST_PRESALE_ENABLED = presaleFlag;
-    }
+      const chain = {
+        presale_id: presaleId,
+        checkpoint,
+        completed_at: new Date(timestampMs),
+      };
+      assert.deepEqual(await outcomeRows(admin), [
+        // The first report decided the link (the on-time commitment); a later session cannot replace it, but adds its account.
+        {
+          tx_digest: digests.commit,
+          event_seq: 1,
+          ...chain,
+          sender_wallet: senders.committer,
+          visitor_id: visitorOne,
+          visitor_link: "signed_commitment",
+          privy_did: DID_COMMITTER,
+        },
+        {
+          tx_digest: digests.secondCommit,
+          event_seq: 0,
+          ...chain,
+          sender_wallet: senders.committer,
+          visitor_id: VISITOR_THREE,
+          visitor_link: "privy_session",
+          privy_did: DID_COMMITTER,
+        },
+        {
+          tx_digest: digests.sponsored,
+          event_seq: 0,
+          ...chain,
+          sender_wallet: senders.embedded,
+          visitor_id: null,
+          visitor_link: null,
+          privy_did: DID_EMBEDDED,
+        },
+      ]);
+      const left = await admin.query<{ n: number }>(
+        "SELECT count(*)::int AS n FROM presale_outcome_commitments",
+      );
+      assert.equal(
+        left.rows[0]?.n,
+        0,
+        "every commitment went with its digest's decision",
+      );
+    });
   },
 );
 

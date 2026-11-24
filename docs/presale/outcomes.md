@@ -23,7 +23,7 @@ The presale page records each commit as a verified outcome (contract section 3.6
 
 All three are same-origin: a present `Origin` must be `SITE_ORIGIN`, and `Sec-Fetch-Site` must be absent or `same-origin` (the launchpad's `sameOrigin`). The outcome route treats a missing, invalid, or expired token as anonymous and never answers `unauthorized` (CL-22). Its answer never says whether, or to whom, an outcome is linked. A node that cannot answer now is `service_unavailable` with `Retry-After`.
 
-**Visitor route.** The launchpad's telemetry route is the only other place that mints the visitor cookie, and the presale ships with the launchpad off. This route mints it with exactly that route's attributes (`visitorCookie` in `launchpad-telemetry/http.ts`). It keeps an existing valid cookie. It stores nothing. The page calls it once per tab per page load, before it registers a commitment.
+**Visitor route.** A visitor can land directly on a presale before visiting the launchpad. This route mints it with exactly that route's attributes (`visitorCookie` in `launchpad-telemetry/http.ts`). It keeps an existing valid cookie. It stores nothing. The page calls it once per tab per page load, before it registers a commitment.
 
 ## Rate limits
 

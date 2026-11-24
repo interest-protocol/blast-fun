@@ -271,7 +271,6 @@ test(
       NODE_ENV: "test",
       TZ: "UTC",
       BLAST_GATE_SECRET: "synthetic-gate-shared-key-01234567890123456789",
-      BLAST_PRESALE_ENABLED: "team",
       // Fresh launch reads go to a loopback port nothing listens on, never the public fullnode.
       PRESALE_SUI_GRPC_URL: `https://127.0.0.1:${await freePort()}`,
       DATABASE_URL: database,

@@ -11,7 +11,7 @@ test("T-006-AC-2: the social feed is off unless the server sets BLAST_SOCIAL_ENA
   assert.equal(isSocialEnabled({ BLAST_SOCIAL_ENABLED: "true" }), true);
   // Other flags never turn it on.
   assert.equal(
-    isSocialEnabled({ BLAST_EXPERIENCE_ENABLED: "true", BLAST_PRESALE_ENABLED: "true", BLAST_LAUNCHPAD_ENABLED: "true" }),
+    isSocialEnabled({ BLAST_EXPERIENCE_ENABLED: "true" }),
     false,
   );
 });
@@ -35,5 +35,5 @@ test("UI-02 (OA-7): trading surfaces stay hidden unless the server sets BLAST_TR
     assert.equal(isTradingVisible({ BLAST_TRADING_ENABLED: value }), false, JSON.stringify(value));
   }
   assert.equal(isTradingVisible({ BLAST_TRADING_ENABLED: "true" }), true);
-  assert.equal(isTradingVisible({ BLAST_SOCIAL_ENABLED: "true", BLAST_PRESALE_ENABLED: "true" }), false);
+  assert.equal(isTradingVisible({ BLAST_SOCIAL_ENABLED: "true" }), false);
 });

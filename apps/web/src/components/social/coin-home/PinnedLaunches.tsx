@@ -28,10 +28,8 @@ const PIN_POLL_MS = 60_000;
  * (the Bonding board's "Closest to graduation" stand-in is not a pin), and
  * while the reads are out or failed the page simply starts at its sections.
  */
-export function PinnedLaunches({ now, nowMs, initialPinSeed, launchpad, presales: seededPresales = null, curves: seededCurves = null }: Readonly<{
+export function PinnedLaunches({ now, nowMs, initialPinSeed, presales: seededPresales = null, curves: seededCurves = null }: Readonly<{
   now: number;
-  /** The launchpad flag: with it off the curves are not Home's to show or read (their pages answer nothing). */
-  launchpad: boolean;
   /** When the server read the seeds. */
   nowMs: number;
   initialPinSeed: string;
@@ -41,10 +39,10 @@ export function PinnedLaunches({ now, nowMs, initialPinSeed, launchpad, presales
 }>) {
   const client = useAppQueryClient();
   const presales = useSeededQuery({ ...featuredPresalesQuery(), refetchInterval: (query) => pollInterval(PIN_POLL_MS, query) }, seededPresales, nowMs, client);
-  const curves = useSeededQuery({ ...bondingFeaturedQuery(), enabled: launchpad, refetchInterval: (query) => pollInterval(PIN_POLL_MS, query) }, seededCurves?.answer, seededCurves?.nowMs ?? nowMs, client);
+  const curves = useSeededQuery({ ...bondingFeaturedQuery(), refetchInterval: (query) => pollInterval(PIN_POLL_MS, query) }, seededCurves?.answer, seededCurves?.nowMs ?? nowMs, client);
   const [seed] = useState(() => initialPinSeed);
   const sales = shuffleFeatured(eligibleFeatured(presales.data ?? [], now), seed);
-  const pinnedCurves = launchpad && curves.data?.featured === true ? (pageOf(curves.data)?.rows ?? []) : [];
+  const pinnedCurves = curves.data?.featured === true ? (pageOf(curves.data)?.rows ?? []) : [];
   const count = sales.length + pinnedCurves.length;
   if (count === 0) return null;
   return (

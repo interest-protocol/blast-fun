@@ -21,7 +21,7 @@ const env={
   PRIVY_APP_ID:'lt00000000000000000000000', NEXT_PUBLIC_PRIVY_APP_ID:'lt00000000000000000000000',
   PRIVY_JWT_VERIFICATION_KEY:publicKey.export({format:'pem',type:'spki'}).toString(),
   RATE_LIMIT_SUBJECT_PEPPER:randomBytes(32).toString('hex'), BLAST_GATE_SECRET:randomBytes(32).toString('hex'),
-  BLAST_SOCIAL_ENABLED:'true', BLAST_PRESALE_ENABLED:'true', BLAST_TRADING_ENABLED:'false', BLAST_LAUNCHPAD_ENABLED:'false',
+  BLAST_SOCIAL_ENABLED:'true', BLAST_TRADING_ENABLED:'false',
   NODE_OPTIONS:[process.env.NODE_OPTIONS, `--import ${root}/apps/web/loadtest/lib/egress-guard.mjs`].filter(Boolean).join(" "),
   LOADTEST_EGRESS_LOG:`${dir}/runtime-egress.jsonl`, LOADTEST_EGRESS_MODE:'block',
 };

@@ -21,7 +21,7 @@ import { createAccountWalletsRoutes, type LinkedWallet, type LinkedWalletStore }
  * fixture key, an in-memory linked-wallet store, a fixture embedded-wallet
  * resolver and an in-memory rate-limit port. The Postgres store, the Privy
  * gateway and the real `presale_account_wallets` budget are in
- * wallets.integration.test.ts; the `BLAST_PRESALE_ENABLED` gate is in
+ * wallets.integration.test.ts. Proxy-to-route authorization is covered in
  * wallets-gate.test.ts.
  */
 

@@ -9,7 +9,6 @@ import {
 } from "./config.ts";
 
 const VALID = {
-  BLAST_PRESALE_ENABLED: "true",
   BLAST_NETWORK: "mainnet",
   NEXT_PUBLIC_PRESALE_BRIDGE_ENABLED: "1",
   NEXT_PUBLIC_PRESALE_SOLANA_RPC_URL: "https://solana.rpc.test/key",
@@ -29,7 +28,6 @@ const VALID = {
 } satisfies Record<PresaleConfigVariable, string>;
 
 const BASELINE: PresaleConfig = {
-  enabled: true,
   network: { status: "available", value: "mainnet" },
   bridge: {
     enabled: true,
@@ -104,7 +102,6 @@ test("each invalid value makes only its own feature unavailable", () => {
 
 test("missing values disable their feature or fall back to the documented default", () => {
   const config = readPresaleConfig({});
-  assert.equal(config.enabled, false);
   assert.equal(config.bridge.enabled, false);
   for (const [setting, variable] of [
     [config.network, "BLAST_NETWORK"],
@@ -123,10 +120,7 @@ test("missing values disable their feature or fall back to the documented defaul
   assert.deepEqual(config.defaultTheme, { status: "available", value: "system" });
 });
 
-test("the flags open only on their exact values", () => {
-  for (const value of ["TRUE", "1", "yes", " true"]) {
-    assert.equal(readPresaleConfig({ BLAST_PRESALE_ENABLED: value }).enabled, false, value);
-  }
+test("the bridge opens only on its exact flag value", () => {
   for (const value of ["true", "yes", "0"]) {
     assert.equal(readPresaleConfig({ NEXT_PUBLIC_PRESALE_BRIDGE_ENABLED: value }).bridge.enabled, false, value);
   }

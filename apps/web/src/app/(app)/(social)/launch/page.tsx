@@ -10,7 +10,7 @@ export const metadata: Metadata = { title: "Launch a coin", robots: { index: fal
  * draft is read and saved in the browser with the viewer's credentials
  * (personal data, never server-rendered or cached); the server passes only
  * what is the same for everyone: the deployed launchpad's rules, or why
- * launching is off. Answered only while the launchpad is on for the request.
+ * launching is off.
  */
 export default async function LaunchPage() {
   return <LaunchScreen context={await readLaunchContextFromBackend()} />;

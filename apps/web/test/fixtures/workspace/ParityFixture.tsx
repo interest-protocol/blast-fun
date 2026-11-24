@@ -8,7 +8,6 @@ import { ProfileScreen } from "../../../src/components/social/profile/ProfileScr
 import { ConnectionRowsLoading } from "../../../src/components/social/profile/ConnectionsLoading.tsx";
 import { EmptyState } from "../../../src/components/blast-ui/EmptyState.tsx";
 import { FollowingList, WatchlistList } from "../../../src/components/social/coin-home/sources.tsx";
-import { LaunchpadFlagProvider } from "../../../src/components/blast-ui/launchpad-flag.tsx";
 import { blankDraft } from "@blast/core/modules/social/create/model.ts";
 import { PageHeader } from "../../../src/components/blast-ui/PageHeader.tsx";
 import { bricolage, geist, geistMono } from "../../../src/components/blast-ui/fonts.ts";
@@ -368,11 +367,11 @@ export function ParityFixture({ initial }: Readonly<{ initial?: { surface: strin
   const overlays = surface === "holders" ? <BlastMode view="holders" /> : surface === "blast-rows" ? <BlastMode view="rows" /> : undefined;
   return (
     <div className={`${geist.variable} ${geistMono.variable} ${bricolage.variable}`} data-blast-ui="" data-theme={theme} data-fixture-surface={surface} data-fixture-variant={variant} data-fixture-resolved={resolved || undefined}>
-      <QueryProvider><LaunchpadFlagProvider value={false}>
+      <QueryProvider>
         <AppShell signedIn={member} viewer={member ? SHELL_VIEWER : null} portfolio={shellPortfolio} signInHref="/sign-in" aside={aside} overlays={overlays}>
           {surface === "" ? null : <Surface surface={surface} variant={variant} snapshot={initial} />}
         </AppShell>
-      </LaunchpadFlagProvider></QueryProvider>
+      </QueryProvider>
     </div>
   );
 }

@@ -6,7 +6,6 @@ import type { ReactNode } from "react";
 
 import { FeelProvider } from "#web/components/blast-feel/index.ts";
 import { BlastUiRoot } from "#web/components/blast-ui/BlastUiRoot.tsx";
-import { presaleConfigFor } from "#web/components/presale/config.ts";
 import { PresaleProviders } from "#web/components/presale/providers/PresaleProviders.tsx";
 import { SocialSession } from "#web/components/social/SocialSession.tsx";
 import { SocialShell } from "#web/components/social/SocialShell.tsx";
@@ -23,13 +22,12 @@ export default async function AppLayout({
   rail,
   banner,
 }: Readonly<{ children: ReactNode; rail: ReactNode; banner: ReactNode }>) {
-  const { social, presale, launchpad } = await requestLaunchFlags();
-  if (!social || !presale) {
+  const { social } = await requestLaunchFlags();
+  if (!social) {
     return children;
   }
 
-  const { presale: presaleConfig, presaleDeployment } = webConfig();
-  const config = presaleConfigFor(presaleConfig, presale);
+  const { presale: config, presaleDeployment } = webConfig();
   const requestHeaders = await headers();
   const nonce = requestHeaders.get("x-nonce");
   const initialSession = await readHeaderSession(
@@ -50,7 +48,6 @@ export default async function AppLayout({
       banner={shellBanner}
       initialSession={initialSession}
       presaleDeployed={mainnetIdentity(presaleDeployment) !== null}
-      launchpad={launchpad}
       rail={rail}
     >
       {children}

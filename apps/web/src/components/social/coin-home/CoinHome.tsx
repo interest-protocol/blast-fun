@@ -108,7 +108,6 @@ export type CoinHomeProps = Readonly<{
   initialRows: number;
   nowMs: number;
   trading: boolean;
-  launchpad?: boolean;
 }>;
 
 type DiscoverSeed = CoinHomeProps["initial"] | Promise<CoinHomeProps["initial"]>;
@@ -132,7 +131,7 @@ function scrollToCoins(): void {
  * trades), Posts and Top traders (tables) — movable and hideable from
  * Customize Home, the hidden ones never read. The page has no right column.
  */
-export function CoinHome({ initial, initialState, happening, presales, pinned, traders, posts = null, sections, initialRows, nowMs, trading, launchpad = false }: CoinHomeReadProps) {
+export function CoinHome({ initial, initialState, happening, presales, pinned, traders, posts = null, sections, initialRows, nowMs, trading }: CoinHomeReadProps) {
   const [state, setState] = useViewState(initialState);
   const phone = usePhoneLayout();
   const prefs = useHomeSections(sections);
@@ -234,13 +233,12 @@ export function CoinHome({ initial, initialState, happening, presales, pinned, t
       children: <PresaleSection happening={happening} initial={presales} initialMs={nowMs} nowMs={now} window={state.window} />,
     },
   };
-  const customize = <HomeSettingsMenu launchpad={launchpad} onSections={changeSections} sections={prefs} showLabel={phone} />;
+  const customize = <HomeSettingsMenu onSections={changeSections} sections={prefs} showLabel={phone} />;
   const tape = <FollowedTape key="tape" nowMs={now} window={state.window} />;
   const discovery = (
     <RankingsSlot.Provider key="discovery" value={rankingsStore}>
       <HomeSections
         empty={<EmptyState framed title="Every section is hidden">Restore sections from Customize Home.</EmptyState>}
-        launchpad={launchpad}
         onChange={changeSections}
         prefs={prefs}
         sections={specs}
@@ -254,7 +252,7 @@ export function CoinHome({ initial, initialState, happening, presales, pinned, t
       <PageHeader actions={phone ? undefined : customize} title="Home" />
       <div className={styles.board}>
         {late ? <ListsLate className={styles.lateLine} /> : null}
-        <PinnedLaunches curves={pinned?.curves} launchpad={launchpad} now={now} nowMs={nowMs} initialPinSeed={pinned?.seed ?? ""} presales={pinned?.presales} />
+        <PinnedLaunches curves={pinned?.curves} now={now} nowMs={nowMs} initialPinSeed={pinned?.seed ?? ""} presales={pinned?.presales} />
         {phone ? [discovery, tape] : [tape, discovery]}
         {phone ? <div className={styles.customize}>{customize}</div> : null}
       </div>

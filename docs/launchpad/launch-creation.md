@@ -3,7 +3,6 @@
 `/launch` is the Blast UI flow: Coin → Curve → Cover & details → Review.
 `/bonding` lists launches by stage; `/coin/{launchId}` keeps each coin's chart,
 trade, migration, holders and activity slots inside the Blast shell.
-All three creation surfaces and the launch API require `BLAST_LAUNCHPAD_ENABLED`.
 
 ## Draft and publication
 
@@ -489,7 +488,7 @@ upload credentials.
 
 ## Development harness
 
-`/dev/launchpad/launch` (development only; a dev server started with `BLAST_LAUNCHPAD_ENABLED=true`) drives a fixture draft through both
+`/dev/launchpad/launch` (development only) drives a fixture draft through both
 approvals on the fixture node, with controls for the creator's first buy
 (its creation then emits a `Bought` before `LaunchShared`), the Privy fixture
 wallet's session token (sent with its completed launch's report; it links only
@@ -511,7 +510,7 @@ browser with a visitor cookie is linked to that launch. Only this harness lands 
 fixture pages below report and commit nothing (their `reportOutcome` and
 `commitOutcome` are no-ops).
 
-`/dev/launchpad/launch/advanced` (development only; a dev server started with `BLAST_LAUNCHPAD_ENABLED=true`) drives Advanced launch on
+`/dev/launchpad/launch/advanced` (development only) drives Advanced launch on
 the same fixture node, with controls for the fixture partner (accepted,
 removal pending, removed, never accepted) and its share, admitted decimals,
 the SUI Quote, a contract abort in simulation, the wallet
@@ -531,7 +530,7 @@ in `cetus::new` or the `LaunchCreated` check) or fails with a node error.
 Changing the venue sets remounts the engine on that manifest; the pages share
 it.
 
-`/dev/launchpad/launch/quick` (development only; a dev server started with `BLAST_LAUNCHPAD_ENABLED=true`) drives Quick launch with
+`/dev/launchpad/launch/quick` (development only) drives Quick launch with
 fixture preset configurations (one valid Bluefin preset, one valid Cetus CLMM
 preset, none, another deployment's, without values, malformed, two enabled,
 another SDK range), both signer kinds, the

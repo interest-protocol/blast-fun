@@ -27,7 +27,7 @@ async function curves(featured: boolean, id = `0x${"01".repeat(32)}`) {
   return parseDiscoveryResponse(await response.json());
 }
 
-async function mount(t: TestContext, seed: Readonly<{ presales?: typeof presales; curves?: Awaited<ReturnType<typeof curves>>; now?: number; fetch?: typeof fetch; launchpad?: boolean; seeded?: Readonly<{ presales?: typeof presales; curves?: BondingHeroSeed }> }>) {
+async function mount(t: TestContext, seed: Readonly<{ presales?: typeof presales; curves?: Awaited<ReturnType<typeof curves>>; now?: number; fetch?: typeof fetch; seeded?: Readonly<{ presales?: typeof presales; curves?: BondingHeroSeed }> }>) {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = seed.fetch ?? (async () => Response.json({ details: { tagline: null, cover: null, links: [] } }));
   const container = document.createElement("div");
@@ -43,7 +43,7 @@ async function mount(t: TestContext, seed: Readonly<{ presales?: typeof presales
     globalThis.fetch = originalFetch;
   });
   const now = seed.now ?? FIXTURE_NOW;
-  await act(async () => root.render(<QueryProvider client={client}><PinnedLaunches curves={seed.seeded?.curves} launchpad={seed.launchpad ?? true} now={now} nowMs={seed.seeded ? Date.now() : FIXTURE_NOW} initialPinSeed="page-b" presales={seed.seeded?.presales} /></QueryProvider>));
+  await act(async () => root.render(<QueryProvider client={client}><PinnedLaunches curves={seed.seeded?.curves} now={now} nowMs={seed.seeded ? Date.now() : FIXTURE_NOW} initialPinSeed="page-b" presales={seed.seeded?.presales} /></QueryProvider>));
   return container;
 }
 
@@ -118,16 +118,4 @@ test("server seeds paint the bar with no browser read", async (t) => {
   });
   assert.equal(container.querySelectorAll('[aria-roledescription="carousel"]').length, 1);
   assert.deepEqual(reads.filter((url) => url.includes("/featured")), [], "fresh seeds are not read again");
-});
-
-test("with the launchpad off the pinned curves neither show nor are read", async (t) => {
-  const reads: string[] = [];
-  const container = await mount(t, {
-    launchpad: false,
-    curves: await curves(true),
-    presales: [presales[0]!],
-    fetch: (async (input: RequestInfo | URL) => { reads.push(String(input)); return Response.json({}); }) as typeof fetch,
-  });
-  assert.equal(container.querySelectorAll("a").length, 1, "the presale only");
-  assert.equal(reads.some((url) => url.includes("catalog=featured")), false);
 });

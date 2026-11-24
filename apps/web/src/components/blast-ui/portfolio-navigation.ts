@@ -15,7 +15,7 @@ export type PortfolioTab = (typeof PORTFOLIO_TABS)[number][0];
 /** The tabs Claims replaced: their links (and a remembered choice) open Claims. */
 const CLAIMS_ALIASES = ["vestings", "rewards", "launches"] as const;
 
-/** The holdings card's tabs: the same on every request (Claims shows the launch lists only while the launchpad is on). */
+/** The holdings card's tabs: the same on every request. */
 export function portfolioTabs(): typeof PORTFOLIO_TABS {
   return PORTFOLIO_TABS;
 }

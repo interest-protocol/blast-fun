@@ -1,8 +1,7 @@
 import type { MetadataRoute } from "next";
 import { SITE_ORIGIN } from "#web/lib/site.ts";
 
-// Cached like the sitemap (which reads the launchpad and presale flags when it
-// renders), so both take the site origin from the same environment.
+// Cache robots.txt and the sitemap for the same hour.
 export const revalidate = 3600;
 
 export default function robots(): MetadataRoute.Robots {

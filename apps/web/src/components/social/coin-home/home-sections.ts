@@ -79,13 +79,9 @@ function normalize(prefs: HomeSectionPrefs): HomeSectionPrefs {
   return isDefaultHomeSections(frozen) ? HOME_SECTIONS_DEFAULT : Object.freeze(frozen);
 }
 
-export function availableHomeSections(prefs: HomeSectionPrefs, launchpad: boolean): readonly HomeSectionKey[] {
-  return launchpad ? prefs.order : prefs.order.filter((key) => key !== "bonding");
-}
-
 /** The sections showing, in order. */
-export function shownHomeSections(prefs: HomeSectionPrefs, launchpad = true): readonly HomeSectionKey[] {
-  return availableHomeSections(prefs, launchpad).filter((key) => isHomeSectionShown(prefs, key));
+export function shownHomeSections(prefs: HomeSectionPrefs): readonly HomeSectionKey[] {
+  return prefs.order.filter((key) => isHomeSectionShown(prefs, key));
 }
 
 export function isHomeSectionShown(prefs: HomeSectionPrefs, key: HomeSectionKey): boolean {
@@ -97,15 +93,15 @@ export function isHomeSectionShown(prefs: HomeSectionPrefs, key: HomeSectionKey)
  * hidden ones keeping their place. At either end nothing moves and the same
  * object comes back (so nothing is announced or written).
  */
-export function moveHomeSection(prefs: HomeSectionPrefs, key: HomeSectionKey, delta: -1 | 1, launchpad = true): HomeSectionPrefs {
-  const shown = shownHomeSections(prefs, launchpad);
+export function moveHomeSection(prefs: HomeSectionPrefs, key: HomeSectionKey, delta: -1 | 1): HomeSectionPrefs {
+  const shown = shownHomeSections(prefs);
   const from = shown.indexOf(key);
-  return placeHomeSection(prefs, key, from + delta, launchpad);
+  return placeHomeSection(prefs, key, from + delta);
 }
 
 /** `key` dropped at `to` among the sections showing (a drag); `to` is clamped. */
-export function placeHomeSection(prefs: HomeSectionPrefs, key: HomeSectionKey, to: number, launchpad = true): HomeSectionPrefs {
-  const shown = shownHomeSections(prefs, launchpad);
+export function placeHomeSection(prefs: HomeSectionPrefs, key: HomeSectionKey, to: number): HomeSectionPrefs {
+  const shown = shownHomeSections(prefs);
   const from = shown.indexOf(key);
   if (from < 0) return prefs;
   const target = Math.max(0, Math.min(shown.length - 1, to));

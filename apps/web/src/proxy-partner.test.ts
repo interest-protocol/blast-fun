@@ -133,8 +133,7 @@ test("private frontend and write boundaries survive partner access, and v1 is fo
   context.after(() => { process.env = previous; });
   const verify = context.mock.method(partnerKeyReader, "verify", async () => { throw new Error("Unexpected key lookup"); });
   Object.assign(process.env, {
-    BLAST_PRESALE_ENABLED: "team", BLAST_SOCIAL_ENABLED: "team", BLAST_TRADING_ENABLED: "team",
-    BLAST_LAUNCHPAD_ENABLED: "false",
+    BLAST_SOCIAL_ENABLED: "team", BLAST_TRADING_ENABLED: "team",
   });
   const { NextRequest } = await import("next/server");
   const { proxy } = await import("#web/proxy.ts");

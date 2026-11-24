@@ -126,7 +126,7 @@ verified outcomes, not from `curve_conversion`.
 
 ## Development harness
 
-`/dev/launchpad/trade` (development only; a dev server started with `BLAST_LAUNCHPAD_ENABLED=true`) drives the rail on a fixture node
+`/dev/launchpad/trade` (development only) drives the rail on a fixture node
 with one Live launch: lifecycle, wallet answer, a competing trade now or while
 you sign, a lost or aborted submission, simulation, node reads, coin
 balances for both fixture wallets, and the Privy fixture wallet's session
@@ -135,7 +135,7 @@ its digest to the real commitments route; a completed Buy is landed on the
 dev server's fixture node (`harnessOutcomeReporter`, through the fixture
 chain's `transactionOf`, about a checkpoint's delay after it completes) and
 then reported to the real outcomes route, which verifies it there when the
-dev server runs with `BLAST_LAUNCHPAD_ENABLED=true`, `LAUNCHPAD_FIXTURE_CHAIN_ORIGIN` and
+dev server runs with `LAUNCHPAD_FIXTURE_CHAIN_ORIGIN` and
 `npm run dev:coin-fixtures -w @blast/web`. The page shows whether the last landing
 succeeded.
 
@@ -157,7 +157,7 @@ for the recorded venue (`@interest-protocol/blast-sdk/migrators`): Cetus CLMM
 | `venueTradeAdapter("buy" \| "sell")` | `venue-adapter.ts` | the adapter: route, the recorded venue's availability (`access.venues[venue]`), balances, amount, and a fresh quote from that venue's driver; review facts; that venue's SDK build; the SDK's reconciliation of the simulated swap before signing (`checkSimulation`); and success only when the completed swap reconciles against the signed quote (`completionFor`) |
 | `gateVenueTrades`, `reviewExpired`, `venueGuidance`, `venueProblem` | `venue-session.ts` | both directions gated while a trade is unresolved; approving an expired review quotes again for a new confirmation instead of signing; refusals and failures in words (a Move abort is never shown raw, except, until the Cetus quote-transport follow-up lands, a Cetus refusal raised while the client builds the quote probe, which is retried as an outage and keeps the raw abort in the block's details; Bluefin's `slippage_exceeds`, read only from the deployment's Bluefin Spot package, says the pool moved past the minimum) |
 | `VenueTradeProvider`, `VenueTradeRail`, `VenueTradeUnavailable` | components | the venue rail; mount the provider under a `LaunchpadSignerProvider` with the launch's locator (`launchId`, the migration transaction digest from its classified activity, and the page's pool key) |
-| `/dev/launchpad/venue-trade` | `VenueTradeFixtures.tsx`, `venue-fixtures.ts` | development fixtures (a dev server started with `BLAST_LAUNCHPAD_ENABLED=true`): a Cetus-migrated and a Bluefin-migrated launch (NEWT, six decimals), route and venue substitution, a missing record, an unavailable Cetus venue, absent or mismatched recorded Bluefin objects, an absent Bluefin pool, a Bluefin fee or layout change, a quote provider outage (all venues, or Bluefin only), another trader landing right after the quote (Bluefin's `slippage_exceeds` in simulation), wallet answers, submission outcomes, a competing trade, and a clock that expires quotes |
+| `/dev/launchpad/venue-trade` | `VenueTradeFixtures.tsx`, `venue-fixtures.ts` | development fixtures: a Cetus-migrated and a Bluefin-migrated launch (NEWT, six decimals), route and venue substitution, a missing record, an unavailable Cetus venue, absent or mismatched recorded Bluefin objects, an absent Bluefin pool, a Bluefin fee or layout change, a quote provider outage (all venues, or Bluefin only), another trader landing right after the quote (Bluefin's `slippage_exceeds` in simulation), wallet answers, submission outcomes, a competing trade, and a clock that expires quotes |
 
 ## Rules
 

@@ -123,8 +123,6 @@ export function useWorkspaceOwner(
 export type WorkspaceSlots = Readonly<{
   panel?: ComponentType<Readonly<{ panel: PanelSetup }>>;
   data?: Partial<Record<DataView, ComponentType>>;
-  /** Views this deployment does not serve (Bonding while the launchpad is off): never offered, while the saved setup keeps them. */
-  unavailable?: readonly DataView[];
   controls?: ReactNode;
   discovery?: ComponentType;
 }>;
@@ -552,16 +550,15 @@ function useWorkspaceContent({
     setPickerScreen(mobile);
     if (mobile) setMobilePickerActivated(false);
   }
-  const unavailable = slots?.unavailable;
   const viewport = useSyncExternalStore(subscribeViewport, viewportSize, serverViewport);
   const [width, height] = viewport.split(":").map(Number) as [number, number];
   const laptop = discoverDefaultCollapsed(Number.parseInt(viewport, 10));
   const snapshot = useMemo(() => {
-    const shown = offeredData(savedSnapshot, unavailable);
+    const shown = offeredData(savedSnapshot);
     if (shown.presentation !== "focus" || shown.data.collapsed) return shown;
     if (mobile) return { ...shown, data: { ...shown.data, collapsed: !mobilePickerActivated } };
     return laptop && !chosen ? { ...shown, data: { ...shown.data, collapsed: true } } : shown;
-  }, [savedSnapshot, unavailable, mobilePickerActivated, mobile, chosen, laptop]);
+  }, [savedSnapshot, mobilePickerActivated, mobile, chosen, laptop]);
   const { presaleId, activePresaleId, presaleTarget, setPresaleTarget, setPresaleRequest, openPresale, closePresale } = usePresalePresentation(snapshot, store, mobile, documentVisible, setDataCollapsed);
   const covered = mobile && !snapshot.data.collapsed;
   const [workspaceElement, setWorkspaceElement] = useState<HTMLDivElement | null>(null);
@@ -749,7 +746,6 @@ function useWorkspaceContent({
   }, [snapshot]);
   const value: WorkspaceContextValue = {
     snapshot,
-    offered_views: unavailable?.length ? DATA_VIEWS.filter(view => !unavailable.includes(view)) : DATA_VIEWS,
     dispatch,
     owner,
     entry_generation: entryGeneration,
@@ -1324,13 +1320,10 @@ function MoreDataViews({ views, selected, onSelect }: Readonly<{ views: readonly
 const PHONE_NAV_PRIORITY: readonly DataView[] = ["Coins", "Presales", "Portfolio", "Activity", "Traders", "Feed", "Bonding"];
 
 /**
- * The setup as Discover shows it. Discover's navigation is fixed (Blast mode audit 06/28): every
- * view the deployment serves, Coins · Presales · Posts as tabs and the rest under More, whatever
- * an older setup hid. An unavailable view is neither shown nor selected (the first offered view
- * is), while the store keeps the saved choice for when the view is served again.
+ * Discover always offers the full set of views, including views hidden by older saved setups.
  */
-function offeredData(snapshot: WorkspaceV1, unavailable: readonly DataView[] | undefined): WorkspaceV1 {
-  const enabled_views = DATA_VIEWS.filter(view => !unavailable?.includes(view));
+function offeredData(snapshot: WorkspaceV1): WorkspaceV1 {
+  const enabled_views = [...DATA_VIEWS];
   const selected = snapshot.data.selected_view;
   const selected_view = selected !== null && enabled_views.includes(selected) ? selected : (enabled_views[0] ?? null);
   if (enabled_views.join() === snapshot.data.enabled_views.join() && selected_view === selected) return snapshot;

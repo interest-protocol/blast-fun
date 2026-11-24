@@ -1,15 +1,13 @@
 import { referralCallsign, REFERRAL_COOKIE, REFERRAL_MAX_AGE } from "@blast/core/modules/social/referrals/contracts.ts";
 import { NextResponse, userAgent, type NextRequest } from "next/server";
 import { publicErrorResponse } from "@blast/core/lib/http-errors.ts";
-import { presaleConfigFor, presaleConnectSources } from "#web/components/presale/config.ts";
+import { presaleConnectSources } from "#web/components/presale/config.ts";
 import { isBlastExperienceEnabled } from "#web/lib/experience.ts";
-import { launchFlagsFor, type LaunchFlags } from "@blast/core/lib/launch-flags.ts";
+import { isSocialEnabled } from "@blast/core/lib/social-flag.ts";
 import {
   decideMissionControlRoute,
-  HOME_REWRITE_HEADER,
   MISSION_CONTROL_ENTRY,
   notFoundAnswersJson,
-  PRESALE_ENTRY,
   SOCIAL_ENTRY,
   socialProfileTarget,
 } from "@blast/core/lib/mission-control/route-policy.ts";
@@ -28,14 +26,14 @@ import { partnerV1Route, isRegionalPartnerRead } from "@blast/server/modules/par
 
 /**
  * `nonce: null` for the prerendered pages (`PRERENDERED_PAGES`), which the CDN
- * serves without one. The presale flag controls the allowed connection sources.
+ * serves without one.
  */
-function browserSecurityHeaders(nonce: string | null, presaleEnabled: boolean): Readonly<Record<string, string>> {
+function browserSecurityHeaders(nonce: string | null): Readonly<Record<string, string>> {
   return securityHeaders({
     nonce,
     development: webConfig().development,
     // Every page carries them, so a client-side navigation into the presale keeps working.
-    presaleConnectSources: presaleConnectSources(presaleConfigFor(webConfig().presale, presaleEnabled)),
+    presaleConnectSources: presaleConnectSources(webConfig().presale),
   });
 }
 
@@ -67,8 +65,8 @@ const PNL_CARD_PAGE = /^\/card\/pnl\/[^/]+$/;
 // source content belong here; every other page keeps the nonce.
 const PRERENDERED_PAGES = new Set(["/privacy", "/terms"]);
 
-function applyBrowserSecurity(response: NextResponse, nonce: string | null, flags: LaunchFlags): NextResponse {
-  for (const [name, value] of Object.entries(browserSecurityHeaders(nonce, flags.presale))) {
+function applyBrowserSecurity(response: NextResponse, nonce: string | null): NextResponse {
+  for (const [name, value] of Object.entries(browserSecurityHeaders(nonce))) {
     response.headers.set(name, value);
   }
   return response;
@@ -95,17 +93,15 @@ export function proxy(request: NextRequest) {
   // Explicit partner credentials never fall back to a browser cookie, even
   // when invalid. Authenticate and count before a route or CDN can answer.
   if (isPartnerRequest(request)) return partnerRequest(request);
-  const flags = launchFlagsFor();
   const gate = apiGateVerdict(request, { gate: webConfig().gate });
   if (gate.kind === "refuse" || gate.kind === "unavailable") {
     const refusal = gate.kind === "refuse" ? gateRefusalResponse() : gateUnavailableResponse();
     return applyBrowserSecurity(
       new NextResponse(refusal.body, { status: refusal.status, headers: refusal.headers }),
       crypto.randomUUID().replaceAll("-", ""),
-      flags,
     );
   }
-  const response = routeRequest(request, flags);
+  const response = routeRequest(request);
   const cookie = gate.kind === "page" ? pageGateCookie(request, { gate: webConfig().gate }) : null;
   if (cookie) response.headers.append("Set-Cookie", cookie);
   const referral = referralCallsign(request.nextUrl.searchParams.get("ref"));
@@ -141,46 +137,40 @@ function pnlCardRedirect(request: NextRequest): NextResponse | null {
   });
 }
 
-function routeRequest(request: NextRequest, flags: LaunchFlags): NextResponse {
+function routeRequest(request: NextRequest): NextResponse {
   const nonce = crypto.randomUUID().replaceAll("-", "");
   const requestHeaders = new Headers(request.headers);
-  // Only this proxy marks a home rewrite.
-  requestHeaders.delete(HOME_REWRITE_HEADER);
-  const headers = browserSecurityHeaders(nonce, flags.presale);
+  const headers = browserSecurityHeaders(nonce);
   requestHeaders.set("x-nonce", nonce);
   requestHeaders.set("Content-Security-Policy", headers["Content-Security-Policy"]);
 
   const decision = decideMissionControlRoute(
     request.nextUrl.pathname,
     isBlastExperienceEnabled(),
-    flags.presale,
-    flags.launchpad,
-    flags.social,
+    isSocialEnabled(),
   );
   if (decision === "not-found") {
-    return applyBrowserSecurity(notFound(request.nextUrl.pathname), nonce, flags);
+    return applyBrowserSecurity(notFound(request.nextUrl.pathname), nonce);
   }
   if (decision === "allow" && PRERENDERED_PAGES.has(request.nextUrl.pathname)) {
-    return applyBrowserSecurity(NextResponse.next(), null, flags);
+    return applyBrowserSecurity(NextResponse.next(), null);
   }
   if (decision === "allow") {
     return applyBrowserSecurity(
       pnlCardRedirect(request) ?? NextResponse.next({ request: { headers: requestHeaders } }),
       nonce,
-      flags,
     );
   }
   if (decision === "redirect-mission") {
     return applyBrowserSecurity(
       NextResponse.redirect(new URL(MISSION_CONTROL_ENTRY, request.url)),
       nonce,
-      flags,
     );
   }
   if (decision === "redirect-profile" && request.headers.get(PROFILE_REWRITE_HEADER) === "1") {
     // The page request behind a `/@<callsign>` rewrite reaches the proxy
     // again under the page's own path: serve it, do not redirect it back.
-    return applyBrowserSecurity(NextResponse.next({ request: { headers: requestHeaders } }), nonce, flags);
+    return applyBrowserSecurity(NextResponse.next({ request: { headers: requestHeaders } }), nonce);
   }
   if (decision === "redirect-profile" || decision === "rewrite-profile") {
     // `/@<callsign>` is the profile's address (OA-4): the proxy serves the
@@ -190,37 +180,24 @@ function routeRequest(request: NextRequest, flags: LaunchFlags): NextResponse {
     const target = request.nextUrl.clone();
     target.pathname = socialProfileTarget(request.nextUrl.pathname)!;
     if (decision === "redirect-profile") {
-      return applyBrowserSecurity(NextResponse.redirect(target, 307), nonce, flags);
+      return applyBrowserSecurity(NextResponse.redirect(target, 307), nonce);
     }
     requestHeaders.set(PROFILE_REWRITE_HEADER, "1");
     return applyBrowserSecurity(
       NextResponse.rewrite(target, { request: { headers: requestHeaders } }),
       nonce,
-      flags,
     );
   }
-  if (decision === "rewrite-home") {
-    // Serve the brand landing at `/` and preserve its referral query.
-    const target = request.nextUrl.clone();
-    target.pathname = MISSION_CONTROL_ENTRY;
-    requestHeaders.set(HOME_REWRITE_HEADER, "1");
-    return applyBrowserSecurity(
-      NextResponse.rewrite(target, { request: { headers: requestHeaders } }),
-      nonce,
-      flags,
-    );
-  }
-  if (decision === "rewrite-presale" || decision === "rewrite-social") {
+  if (decision === "rewrite-social") {
     // A rewrite does not run the proxy again for its target, so the forwarded
-    // headers carry this request's nonce and CSP to the presale or feed page.
+    // headers carry this request's nonce and CSP to the feed page.
     // The query string (referral and campaign tags) reaches that page, and
     // the address bar keeps `/`.
     const target = request.nextUrl.clone();
-    target.pathname = decision === "rewrite-social" ? SOCIAL_ENTRY : PRESALE_ENTRY;
+    target.pathname = SOCIAL_ENTRY;
     return applyBrowserSecurity(
       NextResponse.rewrite(target, { request: { headers: requestHeaders } }),
       nonce,
-      flags,
     );
   }
   return applyBrowserSecurity(
@@ -228,7 +205,6 @@ function routeRequest(request: NextRequest, flags: LaunchFlags): NextResponse {
       request: { headers: requestHeaders },
     }),
     nonce,
-    flags,
   );
 }
 
