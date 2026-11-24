@@ -17,9 +17,16 @@ Run `/app/apps/workers/start.sh <process>` or `npm run worker -w @blast/workers 
 
 Migration 0154 binds new sponsored presale reservations to a deployment fingerprint so prepared transactions cannot cross a cutover. Submitted attempts remain available for reconciliation. Migration 0153 is additive to account data. It preserves account/profile/wallet/referral/social/settings/invitation and blacklist data and human release-gate evidence. It adds `blast_keeper_actions`, the `vault_reward_*` journal and `mission_control_vault_buybacks`, renames alerts and the buyback gate without deleting their rows. Retained old database journals are custody evidence, with no worker runtime reading them. Do not truncate them or perform a web database reset as part of rollout. Resolve any unknown signed attempts before changing signer ownership.
 
-New rounds pay eligible holders the Meme and Quote available in the vault’s holder-rewards balance using the same time-weighted balance for both assets. A JOEY round pays JOEY and SUI to holders. Rounding leftovers stay in the vault for later rounds. Every new round requires a positive holder Quote payout. If Quote falls short of the holder minimum or all holder allocations round to zero, both assets stay in the vault for a later round. `REWARDS_GAS_RESERVE_BPS` defaults to zero. A nonzero setting is at most 909 bps of gross Quote, and the reserve cannot exceed 10% of allocated holder Quote.
+New rounds pay eligible holders the Meme and Quote available in the vault’s holder-rewards balance using the same time-weighted balance for both assets. A JOEY round pays JOEY and SUI to holders. Rounding leftovers stay in the vault for later rounds. The planner values both assets at the period's closing prices and excludes the gas reserve from the budget. The combined value must cover at least $100 and $1 per qualifying holder. Every round still requires a positive holder Quote payout. `REWARDS_GAS_RESERVE_BPS` defaults to zero. A nonzero setting is at most 909 bps of gross Quote, and the reserve cannot exceed 10% of allocated holder Quote.
 
-For plans that evaluate holder eligibility, frozen exclusions include the per-coin blacklist, launch and presale team allocations, evidenced treasury destinations, protocol objects, and `REWARDS_EXCLUSIONS`. Cuts, holders, allocations, and custody survive restart. The planner and signer reject unpublished plans prepared under the previous payout policy. The treasury remains the destination for gas reimbursement.
+Deploy the updated vault-rewards worker before the planner so it can read the new budget policy. To retry a vault’s latest period skipped under the Quote-only budget check, use the planner’s environment and run the following command from the repository root. It reuses the frozen holder set and requires an untouched plan whose combined budget passes. The planner and relay then use the normal scheduling and publication flow.
+
+```sh
+node --import ./scripts/register-runtime-types.mjs --experimental-strip-types \
+  apps/workers/scripts/retry-reward-period.ts "$VAULT_ID" "$PERIOD_ID"
+```
+
+For plans that evaluate holder eligibility, frozen exclusions include the per-coin blacklist, launch and presale team allocations, evidenced treasury destinations, protocol objects, and `REWARDS_EXCLUSIONS`. Cuts, holders, allocations, and custody survive restart. The planner and signer require a recorded payout policy for unpublished plans. The treasury remains the destination for gas reimbursement.
 
 `VAULT_REWARDS_RELAY_BATCH` defaults to 1,023, the largest accepted Sui command count. The relay packs the largest ordered prefix that fits in a signed 128 KiB transaction. It dry-runs with up to 1 SUI from the signer’s address balance, budgets gas after Sui’s storage rebate, plus up to 10% headroom, and checks the adjusted bytes before signing. On a gas or size limit, it probes smaller prefixes to find the largest one that fits before signing. The signer independently caps claim gas at 1 SUI per transaction.
 
@@ -65,7 +72,7 @@ process. Store credentials in service-scoped configuration. Verify
 deployment identity, reader provenance, permissions and custody before a
 signed worker pass. Require fresh release evidence for each enabled process.
 
-### Holder reward policy cutover
+### Incompatible holder reward policy cutovers
 
 1. After owner approval, stop and drain both live rewards workers. Confirm both old processes have exited and no old signer can submit more transactions. Resolve signing and signed custody with definitive chain effects or verified transaction expiry before proceeding.
 2. With both workers stopped, read the unpublished journal again and check every vault for an on-chain schedule. Cancel incompatible schedules before their notice elapses and verify cancellation on chain. Rebuild incompatible unpublished plans from their original periods and cuts. Preserve the records and claims of already published rounds. Keep both workers stopped if custody, the journal, and chain state cannot be reconciled.

@@ -21,7 +21,7 @@ export const frozenSchema = z.object({
   globalWeight: z.string().regex(/^[0-9]+$/), qualifiers: z.number().int().min(0),
   sourceEvidence: z.record(z.string(), z.unknown()),
   // Published plans from earlier policies must retain their original commitment.
-  payoutPolicy: z.literal("both-assets-to-holders").optional(),
+  payoutPolicy: z.enum(["both-assets-to-holders", "combined-value-to-holders"]).optional(),
 });
 export type Frozen = z.infer<typeof frozenSchema>;
 export type Plan = {
