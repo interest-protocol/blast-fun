@@ -438,7 +438,7 @@ export function SaleMarket({
           </div>
           {extras.note}
         </CoinPriceCurrencyProvider>
-      ) : <SalePriceChart sale={sale} trade={null} enabled={!marketQuery.isPending} windows={windows} {...extras} />}
+      ) : <SalePriceChart sale={sale} trade={null} enabled={!marketQuery.isPending} windows={windows} note={extras.note} />}
     >
       {children}
     </SaleMarketView>

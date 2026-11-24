@@ -316,7 +316,8 @@ test("the coin page reads the coin market on Home's public root, keyed by the sa
   client.setQueryData([...queryKeys.home.all, "market", detail.presale.sale_token], fixtureCoinMarket());
   const html = renderToStaticMarkup(withQueryClient(client, <SaleMarket nowMs={FIXTURE_NOW} sale={detail.presale} terms={detail.terms} />));
   assert.match(html, /<dt>FDV<\/dt><dd>.*\$412\.7M/);
-  assert.match(html, /\+\$0\.0137 \(3\.42%\) <span[^>]*>today/);
+  assert.match(html, /<span>Price<\/span><strong>—<\/strong>/);
+  assert.doesNotMatch(html, /\$0\.0137/);
   // Another coin's answer is never drawn.
   client.setQueryData([...queryKeys.home.all, "market", detail.presale.sale_token], fixtureCoinMarket({ coin_type: "0x2::other::OTHER" }));
   assert.doesNotMatch(renderToStaticMarkup(withQueryClient(client, <SaleMarket nowMs={FIXTURE_NOW} sale={detail.presale} terms={detail.terms} />)), /FDV|\$0\.0137/);

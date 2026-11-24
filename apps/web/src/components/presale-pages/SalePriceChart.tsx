@@ -8,8 +8,9 @@ import { Segmented } from "#web/components/blast-ui/Segmented.tsx";
 import { useQuery } from "@tanstack/react-query";
 import { useContext, useState, type ReactNode } from "react";
 
-import { formatChange, formatMove, priceDirection, type PriceMove } from "./sale-market-format";
-import { ChartCard, CoinPriceFigure, MarketPriceRow } from "#web/components/social/bonding/CoinPageParts.tsx";
+import { NO_VALUE } from "@blast/core/web/format.ts";
+import type { PriceMove } from "./sale-market-format";
+import { ChartCard, MarketPriceRow } from "#web/components/social/bonding/CoinPageParts.tsx";
 import coinStyles from "#web/components/social/bonding/bonding-coin.module.css";
 import { ChartLastTrade } from "#web/components/launchpad/chart/ChartLastTrade.tsx";
 import { ChartTradeContext } from "#web/components/launchpad/chart/chart-trade-context.ts";
@@ -27,7 +28,7 @@ const WINDOWS = [["24h", "24H"], ["launch", "Since launch"]] as const;
 /** The delay notice and dollar price move from the market read. */
 export type MarketExtras = Readonly<{ note?: ReactNode; move?: PriceMove | null }>;
 
-export function SalePriceChart({ sale, trade, note, move, enabled = true, windows = WINDOWS }: Readonly<{ sale: SocialPresaleDetail["presale"]; trade: ReactNode; enabled?: boolean; windows?: readonly (readonly [PriceWindow, string])[] } & MarketExtras>) {
+export function SalePriceChart({ sale, trade, note, enabled = true, windows = WINDOWS }: Readonly<{ sale: SocialPresaleDetail["presale"]; trade: ReactNode; note?: ReactNode; enabled?: boolean; windows?: readonly (readonly [PriceWindow, string])[] }>) {
   const [window, setWindow] = useState<PriceWindow>("24h");
   const query = useQuery({
     ...priceQuery({ kind: "presale", id: sale.presale_id, window }),
@@ -35,7 +36,7 @@ export function SalePriceChart({ sale, trade, note, move, enabled = true, window
     refetchInterval: (query) => pollInterval(15_000, query),
   }, useAppQueryClient());
   const history = query.data?.coin_type === sale.sale_token ? query.data : null;
-  return <SalePriceChartView failed={query.isError} fetching={query.isFetching} history={history} loading={query.isPending} move={move} note={note} onWindow={setWindow} priceUsd={history ? history.price_usd : sale.price_usd} retry={() => { void query.refetch(); }} trade={trade} window={window} windows={windows} />;
+  return <SalePriceChartView failed={query.isError} fetching={query.isFetching} history={history} loading={query.isPending} note={note} onWindow={setWindow} retry={() => { void query.refetch(); }} trade={trade} window={window} windows={windows} />;
 }
 
 function PriceHistory({ points, loading, failed, fetching, hasHistory, retry, quoteSymbol }: Readonly<{ points: SocialPriceHistory["points"]; loading: boolean; failed: boolean; fetching: boolean; hasHistory: boolean; retry?: () => void; quoteSymbol?: string }>) {
@@ -50,7 +51,7 @@ function PriceHistory({ points, loading, failed, fetching, hasHistory, retry, qu
   return <EmptyState role="status" title={title} />;
 }
 
-export function SalePriceChartView({ history, loading, failed = false, fetching = false, retry, window, windows = WINDOWS, onWindow, priceUsd, trade, note, move }: Readonly<{
+export function SalePriceChartView({ history, loading, failed = false, fetching = false, retry, window, windows = WINDOWS, onWindow, trade, note }: Readonly<{
   history: SocialPriceHistory | null | undefined;
   loading: boolean;
   failed?: boolean;
@@ -59,19 +60,16 @@ export function SalePriceChartView({ history, loading, failed = false, fetching 
   window: PriceWindow;
   windows?: readonly (readonly [PriceWindow, string])[];
   onWindow: (window: PriceWindow) => void;
-  priceUsd: string | null | undefined;
   trade: ReactNode;
-} & MarketExtras>) {
-  const { quote, points, dayMove, change, hasLine, price } = marketPriceFigures(history, priceUsd, move);
+  note?: ReactNode;
+}>) {
+  const quote = history?.price_usd == null ? history?.quote : undefined;
+  const points = quote?.points ?? history?.points ?? [];
+  const hasLine = points.length >= 2;
   const liveActivity = useContext(ChartTradeContext)?.placement === "headline";
   return (
     <div className={coinStyles.market} data-sale-market="">
-      <MarketPriceRow price={price == null ? null : <CoinPriceFigure price={price} tradeId={history?.price_as_of_ms == null ? null : String(history.price_as_of_ms)} quoteSymbol={quote?.symbol} />}
-        showSound={liveActivity} activity={liveActivity && <ChartLastTrade placement="headline" playSound />}
-        change={change == null ? null : {
-          value: <>{dayMove ? formatMove(dayMove) : formatChange(change)} <span>today</span></>,
-          direction: priceDirection(change),
-        }} />
+      <MarketPriceRow price={NO_VALUE} showSound={liveActivity} activity={liveActivity && <ChartLastTrade placement="headline" playSound />} />
       <ChartCard>
         <div className={cx("trading-market-actions")}>
           {trade}
@@ -85,15 +83,4 @@ export function SalePriceChartView({ history, loading, failed = false, fetching 
       </ChartCard>
     </div>
   );
-}
-
-function marketPriceFigures(history: SocialPriceHistory | null | undefined, priceUsd: string | null | undefined, move: MarketExtras["move"]) {
-  const quote = priceUsd == null ? history?.quote : undefined;
-  const points = quote?.points ?? history?.points ?? [];
-  // A dollar move only beside a dollar price; it brings its own percentage, so the line reads one opening price.
-  const dayMove = quote ? null : move ?? null;
-  const change = dayMove ? dayMove.bps : quote ? quote.change_24h_bps : history?.change_24h_bps;
-  const hasLine = points.length >= 2;
-  const price = quote?.price ?? priceUsd;
-  return { quote, points, dayMove, change, hasLine, price };
 }
