@@ -263,7 +263,7 @@ test("old splash links permanently redirect to Home with their referral and camp
 });
 
 test("unknown URLs serve the app's 404 with a link home", async () => {
-  for (const path of ["/missing-blast-page", "/mission/missing", "/closed/missing"]) {
+  for (const path of ["/404", "/missing-blast-page", "/mission/missing", "/closed/missing"]) {
     const { status, html } = await get(path);
     assert.equal(status, 404, path);
     const doc = JSDOM.fragment(html);

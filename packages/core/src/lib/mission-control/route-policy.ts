@@ -90,7 +90,8 @@ export function decideMissionControlRoute(
 }
 
 function isPublicPage(pathname: string): boolean {
-  return pathname === "/privacy" || pathname === "/terms" ||
+  // The fixed 404 target must reach the App Router even when the rewrite re-enters the proxy.
+  return pathname === "/404" || pathname === "/privacy" || pathname === "/terms" ||
     PUBLIC_PAGE_NAMESPACES.some((prefix) => isWithin(pathname, prefix));
 }
 
