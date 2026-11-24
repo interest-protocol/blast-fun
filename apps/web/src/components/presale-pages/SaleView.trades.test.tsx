@@ -17,7 +17,7 @@ const { SaleView } = await import("./SaleView");
 const ID = "0xeb9dce118d582bb2ed3e5cb7da316ed0afc6365a5eeb0e20184fb32d3f533944";
 const address = "0x" + "1".repeat(64);
 const digest = "B".repeat(44);
-const activityPath = socialHomeActivityPath(ID, "24h");
+const activityPath = socialHomeActivityPath(ID, "24h", null, undefined, true);
 
 function tradePage(checkpoint: number): HomeThreadPage {
   const at = FIXTURE_NOW + (checkpoint - 100) * 1_000;
@@ -45,7 +45,7 @@ function tradePage(checkpoint: number): HomeThreadPage {
         digest: checkpoint > 100 ? digest : null,
         quote: checkpoint > 100 ? {
           quote_type: "0x2::sui::SUI", quote_symbol: "SUI", quote_decimals: 9,
-          atoms: "1234567890", usd: checkpoint === 101 ? "1000.00" : "2.00", usd_complete: true,
+          atoms: "1234567890", usd: checkpoint === 101 ? "1000.00" : checkpoint === 105 ? "0.999" : "2.00", usd_complete: true,
         } : null,
         tokens: "1000000000",
         refund: null,
@@ -64,7 +64,7 @@ function tradePage(checkpoint: number): HomeThreadPage {
   };
 }
 
-test("confirmed presale trades update the list and headline without a read, including with Holders selected", { timeout: 5_000 }, async (t) => {
+test("confirmed presale trades update the list and headline without a read, including with Holders selected", { timeout: 8_000 }, async (t) => {
   t.mock.method(Math, "random", () => 0);
   let now = Date.now();
   t.mock.method(Date, "now", () => now);
@@ -114,9 +114,9 @@ test("confirmed presale trades update the list and headline without a read, incl
     const source = streams[0];
     assert.equal(streams.length, 1);
     assert.equal(new URL(source!.url, "https://blast.test").searchParams.get("presale"), ID);
-    const emitTrade = (checkpoint: number, presaleId = ID, quoteType = CREATE_SUI_QUOTE_TYPE) => {
+    const emitTrade = (checkpoint: number, presaleId = ID, quoteType = CREATE_SUI_QUOTE_TYPE, stream = source) => {
       const row = tradePage(checkpoint).participants[0]!.events![0]!;
-      return act(async () => source?.receive({
+      return act(async () => stream?.receive({
         type: "presale_trade", presale_id: presaleId, cursor: row.activity_id, kind: row.kind,
         timestamp_ms: row.occurred_at_ms, actor: "0x" + "2".repeat(64), digest,
         coin_atoms: row.tokens, quote_atoms: row.quote!.atoms, quote_type: quoteType, usd: row.quote!.usd,
@@ -210,6 +210,26 @@ test("confirmed presale trades update the list and headline without a read, incl
     assert.equal(headline.querySelector("[data-trade-cue]")?.getAttribute("data-trade-cue"), "sell");
     assert.equal(chartCues().length, 3, "the catch-up read is quiet");
     assert.equal(status(), "New buy", "the catch-up sell cannot replace the live announcement");
+
+    now += 6_000;
+    latestCheckpoint = 105;
+    await emitTrade(105, ID, CREATE_SUI_QUOTE_TYPE, await next);
+    await settle();
+    assert.equal(container.querySelector('ol[aria-label="Recent trades"] > li [data-side]')?.getAttribute("data-side"), "sell", "a sub-dollar live buy stays hidden");
+    const historyStream = new Promise<EventStream>(resolve => { reconnected = resolve; });
+    await act(async () => {
+      (await next).receive({}, "resync");
+      const resumed = await historyStream;
+      resumed.receive({ type: "hello", provenance: infraProvenanceFixture({ deployment_fingerprint: null }) });
+      resumed.receive({ type: "pong", presale_checkpoint: 105 });
+    });
+    await settle();
+    assert.equal(reads.at(-1), `${activityPath}&at=105`, "the history read includes the sub-dollar trade");
+    assert.match(panel() ?? "", /No trades match this filter/, "a history read retains the exact dollar threshold");
+    const filter = container.querySelector<HTMLButtonElement>('button[role="switch"]');
+    assert.ok(filter);
+    await act(async () => filter.click());
+    assert.equal(container.querySelector('ol[aria-label="Recent trades"] > li [data-side]')?.getAttribute("data-side"), "buy", "the switch reveals the small trade");
   } finally {
     await act(async () => root.unmount());
     client.clear();

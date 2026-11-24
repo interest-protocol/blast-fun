@@ -18,11 +18,13 @@ import { useAppQueryClient } from "#web/lib/query/provider.tsx";
 import { indexedPoolPolling, readIndexedPool } from "./indexed-pool-query.ts";
 
 const UNAVAILABLE = "Trades couldn’t load";
+const POOL_TRADES_LOOKBACK = 20;
 
 async function recentPoolTrades(poolKey: VenuePoolKey, signal: AbortSignal) {
-  const read = await readIndexedPool(UNAVAILABLE, signal, (market) => readPoolTrades(poolKey, { limit: RECENT_TRADES_LIMIT }, market));
+  const read = await readIndexedPool(UNAVAILABLE, signal, (market) => readPoolTrades(poolKey, { limit: POOL_TRADES_LOOKBACK }, market));
   if (read.status === "unavailable" || read.data.kind === "refused") throw new PublicError(UNAVAILABLE, { code: "service_unavailable" });
-  return { stale: read.status === "stale", rows: read.data.value.trades.map((trade) => venueTradeRow(trade, poolKey)) };
+  const rows = read.data.value.trades.map((trade) => venueTradeRow(trade, poolKey));
+  return { stale: read.status === "stale", rows };
 }
 
 export function IndexedPoolTrades({ poolKey, units }: Readonly<{ poolKey: VenuePoolKey; units: ActivityUnits }>) {
@@ -43,7 +45,8 @@ export function IndexedPoolTrades({ poolKey, units }: Readonly<{ poolKey: VenueP
   return <>
     {query.data?.stale || query.isError ? <p className={styles.note} role="status">Trade updates delayed.</p> : null}
     {rows.length
-      ? <TradeList rows={rows} units={units} explorer={explorer} next={null} hold={(held) => setHeldRows(held ? rows : null)} />
+      ? <TradeList rows={rows.slice(0, RECENT_TRADES_LIMIT)} availableRows={rows}
+        units={units} explorer={explorer} next={null} hold={(held) => setHeldRows(held ? rows : null)} />
       : <EmptyState title="No swaps indexed yet">New swaps in this pool will appear here.</EmptyState>}
   </>;
 }

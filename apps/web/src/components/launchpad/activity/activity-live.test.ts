@@ -139,7 +139,7 @@ test("trade frames show once, newest first, and the next read's rows take their 
   const before = shown();
   listener().fence!(VENUE_POOL_KEY, READ_THROUGH);
   const first = frame(VENUE_POOL_KEY, READ_THROUGH + 1, { kind: "swap" });
-  const second = frame(VENUE_POOL_KEY, READ_THROUGH + 2, { kind: "swap", side: "sell" });
+  const second = frame(VENUE_POOL_KEY, READ_THROUGH + 2, { kind: "swap", side: "sell", volumeUsd: "0.999" });
   listener().trade!(first);
   listener().trade!(second);
   listener().trade!(first);
@@ -149,7 +149,10 @@ test("trade frames show once, newest first, and the next read's rows take their 
   assert.equal(clock.timers.length, 0, "mapped frames and a fence already read through ask for no read");
 
   // The next poll answers with both trades as classified rows: every state the list passes through shows each once.
-  const rest = [second, first].map((item) => ({ ...provisionalActivityRow(LAUNCH, item)! }));
+  assert.equal(shownActivity(feed.state()).view!.rows[0]?.volumeUsd, "0.999");
+  const rest = [second, first].map((item) => provisionalActivityRow(LAUNCH, {
+    ...item, trade: { ...item.trade, volumeUsd: null },
+  })!);
   newest = page([...rest, ...fixture.activity], READ_THROUGH + 2, fixture.nextCursor);
   const seen: string[][] = [];
   const unsubscribe = feed.subscribe(() => seen.push(shown()));
@@ -158,6 +161,9 @@ test("trade frames show once, newest first, and the next read's rows take their 
   assert.ok(seen.length > 0);
   for (const rows of seen) assert.deepEqual(rows, [`${READ_THROUGH + 2}:2:0:0`, `${READ_THROUGH + 1}:2:0:0`, ...before]);
   assert.equal(feed.state().live.length, 0, "the read answered for every provisional row");
+  assert.equal(shownActivity(feed.state()).view!.rows[0]?.volumeUsd, "0.999", "the trade retains its recorded USD after confirmation");
+  await feed.refresh(false);
+  assert.equal(shownActivity(feed.state()).view!.rows[0]?.volumeUsd, "0.999", "subsequent reads retain the recorded USD");
   assert.equal(shownActivity(feed.state()).view!.rows[0], feed.state().activity.view!.rows[0], "the row shown is the read's");
 
   stop();

@@ -75,8 +75,8 @@ export function fetchHomeTraders(window: HomeWindow, signal?: AbortSignal, query
 }
 
 /** One coin's thread by its key (`homeCoinKey`): a presale id or a curve coin's type. */
-export function fetchHomeThread(coinKey: string, window: HomeWindow, cursor: string | null, signal?: AbortSignal, at?: number): Promise<HomeThreadPage> {
-  return readHomeJson<HomeThreadPage>(socialHomeActivityPath(coinKey, window, cursor, at), "The activity", homeThreadPageReadSchema, signal);
+export function fetchHomeThread(coinKey: string, window: HomeWindow, cursor: string | null, signal?: AbortSignal, options?: Readonly<{ at?: number; exactTradeUsd?: boolean }>): Promise<HomeThreadPage> {
+  return readHomeJson<HomeThreadPage>(socialHomeActivityPath(coinKey, window, cursor, options?.at, options?.exactTradeUsd), "The activity", homeThreadPageReadSchema, signal);
 }
 
 export function fetchHomeDiscussion(presaleId: string, cursor: string | null, signal?: AbortSignal): Promise<HomeDiscussionPage> {

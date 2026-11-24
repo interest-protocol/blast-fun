@@ -30,6 +30,8 @@ import { compactFigure, readablePrice } from "#web/lib/market-format.ts";
 import { ago, NO_VALUE } from "@blast/core/web/format.ts";
 import { SOCIAL_FEED_DELAYED_LAG_MS } from "@blast/core/web/contracts/feed.ts";
 import { InspectValue } from "#web/components/blast-ui/InspectValue.tsx";
+import { SmallTradeSwitch } from "#web/components/launchpad/activity/SmallTradeSwitch.tsx";
+import { isHomeTradeUnderDollar } from "#web/components/launchpad/activity/small-trades.ts";
 import { SkeletonText } from "#web/components/blast-ui/Skeleton.tsx";
 import { useShellPrefs } from "#web/components/blast-ui/use-shell-prefs.ts";
 import { KindGlyph, QuoteMark } from "#web/components/social/coin-home/glyphs.tsx";
@@ -373,9 +375,10 @@ function CoinMissing({ showSui, remove }: Readonly<{ showSui?: () => void; remov
 const noSubscribe = () => () => {};
 const noVersion = () => 0;
 
+type RecentTrade = Readonly<{ participant: HomeParticipant; event: HomeEvent }>;
+
 function Activity({ page, coin }: Readonly<{ page: HomeThreadPage | null; coin: CoinRecord | null }>) {
   const noteId = useId();
-  const [limit,setLimit]=useState(12);
   const followingOnly = useContext(FollowingOnlyContext);
   const clearFollowingOnly = useContext(ClearFollowingOnlyContext);
   const store = useViewerStateStore();
@@ -384,11 +387,15 @@ function Activity({ page, coin }: Readonly<{ page: HomeThreadPage | null; coin: 
   useEffect(() => { if (store && callsigns) store.want({ callsigns: callsigns.split(",") }); }, [store, callsigns]);
   if (!page)
     return <NoRows><PanelEmptyState title="Trades unavailable for this coin" /></NoRows>;
-  const followed = (participant: HomeParticipant) => !followingOnly || (participant.actor.type === "account" && store?.following({ kind: "account", callsign: participant.actor.callsign }) === true);
-  const events = page.participants.filter(followed).flatMap((participant) =>
+  const trades = page.participants.flatMap((participant) =>
     (participant.events ?? []).filter(event => event.kind === "trade_buy" || event.kind === "trade_sell").map((event) => ({ participant, event })),
   ).sort((a, b) => b.event.occurred_at_ms - a.event.occurred_at_ms);
+  const events = followingOnly ? trades.filter(({ participant }) => participant.actor.type === "account" &&
+    store?.following({ kind: "account", callsign: participant.actor.callsign }) === true) : trades;
   const freshness = activityFreshness(page.as_of);
+  const empty = followingOnly && clearFollowingOnly && trades.length > 0
+    ? <EmptyState compact role="status" title="No trades by people you follow in this period" action={<Button variant="ghost" size="sm" type="button" onClick={clearFollowingOnly}>Show all trades</Button>} />
+    : <PanelEmptyState title={followingOnly ? "No trades by people you follow in this period" : "No recorded trades in this period"} />;
   return (
     <>
       <ListNote id={noteId}>
@@ -399,18 +406,38 @@ function Activity({ page, coin }: Readonly<{ page: HomeThreadPage | null; coin: 
         ].filter(Boolean).join(" ")}
       </ListNote>
       {freshness.warning && <p role="status" className={styles.warning}>{freshness.warning}</p>}
-      {events.length === 0 ? (
-        followingOnly && clearFollowingOnly && page.participants.some(participant => participant.events?.some(event => event.kind === "trade_buy" || event.kind === "trade_sell"))
-          ? <EmptyState compact role="status" title="No trades by people you follow in this period" action={<Button variant="ghost" size="sm" type="button" onClick={clearFollowingOnly}>Show all trades</Button>} />
-          : <PanelEmptyState title={followingOnly ? "No trades by people you follow in this period" : "No recorded trades in this period"} />
+      <RecentTrades events={events} coin={coin} nowMs={page.clock_ms} noteId={noteId} empty={empty} />
+    </>
+  );
+}
+
+function RecentTrades({ events, coin, nowMs, noteId, empty }: Readonly<{
+  events: readonly RecentTrade[];
+  coin: CoinRecord | null;
+  nowMs: number;
+  noteId: string;
+  empty: ReactNode;
+}>) {
+  const [limit, setLimit] = useState(12);
+  const [hideSmallTrades, setHideSmallTrades] = useState(true);
+  if (events.length === 0) return empty;
+  const visibleEvents = hideSmallTrades ? events.filter(({ event }) => !isHomeTradeUnderDollar(event.quote)) : events;
+  return (
+    <>
+      <SmallTradeSwitch checked={hideSmallTrades} onCheckedChange={setHideSmallTrades} />
+      {visibleEvents.length === 0 ? (
+        <PanelEmptyState title="No trades match this filter" />
       ) : (
-        <div><div className={styles.tradeTableHead} aria-hidden="true"><span>Trader</span><span>Side</span><span>Value</span><span>Age</span></div><ol className={styles.rows} aria-label="Recent trades, last 24 hours" aria-describedby={noteId}>
-          {events.slice(0,limit).map(({ participant, event }) => (
-            <TradeRow key={event.activity_id} participant={participant} event={event} coin={coin} nowMs={page.clock_ms} />
-          ))}
-        </ol></div>
+        <div>
+          <div className={styles.tradeTableHead} aria-hidden="true"><span>Trader</span><span>Side</span><span>Value</span><span>Age</span></div>
+          <ol className={styles.rows} aria-label="Recent trades, last 24 hours" aria-describedby={noteId}>
+            {visibleEvents.slice(0, limit).map(({ participant, event }) => (
+              <TradeRow key={event.activity_id} participant={participant} event={event} coin={coin} nowMs={nowMs} />
+            ))}
+          </ol>
+        </div>
       )}
-      {events.length > limit && <Button variant="ghost" size="sm" className={styles.pill} type="button" onClick={()=>setLimit(limit+5)}>More activity</Button>}
+      {visibleEvents.length > limit && <Button variant="ghost" size="sm" className={styles.pill} type="button" onClick={() => setLimit(limit + 5)}>More activity</Button>}
     </>
   );
 }

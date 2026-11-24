@@ -7,6 +7,9 @@ import { COIN_FIXTURE, curvePoolBody } from "../../../../../../packages/core/tes
 import { activityAnchor, isActivityTrade, parseClassifiedActivityPage, parseCurveFlow, type ActivityRow } from "@blast/core/modules/launchpad-contract/activity.ts";
 import type { LaunchLifecycle } from "@blast/core/modules/launchpad-contract/discovery.ts";
 import { parseInfraProvenance } from "@blast/core/modules/launchpad-contract/provenance.ts";
+import { parseTraderProfilesRequest, traderProfileKey, type TraderProfileRequest } from "@blast/core/modules/social/contracts/trader-profiles.ts";
+import { CREATE_QUOTE_TYPE } from "@blast/core/web/contracts/create.ts";
+import { createTestQueryClient, settleQueries, withQueryClient } from "#web/lib/query/test-client.ts";
 
 import { NON_PRODUCTION_MANIFEST } from "../../../../test/fixtures/launchpad/transaction/fixtures.ts";
 import { installTestDom } from "../../../../test/fixtures/social/test-dom.ts";
@@ -339,6 +342,65 @@ test("the coin renders the recent trades from the server page before hydration",
   assert.doesNotMatch(html, /Reading trades/);
 });
 
+test("recent trades hide sub-dollar trades until the switch is turned off", async (t) => {
+  const state = activity("migrated");
+  const [first, second, third, fourth] = state.view!.rows.filter(isActivityTrade);
+  const earlier = { ...fourth!, position: "1:0:0:0", timestampMs: fourth!.timestampMs - 1_000 };
+  const rows = [
+    { ...first!, amounts: { ...first!.amounts, quote: 999_999n } },
+    { ...second!, amounts: { ...second!.amounts, quote: 1_000_000n } },
+    { ...third!, amounts: { ...third!.amounts, quote: 1_000_001n } },
+    { ...fourth!, amounts: { ...fourth!.amounts, quote: 2_000_000n } },
+    { ...earlier, amounts: { ...earlier.amounts, quote: 3_000_000n } },
+  ];
+  const confirmedActivity = { ...state, view: { ...state.view!, rows } };
+  const element = activityElement({
+    compact: true,
+    activity: confirmedActivity,
+    confirmedActivity,
+    units: { ...UNITS, quoteType: CREATE_QUOTE_TYPE, quoteSymbol: "USDC", quoteDecimals: 6 },
+  });
+  assert.ok(earlier.actor);
+  const earlierProfile = traderProfileKey({ address: earlier.actor, timestampMs: earlier.timestampMs });
+  const requests: (readonly TraderProfileRequest[])[] = [];
+  const now = Math.max(...rows.map((row) => row.timestampMs));
+  t.mock.method(globalThis, "fetch", async (resource: string) => {
+    const traders = parseTraderProfilesRequest(new URL(resource, "https://blast.fun"), now);
+    assert.ok(traders);
+    requests.push(traders);
+    return Response.json(Object.fromEntries(traders.map((trader) => {
+      const key = traderProfileKey(trader);
+      return [key, key === earlierProfile ? { callsign: "alice", avatarUrl: null } : null];
+    })));
+  });
+  const { document } = installTestDom();
+  const { act } = await import("react");
+  const { createRoot } = await import("react-dom/client");
+  const client = createTestQueryClient();
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  t.after(async () => {
+    await act(async () => root.unmount());
+    client.clear();
+    container.remove();
+  });
+  await act(async () => root.render(withQueryClient(client, element)));
+  await act(async () => settleQueries(client));
+
+  const toggle = container.querySelector<HTMLButtonElement>('button[role="switch"]')!;
+  const times = () => [...container.querySelectorAll('[aria-label="Recent trades"] time')].map((time) => time.getAttribute("datetime"));
+  const dates = rows.map((row) => new Date(row.timestampMs).toISOString());
+  assert.equal(toggle.getAttribute("aria-checked"), "true");
+  assert.deepEqual(times(), dates.slice(1));
+  assert.deepEqual(requests.map((traders) => traders.map((trader) => trader.timestampMs)), [rows.slice(1).map((row) => row.timestampMs)]);
+  assert.ok(container.querySelector('[aria-label="Recent trades"] a[href="/@alice"]'));
+  await act(async () => toggle.click());
+  assert.equal(toggle.getAttribute("aria-checked"), "false");
+  assert.deepEqual(times(), dates.slice(0, 4));
+  assert.equal(requests.length, 1);
+});
+
 test("a vault claim preserves the trades and appears only in the full activity ledger", () => {
   const body = classifiedActivityBody("migrated", { limit: 100 }, NOW);
   assert.ok(Array.isArray(body.activity));
@@ -441,7 +503,11 @@ test("recent trades link only named event-time profiles and retain wallet identi
   const row = state.view!.rows.find((row) => row.actor && (row.kind === "venue_buy" || row.kind === "curve_buy"))!;
   const other = { ...row, timestampMs: row.timestampMs - 1, position: "1:1:1:0" };
   const rows = [row, other];
-  const html = render({ compact: true, activity: { ...state, view: { ...state.view!, rows } }, traderProfiles: { [`${row.actor}:${row.timestampMs}`]: { callsign: "alice", avatarUrl: "https://example.com/avatar.png" } } });
+  const confirmedActivity = { ...state, view: { ...state.view!, rows } };
+  const client = createTestQueryClient();
+  client.setQueryData(["trader-profiles", COIN_FIXTURE.launchId, true], { [`${row.actor}:${row.timestampMs}`]: { callsign: "alice", avatarUrl: "https://example.com/avatar.png" } });
+  const html = renderToStaticMarkup(withQueryClient(client, activityElement({ compact: true, activity: confirmedActivity, confirmedActivity })));
+  client.clear();
   assert.match(html, /href="\/@alice"/);
   assert.match(html, /View @alice/);
   assert.equal((html.match(/aria-label="Wallet trader"/g) ?? []).length, 1);

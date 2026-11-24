@@ -235,7 +235,7 @@ export function createCoinReads(
     },
     async activity(asset, signal) {
       if (asset.network !== "mainnet" || !asset.presale_id) return null;
-      const page = await fetchHomeThread(asset.presale_id, "24h", null, signal);
+      const page = await fetchHomeThread(asset.presale_id, "24h", null, signal, { exactTradeUsd: true });
       return page.presale_id === asset.presale_id ? page : null;
     },
   };

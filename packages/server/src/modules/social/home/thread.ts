@@ -99,11 +99,13 @@ export type EventRow = Readonly<{
   has_why: boolean;
 }>;
 
-export function eventOf(row: EventRow): HomeEvent | null {
+export function eventOf(row: EventRow, exactTradeUsd = false): HomeEvent | null {
   if (!isHomeKind(row.kind)) return null;
   const asset = quoteAssetOf(row.quote_type, row);
   const claim = row.kind === "presale_claim";
   const quoteAtoms = claim ? null : row.quote_amount;
+  const preserveUsd = exactTradeUsd && (row.kind === "trade_buy" || row.kind === "trade_sell");
+  const usd = row.usd_value === null || preserveUsd ? row.usd_value : toUsd(row.usd_value);
   return {
     activity_id: row.activity_id,
     entry_id: activityEntryId(row.activity_id),
@@ -112,7 +114,7 @@ export function eventOf(row: EventRow): HomeEvent | null {
     digest: row.digest,
     quote: quoteAtoms === null
       ? null
-      : { quote_type: row.quote_type, quote_symbol: asset.symbol, quote_decimals: asset.decimals, atoms: quoteAtoms, usd: row.usd_value === null ? null : toUsd(row.usd_value), usd_complete: row.usd_value !== null },
+      : { quote_type: row.quote_type, quote_symbol: asset.symbol, quote_decimals: asset.decimals, atoms: quoteAtoms, usd, usd_complete: usd !== null },
     tokens: row.coin_amount === null || row.coin_amount === "0" ? null : row.coin_amount,
     refund: claim && row.quote_refund !== null && row.quote_refund !== "0" ? row.quote_refund : null,
     has_why: row.has_why === true,
@@ -166,10 +168,11 @@ export type ThreadRequest = Readonly<{
   hiddenKinds: readonly string[];
   actors: ActorScope;
   minimumMarketCheckpoint?: number;
+  exactTradeUsd?: boolean;
 }>;
 
-/** `presale` or `coin` (exactly one), `window` and `cursor` of the activity route, each at most once. */
-export function parseThreadQuery(params: URLSearchParams): Readonly<{ coin: ThreadCoin; window: HomeWindow; cursor: string | null }> {
+/** The activity route's filters, each at most once. */
+export function parseThreadQuery(params: URLSearchParams): Pick<ThreadRequest, "coin" | "window" | "cursor" | "exactTradeUsd"> {
   const single = (name: string) => socialSingle(params, name);
   const coinType = single("coin");
   const presaleId = single("presale");
@@ -181,7 +184,10 @@ export function parseThreadQuery(params: URLSearchParams): Readonly<{ coin: Thre
   if (!isHomeWindow(window)) throw new SocialRouteError("invalid_parameter", { extra: { parameter: "window" } });
   const cursor = single("cursor");
   if (cursor !== null && cursor.length === 0) throw invalidCursor();
-  return { coin, window, cursor };
+  const exactTradeUsd = single("exact_trade_usd");
+  if (exactTradeUsd === null) return { coin, window, cursor };
+  socialParameter(z.literal("1"), exactTradeUsd, "exact_trade_usd");
+  return { coin, window, cursor, exactTradeUsd: true };
 }
 
 /** The whole thread page, in the public or the followed scope. */
@@ -198,7 +204,7 @@ export async function readHomeThread(db: ReadableDatabase, request: ThreadReques
 /** The thread with its bounds already read (the Following route shares the bounds across modes). */
 export async function readThreadIn(
   db: ReadableDatabase,
-  input: Readonly<{ coin: ThreadCoin; window: HomeWindow; cursor: ThreadCursor | null; hiddenKinds: readonly string[]; actors: ActorScope; span: HomeSpan; bounds: HomeBounds; asOf: HomeThreadPage["as_of"] }>,
+  input: Readonly<{ coin: ThreadCoin; window: HomeWindow; cursor: ThreadCursor | null; hiddenKinds: readonly string[]; actors: ActorScope; span: HomeSpan; bounds: HomeBounds; asOf: HomeThreadPage["as_of"]; exactTradeUsd?: boolean }>,
 ): Promise<HomeThreadPage> {
   const { coin, span, bounds, actors, cursor } = input;
   const key = coin.presaleId ?? coin.coinType;
@@ -221,7 +227,7 @@ export async function readThreadIn(
   const participants: HomeParticipant[] = page.map((row) => {
     const participant = participantOf({ grouped: row, sides: sidesOf.get(row.who) ?? [], ...people });
     const rows = events.get(row.who) ?? [];
-    const kept = rows.slice(0, HOME_PARTICIPANT_EVENTS).flatMap((event) => eventOf(event) ?? []);
+    const kept = rows.slice(0, HOME_PARTICIPANT_EVENTS).flatMap((event) => eventOf(event, input.exactTradeUsd) ?? []);
     return {
       ...participant,
       events: kept,

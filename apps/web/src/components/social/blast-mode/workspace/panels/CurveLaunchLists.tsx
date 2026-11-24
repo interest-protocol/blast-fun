@@ -75,7 +75,7 @@ function ShownCurveTrades({ launchId, asset, coin, live }: Readonly<{ launchId: 
   const units = useQuery(
     {
       ...curvePoolQuery(launchId),
-      // A launch's quote coin and decimals never change; the list reads no price.
+      // Reuse the pool summary for units and the USD estimate. The list adds no price poll.
       staleTime: Infinity,
     },
     client,
@@ -97,6 +97,8 @@ function ShownCurveTrades({ launchId, asset, coin, live }: Readonly<{ launchId: 
         units: {
           symbol: coin?.symbol ?? typeSymbol(asset.coin_type),
           memeDecimals: coin?.decimals ?? units.data.memeDecimals,
+          quoteType: units.data.quoteType,
+          quoteUsd: units.data.quoteUsd,
           quoteSymbol: typeSymbol(units.data.quoteType),
           quoteDecimals: units.data.quoteDecimals,
         },

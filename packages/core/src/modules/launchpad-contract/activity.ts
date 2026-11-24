@@ -398,6 +398,7 @@ export type ActivityRow = Readonly<{
    */
   actor: string | null;
   labels?: readonly IndexedTradeLabel[];
+  volumeUsd?: string;
   lifecycle: "opening_round" | "live" | "migration_ready" | "migrated" | null;
   amounts: Readonly<Record<string, bigint>>;
 }>;
