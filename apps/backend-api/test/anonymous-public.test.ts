@@ -152,6 +152,8 @@ test("admitted reads preserve the owner request and the public, partner and HEAD
     assert.equal(port, prepaid);
     return {
       prices,
+      coin_metadata: unused,
+      daily_stats: unused,
       defillama: unused,
       discovery: unused,
       featured: unused,
