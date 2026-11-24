@@ -1,5 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 
+import { quoteValueUsd } from "@blast/core/modules/launchpad-contract/market-cap-usd.ts";
 import { parseLaunchSummary } from "@blast/core/modules/launchpad-contract/discovery.ts";
 import { readV1 } from "@blast/core/modules/launchpad-contract/v1.ts";
 import { SUI_COIN_TYPE } from "@blast/core/lib/sui/coin-types.ts";
@@ -55,22 +56,26 @@ export function curveLaunchQuery(client: QueryClient, asset: CoinAsset) {
  * A curve's quote coin and decimals, which never change for a launch, and its price now (quote atoms per meme atom,
  * null before the curve has one): one read of `GET /v1/pools/blast_curve/{launch id}`.
  */
-export type CurvePool = Readonly<{ quoteType: string; quoteDecimals: number | null; memeDecimals: number; price: string | null }>;
+export type CurvePool = Readonly<{ quoteType: string; quoteDecimals: number | null; quoteUsd: string | null; memeDecimals: number; price: string | null }>;
 
 export async function readCurvePool(launchId: string, signal: AbortSignal): Promise<CurvePool> {
   const read = await readV1(
     "market",
     `/v1/pools/blast_curve/${launchId}`,
-    (body) => parseLaunchSummary((body as { pool?: unknown } | null)?.pool, "pool"),
+    (body) => {
+      const pool = (body as { pool?: Readonly<{ quote_usd?: unknown }> } | null)?.pool;
+      return { launch: parseLaunchSummary(pool, "pool"), quoteUsd: quoteValueUsd({ n: 1n, scale: 0 }, pool?.quote_usd) };
+    },
     marketReads(signal),
   );
   signal.throwIfAborted();
   if (read.status === "unavailable" || read.data.kind !== "answer") throw new Error("The launch's curve could not load.");
-  const launch = read.data.value;
+  const { launch, quoteUsd } = read.data.value;
   if (launch.launchId !== launchId) throw new Error("The curve read answered for another launch.");
   const { quoteDecimals, memeDecimals } = launch.economics.inputs;
   return {
     quoteType: launch.quoteType,
+    quoteUsd,
     quoteDecimals: quoteDecimals === null ? null : Number(quoteDecimals),
     memeDecimals: Number(memeDecimals),
     price: launch.economics.price,

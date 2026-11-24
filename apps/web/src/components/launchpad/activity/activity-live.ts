@@ -57,6 +57,7 @@ function tradeActivityRow(trade: PoolTrade, kind: ActivityKind, source: Activity
     source,
     actor: trade.trader,
     ...(trade.whale ? { labels: ["whale"] as const } : {}),
+    ...(trade.volumeUsd === null ? {} : { volumeUsd: trade.volumeUsd }),
     lifecycle: null,
     amounts: { quote: trade.quoteAmount, meme: trade.memeAmount },
   };

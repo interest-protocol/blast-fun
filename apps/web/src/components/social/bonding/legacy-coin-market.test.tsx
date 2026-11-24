@@ -162,7 +162,7 @@ test("a tracked coin shows completed pool swaps with exact coin and SUI amounts 
   let reply = Response.json({ trades: [], provenance });
   t.mock.method(globalThis, "fetch", async (input: RequestInfo | URL) => {
     const url = new URL(String(input), window.location.origin);
-    if (url.pathname !== `/api/launchpad/market/pools/${venue}/${poolId}/trades` || url.search !== "?limit=4") return Response.json({}, { status: 404 });
+    if (url.pathname !== `/api/launchpad/market/pools/${venue}/${poolId}/trades` || url.search !== "?limit=20") return Response.json({}, { status: 404 });
     await pending.promise;
     return reply.clone();
   });

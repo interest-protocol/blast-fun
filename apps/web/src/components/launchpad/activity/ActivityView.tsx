@@ -1,14 +1,17 @@
 
 import { shortAddress as shortId } from "@blast/core/lib/format.ts";
 import { SUI_COIN_TYPE } from "@blast/core/lib/sui/coin-types.ts";
+import { CREATE_QUOTE_TYPE, quotePriceType } from "@blast/core/web/contracts/create.ts";
 import { CoinMark } from "#web/components/blast-ui/CoinMark.tsx";
 import { DateStamp } from "#web/components/blast-ui/DateStamp.tsx";
 import { DexIdentity } from "#web/components/blast-ui/DexIdentity.tsx";
 import { LoadingIndicator } from "#web/components/blast-ui/LoadingIndicator.tsx";
-import { traderProfileKey, type TraderProfile, type TraderProfiles } from "@blast/core/modules/social/contracts/trader-profiles.ts";
-import { ActivityAmount, CompactTradeList, CompactTradeRow, Transaction, useTradeInspector, type TradeExplorer, type TradeRowState, type TransactionExplorer } from "./CompactTradeList";
+import { traderProfileKey, type TraderProfile } from "@blast/core/modules/social/contracts/trader-profiles.ts";
+import { ActivityAmount, CompactTradeList, CompactTradeRow, Transaction, useTradeInspector, useTradeVisibility, type TradeExplorer, type TradeRowState, type TransactionExplorer } from "./CompactTradeList";
 import { WalletAddress } from "./WalletAddress";
 import { recentTrades } from "./recent-trades";
+import { isTradeUnderDollar } from "./small-trades";
+import { useTraderProfiles } from "./trader-profiles";
 import { Button } from "#web/components/blast-ui/Button.tsx";
 import { Disclosure } from "#web/components/blast-ui/Disclosure.tsx";
 import { EmptyState } from "#web/components/blast-ui/EmptyState.tsx";
@@ -17,6 +20,7 @@ import { SkeletonText } from "#web/components/blast-ui/Skeleton.tsx";
 import { memo, type ReactNode } from "react";
 
 import { Fact, Facts } from "../coin/Facts";
+import { useCoinPriceCurrency } from "../chart/CoinPriceCurrency";
 import { LIFECYCLE_LABEL } from "../coin/coin-view";
 import { provenanceRecord } from "../primitives/provenance";
 import { DataState } from "../primitives/DataState";
@@ -27,6 +31,7 @@ import styles from "./Activity.module.css";
 import {
   activityKey,
   flowDisplay,
+  initialList,
   listDisplay,
   type FlowState,
   type FlowView,
@@ -35,7 +40,7 @@ import {
   type ListView,
   type RowKey,
 } from "./activity-model";
-import { WINDOW_NAMES, type ActivityRow, type WindowName } from "@blast/core/modules/launchpad-contract/activity.ts";
+import { isActivityTrade, WINDOW_NAMES, type ActivityRow, type WindowName } from "@blast/core/modules/launchpad-contract/activity.ts";
 import type { Provenance } from "@blast/core/modules/launchpad-contract/read.ts";
 
 export { TradeListSkeleton, type TransactionExplorer } from "./CompactTradeList";
@@ -49,13 +54,14 @@ export type ActivityUnits = Readonly<{
   quoteSymbol: string;
   quoteDecimals: number | null;
   quoteType?: string | null;
+  quoteUsd?: string | null;
 }>;
 
 export type ActivityPending = "refresh" | "more-activity" | null;
 
 export type ActivityViewProps = Readonly<{
   compact?: boolean;
-  traderProfiles?: TraderProfiles;
+  confirmedActivity?: ListState<ActivityRow>;
   launchId: string;
   activity: ListState<ActivityRow>;
   tape?: Readonly<{ recent: TradeTapeSnapshot; hold: (hold: boolean) => void }>;
@@ -423,10 +429,12 @@ function CompactTrades({ props }: Readonly<{ props: ActivityViewProps }>) {
   if (display.kind === "unavailable") return <EmptyState title="Trades couldn’t load" role="alert" action={<Button size="sm" onClick={props.onRefresh}>Try again</Button>} />;
   const tape = props.tape;
   const rows = tape?.recent.rows ?? recentTrades(display.view.rows);
+  const profileSource = props.confirmedActivity ? { launchId: props.launchId, activity: props.confirmedActivity } : undefined;
   return <>
     {display.stale ? <p className={styles.note} role="status">Trade updates delayed.</p> : null}
     {props.activity.newer ? <Newer subject="trades" onShow={props.onShowNewerActivity} /> : null}
-    <TradeList key={props.launchId} rows={rows} units={props.units} explorer={props.explorer} profiles={props.traderProfiles} next={display.view.next}
+    <TradeList key={props.launchId} rows={rows} availableRows={display.view.rows.filter(isActivityTrade)}
+      units={props.units} explorer={props.explorer} profileSource={profileSource} next={display.view.next}
       entering={tape?.recent.entering} leaving={tape?.recent.leaving} slide={tape?.recent.slide} hold={tape?.hold} />
     <Disclosure title="Launch activity"><ActivityView {...props} compact={false} /></Disclosure>
   </>;
@@ -435,21 +443,32 @@ function CompactTrades({ props }: Readonly<{ props: ActivityViewProps }>) {
 type TradeListProps = Readonly<{
   units: ActivityUnits;
   explorer: TradeExplorer;
-  profiles?: TraderProfiles;
+  profileSource?: Readonly<{ launchId: string; activity: ListState<ActivityRow> }>;
   next: string | null;
 }>;
 
-export const TradeList = memo(function TradeList({ rows, units, explorer, profiles, next, entering, leaving, slide, hold }: TradeListProps & Readonly<{
+const NO_CONFIRMED_ACTIVITY = initialList<ActivityRow>();
+
+export const TradeList = memo(function TradeList({ rows, availableRows, units, explorer, profileSource, next, entering, leaving, slide, hold }: TradeListProps & Readonly<{
   rows: readonly ActivityRow[];
+  availableRows?: readonly ActivityRow[];
   entering?: string | null;
   leaving?: ActivityRow | null;
   slide?: boolean;
   hold?: (hold: boolean) => void;
 }>) {
+  const currency = useCoinPriceCurrency();
+  const quoteType = units.quoteType ? quotePriceType(units.quoteType) : null;
+  const currentRate = currency?.quoteType && quoteType === quotePriceType(currency.quoteType) ? currency.rate : null;
+  const quoteUsd = quoteType === CREATE_QUOTE_TYPE ? "1" : currentRate ?? units.quoteUsd;
+  const visibility = useTradeVisibility(rows, availableRows,
+    (row) => isTradeUnderDollar({ usd: row.volumeUsd, quote: row.amounts.quote, decimals: units.quoteDecimals, quoteUsd }),
+  );
+  const profiles = useTraderProfiles(profileSource?.launchId ?? "", profileSource?.activity ?? NO_CONFIRMED_ACTIVITY, profileSource !== undefined, visibility.rows, leaving);
   if (!rows.length) return <EmptyState title={next ? "No trades in this page of activity" : "No trades in the loaded activity"} />;
-  return <CompactTradeList rows={rows} entering={entering} leaving={leaving} slide={slide} hold={hold}>
+  return <CompactTradeList visibility={visibility} entering={entering} leaving={leaving} slide={slide} hold={hold}>
     {(row, state) => <LaunchTradeRow key={row.position} {...state} row={row} units={units} explorer={explorer}
-      profile={row.actor ? profiles?.[traderProfileKey({ address: row.actor, timestampMs: row.timestampMs })] ?? null : null}
+      profile={row.actor ? profiles[traderProfileKey({ address: row.actor, timestampMs: row.timestampMs })] ?? null : null}
     />}
   </CompactTradeList>;
 });

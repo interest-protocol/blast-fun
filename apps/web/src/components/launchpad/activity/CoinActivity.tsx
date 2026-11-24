@@ -15,7 +15,6 @@ import { createActivityFeed, linkTarget, listStart, shownActivity } from "./acti
 import { followLiveTrades } from "./activity-live";
 import type { PageOutcome } from "./activity-model";
 import { usePublishWalletTrades } from "./wallet-trades";
-import { useTraderProfiles } from "./trader-profiles";
 import { createTradeTape } from "./trade-tape";
 import { ActivityView, type ActivityUnits, type TransactionExplorer } from "./ActivityView";
 
@@ -97,7 +96,6 @@ function CoinActivityFeed({ source, compact, initialActivity, start }: CoinActiv
   const scrolled = useRef(false);
   const showTape = Boolean(compact && !anchor);
   const recent = useSyncExternalStore(showTape ? tape.subscribe : skipSubscription, tape.snapshot, tape.serverSnapshot);
-  const traderProfiles = useTraderProfiles(launchId, state.activity, showTape, recent.rows, recent.leaving);
 
   // Only the newest page follows the stream; a link's page stays on its reads.
   const pools = start === null ? [...new Set(source.livePools ?? [])].filter((pool) => POOL_KEY.test(pool)).slice(0, 2) : [];
@@ -145,7 +143,7 @@ function CoinActivityFeed({ source, compact, initialActivity, start }: CoinActiv
   return (
     <ActivityView
       compact={compact}
-      traderProfiles={traderProfiles}
+      confirmedActivity={showTape ? state.activity : undefined}
       launchId={launchId}
       activity={activity}
       tape={showTape ? { recent, hold: tape.hold } : undefined}

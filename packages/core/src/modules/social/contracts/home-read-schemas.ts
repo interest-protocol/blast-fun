@@ -60,8 +60,12 @@ export const homeCoinsByIdsReadSchema = homeCoinsByIdsSchema.extend({
     .record(z.string(), z.xor([z.null(), z.array(amount)]))
     .optional(),
 });
+// The trade lists opt in to the indexed precision for their dollar threshold.
+const threadEvent = event.extend({
+  quote: z.xor([z.null(), amount.extend({ usd: z.string().regex(/^-?(0|[1-9][0-9]*)(\.[0-9]+)?$/).nullable() })]),
+});
 export const homeThreadPageReadSchema = homeThreadPageSchema.extend({
-  participants: z.array(participant).max(20),
+  participants: z.array(participant.extend({ events: z.array(threadEvent).max(10).optional() })).max(20),
   totals: activity.omit({ preview: true }),
 });
 export const homeTradersPageReadSchema = homeTradersPageSchema.extend({

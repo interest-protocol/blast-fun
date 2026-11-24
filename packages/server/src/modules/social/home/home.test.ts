@@ -10,6 +10,7 @@ import { topHoldersOf } from "@blast/server/modules/social/home/coins.ts";
 import { fdvOf } from "@blast/server/modules/social/home/fdv.ts";
 import { decodeHomeCursor, encodeHomeCursor, homeOrder, pageOf, parseHomeQuery, passesFilters, rankInputs, recencyOf, relevanceScore, whyShown, type Rankable } from "@blast/server/modules/social/home/rank.ts";
 import type { GroupedRow, SideRow } from "@blast/server/modules/social/home/sql.ts";
+import { eventOf, parseThreadQuery } from "@blast/server/modules/social/home/thread.ts";
 import { traderPortfolioOf } from "@blast/server/modules/social/home/traders.ts";
 import { lifetimePnl } from "@blast/server/modules/social/portfolio/pnl.ts";
 import type { CostBasisRow } from "@blast/server/modules/social/portfolio/cost-basis.ts";
@@ -32,6 +33,18 @@ test("quote assets: the sale's quote, SUI and USDC by type; anything else keeps 
   assert.deepEqual(quoteAssetOf(QUOTE, sale), { symbol: "USDC", decimals: 6 });
   assert.deepEqual(quoteAssetOf(SOCIAL_TRADE_BASE_COINS.sui, sale), { symbol: "SUI", decimals: 9 });
   assert.deepEqual(quoteAssetOf(`${hex("ab")}::x::X`, sale), { symbol: null, decimals: null });
+});
+
+test("the trade list can request indexed USD precision without changing default thread values", () => {
+  const params = new URLSearchParams({ presale: SALE });
+  const row = {
+    who: "w:" + hex("a1"), activity_id: "1:0:0:0", kind: "trade_buy", timestamp_ms: "1000", digest: null,
+    quote_type: SOCIAL_TRADE_BASE_COINS.sui, ...sale, quote_amount: "250000000", coin_amount: "500",
+    quote_refund: null, usd_value: "0.999", has_why: false,
+  };
+  assert.equal(eventOf(row, parseThreadQuery(params).exactTradeUsd)?.quote?.usd, "1.00");
+  params.set("exact_trade_usd", "1");
+  assert.equal(eventOf(row, parseThreadQuery(params).exactTradeUsd)?.quote?.usd, "0.999");
 });
 
 test("amounts: USD only as priced, never 0 for the unpriced; different quote assets are never summed", () => {

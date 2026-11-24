@@ -5,11 +5,11 @@ import { installTestDom, waitFor } from "../../../../../../test/fixtures/social/
 
 // The coin page's lists stand in as text naming what they were given; the launch and curve reads answer from tables.
 const stubs: Record<string, string> = {
-  "#web/components/launchpad/activity/CoinActivity.tsx": `export const CoinActivity = ({ source: s }) => "trades:" + s.launchId + ":" + s.units.symbol + ":" + s.units.memeDecimals + ":" + s.units.quoteSymbol + ":" + s.units.quoteDecimals + (s.livePools ? ":live=" + s.livePools.join(",") : "");`,
+  "#web/components/launchpad/activity/CoinActivity.tsx": `export const CoinActivity = ({ source: s }) => "trades:" + s.launchId + ":" + s.units.symbol + ":" + s.units.memeDecimals + ":" + s.units.quoteSymbol + ":" + s.units.quoteDecimals + (s.units.quoteUsd ? ":usd=" + s.units.quoteUsd : "") + (s.livePools ? ":live=" + s.livePools.join(",") : "");`,
   "#web/components/launchpad/holders/CoinHolders.tsx": `export const CoinHolders = ({ source: s }) => "holders:" + s.launchId + ":" + s.coinType + ":" + s.symbol + ":" + s.decimals;`,
   "#web/components/launchpad/theses/ThesesBoard.tsx": `export const ThesesBoard = p => "theses:" + p.launchId + ":" + p.symbol + ":" + (p.composer(() => {}) ?? "read-only");`,
   "./curve-launch": `const pools = { "0x1::curve::CURVE": "0xlaunch" };
-const units = globalThis.curveUnits ??= { "0xlaunch": { quoteType: "0x2::sui::SUI", quoteDecimals: 9, memeDecimals: 6, price: "123" } };
+const units = globalThis.curveUnits ??= { "0xlaunch": { quoteType: "0x2::sui::SUI", quoteDecimals: 9, memeDecimals: 6, price: "123", quoteUsd: "3.4521" } };
 export const mayTradeOnCurve = (asset, coin) => asset.network === "mainnet" && asset.presale_id === null && asset.coin_type !== "0x2::sui::SUI" && coin?.lifecycle !== "migrated";
 export const curveLaunchQuery = (client, asset) => ({ queryKey: ["blast", "public", "workspace-curve-launch", asset.network, asset.coin_type], queryFn: async () => pools[asset.coin_type] ?? null });
 export const curvePoolQuery = launchId => ({ queryKey: ["blast", "public", "workspace-curve-pool", launchId], queryFn: async () => { const value = units[launchId]; if (value instanceof Error) throw value; return value; } });`,
@@ -66,14 +66,14 @@ test("a coin on its bonding curve names its launch; presale, migrated and other 
 
 test("curve trades show the launch's activity in its own quote coin and decimals", async () => {
   const container = await rendered(<CurveTrades launchId="0xlaunch" asset={asset("0x1::curve::CURVE")} coin={coin("0x1::curve::CURVE")} visible />);
-  await waitFor(() => container.textContent === "trades:0xlaunch:FROG:6:SUI:9", "curve trades");
+  await waitFor(() => container.textContent === "trades:0xlaunch:FROG:6:SUI:9:usd=3.4521", "curve trades");
 });
 
 test("only the focused coin's trades follow the curve's market stream; compare cards poll", async () => {
   const focused = await rendered(<CurveTrades launchId="0xlaunch" asset={asset("0x1::curve::CURVE")} coin={coin("0x1::curve::CURVE")} visible live />);
-  await waitFor(() => focused.textContent === "trades:0xlaunch:FROG:6:SUI:9:live=blast_curve:0xlaunch", "live curve trades");
+  await waitFor(() => focused.textContent === "trades:0xlaunch:FROG:6:SUI:9:usd=3.4521:live=blast_curve:0xlaunch", "live curve trades");
   const compared = await rendered(<CurveTrades launchId="0xlaunch" asset={asset("0x1::curve::CURVE")} coin={coin("0x1::curve::CURVE")} visible />);
-  await waitFor(() => compared.textContent === "trades:0xlaunch:FROG:6:SUI:9", "polled curve trades");
+  await waitFor(() => compared.textContent === "trades:0xlaunch:FROG:6:SUI:9:usd=3.4521", "polled curve trades");
 });
 
 test("a failed curve read offers a retry instead of guessing the quote coin", async () => {

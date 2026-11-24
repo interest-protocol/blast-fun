@@ -393,10 +393,12 @@ export function socialHomeActivityPath(
   window: HomeWindow,
   cursor: string | null = null,
   at?: number,
+  exactTradeUsd = false,
 ): string {
   const params = new URLSearchParams(coinKey.includes("::") ? { coin: coinKey } : { presale: coinKey });
   if (window !== HOME_DEFAULT_WINDOW) params.set("window", window);
   if (cursor) params.set("cursor", cursor);
+  if (exactTradeUsd) params.set("exact_trade_usd", "1");
   if (at !== undefined) params.set("at", String(at));
   return `${SOCIAL_HOME_ACTIVITY_PATH}?${params.toString()}`;
 }

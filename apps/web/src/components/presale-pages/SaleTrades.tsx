@@ -11,14 +11,15 @@ import { createQuoteOf } from "@blast/core/web/contracts/create.ts";
 import type { HomeThreadPage } from "@blast/core/web/contracts/home.ts";
 import type { SocialPresaleDetail } from "@blast/core/web/contracts/presales.ts";
 import type { SocialExplorer } from "@blast/core/web/contracts/settings.ts";
-import { exactDecimal, fixedExact } from "@blast/core/web/exact-amount.ts";
+import { exactDecimal, exactText } from "@blast/core/web/exact-amount.ts";
 import { shortAddress, usd } from "@blast/core/web/format.ts";
 import { Button } from "#web/components/blast-ui/Button.tsx";
 import { EmptyState } from "#web/components/blast-ui/EmptyState.tsx";
 import { useDevicePrefs } from "#web/components/blast-ui/device-prefs.ts";
-import { ActivityAmount, CompactTradeList, CompactTradeRow, TradeListSkeleton, useTradeInspector, type TradeRowState } from "#web/components/launchpad/activity/CompactTradeList.tsx";
+import { ActivityAmount, CompactTradeList, CompactTradeRow, TradeListSkeleton, useTradeInspector, useTradeVisibility, type TradeRowState } from "#web/components/launchpad/activity/CompactTradeList.tsx";
 import { WalletAddress } from "#web/components/launchpad/activity/WalletAddress.tsx";
 import { createRecentTradeTape } from "#web/components/launchpad/activity/trade-tape.ts";
+import { isHomeTradeUnderDollar } from "#web/components/launchpad/activity/small-trades.ts";
 import { ChartTradeContext } from "#web/components/launchpad/chart/chart-trade-context.ts";
 import { fetchHomeThread } from "#web/components/social/coin-home/home-client.ts";
 import { actorName } from "#web/components/social/coin-home/home-model.ts";
@@ -72,7 +73,7 @@ function streamedRow(frame: PresaleMarketTrade, sale: SocialPresaleDetail["presa
         quote_symbol: quote?.symbol ?? null,
         quote_decimals: quote?.decimals ?? null,
         atoms: frame.quote_atoms,
-        usd: dollars ? fixedExact(dollars, 2) : null,
+        usd: dollars ? exactText(dollars) : null,
         usd_complete: dollars !== null,
       },
       has_why: false,
@@ -130,9 +131,12 @@ function useSaleTradeFeed(sale: SocialPresaleDetail["presale"]) {
         target?.trade?.checkpoint ?? -1,
         latest ? checkpointOf(latest.position) : -1,
       );
-      const page = await fetchHomeThread(presaleId, "24h", null, signal, checkpoint >= 0 ? checkpoint : undefined);
+      const page = await fetchHomeThread(presaleId, "24h", null, signal, {
+        at: checkpoint >= 0 ? checkpoint : undefined,
+        exactTradeUsd: true,
+      });
       if (!signal.aborted && pending.current === target) pending.current = undefined;
-      const rows = tradeRows(page).slice(0, LIMIT);
+      const rows = tradeRows(page);
       const visibleHint = target && target.atMs > hiddenAt.current ? target : undefined;
       return { rows, clockMs: page.clock_ms, checkpoint: page.as_of.checkpoint, receivedAt: tradeArrival(previous, rows, visibleHint) };
     },
@@ -147,7 +151,7 @@ function useSaleTradeFeed(sale: SocialPresaleDetail["presale"]) {
         checkpointOf(position) > next.checkpoint && !snapshotPositions.has(position),
       ) : [];
       const rows = ahead.length
-        ? [...next.rows, ...ahead].sort((a, b) => compareEventCursors(b.position, a.position)).slice(0, LIMIT)
+        ? [...next.rows, ...ahead].sort((a, b) => compareEventCursors(b.position, a.position)).slice(0, Math.max(LIMIT, next.rows.length))
         : next.rows;
       return replaceEqualDeep(previous, {
         ...next,
@@ -171,7 +175,7 @@ function useSaleTradeFeed(sale: SocialPresaleDetail["presale"]) {
       const newer = !known[0] || compareEventCursors(frame.cursor, known[0].position) > 0;
       const streamed = previous?.streamed;
       return {
-        rows: [streamedRow(frame, sale), ...known].sort((a, b) => compareEventCursors(b.position, a.position)).slice(0, LIMIT),
+        rows: [streamedRow(frame, sale), ...known].sort((a, b) => compareEventCursors(b.position, a.position)).slice(0, Math.max(LIMIT, known.length)),
         clockMs: previous?.clockMs ?? 0,
         checkpoint: previous?.checkpoint ?? -1,
         receivedAt: newer ? performance.now() : previous?.receivedAt ?? null,
@@ -257,18 +261,20 @@ export const SaleTrades = memo(function SaleTrades({ sale }: Readonly<{ sale: So
   const client = useAppQueryClient();
   const key = useMemo(() => queryKeys.home.presaleTrades(sale.presale_id), [sale.presale_id]);
   const tape = useMemo(() => createSaleTape(client, key), [client, key]);
-  const trades = useSyncExternalStore(tape.subscribe, tape.snapshot, tape.serverSnapshot);
+  const { rows: recent, entering, leaving, slide } = useSyncExternalStore(tape.subscribe, tape.snapshot, tape.serverSnapshot);
   const { hold } = tape;
   const { explorer } = useDevicePrefs();
+  const data = read?.data;
+  const rows = recent.length ? recent : data?.rows.slice(0, LIMIT) ?? [];
+  const visibility = useTradeVisibility(rows, data?.rows, (row) => isHomeTradeUnderDollar(row.event.quote));
 
   if (!read) return null;
-  const { data, isPending, refetch } = read;
+  const { isPending, refetch } = read;
   if (isPending) return <TradeListSkeleton count={LIMIT} />;
   if (!data) return <EmptyState action={<Button onClick={() => void refetch()} size="sm">Try again</Button>} role="alert" title="Trades couldn’t load" />;
-  const rows = trades.rows.length ? trades.rows : data.rows.slice(0, LIMIT);
   if (!rows.length) return <EmptyState title="No trades in the last 24 hours" />;
 
-  return <CompactTradeList {...trades} rows={rows} hold={hold}>
+  return <CompactTradeList visibility={visibility} entering={entering} leaving={leaving} slide={slide} hold={hold}>
     {(row, state) => <SaleTradeRow key={row.position} row={row} sale={sale} explorer={explorer} {...state} />}
   </CompactTradeList>;
 });

@@ -69,6 +69,25 @@ export type ActivityFeed = Readonly<{
 /** The most provisional rows a list holds: one page. Older ones give way, and the list asks for a read that brings them (`activity-live.ts`). */
 export const LIVE_ROWS_MAX = 25;
 
+/** The classified read can omit a USD value already received for the same immutable trade. */
+function preserveTradeValues(outcome: PageOutcome<ActivityRow>, state: ActivityFeedState): PageOutcome<ActivityRow> {
+  if (outcome.kind !== "rows") return outcome;
+  const values = new Map<string, string>();
+  for (const rows of [state.live, state.activity.view?.rows, state.activity.newer?.rows]) {
+    for (const row of rows ?? []) {
+      if (row.volumeUsd !== undefined) values.set(row.position, row.volumeUsd);
+    }
+  }
+  if (values.size === 0) return outcome;
+  return {
+    ...outcome,
+    rows: outcome.rows.map((row) => {
+      const value = values.get(row.position);
+      return row.volumeUsd === undefined && value !== undefined ? { ...row, volumeUsd: value } : row;
+    }),
+  };
+}
+
 /** Whether a first-page answer at `checkpoint` whose newest row is `newest` covers a provisional row. */
 function answers(row: ActivityRow, checkpoint: number | null, newest: ActivityRow | undefined): boolean {
   return (checkpoint !== null && row.checkpoint <= checkpoint) || (newest !== undefined && compareEventCursors(row.position, newest.position) <= 0);
@@ -143,7 +162,7 @@ export function createActivityFeed(options: Readonly<{
     if (coveredThrough !== null && checkpoint !== null && checkpoint < coveredThrough) return false;
     update((state) => {
       if (mine !== tickets.activity) return state;
-      const activity = afterRefresh(state.activity, outcome, activityKey);
+      const activity = afterRefresh(state.activity, preserveTradeValues(outcome, state), activityKey);
       return { ...state, activity, live: uncovered(activity, state.live) };
     });
     return outcome.kind !== "failed";
