@@ -15,7 +15,7 @@ import {
   type ChartHandle,
   type ChartSeries,
 } from "#web/components/charts/TradingViewChart.tsx";
-import { combinedVolumes } from "#web/components/charts/candle-data.ts";
+import { combinedVolumes, linePoints } from "#web/components/charts/candle-data.ts";
 import { exactChartScale } from "#web/components/charts/exact-chart-scale.ts";
 import { MIGRATION_LABEL_ROOM_PX } from "#web/components/charts/TradingViewChart.tsx";
 import { compareExact, exactDecimal } from "@blast/core/web/exact-amount.ts";
@@ -82,11 +82,15 @@ export function TradingViewPlot({
       tradingViewPriceLabel(visual, value, significant),
     [visual],
   );
+  const plotSegments = useMemo(
+    () => style === "line" ? [visual.points] : visual.segments,
+    [style, visual],
+  );
   const series = useMemo<readonly ChartSeries[]>(() => {
-    const prices: ChartSeries[] = visual.segments.map((segment, index) => {
+    const prices: ChartSeries[] = plotSegments.map((segment, index) => {
       const options = {
-        lastValueVisible: !hidden && index === visual.segments.length - 1,
-        priceLineVisible: index === visual.segments.length - 1,
+        lastValueVisible: !hidden && index === plotSegments.length - 1,
+        priceLineVisible: index === plotSegments.length - 1,
       };
       if (style === "candles" && segment.every((point) => point.candle))
         return {
@@ -111,16 +115,14 @@ export function TradingViewPlot({
           },
         };
       // The BlastMode board's chart: the price line over its gradient fill.
+      const closes = [...new Map(segment.map((point) => [point.at, point.value]))]
+        .map(([bucketStart, close]) => ({ bucketStart, close }));
+      const end = closes.length === 1 ? closes[0]!.bucketStart + intervalMs : visual.end;
       return {
         type: "Area",
-        data: [
-          ...new Map(
-            segment.map((point) => [
-              point.at,
-              { time: chartTimestamp(point.at), value: 300 - point.y },
-            ]),
-          ).values(),
-        ],
+        data: linePoints(closes, undefined, intervalMs, -Infinity, end).map(({ timestampMs, price }) => ({
+          time: chartTimestamp(timestampMs), value: visual.coordinate(price),
+        })),
         options: {
           ...options,
           crosshairMarkerRadius: 3,
@@ -172,10 +174,10 @@ export function TradingViewPlot({
       });
     }
     return prices;
-  }, [visual, hidden, style, volume]);
+  }, [visual, hidden, style, volume, intervalMs, plotSegments]);
   const syncSelection = useEffectEvent(() => {
     cancelAnimationFrame(crosshairFrame.current);
-    crosshairFrame.current = positionSelection(api.current, visual, selected);
+    crosshairFrame.current = positionSelection(api.current, visual, plotSegments, selected);
   });
   useEffect(() => {
     syncSelection();
@@ -199,7 +201,7 @@ export function TradingViewPlot({
       width,
       height,
       projectTime,
-      segments: visual.segments.map((segment, index) =>
+      segments: plotSegments.map((segment, index) =>
         segment.map((point) => ({
           ...point,
           x: (projectTime(point.at) ?? -1) * 1000,
@@ -230,7 +232,7 @@ export function TradingViewPlot({
             .applyOptions({ scaleMargins: { top: 0.15, bottom: 0 } });
           api.current = handle;
           cancelAnimationFrame(crosshairFrame.current);
-          crosshairFrame.current = positionSelection(handle, visual, selected);
+          crosshairFrame.current = positionSelection(handle, visual, plotSegments, selected);
           return () => {
             cancelAnimationFrame(crosshairFrame.current);
             api.current = null;
@@ -246,7 +248,7 @@ export function TradingViewPlot({
         <ChartTradeMarkers
           start={view?.start ?? visual.start}
           end={view?.end ?? visual.end}
-          segments={view?.segments ?? visual.segments}
+          segments={view?.segments ?? plotSegments}
           projectTime={view?.projectTime}
         />
       </div>
@@ -295,6 +297,7 @@ function ChartFooter({ onReset }: Readonly<{ onReset: () => void }>) {
 function positionSelection(
   current: PlotApi | null,
   visual: ChartGeometry,
+  segments: readonly (readonly PlacedObservation[])[],
   selected: number | null,
 ) {
   if (!current) return 0;
@@ -303,7 +306,7 @@ function positionSelection(
     return 0;
   }
   const point = visual.points[Math.min(selected, visual.points.length - 1)]!;
-  const segment = visual.segments.findIndex((points) => points.includes(point));
+  const segment = segments.findIndex((points) => points.includes(point));
   const scale = current.chart.timeScale();
   const time = chartTimestamp(point.at);
   const index = scale.timeToIndex(time);

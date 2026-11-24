@@ -1,7 +1,7 @@
-import { candleIntervalMs } from "@blast/core/modules/launchpad-contract/venue-history.ts";
+import { poolLinePoints } from "#web/components/charts/candle-data.ts";
+import { exactChartScale } from "#web/components/charts/exact-chart-scale.ts";
 
-import { CHART_HEIGHT, CHART_WIDTH, PANES, type ChartGeometry, type DrawnCandle } from "./chart-geometry";
-import type { ChartControls } from "./chart-model";
+import { CHART_HEIGHT, CHART_WIDTH, PANES, type ChartGeometry, type DrawnCandle, type DrawnSeries } from "./chart-geometry";
 import styles from "./Chart.module.css";
 
 const position = (value: number) => Math.round(value * 10) / 10;
@@ -25,28 +25,32 @@ function candlePaths(candles: readonly DrawnCandle[]) {
   return { wicks, bodies, volume };
 }
 
-function closePath(candles: readonly DrawnCandle[], intervalMs: number): string {
-  let path = "";
-  let previous: DrawnCandle | undefined;
-  for (const candle of candles) {
-    const adjacent = previous?.source === candle.source && candle.candle.bucketStart - previous.candle.bucketStart === intervalMs;
-    const point = `${position(candle.wickX)} ${position(candle.closeY)}`;
-    path += adjacent ? `L${point}` : `M${point}h0`;
-    previous = candle;
-  }
-  return path;
+function closePath({ start, end }: ChartGeometry, sources: readonly DrawnSeries[], migrationAt?: number, rolling?: boolean): string {
+  const lines = poolLinePoints(sources, migrationAt, end, rolling);
+  const scale = exactChartScale(lines.flatMap((points) => points.map(({ price }) => price)));
+  return lines.map((points) => {
+    const path = points.map(({ timestampMs, price }, index) => {
+      const x = (timestampMs - start) * CHART_WIDTH / (end - start);
+      const y = PANES.priceBottom - scale.coordinate(price) * (PANES.priceBottom - PANES.priceTop) / 100;
+      return `${index === 0 ? "M" : "L"}${position(x)} ${position(y)}`;
+    }).join("");
+    return points.length === 1 ? `${path}h0` : path;
+  }).join("");
 }
 
 /** Reserve the interactive plot's space with paths from the initial candles. */
-export function ChartPreview({ geometry, interval, line }: Readonly<{
+export function ChartPreview({ geometry, sources, migrationAt, line, rolling, viewport }: Readonly<{
   geometry: ChartGeometry;
-  interval: ChartControls["interval"];
+  sources: readonly DrawnSeries[];
+  migrationAt?: number;
   line: boolean;
+  rolling?: boolean;
+  viewport?: "mobile" | "desktop";
 }>) {
   const height = line ? PANES.volumeTop : CHART_HEIGHT;
   const paths = line ? null : candlePaths(geometry.candles);
   return (
-    <svg className={styles.preview} data-chart-preview="" viewBox={`0 0 ${CHART_WIDTH} ${height}`} preserveAspectRatio="none" focusable="false">
+    <svg className={styles.preview} data-chart-preview="" data-viewport={viewport} viewBox={`0 0 ${CHART_WIDTH} ${height}`} preserveAspectRatio="none" focusable="false">
       {paths ? <>
         {(["up", "down", "flat"] as const).map((direction) => (
           <g key={direction} className={styles.previewCandle} data-direction={direction}>
@@ -55,7 +59,7 @@ export function ChartPreview({ geometry, interval, line }: Readonly<{
           </g>
         ))}
         <path d={paths.volume} className={styles.previewVolume} />
-      </> : <path d={closePath(geometry.candles, candleIntervalMs(interval))} className={styles.previewClose} fill="none" stroke="currentColor" strokeLinecap="round" vectorEffect="non-scaling-stroke" />}
+      </> : <path d={closePath(geometry, sources, migrationAt, rolling)} className={styles.previewClose} fill="none" stroke="currentColor" strokeLinecap="round" vectorEffect="non-scaling-stroke" />}
       {geometry.migrationX !== null && <path d={`M${position(geometry.migrationX)} ${PANES.labelBand}V${height}`} className={styles.previewMigration} vectorEffect="non-scaling-stroke" />}
     </svg>
   );

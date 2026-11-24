@@ -227,7 +227,8 @@ function useTradingViewPlot({
       if (coinViewport && viewReady) {
         const width = handle.chart.timeScale().width();
         const logical = viewport.read();
-        const resized = logical && resizedLiveChartRange(logical, times.length, previousWidth, width);
+        const initialFit = rollingWindow && !previousView && previousWidth === 0;
+        const resized = logical && resizedLiveChartRange(logical, times.length, previousWidth, width, initialFit);
         previousWidth = width;
         if (resized) viewport.write(resized);
         const visible = resized ?? logical;
@@ -359,7 +360,7 @@ function useTradingViewPlot({
       // A scale takes its tick labels from its first series, while the last-price tag may belong to a later one (the
       // board draws one series per price source), so each series checks every tag in its pane.
       const drawn: ISeriesApi<Kind>[] = [];
-      const syncLatestPrice = coinPriceMarker(css, library.LineStyle.Dashed, showCoinTag);
+      const syncLatestPrice = coinPriceMarker(css, library.LineStyle.Dashed, showCoinTag, !rollingWindow);
       const clearOfTags = (pane: number | undefined) => (price: number) =>
         drawn.every((other, index) => (series[index]!.pane ?? 0) !== (pane ?? 0) || clearOfTag(other, price,
           showCoinTag && index === current.latestPrice?.seriesIndex ? current.latestPrice.price : undefined));
@@ -640,8 +641,8 @@ function chartSurfaceAccessibility(label: string | undefined, coinViewport: bool
   };
 }
 
-/** A single native price line keeps the latest close and its scale label at the same coordinate while panning. */
-function coinPriceMarker(css: CSSStyleDeclaration, lineStyle: LineStyle, enabled: boolean) {
+/** Keep the latest close label on the scale. In Live, the guide would paint over the held close. */
+function coinPriceMarker(css: CSSStyleDeclaration, lineStyle: LineStyle, enabled: boolean, lineVisible: boolean) {
   if (!enabled) return;
   const color = readChartColor(css, "--muted");
   const axisLabelColor = readChartColor(css, "--ink-2");
@@ -656,7 +657,7 @@ function coinPriceMarker(css: CSSStyleDeclaration, lineStyle: LineStyle, enabled
     }
     if (!owner || !latest) return;
     if (!marker) {
-      const line = owner.createPriceLine({ price: latest.price, lineStyle, color, axisLabelColor, axisLabelTextColor, lineWidth: 1 });
+      const line = owner.createPriceLine({ price: latest.price, lineStyle, color, axisLabelColor, axisLabelTextColor, lineWidth: 1, lineVisible });
       marker = { owner, line };
     } else if (marker.line.options().price !== latest.price) {
       marker.line.applyOptions({ price: latest.price });

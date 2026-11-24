@@ -37,17 +37,17 @@ export function candleTradeLabel(trade: CandleTrade | null | undefined, sources:
   if (index < 0) return null;
   const { side, memeAmount } = trade.trade;
   const sign = side === "buy" ? "+" : "−";
-  return { index, text: `${sign}${candleTradeAmount(memeAmount, decimals)}`, side, cursor: trade.trade.cursor, receivedAt: trade.receivedAt };
+  return { index, bucketStart: sources[index]!.page.candles.at(-1)!.bucketStart, text: `${sign}${candleTradeAmount(memeAmount, decimals)}`, side, cursor: trade.trade.cursor, receivedAt: trade.receivedAt };
 }
 
 export type CandleAnchor = Readonly<{ x: number; y: number; width: number; left: boolean; below: boolean }>;
 
 /** The model's close is in the series' own scale, even for USD or very small prices. */
-export function projectCandleTrade(handle: ChartHandle, specs: readonly ChartSeries[], index: number | undefined): CandleAnchor | "offscreen" | null {
+export function projectCandleTrade(handle: ChartHandle, specs: readonly ChartSeries[], index: number | undefined, at?: number): CandleAnchor | "offscreen" | null {
   if (index === undefined) return null;
   const spec = specs[index];
   if (spec?.type !== "Candlestick" && spec?.type !== "Area") return null;
-  const point = spec.data.at(-1);
+  const point = at === undefined ? spec.data.at(-1) : spec.data.findLast(({ time }) => Math.abs(Number(time) - at) < 0.001);
   if (!point) return null;
   const price = "close" in point ? point.close : "value" in point ? point.value : undefined;
   if (typeof price !== "number") return null;

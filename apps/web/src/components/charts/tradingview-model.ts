@@ -36,7 +36,11 @@ export function liveChartRange(range: IRange<number>, pointCount: number, width:
   return { from: to - (range.to - range.from), to };
 }
 
-export function resizedLiveChartRange(range: IRange<number>, pointCount: number, before: number, after: number) {
+export function resizedLiveChartRange(range: IRange<number>, pointCount: number, before: number, after: number, initialFit = false) {
+  // A native fit can gain extra gutter when the price axis settles on a narrow plot.
+  if (initialFit && after && Math.abs(range.from) < 0.001 && range.to >= pointCount - 1) {
+    return liveChartRange(range, pointCount, after);
+  }
   if (!before || !after || before === after || !atLiveEdge(range, pointCount, before)) return null;
   return liveChartRange(range, pointCount, after);
 }
