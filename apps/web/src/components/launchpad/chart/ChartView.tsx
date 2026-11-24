@@ -525,7 +525,7 @@ function ChartFigure({ drawn, migrationAt, venuePoolKey, geometry, latest, lates
   const event = markerVisible ? ` ${graduation} on ${clock(migrationAt)}.` : "";
   const label = `${source.symbol} ${metric}. ${RANGE_WORDS[controls.range]}, ${controls.interval} intervals.${event}`;
   const initialPlot = preview && controls.range !== "live"
-    ? <CoinChartPreview geometry={geometry} sources={drawn} migrationAt={migrationAt} line={line} marketChart={marketChart} />
+    ? <CoinChartPreview geometry={geometry} sources={drawn} migrationAt={migrationAt} line={line} />
     : null;
   return (
     <figure className={styles.figure}>
@@ -539,8 +539,8 @@ function ChartFigure({ drawn, migrationAt, venuePoolKey, geometry, latest, lates
   );
 }
 
-function CoinChartPreview({ marketChart, line, ...plot }: Parameters<typeof ChartPreview>[0] & { marketChart?: boolean }) {
-  if (marketChart || line) return <ChartPreview {...plot} line={line} />;
+function CoinChartPreview({ line, ...plot }: Parameters<typeof ChartPreview>[0]) {
+  if (line) return <ChartPreview {...plot} line />;
   return <>
     <ChartPreview {...plot} line={false} viewport="desktop" />
     <ChartPreview {...plot} line viewport="mobile" />
@@ -599,7 +599,7 @@ function CompactChart({ view, preview }: Readonly<{ view: ChartViewControls; pre
   const mobile = useMobileChartLayout();
   const [preferredStyle, setStyle] = useChartStyle();
   const live = view.controls.range === "live";
-  const style = (mobile && !view.marketChart) || live ? "line" : preferredStyle;
+  const style = mobile || live ? "line" : preferredStyle;
   const { source, quoteUsd } = view;
   return <div className={styles.chart} data-compact-chart="" data-chart-style={style} data-market-chart={view.marketChart || undefined}>
     <CompactChartHeader view={view} style={style} mobile={mobile} onStyle={setStyle} />
@@ -615,7 +615,7 @@ function CompactChart({ view, preview }: Readonly<{ view: ChartViewControls; pre
 function CompactChartHeader({ view, style, mobile, onStyle }: Readonly<{ view: ChartViewControls; style: ChartStyle; mobile: boolean; onStyle: (style: ChartStyle) => void }>) {
   const { source, quoteUsd, geometry } = view;
   const unit = geometry && (exactDecimal(quoteUsd) ? "USD" : source.quoteSymbol);
-  const showStyle = geometry && view.controls.range !== "live" && (!mobile || view.marketChart);
+  const showStyle = geometry && view.controls.range !== "live" && !mobile;
   return (
     <div className={styles.compactHead}>
       <h2>Price{unit ? <span> · {unit}</span> : null}</h2>

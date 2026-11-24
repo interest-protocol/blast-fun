@@ -301,7 +301,7 @@ test("compact style controls update a single plot and show trades on its live ca
   }
 });
 
-test("a migrated coin tags only the venue's last price, in both chart styles", async () => {
+test("a migrated coin tags only the venue and keeps the phone plot a line", async (t) => {
   dom.window.localStorage.clear();
   const migration = { cursor: "22:2:2:0", timestampMs: 1_790_337_660_000, curvePoolKey: "blast_curve:0x1", venuePoolKey: `cetus:0x${"c3".repeat(32)}` };
   const candle = (bucketStart: number, close: string) => ({ bucketStart, open: close, high: close, low: close, close, volumeQuote: 20n, volumeMeme: 10n, volumeUsd: null, buys: 1, sells: 0, trades: 1 });
@@ -313,11 +313,13 @@ test("a migrated coin tags only the venue's last price, in both chart styles", a
   const root = createRoot(container);
   try {
     const controls = { interval: "1m", range: "all" } as const;
-    await act(async () => root.render(
+    const renderChart = (marketChart: boolean) => act(async () => root.render(
       <ChartView
+        key={String(marketChart)}
         compact
+        marketChart={marketChart}
         preview
-        source={{ expected: null, curvePoolKey: migration.curvePoolKey, venuePoolKey: migration.venuePoolKey, migration, symbol: "PIP", quoteSymbol: "SUI", memeDecimals: 9, quoteDecimals: 9 }}
+        source={{ expected: null, curvePoolKey: migration.curvePoolKey, venuePoolKey: migration.venuePoolKey, migration, symbol: "PIP", quoteSymbol: "SUI", memeDecimals: 9, quoteDecimals: 9, launchAt: 1_790_337_600_000 }}
         state={{ key: "1m|all", curve: { state: "available", data: curve, provenance }, venue: { state: "available", data: venue, provenance }, migration }}
         controls={controls}
         request={chartRequest(controls, 1_790_337_800_000)}
@@ -329,6 +331,7 @@ test("a migrated coin tags only the venue's last price, in both chart styles", a
         onRefresh={() => {}}
       />,
     ));
+    await renderChart(false);
     const plot = () => container.querySelector("[data-series]")!;
     const button = (name: string) => [...container.querySelectorAll("button")].find(b => b.textContent === name)!;
     const preview = () => plot().querySelector("[data-chart-preview]");
@@ -341,6 +344,16 @@ test("a migrated coin tags only the venue's last price, in both chart styles", a
     assert.equal(plot().getAttribute("data-series"), "Area,Area");
     assert.equal(plot().getAttribute("data-tags"), "false,false");
     assert.equal(plot().getAttribute("data-latest-series"), "1", "the neutral latest-price line belongs to the venue line");
+
+    const matchMedia = dom.window.matchMedia.bind(dom.window);
+    t.mock.method(dom.window, "matchMedia", (query: string) => {
+      const result = matchMedia(query);
+      return query.includes("max-width: 760px") ? { ...result, matches: true } : result;
+    });
+    dom.window.localStorage.setItem("blast.coin-chart.style", "candles");
+    await renderChart(true);
+    assert.equal(plot().getAttribute("data-series"), "Area,Area");
+    assert.equal(button("Candles & volume"), undefined);
   } finally {
     await act(async () => root.unmount());
     container.remove();

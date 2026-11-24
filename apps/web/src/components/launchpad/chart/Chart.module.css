@@ -276,7 +276,7 @@
     --coin-readout-height: 2.75rem;
   }
   .preview[data-viewport="mobile"] { display: block; }
-  .preview[data-viewport="desktop"], .chart:not([data-market-chart]) .compactTools .stylePicker { display: none; }
+  .preview[data-viewport="desktop"], .compactTools .stylePicker { display: none; }
 }
 
 .chartState { min-block-size: calc(var(--coin-plot-height) + var(--coin-readout-height)); }

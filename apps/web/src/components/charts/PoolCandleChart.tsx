@@ -133,7 +133,7 @@ export function PoolCandleChart({
   const [localMode, setMode] = useState<"line" | "candles">("candles");
   const [localVolume, setShowVolume] = useState(true);
   const mobile = useMobileChartLayout();
-  const mode = mobile && !marketChart ? "line" : presentation ?? localMode;
+  const mode = mobile ? "line" : presentation ?? localMode;
   const showVolume = presentation ? mode === "candles" : localVolume;
   const { showWalletTags, setWalletTags } = useWalletTags();
   const { amountsHidden } = useShellPrefs();
