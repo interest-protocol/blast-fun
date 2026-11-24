@@ -1,6 +1,6 @@
 import { track } from "@vercel/analytics";
 
-import type { HomeViewState } from "./home-state";
+import type { HomeFeedState } from "./home-state";
 
 /**
  * Home's product events on the site's analytics (`@vercel/analytics`, the
@@ -19,8 +19,8 @@ function send(name: string, properties: Properties): void {
 }
 
 export const homeAnalytics = {
-  source: (state: HomeViewState) => send("home_source", { source: state.source, window: state.window }),
-  controls: (state: HomeViewState, filters: number) => send("home_controls", { sort: state.sort, window: state.window, filters, age: state.age, min: state.minParticipants, tradable: state.tradable }),
+  source: (state: HomeFeedState) => send("home_source", { source: state.source, window: state.window }),
+  controls: (state: HomeFeedState, filters: number) => send("home_controls", { sort: state.sort, window: state.window, filters, age: state.age, min: state.minParticipants, tradable: state.tradable }),
   events: (presaleId: string) => send("home_events_expand", { presale: presaleId }),
   openCoin: (presaleId: string) => send("home_open_coin", { presale: presaleId }),
   trade: (presaleId: string, action: "buy" | "sell" | "commit" | "view") => send("home_trade_entry", { presale: presaleId, action }),

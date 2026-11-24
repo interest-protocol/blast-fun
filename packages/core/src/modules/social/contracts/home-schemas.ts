@@ -782,6 +782,14 @@ export const socialHappeningResponseSchema = z
     tape: z.array(happeningTapeEventSchema).max(8),
     fastest: z.array(happeningPresaleSchema).max(5),
     opening_soon: z.array(happeningPresaleSchema).max(5),
+    recent_presales: z
+      .array(z.strictObject({
+        presale: feedItemDefinitions.presale,
+        last_commit_ms: feedItemDefinitions.millis,
+      }))
+      .max(5)
+      .describe("Open presales with a confirmed commit in the last hour, newest commit first.")
+      .optional(),
     today: z
       .array(happeningPresaleSchema)
       .max(8)

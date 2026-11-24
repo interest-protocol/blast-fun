@@ -40,16 +40,19 @@ test("Home's live activity drops test sales, their tape rows and their top coins
     fastest: [sale(1, "TSUI"), sale(2, "SUI")],
     opening_soon: [],
     today: [sale(1, "TSUI")],
+    recent_presales: [sale(1, "TSUI"), sale(2, "SUI"), sale(3, "TSUI")],
     tape: [
       { presale_id: id(1), quote_symbol: null },
       { presale_id: null, quote_symbol: "TSUI" },
       { presale_id: id(2), quote_symbol: "SUI" },
+      { presale_id: id(3), quote_symbol: null },
     ],
     top_coins: { trending: [{ presale_id: id(1), coin_type: `${id(1)}::c::C` }, { presale_id: id(2), coin_type: `${id(2)}::c::C` }], gainers: [] },
   } as unknown as SocialHappeningResponse;
   const shown = withoutTestHappening(read);
   assert.deepEqual(shown.fastest.map(({ presale }) => presale.presale_id), [id(2)]);
   assert.deepEqual(shown.today, []);
+  assert.deepEqual(shown.recent_presales?.map(({ presale }) => presale.presale_id), [id(2)]);
   assert.deepEqual(shown.tape.map((event) => event.presale_id), [id(2)]);
   assert.deepEqual(shown.top_coins?.trending.map((coin) => coin.presale_id), [id(2)]);
 });

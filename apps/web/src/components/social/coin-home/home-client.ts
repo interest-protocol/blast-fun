@@ -97,12 +97,16 @@ export function fetchHomeFollowing(options: SocialApiOptions, body: HomeFollowin
  * "static"`): Home refreshes on its own gate. While the next page loads the
  * previous one stays on screen (`keepPreviousData`), so nothing jumps.
  */
-export function discoverQuery(query: HomeQuery, marketDetails = false) {
+export function discoverQuery(query: HomeQuery, marketDetails = false, pendingSeed?: Promise<HomeCoinsPage | null>) {
   const path = socialHomePath(query);
   const key = marketDetails ? withHomeDiscoverDetails(path) : path;
   return queryOptions({
     queryKey: queryKeys.home.discover(key),
-    queryFn: async ({ signal }): Promise<HomeCoinsPage> => withoutTestCoins(await fetchHomePage(query, null, signal, marketDetails)),
+    queryFn: async ({ signal, client, queryKey }): Promise<HomeCoinsPage> => {
+      // Adopt the first server read while the other stages can paint independently.
+      const seed = pendingSeed && client.getQueryData(queryKey) === undefined ? await pendingSeed : null;
+      return seed ?? withoutTestCoins(await fetchHomePage(query, null, signal, marketDetails));
+    },
     placeholderData: keepPreviousData,
     staleTime: "static",
     ...marketReadPolicy,
