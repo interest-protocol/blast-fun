@@ -27,13 +27,13 @@ export function poolCoinMetadata(description: string | undefined): {
   }
 
   const links = PROJECT_LINKS.flatMap(([key, label]) => {
-    const url = projectUrl(Object.getOwnPropertyDescriptor(metadata, key)?.value);
+    const url = httpsProjectUrl(Object.getOwnPropertyDescriptor(metadata, key)?.value);
     return url ? [{ label, url }] : [];
   });
   return { description: description.slice(0, separator).trim(), links };
 }
 
-function projectUrl(value: unknown): string | null {
+export function httpsProjectUrl(value: unknown): string | null {
   if (typeof value !== "string") {
     return null;
   }

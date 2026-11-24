@@ -31,6 +31,7 @@ import { formatAmountShort } from "#web/components/launchpad/coin/coin-format.ts
 import { readableUsd } from "#web/lib/market-format.ts";
 import { allocationRows, coinIdentity, coinMarketOffline, feeRouteLabel, pageLifecycle, sectionData, venueMarketCatchingUp, venueRoute } from "#web/components/launchpad/coin/coin-view.ts";
 import { coinCreatorAddress, witnessVenue, type CoinPage } from "@blast/core/modules/launchpad-coin/contracts.ts";
+import { poolCoinMetadata } from "@blast/core/modules/launchpad-coin/pool-coin-metadata.ts";
 import type { LaunchPageDetails } from "@blast/core/modules/launchpad-coin/transfer.ts";
 import type { LegacyCoinMarket } from "@blast/core/modules/launchpad-discovery/rows.ts";
 import { createQuoteOf } from "@blast/core/web/contracts/create.ts";
@@ -45,7 +46,6 @@ import { LiveFigureCue } from "#web/components/blast-ui/LiveFigureCue.tsx";
 import { useAppQueryClient } from "#web/lib/query/provider.tsx";
 import { pollInterval } from "#web/lib/query/polling.ts";
 import { legacyCoinMarketQuery } from "./bonding-client.ts";
-import { poolCoinMetadata } from "./pool-coin-metadata.ts";
 import styles from "./bonding-coin.module.css";
 import { ChartCard, CoinCover, CoinIdentityHeader, CoinPriceFigure, CoinTradingActivity, Fact, MarketOverview, MarketPriceRow } from "./CoinPageParts.tsx";
 import { bpsPercent } from "@blast/core/lib/bps.ts";

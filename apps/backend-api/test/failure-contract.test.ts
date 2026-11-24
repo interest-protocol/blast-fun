@@ -222,6 +222,7 @@ test("one API instance reuses handlers per admitted bucket without sharing autho
         defillama: read,
         wallet_launches: read,
         presale_proof: read,
+        coin_metadata: read,
       };
     },
   };

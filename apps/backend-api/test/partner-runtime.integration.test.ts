@@ -264,6 +264,7 @@ async function productionPartnerApi(backendPrimary: Pool) {
       discovery: unexpected,
       wallet_launches: unexpected,
       presale_proof: unexpected,
+      coin_metadata: unexpected,
       market: unexpected,
     }),
   });

@@ -39,6 +39,7 @@ const cases: ReadonlyArray<readonly [string, RateBucket]> = [
   ["market/status", "launchpad_market_status"],
   ["market/coins/0x2%3A%3Asui%3A%3ASUI/candles", "launchpad_market_candles"],
   ["market/coins/0x2%3A%3Asui%3A%3ASUI", "launchpad_market_coin"],
+  ["market/coins/0x2%3A%3Asui%3A%3ASUI/metadata", "launchpad_market_coin"],
   ["market/coins/0x2%3A%3Asui%3A%3ASUI/holders", "launchpad_market_holders"],
   [`market/launches/${id}/activity`, "launchpad_market_activity"],
   [`market/pools/blast_curve/${id}`, "launchpad_market_pool"],

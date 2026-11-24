@@ -563,6 +563,7 @@ async function exercise(effect: boolean, examples: readonly CandleCase[]) {
         defillama: unused,
         wallet_launches: unused,
         presale_proof: unused,
+        coin_metadata: unused,
       };
     },
   });

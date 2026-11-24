@@ -17,6 +17,7 @@ import { socialRouteKit } from "@blast/server/modules/social/route-kit/shared-ru
 import type { PartnerV1Handlers } from "@blast/server/modules/partner-api/v1/route.ts";
 import { createDefillamaRead } from "@blast/core/modules/defillama/reads.ts";
 import { defillamaReportingReads } from "@blast/core/modules/defillama/runtime.ts";
+import { handleCoinMetadataRequest } from "./coin-metadata.ts";
 
 const limitCodes = { rateLimited: "LAUNCHPAD_RATE_LIMITED", unavailable: "LAUNCHPAD_READ_UNAVAILABLE" } as const;
 
@@ -49,6 +50,12 @@ export function createPartnerV1Handlers(
     presale_proof: (request, client) => (proof ??= presaleAllowlistProofRoute(limiter))(request, client),
     prices: (request, client) => prices.GET(request, client),
     market,
+    coin_metadata: (request, client) => withRouteLimits(
+      client,
+      ["launchpad_market_coin"],
+      () => handleCoinMetadataRequest(request),
+      { rateLimited: "rate_limited", unavailable: "unavailable", limiter },
+    ),
     discovery: (request, client) => withRouteLimits(client, ["launchpad_discovery"], () => handleDiscoveryRequest(request, undefined, undefined, undefined, publicReadCache("market"), readLegacyMarket), { ...limitCodes, limiter }),
     wallet_launches: (request, client) =>
       withRouteLimits(client, ["launchpad_wallet_launches"], () => handleWalletLaunchesRequest(request, walletOf(request)), { ...limitCodes, limiter }),

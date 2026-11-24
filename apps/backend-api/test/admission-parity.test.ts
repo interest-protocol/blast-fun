@@ -484,6 +484,7 @@ async function record(): Promise<Recorded[]> {
     defillama: read,
     wallet_launches: read,
     presale_proof: read,
+    coin_metadata: read,
   };
   const handle = createBackendApi({
     redis,

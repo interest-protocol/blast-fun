@@ -221,6 +221,7 @@ test(
             market: read,
             wallet_launches: read,
             presale_proof: read,
+            coin_metadata: read,
           }),
         });
         const request = () =>

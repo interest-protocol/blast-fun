@@ -62,6 +62,7 @@ function partnerLane(classify: RecognitionDecision, read: PartnerV1Handlers["pre
     defillama: read,
     wallet_launches: read,
     presale_proof: read,
+    coin_metadata: read,
   };
   const api = createBackendApi({
     redis,

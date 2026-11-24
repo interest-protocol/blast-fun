@@ -154,6 +154,7 @@ const handlers = (): PartnerV1Handlers => {
     defillama: read,
     wallet_launches: read,
     presale_proof: read,
+    coin_metadata: read,
   };
 };
 

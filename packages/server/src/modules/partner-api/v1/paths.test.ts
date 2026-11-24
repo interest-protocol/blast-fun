@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { PRESALE_PROOF_PATH } from "@blast/core/modules/backend-api/private/presale-contracts.ts";
-import { FIRST_PARTY_WEB_PATHS, firstPartyReadRoute, partnerV1Route, PRESALE_PROOF_READ, webPath } from "@blast/server/modules/partner-api/v1/paths.ts";
+import { FIRST_PARTY_WEB_PATHS, firstPartyReadRoute, partnerEndpointBucket, partnerV1Route, PRESALE_PROOF_READ, webPath } from "@blast/server/modules/partner-api/v1/paths.ts";
 
 const PATH = "/api/v1/presales";
 const ID = `0x${"a".repeat(64)}`;
@@ -12,6 +12,7 @@ test("only audited public reads are allowlisted, including all supported venues"
     "/api/v1/discovery", "/api/v1/search", "/api/v1/market/status",
     ...["metadata", "metrics", "contracts"].map((operation) => `/api/v1/defillama/${operation}`),
     `/api/v1/market/coins/${ID}%3A%3Acoin%3A%3ACOIN/holders`,
+    `/api/v1/market/coins/${ID}%3A%3Acoin%3A%3ACOIN/metadata`,
     `/api/v1/market/launches/${ID}/activity`,
     ...poolVenues.map((venue) => `/api/v1/market/pools/${venue}/${ID}`),
     ...poolVenues.map((venue) => `/api/v1/market/pools/${venue}/${ID}/candles`),
@@ -37,4 +38,11 @@ test("the proof read reaches the private gateway's handler path and is partner-o
   assert.equal(FIRST_PARTY_WEB_PATHS.includes(PRESALE_PROOF_PATH), false);
   assert.equal(firstPartyReadRoute(`${PATH}/${ID}/proof`), null);
   assert.notEqual(firstPartyReadRoute(`${PATH}/${ID}`), null);
+});
+
+test("coin metadata is partner-only and uses the coin summary quota", () => {
+  const path = `/api/v1/market/coins/${ID}%3A%3Acoin%3A%3ACOIN/metadata`;
+  assert.deepEqual(partnerV1Route(path), { name: "coin_metadata", sourcePath: path });
+  assert.equal(firstPartyReadRoute(path), null);
+  assert.equal(partnerEndpointBucket(path), "launchpad_market_coin");
 });

@@ -12,7 +12,7 @@ Only GET and HEAD are authorized:
 
 - `/api/v1/discovery` and `/api/v1/search`
 - `/api/v1/market/status`
-- `/api/v1/market/coins/{coinType}/holders`
+- `/api/v1/market/coins/{coinType}` and its `/holders` and `/metadata` reads
 - `/api/v1/market/launches/{launchId}/activity`
 - `/api/v1/market/pools/{venue}/{poolId}` and its `/candles`: Blast curve, Cetus and Bluefin
 - `/api/v1/market/pools/{venue}/{poolId}/trades`: Cetus and Bluefin
@@ -299,6 +299,20 @@ const response = await fetch('https://www.blast.fun/api/v1/presales?limit=20', {
   headers: { 'X-Blast-Partner-Key': partnerKey },
 });
 ```
+
+To fetch a coin's name, ticker, description, logo and project links, send
+`GET /api/v1/market/coins/{coinType}/metadata` with the same partner key.
+URL-encode the canonical coin type as one path segment. This read takes no query
+parameters and covers confirmed Blast launches, indexed presales and indexed
+external coins.
+
+The response uses `coin_type`, `name`, `symbol`, `description`, `decimals`,
+`icon_url`, `tagline` and a `links` object with `website`, `x`, `telegram`,
+`docs` and `audit`. Missing values are null. Published Blast project links
+take precedence over links embedded in the on-chain description. These are
+project-provided URLs. An unknown coin returns 404 `not_found`.
+The lookup shares the coin summary's per-key limit of 240
+requests per minute. Cache and coalesce lookups on your backend.
 
 The backend admission, reached through the regional v1 route, answers OPTIONS
 preflights for registered origins, GET/HEAD, and the

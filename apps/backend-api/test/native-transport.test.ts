@@ -187,6 +187,7 @@ test("gateway authentication binds the exact encoded target and claims each nonc
       defillama: read,
       wallet_launches: read,
       presale_proof: read,
+      coin_metadata: read,
     }),
   });
   const runtime = createBackendServer({

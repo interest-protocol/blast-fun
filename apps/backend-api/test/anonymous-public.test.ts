@@ -75,6 +75,7 @@ test("stale wallet and Privy credentials cause no session work or Set-Cookie on 
     defillama: read,
     wallet_launches: read,
     presale_proof: read,
+    coin_metadata: read,
   };
   const api = createBackendApi({
     namespace,
