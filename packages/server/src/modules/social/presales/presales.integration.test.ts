@@ -25,6 +25,7 @@ import { SOCIAL_PUBLIC_CACHE_CONTROL, createSocialRouteKit } from "@blast/server
 import { qsRaised, quoteOf } from "@blast/core/lib/format.ts";
 import { PRESALE_STORY_ACCOUNTS, PRESALE_STORY_WALLETS, seedPresaleStory, type PresaleStory } from "../../../../../core/test/fixtures/modules/social/presales/presale-story.ts";
 import { createSocialPresaleRoutes } from "@blast/server/modules/social/presales/route.ts";
+import { createPresaleFollowReader } from "@blast/server/modules/social/presales/follow-reader.ts";
 import { readViewerPresales } from "@blast/server/modules/social/presales/viewer.ts";
 import { createAdminPresaleRoute } from "@blast/server/modules/social/admin-presales/route.ts";
 import { optionalSource } from "@blast/server/modules/social/optional-source.ts";
@@ -122,6 +123,7 @@ async function withFixture(run: (fixture: Fixture) => Promise<void>, seed: Reado
     const routes = createSocialPresaleRoutes({
       kit,
       database: () => replicaDb,
+      followingDatabase: createPresaleFollowReader(replica, { fleetSlots: 1, processSlots: 1 }),
       config: async () => SOCIAL_CONFIG_DEFAULTS,
       terms: (presaleId) => optionalSource("presale_terms", async () => {
         termsCalls.push(presaleId);
@@ -482,6 +484,18 @@ test("UI-10: the viewer read names the caller's followed backers and own positio
     const commitRead = await viewer(KAI, { presale_ids: [story.presaleIds.MRDN] }, { [PRESALE_COMMIT_FIELDS_HEADER]: "1" });
     const commitEntry = (await ok<SocialPresaleViewerResponse>(commitRead, "presale-viewer-response", "private, no-store")).presales[story.presaleIds.MRDN];
     assert.equal(commitEntry.mine?.claim_wallet_commitment_atoms, "100000000");
+    const permit = await admin.connect();
+    try {
+      await permit.query("BEGIN");
+      await permit.query("SELECT pg_advisory_xact_lock(hashtext('blast.presale_follow_read'), 0)");
+      const partial = await viewer(KAI, { presale_ids: [story.presaleIds.MRDN] }, { [PRESALE_COMMIT_FIELDS_HEADER]: "1" });
+      assert.equal(partial.headers.get("X-Blast-Presale-Following"), "unavailable");
+      const answer = await ok<SocialPresaleViewerResponse>(partial, "presale-viewer-response", "private, no-store");
+      assert.deepEqual(answer.presales[story.presaleIds.MRDN].following, []);
+      assert.deepEqual(answer.presales[story.presaleIds.MRDN].mine, commitEntry.mine);
+    } finally {
+      try { await permit.query("ROLLBACK"); } finally { permit.release(); }
+    }
     assert.equal(mrdn.mine?.claimed, false);
     assert.equal(mrdn.mine?.claimable_tokens, null, "the live allocation is not guessed from its price");
     assert.equal(mrdn.mine?.claimed_tokens, "0");

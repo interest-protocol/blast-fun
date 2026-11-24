@@ -103,6 +103,8 @@
 .row a, .row button:not(.expand) { position: relative; z-index: 1; }
 .coinRow a.symbol { position: static; touch-action: manipulation; }
 .coinRow a.symbol::before { content: ""; position: absolute; inset: 0; z-index: 1; }
+.coinRow:has(.symbol [data-pending]) { background: color-mix(in srgb, var(--ink) 8%, var(--chip)); transition: none; }
+.coinRow .symbol [data-pending] { text-decoration: underline; text-underline-offset: 0.2em; }
 @supports selector(:has(*)) {
   .coinRow a.symbol:focus-visible { outline: none; box-shadow: none; }
   .coinRow:has(a.symbol:focus-visible) { outline: 0.125rem solid var(--focus-color, var(--ink)); outline-offset: -0.125rem; }

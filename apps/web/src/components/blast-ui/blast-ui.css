@@ -543,12 +543,18 @@ html:has(> body > [data-blast-ui][data-theme="dark"]) > body {
 
 /* ---------- native page and theme transitions (OA-41); snapshots keep fixed/sticky children anchored ---------- */
 /* These pseudo-elements inherit from html, outside the scoped motion tokens. */
+html:has([data-blast-ui])::view-transition { pointer-events: none; }
 html[data-blast-traversing] [data-blast-ui] #view { view-transition-name: blast-page; view-transition-class: blast-route; }
-/* Both use `--ease-std`'s curve, written out because these pseudo-elements sit outside `[data-blast-ui]`. */
-::view-transition-old(.blast-route) { animation: blast-page-out .12s cubic-bezier(.23, 1, .32, 1) both; }
-::view-transition-new(.blast-route) { animation: blast-page-in .12s cubic-bezier(.23, 1, .32, 1) both; }
-@keyframes blast-page-out { to { opacity: 0; } }
-@keyframes blast-page-in { from { opacity: 0; } }
+/* Distinct names keep the browser from tweening the scrolled Home and detail snapshots' boxes. */
+html[data-blast-traversing] [data-blast-ui] #view[data-route-transition="blast-home"] { view-transition-name: blast-home; }
+html[data-blast-traversing] [data-blast-ui] #view[data-route-transition="blast-asset"] { view-transition-name: blast-asset; }
+/* Both directions share this timing. Only the incoming image drifts, leaving the shell anchored. */
+::view-transition-group(.blast-route) { animation-duration: .12s; animation-timing-function: cubic-bezier(.23, 1, .32, 1); }
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-new(blast-home) { animation-name: blast-route-settle; --route-offset: -.25rem; }
+  ::view-transition-new(blast-asset) { animation-name: blast-route-settle; --route-offset: .25rem; }
+}
+@keyframes blast-route-settle { from { opacity: 0; translate: 0 var(--route-offset); } }
 html:has([data-blast-ui])::view-transition-old(root),
 html:has([data-blast-ui])::view-transition-new(root),
 html.blast-theming::view-transition-old(root),

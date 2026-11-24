@@ -14,6 +14,7 @@ import type { SocialCaller } from "@blast/server/modules/social/route-kit/route.
 
 import type { PresaleTermsSource } from "@blast/server/modules/social/presales/detail.ts";
 import { createSocialPresaleRoutes } from "@blast/server/modules/social/presales/route.ts";
+import { createPresaleFollowReader } from "@blast/server/modules/social/presales/follow-reader.ts";
 
 /**
  * The presale pages read on the read replica (`blast_replica`), never the
@@ -47,9 +48,27 @@ export function socialPresaleRoutes(): ReturnType<typeof createSocialPresaleRout
     createSocialPresaleRuntimeRoutes(sharedSocialRouteKit()));
 }
 
+const followingDatabase: ReadableDatabase = {
+  async read(text, values, rowMode) {
+    const reader = processSingleton(
+      "social.presale-follow-reader",
+      () => createPresaleFollowReader(replicaPool(), runtimeConfig().presaleFollow),
+    );
+    return reader.read(text, values, rowMode);
+  },
+};
+
 /** Bind public reads to a transport's kit while sharing replica reads and coalescing. */
 export function createSocialPresaleRuntimeRoutes(kit: SocialRouteKit, blastWallet?: (caller: SocialCaller) => Promise<string | null>): ReturnType<typeof createSocialPresaleRoutes> {
-  return createSocialPresaleRoutes({ kit, database: socialPresaleDatabase, config: getSocialConfig, terms: readPresaleTerms, blastWallet, publicRead: publicReads() });
+  return createSocialPresaleRoutes({
+    kit,
+    database: socialPresaleDatabase,
+    followingDatabase,
+    config: getSocialConfig,
+    terms: readPresaleTerms,
+    blastWallet,
+    publicRead: publicReads(),
+  });
 }
 
 const publicReads = () => publicReadCache("presales");

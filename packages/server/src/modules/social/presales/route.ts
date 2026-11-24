@@ -161,6 +161,7 @@ export type SocialPresaleRouteDependencies = Readonly<{
   kit: SocialRouteKit;
   /** The read replica in production. Resolved per request. */
   database: () => ReadableDatabase;
+  followingDatabase?: ReadableDatabase;
   config: () => Promise<SocialConfig>;
   terms: PresaleTermsSource;
   now?: () => number;
@@ -176,6 +177,7 @@ export type SocialPresaleRouteDependencies = Readonly<{
  */
 export function createSocialPresaleRoutes(dependencies: SocialPresaleRouteDependencies) {
   const { kit, database, config, terms } = dependencies;
+  const followingDatabase = dependencies.followingDatabase && chainViewsOnly(dependencies.followingDatabase);
   const now = dependencies.now ?? Date.now;
   const publicRead = dependencies.publicRead ?? ((_key, load) => load());
   const publicSpec = (name: string) => ({ name, auth: "none", bucket: "social_read_presales", cache: "public" }) as const;
@@ -232,11 +234,18 @@ export function createSocialPresaleRoutes(dependencies: SocialPresaleRouteDepend
           }
           if ("presale_ids" in body) {
             const includeCommitFields = context.request.headers.get(PRESALE_COMMIT_FIELDS_HEADER) === "1";
-            const answer = await readViewerPresales(db, accountId, own, body.presale_ids, claimWallet, includeCommitFields);
+            let followingUnavailable = false;
+            const following = followingDatabase ? {
+              database: followingDatabase,
+              onUnavailable: () => { followingUnavailable = true; },
+            } : undefined;
+            const answer = await readViewerPresales(db, accountId, own, body.presale_ids, claimWallet, includeCommitFields, following);
             recordMetric("social.presales", { route: "viewer", scope: "ids", ms: Math.round(performance.now() - started) });
-            return context.json(answer);
+            const response = context.json(answer);
+            if (followingUnavailable) response.headers.set("X-Blast-Presale-Following", "unavailable");
+            return response;
           }
-          const answer = await readViewerBackedPresales(db, accountId, own, body.status, now(), claimWallet);
+          const answer = await readViewerBackedPresales(db, accountId, own, body.status, now(), claimWallet, followingDatabase);
           recordMetric("social.presales", { route: "viewer", scope: "status", ms: Math.round(performance.now() - started) });
           return context.json({ ...answer, rows: await withCatalogTerms(answer.rows ?? [], terms) });
         },
