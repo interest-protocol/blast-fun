@@ -114,7 +114,8 @@ test("market stream is an exact browser-only signed GET/HEAD with one or two can
 
 test("presale clients share the socket and receive only their fills beyond a scoped fence", async () => {
   const sale = (index: number) => `0x${index.toString(16).padStart(64, "0")}`;
-  const scoped = (id: string) => new Request(`https://frontend.test${MARKET_STREAM_PATH}?presale=${id}`);
+  const scoped = (id: string) =>
+    new Request(`https://frontend.test${MARKET_STREAM_PATH}?presale=${id}`);
   const socket = new Socket();
   const relay = new MarketStreamRelay(() => socket, expected);
   const a = relay.stream(scoped(sale(1))).body!.getReader();
@@ -125,8 +126,14 @@ test("presale clients share the socket and receive only their fills beyond a sco
   socket.receive({ type: "pong", activity_checkpoint: 12 });
   assert.equal((await read(a)).data.presale_checkpoint, 12);
   const fill = {
-    type: "presale_pool_swap", presale_id: sale(1), pool_key: `bluefin:${sale(3)}`,
-    cursor: "13:0:3:0", timestamp_ms: 13_000, side: "sell", coin_atoms: "9007199254740993", quote_atoms: "41",
+    type: "presale_pool_swap",
+    presale_id: sale(1),
+    pool_key: `bluefin:${sale(3)}`,
+    cursor: "13:0:3:0",
+    timestamp_ms: 13_000,
+    side: "sell",
+    coin_atoms: "9007199254740993",
+    quote_atoms: "41",
   };
   socket.receive({ ...fill, internal: "discard" });
   const frame = await read(a);
