@@ -11,6 +11,7 @@ import type { FreshReview, ReconciliationOutcome } from "./action-machine.ts";
 import { explorerTransactionUrl } from "./explorer.ts";
 import type { CompletionExpectation } from "./preflight.ts";
 import { isUserRejection, type LaunchpadSigner } from "./signer.ts";
+import { reportWalletSigningFailure } from "./signing-diagnostics.ts";
 
 export type SubmissionResult =
   | Readonly<{ status: "rejected" }>
@@ -55,6 +56,7 @@ export async function signAndSubmitOnce({
     signature = signed.signature;
   } catch (error) {
     if (isUserRejection(error)) return { status: "rejected" };
+    reportWalletSigningFailure(signer.kind, error);
     return {
       status: "signature-failed",
       message: diagnosticMessage("The wallet could not sign. Reconnect it and retry. Nothing was submitted.", { ...(error instanceof PublicError ? error : {}), code: "sign_failed" }),

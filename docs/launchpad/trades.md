@@ -84,6 +84,17 @@ only, and reporting never blocks or changes a trade. These events are client
 diagnostics, not outcome metrics: the conversion that counts is the verified
 Buy outcome below.
 
+In Vercel Web Analytics, filter for `wallet_signature_failed` to investigate a
+failed signature request. `signer` distinguishes Privy from a connected wallet.
+Use `reason` to direct the check. For `wallet_popup_open_failed`, check browser
+popup settings and whether the app opens the wallet directly from the click.
+For `wallet_account_unauthorized`, check which account granted access to Blast.
+For `wallet_session_missing` or `privy_session_invalid`, reconnect or sign in
+again. `provider_code` is present when the wallet supplies a known code.
+An unrecognized failure is counted without forwarding the provider's text.
+Each failed signing attempt can send one analytics event. It adds no requests
+to Blast APIs or Sui.
+
 ## Verified Buy outcomes
 
 Each completed Buy is reported to the verified-outcome route
