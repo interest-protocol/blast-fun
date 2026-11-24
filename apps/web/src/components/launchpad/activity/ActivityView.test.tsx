@@ -349,8 +349,8 @@ test("a vault claim preserves the trades and appears only in the full activity l
   const compact = render({ compact: true, activity: state });
   const preview = compact.match(/<ol[^>]*aria-label="Recent trades"[^>]*>(.*?)<\/ol>/s)?.[1] ?? "";
   const trades = text(preview);
-  assert.match(trades, /Bought/);
-  assert.match(trades, /Sold/);
+  assert.match(trades, /Buy/);
+  assert.match(trades, /Sell/);
   assert.ok(!preview.includes(claim.digest));
   assert.match(rowText(render({ activity: state }), claim.position), /Vault balances claimed .* Launch vault/);
 });
@@ -364,18 +364,18 @@ test("recent buys and sells show both amounts in their own units", () => {
     { ...sell, amounts: { meme: 2_500_000n, quote: 370_000_000n } },
   ];
   const html = render({ compact: true, activity: { ...state, view: { ...state.view!, rows } } });
-  assert.match(text(html), /Bought 9\.51M FROGGY for 100 SUI/);
-  assert.match(text(html), /Sold 2\.5 FROGGY for 0\.37 SUI/);
+  assert.match(text(html), /9\.51M FROGGY for 100 SUI/);
+  assert.match(text(html), /2\.5 FROGGY for 0\.37 SUI/);
   assert.match(html, /Inspect full FROGGY amount: 9,510,000 FROGGY/);
 });
 
-test("trade times show local minutes and update at midnight and on return to the tab", async (t) => {
+test("trade rows lead with a short age that ticks and keeps the exact time", async (t) => {
   const state = activity("migrated");
   const trades = state.view!.rows.filter(isActivityTrade);
   const dates = [
-    new Date(2026, 0, 1, 20, 38, 59),
-    new Date(2025, 11, 31, 23, 59, 59),
-    new Date(2025, 11, 30, 8, 7),
+    new Date(2026, 0, 1, 23, 59, 53),
+    new Date(2026, 0, 1, 23, 59, 0),
+    new Date(2026, 0, 1, 17, 59, 59),
   ];
   const rows = dates.map((date, index) => ({ ...trades[index]!, timestampMs: date.getTime() }));
   const element = activityElement({ compact: true, activity: { ...state, view: { ...state.view!, rows } } });
@@ -396,19 +396,22 @@ test("trade times show local minutes and update at midnight and on return to the
   const labels = () => [...container.querySelectorAll('[aria-label="Recent trades"] time')].map((time) => time.textContent);
 
   assert.deepEqual(errors, []);
-  assert.deepEqual(labels(), ["Today 20:38", "Yesterday 23:59", "30 Dec 2025 08:07"]);
+  assert.deepEqual(labels(), ["6s", "59s", "6h"]);
+  const first = container.querySelector('[aria-label="Recent trades"] li')?.firstElementChild;
+  assert.match(first?.textContent ?? "", /^(Buy|Sell) · 6s$/);
+  assert.ok(first?.querySelector('button[aria-label="Trade time, 6 seconds ago"]'));
   assert.deepEqual(
     [...container.querySelectorAll('[aria-label="Recent trades"] time')].map((time) => time.getAttribute("datetime")),
     dates.map((date) => date.toISOString()),
   );
 
   await act(async () => { t.mock.timers.tick(1_000); });
-  assert.deepEqual(labels(), ["Yesterday 20:38", "31 Dec 2025 23:59", "30 Dec 2025 08:07"]);
+  assert.deepEqual(labels(), ["7s", "1m", "6h"]);
   await act(async () => {
     t.mock.timers.setTime(new Date(2026, 0, 3, 12).getTime());
     document.dispatchEvent(new window.Event("visibilitychange"));
   });
-  assert.deepEqual(labels(), ["1 Jan 20:38", "31 Dec 2025 23:59", "30 Dec 2025 08:07"]);
+  assert.deepEqual(labels(), ["2d", "2d", "2d"]);
 });
 
 test("compact mode preserves the complete durable-link view", () => {

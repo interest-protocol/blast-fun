@@ -289,12 +289,11 @@ function TermsCard({ view }: Readonly<{ view: View }>) {
 }
 
 function AboutCard({ details, view }: Readonly<{ details: LaunchPageDetails | null; view: View }>) {
-  const phone = usePhoneLayout();
   const { curve } = view;
-  if (!details?.tagline && !details?.links.length && !curve?.launch.metadata?.description && !(phone && details?.cover)) return null;
+  if (!details?.tagline && !details?.links.length && !curve?.launch.metadata?.description && !details?.cover) return null;
   return (
 <Card title="About">
-          {phone && details?.cover ? <CoinCover cover={details.cover} inAbout /> : null}
+          {details?.cover ? <CoinCover cover={details.cover} /> : null}
           {details?.tagline ? <p className={styles.tagline}>{details.tagline}</p> : null}
           {curve?.launch.metadata?.description && curve.launch.metadata.description.trim() !== details?.tagline.trim() ? <p className={styles.note}>{curve.launch.metadata.description}</p> : null}
           <AboutLinks links={details?.links ?? []} />
@@ -362,7 +361,6 @@ function CoinPageHeader({ page, view, details, verified, marketCatchingUp }: Rea
   const origin = useListOrigin(page.launchId);
   return <>
     <CoinBackLink origin={origin} />
-    {details?.cover ? <CoinCover cover={details.cover} /> : null}
     <Identity page={page} view={view} fallbackLogo={details?.iconUrl} verified={verified} />
     {!page.confirmed ? <EmptyState framed title="Launch could not be confirmed" role="alert" action={<ButtonLink href={`/coin/${page.launchId}`}>Reload</ButtonLink>}>The launch could not be read. Try again in a moment.</EmptyState> : null}
     {!marketCatchingUp && (page.curve.state === "stale" || page.coin.state === "stale" || page.venue?.state === "stale") ? <p className={styles.notice} role="status">Market data is delayed. Trading availability follows the latest chain read.</p> : null}
@@ -370,8 +368,8 @@ function CoinPageHeader({ page, view, details, verified, marketCatchingUp }: Rea
   </>;
 }
 
-function CoinMarket({ snapshot, page, chart, poolKey, checkpoint }: Readonly<{
-  snapshot: View; page: CoinPage; chart: ReactNode; poolKey: string | null; checkpoint: number | null;
+function CoinMarket({ snapshot, page, chart, activity, poolKey, checkpoint }: Readonly<{
+  snapshot: View; page: CoinPage; chart: ReactNode; activity: ReactNode; poolKey: string | null; checkpoint: number | null;
 }>) {
   const { tick, lastTrade, receivedAt } = useCoinTrade(snapshot.identity.coinType, poolKey, checkpoint);
   const graduated = snapshot.lifecycle === "migrated";
@@ -383,23 +381,25 @@ function CoinMarket({ snapshot, page, chart, poolKey, checkpoint }: Readonly<{
     <div className={styles.market}>
       <MarketPrice units={priceUnits(view)} price={price} tradeId={tradeId} showSound={hasMarketSound(view, poolKey)}
         showCurrency={view.identity.quoteType !== null} activity={context && <ChartLastTrade placement="headline" />} />
-      <CoinMarketCards graduated={graduated} view={view} tick={tick} tradeId={tradeId} chart={chart} />
+      <CoinMarketCards graduated={graduated} view={view} tick={tick} tradeId={tradeId} chart={chart} activity={activity} />
     </div>
   </ChartTradeContext>;
 }
 
-function CoinMarketCards({ graduated, view, tick, tradeId, chart }: Readonly<{
-  graduated: boolean; view: View; tick: ReturnType<typeof useCoinTrade>["tick"]; tradeId: string | null; chart: ReactNode;
+function CoinMarketCards({ graduated, view, tick, tradeId, chart, activity }: Readonly<{
+  graduated: boolean; view: View; tick: ReturnType<typeof useCoinTrade>["tick"]; tradeId: string | null; chart: ReactNode; activity: ReactNode;
 }>) {
   const phone = usePhoneLayout();
   const phoneProgress = phone && !graduated;
   const facts = view.curve && view.inputs ? <ProgressFacts view={view} tradeId={tradeId} /> : null;
-  const stats = graduated ? <GraduatedMarketOverview key="stats" view={view} tick={tick} tradeId={tradeId} /> : (
-    <ProgressCard key="stats" view={view} tradeId={tradeId}>{phone ? null : facts}</ProgressCard>
+  const stats = graduated ? <GraduatedMarketOverview view={view} tick={tick} tradeId={tradeId} /> : (
+    <ProgressCard view={view} tradeId={tradeId}>{phone ? null : facts}</ProgressCard>
   );
-  const chartCard = chart ? <ChartCard key="chart">{chart}</ChartCard> : null;
   return <>
-    {phoneProgress ? [stats, chartCard] : [chartCard, stats]}
+    {phoneProgress && stats}
+    {chart && <ChartCard>{chart}</ChartCard>}
+    {activity}
+    {!phoneProgress && stats}
     {phoneProgress && facts ? <div className={`${styles.card} ${styles.progressFacts}`}>{facts}</div> : null}
   </>;
 }
@@ -517,17 +517,15 @@ export function LegacyCoinScreen({ coinType, name, symbol, logoUrl, chart, decim
         <div className={styles.market}>
           <MarketPrice units={units} price={isRefetchError ? undefined : market?.price} />
           <ChartCard><SectionBoundary subject="chart">{chart}</SectionBoundary></ChartCard>
+          <Card title="Trades">
+            <SectionBoundary subject="trades" key={poolKey}>
+              <IndexedPoolTrades poolKey={poolKey} units={units} />
+            </SectionBoundary>
+          </Card>
           <MarketOverview fdv={isRefetchError ? undefined : fdvUsd} venue={poolKey.split(":")[0]} />
         </div>
       </CoinPriceCurrencyProvider>
       {trade == null ? null : <CoinTradePlacement execution={<SectionBoundary subject="execution">{trade}</SectionBoundary>} symbol={symbol} />}
-      <div className={styles.activity}>
-        <Card title="Trades">
-          <SectionBoundary subject="trades" key={poolKey}>
-            <IndexedPoolTrades poolKey={poolKey} units={units} />
-          </SectionBoundary>
-        </Card>
-      </div>
       <LegacyMarketDetails market={market} decimals={decimals} symbol={symbol} />
     </div>
   </div>;
@@ -538,17 +536,19 @@ export function BondingCoinScreen({ page, details, verified = false, slots }: Re
   const view = coinView(page);
   const { graduated, poolKey, marketKey, marketCatchingUp, marketOffline, showMarket, checkpoint } = coinPageMarket(page, view);
   const slot = (name: keyof TerminalSlots) => <SectionBoundary subject={name} key={`${page.launchId}:${name}`}>{slots[name]}</SectionBoundary>;
-  return <div className={styles.page} data-bonding-coin="" data-has-cover={!!details?.cover || undefined}>
+  return <div className={styles.page} data-bonding-coin="">
     <CoinPageHeader page={page} view={view} details={details} verified={verified} marketCatchingUp={marketCatchingUp} />
     <WalletTradesProvider key={page.launchId} deployer={view.coin?.launcher ?? null}>
       <div className={styles.layout} data-graduated={graduated || undefined} data-market-offline={marketOffline || undefined} data-no-market={!showMarket || undefined}>
         {showMarket ? (
           <CoinPriceCurrencyProvider key={page.launchId} quoteType={view.identity.quoteType} quoteSymbol={view.identity.quoteSymbol}>
-            <CoinMarket key={marketKey} snapshot={view} page={page} poolKey={poolKey} checkpoint={checkpoint} chart={marketOffline || slots.chart == null ? null : slot("chart")} />
+            <CoinMarket key={marketKey} snapshot={view} page={page} poolKey={poolKey} checkpoint={checkpoint}
+              chart={marketOffline || slots.chart == null ? null : slot("chart")}
+              activity={marketOffline ? null : <CoinTradingActivity key={page.launchId} trades={slots.activity} holders={slots.holders} />}
+            />
           </CoinPriceCurrencyProvider>
         ) : null}
         <CoinTradePlacement execution={slot("execution")} symbol={view.identity.symbol} />
-        {marketOffline ? null : <div className={styles.activity}><CoinTradingActivity key={page.launchId} trades={slots.activity} holders={slots.holders} /></div>}
         <div className={styles.details}>
           {view.curve ? <details className={styles.card}><DisclosureSummary>Token &amp; fees</DisclosureSummary>
             <div className={styles.pair}><AllocationCard view={view} /><FeesCard view={view} /></div>

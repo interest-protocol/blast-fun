@@ -24,10 +24,10 @@ import PricePlot from "./SalePricePlot";
 
 const WINDOWS = [["24h", "24H"], ["launch", "Since launch"]] as const;
 
-/** The overview, delay notice, and dollar price move from the market read. */
-export type MarketExtras = Readonly<{ overview?: ReactNode; note?: ReactNode; move?: PriceMove | null }>;
+/** The delay notice and dollar price move from the market read. */
+export type MarketExtras = Readonly<{ note?: ReactNode; move?: PriceMove | null }>;
 
-export function SalePriceChart({ sale, trade, overview, note, move, enabled = true, windows = WINDOWS }: Readonly<{ sale: SocialPresaleDetail["presale"]; trade: ReactNode; enabled?: boolean; windows?: readonly (readonly [PriceWindow, string])[] } & MarketExtras>) {
+export function SalePriceChart({ sale, trade, note, move, enabled = true, windows = WINDOWS }: Readonly<{ sale: SocialPresaleDetail["presale"]; trade: ReactNode; enabled?: boolean; windows?: readonly (readonly [PriceWindow, string])[] } & MarketExtras>) {
   const [window, setWindow] = useState<PriceWindow>("24h");
   const query = useQuery({
     ...priceQuery({ kind: "presale", id: sale.presale_id, window }),
@@ -35,7 +35,7 @@ export function SalePriceChart({ sale, trade, overview, note, move, enabled = tr
     refetchInterval: (query) => pollInterval(15_000, query),
   }, useAppQueryClient());
   const history = query.data?.coin_type === sale.sale_token ? query.data : null;
-  return <SalePriceChartView failed={query.isError} fetching={query.isFetching} history={history} loading={query.isPending} move={move} note={note} onWindow={setWindow} priceUsd={history ? history.price_usd : sale.price_usd} retry={() => { void query.refetch(); }} overview={overview} trade={trade} window={window} windows={windows} />;
+  return <SalePriceChartView failed={query.isError} fetching={query.isFetching} history={history} loading={query.isPending} move={move} note={note} onWindow={setWindow} priceUsd={history ? history.price_usd : sale.price_usd} retry={() => { void query.refetch(); }} trade={trade} window={window} windows={windows} />;
 }
 
 function PriceHistory({ points, loading, failed, fetching, hasHistory, retry, quoteSymbol }: Readonly<{ points: SocialPriceHistory["points"]; loading: boolean; failed: boolean; fetching: boolean; hasHistory: boolean; retry?: () => void; quoteSymbol?: string }>) {
@@ -50,7 +50,7 @@ function PriceHistory({ points, loading, failed, fetching, hasHistory, retry, qu
   return <EmptyState role="status" title={title} />;
 }
 
-export function SalePriceChartView({ history, loading, failed = false, fetching = false, retry, window, windows = WINDOWS, onWindow, priceUsd, trade, overview, note, move }: Readonly<{
+export function SalePriceChartView({ history, loading, failed = false, fetching = false, retry, window, windows = WINDOWS, onWindow, priceUsd, trade, note, move }: Readonly<{
   history: SocialPriceHistory | null | undefined;
   loading: boolean;
   failed?: boolean;
@@ -83,7 +83,6 @@ export function SalePriceChartView({ history, loading, failed = false, fetching 
         </div>
         {note}
       </ChartCard>
-      {overview}
     </div>
   );
 }

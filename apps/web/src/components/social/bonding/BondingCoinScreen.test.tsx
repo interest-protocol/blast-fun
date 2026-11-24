@@ -123,6 +123,7 @@ test("fresh graduation wins over a lagging curve lifecycle and source", () => {
 test("graduated reading order keeps trades before holders and historical launch information", () => {
   const text = render(coinScreenFixture()).body.textContent!;
   assert.ok(text.indexOf("Chart fixture") < text.indexOf("Recent trades fixture"));
+  assert.ok(text.indexOf("Recent trades fixture") < text.indexOf("FDV"));
   assert.ok(text.indexOf("Recent trades fixture") < text.indexOf("Top holders fixture"));
   assert.ok(text.indexOf("Top holders fixture") < text.indexOf("A permanent coin"));
   assert.ok(text.indexOf("Recent trades fixture") < text.indexOf("Tokenomics"));

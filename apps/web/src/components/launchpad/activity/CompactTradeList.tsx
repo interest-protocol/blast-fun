@@ -1,5 +1,6 @@
-import { createContext, useCallback, useContext, useRef, useSyncExternalStore, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useRef, type ReactNode } from "react";
 import { explorerTransactionUrl as socialTransactionUrl } from "@blast/core/lib/explorer.ts";
+import { bxAgo, countWords } from "@blast/core/lib/format.ts";
 import type { SocialExplorer } from "@blast/core/modules/social/contracts/settings.ts";
 import { profilePagePath } from "@blast/core/modules/social/contracts/profiles.ts";
 import { RECENT_TRADES_LIMIT, type TraderProfile } from "@blast/core/modules/social/contracts/trader-profiles.ts";
@@ -7,13 +8,13 @@ import { atomsGrouped, NO_VALUE } from "@blast/core/web/format.ts";
 import { IconButtonLink } from "#web/components/blast-ui/Button.tsx";
 import { CoinAmount } from "#web/components/blast-ui/CoinAmount.tsx";
 import { DateStamp } from "#web/components/blast-ui/DateStamp.tsx";
-import { tradeTimeLabel } from "#web/components/blast-ui/date-label.ts";
 import { UserIcon } from "#web/components/blast-ui/Icons.tsx";
 import { InspectValue } from "#web/components/blast-ui/InspectValue.tsx";
 import { ShellAvatar } from "#web/components/blast-ui/ShellAvatar.tsx";
 import { SkeletonBox, SkeletonRows, SkeletonText } from "#web/components/blast-ui/Skeleton.tsx";
 import { Ticker } from "#web/components/blast-ui/Ticker.tsx";
 import { TransactionLink } from "#web/components/blast-ui/TransactionLink.tsx";
+import { useChartClock } from "../chart/use-chart-clock";
 import { formatAmountShort } from "../coin/coin-format";
 import primitives from "../primitives/primitives.module.css";
 import { explorerTransactionUrl } from "../transaction/explorer";
@@ -43,12 +44,13 @@ export function Transaction({ digest, explorer }: Readonly<{ digest: string; exp
 
 export function TradeListSkeleton({ count = RECENT_TRADES_LIMIT }: Readonly<{ count?: number }> = {}) {
   return <SkeletonRows label="Reading trades" count={count} className={`${styles.tradeList} ${styles.tradeLoading}`} rowClassName={styles.tradeRow}>
+    <span className={styles.tradeType}><SkeletonText>Buy or sell</SkeletonText></span>
     <span className={styles.trader}>
       <SkeletonBox className={styles.defaultAvatar} round />
-      <span className={styles.traderText}><SkeletonText>Trader address</SkeletonText><SkeletonText>Trade time</SkeletonText></span>
+      <SkeletonText>Trader address</SkeletonText>
     </span>
     <span className={styles.tradeAmount}><SkeletonText>Trade amounts</SkeletonText></span>
-    <SkeletonBox className={styles.defaultAvatar} />
+    <span className={styles.tradeLink}><SkeletonBox className={styles.defaultAvatar} /></span>
   </SkeletonRows>;
 }
 
@@ -60,30 +62,6 @@ function TraderAvatar({ profile }: Readonly<{ profile: TraderProfile | null }>) 
   ) : <span className={styles.defaultAvatar} role="img" aria-label="Wallet trader"><UserIcon /></span>;
 }
 
-const localDaySnapshot = () => new Date().setHours(0, 0, 0, 0);
-const serverDaySnapshot = () => null;
-
-function subscribeLocalDay(notify: () => void) {
-  let timer: ReturnType<typeof setTimeout>;
-  function schedule() {
-    const now = Date.now();
-    const midnight = new Date(now);
-    midnight.setHours(24, 0, 0, 0);
-    timer = setTimeout(refresh, midnight.getTime() - now);
-  }
-  function refresh() {
-    clearTimeout(timer);
-    schedule();
-    notify();
-  }
-  schedule();
-  document.addEventListener("visibilitychange", refresh);
-  return () => {
-    clearTimeout(timer);
-    document.removeEventListener("visibilitychange", refresh);
-  };
-}
-
 const TradeInspectContext = createContext<(open: boolean) => void>(() => {});
 
 export const useTradeInspector = () => useContext(TradeInspectContext);
@@ -91,7 +69,7 @@ export const useTradeInspector = () => useContext(TradeInspectContext);
 export type TradeRowState = Readonly<{
   entering: boolean;
   leaving: boolean;
-  localDay: number | null;
+  now: number | null;
 }>;
 
 /** Both launch types use the same motion, focus hold and row spacing. */
@@ -105,7 +83,7 @@ export function CompactTradeList<Row extends { position: string }>({
   hold?: (hold: boolean) => void;
   children: (row: Row, state: TradeRowState) => ReactNode;
 }>) {
-  const localDay = useSyncExternalStore(subscribeLocalDay, localDaySnapshot, serverDaySnapshot);
+  const now = useChartClock(1_000, rows.length > 0);
   const list = useRef<HTMLOListElement>(null);
   const keyboardFocus = useRef(false);
   const openInspectors = useRef(0);
@@ -129,14 +107,14 @@ export function CompactTradeList<Row extends { position: string }>({
       }}
     >
       {rendered.map((row) => children(row, {
-        entering: row.position === entering, leaving: row === leaving, localDay,
+        entering: row.position === entering, leaving: row === leaving, now,
       }))}
     </ol>
   </div></TradeInspectContext>;
 }
 
 export function CompactTradeRow({
-  side, trader, profile, timestampMs, tokens, quote, digest, explorer, entering, leaving, localDay,
+  side, trader, profile, timestampMs, tokens, quote, digest, explorer, entering, leaving, now,
 }: TradeRowState & Readonly<{
   side: "buy" | "sell";
   trader: ReactNode;
@@ -148,23 +126,32 @@ export function CompactTradeRow({
   explorer: TradeExplorer;
 }>) {
   const onInspect = useTradeInspector();
+  const age = now === null ? undefined : bxAgo(timestampMs, now);
   return <li className={styles.tradeRow} data-live-trade={entering ? side : undefined} data-leaving={leaving || undefined} inert={leaving} aria-hidden={leaving || undefined}>
+    <span className={styles.tradeType}>
+      <b data-side={side}>{side === "sell" ? "Sell" : "Buy"}</b>{" · "}
+      <DateStamp at={timestampMs} label="trade time" displayText={age}
+        triggerLabel={tradeTimeButtonLabel(age)} onInspect={onInspect} />
+    </span>
     <span className={styles.trader}>
       <TraderAvatar profile={profile} />
-      <span className={styles.traderText}>
-        {trader}
-        <DateStamp at={timestampMs} label="trade time" onInspect={onInspect}
-          displayText={localDay === null ? undefined : tradeTimeLabel(timestampMs, localDay)} />
-      </span>
+      <span className={styles.traderText}>{trader}</span>
     </span>
     <span className={styles.tradeAmount}>
-      <span className={styles.tradeLeg}>
-        <b data-side={side}>{side === "sell" ? "Sold" : "Bought"}</b>{" "}{tokens}
-      </span>
+      <span className={styles.tradeLeg}>{tokens}</span>
       {quote != null && <>{" "}<span className={styles.tradeLeg}>for{" "}{quote}</span></>}
     </span>
-    {digest ? <Transaction digest={digest} explorer={explorer} /> : null}
+    {digest ? <span className={styles.tradeLink}><Transaction digest={digest} explorer={explorer} /></span> : null}
   </li>;
+}
+
+const ageUnits: Partial<Record<string, string>> = { s: "second", m: "minute", h: "hour", d: "day", y: "year" };
+
+function tradeTimeButtonLabel(age?: string) {
+  if (!age) return "Trade time";
+  if (age === "now") return "Trade time, just now";
+  const unit = ageUnits[age.slice(-1)];
+  return unit ? `Trade time, ${countWords(Number(age.slice(0, -1)), unit, `${unit}s`)} ago` : "Trade time";
 }
 
 const ZERO_ATOMS = 0n;

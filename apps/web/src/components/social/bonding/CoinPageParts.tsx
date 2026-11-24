@@ -17,17 +17,13 @@ import { useCoinPriceCurrency } from "#web/components/launchpad/chart/CoinPriceC
 import { readablePrice, readableUsd } from "#web/lib/market-format.ts";
 import styles from "./bonding-coin.module.css";
 
-export function CoinCover({ cover, inAbout }: Readonly<{ cover: Readonly<{ url: string; width: number; height: number }>; inAbout?: boolean }>) {
-  // Keep older artwork narrower than the phone cover ratio intact in the desktop banner.
-  const needsSideFill = !inAbout && cover.width < 2 * cover.height;
-  return <div className={inAbout ? styles.aboutCover : styles.cover} data-coin-cover={inAbout ? undefined : ""}>
-    {needsSideFill && (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img alt="" aria-hidden="true" className={styles.coverFill} src={cover.url} referrerPolicy="no-referrer" />
-    )}
+export function CoinCover({ cover }: Readonly<{ cover: Readonly<{ url: string; width: number; height: number }> }>) {
+  const [failed, setFailed] = useState<string | null>(null);
+  if (failed === cover.url) return null;
+  return <div className={styles.aboutCover} data-coin-cover="" aria-hidden="true">
     {/* Uploaded covers are sanitized WebP files. */}
     {/* eslint-disable-next-line @next/next/no-img-element */}
-    <img alt="" src={cover.url} referrerPolicy="no-referrer" width={cover.width} height={cover.height} loading={inAbout ? "lazy" : undefined} />
+    <img alt="" src={cover.url} referrerPolicy="no-referrer" width={cover.width} height={cover.height} loading="lazy" decoding="async" onError={() => setFailed(cover.url)} />
   </div>;
 }
 

@@ -189,7 +189,7 @@ test("a tracked coin shows completed pool swaps with exact coin and SUI amounts 
   assert.ok(retry);
   await act(async () => { retry.click(); await settleQueries(client); });
   const row = container.querySelector('ol[aria-label="Recent trades"] li');
-  assert.match(row?.textContent ?? "", /Sold/);
+  assert.match(row?.textContent ?? "", /Sell/);
   assert.ok(row?.querySelector('[aria-label="Inspect full ONE amount: 1.234567 ONE"]'));
   assert.ok(row?.querySelector('[aria-label="Inspect full SUI amount: 2.5 SUI"]'));
   assert.ok(row?.querySelector(`[aria-label="Inspect full trader address: ${trader}"]`));

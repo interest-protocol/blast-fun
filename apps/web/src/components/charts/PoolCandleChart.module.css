@@ -57,13 +57,12 @@
 }
 .readout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 0 .5rem;
   min-block-size: var(--coin-readout-height, 2.75rem);
   font-variant-numeric: tabular-nums;
 }
-:global([data-amounts="hidden"]) .readout > * { display: none; }
 .inspectionAmount {
   display: flex;
   flex-wrap: wrap;
@@ -115,10 +114,9 @@
 .candleFields > div {
   display: grid;
   align-content: center;
-  aspect-ratio: 1;
   min-inline-size: 0;
-  gap: .25rem;
-  padding: .5rem;
+  gap: .125rem;
+  padding: .125rem .5rem;
   border-radius: var(--r-sm);
   background: var(--raised);
 }
@@ -133,7 +131,7 @@
 }
 .candleContext { overflow-wrap: anywhere; }
 
-.exactTrigger { justify-self: end; --control-hover: transparent; }
+.exactTrigger { grid-area: 1 / 2; justify-self: end; --control-hover: transparent; }
 .exactLayer { z-index: 1100; }
 .exactValues {
   max-inline-size: min(20rem, calc(100vw - 2rem));
@@ -163,6 +161,12 @@
   font-size: .8125rem;
   font-weight: 600;
   cursor: pointer;
+}
+.readout .walletToggle { grid-area: 1 / 3; gap: .375rem; white-space: nowrap; }
+@container (max-width: 18rem) {
+  .readout[data-mode="line"] .lineContext { grid-column: 1 / -1; }
+  .readout[data-mode="line"] .exactTrigger { grid-row: 2; }
+  .readout[data-mode="line"] .walletToggle { grid-row: 2; }
 }
 
 .walletOverlay, .walletDots {

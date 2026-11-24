@@ -126,8 +126,10 @@ export function PoolCandleChart({
     labels.projectLabels(handle.chart);
     projectTrade(handle, model.series, settled);
   };
+  const walletToggle = <WalletTagsToggle available={Boolean(walletTrades)} checked={showWalletTags} onChange={setWalletTags} />;
   const readout = compact && <div className={styles.readout} data-mode={mode}>
-    {!amountsHidden && <PoolReadout inspected={inspectedPrice} model={model} mode={mode} quoteSymbol={quoteSymbol} />}
+    <PoolReadout hidden={amountsHidden} inspected={inspectedPrice} model={model} mode={mode} quoteSymbol={quoteSymbol} />
+    {walletToggle}
   </div>;
   return (
     <>
@@ -160,13 +162,18 @@ export function PoolCandleChart({
           </span>
         </div>
         {mode === "candles" && readout}
-        {walletTrades && <label className={styles.walletToggle}>
-          Wallet tags
-          <Switch checked={showWalletTags} onCheckedChange={setWalletTags} />
-        </label>}
+        {!compact && walletToggle}
       </div>
     </>
   );
+}
+
+function WalletTagsToggle({ available, checked, onChange }: Readonly<{ available: boolean; checked: boolean; onChange: (checked: boolean) => void }>) {
+  if (!available) return null;
+  return <label className={styles.walletToggle}>
+    Wallet tags
+    <Switch checked={checked} onCheckedChange={onChange} />
+  </label>;
 }
 
 function PoolChartControls({ compact, mode, onModeChange, showVolume, onToggleVolume }: Readonly<{
@@ -257,12 +264,14 @@ function useTradeOverlay(tradeLabel: ReturnType<typeof candleTradeLabel>) {
   return { mountTrade, projectTrade, tradeKey: tradeLabel?.cursor ?? "" };
 }
 
-function PoolReadout({ inspected, model, mode, quoteSymbol }: Readonly<{
+function PoolReadout({ hidden, inspected, model, mode, quoteSymbol }: Readonly<{
+  hidden: boolean;
   inspected?: { at: number; value?: string; candle?: ExactCandle; volume?: string };
   model: ReturnType<typeof poolChartModel>;
   mode: "line" | "candles";
   quoteSymbol?: string;
 }>) {
+  if (hidden) return null;
   const unit = model.usd ? "USD" : quoteSymbol;
   if (mode === "candles") {
     const candle = inspected ? inspected.candle : model.latestCandle;

@@ -176,12 +176,13 @@ test("only a migrated sale mounts market data, with a separate query key from Ho
       />,
     ),
   );
-  // The Coin board: the market card's tiles, then the claims, then Activity (Trades first), all before the history.
+  // The chart and trades lead the market figures and claims, all before the history.
   assert.ok(html.indexOf("Volume 24h") < html.indexOf('id="presaleHistory"'));
   assert.match(html, /<dt>Holders<\/dt><dd>/);
-  assert.ok(html.indexOf("data-sale-market") < html.indexOf("Claim my allocation"));
-  assert.ok(html.indexOf("Claim my allocation") < html.indexOf('aria-label="Trading activity"'));
-  assert.ok(html.indexOf('aria-label="Trading activity"') < html.indexOf('id="presaleHistory"'));
+  assert.ok(html.indexOf("data-sale-market") < html.indexOf('aria-label="Trading activity"'));
+  assert.ok(html.indexOf('aria-label="Trading activity"') < html.indexOf("Volume 24h"));
+  assert.ok(html.indexOf("Volume 24h") < html.indexOf("Claim my allocation"));
+  assert.ok(html.indexOf("Claim my allocation") < html.indexOf('id="presaleHistory"'));
   assert.deepEqual([...html.matchAll(/<button[^>]*role="tab"[^>]*>([^<]+)<\/button>/g)].map((match) => match[1]).slice(0, 3), ["Trades", "Holders", "Posts"]);
   // The Holders tab holds the top holders with the pool's allocation at launch.
   const holders = renderToStaticMarkup(view(coin, { activity: (content: React.ReactNode) => <section aria-label="Activity">{content}</section> }));
@@ -228,10 +229,11 @@ function fixtureCoinMarket(overrides: Partial<HomeCoinMarket> = {}): HomeCoinMar
   };
 }
 
-test("Coin board: the market read adds the FDV tile first and hands the price card the day's dollar move", () => {
+test("Coin board: the chart and trades lead the FDV tile and the price card gets the day's move", () => {
   let extras: MarketExtras | null = null;
-  const chart = (value: MarketExtras) => { extras = value; return <section>{value.overview}</section>; };
-  const html = renderToStaticMarkup(view(fixtureMarket(), { market: fixtureCoinMarket(), chart }));
+  const chart = (value: MarketExtras) => { extras = value; return <section>Chart fixture</section>; };
+  const html = renderToStaticMarkup(view(fixtureMarket(), { market: fixtureCoinMarket(), chart, activity: () => <section>Recent trades fixture</section> }));
+  assert.match(html, /Chart fixture.*Recent trades fixture.*<dt>FDV<\/dt>/);
   // Without a pool read the liquidity tile is left out: FDV, Volume 24h, Holders.
   assert.deepEqual([...html.matchAll(/<dt>([^<]+)<\/dt><dd>/g)].map((match) => match[1]), ["FDV", "Holders", "Volume 24h"]);
   assert.match(html, /<dt>FDV<\/dt><dd>.*\$412\.7M/);
@@ -268,9 +270,8 @@ test("Coin board: Volume 24h shows a compact total without a breakdown", () => {
 });
 
 test("Coin board: Liquidity shows compact balances and copies exact values", async (t) => {
-  const chart = (value: MarketExtras) => <section>{value.overview}</section>;
   const pool = { id: `0x${"9".repeat(64)}`, venue: "cetus", coin_atoms: "12500000000000000000000000", quote_atoms: "1", as_of_ms: Date.UTC(2026, 9, 27, 14) };
-  const marketView = view(fixtureMarket(), { market: fixtureCoinMarket({ pool, decimals: 18, quote: { ...fixtureMarket().quote, decimals: 18 }, liquidity_usd: "9420000.00" }), chart });
+  const marketView = view(fixtureMarket(), { market: fixtureCoinMarket({ pool, decimals: 18, quote: { ...fixtureMarket().quote, decimals: 18 }, liquidity_usd: "9420000.00" }) });
   const html = renderToStaticMarkup(marketView);
   assert.deepEqual([...html.matchAll(/<dt>([^<]+)<\/dt><dd>/g)].map((match) => match[1]), ["FDV", "Holders", "Volume 24h", "DEX", "Liquidity"]);
   assert.match(html, /<dt>Liquidity<\/dt><dd>.*\$9\.42M/);
@@ -301,13 +302,12 @@ test("Coin board: Liquidity shows compact balances and copies exact values", asy
     coin: null,
     liquidity: null,
     market: fixtureCoinMarket({ pool, decimals: 18, quote: { ...fixtureMarket().quote, decimals: 18, symbol: " " }, liquidity_usd: "9420000.00" }),
-    chart,
   })));
   const unnamed = document.querySelector('[role="dialog"]')!;
   const announcement = ["h2", "code", "p"].map((selector) => unnamed.querySelector(selector)!.textContent).join(" ");
   assert.equal(announcement, "liquidity $9.42M Token: 12.5M, Quote: 0.0₁₇1");
   assert.equal(announcement.split(/\s+/).length, 6);
-  assert.doesNotMatch(renderToStaticMarkup(view(fixtureMarket(), { market: fixtureCoinMarket({ pool, liquidity_usd: null }), chart })), /Liquidity/);
+  assert.doesNotMatch(renderToStaticMarkup(view(fixtureMarket(), { market: fixtureCoinMarket({ pool, liquidity_usd: null }) })), /Liquidity/);
 });
 
 test("the coin page reads the coin market on Home's public root, keyed by the sale's coin", () => {

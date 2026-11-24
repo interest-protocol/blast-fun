@@ -78,11 +78,24 @@
 }
 
 
-.coinAxes {
+.hasFooter {
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
 }
-.coinAxes .credit {
+.hasFooter .canvas:focus-visible {
+  outline: 0.125rem solid var(--focus-color, var(--ink));
+  outline-offset: -0.125rem;
+}
+.footer {
+  display: flex;
+  align-items: center;
+  min-block-size: 2rem;
+}
+.hasFooter .credit {
   position: static;
-  justify-self: end;
+  margin-inline-start: auto;
+}
+@media (max-width: 760px), (pointer: coarse) {
+  .footer,
+  .footer .backToLive { min-block-size: 2.75rem; }
 }

@@ -5,7 +5,7 @@ import { InspectValue } from "./InspectValue.tsx";
 import { shortUtcDate } from "./date-label.ts";
 
 /** A compact date or time label, with the exact UTC timestamp available to inspect. */
-export function DateStamp({ at, label = "timestamp", className, href, plain = false, clock = false, displayText, onInspect }: Readonly<{
+export function DateStamp({ at, label = "timestamp", className, href, plain = false, clock = false, displayText, triggerLabel, onInspect }: Readonly<{
   at: number | bigint | string | null | undefined;
   label?: string;
   className?: string;
@@ -15,6 +15,7 @@ export function DateStamp({ at, label = "timestamp", className, href, plain = fa
   /** Time of day distinguishes records within the same day, as in a candle table. */
   clock?: boolean;
   displayText?: string;
+  triggerLabel?: string;
   onInspect?: (open: boolean) => void;
 }>) {
   const date = new Date(typeof at === "bigint" ? Number(at) : at ?? Number.NaN);
@@ -31,5 +32,5 @@ export function DateStamp({ at, label = "timestamp", className, href, plain = fa
   );
   if (plain) return visible;
   if (href) return <a className={className} href={href} aria-label={`${label}: ${text}, ${full}`} title={full}>{visible}</a>;
-  return <span className={className}><InspectValue value={full} label={label} onOpenChange={onInspect}>{visible}</InspectValue></span>;
+  return <span className={className}><InspectValue value={full} label={label} triggerLabel={triggerLabel} onOpenChange={onInspect}>{visible}</InspectValue></span>;
 }

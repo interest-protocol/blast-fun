@@ -81,7 +81,7 @@ function LastTradeSlot({ trade, cue, decimals, symbol, placement, playSound, lar
   const fill = useTradeFill(cue, trade?.side, headline);
   const highlight = largeBuy && !amountsHidden;
   const status = useTradeNotice(headline ? cue : null, playSound, highlight);
-  return <div className={styles.slot} data-chart-last-trade={placement}>
+  return <div className={styles.slot} data-chart-last-trade={placement} data-idle={!trade || undefined}>
     <span className={styles.label} data-idle={!trade || undefined}>Last trade{trade && <> <TradeAge at={trade.timestampMs} /></>}</span>
     <span aria-hidden="true" className={styles.measure} data-width-sample={widthSample} />
     {trade && <LastTradeValue trade={trade} decimals={decimals} symbol={symbol} hidden={amountsHidden} highlight={highlight} fill={fill} />}

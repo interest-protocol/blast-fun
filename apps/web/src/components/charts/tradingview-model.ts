@@ -1,4 +1,4 @@
-import type { UTCTimestamp } from "lightweight-charts";
+import type { IRange, UTCTimestamp } from "lightweight-charts";
 
 export const chartTimestamp = (at: number) => (at / 1000) as UTCTimestamp;
 export type SavedChartView = Readonly<{
@@ -13,6 +13,101 @@ export function restoredChartRange(previous: SavedChartView, last: number) {
   if (range.from <= first && range.to >= previous.last) return null;
   const shift = range.to >= previous.last ? last - previous.last : 0;
   return { from: range.from + shift, to: range.to + shift };
+}
+
+export const LIVE_GUTTER_PX = 32;
+
+function barsPerPixel(range: IRange<number>, width: number) {
+  return (range.to - range.from + 1) / width;
+}
+
+export function atLiveEdge(range: IRange<number>, pointCount: number, width: number) {
+  const gap = (range.to - (pointCount - 1)) / barsPerPixel(range, width);
+  return gap >= -1 && gap <= LIVE_GUTTER_PX + 1;
+}
+
+export function panChartRange(range: IRange<number>, pixels: number, width: number) {
+  const shift = pixels * barsPerPixel(range, width);
+  return { from: range.from + shift, to: range.to + shift };
+}
+
+export function liveChartRange(range: IRange<number>, pointCount: number, width: number) {
+  const to = pointCount - 1 + LIVE_GUTTER_PX * barsPerPixel(range, width);
+  return { from: to - (range.to - range.from), to };
+}
+
+export function resizedLiveChartRange(range: IRange<number>, pointCount: number, before: number, after: number) {
+  if (!before || !after || before === after || !atLiveEdge(range, pointCount, before)) return null;
+  return liveChartRange(range, pointCount, after);
+}
+
+function regridChartRange(range: IRange<number>, before: readonly number[], after: readonly number[]) {
+  const oldStart = before[0]!;
+  const newStart = after[0]!;
+  const oldStep = (before.at(-1)! - oldStart) / (before.length - 1);
+  const newStep = (after.at(-1)! - newStart) / (after.length - 1);
+  if (!oldStep || !newStep || Math.abs(newStep - oldStep) < 0.001) return null;
+  const uniform = (times: readonly number[], start: number, step: number) =>
+    times.every((time, index) => Math.abs(time - (start + index * step)) < 0.001);
+  if (!uniform(before, oldStart, oldStep) || !uniform(after, newStart, newStep)) return null;
+  const project = (index: number) => (oldStart - newStart + index * oldStep) / newStep;
+  return { from: project(range.from), to: project(range.to) };
+}
+
+/** Preserve fractional spacing. Keep the newest bar in place at the live edge, or anchor history by time. */
+export function rebaseCoinChartRange(range: IRange<number>, before: readonly number[], after: readonly number[], width: number) {
+  const following = atLiveEdge(range, before.length, width);
+  const regridded = regridChartRange(range, before, after);
+  if (regridded) return following ? liveChartRange(regridded, after.length, width) : regridded;
+  if (following) {
+    const shift = after.length - before.length;
+    return { from: range.from + shift, to: range.to + shift };
+  }
+  const left = Math.max(0, Math.min(before.length - 1, Math.floor(range.from)));
+  const available = new Set(after);
+  const retained = before.findIndex((time, index) => index >= left && available.has(time));
+  const anchor = retained >= 0 ? retained : before.findLastIndex((time) => available.has(time));
+  const oldIndex = anchor >= 0 ? anchor : left;
+  const next = after.findIndex((time) => time >= before[oldIndex]!);
+  const shift = (next < 0 ? after.length - 1 : next) - oldIndex;
+  return { from: range.from + shift, to: range.to + shift };
+}
+
+/** A native range write is applied on the next chart frame. Data and input use its pending target until then. */
+export function queuedChartRange(readNative: () => IRange<number> | null, writeNative: (range: IRange<number>) => void) {
+  let pending: IRange<number> | null = null;
+  return {
+    read: () => pending ?? readNative(),
+    write: (range: IRange<number>) => {
+      pending = range;
+      writeNative(range);
+    },
+    settle: () => { pending = null; },
+  };
+}
+
+export function zoomChartRange(range: IRange<number>, anchor: number, wheelDelta: number) {
+  const factor = Math.exp(Math.max(-1, Math.min(1, wheelDelta * 0.002)));
+  return {
+    from: anchor - (anchor - range.from) * factor,
+    to: anchor + (range.to - anchor) * factor,
+  };
+}
+
+/** Use the target range for pointer zoom even when the canvas still shows the previous frame. */
+export function zoomChartRangeAtPixel(range: IRange<number>, x: number | null, width: number, delta: number) {
+  const anchor = x === null || !width
+    ? (range.from + range.to) / 2
+    : range.to - (width - 1 - x) * barsPerPixel(range, width);
+  return zoomChartRange(range, anchor, delta);
+}
+
+export function keyboardChartRange(key: string, range: IRange<number>, pointCount: number, width: number) {
+  if (key === "ArrowLeft" || key === "ArrowRight")
+    return panChartRange(range, (key === "ArrowLeft" ? -1 : 1) * width / 8, width);
+  if (key !== "+" && key !== "-" && key !== "=") return null;
+  const zoom = zoomChartRange(range, (range.from + range.to) / 2, key === "-" ? 120 : -120);
+  return atLiveEdge(range, pointCount, width) ? liveChartRange(zoom, pointCount, width) : zoom;
 }
 
 /** Sorted, unique library times. Callers keep exact same-time source observations separately. */
