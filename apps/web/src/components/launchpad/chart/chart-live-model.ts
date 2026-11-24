@@ -3,8 +3,9 @@ import { ContractViolation, parseCount } from "@blast/core/modules/launchpad-con
 import { EVENT_CURSOR, compareEventCursors } from "@blast/core/modules/launchpad-contract/cursor.ts";
 import { deploymentMismatch, parseInfraProvenance, type ExpectedDeployment } from "@blast/core/modules/launchpad-contract/provenance.ts";
 import type { Provenance } from "@blast/core/modules/launchpad-contract/read.ts";
-import { CANDLE_INTERVALS, candleBucketStart, candleIntervalMs, comparePrices, parsePoolCandlePage, parsePoolTradesPage, type Candle, type CandleInterval, type MigrationMarker, type PoolCandlePage, type PoolTrade } from "@blast/core/modules/launchpad-contract/venue-history.ts";
+import { CANDLE_INTERVALS, TRADE_PAGE, candleBucketStart, candleIntervalMs, comparePrices, parsePoolCandlePage, parsePoolTradesPage, type Candle, type CandleInterval, type MigrationMarker, type PoolTrade } from "@blast/core/modules/launchpad-contract/venue-history.ts";
 
+import type { StreamChartPage } from "./chart-client.ts";
 import type { ChartRequest } from "./chart-model.ts";
 
 type Envelope = Readonly<{ cursor: string; checkpoint: number; timestampMs: number; poolKey: string; provenance: Provenance }>;
@@ -113,8 +114,28 @@ function addTrade(candles: Candle[], trade: PoolTrade, interval: CandleInterval,
   else candles.push(candle);
 }
 
+export function candlesFromTrades(trades: readonly PoolTrade[]): Candle[] {
+  const candles: Candle[] = [];
+  for (const trade of trades) addTrade(candles, trade, "1s", { interval: "1s", capped: false });
+  return candles;
+}
+
+function applyLiveTrade(page: StreamChartPage, tape: readonly PoolTrade[], trade: PoolTrade, request: ChartRequest): StreamChartPage {
+  const last = tape.at(-1);
+  if (last && compareEventCursors(trade.cursor, last.cursor) <= 0) {
+    if (tape.some(({ cursor }) => cursor === trade.cursor)) return page;
+    throw new ChartBackfillRequired("trade precedes the loaded tape");
+  }
+  const liveTrades = [...tape, trade].slice(-TRADE_PAGE.max);
+  const candles = [...page.candles];
+  addTrade(candles, trade, page.interval, request);
+  // Rebuild the bounded tape when its first trade rolls out, since its bucket may have retained trades.
+  const nextCandles = liveTrades[0] === tape[0] || !last ? candles : candlesFromTrades(liveTrades);
+  return { ...page, liveTrades, candles: nextCandles, truncated: page.truncated || liveTrades.length === TRADE_PAGE.max };
+}
+
 /** Apply ordered, previously unseen frames after the HTTP checkpoint fence. No gap filling. */
-export function applyChartFrame(page: PoolCandlePage, frame: ChartFrame, request: ChartRequest): PoolCandlePage {
+export function applyChartFrame(page: StreamChartPage, frame: ChartFrame, request: ChartRequest): StreamChartPage {
   if (frame.poolKey !== page.poolKey || page.interval !== request.interval) throw new ChartBackfillRequired("route changed");
   if (frame.type === "lifecycle") throw new ChartBackfillRequired("lifecycle changed");
   // A round's state is not a candle; the stream hands it to the coin page instead.
@@ -123,6 +144,7 @@ export function applyChartFrame(page: PoolCandlePage, frame: ChartFrame, request
   if (frame.type === "trade" && migration && (page.source === "curve" ? compareEventCursors(frame.trade.cursor, migration.cursor) >= 0 : compareEventCursors(frame.trade.cursor, migration.cursor) <= 0)) {
     throw new ChartBackfillRequired("trade crosses the committed migration");
   }
+  if (page.liveTrades && frame.type === "trade") return applyLiveTrade(page, page.liveTrades, frame.trade, request);
   const candles = [...page.candles];
   if (frame.type === "candle_closed") {
     if (frame.interval !== page.interval) return page;

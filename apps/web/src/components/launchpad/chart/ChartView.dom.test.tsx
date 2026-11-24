@@ -70,9 +70,9 @@ test("changing the interval leaves an untouched range at its coin default", asyn
   try {
     saveChartControls({ interval: "5m", range: "all" }, { interval: "15m", range: "all" });
     const saved = dom.window.localStorage.getItem(key) ?? "";
-    assert.equal(saved, "interval=15m");
+    assert.equal(saved, "interval.all=15m");
     assert.deepEqual(preferredChartControls(saved, "", { interval: "5m", range: "24h" }), {
-      interval: "15m",
+      interval: "5m",
       range: "24h",
     });
   } finally {
@@ -80,7 +80,7 @@ test("changing the interval leaves an untouched range at its coin default", asyn
   }
 });
 
-test("reopening a Live link preserves the saved history interval when leaving Live", async (t) => {
+test("reopening a Live link keeps a different range at its own interval", async (t) => {
   const { useCoinChartControls } = await import("./chart-preferences.ts");
   const key = "blast.coin-chart.controls";
   const original = window.location.href;
@@ -102,9 +102,9 @@ test("reopening a Live link preserves the saved history interval when leaving Li
   await act(async () => root.render(<Probe />));
   assert.equal(node.textContent, "live / 1s");
   await act(async () => node.querySelector("button")?.click());
-  assert.equal(node.textContent, "1h / 15m");
-  assert.equal(window.location.search, "?range=1h&interval=15m");
-  assert.equal(window.localStorage.getItem(key), "interval=15m&range=1h");
+  assert.equal(node.textContent, "1h / 1m");
+  assert.equal(window.location.search, "?range=1h&interval=1m");
+  assert.equal(window.localStorage.getItem(key), "range=1h&interval.7d=15m");
 });
 
 test("compact style controls update a single plot and show trades on its live candle", async t => {
@@ -347,104 +347,90 @@ test("a migrated coin tags only the venue's last price, in both chart styles", a
   }
 });
 
-test("Live carries the last close across the five-minute window on desktop and mobile", async (t) => {
+test("quiet Live keeps the last executed time and plots the next exact trade once", async (t) => {
   const start = 1_800_000_000_000;
   let now = start;
   t.mock.method(Date, "now", () => now);
-  const media = "(max-width: 760px), (pointer: coarse)";
-  const layout = Object.assign(new dom.window.EventTarget(), {
-    matches: false, media, onchange: null, addListener() {}, removeListener() {},
-  });
-  const matchMedia = dom.window.matchMedia.bind(dom.window);
-  t.mock.method(dom.window, "matchMedia", (query: string) => query === media ? layout : matchMedia(query));
-  async function setMobile(matches: boolean) {
-    await act(async () => {
-      layout.matches = matches;
-      layout.dispatchEvent(new dom.window.Event("change"));
-    });
-  }
   const poolKey = "blast_curve:0x1";
-  const candle = (bucketStart: number, close: string) => ({
-    bucketStart, open: close, high: close, low: close, close, volumeQuote: 20n, volumeMeme: 10n, volumeUsd: null, buys: 1, sells: 0, trades: 1,
+  const trade = (cursor: string, timestampMs: number, price: string) => ({
+    cursor, timestampMs, price, poolKey, venue: "blast_curve" as const, kind: "buy" as const, side: "buy" as const,
+    trader: null, digest: "1".repeat(32), quoteAmount: 20n, memeAmount: 10n, volumeUsd: null, venueSwap: null,
   });
-  const page = {
-    poolKey, source: "curve" as const, venue: "blast_curve" as const, interval: "1s" as const, migration: null,
-    candles: [candle(start - 300_000, "91"), candle(start - 299_000, "92")],
-  };
-  const provenance = { source: "blast-infra" as const, network: "localnet" as const, deployment: "fixture", checkpoint: 1, timestampMs: start, observedAt: start, lagMs: 0 };
+  const candle = ({ timestampMs, price }: ReturnType<typeof trade>) => ({
+    bucketStart: Math.floor(timestampMs / 1_000) * 1_000, open: price, high: price, low: price, close: price,
+    volumeQuote: 20n, volumeMeme: 10n, volumeUsd: null, buys: 1, sells: 0, trades: 1,
+  });
+  const last = trade("1:0:0:0", start - 303_250, "92");
+  const next = trade("2:0:0:0", start + 2_375, "93");
   const controls = { interval: "1s", range: "live" } as const;
   const container = dom.document.createElement("div");
   const root = createRoot(container);
   t.after(() => act(async () => root.unmount()));
-  const noRows: readonly ActivityRow[] = [];
-  function TradeHistory({ row }: Readonly<{ row: ActivityRow | null }>) {
-    usePublishWalletTrades(noRows, row);
-    return null;
-  }
-  const render = (updates: string | null, trade: { cursor: string; timestampMs: number; side: "buy"; price: string; quoteAmount: bigint; memeAmount: bigint } | null = null, history: ActivityRow | null = null, graduated?: "traded" | "quiet") => {
-    const migration = graduated ? {
-      cursor: "1:0:0:0", timestampMs: now - (graduated === "quiet" ? 315_000 : 65_000) + 550,
-      curvePoolKey: poolKey, venuePoolKey: `cetus:0x${"c3".repeat(32)}`,
-    } : null;
-    const checkpoint = { ...provenance, observedAt: now, timestampMs: now };
-    const curve = { ...page, migration, candles: trade ? [candle(trade.timestampMs, trade.price)] : page.candles };
-    const venue = migration && (graduated === "traded" ? {
-      state: "available" as const, provenance: checkpoint,
-      data: { ...page, poolKey: migration.venuePoolKey, source: "venue" as const, venue: "cetus" as const, migration, candles: [candle(now - 65_000, "93")] },
-    } : { state: "empty" as const, provenance: checkpoint });
-    return act(async () => root.render(
-    <WalletTradesProvider deployer={null}><TradeHistory row={history} /><ChartTradeContext value={{ trade, poolKey, receivedAt: trade ? performance.now() : null, decimals: 9, symbol: "SUI" }}><ChartView
-      compact
-      livePreset
-      source={{ expected: null, curvePoolKey: poolKey, venuePoolKey: migration?.venuePoolKey ?? null, migration, symbol: "PIP", quoteSymbol: "SUI", memeDecimals: 9, quoteDecimals: 9 }}
-      state={{ key: "1s|live", curve: { state: "available", data: curve, provenance: checkpoint }, venue, migration }}
-      controls={controls}
-      request={chartRequest(controls, start)}
-      hidden={[]}
-      updates={updates}
-      pending={false}
-      onControls={() => {}}
-      onToggle={() => {}}
-      onRefresh={() => {}}
-    /></ChartTradeContext></WalletTradesProvider>,
-    ));
+  const render = (updates: string | null, liveTrades = [last]) => {
+    const provenance = { source: "blast-infra" as const, network: "localnet" as const, deployment: "fixture", checkpoint: 2, timestampMs: now, observedAt: now, lagMs: 0 };
+    const page = {
+      poolKey, source: "curve" as const, venue: "blast_curve" as const, interval: "1s" as const, migration: null,
+      liveTrades, candles: liveTrades.map(candle),
+    };
+    return act(async () => root.render(<ChartView
+      compact marketChart livePreset
+      source={{ expected: null, curvePoolKey: poolKey, venuePoolKey: null, migration: null, symbol: "PIP", quoteSymbol: "SUI", memeDecimals: 9, quoteDecimals: 9 }}
+      state={{ key: "1s|live", curve: { state: "available", data: page, provenance }, venue: null, migration: null }}
+      controls={controls} request={chartRequest(controls, now)} hidden={[]} updates={updates} pending={false}
+      onControls={() => {}} onToggle={() => {}} onRefresh={() => {}}
+    />));
   };
   await render(null);
-  const plot = container.querySelector("[data-series]");
-  assert.equal(plot?.getAttribute("data-series"), "Area");
-  assert.match(plot?.getAttribute("data-points") ?? "", /^1799999701:92.*1800000001:92$/);
-  assert.ok(container.querySelector('button[aria-label="Chart range: Live, last 5 minutes"]'));
-  await setMobile(true);
-  assert.equal(container.querySelector("[data-compact-chart]")?.getAttribute("data-chart-style"), "line");
-  assert.equal(container.querySelector("[data-series]")?.getAttribute("data-series"), "Area");
-  await setMobile(false);
-  assert.equal(container.querySelector("[data-series]")?.getAttribute("data-series"), "Area");
+  const dateTime = () => container.querySelector("time")?.dateTime;
+  assert.match(container.textContent ?? "", /No trades in the last 5 min/);
+  assert.equal(container.querySelector("[data-series]"), null);
+  assert.equal(dateTime(), new Date(last.timestampMs).toISOString());
 
   now += 1_000;
-  await act(async () => document.dispatchEvent(new dom.window.Event("visibilitychange")));
-  assert.equal(container.querySelector("[data-series]")?.getAttribute("data-points"), "1799999702:92,1800000002:92");
-  assert.equal(container.querySelector("[data-candle-trade-amount]"), null);
-  assert.match(container.textContent ?? "", /Last close/);
-
+  await render(null);
+  assert.equal(dateTime(), new Date(last.timestampMs).toISOString(), "a fresher checkpoint leaves the execution time intact");
   await render("Trade updates delayed.");
   assert.match(container.querySelector('[role="status"]')?.textContent ?? "", /Trade updates delayed/);
-  assert.doesNotMatch(container.textContent ?? "", /No trades in this range/);
+  assert.doesNotMatch(container.textContent ?? "", /No trades in the last 5 min/);
+  assert.equal(dateTime(), new Date(last.timestampMs).toISOString());
 
-  const buy = { cursor: "2:0:1:0", timestampMs: now, side: "buy" as const, price: "93", quoteAmount: 20n, memeAmount: 1_000_000_000n };
-  await render(null, buy);
-  assert.equal(container.querySelector("[data-candle-trade-amount]")?.textContent, "+1", "the first trade after the quiet period cues its new candle");
-  await render(null, buy, { position: "2:0:2:0", checkpoint: 2, timestampMs: now, digest: "newer", kind: "curve_sell",
-    source: "user", actor: null, lifecycle: null, amounts: { quote: 100_000_000n, meme: 1_000_000_000n } });
-  assert.equal(container.querySelector("[data-chart-last-trade] [data-trade-cue]")?.textContent, "Sell · 0.1\u00a0SUI");
-  assert.equal(container.querySelector("[data-candle-trade-amount]"), null, "the earlier buy callout leaves when newer history wins");
+  now += 2_000;
+  await render(null, [last, next]);
+  const plot = container.querySelector("[data-series]");
+  assert.equal(plot?.getAttribute("data-series"), "Area");
+  assert.equal(plot?.getAttribute("data-points"), `${next.timestampMs / 1_000}:93`);
+  assert.equal(dateTime(), new Date(next.timestampMs).toISOString());
+  assert.equal(container.querySelector("[data-candle-trade-amount]"), null);
+});
 
-  await render(null, null, null, "traded");
-  assert.match(container.querySelector("[data-series]")?.getAttribute("data-last-points") ?? "",
-    /1799999936\.55:92,1799999936\.5505:93,1800000002:93/);
-
-  now += 25_000;
-  await render(null, null, null, "quiet");
-  assert.equal(container.querySelector("[data-series]")?.getAttribute("data-points"), "1799999727:92,1800000027:92");
+test("partial line history has only indexed candle closes, with no points in the gaps", async (t) => {
+  const { saveChartPreference } = await import("./chart-preferences.ts");
+  saveChartPreference("style", "line");
+  const at = 1_800_000_000_000;
+  const poolKey = "blast_curve:0x1";
+  const provenance = { source: "blast-infra" as const, network: "localnet" as const, deployment: "fixture", checkpoint: 2,
+    timestampMs: at + 300_000, observedAt: at + 300_000, lagMs: 0 };
+  const candles = [at, at + 240_000].map((bucketStart, index) => ({
+    bucketStart, open: "90", high: "92", low: "90", close: String(91 + index),
+    volumeQuote: 20n, volumeMeme: 10n, buys: 1, sells: 0, trades: 1,
+  }));
+  const controls = { interval: "1m", range: "1h" } as const;
+  const data = { poolKey, source: "curve" as const, venue: "blast_curve", interval: controls.interval, migration: null, candles };
+  const container = dom.document.createElement("div");
+  const root = createRoot(container);
+  t.after(async () => {
+    saveChartPreference("style", "");
+    await act(async () => root.unmount());
+  });
+  await act(async () => root.render(<ChartView
+    compact marketChart
+    source={{ expected: null, curvePoolKey: poolKey, venuePoolKey: null, migration: null, symbol: "PIP", quoteSymbol: "SUI", memeDecimals: 9, quoteDecimals: 9 }}
+    state={{ key: "1m|1h", curve: { state: "available", data, provenance }, venue: null, migration: null }}
+    controls={controls} request={chartRequest(controls, at + 300_000)} hidden={[]} updates={null} pending={false}
+    onControls={() => {}} onToggle={() => {}} onRefresh={() => {}}
+  />));
+  assert.match(container.textContent ?? "", /Partial price history/);
+  assert.equal(container.querySelector("[data-series]")?.getAttribute("data-points"), "1800000000:91,1800000240:92");
 });
 
 test("panning the live candle out of the price pane hides its amount", async () => {

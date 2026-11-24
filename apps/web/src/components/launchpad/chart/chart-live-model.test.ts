@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { parsePoolCandlePage, type Candle, type PoolCandlePage } from "@blast/core/modules/launchpad-contract/venue-history.ts";
-import { applyChartFrame, ChartBackfillRequired, parseChartFrame } from "./chart-live-model.ts";
+import { applyChartFrame, candlesFromTrades, ChartBackfillRequired, parseChartFrame } from "./chart-live-model.ts";
 import { chartRequest, parseChartControls, parseLiveChartControls } from "./chart-model.ts";
 
 const POOL = `blast_curve:0x${"11".repeat(32)}`;
@@ -117,4 +117,17 @@ test("an opening round frame parses its round and never touches candles or requi
   assert.throws(() => parseChartFrame(roundWire(11, { ...ROUND, undelivered_count: 3 }), POOL, expected, null));
   assert.throws(() => parseChartFrame(roundWire(11, ROUND, `blast_curve:0x${"22".repeat(32)}`), POOL, expected, null));
   assert.throws(() => parseChartFrame({ ...roundWire(), cursor: "12:3:0:0" }, POOL, expected, null));
+});
+
+test("the Live tape applies an execution once and agrees with a clean tape fetch", () => {
+  const earlier = parseChartFrame(wire(11, NOW - 101, "1"), POOL, expected, null);
+  const next = parseChartFrame(wire(12, NOW + 375, "2"), POOL, expected, null);
+  assert.ok(earlier.type === "trade" && next.type === "trade");
+  const liveRequest = chartRequest({ interval: "1s", range: "live" }, NOW);
+  const liveTrades = [earlier.trade];
+  const before = { ...page(candlesFromTrades(liveTrades)), liveTrades };
+  const after = applyChartFrame(before, next, liveRequest);
+  assert.equal(applyChartFrame(after, next, liveRequest), after);
+  assert.deepEqual(after.liveTrades, [earlier.trade, next.trade]);
+  assert.deepEqual(after.candles, candlesFromTrades([earlier.trade, next.trade]));
 });

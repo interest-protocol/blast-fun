@@ -4,7 +4,7 @@
 // here makes a candle, fills a gap or moves the migration: missing intervals
 // stay missing, and the raw OHLC and volume are the engine's.
 
-import { CANDLE_PAGE, candleBucketStart, candleIntervalMs, type Candle, type CandleInterval, type CandleRequest, type MigratedChart, type MigrationMarker, type PoolCandlePage } from "@blast/core/modules/launchpad-contract/venue-history.ts";
+import { CANDLE_PAGE, candleBucketStart, candleIntervalMs, type Candle, type CandleInterval, type CandleRequest, type MigratedChart, type MigrationMarker, type PoolCandlePage, type PoolTrade } from "@blast/core/modules/launchpad-contract/venue-history.ts";
 import type { Section } from "@blast/core/modules/launchpad-contract/section.ts";
 
 /** History-only controls retained for existing callers; streaming controls also expose 1s. */
@@ -23,6 +23,18 @@ export const CHART_RANGES = Object.keys(RANGE_MS) as HistoryRange[];
 
 export type ChartControls = Readonly<{ interval: ChartInterval; range: ChartRange }>;
 export const DEFAULT_CHART_CONTROLS = { interval: "5m", range: "all" } as const satisfies ChartControls;
+const RANGE_INTERVALS = { "1h": "1m", "6h": "5m", "24h": "15m", "7d": "1h", "30d": "4h", all: "5m", live: "1s" } as const satisfies Record<ChartRange, ChartInterval>;
+
+export function rangeInterval(range: ChartRange): ChartInterval {
+  return RANGE_INTERVALS[range];
+}
+
+export function allChartInterval(launchAt: number | undefined, now: number, plotWidth = 360): ChartInterval {
+  if (launchAt === undefined) return RANGE_INTERVALS.all;
+  const slots = Math.max(20, Math.floor(plotWidth / 6));
+  return CHART_INTERVALS.find((interval) => (now - launchAt) / candleIntervalMs(interval) <= slots) ?? "1w";
+}
+
 export const LIVE_CHART_CONTROLS = { interval: "1s", range: "live" } as const satisfies ChartControls;
 
 export const CHART_CONTROLS_COOKIE = "blast-chart-controls";
@@ -49,21 +61,25 @@ export function parseLiveChartControls(
 ): ChartControls {
   if (search.range === "live" || (search.range === undefined && fallback.range === "live")) return LIVE_CHART_CONTROLS;
   const controls = parseChartControls(search, fallback);
-  return search.interval === "1s" ? { ...controls, interval: "1s" } : controls;
+  const interval = LIVE_CHART_INTERVALS.find(interval => interval === search.interval);
+  return { ...controls, interval: interval ?? (controls.range === fallback.range ? fallback.interval : rangeInterval(controls.range)) };
 }
 
 export function preferredChartControls(saved: string, search: string, initial: ChartControls, live = true, livePreset = live): ChartControls {
-  if (!saved) return initial;
   const fields = (value: string) => {
     const query = new URLSearchParams(value);
-    const interval = query.getAll("interval");
-    const range = query.getAll("range");
-    return { interval: interval.length === 1 ? interval[0] : undefined, range: range.length === 1 ? range[0] : undefined };
+    return (key: string) => query.getAll(key).length === 1 ? query.get(key) ?? undefined : undefined;
   };
+  const url = fields(search);
+  const stored = fields(saved);
   const parse = live ? parseLiveChartControls : parseChartControls;
-  const query = fields(search);
-  if (!livePreset && query.range === "live") return initial;
-  return parse(query, parse(fields(saved), initial));
+  if (!live) return parse({ interval: url("interval"), range: url("range") }, parse({ interval: stored("interval"), range: stored("range") }, initial));
+  if (!livePreset && url("range") === "live") return initial;
+  const savedRange = parse({ range: stored("range") }, initial).range;
+  const range = parse({ range: url("range") }, { ...initial, range: savedRange }).range;
+  const options = [url("interval"), stored(`interval.${range}`), range === stored("range") ? stored("interval") : undefined];
+  const chosen = options.find(value => LIVE_CHART_INTERVALS.some(interval => interval === value));
+  return parse({ interval: chosen, range }, { range, interval: range === initial.range ? initial.interval : rangeInterval(range) });
 }
 
 /** The query string of a direct link to these controls. */
@@ -85,8 +101,7 @@ export type ChartRequest = CandleRequest & Readonly<{ capped: boolean }>;
  */
 export function chartRequest(controls: ChartControls, now: number): ChartRequest {
   if (controls.range === "live") {
-    // A stable URL shares the cache between viewers and keeps the previous close
-    // after a quiet spell. The plot applies the five-minute cutoff locally.
+    // Live reads a bounded tape. Its time window advances locally.
     return { interval: "1s", limit: LIVE_CHART_SPAN_MS / 1_000 + 1, capped: false };
   }
   const span = RANGE_MS[controls.range];
@@ -131,7 +146,7 @@ export function candleGaps(page: ChartCandlePage): CandleGap[] {
 /** The chart can render venue candles whose read only supplies total trade counts. */
 export type ChartCandle = Pick<Candle, "bucketStart" | "open" | "high" | "low" | "close" | "volumeQuote" | "trades"> &
   Partial<Pick<Candle, "buys" | "sells">>;
-export type ChartCandlePage = Omit<PoolCandlePage, "candles" | "venue"> & Readonly<{ venue: string; candles: readonly ChartCandle[]; truncated?: boolean }>;
+export type ChartCandlePage = Omit<PoolCandlePage, "candles" | "venue"> & Readonly<{ venue: string; candles: readonly ChartCandle[]; truncated?: boolean; liveTrades?: readonly PoolTrade[] }>;
 
 /** One source's chart: blast-infra's section, or loading before its first answer. */
 export type SourceState = Section<ChartCandlePage> | Readonly<{ state: "loading" }>;

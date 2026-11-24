@@ -3,7 +3,7 @@
 // A candle is drawn at its own bucket from its own raw high, low, open and
 // close; nothing joins two candles, so a missing interval stays empty.
 
-import { candleBucketStart, candleIntervalMs, comparePrices, type MigrationMarker } from "@blast/core/modules/launchpad-contract/venue-history.ts";
+import { candleBucketStart, candleIntervalMs, comparePrices, type MigrationMarker, type PoolTrade } from "@blast/core/modules/launchpad-contract/venue-history.ts";
 
 import { candleGaps, type CandleGap, type ChartCandle, type ChartCandlePage } from "./chart-model";
 
@@ -20,6 +20,8 @@ export type DrawnSeries = Readonly<{
   source: "curve" | "venue";
   page: ChartCandlePage;
   opening?: Readonly<{ timestampMs: number; price: string }>;
+  liveTrades?: readonly PoolTrade[];
+  lastTrade?: PoolTrade;
   carriedClose?: Readonly<{ timestampMs: number; price: string }>;
   observedAt?: number | null;
   holdAfterMigration?: boolean;
@@ -84,13 +86,14 @@ export function chartGeometry(
   const ms = candleIntervalMs(interval);
   const all = drawn.flatMap(({ page }) => page.candles);
   const carries = drawn.flatMap(({ carriedClose }) => carriedClose ? [carriedClose] : []);
-  const start = Math.min(
+  const live = drawn.some(({ liveTrades }) => liveTrades !== undefined);
+  const start = live && from !== undefined ? from : Math.min(
     from ?? Infinity,
     ...all.map((candle) => candle.bucketStart),
     ...carries.map(({ timestampMs }) => timestampMs),
     ...drawn.flatMap(({ opening }) => opening ? [candleBucketStart(interval, opening.timestampMs)] : []),
   );
-  const end = Math.max(chainTime ?? 0, ...all.map((candle) => candle.bucketStart + ms), start + 1);
+  const end = live && chainTime !== null ? chainTime : Math.max(chainTime ?? 0, ...all.map((candle) => candle.bucketStart + ms), start + 1);
   const x = (time: number) => ((time - start) / (end - start)) * CHART_WIDTH;
 
   const highPrices = [...all.map(({ high }) => high), ...carries.map(({ price }) => price)];

@@ -14,13 +14,13 @@ import { ChartCandlesIcon, ChartLineIcon } from "#web/components/blast-ui/Icons.
 import { Popover, PopoverSurface } from "#web/components/blast-ui/Popover.tsx";
 import { useLaunchWallet, useWalletTrades } from "../activity/wallet-trades";
 import { tradeWalletLabels } from "../activity/wallet-labels";
-import { walletMarkerKey, type WalletChartTrade, type WalletRipple } from "#web/components/charts/wallet-markers.ts";
+import { liveWalletMarkerKey, walletMarkerKey, type WalletChartTrade, type WalletRipple } from "#web/components/charts/wallet-markers.ts";
 import { useMemo, useState } from "react";
 import { useShellPrefs } from "#web/components/blast-ui/use-shell-prefs.ts";
 import { useMobileChartLayout } from "#web/components/charts/use-mobile-chart-layout.ts";
 import { saveChartPreference, useChartPreference } from "./chart-preferences";
 
-import { candleBucketStart, comparePrices } from "@blast/core/modules/launchpad-contract/venue-history.ts";
+import { candleBucketStart, candleIntervalMs, comparePrices } from "@blast/core/modules/launchpad-contract/venue-history.ts";
 import type { Section } from "@blast/core/modules/launchpad-contract/section.ts";
 
 import { exactDecimal, exactText, multiplyExact } from "@blast/core/lib/exact-amount.ts";
@@ -170,7 +170,7 @@ function limitedNote(page: ChartCandlePage, request: ChartRequest, range: ChartR
 
 /**
  * Each pool keeps its own candles and gap records around the committed migration.
- * The Live line can carry the close before the window without adding a candle.
+ * Live plots the original execution timestamps.
  * A read failure keeps the source's last answer marked stale.
  */
 function useChartViewControls({
@@ -187,6 +187,7 @@ function useChartViewControls({
   livePreset = false,
   currentPrice,
   diagnostic,
+  marketChart = false,
   onControls,
   onToggle,
   onRefresh,
@@ -205,17 +206,19 @@ function useChartViewControls({
   livePreset?: boolean;
   currentPrice?: string | null;
   diagnostic?: string;
+  marketChart?: boolean;
   onControls: (controls: ChartControls) => void;
   onToggle: (source: ChartSourceName, shown: boolean) => void;
   onRefresh: () => void;
 }>) {
   const live = controls.range === "live";
   const now = useChartClock(1_000, live);
-  const drawing = chartDrawing({ state, source, omitCurve, historyRequest, hidden, live, now, currentPrice });
-  return { source, quoteUsd, controls, pending, updates, emptyMessage, livePreset, diagnostic, onControls, onToggle, onRefresh, ...drawing };
+  const drawing = chartDrawing({ state, source, omitCurve, historyRequest, hidden, live, now, marketChart, currentPrice });
+  const delayed = live && drawing.sources.some(({ section }) => !section || section.state === "stale" || section.state === "unavailable");
+  return { source, quoteUsd, controls, pending, updates: updates ?? (delayed ? "Trade updates delayed." : null), emptyMessage, livePreset, diagnostic, marketChart, onControls, onToggle, onRefresh, ...drawing };
 }
 
-function chartDrawing({ state, source, omitCurve, historyRequest, hidden, live, now, currentPrice }: Readonly<{
+function chartDrawing({ state, source, omitCurve, historyRequest, hidden, live, now, marketChart, currentPrice }: Readonly<{
   state: ChartState;
   source: ChartViewSource;
   omitCurve?: boolean;
@@ -224,66 +227,111 @@ function chartDrawing({ state, source, omitCurve, historyRequest, hidden, live, 
   live: boolean;
   now: number | null;
   currentPrice?: string | null;
+  marketChart: boolean;
 }>) {
   const chainTime = chartLatestTimestamp(state);
-  const liveEnd = live ? candleBucketStart("1s", Math.max(now ?? 0, chainTime)) + 1_000 : null;
+  const liveEnd = live ? Math.max(now ?? 0, chainTime) : null;
   const liveStart = liveEnd === null ? null : liveEnd - LIVE_CHART_SPAN_MS;
-  const request = liveStart === null ? historyRequest : { ...historyRequest, from: liveStart };
+  const launchAt = source.launchAt ?? source.opening?.timestampMs;
+  const { request, sinceLaunch, start, end } = chartViewport(historyRequest, marketChart, liveStart, liveEnd, launchAt, chainTime);
   const migration = state.migration;
-  const holdCurveAfterMigration = live && migration !== null && state.venue?.state === "empty";
   const venuePoolKey = source.venuePoolKey ?? migration?.venuePoolKey ?? null;
   const sources = chartSources(state)
     .filter(({ name }) => name !== "curve" || (!omitCurve && source.curvePoolKey !== null))
-    .map((read) => priceSource(read, request, liveStart, source.opening, migration?.timestampMs, holdCurveAfterMigration));
+    .map((read) => priceSource(read, request, liveStart, liveEnd, marketChart ? undefined : source.opening));
   const label = (name: ChartSourceName) => sourceLabel(name, venuePoolKey);
-  const selectable = sources.filter(({ section, carriedClose }) => hasData(section) && (section.data.candles.length > 0 || carriedClose));
+  const selectable = sources.filter(({ section }) => hasData(section) && section.data.candles.length > 0);
   const shown = (name: ChartSourceName) =>
     (selectable.length === 1 && selectable[0]?.name === name) || !hidden.includes(name);
-
-  const drawn: DrawnSeries[] = sources.flatMap(({ name, section, opening, carriedClose }) =>
-    hasData(section) && (section.data.candles.length || carriedClose) && shown(name) ? [{
-      source: name, page: section.data, opening, carriedClose, observedAt: section.provenance.timestampMs,
-      holdAfterMigration: name === "curve" && holdCurveAfterMigration,
+  const drawn: DrawnSeries[] = sources.flatMap(({ name, section, opening, lastTrade, liveTrades }) =>
+    hasData(section) && section.data.candles.length && shown(name) ? [{
+      source: name, page: section.data, opening, liveTrades, lastTrade, observedAt: section.provenance.timestampMs,
     }] : [],
   );
+  const visible = sources.filter(({ name }) => shown(name));
+  const lastTrade = visible.flatMap(source => source.lastTrade ? [source.lastTrade] : [])
+    .reduce<(typeof drawn)[number]["lastTrade"]>((latest, trade) => !latest || trade.timestampMs >= latest.timestampMs ? trade : latest, undefined);
+  const gapStatus = marketChart && !live ? chartGapStatus(visible, request, launchAt, migration?.timestampMs, chainTime) : undefined;
+  const partial = marketChart && !live && partialHistory(visible, request, launchAt, drawn.length > 0);
+  const liveIncomplete = liveStart !== null && visible.some(({ liveTapeStart }) => liveTapeStart !== undefined && liveTapeStart >= liveStart);
+  const hasLiveTrades = visible.some(({ inWindow }) => inWindow);
   const latest = drawn.at(-1);
-  const close = latest?.page.candles.at(-1)?.close ?? latest?.carriedClose?.price ?? null;
+  const close = latest?.page.candles.at(-1)?.close ?? null;
   const hasLatest = latest !== undefined &&
     sources.find(({ name }) => name === latest.source)?.section?.state === "available" &&
     (currentPrice === undefined || (currentPrice === close && latest.source === (venuePoolKey ? "venue" : "curve")));
-  // A bounded range runs to blast-infra's committed checkpoint time; all history ends at its last candle.
   const hasPriceUnits = source.memeDecimals !== null && source.quoteDecimals !== null;
-  const geometry = hasPriceUnits ? chartGeometry(drawn, migration, request.from, liveEnd ?? (request.from === undefined ? null : chainTime || null)) : null;
+  const geometry = hasPriceUnits ? chartGeometry(drawn, migration, start, end) : null;
   const missingPriceUnits = Boolean(latest) && !hasPriceUnits;
-  return { venuePoolKey, request, migration, sources, selectable, drawn, label, shown, geometry, hasPriceUnits, missingPriceUnits, latestAvailable: hasLatest, latest: close };
+  return { venuePoolKey, request, migration, sources, selectable, drawn, label, shown, geometry, hasPriceUnits, missingPriceUnits,
+    sinceLaunch, lastTrade, hasLiveTrades, liveIncomplete, gapStatus, partial, latestAvailable: hasLatest, latest: close };
+}
+
+function chartViewport(history: ChartRequest, marketChart: boolean, liveStart: number | null, liveEnd: number | null, launchAt: number | undefined, chainTime: number) {
+  if (liveStart !== null) return { request: { ...history, from: liveStart }, sinceLaunch: false, start: liveStart, end: liveEnd };
+  const sinceLaunch = marketChart && launchAt !== undefined && (history.from === undefined || history.from < launchAt);
+  const from = sinceLaunch ? candleBucketStart(history.interval, launchAt) : history.from;
+  if (history.from === undefined) return { request: { ...history, from }, sinceLaunch, start: undefined, end: null };
+  return { request: { ...history, from }, sinceLaunch, start: from, end: chainTime || null };
+}
+
+type PriceSource = ReturnType<typeof priceSource>;
+
+function chartGapStatus(sources: PriceSource[], request: ChartRequest, launchAt: number | undefined, migrationAt: number | undefined, chainTime: number) {
+  const coverage = sources.flatMap(({ name, section }) => {
+    const from = name === "curve" ? launchAt : migrationAt;
+    const observed = section && "provenance" in section ? section.provenance?.timestampMs : undefined;
+    if (from === undefined || observed == null || !section || !["available", "stale", "empty"].includes(section.state)) return [];
+    const data = hasData(section) ? section.data : undefined;
+    const first = data?.candles[0]?.bucketStart;
+    const floor = first !== undefined && data && pageTruncated(data, request) ? Math.max(from, first) : from;
+    return [{ from: floor, to: name === "curve" ? Math.min(observed, migrationAt ?? Infinity) : observed }];
+  });
+  const interval = candleIntervalMs(request.interval);
+  return (at: number) => {
+    const start = Math.max(at, launchAt ?? at);
+    const end = Math.min(at + interval, chainTime);
+    if (start >= end) return "History unavailable";
+    const split = migrationAt;
+    const covered = split !== undefined && split > start && split < end
+      ? coverage.some(span => span.from <= start && span.to >= split) && coverage.some(span => span.from <= split && span.to >= end)
+      : coverage.some(span => span.from <= start && span.to >= end);
+    return covered ? "No trades" : "History unavailable";
+  };
+}
+
+function partialHistory(sources: PriceSource[], request: ChartRequest, launchAt: number | undefined, hasDrawing: boolean) {
+  return launchAt === undefined || sources.some(({ section }) =>
+    !section || section.state === "unavailable" || section.state === "stale" || hasData(section) && pageTruncated(section.data, request) ||
+    hasDrawing && section.state === "loading");
 }
 
 function priceSource(
   { name, section: read }: ReturnType<typeof chartSources>[number],
   request: ChartRequest,
   liveStart: number | null,
+  liveEnd: number | null,
   launch: ChartViewSource["opening"],
-  migrationAt: number | undefined,
-  holdCurveAfterMigration: boolean,
 ) {
-  if (!hasData(read)) return { name, section: read, opening: undefined };
-  const from = request.from;
-  const candles = from === undefined ? read.data.candles : read.data.candles.filter(({ bucketStart }) => bucketStart >= from);
-  const carryFrom = name === "venue" && liveStart !== null ? Math.max(liveStart, migrationAt ?? liveStart) : liveStart;
-  const mayCarry = name === "venue" || migrationAt === undefined || holdCurveAfterMigration || (carryFrom !== null && carryFrom < migrationAt);
-  const previous = liveStart !== null && mayCarry
-    ? read.data.candles.findLast(({ bucketStart }) => bucketStart < liveStart)
-    : undefined;
-  const carriedClose = previous && carryFrom !== null ? { timestampMs: carryFrom, price: previous.close } : undefined;
-  const page = { ...read.data, candles };
-  if (!candles.length && !carriedClose && read.state === "available") {
-    return { name, section: { ...read, state: "empty" as const, data: page }, opening: undefined };
+  if (!hasData(read)) return { name, section: read };
+  if (liveStart !== null && liveEnd !== null) {
+    const tape = read.data.liveTrades ?? [];
+    const executions = tape.filter(trade => trade.kind !== "opening_round_fill");
+    const inWindow = executions.filter(({ timestampMs }) => timestampMs >= liveStart && timestampMs <= liveEnd);
+    const liveTrades = inWindow.filter(trade => trade.price !== null);
+    const lastTrade = executions.at(-1);
+    const buckets = new Set(liveTrades.map(trade => candleBucketStart("1s", trade.timestampMs)));
+    const candles = read.data.candles.filter(({ bucketStart }) => buckets.has(bucketStart));
+    return { name, section: { ...read, data: { ...read.data, candles } }, liveTrades, lastTrade, inWindow: inWindow.length > 0,
+      liveTapeStart: read.data.truncated ? tape[0]?.timestampMs : undefined };
   }
+  const { from } = request;
+  const candles = from === undefined ? read.data.candles : read.data.candles.filter(candle => candle.bucketStart >= from);
+  const page = { ...read.data, candles };
+  if (!candles.length && read.state === "available") return { name, section: { ...read, state: "empty" as const, data: page } };
   const opening = chartOpening(page, request, launch);
   const first = candles[0];
-  if (!opening || !first) return { name, section: { ...read, data: page }, opening, carriedClose };
-
-  // The first indexed trade can fall in a later bucket. Its pre-trade price is still the launch price.
+  if (!opening || !first) return { name, section: { ...read, data: page }, opening };
   const { price } = opening;
   const candle = {
     ...first,
@@ -291,7 +339,7 @@ function priceSource(
     high: comparePrices(price, first.high) > 0 ? price : first.high,
     low: comparePrices(price, first.low) < 0 ? price : first.low,
   };
-  return { name, section: { ...read, data: { ...page, candles: [candle, ...candles.slice(1)] } }, opening, carriedClose };
+  return { name, section: { ...read, data: { ...read.data, candles: [candle, ...candles.slice(1)] } }, opening };
 }
 
 export function ChartView(props: Parameters<typeof useChartViewControls>[0] & Readonly<{ compact?: boolean; preview?: boolean }>) {
@@ -309,12 +357,14 @@ export function ChartView(props: Parameters<typeof useChartViewControls>[0] & Re
       ) : null}
 
       {geometry ? (
-        <ChartFigure key={`${controls.range}:${controls.interval}`} presentation={controls.range === "live" ? "line" : undefined} quoteUsd={quoteUsd} drawn={drawn} migrationAt={migration?.timestampMs} venuePoolKey={venuePoolKey} geometry={geometry} latest={latest} latestAvailable={latestAvailable} source={source} controls={controls} />
+        <ChartFigure key={`${controls.range}:${controls.interval}`} presentation={controls.range === "live" ? "line" : undefined} marketChart={view.marketChart} discontinuous={view.partial} gapStatus={view.gapStatus} quoteUsd={quoteUsd} drawn={drawn} migrationAt={migration?.timestampMs} venuePoolKey={venuePoolKey} geometry={geometry} latest={latest} latestAvailable={latestAvailable} source={source} controls={controls} />
       ) : null}
 
+      <ChartHistoryStatus view={view} />
+      <LiveTradeStatus view={view} />
       {geometry && exactDecimal(quoteUsd) ? <p className={styles.note}>USD prices use the current {source.quoteSymbol} rate.</p> : null}
       {missingPriceUnits ? <p className={styles.note}>Price units couldn’t load.</p> : null}
-      {updates ? <p className={styles.note} role="status">{updates}</p> : null}
+      {updates && controls.range !== "live" ? <p className={styles.note} role="status">{updates}</p> : null}
 
       <ChartSourcePages view={view} />
     </div>
@@ -429,7 +479,7 @@ function SourceCandles({ name, section, label, source, quoteUsd, request, range,
   );
 }
 
-function ChartFigure({ drawn, migrationAt, venuePoolKey, geometry, latest, latestAvailable, source, controls, compact = false, presentation, quoteUsd, candleTrade, preview }: Readonly<{
+function ChartFigure({ drawn, migrationAt, venuePoolKey, geometry, latest, latestAvailable, source, controls, compact = false, presentation, quoteUsd, candleTrade, preview, marketChart, discontinuous, gapStatus }: Readonly<{
   drawn: readonly DrawnSeries[];
   migrationAt?: number;
   venuePoolKey: string | null;
@@ -443,6 +493,9 @@ function ChartFigure({ drawn, migrationAt, venuePoolKey, geometry, latest, lates
   candleTrade?: ReturnType<typeof useCandleTrade>;
   quoteUsd?: string | null;
   preview?: boolean;
+  marketChart?: boolean;
+  gapStatus?: (at: number) => string;
+  discontinuous?: boolean;
 }>) {
   const deployer = useLaunchWallet();
   const activity = useWalletTrades();
@@ -462,7 +515,7 @@ function ChartFigure({ drawn, migrationAt, venuePoolKey, geometry, latest, lates
         return [];
     }
   }), [activity, deployer, source.curvePoolKey]);
-  const ripple = walletRipple(walletTrades, liveTrade, controls.interval);
+  const ripple = walletRipple(walletTrades, liveTrade, controls);
   const line = presentation === "line";
   const unit = exactDecimal(quoteUsd) ? "USD" : source.quoteSymbol;
   const metric = line || !compact ? `price in ${unit}` : `price in ${unit} and volume in ${source.quoteSymbol}`;
@@ -471,30 +524,37 @@ function ChartFigure({ drawn, migrationAt, venuePoolKey, geometry, latest, lates
   const markerVisible = migrationAt !== undefined && migrationAt >= geometry.start && migrationAt <= geometry.end;
   const event = markerVisible ? ` ${graduation} on ${clock(migrationAt)}.` : "";
   const label = `${source.symbol} ${metric}. ${RANGE_WORDS[controls.range]}, ${controls.interval} intervals.${event}`;
-  const initialPlot = preview ? <>
-    {!line && <ChartPreview geometry={geometry} sources={drawn} migrationAt={migrationAt} line={false} viewport="desktop" />}
-    <ChartPreview geometry={geometry} sources={drawn} migrationAt={migrationAt} rolling={controls.range === "live"} line viewport={line ? undefined : "mobile"} />
-  </> : null;
+  const initialPlot = preview && controls.range !== "live"
+    ? <CoinChartPreview geometry={geometry} sources={drawn} migrationAt={migrationAt} line={line} marketChart={marketChart} />
+    : null;
   return (
     <figure className={styles.figure}>
       {compact ? null : <p className={styles.axis} aria-hidden="true">
         <>Last {tokenPrice(latestAvailable ? latest : null, source, quoteUsd)} · </>High {tokenPrice(geometry.highest, source, quoteUsd)} · Low {tokenPrice(geometry.lowest, source, quoteUsd)}
       </p>}
       <div className={compact ? styles.compactCanvas : styles.canvas}>
-        <PoolCandleChart latestAvailable={latestAvailable} walletTrades={walletTrades} ripple={ripple} trade={candleTrade} label={label} compact={compact} rollingWindow={controls.range === "live"} presentation={presentation} memeDecimals={source.memeDecimals} quoteDecimals={source.quoteDecimals} quoteUsd={quoteUsd} sources={drawn} migrationAt={migrationAt} migrationLabel={venue ? <>Graduated to <DexIdentity venue={venue} /></> : graduation} quoteSymbol={source.quoteSymbol} from={geometry.start} to={geometry.end} preview={initialPlot} />
+        <PoolCandleChart latestAvailable={latestAvailable} walletTrades={walletTrades} ripple={ripple} trade={candleTrade} label={label} compact={compact} marketChart={marketChart} discontinuous={discontinuous} gapStatus={gapStatus} rollingWindow={controls.range === "live"} presentation={presentation} memeDecimals={source.memeDecimals} quoteDecimals={source.quoteDecimals} quoteUsd={quoteUsd} sources={drawn} migrationAt={migrationAt} migrationLabel={venue ? <>Graduated to <DexIdentity venue={venue} /></> : graduation} quoteSymbol={source.quoteSymbol} from={geometry.start} to={geometry.end} preview={initialPlot} />
       </div>
     </figure>
   );
 }
 
-function walletRipple(trades: readonly WalletChartTrade[], live: ReturnType<typeof useCandleTrade>, interval: ChartControls["interval"]): WalletRipple | null {
+function CoinChartPreview({ marketChart, line, ...plot }: Parameters<typeof ChartPreview>[0] & { marketChart?: boolean }) {
+  if (marketChart || line) return <ChartPreview {...plot} line={line} />;
+  return <>
+    <ChartPreview {...plot} line={false} viewport="desktop" />
+    <ChartPreview {...plot} line viewport="mobile" />
+  </>;
+}
+
+function walletRipple(trades: readonly WalletChartTrade[], live: ReturnType<typeof useCandleTrade>, controls: ChartControls): WalletRipple | null {
   if (!live) return null;
   const tagged = trades.find(row => row.cursor === live.trade.cursor && row.poolKey === live.poolKey && row.side === live.trade.side);
   if (!tagged) return null;
   return {
     cursor: tagged.cursor,
     receivedAt: live.receivedAt,
-    markerKey: walletMarkerKey(tagged.poolKey, tagged.side, candleBucketStart(interval, tagged.timestampMs)),
+    markerKey: controls.range === "live" ? liveWalletMarkerKey(tagged) : walletMarkerKey(tagged.poolKey, tagged.side, candleBucketStart(controls.interval, tagged.timestampMs)),
   };
 }
 
@@ -539,21 +599,32 @@ function CompactChart({ view, preview }: Readonly<{ view: ChartViewControls; pre
   const mobile = useMobileChartLayout();
   const [preferredStyle, setStyle] = useChartStyle();
   const live = view.controls.range === "live";
-  const style = mobile || live ? "line" : preferredStyle;
+  const style = (mobile && !view.marketChart) || live ? "line" : preferredStyle;
+  const { source, quoteUsd } = view;
+  return <div className={styles.chart} data-compact-chart="" data-chart-style={style} data-market-chart={view.marketChart || undefined}>
+    <CompactChartHeader view={view} style={style} mobile={mobile} onStyle={setStyle} />
+    {!live && <ChartLastTrade />}
+    <ChartHistoryStatus view={view} />
+    <LiveTradeStatus view={view} />
+    <CompactChartBody view={view} style={style} preview={preview} />
+    {view.marketChart && exactDecimal(quoteUsd) && <p className={styles.note}>USD prices use the current {source.quoteSymbol} rate.</p>}
+    {view.updates && !live && <p className={styles.note} role="status">{view.updates}</p>}
+  </div>;
+}
+
+function CompactChartHeader({ view, style, mobile, onStyle }: Readonly<{ view: ChartViewControls; style: ChartStyle; mobile: boolean; onStyle: (style: ChartStyle) => void }>) {
   const { source, quoteUsd, geometry } = view;
   const unit = geometry && (exactDecimal(quoteUsd) ? "USD" : source.quoteSymbol);
-  return <div className={styles.chart} data-compact-chart="" data-chart-style={style}>
+  const showStyle = geometry && view.controls.range !== "live" && (!mobile || view.marketChart);
+  return (
     <div className={styles.compactHead}>
       <h2>Price{unit ? <span> · {unit}</span> : null}</h2>
       <div className={styles.compactTools}>
-        {geometry && !live && !mobile && <Segmented className={styles.stylePicker} label="Chart style" size="touch" variant="outline" options={CHART_STYLES} value={style} onChange={setStyle} />}
+        {showStyle && <Segmented className={styles.stylePicker} label="Chart style" size="touch" variant="outline" options={CHART_STYLES} value={style} onChange={onStyle} />}
         <ChartFilters view={view} style={style} />
       </div>
     </div>
-    <ChartLastTrade />
-    <CompactChartBody view={view} style={style} preview={preview} />
-    {view.updates && (geometry || !live) && <p className={styles.note} role="status">{view.updates}</p>}
-  </div>;
+  );
 }
 
 function CompactChartBody({ view, style, preview }: Readonly<{ view: ChartViewControls; style: ChartStyle; preview?: boolean }>) {
@@ -561,8 +632,28 @@ function CompactChartBody({ view, style, preview }: Readonly<{ view: ChartViewCo
   const candleTrade = useCandleTrade();
   if (!geometry) return <CompactEmptyChart view={view} />;
   return <>
-    <ChartFigure compact candleTrade={candleTrade} presentation={style} quoteUsd={quoteUsd} drawn={drawn} migrationAt={migration?.timestampMs} venuePoolKey={venuePoolKey} geometry={geometry} latest={latest} latestAvailable={latestAvailable} source={source} controls={controls} preview={preview} />
-    <CompactSourceNotices view={view} />
+    <ChartFigure compact marketChart={view.marketChart} discontinuous={view.partial} gapStatus={view.gapStatus} candleTrade={controls.range === "live" ? undefined : candleTrade} presentation={style} quoteUsd={quoteUsd} drawn={drawn} migrationAt={migration?.timestampMs} venuePoolKey={venuePoolKey} geometry={geometry} latest={latest} latestAvailable={latestAvailable} source={source} controls={controls} preview={preview} />
+    {controls.range !== "live" && <CompactSourceNotices view={view} />}
+  </>;
+}
+
+function ChartHistoryStatus({ view }: Readonly<{ view: ChartViewControls }>) {
+  if (!view.sinceLaunch && !view.partial) return null;
+  return <p className={styles.note}>{[view.sinceLaunch && "Since launch", view.partial && "Partial price history"].filter(Boolean).join(" · ")}</p>;
+}
+
+function LiveTradeStatus({ view }: Readonly<{ view: ChartViewControls }>) {
+  const { amountsHidden } = useShellPrefs();
+  if (view.controls.range !== "live") return null;
+  const { lastTrade, source, quoteUsd, updates, liveIncomplete } = view;
+  const at = lastTrade && new Date(lastTrade.timestampMs).toISOString();
+  return <>
+    {lastTrade && at && <p className={styles.note}>
+      {lastTrade.price === null ? "Last trade · price unavailable" : `Last traded price ${amountsHidden ? HIDDEN_AMOUNT : tokenPrice(lastTrade.price, source, quoteUsd)}`}
+      {" · "}<time dateTime={at}>{at.slice(0, 10)} · {at.slice(11, 19)} UTC</time>
+    </p>}
+    {updates && <p className={styles.note} role="status">{updates}</p>}
+    {liveIncomplete && <p className={styles.note} role="status">Partial trade history in this window.</p>}
   </>;
 }
 
@@ -588,12 +679,17 @@ function CompactEmptyChart({ view }: Readonly<{ view: ReturnType<typeof useChart
     </EmptyState>
   );
   if (view.emptyMessage) return <EmptyState className={state} title={view.emptyMessage} />;
-  if (view.controls.range === "live" && view.updates) {
-    return <EmptyState className={state} role="status" title={view.updates}>The chart refreshes automatically.</EmptyState>;
+  if (view.controls.range === "live") {
+    return <EmptyState className={state} title={quietLiveTitle(view)} />;
   }
   return view.controls.range === "all"
     ? <EmptyState className={state} title="No price history yet" />
     : <EmptyState className={state} title="No trades in this range">Choose a wider range to see more trades.</EmptyState>;
+}
+
+function quietLiveTitle(view: ChartViewControls) {
+  if (view.updates || view.liveIncomplete) return "Waiting for trade updates";
+  return view.hasLiveTrades ? "Trade prices unavailable in this window" : "No trades in the last 5 min";
 }
 
 function compactOpeningPrice({ migration, hasPriceUnits, source, controls, shown, sources }: ReturnType<typeof useChartViewControls>) {
