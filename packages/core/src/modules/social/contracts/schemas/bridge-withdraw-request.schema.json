@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/bridge-withdraw-request.schema.json",
+  "title": "Withdraw to another chain",
+  "description": "POST /api/social/me/bridge-withdrawals: the client's key for this withdrawal (a UUID v4, resent on every retry), where it goes and to whom, the USDC atoms burned on Sui, and the most Circle may keep (the fee the sheet showed: at least today's, below the amount).",
+  "type": "object",
+  "properties": {
+    "idempotency_key": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "destination": { "enum": ["base", "arbitrum", "ethereum", "solana"] },
+    "recipient": {
+      "type": "string",
+      "minLength": 32,
+      "maxLength": 44,
+      "pattern": "^(0x[0-9a-fA-F]{40}|[1-9A-HJ-NP-Za-km-z]{32,44})$"
+    },
+    "amount": { "type": "string", "pattern": "^[1-9][0-9]{0,19}$" },
+    "max_fee": { "type": "string", "pattern": "^(0|[1-9][0-9]{0,19})$" }
+  },
+  "required": ["idempotency_key", "destination", "recipient", "amount", "max_fee"],
+  "additionalProperties": false
+}

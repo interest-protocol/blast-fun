@@ -1,0 +1,90 @@
+name: Backend architecture
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: backend-architecture-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-architecture:
+    name: Backend architecture gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    env:
+      NODE_OPTIONS: --max-old-space-size=2048
+      MISSION_CONTROL_TEST_POSTGRES_IMAGE: postgres:18-alpine
+      BLAST_BACKEND_LOAD_DURATION_MS: "3000"
+      CI: "true"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24.18.0"
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: "1.4.2"
+      - name: Install required search tool
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
+      - name: Install locked dependencies
+        run: |
+          npm install --global npm@12.0.2 --ignore-scripts --no-audit --no-fund
+          test "$(node --version)" = v24.18.0
+          test "$(npm --version)" = 12.0.2
+          test "$(bun --version)" = 1.4.2
+          mkdir -p ci-artifacts/backend-architecture
+          git rev-parse HEAD > ci-artifacts/backend-architecture/source-commit.txt
+          sha256sum package-lock.json apps/backend-api/Dockerfile apps/backend-api/Dockerfile.dockerignore > ci-artifacts/backend-architecture/inputs.sha256
+          npm ci --ignore-scripts --no-audit --no-fund 2>&1 | tee ci-artifacts/backend-architecture/install.log
+      - name: Check installed dependency security regressions
+        run: |
+          node --test --test-concurrency=1 scripts/dependency-security.test.mjs scripts/zod-collection-limits.test.mjs 2>&1 | tee ci-artifacts/backend-architecture/dependency-regressions.log
+      - name: Check backend code style
+        run: npm run format:check --workspace @blast/backend-api 2>&1 | tee ci-artifacts/backend-architecture/style.log
+      - name: Check backend types and transport contracts
+        run: |
+          npm run typecheck --workspace @blast/server 2>&1 | tee ci-artifacts/backend-architecture/shared-server-types.log
+          npm test --workspace @blast/server 2>&1 | tee ci-artifacts/backend-architecture/shared-server-contracts.log
+          # Tests that mock imports with node:module's registerHooks run only under Node, in `npm test` above; Bun has no registerHooks.
+          # maintenance.test.ts sets process.env at module scope, which leaks across files in Bun's single process; it runs under Node only.
+          mapfile -t shared_server_tests < <(rg --files-without-match 'registerHooks' packages/server/src -g '*.test.ts' -g '!*.integration.test.ts' -g '!**/mission-control/maintenance/maintenance.test.ts')
+          test "${#shared_server_tests[@]}" -gt 0
+          bun test --max-concurrency 1 --timeout 30000 "${shared_server_tests[@]}" 2>&1 | tee ci-artifacts/backend-architecture/shared-server-bun-contracts.log
+          npm run typecheck --workspace @blast/backend-api 2>&1 | tee ci-artifacts/backend-architecture/types.log
+          npm test --workspace @blast/backend-api 2>&1 | tee ci-artifacts/backend-architecture/contracts.log
+          npm run test:frontend-transport --workspace @blast/backend-api 2>&1 | tee ci-artifacts/backend-architecture/frontend-transport.log
+          node --test --test-concurrency=1 scripts/backend-image-contract.test.mjs 2>&1 | tee ci-artifacts/backend-architecture/image-contract-tests.log
+          npm run test:context --workspace @blast/backend-api 2>&1 | tee ci-artifacts/backend-architecture/context.log
+      - name: Check real PostgreSQL and Valkey admission
+        run: |
+          docker version
+          npm run test:integration --workspace @blast/server 2>&1 | tee ci-artifacts/backend-architecture/shared-server-physical.log
+          npm run test:integration --workspace @blast/backend-api 2>&1 | tee ci-artifacts/backend-architecture/physical.log
+      - name: Build the actual production image with BuildKit
+        env:
+          DOCKER_BUILDKIT: "1"
+        run: |
+          docker build --progress=plain --file apps/backend-api/Dockerfile --tag blast-backend-api:ci . 2>&1 | tee ci-artifacts/backend-architecture/image-build.log
+          docker image inspect blast-backend-api:ci --format '{{.Id}} {{.Size}}' > ci-artifacts/backend-architecture/image.txt
+      - name: Verify native production imports without network or secrets
+        run: |
+          node scripts/backend-image-contract.mjs blast-backend-api:ci ci-artifacts/backend-architecture/image-startup.log
+      - name: Retain scoped verification evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: backend-architecture-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ci-artifacts/backend-architecture/
+          if-no-files-found: error
+          retention-days: 14

@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/settings-request.schema.json",
+  "title": "Social settings update",
+  "description": "PUT /api/social/me/settings body. Closed; send only the fields that changed. commit_too_coin_type null means each sale's own quote coin; private or public_portfolio before onboarding is 409 onboarding_required; sound is a choice, so only a boolean (never null) is accepted.",
+  "type": "object",
+  "properties": {
+    "private": {
+      "type": "boolean"
+    },
+    "public_portfolio": {
+      "type": "boolean"
+    },
+    "explorer": {
+      "enum": [
+        "suiscan",
+        "suivision"
+      ]
+    },
+    "sound": {
+      "type": "boolean"
+    },
+    "blast_mode_confirm_actions": {
+      "type": "boolean"
+    },
+    "notifications": {
+      "type": "object",
+      "properties": {
+        "opens_soon": {
+          "type": "boolean"
+        },
+        "almost_full": {
+          "type": "boolean"
+        },
+        "last_hour": {
+          "type": "boolean"
+        },
+        "funded": {
+          "type": "boolean"
+        },
+        "claims_open": {
+          "type": "boolean"
+        },
+        "unlocks": {
+          "type": "boolean"
+        },
+        "people_you_follow": {
+          "type": "boolean"
+        },
+        "call_moves": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "commit_too_coin_type": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "pattern": "^0x[0-9a-f]{64}::[A-Za-z_][A-Za-z0-9_]{0,127}::[A-Za-z_][A-Za-z0-9_]{0,127}(<.+>)?$",
+          "minLength": 8,
+          "maxLength": 512
+        }
+      ]
+    }
+  },
+  "additionalProperties": false
+}

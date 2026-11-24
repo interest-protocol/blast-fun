@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/viewer-state-response.schema.json",
+  "title": "Social viewer state of the caller",
+  "description": "POST /api/social/viewer-state 200 (Cache-Control: private, no-store): the caller's reaction keys per requested entry id, whether the caller follows each requested callsign and presale id, and, per requested backers_of presale, how many named backers the caller follows and up to six of them. Every requested id is present, and per requested follows_you callsign whether that account follows the caller.",
+  "type": "object",
+  "properties": {
+    "reactions": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[alm]:[!-~]{1,250}$"
+      },
+      "additionalProperties": {
+        "type": "array",
+        "uniqueItems": true,
+        "items": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,31}$"
+        }
+      }
+    },
+    "follows": {
+      "type": "object",
+      "properties": {
+        "accounts": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z0-9][a-z0-9_]{1,18}[a-z0-9]$"
+          },
+          "additionalProperties": {
+            "type": "boolean"
+          }
+        },
+        "presales": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^0x[0-9a-f]{64}$"
+          },
+          "additionalProperties": {
+            "type": "boolean"
+          }
+        }
+      },
+      "required": [
+        "accounts",
+        "presales"
+      ],
+      "additionalProperties": false
+    },
+    "backers": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^0x[0-9a-f]{64}$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "accounts": {
+            "type": "array",
+            "maxItems": 6,
+            "items": {
+              "$ref": "https://blast-v2.invalid/social/contracts/feed-item.schema.json#/$defs/backer"
+            }
+          }
+        },
+        "required": [
+          "count",
+          "accounts"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "follows_you": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[a-z0-9][a-z0-9_]{1,18}[a-z0-9]$"
+      },
+      "additionalProperties": {
+        "type": "boolean"
+      },
+      "description": "Per requested follows_you callsign: whether that account follows the caller."
+    },
+    "buyers": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^0x[0-9a-f]{64}$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "accounts": {
+            "type": "array",
+            "maxItems": 3,
+            "items": {
+              "$ref": "https://blast-v2.invalid/social/contracts/feed-item.schema.json#/$defs/backer"
+            }
+          }
+        },
+        "required": [
+          "count",
+          "accounts"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "reactions",
+    "follows",
+    "backers",
+    "follows_you"
+  ],
+  "additionalProperties": false
+}

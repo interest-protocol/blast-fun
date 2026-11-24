@@ -1,0 +1,204 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/prices-response.schema.json",
+  "title": "Coins' prices over time",
+  "description": "GET /api/social/prices 200 (Cache-Control: public, s-maxage=10, stale-while-revalidate=20): for each sale or coin asked that has a price, its USD prices over the window from chain_read_v1.price_history, the price now from chain_read_v1.prices, the price 24 hours ago, the move between them and the price at the day's open (00:00 UTC), bounded by the watermark (contracts/prices.ts). The same for every caller; no viewer field.",
+  "type": "object",
+  "properties": {
+    "window": {
+      "enum": [
+        "1h",
+        "6h",
+        "24h",
+        "7d",
+        "30d",
+        "launch"
+      ]
+    },
+    "clock_ms": {
+      "$ref": "https://blast-v2.invalid/social/contracts/feed-item.schema.json#/$defs/millis",
+      "description": "The chain clock every window ends at: the earlier of the watermark and the server's clock."
+    },
+    "prices": {
+      "type": "array",
+      "maxItems": 54,
+      "items": {
+        "$ref": "#/$defs/history"
+      }
+    },
+    "as_of": {
+      "$ref": "https://blast-v2.invalid/social/contracts/as-of.schema.json"
+    }
+  },
+  "required": [
+    "window",
+    "clock_ms",
+    "prices",
+    "as_of"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "price": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]*[1-9])?$",
+      "description": "USD per whole token, exact, trailing zeros trimmed."
+    },
+    "history": {
+      "type": "object",
+      "properties": {
+        "presale_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^0x[0-9a-f]{64}$"
+        },
+        "coin_type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tier": {
+          "enum": [
+            "5m",
+            "1h",
+            "1d"
+          ]
+        },
+        "from_ms": {
+          "$ref": "https://blast-v2.invalid/social/contracts/feed-item.schema.json#/$defs/millis"
+        },
+        "points": {
+          "type": "array",
+          "maxItems": 292,
+          "description": "Oldest first: [the price's own time in ms, its USD price]. Empty when the window has no line.",
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "$ref": "https://blast-v2.invalid/social/contracts/feed-item.schema.json#/$defs/millis"
+              },
+              {
+                "$ref": "#/$defs/price"
+              }
+            ],
+            "items": false,
+            "minItems": 2
+          }
+        },
+        "price_usd": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/price"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "price_24h_usd": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/price"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "change_24h_bps": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "day_open_usd": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/price"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "day_open_ms": {
+          "anyOf": [
+            {
+              "$ref": "https://blast-v2.invalid/social/contracts/feed-item.schema.json#/$defs/millis"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "quote": {
+          "type": "object",
+          "properties": {
+            "coin_type": {
+              "type": "string",
+              "minLength": 1
+            },
+            "symbol": {
+              "type": "string",
+              "minLength": 1
+            },
+            "price": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]*[1-9])?$"
+            },
+            "as_of_ms": {
+              "$ref": "https://blast-v2.invalid/social/contracts/feed-item.schema.json#/$defs/millis"
+            },
+            "points": {
+              "type": "array",
+              "maxItems": 292,
+              "description": "Real indexed pool observations: timestamp and quote coins per whole sale token. No USD conversion or synthetic endpoint.",
+              "items": {
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "$ref": "https://blast-v2.invalid/social/contracts/feed-item.schema.json#/$defs/millis"
+                  },
+                  {
+                    "$ref": "#/$defs/price"
+                  }
+                ],
+                "items": false,
+                "minItems": 2
+              }
+            },
+            "change_24h_bps": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "coin_type",
+            "symbol",
+            "price",
+            "as_of_ms",
+            "points",
+            "change_24h_bps"
+          ],
+          "additionalProperties": false,
+          "description": "Available pool price/history in the sale quote when a genuine USD conversion is unavailable. USD fields retain their own units; unavailable values remain null."
+        }
+      },
+      "required": [
+        "presale_id",
+        "coin_type",
+        "tier",
+        "from_ms",
+        "points",
+        "price_usd",
+        "price_24h_usd",
+        "change_24h_bps",
+        "day_open_usd",
+        "day_open_ms"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

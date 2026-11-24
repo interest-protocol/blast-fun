@@ -1,0 +1,170 @@
+{
+  "provenance": {
+    "network": "localnet",
+    "deployment_fingerprint": "5d2f2a4be1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c",
+    "checkpoint": 23,
+    "timestamp_ms": 1790289670425,
+    "observed_ms": 1790823976613,
+    "lag_ms": 534306188
+  },
+  "pool": {
+    "pool_key": "blast_curve:0x7a79ac93eb3b3c2a93828a0a85367d15557e4d0b74bab119debb654c803f00fa",
+    "venue": "blast_curve",
+    "pool_id": "0x7a79ac93eb3b3c2a93828a0a85367d15557e4d0b74bab119debb654c803f00fa",
+    "coin": "0xc87fedd65e88c8517369ab363f8104caa51c711b323307b60ae2f447165ccd04::meme::MEME",
+    "metadata": {
+      "name": "TOAD fixture",
+      "symbol": "TOAD",
+      "description": "Fixture coin b",
+      "icon_url": "https://blast.fun/icons/toad.png"
+    },
+    "quote": "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI",
+    "lifecycle": "live",
+    "created_cursor": "10:2:0:0",
+    "created_at_ms": 1790289083000,
+    "launch": {
+      "venue": "0xd617711ff37d35a2616a1e6aaca58f245fefdf9d1fc40e0c9b2ed208e37b0f70::mock_adapter::Venue",
+      "pool_tier": {
+        "tick_spacing": "60",
+        "fee_rate": "2500"
+      },
+      "lp_fee_split": {
+        "creator_bps": "5000",
+        "auto_lp_bps": "2000",
+        "rewards_bps": "1000",
+        "burn_bps": "1000",
+        "recipients": [
+          {
+            "destination": "0x0000000000000000000000000000000000000000000000000000000000007ea3",
+            "bps": "1000"
+          }
+        ]
+      },
+      "allocation_plan": {
+        "curve_meme_bps": "7000",
+        "lp_meme_bps": "1900",
+        "lp_quote_bps": "8900",
+        "protocol_meme_bps": "100",
+        "protocol_quote_bps": "100",
+        "recipients": [
+          {
+            "destination": "0x0000000000000000000000000000000000000000000000000000000000007ea3",
+            "meme_bps": "1000",
+            "quote_bps": "1000"
+          }
+        ]
+      },
+      "opening_round_ms": "60000",
+      "creation_fee": "0",
+      "partner_id": null
+    },
+    "public_start_ms": "1790289083000",
+    "partner": null,
+    "migration": null,
+    "opening_round": {
+      "duration_ms": "60000",
+      "starts_at_ms": "1790289083000",
+      "ends_at_ms": "1790289143000",
+      "total_committed_quote": "3500000000",
+      "bidder_count": 3,
+      "settlement": {
+        "checkpoint": 12,
+        "timestamp_ms": 1790289148000,
+        "digest": "HgbhsaMwbfuiTUWNTtvW2HaJFU4aequJRHza1475MtLQ"
+      },
+      "delivered_count": 2,
+      "undelivered_count": 1,
+      "state": "settled"
+    },
+    "price": "0.000031667128012010982488273410384357",
+    "market_cap": "31667128012",
+    "inputs": {
+      "virtual_quote": "10000000000",
+      "meme_reserve": "470158921180125",
+      "quote_reserve": "4888582743",
+      "graduation_target": "30000000000",
+      "sqrt_price_x64": null,
+      "meme_is_coin_a": null,
+      "currency_supply": "1000000000000000",
+      "pending_burn_total": "0",
+      "balance_0x0": "0",
+      "meme_decimals": "6",
+      "quote_decimals": "9"
+    },
+    "supply": "1000000000000000",
+    "windows": {
+      "5m": {
+        "volume_quote": "950853084",
+        "volume_usd": "3.2824399312764",
+        "buys": 1,
+        "sells": 1,
+        "trades": 2,
+        "net_quote_flow": "-150853084",
+        "buyers": 1,
+        "sellers": 1
+      },
+      "1h": {
+        "volume_quote": "6050853084",
+        "volume_usd": "20.8881499312764",
+        "buys": 6,
+        "sells": 1,
+        "trades": 7,
+        "net_quote_flow": "1449146916",
+        "buyers": 3,
+        "sellers": 1
+      },
+      "6h": {
+        "volume_quote": "6050853084",
+        "volume_usd": "20.8881499312764",
+        "buys": 6,
+        "sells": 1,
+        "trades": 7,
+        "net_quote_flow": "1449146916",
+        "buyers": 3,
+        "sellers": 1
+      },
+      "24h": {
+        "volume_quote": "6050853084",
+        "volume_usd": "20.8881499312764",
+        "buys": 6,
+        "sells": 1,
+        "trades": 7,
+        "net_quote_flow": "1449146916",
+        "buyers": 3,
+        "sellers": 1
+      },
+      "all": {
+        "volume_quote": "6050853084",
+        "volume_usd": "20.8881499312764",
+        "buys": 6,
+        "sells": 1,
+        "trades": 7,
+        "net_quote_flow": "1449146916",
+        "buyers": 3,
+        "sellers": 1
+      }
+    },
+    "holders": 4,
+    "last_trade_cursor": "23:2:0:0",
+    "quote_usd": {
+      "price": "345210000",
+      "expo": -8,
+      "publish_time": 1790288863,
+      "age_ms": 807425
+    }
+  },
+  "candle": {
+    "bucket_start": 1790289660000,
+    "interval": "1m",
+    "open": "0.000034078289285714053056936433675057",
+    "high": "0.000034078289285714053056936433675057",
+    "low": "0.000031667128012010982488273410384357",
+    "close": "0.000031667128012010982488273410384357",
+    "volume_quote": "550853084",
+    "volume_meme": "17108903056266",
+    "volume_usd": "1.9015999312764",
+    "buys": 0,
+    "sells": 1,
+    "trades": 1
+  }
+}

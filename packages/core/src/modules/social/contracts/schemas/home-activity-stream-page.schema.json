@@ -1,0 +1,207 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/home-activity-stream-page.schema.json",
+  "title": "Public indexed Activity",
+  "type": "object",
+  "properties": {
+    "window": {
+      "enum": ["1h", "24h"]
+    },
+    "from_ms": {
+      "type": "integer"
+    },
+    "to_ms": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "clock_ms": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "events": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "type": "object",
+        "properties": {
+          "activity_id": {
+            "type": "string",
+            "pattern": "^[0-9]+:[0-9]+:[0-9]+:[0-9]+$"
+          },
+          "entry_id": {
+            "type": "string",
+            "pattern": "^a:[0-9]+:[0-9]+:[0-9]+:[0-9]+$"
+          },
+          "kind": {
+            "enum": ["trade_buy", "trade_sell", "presale_commit"]
+          },
+          "occurred_at_ms": {
+            "$ref": "https://blast-v2.invalid/social/contracts/feed-item.schema.json#/$defs/millis"
+          },
+          "digest": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "minLength": 1
+              }
+            ]
+          },
+          "quote": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "https://blast-v2.invalid/social/contracts/home-thread-page.schema.json#/$defs/amount"
+              }
+            ]
+          },
+          "tokens": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$",
+                "description": "Atoms as a decimal string, exact."
+              }
+            ]
+          },
+          "refund": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$",
+                "description": "Atoms as a decimal string, exact."
+              }
+            ]
+          },
+          "has_why": {
+            "type": "boolean"
+          },
+          "actor": {
+            "oneOf": [
+              {
+                "$ref": "https://blast-v2.invalid/social/contracts/feed-item.schema.json#/$defs/accountActor"
+              },
+              {
+                "$ref": "https://blast-v2.invalid/social/contracts/feed-item.schema.json#/$defs/addressActor"
+              }
+            ]
+          },
+          "coin": {
+            "type": "object",
+            "properties": {
+              "chain": {
+                "const": "sui"
+              },
+              "network": {
+                "enum": ["mainnet", "testnet", "devnet", "localnet"]
+              },
+              "coin_type": {
+                "type": "string",
+                "minLength": 1
+              },
+              "presale_id": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "^0x[0-9a-f]{64}$"
+                  }
+                ]
+              },
+              "lifecycle": {
+                "type": "string",
+                "minLength": 1
+              },
+              "decimals": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 18
+              },
+              "symbol": {
+                "type": "string",
+                "minLength": 1
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "icon_url": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "chain",
+              "network",
+              "coin_type",
+              "presale_id",
+              "lifecycle",
+              "decimals",
+              "symbol",
+              "name",
+              "icon_url"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "activity_id",
+          "entry_id",
+          "kind",
+          "occurred_at_ms",
+          "digest",
+          "quote",
+          "tokens",
+          "refund",
+          "has_why",
+          "actor",
+          "coin"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "next_cursor": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 600
+        }
+      ]
+    },
+    "as_of": {
+      "$ref": "https://blast-v2.invalid/social/contracts/as-of.schema.json"
+    }
+  },
+  "required": [
+    "window",
+    "from_ms",
+    "to_ms",
+    "clock_ms",
+    "events",
+    "next_cursor",
+    "as_of"
+  ],
+  "additionalProperties": false
+}

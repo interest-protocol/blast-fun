@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/wallet-sign-in-challenge-request.schema.json",
+  "title": "Wallet sign-in challenge request",
+  "description": "POST /api/social/sign-in/challenge body. Closed. address is a Sui address (0x and up to 64 hex digits); it is canonicalized to 66 lowercase characters.",
+  "type": "object",
+  "properties": {
+    "address": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 66
+    }
+  },
+  "required": [
+    "address"
+  ],
+  "additionalProperties": false
+}

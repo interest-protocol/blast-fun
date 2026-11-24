@@ -1,0 +1,42 @@
+/*
+ * `.phead`: the boards' title row. The title sits `--page-title-top` (26px)
+ * under the top bar, its actions are bottom-aligned 16px apart, and the first
+ * card follows `--page-title-gap` (20px) below. Phones: 6px and 12px.
+ */
+.phead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: var(--page-title-top, 1.625rem) 0 var(--page-title-gap, 1.25rem);
+}
+
+/* System board: page titles are the display face at 36/650, -.04em, line-height 1.05. */
+.phead h1 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 2.25rem;
+  line-height: 1.05;
+  font-weight: 650;
+  letter-spacing: -.04em;
+}
+
+.sub {
+  font-size: 0.8125rem;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 0.4375rem;
+  padding-bottom: 0.25rem;
+}
+
+.actions { display: flex; align-items: center; gap: 0.5rem; }
+
+/* Mobile board: 32/650 at line-height 1.1, the row centred and wrapping. */
+@media (max-width: 760px) {
+  .phead { flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+  .phead h1 { font-size: 2rem; line-height: 1.1; }
+}
+
+/* Under a back bar the title loses its top padding, at every width (oa41 `.backbar + .phead`). */
+:global([data-back-bar]) + .phead { min-height: 0; padding-top: 0; }

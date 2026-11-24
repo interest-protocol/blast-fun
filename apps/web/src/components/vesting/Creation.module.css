@@ -1,0 +1,493 @@
+.page {
+  max-width: 70rem;
+}
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 21.25rem;
+  gap: 3rem;
+  align-items: start;
+}
+.fields {
+  display: grid;
+  gap: var(--s5);
+  padding: 0;
+  border: 0;
+  margin: 0;
+  min-width: 0;
+}
+.section {
+  padding: var(--s5);
+  background: var(--card);
+  border-radius: var(--r-button-lg);
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+.sectionHeading {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  margin-bottom: 0.3125rem;
+}
+.number {
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: var(--r-inner);
+  background: var(--raised);
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.section label {
+  display: grid;
+  gap: 0.5rem;
+  color: var(--ink-2);
+  font-size: 0.8125rem;
+  font-weight: 550;
+  min-width: 0;
+}
+.section input,
+.section select {
+  width: 100%;
+  min-width: 0;
+  height: 2.875rem;
+  border: 1px solid var(--hair-2);
+  border-radius: var(--r-button);
+  padding: 0 0.8125rem;
+  background: var(--field);
+  color: var(--ink);
+  font: 400 1rem var(--font);
+}
+.section input:focus-visible,
+.section select:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+.section input[aria-invalid="true"] {
+  border-color: var(--down);
+}
+.page .section p {
+  margin: 0;
+  font-size: 0.75rem;
+}
+.coinSelect {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8125rem;
+  width: 100%;
+  min-height: 3.875rem;
+  padding: 0.8125rem;
+  border-radius: var(--r-button);
+  background: var(--field);
+  box-shadow: inset 0 0 0 1px var(--hair-2);
+  text-align: left;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+.coinSelect > svg {
+  width: 1.125rem;
+  height: 1.125rem;
+  color: var(--muted);
+  flex: none;
+}
+.coinSelect > span {
+  min-width: 0;
+}
+.amountField {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding-right: 0.5rem;
+  border: 1px solid var(--hair-2);
+  border-radius: var(--r-button);
+  background: var(--field);
+  min-width: 0;
+}
+.amountField:focus-within {
+  box-shadow: var(--focus);
+}
+.section .amountField input {
+  height: 3.5rem;
+  border: 0;
+  background: transparent;
+  font: 550 1.5625rem var(--display);
+  box-shadow: none;
+}
+.amountField > span {
+  color: var(--muted);
+  font-size: 0.8125rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 5.9375rem;
+  flex-shrink: 0;
+}
+.available {
+  min-width: min(100%, 10rem);
+  font-size: 0.75rem;
+  color: var(--muted);
+  min-height: 1.125rem;
+}
+.available b {
+  color: var(--ink-2);
+  font-weight: 500;
+  margin-left: 0.3125rem;
+  overflow-wrap: anywhere;
+}
+.disclosure {
+  font-size: 0.75rem;
+  min-width: 0;
+}
+.disclosure summary {
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0.375rem 0;
+}
+.disclosure dl {
+  margin-top: 0.5rem;
+}
+.coinDetails > div {
+  padding-bottom: 0;
+  border-bottom: 0;
+  gap: 1rem;
+}
+.coinDetails dd {
+  font-size: 0.75rem;
+  color: var(--ink-2);
+}
+.selectField {
+  position: relative;
+  display: block;
+}
+.section .selectField select {
+  appearance: none;
+  padding-right: 2.75rem;
+}
+.selectField > svg {
+  position: absolute;
+  right: 1rem;
+  top: 50%;
+  transform: translateY(-50%) rotate(90deg);
+  width: 1rem;
+  height: 1rem;
+  color: var(--muted);
+  pointer-events: none;
+}
+.segmented {
+  width: 100%;
+}
+.regularFields,
+.custom {
+  display: grid;
+  gap: 1rem;
+}
+.pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8125rem;
+}
+.releaseRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 2.75rem;
+  gap: 0.5rem;
+  align-items: start;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--hair);
+}
+.releaseNumber {
+  grid-column: 1 / -1;
+  color: var(--ink-2);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.releaseRow .remove {
+  width: max(44px, 2.75rem);
+  height: 2.875rem;
+  margin-top: 1.5rem;
+  color: var(--muted);
+}
+.remove svg {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+.rowActions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.allocation {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8125rem;
+  flex-wrap: wrap;
+  font-size: 0.75rem;
+  color: var(--muted);
+  padding: 0.8125rem;
+  background: var(--raised);
+  border-radius: var(--r-button);
+}
+.allocation b {
+  display: block;
+  color: var(--ink-2);
+  margin-top: 0.3125rem;
+  overflow-wrap: anywhere;
+}
+.cancellationRow {
+  display: flex;
+  gap: 1.3125rem;
+  align-items: center;
+  justify-content: space-between;
+}
+.cancellationRow > div {
+  min-width: 0;
+}
+.page .cancellationRow p {
+  margin-top: 0.3125rem;
+}
+.fieldError,
+.page p.fieldError {
+  color: var(--down);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.summary {
+  padding: 1.5rem;
+  position: sticky;
+  top: 5.3125rem;
+  min-width: 0;
+}
+.summaryHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.summaryHeading span {
+  font-size: 0.625rem;
+  color: var(--muted);
+}
+.summaryAmount {
+  font: 600 2rem/1.25 var(--display);
+  letter-spacing: -1px;
+  margin-top: 1.5rem;
+  overflow-wrap: anywhere;
+}
+.summaryContent, .desktopPreview { display: contents; }
+.page .summaryContent > p {
+  font-size: 0.75rem;
+  margin-top: 0.3125rem;
+}
+.summary dl {
+  margin-top: 1.5rem;
+}
+.summary dl > div {
+  gap: 0.8125rem;
+}
+.summary dl dd {
+  font-size: 0.75rem;
+}
+.scheduleNote {
+  padding-top: 0.5rem;
+}
+.reviewAction {
+  margin-top: 1.5rem;
+  display: grid;
+  gap: 0.625rem;
+}
+.reviewAction > p:first-child { min-height: 1.1rem; }
+.page .reviewAction p {
+  margin: 0;
+  font-size: 0.6875rem;
+  line-height: 1.6;
+}
+.reviewAction > button {
+  width: 100%;
+  min-height: 2.875rem;
+}
+@media (hover: hover) and (pointer: fine) {
+  .coinSelect:hover {
+    background: var(--raised);
+  }
+}
+@media (max-width: 1054px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr) 18.75rem;
+    gap: 1.75rem;
+  }
+  .summary {
+    padding: 1.3125rem;
+  }
+  .releaseRow {
+    grid-template-columns: minmax(0, 1fr) 2.75rem;
+  }
+  .releaseRow label:first-of-type {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 500px) {
+  .section {
+    padding: 1rem;
+  }
+  .summary {
+    padding: 1.3125rem 1rem;
+  }
+  .pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .segmented button {
+    padding: 0 0.5rem;
+    font-size: 0.75rem;
+  }
+  .summaryAmount {
+    font-size: 1.5625rem;
+  }
+}
+
+.portions {
+  display: flex;
+  gap: 0.3125rem;
+  justify-content: flex-end;
+  margin-top: -0.5rem;
+}
+
+.summary dl > div {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+.summary dl {
+  gap: 1.125rem;
+}
+.portions button {
+  min-height: 2.25rem;
+  min-width: max(44px, 2.75rem);
+  font-size: 0.6875rem;
+}
+@media (pointer: coarse) { .portions button { min-height: 44px; } }
+.amountFooter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.3125rem 0.8125rem;
+}
+.amountFooter .portions {
+  margin: 0;
+  margin-left: auto;
+}
+
+.review {
+  gap: 1rem;
+  padding-top: 0;
+}
+.review dl {
+  margin-top: 0;
+}
+.review p {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.summaryHeading h2 {
+  font-size: 1.0625rem;
+  font-weight: 650;
+  letter-spacing: -.02em;
+}
+.walletField {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.walletLabel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.walletLabel button,
+.bothWallets {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-height: 2.5rem;
+}
+.walletLabel svg,
+.bothWallets svg {
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+}
+.ownWallet {
+  color: var(--ink);
+  font-weight: 550;
+}
+.bothWallets {
+  justify-self: start;
+}
+.utc {
+  display: block;
+  margin-top: 0.25rem;
+  color: var(--muted);
+  font-size: 0.6875rem;
+  font-weight: 400;
+}
+.releaseRow > div {
+  grid-column: 1 / -1;
+}
+@media (max-height: 850px) {
+  .summary {
+    position: static;
+  }
+}
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.5rem;
+  }
+  .summary {
+    position: static;
+  }
+}
+@media (max-width: 500px) {
+  .walletLabel button {
+    font-size: 0.6875rem;
+  }
+  .page {
+    padding-bottom: calc(6.25rem + env(safe-area-inset-bottom));
+  }
+}
+
+.conditionalFields { display: grid; gap: 1rem; padding: 0.25rem; }
+.cancellationReveal { transition: height 180ms var(--ease-std), opacity 180ms var(--ease-std), transform 180ms var(--ease-std); }
+.cancellationReveal[data-starting-style] { transform: translateY(0.25rem); }
+.cancellationReveal[data-ending-style] { transition-duration: var(--t1); }
+@media (prefers-reduced-motion: reduce) {
+  .cancellationReveal { transition: none; }
+  .cancellationReveal[data-starting-style] { transform: none; }
+}
+:global(html[data-blast-input="keyboard"]) .cancellationReveal { transition: none; }
+:global(html[data-blast-input="keyboard"]) .cancellationReveal[data-starting-style] { transform: none; }
+
+@media (max-width: 760px) {
+  .summary.summary { display: contents; }
+  .summaryContent { display: block; padding: 1rem; border-radius: var(--r-md); background: var(--card); }
+  .summaryContent .summaryAmount { margin-top: 0.75rem; }
+  .summaryContent dl { margin-top: 0.75rem; }
+  .desktopPreview { display: none; }
+  .layout .reviewAction {
+    position: sticky;
+    bottom: var(--shell-phone-nav-height, max(5.25rem, calc(3.125rem + env(safe-area-inset-bottom, 0px))));
+    z-index: 5;
+    margin: 0;
+    padding-block: 1.5rem 0.5rem;
+    border-image: linear-gradient(to bottom, transparent, var(--bg) 1.3125rem) fill 0 / 0 / 0 100vmax;
+  }
+  :global(html):has(.reviewAction) {
+    scroll-padding-bottom: calc(max(5.25rem, calc(3.125rem + env(safe-area-inset-bottom, 0px))) + 5.5rem);
+  }
+}

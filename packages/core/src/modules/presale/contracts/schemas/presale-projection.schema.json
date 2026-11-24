@@ -1,0 +1,567 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/presale/contracts/presale-projection.schema.json",
+  "title": "Presale projection",
+  "description": "GET /v1/presales/{presale_id}: section 2.1. Final launch stack (contracts 88951fe9): the sale's venue, fee split and Blast's rates; its vault, ledger, expected vault ID and pool tier come from blast-infra's market pipeline.",
+  "type": "object",
+  "properties": {
+    "presale_id": {
+      "$ref": "defs.schema.json#/$defs/address"
+    },
+    "presale_cap_id": {
+      "$ref": "defs.schema.json#/$defs/address"
+    },
+    "sale_token": {
+      "$ref": "defs.schema.json#/$defs/coin_type"
+    },
+    "quote": {
+      "$ref": "defs.schema.json#/$defs/coin_type"
+    },
+    "lifecycle": {
+      "$ref": "defs.schema.json#/$defs/lifecycle"
+    },
+    "windows": {
+      "$ref": "defs.schema.json#/$defs/windows"
+    },
+    "raise": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "$ref": "defs.schema.json#/$defs/uint"
+        },
+        "pool_share": {
+          "$ref": "defs.schema.json#/$defs/uint"
+        },
+        "recipients": {
+          "type": "array",
+          "items": {
+            "$ref": "defs.schema.json#/$defs/recipient_share"
+          }
+        },
+        "protocol": {
+          "$ref": "defs.schema.json#/$defs/share"
+        }
+      },
+      "required": [
+        "target",
+        "pool_share",
+        "recipients",
+        "protocol"
+      ],
+      "additionalProperties": false
+    },
+    "supply": {
+      "type": "object",
+      "properties": {
+        "total": {
+          "$ref": "defs.schema.json#/$defs/uint"
+        },
+        "burnable": {
+          "type": "boolean"
+        },
+        "participants": {
+          "$ref": "defs.schema.json#/$defs/share"
+        },
+        "liquidity": {
+          "$ref": "defs.schema.json#/$defs/share"
+        },
+        "recipients": {
+          "type": "array",
+          "items": {
+            "$ref": "defs.schema.json#/$defs/recipient_share"
+          }
+        },
+        "protocol": {
+          "$ref": "defs.schema.json#/$defs/share"
+        }
+      },
+      "required": [
+        "total",
+        "burnable",
+        "participants",
+        "liquidity",
+        "recipients",
+        "protocol"
+      ],
+      "additionalProperties": false
+    },
+    "eligibility": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "open"
+            },
+            "wallet_cap": {
+              "$ref": "defs.schema.json#/$defs/uint"
+            },
+            "min_commitment": {
+              "$ref": "defs.schema.json#/$defs/uint"
+            },
+            "max_participants": {
+              "$ref": "defs.schema.json#/$defs/uint"
+            }
+          },
+          "required": [
+            "kind",
+            "wallet_cap",
+            "min_commitment",
+            "max_participants"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "allowlisted"
+            },
+            "root": {
+              "$ref": "defs.schema.json#/$defs/hex32"
+            },
+            "leaf_count": {
+              "$ref": "defs.schema.json#/$defs/uint"
+            }
+          },
+          "required": [
+            "kind",
+            "root",
+            "leaf_count"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "uncapped": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "starts_after_ms": {
+              "$ref": "defs.schema.json#/$defs/timestamp_ms"
+            },
+            "access": {
+              "oneOf": [
+                {
+                  "const": "eligible"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "anyone": {
+                      "type": "object",
+                      "properties": {
+                        "max_participants": {
+                          "$ref": "defs.schema.json#/$defs/uint"
+                        },
+                        "min_commitment": {
+                          "$ref": "defs.schema.json#/$defs/uint"
+                        }
+                      },
+                      "required": [
+                        "max_participants",
+                        "min_commitment"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "anyone"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "required": [
+            "starts_after_ms",
+            "access"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "hard_cap": {
+      "anyOf": [
+        {
+          "$ref": "defs.schema.json#/$defs/hard_cap"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "participant_vesting": {
+      "description": "Proposed CA-G5: the terms every participant's claimed tokens vest under from the claim; null when a claim pays them out.",
+      "anyOf": [
+        {
+          "$ref": "defs.schema.json#/$defs/vesting_terms"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "partner": {
+      "anyOf": [
+        {
+          "type": "object",
+          "description": "The sale's Blast partner and what Blast's ledger of the sale has paid it (Meme, Quote, SUI), null before any payment.",
+          "properties": {
+            "partner_id": {
+              "$ref": "defs.schema.json#/$defs/address"
+            },
+            "paid": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "meme": {
+                      "$ref": "defs.schema.json#/$defs/uint"
+                    },
+                    "quote": {
+                      "$ref": "defs.schema.json#/$defs/uint"
+                    },
+                    "sui": {
+                      "$ref": "defs.schema.json#/$defs/uint"
+                    }
+                  },
+                  "required": [
+                    "meme",
+                    "quote",
+                    "sui"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "partner_id"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "venue": {
+      "description": "The sale's migration venue: a CLMM venue (`cetus`, `bluefin`) with its witness type, or the Aftermath vendor venue with its binding.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "$ref": "defs.schema.json#/$defs/clmm_venue_kind"
+            },
+            "venue": {
+              "$ref": "defs.schema.json#/$defs/coin_type"
+            }
+          },
+          "required": [
+            "kind",
+            "venue"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "$ref": "defs.schema.json#/$defs/aftermath_venue"
+        }
+      ]
+    },
+    "totals": {
+      "$ref": "defs.schema.json#/$defs/totals"
+    },
+    "custody": {
+      "type": "object",
+      "properties": {
+        "quote": {
+          "$ref": "defs.schema.json#/$defs/uint"
+        },
+        "sale_tokens": {
+          "$ref": "defs.schema.json#/$defs/uint"
+        },
+        "liquidity_tokens": {
+          "$ref": "defs.schema.json#/$defs/uint"
+        },
+        "recipient_tokens": {
+          "$ref": "defs.schema.json#/$defs/uint"
+        },
+        "protocol_tokens": {
+          "$ref": "defs.schema.json#/$defs/uint"
+        }
+      },
+      "required": [
+        "quote",
+        "sale_tokens",
+        "liquidity_tokens",
+        "recipient_tokens",
+        "protocol_tokens"
+      ],
+      "additionalProperties": false
+    },
+    "migration": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "digest": {
+              "$ref": "defs.schema.json#/$defs/digest"
+            },
+            "timestamp_ms": {
+              "$ref": "defs.schema.json#/$defs/timestamp_ms"
+            },
+            "pool_id": {
+              "anyOf": [
+                {
+                  "$ref": "defs.schema.json#/$defs/address"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "protocol_quote": {
+              "$ref": "defs.schema.json#/$defs/uint"
+            },
+            "protocol_tokens": {
+              "$ref": "defs.schema.json#/$defs/uint"
+            }
+          },
+          "required": [
+            "digest",
+            "timestamp_ms",
+            "pool_id",
+            "protocol_quote",
+            "protocol_tokens"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "cancellation": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "digest": {
+              "$ref": "defs.schema.json#/$defs/digest"
+            },
+            "timestamp_ms": {
+              "$ref": "defs.schema.json#/$defs/timestamp_ms"
+            },
+            "reason": {
+              "enum": [
+                "raise_missed",
+                "liquidity_deadline"
+              ]
+            }
+          },
+          "required": [
+            "digest",
+            "timestamp_ms",
+            "reason"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "delivery": {
+      "type": "object",
+      "properties": {
+        "claimed_wallets": {
+          "$ref": "defs.schema.json#/$defs/count"
+        },
+        "remaining_wallets": {
+          "$ref": "defs.schema.json#/$defs/count"
+        }
+      },
+      "required": [
+        "claimed_wallets",
+        "remaining_wallets"
+      ],
+      "additionalProperties": false
+    },
+    "freshness": {
+      "$ref": "defs.schema.json#/$defs/freshness"
+    },
+    "fee_split": {
+      "type": "object",
+      "properties": {
+        "routes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "destination": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "const": "address"
+                      },
+                      "address": {
+                        "$ref": "defs.schema.json#/$defs/address"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "address"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "enum": [
+                          "owner",
+                          "auto_lp",
+                          "holder_rewards",
+                          "burn"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "bps": {
+                "$ref": "defs.schema.json#/$defs/uint"
+              }
+            },
+            "required": [
+              "destination",
+              "bps"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "routes"
+      ],
+      "additionalProperties": false
+    },
+    "protocol_fees": {
+      "description": "Blast's rates and amounts as the sale fixed them (PresaleCreated, ProtocolFeesChanged).",
+      "type": "object",
+      "properties": {
+        "raise_bps": {
+          "$ref": "defs.schema.json#/$defs/uint"
+        },
+        "token_bps": {
+          "$ref": "defs.schema.json#/$defs/uint"
+        },
+        "lp_fee_meme_bps": {
+          "$ref": "defs.schema.json#/$defs/uint"
+        },
+        "lp_fee_quote_bps": {
+          "$ref": "defs.schema.json#/$defs/uint"
+        },
+        "protocol_quote": {
+          "$ref": "defs.schema.json#/$defs/uint"
+        },
+        "protocol_tokens": {
+          "$ref": "defs.schema.json#/$defs/uint"
+        }
+      },
+      "required": [
+        "raise_bps",
+        "token_bps",
+        "lp_fee_meme_bps",
+        "lp_fee_quote_bps",
+        "protocol_quote",
+        "protocol_tokens"
+      ],
+      "additionalProperties": false
+    },
+    "expected_vault_id": {
+      "description": "The vault the VaultRegistry derives for the sale, which a CLMM migration creates; null until the registry and packages are known.",
+      "anyOf": [
+        {
+          "$ref": "defs.schema.json#/$defs/address"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "vault": {
+      "description": "The sale's vault as blast-infra's GET /v1/vaults/{vault_id} serves it (docs/api/schemas/common.json#/$defs/vault), null before migration and for an Aftermath sale.",
+      "anyOf": [
+        {
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "pool_tier": {
+      "description": "The sale token's migration pool tier (blast-infra common.json#/$defs/pool_tier), null without a reservation.",
+      "anyOf": [
+        {
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "ledger": {
+      "description": "Blast's fee ledger of the sale (blast-infra common.json#/$defs/protocol_ledger), null before it accrued anything.",
+      "anyOf": [
+        {
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "presale_id",
+    "presale_cap_id",
+    "sale_token",
+    "quote",
+    "lifecycle",
+    "windows",
+    "raise",
+    "supply",
+    "eligibility",
+    "uncapped",
+    "hard_cap",
+    "participant_vesting",
+    "partner",
+    "venue",
+    "fee_split",
+    "protocol_fees",
+    "totals",
+    "custody",
+    "migration",
+    "cancellation",
+    "delivery",
+    "freshness"
+  ],
+  "additionalProperties": false
+}

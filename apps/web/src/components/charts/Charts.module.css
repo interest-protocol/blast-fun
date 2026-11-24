@@ -1,0 +1,4 @@
+.spark { display: inline-block; vertical-align: middle; }
+.up { color: var(--up); }
+.down { color: var(--down); }
+.ink { color: inherit; }

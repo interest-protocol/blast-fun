@@ -1,0 +1,1661 @@
+[
+  {
+    "name": "first-party /presales",
+    "responses": [{ "status": 200, "code": null, "retryAfter": null }],
+    "handlerRuns": 1,
+    "recognition": [],
+    "invalidated": 0,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:gateway-replay:<nonce>",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:social_read_presales:v1:8968cc1f52a5ed6399802155feda624255e63e42eccf5a9b4a7c631011f629e3:60"
+        ],
+        "arguments": ["1", "60", "300", "1"]
+      }
+    ]
+  },
+  {
+    "name": "first-party /presales/featured",
+    "responses": [{ "status": 200, "code": null, "retryAfter": null }],
+    "handlerRuns": 1,
+    "recognition": [],
+    "invalidated": 0,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:gateway-replay:<nonce>",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:social_read_presales:v1:8968cc1f52a5ed6399802155feda624255e63e42eccf5a9b4a7c631011f629e3:60"
+        ],
+        "arguments": ["1", "60", "300", "1"]
+      }
+    ]
+  },
+  {
+    "name": "first-party /presales/0x1111111111111111111111111111111111111111111111111111111111111111",
+    "responses": [{ "status": 200, "code": null, "retryAfter": null }],
+    "handlerRuns": 1,
+    "recognition": [],
+    "invalidated": 0,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:gateway-replay:<nonce>",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:social_read_presales:v1:8968cc1f52a5ed6399802155feda624255e63e42eccf5a9b4a7c631011f629e3:60"
+        ],
+        "arguments": ["1", "60", "300", "1"]
+      }
+    ]
+  },
+  {
+    "name": "first-party /prices",
+    "responses": [{ "status": 200, "code": null, "retryAfter": null }],
+    "handlerRuns": 1,
+    "recognition": [],
+    "invalidated": 0,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:gateway-replay:<nonce>",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:social_read_prices:v1:8968cc1f52a5ed6399802155feda624255e63e42eccf5a9b4a7c631011f629e3:60"
+        ],
+        "arguments": ["1", "60", "300", "1"]
+      }
+    ]
+  },
+  {
+    "name": "first-party /discovery",
+    "responses": [{ "status": 200, "code": null, "retryAfter": null }],
+    "handlerRuns": 1,
+    "recognition": [],
+    "invalidated": 0,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:gateway-replay:<nonce>",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:launchpad_discovery:v1:8968cc1f52a5ed6399802155feda624255e63e42eccf5a9b4a7c631011f629e3:60"
+        ],
+        "arguments": ["1", "60", "120", "1"]
+      }
+    ]
+  },
+  {
+    "name": "first-party /search",
+    "responses": [{ "status": 200, "code": null, "retryAfter": null }],
+    "handlerRuns": 1,
+    "recognition": [],
+    "invalidated": 0,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:gateway-replay:<nonce>",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:launchpad_search:v1:8968cc1f52a5ed6399802155feda624255e63e42eccf5a9b4a7c631011f629e3:60"
+        ],
+        "arguments": ["1", "60", "60", "1"]
+      }
+    ]
+  },
+  {
+    "name": "first-party /wallets/0x1111111111111111111111111111111111111111111111111111111111111111/launches",
+    "responses": [{ "status": 200, "code": null, "retryAfter": null }],
+    "handlerRuns": 1,
+    "recognition": [],
+    "invalidated": 0,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:gateway-replay:<nonce>",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:launchpad_wallet_launches:v1:8968cc1f52a5ed6399802155feda624255e63e42eccf5a9b4a7c631011f629e3:60"
+        ],
+        "arguments": ["1", "60", "120", "1"]
+      }
+    ]
+  },
+  {
+    "name": "first-party /market/status",
+    "responses": [{ "status": 200, "code": null, "retryAfter": null }],
+    "handlerRuns": 1,
+    "recognition": [],
+    "invalidated": 0,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:gateway-replay:<nonce>",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:launchpad_market_status:v1:8968cc1f52a5ed6399802155feda624255e63e42eccf5a9b4a7c631011f629e3:60"
+        ],
+        "arguments": ["1", "60", "120", "1"]
+      }
+    ]
+  },
+  {
+    "name": "first-party /market/coins/0x3333333333333333333333333333333333333333333333333333333333333333::froggy::FROGGY",
+    "responses": [{ "status": 200, "code": null, "retryAfter": null }],
+    "handlerRuns": 1,
+    "recognition": [],
+    "invalidated": 0,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:gateway-replay:<nonce>",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:launchpad_market_coin:v1:8968cc1f52a5ed6399802155feda624255e63e42eccf5a9b4a7c631011f629e3:60"
+        ],
+        "arguments": ["1", "60", "240", "1"]
+      }
+    ]
+  },
+  {
+    "name": "first-party /market/coins/0x3333333333333333333333333333333333333333333333333333333333333333::froggy::FROGGY/holders",
+    "responses": [{ "status": 200, "code": null, "retryAfter": null }],
+    "handlerRuns": 1,
+    "recognition": [],
+    "invalidated": 0,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:gateway-replay:<nonce>",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:launchpad_market_holders:v1:8968cc1f52a5ed6399802155feda624255e63e42eccf5a9b4a7c631011f629e3:60"
+        ],
+        "arguments": ["1", "60", "240", "1"]
+      }
+    ]
+  },
+  {
+    "name": "first-party /market/coins/0x3333333333333333333333333333333333333333333333333333333333333333::froggy::FROGGY/candles",
+    "responses": [{ "status": 200, "code": null, "retryAfter": null }],
+    "handlerRuns": 1,
+    "recognition": [],
+    "invalidated": 0,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:gateway-replay:<nonce>",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:launchpad_market_candles:v1:8968cc1f52a5ed6399802155feda624255e63e42eccf5a9b4a7c631011f629e3:60"
+        ],
+        "arguments": ["1", "60", "480", "1"]
+      }
+    ]
+  },
+  {
+    "name": "first-party /market/launches/0x1111111111111111111111111111111111111111111111111111111111111111/activity",
+    "responses": [{ "status": 200, "code": null, "retryAfter": null }],
+    "handlerRuns": 1,
+    "recognition": [],
+    "invalidated": 0,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:gateway-replay:<nonce>",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:launchpad_market_activity:v1:8968cc1f52a5ed6399802155feda624255e63e42eccf5a9b4a7c631011f629e3:60"
+        ],
+        "arguments": ["1", "60", "240", "1"]
+      }
+    ]
+  },
+  {
+    "name": "first-party /market/pools/blast_curve/0x1111111111111111111111111111111111111111111111111111111111111111",
+    "responses": [{ "status": 200, "code": null, "retryAfter": null }],
+    "handlerRuns": 1,
+    "recognition": [],
+    "invalidated": 0,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:gateway-replay:<nonce>",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:launchpad_market_pool:v1:8968cc1f52a5ed6399802155feda624255e63e42eccf5a9b4a7c631011f629e3:60"
+        ],
+        "arguments": ["1", "60", "480", "1"]
+      }
+    ]
+  },
+  {
+    "name": "first-party /market/pools/cetus/0x1111111111111111111111111111111111111111111111111111111111111111/trades",
+    "responses": [{ "status": 200, "code": null, "retryAfter": null }],
+    "handlerRuns": 1,
+    "recognition": [],
+    "invalidated": 0,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:gateway-replay:<nonce>",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:launchpad_market_trades:v1:8968cc1f52a5ed6399802155feda624255e63e42eccf5a9b4a7c631011f629e3:60"
+        ],
+        "arguments": ["1", "60", "240", "1"]
+      }
+    ]
+  },
+  {
+    "name": "first-party /defillama/metrics",
+    "responses": [{ "status": 200, "code": null, "retryAfter": null }],
+    "handlerRuns": 1,
+    "recognition": [],
+    "invalidated": 0,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:gateway-replay:<nonce>",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:defillama_read:v1:8968cc1f52a5ed6399802155feda624255e63e42eccf5a9b4a7c631011f629e3:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:defillama_public_global:v1:7f33886d5d044afb206234853a47d523f3dfdc5e7e663f410e429662996bc3e2:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read_global:v1:7f33886d5d044afb206234853a47d523f3dfdc5e7e663f410e429662996bc3e2:60"
+        ],
+        "arguments": ["1", "60", "120", "1", "60", "300", "2", "60", "8015900", "3"]
+      }
+    ]
+  },
+  {
+    "name": "first-party HEAD",
+    "responses": [{ "status": 200, "code": null, "retryAfter": null }],
+    "handlerRuns": 1,
+    "recognition": [],
+    "invalidated": 0,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:gateway-replay:<nonce>",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:social_read_presales:v1:025c2aa62d5af6a926d443f41ccf1a9ab8a5ed7d85936d52f58edfcbfb349fc1:60"
+        ],
+        "arguments": ["1", "60", "300", "1"]
+      }
+    ]
+  },
+  {
+    "name": "first-party OPTIONS refused",
+    "responses": [
+      {
+        "status": 403,
+        "code": "read_forbidden",
+        "message": "This read is not available.",
+        "retryAfter": null
+      }
+    ],
+    "handlerRuns": 0,
+    "recognition": [],
+    "invalidated": 0,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:gateway-replay:<nonce>"
+        ],
+        "arguments": ["1"]
+      }
+    ]
+  },
+  {
+    "name": "first-party POST refused",
+    "responses": [{ "status": 405, "code": "read_only", "retryAfter": null }],
+    "handlerRuns": 0,
+    "recognition": [],
+    "invalidated": 0,
+    "redis": []
+  },
+  {
+    "name": "first-party unknown path refused",
+    "responses": [
+      {
+        "status": 403,
+        "code": "read_forbidden",
+        "message": "This read is not available.",
+        "retryAfter": null
+      }
+    ],
+    "handlerRuns": 0,
+    "recognition": [],
+    "invalidated": 0,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:gateway-replay:<nonce>"
+        ],
+        "arguments": ["1"]
+      }
+    ]
+  },
+  {
+    "name": "first-party allowlist proof refused",
+    "responses": [
+      {
+        "status": 403,
+        "code": "read_forbidden",
+        "message": "This read is not available.",
+        "retryAfter": null
+      }
+    ],
+    "handlerRuns": 0,
+    "recognition": [],
+    "invalidated": 0,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:gateway-replay:<nonce>"
+        ],
+        "arguments": ["1"]
+      }
+    ]
+  },
+  {
+    "name": "first-party partner key refused",
+    "responses": [
+      {
+        "status": 403,
+        "code": "gateway_forbidden",
+        "message": "This endpoint requires the frontend gateway.",
+        "retryAfter": null
+      }
+    ],
+    "handlerRuns": 0,
+    "recognition": [],
+    "invalidated": 0,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:gateway-replay:<nonce>"
+        ],
+        "arguments": ["1"]
+      }
+    ]
+  },
+  {
+    "name": "first-party quota refused",
+    "responses": [
+      { "status": 429, "code": "rate_limited", "message": "Too many requests.", "retryAfter": "30" }
+    ],
+    "handlerRuns": 0,
+    "recognition": [],
+    "invalidated": 0,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:gateway-replay:<nonce>",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:social_read_prices:v1:02a0b26d8903c0ab16123bdcc3b585e281022254d951e63980930724baaf7b18:60"
+        ],
+        "arguments": ["1", "60", "300", "1"]
+      }
+    ]
+  },
+  {
+    "name": "first-party replayed proof",
+    "responses": [
+      { "status": 200, "code": null, "retryAfter": null },
+      {
+        "status": 403,
+        "code": "gateway_forbidden",
+        "message": "Gateway proof already consumed.",
+        "retryAfter": null
+      }
+    ],
+    "handlerRuns": 1,
+    "recognition": [],
+    "invalidated": 0,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:gateway-replay:<nonce>",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:social_read_prices:v1:1ab7a8043e4edbc2d12f0ab34af3d00b0038b8e39cadf1c6e313930af7123896:60"
+        ],
+        "arguments": ["1", "60", "300", "1"]
+      },
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:gateway-replay:<nonce>",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:social_read_prices:v1:1ab7a8043e4edbc2d12f0ab34af3d00b0038b8e39cadf1c6e313930af7123896:60"
+        ],
+        "arguments": ["1", "60", "300", "1"]
+      }
+    ]
+  },
+  {
+    "name": "first-party lost quota answer",
+    "responses": [
+      {
+        "status": 503,
+        "code": "service_unavailable",
+        "message": "This service is temporarily unavailable.",
+        "retryAfter": "5"
+      }
+    ],
+    "handlerRuns": 0,
+    "recognition": [],
+    "invalidated": 0,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:gateway-replay:<nonce>",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:social_read_prices:v1:73c36a0a735dcbb856ce4bbd96fe29f2fa58cb5f2f48cfd3d3768db6152ea3e4:60"
+        ],
+        "arguments": ["1", "60", "300", "1"]
+      }
+    ]
+  },
+  {
+    "name": "first-party unsigned refused",
+    "responses": [{ "status": 403, "code": "gateway_forbidden", "retryAfter": null }],
+    "handlerRuns": 0,
+    "recognition": [],
+    "invalidated": 0,
+    "redis": []
+  },
+  {
+    "name": "partner /presales",
+    "responses": [{ "status": 200, "code": null, "retryAfter": null }],
+    "handlerRuns": 1,
+    "recognition": [
+      {
+        "digest": "231eac68846533e58eff1ae19d62e543fb4d74dfeac684d6b4636c1a5c6f6986",
+        "ip": "203.0.113.1",
+        "nonce": "<nonce>"
+      }
+    ],
+    "invalidated": 0,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:86400",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read_global:v1:7f33886d5d044afb206234853a47d523f3dfdc5e7e663f410e429662996bc3e2:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:social_read_presales:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:recognition-admission:tenant:3bf0df850a142a8b45dd9e741c6d85673f1a8be046f798a70df45d4f9f18ed1a"
+        ],
+        "arguments": [
+          "0",
+          "60",
+          "300",
+          "1",
+          "86400",
+          "50000",
+          "1",
+          "60",
+          "8015900",
+          "2",
+          "60",
+          "300",
+          "3",
+          "60",
+          "4000000",
+          "4"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "partner /presales/featured",
+    "responses": [{ "status": 200, "code": null, "retryAfter": null }],
+    "handlerRuns": 1,
+    "recognition": [
+      {
+        "digest": "231eac68846533e58eff1ae19d62e543fb4d74dfeac684d6b4636c1a5c6f6986",
+        "ip": "203.0.113.1",
+        "nonce": "<nonce>"
+      }
+    ],
+    "invalidated": 0,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:86400",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read_global:v1:7f33886d5d044afb206234853a47d523f3dfdc5e7e663f410e429662996bc3e2:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:social_read_presales:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:recognition-admission:tenant:3bf0df850a142a8b45dd9e741c6d85673f1a8be046f798a70df45d4f9f18ed1a"
+        ],
+        "arguments": [
+          "0",
+          "60",
+          "300",
+          "1",
+          "86400",
+          "50000",
+          "1",
+          "60",
+          "8015900",
+          "2",
+          "60",
+          "300",
+          "3",
+          "60",
+          "4000000",
+          "4"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "partner /presales/0x1111111111111111111111111111111111111111111111111111111111111111",
+    "responses": [{ "status": 200, "code": null, "retryAfter": null }],
+    "handlerRuns": 1,
+    "recognition": [
+      {
+        "digest": "231eac68846533e58eff1ae19d62e543fb4d74dfeac684d6b4636c1a5c6f6986",
+        "ip": "203.0.113.1",
+        "nonce": "<nonce>"
+      }
+    ],
+    "invalidated": 0,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:86400",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read_global:v1:7f33886d5d044afb206234853a47d523f3dfdc5e7e663f410e429662996bc3e2:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:social_read_presales:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:recognition-admission:tenant:3bf0df850a142a8b45dd9e741c6d85673f1a8be046f798a70df45d4f9f18ed1a"
+        ],
+        "arguments": [
+          "0",
+          "60",
+          "300",
+          "1",
+          "86400",
+          "50000",
+          "1",
+          "60",
+          "8015900",
+          "2",
+          "60",
+          "300",
+          "3",
+          "60",
+          "4000000",
+          "4"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "partner /prices",
+    "responses": [{ "status": 200, "code": null, "retryAfter": null }],
+    "handlerRuns": 1,
+    "recognition": [
+      {
+        "digest": "231eac68846533e58eff1ae19d62e543fb4d74dfeac684d6b4636c1a5c6f6986",
+        "ip": "203.0.113.1",
+        "nonce": "<nonce>"
+      }
+    ],
+    "invalidated": 0,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:86400",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read_global:v1:7f33886d5d044afb206234853a47d523f3dfdc5e7e663f410e429662996bc3e2:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:social_read_prices:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:recognition-admission:tenant:3bf0df850a142a8b45dd9e741c6d85673f1a8be046f798a70df45d4f9f18ed1a"
+        ],
+        "arguments": [
+          "0",
+          "60",
+          "300",
+          "1",
+          "86400",
+          "50000",
+          "1",
+          "60",
+          "8015900",
+          "2",
+          "60",
+          "300",
+          "3",
+          "60",
+          "4000000",
+          "4"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "partner /discovery",
+    "responses": [{ "status": 200, "code": null, "retryAfter": null }],
+    "handlerRuns": 1,
+    "recognition": [
+      {
+        "digest": "231eac68846533e58eff1ae19d62e543fb4d74dfeac684d6b4636c1a5c6f6986",
+        "ip": "203.0.113.1",
+        "nonce": "<nonce>"
+      }
+    ],
+    "invalidated": 0,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:86400",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read_global:v1:7f33886d5d044afb206234853a47d523f3dfdc5e7e663f410e429662996bc3e2:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:launchpad_discovery:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:recognition-admission:tenant:3bf0df850a142a8b45dd9e741c6d85673f1a8be046f798a70df45d4f9f18ed1a"
+        ],
+        "arguments": [
+          "0",
+          "60",
+          "300",
+          "1",
+          "86400",
+          "50000",
+          "1",
+          "60",
+          "8015900",
+          "2",
+          "60",
+          "120",
+          "3",
+          "60",
+          "4000000",
+          "4"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "partner /search",
+    "responses": [{ "status": 200, "code": null, "retryAfter": null }],
+    "handlerRuns": 1,
+    "recognition": [
+      {
+        "digest": "231eac68846533e58eff1ae19d62e543fb4d74dfeac684d6b4636c1a5c6f6986",
+        "ip": "203.0.113.1",
+        "nonce": "<nonce>"
+      }
+    ],
+    "invalidated": 0,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:86400",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read_global:v1:7f33886d5d044afb206234853a47d523f3dfdc5e7e663f410e429662996bc3e2:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:launchpad_search:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:recognition-admission:tenant:3bf0df850a142a8b45dd9e741c6d85673f1a8be046f798a70df45d4f9f18ed1a"
+        ],
+        "arguments": [
+          "0",
+          "60",
+          "300",
+          "1",
+          "86400",
+          "50000",
+          "1",
+          "60",
+          "8015900",
+          "2",
+          "60",
+          "60",
+          "3",
+          "60",
+          "4000000",
+          "4"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "partner /wallets/0x1111111111111111111111111111111111111111111111111111111111111111/launches",
+    "responses": [{ "status": 200, "code": null, "retryAfter": null }],
+    "handlerRuns": 1,
+    "recognition": [
+      {
+        "digest": "231eac68846533e58eff1ae19d62e543fb4d74dfeac684d6b4636c1a5c6f6986",
+        "ip": "203.0.113.1",
+        "nonce": "<nonce>"
+      }
+    ],
+    "invalidated": 0,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:86400",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read_global:v1:7f33886d5d044afb206234853a47d523f3dfdc5e7e663f410e429662996bc3e2:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:launchpad_wallet_launches:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:recognition-admission:tenant:3bf0df850a142a8b45dd9e741c6d85673f1a8be046f798a70df45d4f9f18ed1a"
+        ],
+        "arguments": [
+          "0",
+          "60",
+          "300",
+          "1",
+          "86400",
+          "50000",
+          "1",
+          "60",
+          "8015900",
+          "2",
+          "60",
+          "120",
+          "3",
+          "60",
+          "4000000",
+          "4"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "partner /market/status",
+    "responses": [{ "status": 200, "code": null, "retryAfter": null }],
+    "handlerRuns": 1,
+    "recognition": [
+      {
+        "digest": "231eac68846533e58eff1ae19d62e543fb4d74dfeac684d6b4636c1a5c6f6986",
+        "ip": "203.0.113.1",
+        "nonce": "<nonce>"
+      }
+    ],
+    "invalidated": 0,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:86400",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read_global:v1:7f33886d5d044afb206234853a47d523f3dfdc5e7e663f410e429662996bc3e2:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:launchpad_market_status:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:recognition-admission:tenant:3bf0df850a142a8b45dd9e741c6d85673f1a8be046f798a70df45d4f9f18ed1a"
+        ],
+        "arguments": [
+          "0",
+          "60",
+          "300",
+          "1",
+          "86400",
+          "50000",
+          "1",
+          "60",
+          "8015900",
+          "2",
+          "60",
+          "120",
+          "3",
+          "60",
+          "4000000",
+          "4"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "partner /market/coins/0x3333333333333333333333333333333333333333333333333333333333333333::froggy::FROGGY",
+    "responses": [{ "status": 200, "code": null, "retryAfter": null }],
+    "handlerRuns": 1,
+    "recognition": [
+      {
+        "digest": "231eac68846533e58eff1ae19d62e543fb4d74dfeac684d6b4636c1a5c6f6986",
+        "ip": "203.0.113.1",
+        "nonce": "<nonce>"
+      }
+    ],
+    "invalidated": 0,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:86400",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read_global:v1:7f33886d5d044afb206234853a47d523f3dfdc5e7e663f410e429662996bc3e2:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:launchpad_market_coin:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:recognition-admission:tenant:3bf0df850a142a8b45dd9e741c6d85673f1a8be046f798a70df45d4f9f18ed1a"
+        ],
+        "arguments": [
+          "0",
+          "60",
+          "300",
+          "1",
+          "86400",
+          "50000",
+          "1",
+          "60",
+          "8015900",
+          "2",
+          "60",
+          "240",
+          "3",
+          "60",
+          "4000000",
+          "4"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "partner /market/coins/0x3333333333333333333333333333333333333333333333333333333333333333::froggy::FROGGY/holders",
+    "responses": [{ "status": 200, "code": null, "retryAfter": null }],
+    "handlerRuns": 1,
+    "recognition": [
+      {
+        "digest": "231eac68846533e58eff1ae19d62e543fb4d74dfeac684d6b4636c1a5c6f6986",
+        "ip": "203.0.113.1",
+        "nonce": "<nonce>"
+      }
+    ],
+    "invalidated": 0,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:86400",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read_global:v1:7f33886d5d044afb206234853a47d523f3dfdc5e7e663f410e429662996bc3e2:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:launchpad_market_holders:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:recognition-admission:tenant:3bf0df850a142a8b45dd9e741c6d85673f1a8be046f798a70df45d4f9f18ed1a"
+        ],
+        "arguments": [
+          "0",
+          "60",
+          "300",
+          "1",
+          "86400",
+          "50000",
+          "1",
+          "60",
+          "8015900",
+          "2",
+          "60",
+          "240",
+          "3",
+          "60",
+          "4000000",
+          "4"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "partner /market/coins/0x3333333333333333333333333333333333333333333333333333333333333333::froggy::FROGGY/candles",
+    "responses": [{ "status": 200, "code": null, "retryAfter": null }],
+    "handlerRuns": 1,
+    "recognition": [
+      {
+        "digest": "231eac68846533e58eff1ae19d62e543fb4d74dfeac684d6b4636c1a5c6f6986",
+        "ip": "203.0.113.1",
+        "nonce": "<nonce>"
+      }
+    ],
+    "invalidated": 0,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:86400",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read_global:v1:7f33886d5d044afb206234853a47d523f3dfdc5e7e663f410e429662996bc3e2:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:launchpad_market_candles:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:recognition-admission:tenant:3bf0df850a142a8b45dd9e741c6d85673f1a8be046f798a70df45d4f9f18ed1a"
+        ],
+        "arguments": [
+          "0",
+          "60",
+          "300",
+          "1",
+          "86400",
+          "50000",
+          "1",
+          "60",
+          "8015900",
+          "2",
+          "60",
+          "480",
+          "3",
+          "60",
+          "4000000",
+          "4"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "partner /market/launches/0x1111111111111111111111111111111111111111111111111111111111111111/activity",
+    "responses": [{ "status": 200, "code": null, "retryAfter": null }],
+    "handlerRuns": 1,
+    "recognition": [
+      {
+        "digest": "231eac68846533e58eff1ae19d62e543fb4d74dfeac684d6b4636c1a5c6f6986",
+        "ip": "203.0.113.1",
+        "nonce": "<nonce>"
+      }
+    ],
+    "invalidated": 0,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:86400",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read_global:v1:7f33886d5d044afb206234853a47d523f3dfdc5e7e663f410e429662996bc3e2:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:launchpad_market_activity:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:recognition-admission:tenant:3bf0df850a142a8b45dd9e741c6d85673f1a8be046f798a70df45d4f9f18ed1a"
+        ],
+        "arguments": [
+          "0",
+          "60",
+          "300",
+          "1",
+          "86400",
+          "50000",
+          "1",
+          "60",
+          "8015900",
+          "2",
+          "60",
+          "240",
+          "3",
+          "60",
+          "4000000",
+          "4"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "partner /market/pools/blast_curve/0x1111111111111111111111111111111111111111111111111111111111111111",
+    "responses": [{ "status": 200, "code": null, "retryAfter": null }],
+    "handlerRuns": 1,
+    "recognition": [
+      {
+        "digest": "231eac68846533e58eff1ae19d62e543fb4d74dfeac684d6b4636c1a5c6f6986",
+        "ip": "203.0.113.1",
+        "nonce": "<nonce>"
+      }
+    ],
+    "invalidated": 0,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:86400",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read_global:v1:7f33886d5d044afb206234853a47d523f3dfdc5e7e663f410e429662996bc3e2:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:launchpad_market_pool:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:recognition-admission:tenant:3bf0df850a142a8b45dd9e741c6d85673f1a8be046f798a70df45d4f9f18ed1a"
+        ],
+        "arguments": [
+          "0",
+          "60",
+          "300",
+          "1",
+          "86400",
+          "50000",
+          "1",
+          "60",
+          "8015900",
+          "2",
+          "60",
+          "480",
+          "3",
+          "60",
+          "4000000",
+          "4"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "partner /market/pools/cetus/0x1111111111111111111111111111111111111111111111111111111111111111/trades",
+    "responses": [{ "status": 200, "code": null, "retryAfter": null }],
+    "handlerRuns": 1,
+    "recognition": [
+      {
+        "digest": "231eac68846533e58eff1ae19d62e543fb4d74dfeac684d6b4636c1a5c6f6986",
+        "ip": "203.0.113.1",
+        "nonce": "<nonce>"
+      }
+    ],
+    "invalidated": 0,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:86400",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read_global:v1:7f33886d5d044afb206234853a47d523f3dfdc5e7e663f410e429662996bc3e2:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:launchpad_market_trades:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:recognition-admission:tenant:3bf0df850a142a8b45dd9e741c6d85673f1a8be046f798a70df45d4f9f18ed1a"
+        ],
+        "arguments": [
+          "0",
+          "60",
+          "300",
+          "1",
+          "86400",
+          "50000",
+          "1",
+          "60",
+          "8015900",
+          "2",
+          "60",
+          "240",
+          "3",
+          "60",
+          "4000000",
+          "4"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "partner /defillama/metrics",
+    "responses": [{ "status": 200, "code": null, "retryAfter": null }],
+    "handlerRuns": 1,
+    "recognition": [
+      {
+        "digest": "231eac68846533e58eff1ae19d62e543fb4d74dfeac684d6b4636c1a5c6f6986",
+        "ip": "203.0.113.1",
+        "nonce": "<nonce>"
+      }
+    ],
+    "invalidated": 0,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:86400",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read_global:v1:7f33886d5d044afb206234853a47d523f3dfdc5e7e663f410e429662996bc3e2:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:defillama_read:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:recognition-admission:tenant:3bf0df850a142a8b45dd9e741c6d85673f1a8be046f798a70df45d4f9f18ed1a"
+        ],
+        "arguments": [
+          "0",
+          "60",
+          "300",
+          "1",
+          "86400",
+          "50000",
+          "1",
+          "60",
+          "8015900",
+          "2",
+          "60",
+          "120",
+          "3",
+          "60",
+          "4000000",
+          "4"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "partner allowlist proof",
+    "responses": [{ "status": 200, "code": null, "retryAfter": null }],
+    "handlerRuns": 1,
+    "recognition": [
+      {
+        "digest": "231eac68846533e58eff1ae19d62e543fb4d74dfeac684d6b4636c1a5c6f6986",
+        "ip": "203.0.113.1",
+        "nonce": "<nonce>"
+      }
+    ],
+    "invalidated": 0,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:86400",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read_global:v1:7f33886d5d044afb206234853a47d523f3dfdc5e7e663f410e429662996bc3e2:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:presale_proof:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:recognition-admission:tenant:3bf0df850a142a8b45dd9e741c6d85673f1a8be046f798a70df45d4f9f18ed1a"
+        ],
+        "arguments": [
+          "0",
+          "60",
+          "300",
+          "1",
+          "86400",
+          "50000",
+          "1",
+          "60",
+          "8015900",
+          "2",
+          "60",
+          "120",
+          "3",
+          "60",
+          "4000000",
+          "4"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "partner custom 40/day",
+    "responses": [{ "status": 200, "code": null, "retryAfter": null }],
+    "handlerRuns": 1,
+    "recognition": [
+      {
+        "digest": "7a5c8f09b6b423addf4ff6b5c5470ee5c33aec23e87cb180c1c5db4e913a64c7",
+        "ip": "203.0.113.1",
+        "nonce": "<nonce>"
+      }
+    ],
+    "invalidated": 0,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read:v1:b4fb8247250aee1fc350f7bb726e76cc7cae99c3962d1aaa3760f184efd4eef4:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read:v1:b4fb8247250aee1fc350f7bb726e76cc7cae99c3962d1aaa3760f184efd4eef4:86400",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read_global:v1:7f33886d5d044afb206234853a47d523f3dfdc5e7e663f410e429662996bc3e2:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:social_read_presales:v1:b4fb8247250aee1fc350f7bb726e76cc7cae99c3962d1aaa3760f184efd4eef4:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:recognition-admission:tenant:3bf0df850a142a8b45dd9e741c6d85673f1a8be046f798a70df45d4f9f18ed1a"
+        ],
+        "arguments": [
+          "0",
+          "60",
+          "10",
+          "1",
+          "86400",
+          "40",
+          "1",
+          "60",
+          "8015900",
+          "2",
+          "60",
+          "300",
+          "3",
+          "60",
+          "4000000",
+          "4"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "partner internal",
+    "responses": [{ "status": 200, "code": null, "retryAfter": null }],
+    "handlerRuns": 1,
+    "recognition": [
+      {
+        "digest": "e0634270d9f44b902ab56407dc8c3b13fccee1109726d6649aba091c2e870a02",
+        "ip": "203.0.113.1",
+        "nonce": "<nonce>"
+      }
+    ],
+    "invalidated": 0,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:social_read_presales:v1:964853023d1abd7b71d91676af6b28b08d12b3457f70dd0cf238407d4917f728:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:recognition-admission:internal"
+        ],
+        "arguments": ["0", "60", "300", "1", "60", "10000", "2"]
+      }
+    ]
+  },
+  {
+    "name": "partner HEAD",
+    "responses": [{ "status": 200, "code": null, "retryAfter": null }],
+    "handlerRuns": 1,
+    "recognition": [
+      {
+        "digest": "231eac68846533e58eff1ae19d62e543fb4d74dfeac684d6b4636c1a5c6f6986",
+        "ip": "203.0.113.1",
+        "nonce": "<nonce>"
+      }
+    ],
+    "invalidated": 0,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:86400",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read_global:v1:7f33886d5d044afb206234853a47d523f3dfdc5e7e663f410e429662996bc3e2:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:social_read_presales:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:recognition-admission:tenant:3bf0df850a142a8b45dd9e741c6d85673f1a8be046f798a70df45d4f9f18ed1a"
+        ],
+        "arguments": [
+          "0",
+          "60",
+          "300",
+          "1",
+          "86400",
+          "50000",
+          "1",
+          "60",
+          "8015900",
+          "2",
+          "60",
+          "300",
+          "3",
+          "60",
+          "4000000",
+          "4"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "partner GET from an enabled origin",
+    "responses": [{ "status": 200, "code": null, "retryAfter": null }],
+    "handlerRuns": 1,
+    "recognition": [
+      {
+        "digest": "231eac68846533e58eff1ae19d62e543fb4d74dfeac684d6b4636c1a5c6f6986",
+        "ip": "203.0.113.1",
+        "nonce": "<nonce>"
+      }
+    ],
+    "invalidated": 0,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:86400",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read_global:v1:7f33886d5d044afb206234853a47d523f3dfdc5e7e663f410e429662996bc3e2:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:social_read_presales:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:recognition-admission:tenant:3bf0df850a142a8b45dd9e741c6d85673f1a8be046f798a70df45d4f9f18ed1a"
+        ],
+        "arguments": [
+          "0",
+          "60",
+          "300",
+          "1",
+          "86400",
+          "50000",
+          "1",
+          "60",
+          "8015900",
+          "2",
+          "60",
+          "300",
+          "3",
+          "60",
+          "4000000",
+          "4"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "partner GET from another origin",
+    "responses": [
+      {
+        "status": 403,
+        "code": "partner_origin_forbidden",
+        "message": "This origin is not enabled for this partner.",
+        "retryAfter": null
+      }
+    ],
+    "handlerRuns": 0,
+    "recognition": [
+      {
+        "digest": "231eac68846533e58eff1ae19d62e543fb4d74dfeac684d6b4636c1a5c6f6986",
+        "ip": "203.0.113.1",
+        "nonce": "<nonce>"
+      }
+    ],
+    "invalidated": 0,
+    "redis": []
+  },
+  {
+    "name": "partner malformed key",
+    "responses": [
+      {
+        "status": 401,
+        "code": "partner_key_invalid",
+        "message": "A valid partner API key is required.",
+        "retryAfter": null
+      }
+    ],
+    "handlerRuns": 0,
+    "recognition": [],
+    "invalidated": 0,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:gateway-replay:<nonce>"
+        ],
+        "arguments": ["1"]
+      }
+    ]
+  },
+  {
+    "name": "partner unknown key",
+    "responses": [
+      {
+        "status": 401,
+        "code": "partner_key_invalid",
+        "message": "A valid partner API key is required.",
+        "retryAfter": null
+      }
+    ],
+    "handlerRuns": 0,
+    "recognition": [
+      {
+        "digest": "bfd400fbdd92623fc61cb632cecaf291e3dd1aec7f80ddcc233a2a57085aad1d",
+        "ip": "203.0.113.2",
+        "nonce": "<nonce>"
+      }
+    ],
+    "invalidated": 0,
+    "redis": []
+  },
+  {
+    "name": "partner over its key limit",
+    "responses": [
+      {
+        "status": 429,
+        "code": "partner_rate_limited",
+        "message": "Partner request limit reached.",
+        "retryAfter": "7"
+      }
+    ],
+    "handlerRuns": 0,
+    "recognition": [
+      {
+        "digest": "231eac68846533e58eff1ae19d62e543fb4d74dfeac684d6b4636c1a5c6f6986",
+        "ip": "203.0.113.2",
+        "nonce": "<nonce>"
+      }
+    ],
+    "invalidated": 0,
+    "redis": []
+  },
+  {
+    "name": "partner preflight reserve full",
+    "responses": [
+      {
+        "status": 503,
+        "code": "partner_api_unavailable",
+        "message": "Partner access is temporarily unavailable.",
+        "retryAfter": "3"
+      }
+    ],
+    "handlerRuns": 0,
+    "recognition": [
+      {
+        "digest": "3908ae014d2aeba7bbe3c4982d777323f5e29bc8c57ce21841aa480304d7894e",
+        "origin": "https://partner.example",
+        "ip": "203.0.113.2",
+        "nonce": "<nonce>"
+      }
+    ],
+    "invalidated": 0,
+    "redis": []
+  },
+  {
+    "name": "partner revoked key",
+    "responses": [
+      {
+        "status": 401,
+        "code": "partner_key_invalid",
+        "message": "A valid partner API key is required.",
+        "retryAfter": null
+      }
+    ],
+    "handlerRuns": 0,
+    "recognition": [
+      {
+        "digest": "aac151f72970838d80f0198bb7798e4baab2877aecc2be487beffb6318499f4d",
+        "ip": "203.0.113.2",
+        "nonce": "<nonce>"
+      }
+    ],
+    "invalidated": 0,
+    "redis": []
+  },
+  {
+    "name": "partner grant disagrees with recognition",
+    "responses": [
+      {
+        "status": 503,
+        "code": "partner_api_unavailable",
+        "message": "Partner access is temporarily unavailable.",
+        "retryAfter": "5"
+      }
+    ],
+    "handlerRuns": 0,
+    "recognition": [
+      {
+        "digest": "231eac68846533e58eff1ae19d62e543fb4d74dfeac684d6b4636c1a5c6f6986",
+        "ip": "203.0.113.2",
+        "nonce": "<nonce>"
+      }
+    ],
+    "invalidated": 1,
+    "redis": []
+  },
+  {
+    "name": "partner proof already used",
+    "responses": [
+      {
+        "status": 403,
+        "code": "gateway_forbidden",
+        "message": "Gateway proof already consumed.",
+        "retryAfter": null
+      }
+    ],
+    "handlerRuns": 0,
+    "recognition": [
+      {
+        "digest": "231eac68846533e58eff1ae19d62e543fb4d74dfeac684d6b4636c1a5c6f6986",
+        "ip": "203.0.113.2",
+        "nonce": "<nonce>"
+      }
+    ],
+    "invalidated": 0,
+    "redis": []
+  },
+  {
+    "name": "partner recognition unavailable",
+    "responses": [
+      {
+        "status": 503,
+        "code": "partner_api_unavailable",
+        "message": "Partner access is temporarily unavailable.",
+        "retryAfter": "5"
+      }
+    ],
+    "handlerRuns": 0,
+    "recognition": [
+      {
+        "digest": "231eac68846533e58eff1ae19d62e543fb4d74dfeac684d6b4636c1a5c6f6986",
+        "ip": "203.0.113.2",
+        "nonce": "<nonce>"
+      }
+    ],
+    "invalidated": 0,
+    "redis": []
+  },
+  {
+    "name": "partner commercial quota refused",
+    "responses": [
+      {
+        "status": 429,
+        "code": "partner_rate_limited",
+        "message": "Too many requests.",
+        "retryAfter": "30"
+      }
+    ],
+    "handlerRuns": 0,
+    "recognition": [
+      {
+        "digest": "7a5c8f09b6b423addf4ff6b5c5470ee5c33aec23e87cb180c1c5db4e913a64c7",
+        "ip": "203.0.113.3",
+        "nonce": "<nonce>"
+      }
+    ],
+    "invalidated": 0,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read:v1:b4fb8247250aee1fc350f7bb726e76cc7cae99c3962d1aaa3760f184efd4eef4:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read:v1:b4fb8247250aee1fc350f7bb726e76cc7cae99c3962d1aaa3760f184efd4eef4:86400",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read_global:v1:7f33886d5d044afb206234853a47d523f3dfdc5e7e663f410e429662996bc3e2:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:social_read_prices:v1:b4fb8247250aee1fc350f7bb726e76cc7cae99c3962d1aaa3760f184efd4eef4:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:recognition-admission:tenant:3bf0df850a142a8b45dd9e741c6d85673f1a8be046f798a70df45d4f9f18ed1a"
+        ],
+        "arguments": [
+          "0",
+          "60",
+          "10",
+          "1",
+          "86400",
+          "40",
+          "1",
+          "60",
+          "8015900",
+          "2",
+          "60",
+          "300",
+          "3",
+          "60",
+          "4000000",
+          "4"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "partner operational window refused",
+    "responses": [
+      {
+        "status": 503,
+        "code": "partner_api_unavailable",
+        "message": "This service is temporarily unavailable.",
+        "retryAfter": "5"
+      }
+    ],
+    "handlerRuns": 0,
+    "recognition": [
+      {
+        "digest": "231eac68846533e58eff1ae19d62e543fb4d74dfeac684d6b4636c1a5c6f6986",
+        "ip": "203.0.113.3",
+        "nonce": "<nonce>"
+      }
+    ],
+    "invalidated": 0,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:86400",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read_global:v1:7f33886d5d044afb206234853a47d523f3dfdc5e7e663f410e429662996bc3e2:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:social_read_prices:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:recognition-admission:tenant:3bf0df850a142a8b45dd9e741c6d85673f1a8be046f798a70df45d4f9f18ed1a"
+        ],
+        "arguments": [
+          "0",
+          "60",
+          "300",
+          "1",
+          "86400",
+          "50000",
+          "1",
+          "60",
+          "8015900",
+          "2",
+          "60",
+          "300",
+          "3",
+          "60",
+          "4000000",
+          "4"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "partner internal operational window refused",
+    "responses": [
+      {
+        "status": 503,
+        "code": "partner_api_unavailable",
+        "message": "This service is temporarily unavailable.",
+        "retryAfter": "5"
+      }
+    ],
+    "handlerRuns": 0,
+    "recognition": [
+      {
+        "digest": "e0634270d9f44b902ab56407dc8c3b13fccee1109726d6649aba091c2e870a02",
+        "ip": "203.0.113.3",
+        "nonce": "<nonce>"
+      }
+    ],
+    "invalidated": 0,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:social_read_prices:v1:964853023d1abd7b71d91676af6b28b08d12b3457f70dd0cf238407d4917f728:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:recognition-admission:internal"
+        ],
+        "arguments": ["0", "60", "300", "1", "60", "10000", "2"]
+      }
+    ]
+  },
+  {
+    "name": "partner lost quota answer",
+    "responses": [
+      {
+        "status": 503,
+        "code": "partner_api_unavailable",
+        "message": "This service is temporarily unavailable.",
+        "retryAfter": "5"
+      }
+    ],
+    "handlerRuns": 0,
+    "recognition": [
+      {
+        "digest": "231eac68846533e58eff1ae19d62e543fb4d74dfeac684d6b4636c1a5c6f6986",
+        "ip": "203.0.113.4",
+        "nonce": "<nonce>"
+      }
+    ],
+    "invalidated": 0,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:86400",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:partner_read_global:v1:7f33886d5d044afb206234853a47d523f3dfdc5e7e663f410e429662996bc3e2:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:social_read_prices:v1:d79e7c337a650b15ccf4deb395e50991b47e7c7bda31587932cd7e9d21de817d:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:recognition-admission:tenant:3bf0df850a142a8b45dd9e741c6d85673f1a8be046f798a70df45d4f9f18ed1a"
+        ],
+        "arguments": [
+          "0",
+          "60",
+          "300",
+          "1",
+          "86400",
+          "50000",
+          "1",
+          "60",
+          "8015900",
+          "2",
+          "60",
+          "300",
+          "3",
+          "60",
+          "4000000",
+          "4"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "partner preflight",
+    "responses": [{ "status": 204, "code": null, "retryAfter": null }],
+    "handlerRuns": 0,
+    "recognition": [
+      {
+        "digest": "3908ae014d2aeba7bbe3c4982d777323f5e29bc8c57ce21841aa480304d7894e",
+        "origin": "https://partner.example",
+        "ip": "203.0.113.5",
+        "nonce": "<nonce>"
+      }
+    ],
+    "invalidated": 0,
+    "redis": []
+  },
+  {
+    "name": "partner unknown path",
+    "responses": [
+      {
+        "status": 403,
+        "code": "partner_read_forbidden",
+        "message": "This endpoint is not available to partners.",
+        "retryAfter": null
+      }
+    ],
+    "handlerRuns": 0,
+    "recognition": [],
+    "invalidated": 0,
+    "redis": []
+  },
+  {
+    "name": "partner POST",
+    "responses": [{ "status": 405, "code": "read_only", "retryAfter": null }],
+    "handlerRuns": 0,
+    "recognition": [],
+    "invalidated": 0,
+    "redis": []
+  }
+]

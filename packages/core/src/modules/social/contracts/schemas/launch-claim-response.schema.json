@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/launch-claim-response.schema.json",
+  "title": "A launch creator fee claim attempt",
+  "description": "PUT /api/social/me/launch-claims/{request_id} (LP-12): the attempt as the account's transaction log holds it, and while it is submitted with no digest, on the record's answer only, the claim's transaction kind and the sponsored transaction to sign (Blast pays gas for embedded and outside wallets alike).",
+  "type": "object",
+  "properties": {
+    "request_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "launch_id": {
+      "type": "string",
+      "pattern": "^0x[0-9a-f]{64}$"
+    },
+    "kind": {
+      "enum": [
+        "claim_launch_fees",
+        "claim_launch_lp_fees"
+      ]
+    },
+    "state": {
+      "enum": [
+        "submitted",
+        "confirmed",
+        "failed"
+      ]
+    },
+    "digest": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[1-9A-HJ-NP-Za-km-z]{32,44}$"
+    },
+    "failure_code": {
+      "enum": [
+        "execution_failed",
+        "mismatch",
+        "dry_run_failed",
+        "rejected",
+        "expired",
+        null
+      ]
+    },
+    "move_abort": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^E[A-Za-z]{1,63}$"
+    },
+    "fee": {
+      "enum": [
+        "sponsored",
+        "wallet"
+      ]
+    },
+    "transaction_kind_bytes": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 21848,
+      "pattern": "^[A-Za-z0-9+/]+={0,2}$"
+    },
+    "sponsored": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "reservation_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "transaction_bytes": {
+              "type": "string",
+              "maxLength": 32768,
+              "pattern": "^[A-Za-z0-9+/]+={0,2}$"
+            },
+            "sponsor_signature": {
+              "const": ""
+            },
+            "expires_at_ms": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "gas_budget": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]{0,19})$"
+            }
+          },
+          "required": [
+            "reservation_id",
+            "transaction_bytes",
+            "sponsor_signature",
+            "expires_at_ms",
+            "gas_budget"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "created_at_ms": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "settled_at_ms": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    }
+  },
+  "required": [
+    "request_id",
+    "launch_id",
+    "kind",
+    "state",
+    "digest",
+    "failure_code",
+    "move_abort",
+    "fee",
+    "transaction_kind_bytes",
+    "sponsored",
+    "created_at_ms",
+    "settled_at_ms"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/transfer-request.schema.json",
+  "title": "Record or settle a withdrawal",
+  "description": "PUT /api/social/me/transfers/{request_id}: the withdrawal, then the same body with its executed transaction's digest.",
+  "type": "object",
+  "properties": {
+    "coin_type": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 512,
+      "pattern": "^0x[0-9a-f]{64}::[A-Za-z_][A-Za-z0-9_]{0,127}::[A-Za-z_][A-Za-z0-9_]{0,127}(<.+>)?$"
+    },
+    "amount": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]{0,19}$"
+    },
+    "recipient": {
+      "type": "string",
+      "pattern": "^0x[0-9a-f]{64}$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^[1-9A-HJ-NP-Za-km-z]{32,44}$"
+    },
+    "transaction_bytes": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 180000,
+      "pattern": "^[A-Za-z0-9+/]+={0,2}$",
+      "description": "Canonical base64 full Sui TransactionData bytes. Required before execution; digest and sender must match the caller\u2019s server-proven Blast wallet."
+    }
+  },
+  "required": [
+    "coin_type",
+    "amount",
+    "recipient"
+  ],
+  "additionalProperties": false
+}

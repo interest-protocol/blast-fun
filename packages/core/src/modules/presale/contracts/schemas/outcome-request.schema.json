@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/presale/contracts/outcome-request.schema.json",
+  "title": "Outcome registration",
+  "description": "POST /api/presale/outcomes/commitments and POST /api/presale/outcomes.",
+  "type": "object",
+  "properties": {
+    "presale_id": {
+      "$ref": "defs.schema.json#/$defs/address"
+    },
+    "tx_digest": {
+      "$ref": "defs.schema.json#/$defs/digest"
+    }
+  },
+  "required": [
+    "presale_id",
+    "tx_digest"
+  ],
+  "additionalProperties": false
+}

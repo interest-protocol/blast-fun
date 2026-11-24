@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/profile-mutuals-response.schema.json",
+  "title": "Social profile mutuals",
+  "description": "GET /api/social/profiles/{callsign}/mutuals 200 (private, no-store): up to three accounts the viewer follows that follow this one, and how many there are.",
+  "type": "object",
+  "properties": {
+    "accounts": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "properties": {
+          "callsign": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_]{1,18}[a-z0-9]$"
+          },
+          "display_name": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "minLength": 1
+              }
+            ]
+          },
+          "avatar_url": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "minLength": 1
+              }
+            ]
+          }
+        },
+        "required": [
+          "callsign",
+          "display_name",
+          "avatar_url"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "total": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "accounts",
+    "total"
+  ],
+  "additionalProperties": false
+}

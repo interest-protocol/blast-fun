@@ -1,0 +1,6 @@
+html, body { margin: 0; background: #f5f4f7; }
+#app { min-height: 100vh; background: var(--bg); color: var(--ink); }
+.fixture-label { padding: 10px 20px; font: 12px system-ui; color: var(--muted); }
+.fixture-main { max-width: 800px; margin: 0 auto; padding: 20px 24px 60px; }
+.fixture-main h1 { font-size: 28px; margin-bottom: 28px; }
+@media(max-width: 500px) { .fixture-main { padding-inline: 12px; } }

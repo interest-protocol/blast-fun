@@ -1,0 +1,2 @@
+DROP INDEX social_follows_following_page_idx;
+DROP INDEX social_follows_followers_page_idx;

@@ -1,0 +1,378 @@
+{
+  "provenance": {
+    "network": "localnet",
+    "deployment_fingerprint": "5d2f2a4be1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c",
+    "checkpoint": 38,
+    "timestamp_ms": 1790338482000,
+    "observed_ms": 1790843643395,
+    "lag_ms": 505161395
+  },
+  "trades": [
+    {
+      "cursor": "38:2:0:0",
+      "checkpoint": 38,
+      "timestamp_ms": 1790338482000,
+      "digest": "9fcaKaDkGUfcv5k7pNouSFVXW5dygnnkDtu52khDL8yj",
+      "pool_key": "bluefin:0x119ad44916d4c15ef778923be095aefd80d242e49e7c3218148046a5c2eed108",
+      "venue": "bluefin",
+      "coin": "0x29ba3dd8f91b6a5cd83c0046f563e24e0a1ac3605c5923baa9786aaa44069ced::meme::MEME",
+      "quote": "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI",
+      "trader": "0x19e889f3a5620aadde8f93461c04bef7cac0ede49f11e6002c172fd62c8ae7d5",
+      "side": "buy",
+      "kind": "swap",
+      "quote_amount": "500000000",
+      "meme_amount": "4933385878117",
+      "meme_fee": "0",
+      "quote_fee": "1500001",
+      "curve": null,
+      "opening_round": null,
+      "venue_swap": {
+        "amount_in": "500000000",
+        "amount_out": "4933385878117",
+        "ref_amount": null,
+        "before_sqrt_price": "183207169103226918",
+        "after_sqrt_price": "187679594196721271",
+        "a_to_b": false
+      },
+      "inputs": {
+        "virtual_quote": null,
+        "meme_reserve": null,
+        "quote_reserve": null,
+        "graduation_target": null,
+        "sqrt_price_x64": "187679594196721271",
+        "meme_is_coin_a": true,
+        "currency_supply": "1000000000000000",
+        "pending_burn_total": "0",
+        "balance_0x0": "116666666673394",
+        "meme_decimals": "6",
+        "quote_decimals": "9"
+      },
+      "usd": {
+        "price": "345210000",
+        "expo": -8,
+        "publish_time": 1790337463,
+        "age_ms": 1019000
+      },
+      "volume_usd": "1.72605",
+      "labels": [
+        "whale"
+      ],
+      "price": "0.000103512945429904879851465655215759",
+      "market_cap": "91436435129"
+    },
+    {
+      "cursor": "37:2:0:0",
+      "checkpoint": 37,
+      "timestamp_ms": 1790338402000,
+      "digest": "2uzbjCWoZBudg1WLmUQKcs94uLefUikPu2WUdosQNGAM",
+      "pool_key": "bluefin:0x119ad44916d4c15ef778923be095aefd80d242e49e7c3218148046a5c2eed108",
+      "venue": "bluefin",
+      "coin": "0x29ba3dd8f91b6a5cd83c0046f563e24e0a1ac3605c5923baa9786aaa44069ced::meme::MEME",
+      "quote": "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI",
+      "trader": "0x9f33a6fc03a9dca7e431f38f3fcd5c1f2f646061aaa2b21bc22d7a760d067aac",
+      "side": "sell",
+      "kind": "swap",
+      "quote_amount": "789964897",
+      "meme_amount": "7733627825554",
+      "meme_fee": "23200883478",
+      "quote_fee": "0",
+      "curve": null,
+      "opening_round": null,
+      "venue_swap": {
+        "amount_in": "7733627825554",
+        "amount_out": "789964897",
+        "ref_amount": null,
+        "before_sqrt_price": "190294548926214182",
+        "after_sqrt_price": "183207169103226918",
+        "a_to_b": true
+      },
+      "inputs": {
+        "virtual_quote": null,
+        "meme_reserve": null,
+        "quote_reserve": null,
+        "graduation_target": null,
+        "sqrt_price_x64": "183207169103226918",
+        "meme_is_coin_a": true,
+        "currency_supply": "1000000000000000",
+        "pending_burn_total": "0",
+        "balance_0x0": "116666666673394",
+        "meme_decimals": "6",
+        "quote_decimals": "9"
+      },
+      "usd": {
+        "price": "345210000",
+        "expo": -8,
+        "publish_time": 1790337463,
+        "age_ms": 939000
+      },
+      "volume_usd": "2.7270378209337",
+      "labels": [
+        "whale",
+        "top_trader"
+      ],
+      "price": "0.000098638278305548749393676478298657",
+      "market_cap": "87130479169"
+    },
+    {
+      "cursor": "36:2:0:0",
+      "checkpoint": 36,
+      "timestamp_ms": 1790338335000,
+      "digest": "3KEe2yL33zcV8RA98QiKSMZV9Q2tz6SPyEfq7W1BipWa",
+      "pool_key": "bluefin:0x119ad44916d4c15ef778923be095aefd80d242e49e7c3218148046a5c2eed108",
+      "venue": "bluefin",
+      "coin": "0x29ba3dd8f91b6a5cd83c0046f563e24e0a1ac3605c5923baa9786aaa44069ced::meme::MEME",
+      "quote": "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI",
+      "trader": "0xfa9cbb9ac8d8b1d912be45fc4aac964488f4ac3c5a19553ab226d8c448d92634",
+      "side": "buy",
+      "kind": "swap",
+      "quote_amount": "1000000000",
+      "meme_amount": "9830857843456",
+      "meme_fee": "0",
+      "quote_fee": "3000001",
+      "curve": null,
+      "opening_round": null,
+      "venue_swap": {
+        "amount_in": "1000000000",
+        "amount_out": "9830857843456",
+        "ref_amount": null,
+        "before_sqrt_price": "181349698725399824",
+        "after_sqrt_price": "190294548926214182",
+        "a_to_b": false
+      },
+      "inputs": {
+        "virtual_quote": null,
+        "meme_reserve": null,
+        "quote_reserve": null,
+        "graduation_target": null,
+        "sqrt_price_x64": "190294548926214182",
+        "meme_is_coin_a": true,
+        "currency_supply": "1000000000000000",
+        "pending_burn_total": "0",
+        "balance_0x0": "116666666673394",
+        "meme_decimals": "6",
+        "quote_decimals": "9"
+      },
+      "usd": {
+        "price": "345210000",
+        "expo": -8,
+        "publish_time": 1790337463,
+        "age_ms": 872000
+      },
+      "volume_usd": "3.4521",
+      "labels": [
+        "whale"
+      ],
+      "price": "0.000106417548692568187060153412048348",
+      "market_cap": "94002168011"
+    },
+    {
+      "cursor": "35:2:0:0",
+      "checkpoint": 35,
+      "timestamp_ms": 1790338281000,
+      "digest": "7Nx1V6MeBZbHkUUSquLZxBCYGiremLPGHGHppVchtPmZ",
+      "pool_key": "bluefin:0x119ad44916d4c15ef778923be095aefd80d242e49e7c3218148046a5c2eed108",
+      "venue": "bluefin",
+      "coin": "0x29ba3dd8f91b6a5cd83c0046f563e24e0a1ac3605c5923baa9786aaa44069ced::meme::MEME",
+      "quote": "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI",
+      "trader": "0x19e889f3a5620aadde8f93461c04bef7cac0ede49f11e6002c172fd62c8ae7d5",
+      "side": "sell",
+      "kind": "swap",
+      "quote_amount": "3028120615",
+      "meme_amount": "27331190732102",
+      "meme_fee": "81993572197",
+      "quote_fee": "0",
+      "curve": null,
+      "opening_round": null,
+      "venue_swap": {
+        "amount_in": "27331190732102",
+        "amount_out": "3028120615",
+        "ref_amount": null,
+        "before_sqrt_price": "208517286847577850",
+        "after_sqrt_price": "181349698725399824",
+        "a_to_b": true
+      },
+      "inputs": {
+        "virtual_quote": null,
+        "meme_reserve": null,
+        "quote_reserve": null,
+        "graduation_target": null,
+        "sqrt_price_x64": "181349698725399824",
+        "meme_is_coin_a": true,
+        "currency_supply": "1000000000000000",
+        "pending_burn_total": "0",
+        "balance_0x0": "116666666673394",
+        "meme_decimals": "6",
+        "quote_decimals": "9"
+      },
+      "usd": {
+        "price": "345210000",
+        "expo": -8,
+        "publish_time": 1790337463,
+        "age_ms": 818000
+      },
+      "volume_usd": "10.4533751750415",
+      "labels": [
+        "whale"
+      ],
+      "price": "0.000096648302776836055894441529722579",
+      "market_cap": "85372667452"
+    },
+    {
+      "cursor": "34:2:0:0",
+      "checkpoint": 34,
+      "timestamp_ms": 1790338240000,
+      "digest": "6b3NAV3F8TEsSUHbuhWFYuV8Vm1BzCrmgrmRLGAT3Uw8",
+      "pool_key": "bluefin:0x119ad44916d4c15ef778923be095aefd80d242e49e7c3218148046a5c2eed108",
+      "venue": "bluefin",
+      "coin": "0x29ba3dd8f91b6a5cd83c0046f563e24e0a1ac3605c5923baa9786aaa44069ced::meme::MEME",
+      "quote": "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI",
+      "trader": "0x19e889f3a5620aadde8f93461c04bef7cac0ede49f11e6002c172fd62c8ae7d5",
+      "side": "buy",
+      "kind": "swap",
+      "quote_amount": "1500000000",
+      "meme_amount": "12509112602806",
+      "meme_fee": "0",
+      "quote_fee": "4500000",
+      "curve": null,
+      "opening_round": null,
+      "venue_swap": {
+        "amount_in": "1500000000",
+        "amount_out": "12509112602806",
+        "ref_amount": null,
+        "before_sqrt_price": "195100011520861240",
+        "after_sqrt_price": "208517286847577850",
+        "a_to_b": false
+      },
+      "inputs": {
+        "virtual_quote": null,
+        "meme_reserve": null,
+        "quote_reserve": null,
+        "graduation_target": null,
+        "sqrt_price_x64": "208517286847577850",
+        "meme_is_coin_a": true,
+        "currency_supply": "1000000000000000",
+        "pending_burn_total": "0",
+        "balance_0x0": "116666666673394",
+        "meme_decimals": "6",
+        "quote_decimals": "9"
+      },
+      "usd": {
+        "price": "345210000",
+        "expo": -8,
+        "publish_time": 1790337463,
+        "age_ms": 777000
+      },
+      "volume_usd": "5.17815",
+      "labels": [
+        "whale"
+      ],
+      "price": "0.000127774645826350215964239982601034",
+      "market_cap": "112867603812"
+    },
+    {
+      "cursor": "33:2:0:0",
+      "checkpoint": 33,
+      "timestamp_ms": 1790338233000,
+      "digest": "4adyBxGTJ1FTPfQdLRYqUbRZUqyzNKAqQ8xm2F7DuTu5",
+      "pool_key": "bluefin:0x119ad44916d4c15ef778923be095aefd80d242e49e7c3218148046a5c2eed108",
+      "venue": "bluefin",
+      "coin": "0x29ba3dd8f91b6a5cd83c0046f563e24e0a1ac3605c5923baa9786aaa44069ced::meme::MEME",
+      "quote": "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI",
+      "trader": "0x9f33a6fc03a9dca7e431f38f3fcd5c1f2f646061aaa2b21bc22d7a760d067aac",
+      "side": "sell",
+      "kind": "swap",
+      "quote_amount": "1002500151",
+      "meme_amount": "8592919806171",
+      "meme_fee": "25778759419",
+      "quote_fee": "0",
+      "curve": null,
+      "opening_round": null,
+      "venue_swap": {
+        "amount_in": "8592919806171",
+        "amount_out": "1002500151",
+        "ref_amount": null,
+        "before_sqrt_price": "204094207803750223",
+        "after_sqrt_price": "195100011520861240",
+        "a_to_b": true
+      },
+      "inputs": {
+        "virtual_quote": null,
+        "meme_reserve": null,
+        "quote_reserve": null,
+        "graduation_target": null,
+        "sqrt_price_x64": "195100011520861240",
+        "meme_is_coin_a": true,
+        "currency_supply": "1000000000000000",
+        "pending_burn_total": "0",
+        "balance_0x0": "116666666673394",
+        "meme_decimals": "6",
+        "quote_decimals": "9"
+      },
+      "usd": {
+        "price": "345210000",
+        "expo": -8,
+        "publish_time": 1790337463,
+        "age_ms": 770000
+      },
+      "volume_usd": "3.4607307712671",
+      "labels": [
+        "whale",
+        "top_trader"
+      ],
+      "price": "0.000111860085022519015148503481813121",
+      "market_cap": "98809741769"
+    },
+    {
+      "cursor": "32:2:0:0",
+      "checkpoint": 32,
+      "timestamp_ms": 1790338226000,
+      "digest": "E1YaP5pjHt1daBn5qP1utnQCDPB2KqpNQNfBSJhCW23a",
+      "pool_key": "bluefin:0x119ad44916d4c15ef778923be095aefd80d242e49e7c3218148046a5c2eed108",
+      "venue": "bluefin",
+      "coin": "0x29ba3dd8f91b6a5cd83c0046f563e24e0a1ac3605c5923baa9786aaa44069ced::meme::MEME",
+      "quote": "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI",
+      "trader": "0xfa9cbb9ac8d8b1d912be45fc4aac964488f4ac3c5a19553ab226d8c448d92634",
+      "side": "buy",
+      "kind": "swap",
+      "quote_amount": "500000000",
+      "meme_amount": "4163571224476",
+      "meme_fee": "0",
+      "quote_fee": "1500000",
+      "curve": null,
+      "opening_round": null,
+      "venue_swap": {
+        "amount_in": "500000000",
+        "amount_out": "4163571224476",
+        "ref_amount": null,
+        "before_sqrt_price": "199621782694844687",
+        "after_sqrt_price": "204094207803750223",
+        "a_to_b": false
+      },
+      "inputs": {
+        "virtual_quote": null,
+        "meme_reserve": null,
+        "quote_reserve": null,
+        "graduation_target": null,
+        "sqrt_price_x64": "204094207803750223",
+        "meme_is_coin_a": true,
+        "currency_supply": "1000000000000000",
+        "pending_burn_total": "0",
+        "balance_0x0": "116666666673394",
+        "meme_decimals": "6",
+        "quote_decimals": "9"
+      },
+      "usd": {
+        "price": "345210000",
+        "expo": -8,
+        "publish_time": 1790337463,
+        "age_ms": 763000
+      },
+      "volume_usd": "1.72605",
+      "labels": [
+        "whale"
+      ],
+      "price": "0.000122411413897089803941723145000573",
+      "market_cap": "108130082274"
+    }
+  ]
+}

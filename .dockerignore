@@ -1,0 +1,21 @@
+# Secret/artifact fallback for every builder, including the legacy builder.
+# Backend BuildKit contexts use apps/backend-api/Dockerfile.dockerignore instead.
+**/.env*
+**/*.env*
+**/production.env*
+**/credentials*
+**/.git
+**/.git/**
+**/node_modules
+**/node_modules/**
+**/.vercel
+**/.vercel/**
+**/.next
+**/.next/**
+**/outputs
+**/outputs/**
+**/artifacts
+**/artifacts/**
+**/coverage
+**/coverage/**
+**/*.tsbuildinfo

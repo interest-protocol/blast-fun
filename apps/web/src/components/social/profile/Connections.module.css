@@ -1,0 +1,72 @@
+:global([data-blast-ui]) .panel:global(.card) { padding: 1.25rem; }
+/* Followers and Following: the shared `SegmentedLinks`, the panel's full width, each with its count. */
+.tabsHost { margin-bottom: 1rem; }
+:global([data-blast-ui]) .tabs:global(.seg) { display: grid; width: 100%; grid-auto-columns: minmax(0, 1fr); }
+:global([data-blast-ui]) .tabs:global(.seg) a { gap: 0.5rem; min-width: 0; padding-inline: 0.5rem; }
+.tabs a > span { min-width: 2ch; font-size: 0.75rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.search { margin-bottom: 0.5rem; }
+.search > svg { flex: none; width: 1rem; height: 1rem; color: var(--muted); }
+.list { list-style: none; margin: 0; padding: 0; opacity: 1; transition: opacity 140ms ease-out; }
+.row { display: flex; align-items: center; gap: 0.8125rem; min-height: 4.75rem; padding: 0.875rem 0; }
+/* People you invited (Invites board): a 24px card padded 18/10/10, the 17/650 title, 64px rows. */
+:global([data-blast-ui]) .invitesPanel:global(.card) { padding: 1.125rem 0.625rem 0.625rem; border-radius: 1.5rem; }
+.inviteesHeading { margin: 0; padding: 0 0.75rem 0.5rem; font-size: 1.0625rem; font-weight: 650; color: var(--ink); }
+.invitesPanel .row { gap: 0.875rem; min-height: 4rem; padding: 0 0.75rem; border-radius: var(--r-sm); }
+.invitesPanel .person { gap: 0.875rem; min-height: 0; }
+.invitesPanel .identity { line-height: 1.3; }
+.invitesPanel .identity b { font-weight: 600; }
+.invitesPanel .identity > span { font-size: 0.75rem; }
+.invitesPanel .xHandle { min-height: 0; }
+.invitesPanel .more { margin-top: 0; padding: 0.5rem 0 0.375rem; }
+.invitesPanel .relationship { display: none; }
+@media (pointer: coarse) { .invitesPanel :is(.person, .xHandle) { min-height: 44px; } }
+/* On a phone the X link is its icon (the handle stays its accessible name), so the name and "Joined Oct 24" keep the row. */
+@media (max-width: 400px) {
+  .invitesPanel .xHandle { justify-content: center; min-width: 44px; }
+  .invitesPanel .xHandle > span:not(:global(.sr)) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+}
+.person { flex: 1; min-width: 0; min-height: max(44px, 2.75rem); display: flex; align-items: center; gap: 0.8125rem; color: var(--ink); text-decoration: none; border-radius: var(--r-button); }
+.person > :first-child { flex-shrink: 0; }
+.identity { display: flex; flex-direction: column; min-width: 0; gap: 0.125rem; font-size: 0.8125rem; color: var(--muted); }
+.identity b { display: flex; align-items: center; min-width: 0; gap: 0.25rem; color: var(--ink); font-size: 0.9375rem; }
+.identity b > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.identity > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.identity :global(.verified) { width: 1rem; height: 1rem; flex-shrink: 0; }
+.identity small { font-size: 0.6875rem; }
+.rowAction { position: relative; }
+.removed { position: absolute; top: 100%; left: 0; right: 0; margin-top: 0.125rem; text-align: center; color: var(--muted); font-size: 0.625rem; line-height: 0.875rem; white-space: nowrap; }
+.row > div { flex-shrink: 0; max-width: 45%; }
+.row :is(:global(.btn), :global([data-ui-button])) { width: 7.25rem; min-width: 7.25rem; --control-height: max(44px, 2.75rem); min-height: max(44px, 2.75rem); }
+.you { color: var(--muted); font-size: 0.8125rem; padding: 0 0.8125rem; }
+.xHandle { display: inline-flex; align-items: center; gap: 0.375rem; min-width: 0; min-height: max(44px, 2.75rem); max-width: 45%; color: var(--muted); font-size: 0.8125rem; }
+.xHandle > svg { width: 0.75rem; height: 0.75rem; flex-shrink: 0; }
+.xHandle > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.more { display: flex; justify-content: center; margin-top: 0.8125rem; }
+.avatarSkeleton { width: 2.5rem; height: 2.5rem; border-radius: 50%; background: var(--chip); }
+.buttonSkeleton { flex-shrink: 0; width: 7.25rem; min-height: max(44px, 2.75rem); display: flex; justify-content: center; align-items: center; border-radius: var(--r-button); background: var(--chip); }
+@media (pointer: coarse) {
+  .row :is(:global(.btn), :global([data-ui-button])), .buttonSkeleton { --control-height: 44px; min-height: 44px; }
+}
+.relationship { min-height: 0.875rem; line-height: 0.875rem; }
+.relationship:empty { display: none; }
+@starting-style { .list { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .list { transition: none; } }
+/* The Profile board's counts: 14px muted, the figures ink at 600, a middot between. */
+.counts { display: flex; align-items: center; flex-wrap: wrap; gap: 0.25rem; font-size: 0.875rem; color: var(--muted); }
+.counts a, .countPlaceholder { display: inline-flex; align-items: center; gap: 0.25rem; color: var(--muted); text-decoration: none; border-radius: 0.25rem; }
+.counts b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.retryCounts { margin-left: 0.5rem; }
+@media (pointer: coarse) { .counts a { min-height: 44px; } }
+@media (hover: hover) and (pointer: fine) {
+  .person:hover .identity b, .counts a:hover { text-decoration: underline; }
+}
+@media (max-width: 407px) {
+  :global([data-blast-ui]) .panel:global(.card) { padding: 1rem; }
+  .row, .person { gap: 0.5rem; }
+  .row :is(:global(.btn), :global([data-ui-button])), .buttonSkeleton { flex-shrink: 0; width: 7rem; min-width: 7rem; --control-pad: 0.625rem; padding-inline: 0.625rem; }
+}
+
+.invitesPanel .row.accountingRow { display: grid; grid-template-columns: minmax(0, 1fr) fit-content(45%); padding-block: .75rem; }
+.row.accountingRow > div { max-width: none; }
+
+.invitesPanel .accountingRow .xHandle { max-width: 100%; }

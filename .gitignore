@@ -1,0 +1,25 @@
+node_modules
+.next/
+out/
+output/
+*.log
+*.tsbuildinfo
+.DS_Store
+.env*
+!.env.example
+production.env
+*.env
+.private/
+tmp/
+.vercel
+
+# load-test harness (tools, generated secrets/data, results)
+apps/web/loadtest/.tools/
+apps/web/loadtest/.data*/
+apps/web/loadtest/results/
+apps/workers/loadtest/results/
+/loadtest/results/
+
+# Mutation testing (stryker.config.mjs)
+/.stryker-tmp/
+/reports/mutation/

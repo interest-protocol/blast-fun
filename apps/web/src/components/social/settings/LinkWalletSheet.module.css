@@ -1,0 +1,37 @@
+/* The link-wallet sheet's content (FEATURE-MAP §14.3), inside the shared `Sheet` (OA-28 M2): the gate's `.signin-btns` and `.wmono`. */
+.wallets { display: flex; flex-direction: column; gap: 0.5rem; }
+
+[data-blast-ui] .wallets .wallet {
+  height: 3.4375rem;
+  justify-content: flex-start;
+  padding: 0 1.3125rem;
+  gap: 0.8125rem;
+  font-size: 0.9375rem;
+  border-radius: var(--r-sm);
+}
+
+[data-blast-ui] .wallets .wallet[disabled] { cursor: default; }
+[data-blast-ui] .wallets .wallet[disabled]:active { transform: none; }
+
+/* OA-24 (`.wmono`): each wallet as a neutral monogram on a chip square, not another project's coin mark. */
+.mono { flex: none; width: 1.5rem; height: 1.5rem; border-radius: var(--r-inner); background: var(--chip); color: var(--ink-2); display: grid; place-items: center; font-size: 0.75rem; font-weight: 700; }
+
+.spin {
+  width: 1.0625rem;
+  height: 1.0625rem;
+  flex: none;
+  border-radius: 62.4375rem;
+  border: 0.125rem solid currentColor;
+  border-right-color: transparent;
+  opacity: .9;
+  animation: link-wallet-spin .7s linear infinite;
+}
+
+@keyframes link-wallet-spin { to { transform: rotate(360deg); } }
+
+.message { margin: -0.5rem 0 0; font-size: 0.8125rem; line-height: 1.45; color: var(--muted); }
+.message[data-tone="error"] { color: var(--down); }
+
+@media (prefers-reduced-motion: reduce) {
+  .spin { animation-duration: 1.4s; }
+}

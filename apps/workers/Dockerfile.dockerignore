@@ -1,0 +1,21 @@
+# The workers' build context is the repository root; the image needs only these
+# (apps/workers/Dockerfile). Tests stay out.
+*
+!package.json
+!package-lock.json
+!apps/web/package.json
+!apps/workers/package.json
+!apps/workers/
+!packages/core/package.json
+!packages/core/src/
+!vendor/next-eslint-glob/
+!vendor/zod-v3/
+!scripts/register-runtime-types.mjs
+# Local, git-ignored files under apps/workers stay out of the image.
+apps/workers/**/.env*
+apps/workers/**/*.tsbuildinfo
+apps/workers/**/node_modules
+**/*.test.ts
+**/*.test.tsx
+
+# Fresh SDK packages required by the root dependencies.

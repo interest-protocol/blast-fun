@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(DISABLE_TELEMETRY=1 npx -y modern-web-guidance@1.0.0 search *)",
+      "Bash(DISABLE_TELEMETRY=1 npx -y modern-web-guidance@1.0.0 retrieve *)",
+      "Bash(DISABLE_TELEMETRY=1 npx -y modern-web-guidance@1.0.0 legacy-scan *)"
+    ]
+  },
+  "extraKnownMarketplaces": {
+    "cursor-plugins": {
+      "source": {
+        "source": "github",
+        "repo": "cursor/plugins"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "pstack@cursor-plugins": true
+  }
+}

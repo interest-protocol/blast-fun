@@ -1,0 +1,234 @@
+.header { display:flex; align-items:center; gap:0.75rem; flex:none; min-width:0; }
+.selector { display:flex; align-items:center; gap:0.625rem; flex:0 1 auto; min-width:0; max-width:100%; margin:0; padding:0; border:0; border-radius:var(--r-sm); background:transparent; color:var(--ink); font:inherit; text-align:left; }
+button.selector { cursor:pointer; }
+.mark { display:flex; flex:none; }
+.names { display:flex; flex-direction:column; gap:1px; min-width:0; }
+.symbolLine { display:flex; align-items:baseline; gap:0.375rem; min-width:0; white-space:nowrap; line-height:1.25rem; }
+.symbolLine strong { overflow:hidden; max-width:11.25rem; font-size:1rem; font-weight:700; letter-spacing:-.01em; text-overflow:ellipsis; }
+.name { overflow:hidden; min-width:0; color:var(--muted); font-size:0.8125rem; text-overflow:ellipsis; }
+.symbolLine svg { flex:none; align-self:center; color:var(--muted); }
+.stage { display:block; min-width:0; color:var(--muted); font-size:0.75rem; line-height:1rem; }
+.stageLine { display:flex; align-items:center; gap:0.3125rem; min-width:0; white-space:nowrap; }
+.stageLine svg { width:0.8125rem; height:0.8125rem; flex:none; }
+.stageLine strong { display:inline-flex; min-width:0; color:var(--ink-2); font-weight:600; }
+.stageText { overflow:hidden; text-overflow:ellipsis; }
+.stageText strong,.stageText b { color:var(--ink-2); font-weight:600; }
+.selector:focus-visible { outline:0.125rem solid var(--workspace-focus); outline-offset:0.1875rem; }
+@media (hover:hover) and (pointer:fine) { button.selector:hover .symbolLine strong { text-decoration:underline; text-underline-offset:0.1875rem; text-decoration-thickness:1.5px; } }
+
+.tabsSlot { flex:none; margin-left:auto; }
+.tabs { display:inline-flex; gap:0.125rem; padding:0.1875rem; border-radius:var(--r-button); background:var(--track); }
+.tab { display:inline-flex; align-items:center; justify-content:center; gap:0.375rem; min-width:2rem; height:1.875rem; padding:0 0.5rem; border:0; border-radius:var(--r-inner); background:transparent; color:var(--muted); font:inherit; font-size:0.7813rem; font-weight:600; white-space:nowrap; cursor:pointer; transition:background var(--t1) ease-out,color var(--t1) ease-out; }
+.tab svg { flex:none; width:1rem; height:1rem; }
+.tabLabel { display:none; }
+.tab[aria-selected="true"] { background:var(--thumb); color:var(--ink); box-shadow:var(--thumb-sh); padding-right:0.625rem; }
+.tab[aria-selected="true"] .tabLabel { display:inline; }
+@media (hover:hover) and (pointer:fine) { .tab:not([aria-selected="true"]):hover { color:var(--ink); background:color-mix(in srgb,var(--thumb) 55%,transparent); } }
+.tab:focus-visible { outline:0.125rem solid var(--workspace-focus); outline-offset:1px; }
+@media (pointer:coarse) { .tab { min-width:44px; height:40px; } .tabs { padding:2px; } }
+@media (prefers-reduced-motion:reduce) { .tab { transition:none; } }
+
+.stats { display:flex; gap:1.3125rem; flex:none; margin:0; }
+.stats > div { min-width:0; }
+.stats dt { color:var(--muted); font-size:0.7188rem; font-weight:500; line-height:0.9375rem; }
+.stats dd { display:flex; align-items:center; gap:0.375rem; margin:0; color:var(--ink); font-size:0.875rem; font-weight:600; line-height:1.25rem; white-space:nowrap; font-variant-numeric:tabular-nums; }
+.stats dd button { min-height:0; height:auto; padding:0; border:0; background:none; color:inherit; font:inherit; line-height:inherit; }
+
+@container workspace-panel (max-width:420px) {
+  .tab[aria-selected="true"] .tabLabel { display:none; }
+  .tab[aria-selected="true"] { padding-right:0.5rem; }
+  /* Phone feed cards have the height and width for the selected word ("Chart", "Trades"). */
+  :global([data-phone-feed]) .tab[aria-selected="true"] .tabLabel { display:inline; }
+  :global([data-phone-feed]) .tab[aria-selected="true"] { padding-right:0.625rem; }
+}
+@container workspace-panel (max-width:360px) { .name { display:none; } }
+@container workspace-panel (max-width:340px) {
+  .stats { gap:0.8125rem; }
+  .stats dd { font-size:0.8125rem; }
+}
+
+.tab { transition:transform 140ms var(--ease-std),background var(--t1) ease-out,color var(--t1) ease-out; }
+@media (pointer:fine) { .tab,button.selector { min-width:0; min-height:0; } .tab { min-width:2rem; } }
+
+/* Scale pass: a quieter header with more air around it. */
+.selector { gap:0.625rem; }
+.symbolLine { line-height:1.125rem; }
+.symbolLine strong { font-size:0.9375rem; font-weight:600; }
+.name { font-size:0.7813rem; }
+.stage { font-size:0.7188rem; line-height:0.9375rem; }
+.stageLine svg { width:0.75rem; height:0.75rem; }
+.tabs { padding:0.125rem; gap:1px; border-radius:var(--r-button); }
+.tab { height:1.625rem; min-width:1.75rem; padding:0 0.4375rem; border-radius:var(--r-inner); font-size:0.75rem; gap:0.3125rem; }
+.tab svg { width:0.9375rem; height:0.9375rem; }
+.tab[aria-selected="true"] { padding-right:0.5625rem; }
+@media (pointer:fine) { .tab { min-width:1.75rem; } }
+@media (pointer:coarse) { .tab { min-width:44px; height:40px; } }
+.stats { gap:1.5rem; }
+.stats dt { font-size:0.6875rem; line-height:0.875rem; }
+.stats dd { font-size:0.8125rem; font-weight:600; line-height:1.125rem; }
+
+.names { overflow:hidden; }
+/* Only very narrow phone cards (320px screens) give the tabs their own full-width row; wider phones keep them beside the coin. */
+@container workspace-panel (max-width:280px) {
+  :global([data-phone-feed]) .header { flex-wrap:wrap; row-gap:0.75rem; }
+  :global([data-phone-feed]) .selector { flex:1 1 0; }
+  :global([data-phone-feed]) .tabsSlot { order:3; flex:1 1 100%; margin-left:0; }
+  :global([data-phone-feed]) .tabs { display:flex; }
+  :global([data-phone-feed]) .tab { flex:1 1 0; }
+  :global([data-phone-feed]) .tabLabel { display:inline; }
+}
+@container workspace-panel (max-width:360px) {
+  /* Narrow desktop cards keep every pixel of height: tabs stay inline and the stage keeps its essential words ("[Cetus]", "closes in 4h 11m"). */
+  .stageLead { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+  /* The remaining time may take a second line rather than be cut ("closes in" / "4h 11m"). */
+  .stageLine { align-items:flex-start; white-space:normal; }
+  .stageText { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; white-space:normal; }
+}
+@media (pointer:coarse) { .tab { height:44px; } }
+
+/* Element audit (agreed with the independent review): "Trading on" is read but not shown; the name and the picker chevron stay. */
+.tradingLead { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+@container workspace-panel (max-width:360px) { .stageLine > svg { display:none; } }
+
+/* No clipping: symbol, name and stage wrap (long symbols break anywhere) instead of ellipsizing or clamping. */
+.symbolLine { flex-wrap:wrap; row-gap:0; white-space:normal; }
+.symbolLine strong { max-width:none; overflow:visible; text-overflow:clip; overflow-wrap:anywhere; }
+.name { overflow:visible; text-overflow:clip; }
+.stageLine { white-space:normal; flex-wrap:wrap; }
+.stageText { overflow:visible; text-overflow:clip; display:inline; -webkit-line-clamp:unset; }
+@container workspace-panel (max-width:360px) { .stageText { display:inline; -webkit-line-clamp:unset; overflow:visible; } }
+
+.chain { color:var(--muted); font-size:0.6875rem; line-height:1rem; overflow-wrap:anywhere; }
+.chainId { white-space:nowrap; }
+
+/* Coin identity reserves the same header height while metadata is pending. */
+.header[data-stable="true"] { height:3.25rem; min-height:3.25rem; flex-wrap:nowrap; }
+.header[data-stable="true"] .symbolLine { flex-wrap:nowrap; white-space:nowrap; }
+.header[data-stable="true"] .symbolLine strong,.header[data-stable="true"] .name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.header[data-stable="true"] .symbolLine strong { flex-shrink:0; max-width:8.75rem; }
+.header[data-stable="true"] .stageLine { height:1rem; flex-wrap:nowrap; white-space:nowrap; overflow:hidden; }
+.header[data-stable="true"] .chain { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+@container workspace-panel (max-width:360px) {
+ .header[data-stable="true"] .tabsSlot { flex:none; order:initial; margin-left:auto; }
+ .header[data-stable="true"] .tabLabel { display:none !important; }
+ .header[data-stable="true"] .symbolLine strong { max-width:5.3125rem; }
+}
+
+/* Two lines: recognisable asset, then venue and an explicit contract inspector. */
+.compactIdentity { display:flex; align-items:center; gap:0.625rem; flex:1; min-width:0; }
+.compactIdentity .names { flex:0 1 auto; }
+.identityMeta { display:flex; align-items:center; gap:0.5rem; min-width:0; height:1.25rem; color:var(--muted); font-size:0.6875rem; }
+.identityMeta .stage { flex-shrink:1; overflow:hidden; }
+.contract { flex:none; color:var(--muted); font-size:0.6875rem; }
+.contract > button { min-height:0; min-width:0; padding:0; color:inherit; font:inherit; white-space:nowrap; }
+.network { color:var(--warn); font-size:0.6875rem; }
+.header[data-stable="true"] .tabs { background:transparent; }
+.header[data-stable="true"] .tab[aria-selected="true"] { background:var(--workspace-inset); box-shadow:none; }
+.header[data-stable="true"] .tab[aria-selected="true"] svg { display:none; }
+@container workspace-panel (max-width:360px) {
+ .header[data-stable="true"] .tab[aria-selected="true"] svg { display:block; }
+ .identityMeta { gap:0.375rem; }
+}
+@media (pointer:coarse) { .header[data-stable="true"] .contract > button { min-height:44px; align-items:center; } .header[data-stable="true"] .contract > button::after { display:none; } }
+/* Narrow phones give view controls their own row instead of clipping coin identity. */
+@media (max-width:1099px) {
+@container workspace-panel (max-width:360px) {
+ .header[data-stable="true"] { height:6rem; min-height:6rem; flex-direction:column; align-items:stretch; gap:0; }
+ .header[data-stable="true"] .compactIdentity { flex:none; height:3.25rem; }
+ .header[data-stable="true"] .tabsSlot { margin-left:0; align-self:flex-start; }
+ .header[data-stable="true"] .tabLabel { display:inline !important; }
+ .header[data-stable="true"] .tab svg { display:none !important; }
+ .header[data-stable="true"]:not(:has(.tabsSlot)) { height:3.25rem; min-height:3.25rem; }
+}
+}
+
+.metrics { flex:1 1 33.75rem; min-width:0; }
+.header:has(.metrics) { gap:1.5rem; flex-wrap:wrap; }
+.header:has(.metrics) .compactIdentity { flex:none; max-width:min(100%,31.25rem); }
+@container workspace-panel (max-width:700px) {
+ .header:has(.metrics) { gap:1rem; }
+ .header:has(.metrics) .metrics { flex-basis:100%; }
+}
+
+/* The terminal header contains financial metrics and grows on small screens. */
+.header[data-stable="true"]:has(.metrics) { height:auto; min-height:3.25rem; }
+@media(max-width:760px) {
+ .header[data-stable="true"]:has(.metrics) { flex-direction:column; align-items:stretch; gap:1rem; height:auto; }
+ .header:has(.metrics) .metrics { flex:none; width:100%; }
+ .header:has(.metrics) .compactIdentity { flex:none; width:100%; height:auto; min-height:2.5rem; }
+}
+
+/* Keep identity tools together; market and personal figures share one baseline. */
+.header[data-stable="true"] .compactIdentity { display:grid; grid-template-columns:2.125rem minmax(0,1fr) auto; gap:0.625rem; height:auto; }
+.header[data-stable="true"] .identityMeta { height:auto; min-height:1.5rem; gap:0.5rem; flex-wrap:wrap; }
+.header[data-stable="true"] .contract { display:inline-flex; align-items:center; gap:0.125rem; color:var(--muted); font-variant-numeric:tabular-nums; }
+.header[data-stable="true"] .contract .copy { display:inline-flex; justify-content:center; align-items:center; width:1.5rem; height:1.5rem; min-height:1.5rem; padding:0.25rem; border-radius:var(--r-inner); color:var(--muted); }
+.socials { display:flex; align-items:center; gap:0.125rem; }
+.socials a { display:inline-flex; align-items:center; justify-content:center; width:1.75rem; height:1.75rem; color:var(--muted); border-radius:var(--r-inner); }
+.socials svg { width:0.875rem; height:0.875rem; }
+.copy:focus-visible,.socials a:focus-visible { outline:0.125rem solid var(--workspace-focus); outline-offset:0.125rem; }
+@media (hover:hover) and (pointer:fine) { .contract .copy:hover,.socials a:hover { background:var(--workspace-inset); color:var(--ink); } }
+@media (pointer:coarse) {
+  .header[data-stable="true"] .contract .copy,.socials a { min-width:44px; min-height:44px; }
+  .header[data-stable="true"] .identityMeta { gap:4px 8px; }
+}
+
+@media (max-width:760px) {
+ .header[data-stable="true"]:has(.compactIdentity) { height:auto; }
+ .header[data-stable="true"] .compactIdentity { grid-template-columns:2.125rem minmax(0,1fr); row-gap:0; }
+ .compactIdentity .socials { grid-column:2; }
+ .compactIdentity .mark { align-self:start; margin-top:0.375rem; }
+}
+
+.header:has(.metrics) { align-items:center; gap:1.25rem; }
+.header:has(.metrics) .compactIdentity { max-width:21.25rem; }
+.header:has(.metrics) .metrics { flex:1 1 42.5rem; }
+@media (max-width:1180px) {
+ .header:has(.metrics) .metrics { flex-basis:100%; }
+}
+@media (max-width:760px) {
+ .header[data-stable="true"]:has(.metrics) { gap:0.75rem; }
+ .header:has(.metrics) .compactIdentity { max-width:none; }
+ .header:has(.metrics) .compactIdentity { padding-right:2.75rem; }
+ .header:has(.metrics) .metrics { flex:none; }
+}
+
+/* The coin market strip distributes identity, price and facts across the canvas. */
+.header[data-stable="true"]:has([aria-label="Market price"]) { display:flex; flex-direction:row; align-items:center; flex-wrap:wrap; gap:1rem; min-height:5.5rem; padding:0.5rem 0; }
+.header:has([aria-label="Market price"]) .compactIdentity { flex:0 1 15.625rem; width:auto; max-width:20rem; min-width:0; min-height:2.5rem; grid-template-columns:2.5rem minmax(0,1fr); padding:0; margin:0; }
+.header:has([aria-label="Market price"]) .metrics { flex:1 1 37.5rem; width:auto; min-width:0; }
+@container workspace-panel (max-width:600px) {
+ .header[data-stable="true"]:has([aria-label="Market price"]) { gap:0.5rem; padding:0.25rem 0; }
+ .header:has([aria-label="Market price"]) .compactIdentity { flex:1 1 100%; width:100%; max-width:none; padding:0; }
+ .header:has([aria-label="Market price"]) .metrics { flex:1 1 100%; width:100%; }
+ .header:has([aria-label="Market price"]) .compactIdentity .selector { max-width:calc(100% - 2.25rem); }
+ .header:has([aria-label="Market price"]) .identityMeta { min-height:1.25rem; }
+ .header:has([aria-label="Market price"]) .mark { align-self:center; margin:0; }
+}
+
+/* Social links belong to the title, independent of its asset-selector button. */
+.identityTitle { display:flex; align-items:center; flex-wrap:wrap; gap:0.125rem 0.5rem; min-width:0; }
+.identityTitle .selector { flex:0 1 auto; min-width:0; }
+.identityTitle .socials { flex:none; }
+.compactIdentity .identityTitle .socials { grid-column:auto; }
+
+/* A compact market identity anchors the denser numeric strip. */
+.header:has([aria-label="Market price"]) .symbolLine strong { font-size:1rem; font-weight:700; line-height:1.375rem; }
+.header:has([aria-label="Market price"]) .identityTitle { gap:0.125rem 0.25rem; }
+.header:has([aria-label="Market price"]) .socials a { color:var(--ink-2); }
+
+/* Keep touch targets intact without giving each identity tool its own row. */
+@container workspace-panel (max-width:600px) {
+ .header:has([aria-label="Market price"]) .identityTitle { flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none; }
+ .header:has([aria-label="Market price"]) .identityTitle .selector { flex:none; max-width:none; }
+ .header:has([aria-label="Market price"]) .identityTitle .socials { flex:none; }
+ .header:has([aria-label="Market price"]) .identityTitle { margin-inline-end:5.5rem; }
+}
+
+/* Wrapped tablet headers use the full identity row, reserving its panel controls. */
+@container workspace-panel (600px < width <= 800px) {
+ .header[data-stable="true"]:has([aria-label="Market price"]) { gap:0.5rem; padding:0.25rem 0; }
+ .header:has([aria-label="Market price"]) .compactIdentity { flex:1 1 100%; width:100%; max-width:none; }
+ .header:has([aria-label="Market price"]) .identityTitle { flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none; margin-inline-end:5.5rem; }
+ .header:has([aria-label="Market price"]) .identityTitle .selector { flex:none; max-width:none; }
+}

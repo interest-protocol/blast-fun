@@ -1,0 +1,23 @@
+/* Follow in a post (FEATURE-MAP §3.3): `.btn.btn-ink.btn-sm.follow`. */
+.follow {
+  position: relative; flex-shrink: 0; height: 2.125rem; padding: 0 0.875rem; border-radius: var(--r-button);
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+  background: var(--ink); color: var(--card); font-size: 0.8125rem; font-weight: 600; white-space: nowrap; letter-spacing: -.01em;
+  transition: background var(--t2) var(--ease-std), color var(--t2) var(--ease-std), box-shadow var(--t2) var(--ease-std), transform var(--t1) var(--ease-std), opacity var(--t2) var(--ease-std);
+}
+.follow:active { transform: scale(.97); }
+.follow[aria-busy="true"] { cursor: progress; }
+@media (hover: hover) { .follow:hover { opacity: .86; } }
+.on { background: var(--card); color: var(--ink); box-shadow: inset 0 0 0 1px var(--hair-2); opacity: 1; }
+.lOn, .lHover { display: none; }
+.on .lOff { display: none; }
+.on .lOn { display: inline; }
+@media (hover: hover) {
+  .on:hover { background: var(--down-soft); color: var(--down); box-shadow: inset 0 0 0 1px transparent; opacity: 1; }
+  .on:hover .lOn { display: none; }
+  .on:hover .lHover { display: inline; }
+}
+.srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+@media (pointer: coarse) { .follow { height: 40px; } }
+/* A press under reduced motion dips instead of scaling (OA-31). */
+@media (prefers-reduced-motion: reduce) { .follow:active { transform: none; opacity: .7; } }

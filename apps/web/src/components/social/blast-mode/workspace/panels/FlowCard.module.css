@@ -1,0 +1,26 @@
+/* Flow (BlastMode.dc.html): 14px card, title row, four window tiles, three pressure bars. */
+.flow { display:flex; flex-direction:column; gap:0.75rem; padding:0.875rem; border-radius:1.25rem; background:var(--card); box-shadow:var(--sh-1); color:var(--ink); }
+.head { display:flex; align-items:baseline; justify-content:space-between; gap:0.5rem; }
+.flow > .head h2 { margin:0; font-size:0.9375rem; line-height:1.1875rem; font-weight:650; }
+.head > span { color:var(--muted); font-size:0.75rem; line-height:1rem; }
+.windows { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:0.375rem; }
+.window { flex-direction:column; gap:0.125rem; min-width:0; background:var(--control-field); box-shadow:none; color:var(--ink); }
+/* A window tile is 8px above and below its two lines and 4px at the sides (BlastMode.dc.html). */
+.window[data-ui-size] { --control-height:auto; --control-pad-block:0.5rem; --control-pad:0.25rem; border-radius:0.625rem; }
+.window[aria-pressed="true"] { background:var(--control-hover); box-shadow:none; }
+.windowName { color:var(--muted); font-size:0.75rem; line-height:0.875rem; font-weight:400; }
+.move { font-size:0.8125rem; line-height:1.0625rem; font-weight:600; font-variant-numeric:tabular-nums; }
+.move[data-direction="up"] { color:var(--up); }
+.move[data-direction="down"] { color:var(--down); }
+.pressure { display:flex; flex-direction:column; gap:0.75rem; margin:0; }
+.row { display:flex; flex-direction:column; gap:0.3125rem; }
+.figures { display:flex; justify-content:space-between; gap:0.5rem; font-size:0.75rem; line-height:1rem; font-variant-numeric:tabular-nums; }
+.figures b { font-weight:600; }
+.figures :global(button) { min-height:0; padding:0; font:inherit; color:inherit; }
+.label { color:var(--muted); }
+.bar { display:flex; gap:0.1875rem; height:0.3125rem; }
+.bar > span { flex-basis:0; min-width:0.1875rem; border-radius:62.4375rem; }
+.buySide { background:var(--up); }
+.sellSide { background:var(--down); }
+.bar[data-empty] > span { background:var(--track); }
+@media (hover:hover) and (pointer:fine) { .window:not([aria-pressed="true"]):hover { background:var(--control-surface); } }

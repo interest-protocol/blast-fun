@@ -1,0 +1,6 @@
+DROP TRIGGER register_wallet_balance ON presale_embedded_wallets;
+DROP TRIGGER register_wallet_balance ON mission_control_account_wallets;
+DROP TRIGGER register_wallet_balance ON social_account_wallets;
+DROP FUNCTION register_linked_wallet_balance();
+
+DROP TABLE social_wallet_balance_requests;

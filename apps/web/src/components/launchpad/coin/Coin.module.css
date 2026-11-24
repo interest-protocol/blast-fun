@@ -1,0 +1,268 @@
+/*
+ * The permanent coin page. Hierarchy is type and space, as in the terminal:
+ * no boxes or dividers between groups; hairlines only inside fact lists.
+ * Colors come from the launchpad theme tokens. Whole-pixel geometry only.
+ */
+
+.header {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.eyebrow {
+  margin: 0;
+  color: var(--lp-accent-text);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  line-height: 16px;
+  text-transform: uppercase;
+}
+
+.identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.identityText {
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 32px;
+}
+
+.pair {
+  margin: 0;
+  color: var(--lp-muted);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 0;
+  color: var(--lp-muted);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.lifecycle {
+  color: var(--lp-ink);
+  font-weight: 600;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px;
+  margin: 4px 0 0;
+}
+
+.stat {
+  min-width: 0;
+}
+
+.stat dt {
+  color: var(--lp-muted);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.stat dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 24px;
+}
+
+.missing {
+  color: var(--lp-muted);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.marketState,
+.conflict {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.marketState {
+  color: var(--lp-muted);
+}
+
+.conflict {
+  padding: 8px 12px;
+  border-radius: var(--lp-radius);
+  background: var(--lp-badge);
+  color: var(--lp-ink);
+}
+
+.conflict svg,
+.marketState svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.conflict svg {
+  color: var(--lp-caution);
+}
+
+.launchId {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  margin: 0;
+}
+
+.launchId code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--lp-font-mono);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+/* Overview */
+
+.overview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 24px 32px;
+}
+
+.group {
+  min-width: 0;
+}
+
+.wide {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.groups {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 24px 32px;
+}
+
+.groupTitle {
+  margin: 0 0 8px;
+  color: var(--lp-ink);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.facts {
+  display: grid;
+  margin: 0;
+}
+
+.subhead {
+  margin: 16px 0 0;
+  color: var(--lp-muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+}
+
+.fact {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 2px 16px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--lp-line);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.fact dt {
+  color: var(--lp-muted);
+}
+
+.fact dd {
+  min-width: 0;
+  margin: 0;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.id {
+  font-family: var(--lp-font-mono);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.note {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--lp-muted);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.group .note + .note {
+  margin-top: 8px;
+}
+
+/* Execution */
+
+.execution {
+  display: grid;
+  gap: 12px;
+}
+
+.executionState {
+  margin: 0;
+  color: var(--lp-ink);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.closedTrade {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.closedTrade button {
+  min-height: 44px;
+  border: 1px solid var(--lp-line);
+  border-radius: var(--lp-radius);
+  background: var(--lp-raised);
+  color: var(--lp-muted);
+  font: inherit;
+  font-weight: 600;
+  cursor: not-allowed;
+}
+
+@media (min-width: 48rem) {
+  .stats {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .overview,
+  .groups {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

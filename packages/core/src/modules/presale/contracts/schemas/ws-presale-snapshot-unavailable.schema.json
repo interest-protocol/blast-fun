@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/presale/contracts/ws-presale-snapshot-unavailable.schema.json",
+  "title": "presale snapshot unavailable message",
+  "description": "presale:<presale_id>: sent instead of a snapshot, on first subscribe or after resume_complete, when the server does not know the sale (not_found) or cannot render it (unavailable); the topic stays subscribed and live messages follow once the sale exists (CL-28).",
+  "type": "object",
+  "properties": {
+    "type": {
+      "const": "snapshot_unavailable"
+    },
+    "topic": {
+      "type": "string",
+      "pattern": "^presale:0x[0-9a-f]{64}$"
+    },
+    "reason": {
+      "enum": [
+        "not_found",
+        "unavailable"
+      ]
+    }
+  },
+  "required": [
+    "type",
+    "topic",
+    "reason"
+  ],
+  "additionalProperties": false
+}

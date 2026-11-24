@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "keys": {
+      "maxItems": 500,
+      "type": "array",
+      "items": {
+        "anyOf": [
+          {
+            "type": "string",
+            "pattern": "^0x[0-9a-f]{64}$"
+          },
+          {
+            "type": "string",
+            "pattern": "^0x[0-9a-f]{64}::[A-Za-z_][A-Za-z0-9_]{0,127}::[A-Za-z_][A-Za-z0-9_]{0,127}$"
+          }
+        ]
+      },
+      "uniqueItems": true
+    }
+  },
+  "required": [
+    "keys"
+  ],
+  "additionalProperties": false,
+  "title": "Watchlist keys",
+  "description": "GET /api/social/me/watchlist/keys 200: every key the caller saved, presale ids and curve coin types together, newest first (private, never cached).",
+  "$id": "https://blast-v2.invalid/social/contracts/watchlist-keys-response.schema.json"
+}

@@ -1,0 +1,21 @@
+.page {
+  display: grid;
+  min-height: 100dvh;
+  align-content: center;
+  justify-items: center;
+  gap: 20px;
+  padding: 20px;
+  background: var(--brand-landing-canvas);
+  color: #f8f5f7;
+}
+
+.page h1 { margin: 0; font-size: 20px; }
+.card {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: min(100%, 1200px);
+  max-height: calc(100svh - 180px);
+}
+.enter { padding: 12px 16px; color: #ff8fbd; }
+.enter:focus-visible { outline: 2px solid currentColor; outline-offset: 4px; }

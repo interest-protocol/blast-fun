@@ -1,0 +1,11 @@
+.trigger.trigger { flex:none; }
+.drawer.drawer { gap:1.25rem; }
+@media (min-width:761px) {
+ .drawer.drawer { position:fixed; inset:0.75rem 0.75rem 0.75rem auto; width:min(30rem,calc(100vw - 1.5rem)); max-height:calc(100dvh - 1.5rem); border-radius:var(--r-lg); }
+}
+
+/* A narrow header (audit 01): Portfolio is its icon; the button keeps its name. */
+@container blast-header (max-width:72rem) {
+ .trigger > span { display:none; }
+ .trigger { padding-inline:0.625rem; }
+}

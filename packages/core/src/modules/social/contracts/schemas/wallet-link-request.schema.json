@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/wallet-link-request.schema.json",
+  "title": "Wallet link request",
+  "description": "POST /api/social/me/wallets body. Closed: the challenge, its message and address as issued, the wallet's signature, and optionally which wallet signed.",
+  "type": "object",
+  "properties": {
+    "challenge_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "address": {
+      "type": "string",
+      "pattern": "^0x[0-9a-fA-F]{1,64}$"
+    },
+    "message": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048
+    },
+    "signature": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 8192
+    },
+    "wallet": {
+      "enum": [
+        "slush",
+        "external"
+      ]
+    }
+  },
+  "required": [
+    "challenge_id",
+    "address",
+    "message",
+    "signature"
+  ],
+  "additionalProperties": false
+}

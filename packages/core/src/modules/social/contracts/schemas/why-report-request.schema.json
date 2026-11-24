@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/why-report-request.schema.json",
+  "title": "Social why report request",
+  "description": "POST /api/social/whys/{why_id}/reports body. Closed: an optional reason of at most 280 Unicode code points (the body is at most 4 KiB). A blank reason stores no reason; the stored text is NFC-normalized and trimmed.",
+  "type": "object",
+  "properties": {
+    "reason": {
+      "type": "string",
+      "maxLength": 280
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,30 @@
+.notice {
+  padding: 0.8125rem;
+  border-radius: var(--r-sm);
+  background: var(--raised);
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.notice p {
+  margin: 0;
+}
+.notice strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+.notice nav {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.notice a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3125rem;
+  min-height: max(44px, 2.75rem);
+  color: var(--pink-text);
+  font-weight: 600;
+  text-underline-offset: 0.1875rem;
+}

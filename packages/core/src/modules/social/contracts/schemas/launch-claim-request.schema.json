@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/launch-claim-request.schema.json",
+  "title": "Record, then settle, a launch creator fee claim",
+  "description": "PUT /api/social/me/launch-claims/{request_id} (LP-12): the launch and which ledger's fees, the curve's or the migration vault's; then the same body with the signed transaction's digest, or with why nothing was sent. Never both. The server finds the cap and the vault.",
+  "type": "object",
+  "properties": {
+    "launch_id": {
+      "type": "string",
+      "pattern": "^0x[0-9a-f]{64}$"
+    },
+    "kind": {
+      "enum": [
+        "claim_launch_fees",
+        "claim_launch_lp_fees"
+      ]
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^[1-9A-HJ-NP-Za-km-z]{32,44}$"
+    },
+    "transaction_bytes": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 180000,
+      "pattern": "^[A-Za-z0-9+/]+={0,2}$",
+      "description": "Canonical base64 full Sui TransactionData bytes, sent with the first digest. Its digest and sender must match the caller’s Blast wallet."
+    },
+    "failure": {
+      "enum": [
+        "rejected",
+        "dry_run_failed"
+      ]
+    }
+  },
+  "required": [
+    "launch_id",
+    "kind"
+  ],
+  "not": {
+    "properties": {
+      "digest": true,
+      "failure": true
+    },
+    "required": [
+      "digest",
+      "failure"
+    ]
+  },
+  "additionalProperties": false
+}

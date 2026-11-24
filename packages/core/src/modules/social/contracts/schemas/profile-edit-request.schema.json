@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/profile-edit-request.schema.json",
+  "title": "Social profile edit request",
+  "description": "PUT /api/social/me/profile: display_name, bio (empty clears it), picture, and callsign (new social accounts only). Callsigns are unique across current and previous social identities, Mission Control and reserved names.",
+  "type": "object",
+  "properties": {
+    "display_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "picture": {
+      "enum": [
+        "source",
+        "none"
+      ]
+    },
+    "callsign": {
+      "type": "string"
+    },
+    "bio": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        {
+          "type": "string",
+          "const": ""
+        }
+      ]
+    }
+  },
+  "additionalProperties": false
+}

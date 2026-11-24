@@ -1,0 +1,4 @@
+/* The error boundaries' page: the shell's gutter and title offset, without the shell. */
+.page { max-width:42rem; margin:0 auto; padding:var(--page-title-top) var(--page-gutter); }
+.actions { display:flex; flex-wrap:wrap; justify-content:center; gap:0.5rem; }
+.code { display:block; margin-top:0.25rem; color:var(--muted); font-size:0.75rem; }

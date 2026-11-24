@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/callsign-availability-response.schema.json",
+  "title": "Callsign availability",
+  "description": "GET /api/social/callsigns/{callsign} 200. The callsign is lowercased, then checked in creation's order: invalid (format), blocked (a blocked term), reserved (Mission Control's reserved list), taken (a profile or an account holds it).",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "available": {
+          "const": true
+        },
+        "reason": {
+          "type": "null"
+        }
+      },
+      "required": [
+        "available",
+        "reason"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "available": {
+          "const": false
+        },
+        "reason": {
+          "enum": [
+            "invalid",
+            "reserved",
+            "taken",
+            "blocked"
+          ]
+        }
+      },
+      "required": [
+        "available",
+        "reason"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

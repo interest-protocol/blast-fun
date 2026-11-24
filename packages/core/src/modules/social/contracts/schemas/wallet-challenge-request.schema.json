@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/wallet-challenge-request.schema.json",
+  "title": "Wallet link challenge request",
+  "description": "POST /api/social/me/wallets/challenge body. Closed.",
+  "type": "object",
+  "properties": {
+    "address": {
+      "type": "string",
+      "pattern": "^0x[0-9a-fA-F]{1,64}$"
+    }
+  },
+  "required": [
+    "address"
+  ],
+  "additionalProperties": false
+}

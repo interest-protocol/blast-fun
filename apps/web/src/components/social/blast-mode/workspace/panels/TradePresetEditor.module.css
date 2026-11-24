@@ -1,0 +1,32 @@
+.edit { display:inline-grid; place-items:center; flex:none; width:1.75rem; height:1.625rem; min-width:1.75rem; min-height:1.625rem; padding:0; color:var(--muted); border-radius:var(--r-inner); }
+.edit:disabled { opacity:.5; cursor:not-allowed; }
+.edit:focus-visible { outline:0.125rem solid var(--workspace-focus,var(--ink)); outline-offset:0.125rem; }
+.editor { --field:var(--bg); }
+:global([data-sheet-scrim]):has(.editor) { background:color-mix(in srgb,var(--scrim) 65%,transparent); -webkit-backdrop-filter:blur(0.25rem); backdrop-filter:blur(0.25rem); }
+.fields { display:grid; gap:1.5rem; }
+.group { margin:0; padding:0; min-width:0; border:0; }
+.group legend { padding:0; margin-bottom:0.75rem; color:var(--ink); font-size:0.875rem; font-weight:600; }
+.row { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:0.5rem; }
+.row label { display:grid; gap:0.5rem; min-width:0; }
+.row label > span:first-child { color:var(--muted); font-size:0.75rem; }
+.row input { width:100%; min-width:0; height:max(44px, 2.75rem); padding:0 0.625rem; border:1px solid transparent; border-radius:var(--r-button); background:var(--field); color:var(--ink); font-size:1rem; font-variant-numeric:tabular-nums; }
+.row input:focus-visible { outline:0.125rem solid var(--workspace-focus,var(--ink)); outline-offset:0.125rem; box-shadow:none; }
+.groupHint { margin:0.5rem 0 0; color:var(--muted); font-size:0.75rem; line-height:1.5; }
+.note { margin:1.25rem 0 1rem; color:var(--muted); font-size:0.8125rem; line-height:1.5; }
+.error { color:var(--down); font-size:0.8125rem; }
+/* margin-top: scrolled to the end, the last helper line sits fully above the footer's fade instead of 8px into it (audit: Trade settings). */
+.editor .actions { display:flex; flex-direction:row; align-items:center; justify-content:space-between; gap:0.5rem; flex-wrap:wrap; margin-top:0; }
+@media (prefers-color-scheme:dark) { :global([data-blast-ui]:not([data-theme="light"])) .editor { --field:var(--raised); } }
+:global([data-blast-ui][data-theme="dark"]) .editor { --field:var(--raised); }
+@media (prefers-reduced-transparency:reduce) { :global([data-sheet-scrim]):has(.editor) { -webkit-backdrop-filter:none; backdrop-filter:none; } }
+@media (prefers-contrast:more) { .row input { border-color:var(--hair-2); } }
+@media (hover:hover) and (pointer:fine) { .edit:not(:disabled):hover { background:var(--track); color:var(--ink); } }
+@media (pointer:coarse) { .edit { min-width:44px; min-height:44px; } }
+@media (max-width:380px) { .row { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+
+.slippage { display:flex; align-items:center; justify-content:space-between; gap:0.75rem; margin-bottom:1.5rem; font-size:0.8125rem; }
+.slippageChoice { flex:none; }
+/* One field's problem in a few words, under that field (audit F14). */
+.fieldError { color:var(--down); font-size:0.75rem; line-height:1.4; }
+/* Unsaved edits closed on Escape, the scrim or ×: the workspace's Undo notice, fixed while no panel owns it. */
+.undo { position:fixed; bottom:1.5rem; left:50%; transform:translateX(-50%); display:flex; align-items:center; gap:0.5rem; padding:0.5rem 0.75rem; border-radius:var(--r-md); background:var(--card); color:var(--ink); box-shadow:var(--sh-pop); z-index:1200; white-space:nowrap; font-size:0.8125rem; }

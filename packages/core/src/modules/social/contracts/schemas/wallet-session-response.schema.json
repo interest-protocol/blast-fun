@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/wallet-session-response.schema.json",
+  "title": "Wallet session",
+  "description": "POST /api/social/sign-in/session 201: when the new wallet session ends at the latest. The session itself travels only in the HttpOnly __Host-blast_wallet cookie.",
+  "type": "object",
+  "properties": {
+    "expires_at_ms": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "expires_at_ms"
+  ],
+  "additionalProperties": false
+}

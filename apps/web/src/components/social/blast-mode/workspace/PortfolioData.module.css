@@ -1,0 +1,268 @@
+/* Summary · Coins · Presales: the shared `Segmented` tablist (track, thumb, sizes and keyboard live there). */
+.tabs {
+  margin-bottom: 1rem;
+}
+.tabsSkeleton {
+  height: 1.75rem;
+}
+
+/* The Blast card: who, the portfolio's value, and today's move when it is known. */
+.summary {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+.card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-height: 8.5rem;
+  margin: 0;
+  padding: 1rem;
+  overflow: hidden;
+  border-radius: var(--r-md);
+  /* Darker stops than the prototype keep 12px white text at 4.9:1 or better across the whole card. */
+  background: linear-gradient(140deg, #d61b70 0%, #a72f9e 50%, #5b3fd6 100%);
+  color: #fff;
+}
+.card > :not(.watermark) {
+  position: relative;
+}
+.watermark {
+  position: absolute;
+  right: -1rem;
+  bottom: -1.25rem;
+  width: 8rem;
+  height: auto;
+  opacity: 0.2;
+  pointer-events: none;
+}
+.watermark path {
+  fill: #fff;
+}
+/* Who and "Only you" on one line; a long name wraps at a word rather than losing its end. */
+.who {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+.owner {
+  min-width: 0;
+}
+.private {
+  margin-left: auto;
+  flex: none;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.summary .card p {
+  margin: 0;
+}
+.label {
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.total {
+  color: #fff;
+  font-size: 1.625rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.875rem;
+  white-space: nowrap;
+}
+.pre,
+.cents {
+  opacity: 0.8;
+  font-weight: 600;
+}
+.unknown {
+  font-size: 1.125rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.day {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1875rem;
+  width: max-content;
+  max-width: 100%;
+  min-height: 1.375rem;
+  padding: 0 0.5rem;
+  border-radius: var(--r-inner);
+  background: rgba(255, 255, 255, 0.22);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.day svg {
+  width: 0.75rem;
+  height: 0.75rem;
+  flex: none;
+}
+.figures {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin: 0;
+}
+.figures > div {
+  display: grid;
+  gap: 0.125rem;
+  min-width: 0;
+  padding: 0.625rem 0.75rem;
+  border-radius: var(--r-sm);
+  background: var(--workspace-inset);
+}
+.figures dt {
+  color: var(--muted);
+  font-size: 0.6875rem;
+  font-weight: 500;
+}
+.figures dd {
+  margin: 0;
+  color: var(--ink);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.figures dd .status {
+  display: grid;
+  gap: 0.5rem;
+  justify-items: start;
+  padding: 0 0.625rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+/* Compact list tools: search, one filter and a refresh on one line. */
+.tools {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+.searchField {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.toolsSkeleton {
+  flex: 1 1 auto;
+  height: 2rem;
+}
+.searchField input {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  height: 2rem;
+  min-height: 2rem;
+}
+.check {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.3125rem;
+  color: var(--ink-2);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+.tools :global(button.btn.btn-sm),
+.pager :global(button.btn.btn-sm) {
+  flex: none;
+  height: 1.625rem;
+  min-height: 1.625rem;
+  padding: 0 0.625rem;
+  border-radius: var(--r-button);
+  font-size: 0.75rem;
+}
+.empty {
+  padding: 0.5rem 0.625rem;
+}
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+.actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.375rem;
+}
+.unpriced {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+@media (pointer: coarse) {
+  .tools :global(button.btn.btn-sm),
+  .pager :global(button.btn.btn-sm),
+  .check {
+    height: auto;
+    min-height: 44px;
+  }
+  .searchField input {
+    height: 44px;
+    min-height: 44px;
+    font-size: 16px;
+  }
+}
+@media (prefers-contrast: more) {
+  .card {
+    background: linear-gradient(rgba(15, 14, 19, 0.28), rgba(15, 14, 19, 0.28)), linear-gradient(140deg, #ff4c98 0%, #d63fb8 48%, #7c5cff 100%);
+  }
+  .pre,
+  .cents {
+    opacity: 1;
+  }
+}
+
+@media (pointer: fine) {
+  :is(.tabs, .summary, .tools, .pager, .actions, .status) button {
+    min-width: 0;
+    min-height: 0;
+  }
+}
+
+/* Audit F37: a holding is one plain line (coin, value and PnL, then Buy and Sell or why they are missing), set apart by space like the presale rows. */
+/* A row wraps rather than overflows (Fable review B1, round 2): the coin is never narrower than its ticker and balance, the value and the actions never shrink,
+ * and when they do not all fit on one line the actions move whole to a second line, whatever the value's or PnL's length. */
+.holding > [data-cols="holding"] { display:flex; flex-wrap:wrap; align-items:center; gap:0.25rem 0.625rem; }
+.quickHolding > [data-cols="holding"] { column-gap:0.5rem; }
+.holding > [data-cols="holding"] > :first-child,.holdingFigures { flex:none; }
+.holdingText.holdingText { flex:1 0 auto; max-width:100%; }
+.holding .actions { flex:none; margin-left:auto; }
+.reason { max-width:7rem; color:var(--muted); font-size:0.75rem; line-height:1rem; text-align:right; }
+/* While trading is checked, the Buy and Sell buttons' own boxes hold their place. */
+.buySkeleton,.sellSkeleton { width:3rem; height:2rem; border-radius:var(--r-button); }
+.pnl { display:grid; grid-template-columns:auto minmax(0,1fr); align-items:baseline; justify-items:end; gap:0 0.25rem; min-width:0; max-width:100%; color:var(--muted); font-size:0.75rem; line-height:1.125rem; font-variant-numeric:tabular-nums; overflow-wrap:normal; }
+.pnl > span:first-child { font-size:0.6875rem; }
+.pnlAmount,.pnlPercent { text-align:right; white-space:nowrap; }
+.pnlPercent,.pnlUnavailable { grid-column:2; text-align:right; }
+.pnl [data-tone="up"] { color:var(--up); }
+.pnl [data-tone="down"] { color:var(--down); }
+.holdingCount { margin:1rem 0 0; color:var(--muted); font-size:0.75rem; text-align:center; }
+@media (pointer:coarse) { .actions > :is(button.buy,button.sell,button.retry) { min-width:44px; min-height:44px; } .buySkeleton,.sellSkeleton { width:44px; height:44px; } }
+
+/* The lower terminal uses its width as columns; the drawer retains compact rows. */
+@container terminal-activity (min-width:700px) {
+ .quickHolding > [data-cols="holding"] { display:grid; grid-template-columns:1.75rem minmax(5.625rem,1fr) minmax(8.125rem,1fr) auto; gap:0.75rem; }
+ .quickHolding .holdingFigures { justify-self:end; }
+}
+
+.pnlUnavailable,.unpriced { white-space:nowrap; }
+/* The ticker stays whole when it fits and breaks inside itself only when it cannot (blast-ui `.ticker`). */
+.holdingTicker.holdingTicker { flex:0 1 auto; min-width:0; white-space:normal; }
+/* The ticker sits right above, so the balance is the figure alone; it is never cut and wraps inside itself only when its cell is too narrow. */
+.balance { display:block; white-space:normal; }
+.balance > button { max-width:100%; overflow-wrap:anywhere; text-align:start; }
+@container terminal-activity (max-width:420px) { .figures { grid-template-columns:1fr; gap:0; } .figures > div { display:flex; align-items:baseline; justify-content:space-between; padding:0.5rem 0.625rem; border-radius:0; } }

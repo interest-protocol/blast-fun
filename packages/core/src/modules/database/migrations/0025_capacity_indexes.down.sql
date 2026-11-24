@@ -1,0 +1,2 @@
+DROP INDEX IF EXISTS mission_control_seed_creator_attributions_creator_recent_idx;
+DROP INDEX IF EXISTS mission_control_referrals_referrer_recent_idx;

@@ -1,0 +1,193 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/deposit-response.schema.json",
+  "title": "A deposit from another chain",
+  "description": "PUT /api/social/me/deposits/{request_id} (OA-25): the attempt as the account's transaction log holds it, the burn to sign while it is submitted and no burn was reported, and the bridge's view of the burn this answer saw.",
+  "type": "object",
+  "properties": {
+    "request_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "source": {
+      "enum": [
+        "base",
+        "arbitrum",
+        "ethereum",
+        "solana"
+      ]
+    },
+    "amount": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]{0,19}$"
+    },
+    "state": {
+      "enum": [
+        "submitted",
+        "confirmed",
+        "failed"
+      ]
+    },
+    "digest": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[1-9A-HJ-NP-Za-km-z]{32,44}$"
+    },
+    "failure_code": {
+      "enum": [
+        "mismatch",
+        "dry_run_failed",
+        "rejected",
+        "expired",
+        null
+      ]
+    },
+    "tx_hash": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^(0x[0-9a-f]{64}|[1-9A-HJ-NP-Za-km-z]{64,88})$"
+    },
+    "transfer": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^bt_[0-9a-f]{32}$"
+            },
+            "status": {
+              "enum": [
+                "sent",
+                "attested",
+                "minted",
+                "failed"
+              ]
+            },
+            "error": {
+              "enum": [
+                "invalid_burn",
+                "attestation_timeout",
+                "delayed",
+                null
+              ]
+            },
+            "minted_amount": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^(0|[1-9][0-9]{0,19})$"
+            }
+          },
+          "required": [
+            "id",
+            "status",
+            "error",
+            "minted_amount"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "plan": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "speed": {
+              "enum": [
+                "fast",
+                "standard"
+              ]
+            },
+            "eta_seconds": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "fee_bps": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+            },
+            "max_fee": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]{0,19})$"
+            },
+            "min_finality_threshold": {
+              "enum": [
+                1000,
+                2000
+              ]
+            },
+            "destination_domain": {
+              "const": 8
+            },
+            "mint_recipient": {
+              "type": "string",
+              "pattern": "^0x[0-9a-f]{64}$"
+            },
+            "destination_caller": {
+              "type": "string",
+              "pattern": "^0x[0-9a-f]{64}$"
+            },
+            "hook_data": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 2050,
+              "pattern": "^0x([0-9a-f]{2})+$"
+            }
+          },
+          "required": [
+            "speed",
+            "eta_seconds",
+            "fee_bps",
+            "max_fee",
+            "min_finality_threshold",
+            "destination_domain",
+            "mint_recipient",
+            "destination_caller",
+            "hook_data"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "created_at_ms": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "settled_at_ms": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    }
+  },
+  "required": [
+    "request_id",
+    "source",
+    "amount",
+    "state",
+    "digest",
+    "failure_code",
+    "tx_hash",
+    "transfer",
+    "plan",
+    "created_at_ms",
+    "settled_at_ms"
+  ],
+  "additionalProperties": false
+}

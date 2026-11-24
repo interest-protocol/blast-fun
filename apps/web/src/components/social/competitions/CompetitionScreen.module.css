@@ -1,0 +1,221 @@
+/*
+ * Competitions as the Competitions board draws it: the title with the
+ * Current & upcoming · Past control at its end; a competition's card (radius
+ * 24, 24px in, an info wash from the left) with its chips, display-face name,
+ * schedule and stat tiles; the leaderboard card of 60px rows.
+ */
+.screen {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 1.3125rem;
+}
+.screen > :global([data-page-head]) { flex-wrap: wrap; }
+.directory,
+.members {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.directory {
+  display: grid;
+  gap: 1.25rem;
+}
+
+/* ---------- a competition (the board's hero) ---------- */
+:global([data-blast-ui]) .screen .hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 1.5rem;
+  border-radius: 1.5rem;
+  background: linear-gradient(120deg, var(--info-soft), transparent 55%), var(--card);
+  color: var(--ink);
+  text-decoration: none;
+}
+.heroMain { display: flex; flex-direction: column; align-items: flex-start; gap: 0.625rem; min-width: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 0.375rem; }
+.chip {
+  height: 1.5rem;
+  padding: 0 0.625rem;
+  border-radius: 62.4375rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  background: var(--chip);
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.chip[data-live] { background: var(--pink-soft); color: var(--pink-text); }
+/* The board's 30/650 name in the display face. */
+.heroName {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 1.875rem;
+  font-weight: 650;
+  letter-spacing: -.035em;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+.heroSub { font-size: 0.9375rem; line-height: 1.45; color: var(--muted); }
+.heroSub time { display: inline-block; }
+.rules {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-height: 2rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.rules svg { width: 1rem; height: 1rem; flex: none; }
+.rules svg:last-of-type { width: 0.875rem; height: 0.875rem; }
+.rules:focus-visible { outline: 0.125rem solid var(--focus-color); outline-offset: 0.125rem; border-radius: var(--r-inner); }
+
+/* The stat tiles: 14px corners, 12px × 16px in, a 12px label over a 20/650 figure. */
+.stats { display: grid; grid-auto-flow: column; grid-auto-columns: auto; gap: 0.5rem; }
+.stat { display: flex; flex-direction: column; min-width: 0; max-width: 16rem; padding: 0.75rem 1rem; border-radius: var(--r-sm); background: var(--control-field); line-height: 1.45; }
+.stat > span { font-size: 0.75rem; color: var(--muted); }
+.stat > b { font-size: 1.25rem; font-weight: 650; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+
+/* The directory's card is one link: a tonal hover, a press, the focus ring on the card. */
+.heroLink { transition: box-shadow var(--t1) var(--ease-std), transform var(--t1) var(--ease-std); }
+@media (hover: hover) and (pointer: fine) { :global([data-blast-ui]) .heroLink:hover { box-shadow: var(--sh-hover); } }
+.heroLink:active { transform: scale(.995); }
+:global([data-blast-ui]) .heroLink:focus-visible { outline: 0.125rem solid var(--focus-color); outline-offset: 0; }
+
+/* ---------- the leaderboard ---------- */
+:global([data-blast-ui]) .screen .board { margin-top: 1.25rem; padding: 1rem 0.625rem 0.625rem; border-radius: 1.5rem; }
+.boardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0 0.75rem 0.5rem;
+}
+.boardHead h2 {
+  margin: 0;
+  font-size: 1.0625rem;
+  font-weight: 650;
+  line-height: 1.45;
+}
+.boardHead h2:focus-visible { outline: none; }
+.boardHead p {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.member {
+  min-width: 0;
+  border-radius: var(--r-sm);
+}
+/* The viewer's own row: the board's tonal fill. */
+.member[data-you] { background: var(--track); }
+.row {
+  display: grid;
+  grid-template-columns: 2.5rem 2.25rem minmax(0, 1fr) auto auto;
+  gap: 0.75rem;
+  align-items: center;
+  min-height: 3.75rem;
+  padding: 0 0.75rem;
+}
+.rank {
+  color: var(--muted);
+  font-size: 0.875rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.member[data-top] .rank { color: var(--ink); }
+.name {
+  min-width: 0;
+  color: var(--ink);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-decoration: none;
+}
+.volume {
+  text-align: right;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.unpriced {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+.name:focus-visible {
+  outline: 0.125rem solid var(--focus-color);
+  outline-offset: 0.125rem;
+  border-radius: var(--r-inner);
+}
+.addresses {
+  padding: 0.3125rem 0.75rem 0.75rem 4rem;
+}
+.addresses h3 {
+  margin: 0 0 0.3125rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+.address {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  min-height: max(44px, 2.75rem);
+}
+.pager {
+  margin-top: 0.8125rem;
+}
+.pending {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.8125rem;
+}
+.skeleton {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 3.5rem;
+  gap: 1.3125rem;
+}
+@media (hover: hover) and (pointer: fine) {
+  .name:hover {
+    color: var(--ink-2);
+    text-decoration: underline;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .heroLink { transition: none; }
+  .heroLink:active { transform: none; opacity: .7; }
+}
+
+/* Below the desktop board the tiles move under the name; phones stack and tighten the rows. */
+@media (max-width: 1023px) {
+  :global([data-blast-ui]) .screen .hero { grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+  .stats { grid-auto-flow: row; grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); }
+  .stat { max-width: none; }
+}
+@media (max-width: 760px) {
+  .heroLink[data-ended] :is(.chips > :first-child, .heroSub) { display: none; }
+  :global([data-blast-ui]) .screen .hero { padding: 1.125rem; }
+  .heroName { font-size: 1.625rem; }
+  :global([data-blast-ui]) .screen .board { padding: 0.75rem 0.3125rem 0.5rem; }
+  .row {
+    grid-template-columns: 1.75rem 2.125rem minmax(0, 1fr) auto auto;
+    gap: 0.5rem;
+    padding-inline: 0.5rem;
+  }
+  .volume { font-size: 0.875rem; }
+  .addresses { padding-left: 1rem; }
+}

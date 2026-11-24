@@ -1,0 +1,322 @@
+/*
+ * Global search inside the focused Search surface (full screen on mobile, a
+ * centered panel on desktop). Colors come from the launchpad theme tokens;
+ * hierarchy is type and space, and every state and every exact match is
+ * spoken as a word, never color alone.
+ */
+
+.search {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.form {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.label {
+  color: var(--lp-muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+}
+
+.input {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--lp-line);
+  border-radius: var(--lp-radius);
+  background: var(--lp-canvas);
+  color: var(--lp-ink);
+  font: inherit;
+  /* 16px keeps mobile browsers from zooming into the field. */
+  font-size: 16px;
+}
+
+.input::placeholder {
+  color: var(--lp-muted);
+  opacity: 1;
+}
+
+/* The clear control, as blast-ui's search field draws it (audit F7): muted, a gap after the text, 44px to touch. */
+.input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: none;
+  width: 12px;
+  height: 12px;
+  margin-inline-start: 8px;
+  background-color: var(--lp-muted);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2 2l8 8M10 2l-8 8' stroke='black' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E") center / 12px no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2 2l8 8M10 2l-8 8' stroke='black' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E") center / 12px no-repeat;
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .input::-webkit-search-cancel-button:hover {
+    background-color: var(--lp-ink);
+  }
+}
+
+@media (pointer: coarse) {
+  .input::-webkit-search-cancel-button {
+    width: 44px;
+    height: 44px;
+    margin-block: -12px;
+    margin-inline-end: -12px;
+  }
+}
+
+.status {
+  min-height: 16px;
+  margin: 0;
+  color: var(--lp-muted);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.resultsRegion,
+.results {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+
+.hint,
+.note,
+.order {
+  margin: 0;
+  color: var(--lp-muted);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.order {
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.state {
+  display: grid;
+  gap: 8px;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin: 0;
+  font-size: 14px;
+}
+
+.actions a {
+  color: var(--lp-accent-text);
+  font-weight: 600;
+}
+
+.textButton {
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--lp-accent-text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.group {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.groupHeader {
+  display: grid;
+  gap: 2px;
+}
+
+.groupTitle {
+  margin: 0;
+  color: var(--lp-ink);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 20px;
+}
+
+.list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/*
+ * A row reads ticker and lifecycle, name, why it matched, then the launch's
+ * identity (launch ID, creator, creation time) so duplicates stay apart.
+ */
+.row {
+  display: grid;
+  grid-template-areas:
+    "icon symbol lifecycle"
+    "icon name name"
+    "match match match"
+    "identity identity identity";
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  column-gap: 10px;
+  min-height: 44px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  color: var(--lp-ink);
+  text-decoration: none;
+}
+
+.thesisRow {
+  grid-template-areas:
+    "icon symbol lifecycle"
+    "icon name name"
+    "identity identity identity"
+    "about about about"
+    "body body body"
+    "posted posted posted";
+}
+
+@media (hover:hover) and (pointer:fine) { .row:hover {
+  background: var(--lp-raised);
+} }
+
+.icon {
+  grid-area: icon;
+  align-self: start;
+  width: 32px;
+  height: 32px;
+  color: var(--lp-muted);
+}
+
+.symbol {
+  grid-area: symbol;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.name {
+  grid-area: name;
+  overflow: hidden;
+  color: var(--lp-muted);
+  font-size: 13px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.symbol[data-missing],
+.name[data-missing] {
+  font-style: italic;
+  font-weight: 500;
+}
+
+.lifecycle {
+  grid-area: lifecycle;
+  align-self: start;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: var(--lp-badge);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+.match {
+  grid-area: match;
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+}
+
+.exact {
+  display: inline-block;
+  margin-right: 2px;
+  padding: 0 5px;
+  border: 1px solid var(--lp-accent-text);
+  border-radius: 6px;
+  color: var(--lp-accent-text);
+  font-weight: 700;
+  line-height: 14px;
+}
+
+.identity,
+.posted {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--lp-muted);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.identity {
+  grid-area: identity;
+  margin-top: 4px;
+}
+
+.identity code {
+  font-family: var(--lp-font-mono);
+}
+
+.about {
+  grid-area: about;
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+}
+
+.body {
+  display: -webkit-box;
+  grid-area: body;
+  margin-top: 2px;
+  overflow: hidden;
+  font-size: 14px;
+  line-height: 20px;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+
+.posted {
+  grid-area: posted;
+  margin-top: 2px;
+}
+
+.more {
+  justify-self: start;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--lp-line);
+  border-radius: 8px;
+  background: var(--lp-surface);
+  color: var(--lp-ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.more[aria-disabled="true"] {
+  color: var(--lp-muted);
+  cursor: default;
+}

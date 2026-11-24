@@ -1,0 +1,199 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/trade-response.schema.json",
+  "title": "A trade",
+  "description": "POST /api/social/trades (201 built or refused, 200 a replay) and POST /api/social/trades/{trade_id}/settle (200): the trade, the bytes its wallet signs while built, and how it ended (private, no-store).",
+  "type": "object",
+  "properties": {
+    "balance_failure": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "reason",
+        "coin_type",
+        "required_atoms",
+        "available_atoms"
+      ],
+      "properties": {
+        "reason": {
+          "enum": [
+            "input",
+            "gas"
+          ]
+        },
+        "coin_type": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 512
+        },
+        "required_atoms": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]{0,19})$"
+        },
+        "available_atoms": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]{0,19})$"
+        }
+      }
+    },
+    "trade_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "status": {
+      "enum": [
+        "built",
+        "confirmed",
+        "failed"
+      ]
+    },
+    "side": {
+      "enum": [
+        "buy",
+        "sell"
+      ]
+    },
+    "in_coin": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 512,
+      "pattern": "^0x[0-9a-f]{64}::[A-Za-z_][A-Za-z0-9_]{0,127}::[A-Za-z_][A-Za-z0-9_]{0,127}(<.+>)?$"
+    },
+    "out_coin": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 512,
+      "pattern": "^0x[0-9a-f]{64}::[A-Za-z_][A-Za-z0-9_]{0,127}::[A-Za-z_][A-Za-z0-9_]{0,127}(<.+>)?$"
+    },
+    "amount_in": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]{0,19})$"
+    },
+    "amount_out": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]{0,19})$"
+    },
+    "min_out": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]{0,19})$"
+    },
+    "amount_out_filled": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^(0|[1-9][0-9]{0,19})$"
+    },
+    "route_label": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "maxLength": 300
+    },
+    "network_fee": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "payer": {
+              "enum": [
+                "blast",
+                "wallet"
+              ]
+            },
+            "label": {
+              "enum": [
+                "Paid by Blast",
+                "Paid from your SUI"
+              ]
+            }
+          },
+          "required": [
+            "payer",
+            "label"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "reservation_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "transaction_bytes": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[A-Za-z0-9+/]+={0,2}$"
+    },
+    "digest": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[1-9A-HJ-NP-Za-km-z]{32,44}$"
+    },
+    "expires_at_ms": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "failure_code": {
+      "enum": [
+        "quote_expired",
+        "price_moved",
+        "insufficient_balance",
+        "pool_unavailable",
+        "execution_failed",
+        "expired",
+        null
+      ]
+    },
+    "created_at_ms": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "settled_at_ms": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    }
+  },
+  "required": [
+    "trade_id",
+    "status",
+    "side",
+    "in_coin",
+    "out_coin",
+    "amount_in",
+    "amount_out",
+    "min_out",
+    "amount_out_filled",
+    "route_label",
+    "network_fee",
+    "reservation_id",
+    "transaction_bytes",
+    "digest",
+    "expires_at_ms",
+    "failure_code",
+    "created_at_ms",
+    "settled_at_ms"
+  ],
+  "additionalProperties": false
+}

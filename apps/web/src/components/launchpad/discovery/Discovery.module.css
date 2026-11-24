@@ -1,0 +1,208 @@
+/*
+ * The discovery rail. Colors come from the launchpad theme tokens
+ * (primitives/LaunchpadTheme.module.css); hierarchy is type and space, and
+ * every state is spoken as a word, never color alone.
+ */
+
+.rail {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.views {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.view {
+  min-height: 32px;
+  padding: 0 6px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 6px 6px 0 0;
+  background: transparent;
+  color: var(--lp-muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+/* The chosen view: ink, weight and a pink bar, not color alone. */
+.view[aria-pressed="true"] {
+  border-bottom-color: var(--lp-accent);
+  color: var(--lp-ink);
+  font-weight: 700;
+}
+
+.orderLine {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.order,
+.note {
+  margin: 0;
+  color: var(--lp-muted);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.textButton {
+  flex: none;
+  min-height: 24px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--lp-accent-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.textButton:disabled {
+  color: var(--lp-muted);
+  cursor: default;
+}
+
+.listRegion {
+  min-width: 0;
+}
+
+.list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/*
+ * A row reads symbol, name, lifecycle, launch ID, then the fact its view
+ * orders by; the grid places the lifecycle top right and gives the launch ID
+ * and the fact the full width.
+ */
+.row {
+  display: grid;
+  grid-template-areas:
+    "icon symbol lifecycle"
+    "icon name name"
+    "identity identity identity"
+    "fact fact fact";
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  column-gap: 10px;
+  padding: 8px 8px 8px 10px;
+  border-left: 2px solid transparent;
+  border-radius: 8px;
+  color: var(--lp-ink);
+  text-decoration: none;
+}
+
+@media (hover:hover) and (pointer:fine) { .row:hover {
+  background: var(--lp-raised);
+} }
+
+.row[aria-current="page"] {
+  border-left-color: var(--lp-accent);
+  background: var(--lp-selected);
+}
+
+.icon {
+  grid-area: icon;
+  align-self: start;
+  width: 32px;
+  height: 32px;
+  color: var(--lp-muted);
+}
+
+.symbol {
+  grid-area: symbol;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.name {
+  grid-area: name;
+  overflow: hidden;
+  color: var(--lp-muted);
+  font-size: 13px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.symbol[data-missing],
+.name[data-missing] {
+  font-style: italic;
+  font-weight: 500;
+}
+
+.lifecycle {
+  grid-area: lifecycle;
+  align-self: start;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: var(--lp-badge);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+.identity,
+.fact {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--lp-muted);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.identity {
+  grid-area: identity;
+  margin-top: 4px;
+}
+
+.identity code {
+  font-family: var(--lp-font-mono);
+}
+
+.fact {
+  grid-area: fact;
+  color: var(--lp-ink);
+}
+
+.more {
+  justify-self: start;
+  min-height: 36px;
+  margin-top: 8px;
+  padding: 0 14px;
+  border: 1px solid var(--lp-line);
+  border-radius: 8px;
+  background: var(--lp-surface);
+  color: var(--lp-ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.more:disabled {
+  color: var(--lp-muted);
+  cursor: default;
+}
+
+.emptyActions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}

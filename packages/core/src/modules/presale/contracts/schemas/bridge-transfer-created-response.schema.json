@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/presale/contracts/bridge-transfer-created-response.schema.json",
+  "title": "Bridge transfer registered",
+  "description": "POST /api/presale/bridge/transfers: 201 for a new transfer, 200 with the existing id for a repeat (CL-7).",
+  "type": "object",
+  "properties": {
+    "id": {
+      "$ref": "defs.schema.json#/$defs/id"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "additionalProperties": false
+}

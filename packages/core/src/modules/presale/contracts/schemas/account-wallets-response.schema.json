@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/presale/contracts/account-wallets-response.schema.json",
+  "title": "Linked wallets",
+  "description": "GET /api/account/wallets 200.",
+  "type": "object",
+  "properties": {
+    "wallets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "$ref": "defs.schema.json#/$defs/address"
+          },
+          "kind": {
+            "enum": [
+              "embedded",
+              "slush"
+            ]
+          },
+          "primary": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "address",
+          "kind",
+          "primary"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "wallets"
+  ],
+  "additionalProperties": false
+}

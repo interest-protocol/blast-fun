@@ -1,0 +1,84 @@
+import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import assert from "node:assert/strict";
+import test from "node:test";
+import { installRuntimeConfig } from "../../../test/fixtures/config/runtime-config.ts";
+
+// These fixtures use Node's scoped module hooks; retain their assertions in the Bun sweep.
+if (process.versions.bun) {
+  test("Node module-hook fixture", () => {
+    execFileSync(
+      "node",
+      [
+        "--no-warnings",
+        "--import",
+        new URL(
+          "../../../../../scripts/register-runtime-types.mjs",
+          import.meta.url,
+        ).href,
+        "--experimental-strip-types",
+        "--test",
+        "--test-concurrency=1",
+        fileURLToPath(import.meta.url),
+      ],
+      { stdio: "inherit" },
+    );
+  });
+} else {
+  const { registerHooks } = await import("node:module");
+  // Next's server-only marker has no Node entry.
+  registerHooks({
+    resolve(specifier, context, next) {
+      if (specifier === "server-only")
+        return { url: "data:text/javascript,export {}", shortCircuit: true };
+      return next(specifier, context);
+    },
+  });
+
+  const { GET } = await import("./route.ts");
+
+  test("health route authenticates only backend probes, coalesces reads, and returns safe uncached facts", async (t) => {
+    const origin = "https://health-fixture.blast.test";
+    const key = "health-fixture-key-01234567890123456789";
+    installRuntimeConfig({ BLAST_INFRA_ORIGIN: origin, BLAST_INFRA_API_KEY: key });
+    let backendReads = 0;
+    t.mock.method(
+      globalThis,
+      "fetch",
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = new URL(
+          input instanceof Request ? input.url : String(input),
+        );
+        if (url.origin === origin) {
+          backendReads += 1;
+          assert.equal(url.pathname, "/v1/health");
+          assert.equal(
+            new Headers(init?.headers).get("x-blast-infra-key"),
+            key,
+          );
+          assert.equal(init?.cache, "no-store");
+          assert.equal(init?.redirect, "error");
+          assert.ok(init?.signal);
+          return Response.json({
+            status: "ok",
+            detail: { secret: "private-diagnostics" },
+          });
+        }
+        assert.equal(new Headers(init?.headers).get("x-blast-infra-key"), null);
+        return new Response("Sui fixture unavailable", { status: 503 });
+      },
+    );
+    const [first, second] = await Promise.all([GET(), GET()]);
+    assert.equal(first.status, 200);
+    assert.equal(first.headers.get("cache-control"), "no-store");
+    const body = await first.json();
+    assert.deepEqual(await second.json(), body);
+    assert.equal(backendReads, 1);
+    assert.equal(body.backend, "healthy");
+    assert.equal(body.sui.status, "unavailable");
+    assert.doesNotMatch(
+      JSON.stringify(body),
+      /private-diagnostics|health-fixture|x-blast-infra-key/,
+    );
+  });
+}

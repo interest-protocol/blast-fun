@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/viewer-state-request.schema.json",
+  "title": "Social viewer-state request",
+  "description": "POST /api/social/viewer-state body. Closed; every list is optional and holds at most 50 ids. A longer list, a malformed id or an unknown key is 400 invalid_request.",
+  "type": "object",
+  "properties": {
+    "entry_ids": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "type": "string",
+        "pattern": "^[alm]:[!-~]{1,250}$"
+      }
+    },
+    "callsigns": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9_]{1,18}[a-z0-9]$"
+      }
+    },
+    "presale_ids": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "type": "string",
+        "pattern": "^0x[0-9a-f]{64}$"
+      }
+    },
+    "backers_of": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "type": "string",
+        "pattern": "^0x[0-9a-f]{64}$"
+      },
+      "description": "Presales whose followed named backers are wanted."
+    },
+    "follows_you": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9_]{1,18}[a-z0-9]$"
+      },
+      "description": "Accounts whose 'Follows you' tag is wanted."
+    },
+    "buyers_of": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "type": "string",
+        "pattern": "^0x[0-9a-f]{64}$"
+      },
+      "description": "Presales whose followed named backers are wanted."
+    }
+  },
+  "additionalProperties": false
+}

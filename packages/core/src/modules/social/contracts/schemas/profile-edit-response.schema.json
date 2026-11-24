@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/profile-edit-response.schema.json",
+  "title": "Social profile edit state",
+  "description": "GET and PUT /api/social/me/profile, PUT /api/social/me/profile/picture 200 (private, no-store): what the edit sheet shows.",
+  "type": "object",
+  "properties": {
+    "display_name": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "minLength": 1
+        }
+      ]
+    },
+    "picture": {
+      "enum": [
+        "source",
+        "upload",
+        "none"
+      ]
+    },
+    "avatar_url": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "minLength": 1
+        }
+      ]
+    },
+    "source_avatar_url": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "minLength": 1
+        }
+      ]
+    },
+    "upload_available": {
+      "type": "boolean"
+    },
+    "callsign": {
+      "type": "string"
+    },
+    "callsign_editable": {
+      "type": "boolean"
+    },
+    "bio": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160
+    }
+  },
+  "required": [
+    "display_name",
+    "picture",
+    "avatar_url",
+    "source_avatar_url",
+    "upload_available"
+  ],
+  "additionalProperties": false
+}

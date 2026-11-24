@@ -1,0 +1,54 @@
+/* The feed (FEATURE-MAP §2.1 `.feed`): a column of post cards, gap 13. Tokens from the canonical UI (tokens.md). */
+.feed { display: flex; flex-direction: column; gap: 0.8125rem; min-width: 0; }
+
+.list { display: flex; flex-direction: column; gap: 0.8125rem; margin: 0; padding: 0; list-style: none; }
+.list > li { min-width: 0; }
+/*
+ * In the browser the list is virtual (react-virtuoso, OA-28): two wrappers it
+ * writes `position: relative` on. Positioned, they sit over the sticky "new
+ * posts" pill and Chrome lifts them into a compositing layer of their own,
+ * where text loses subpixel antialiasing. Static, they paint with the page,
+ * as the plain list does; Virtuoso measures the window, not their offsets.
+ */
+.feed > [data-virtuoso-scroller], .feed > [data-virtuoso-scroller] > [data-viewport-type="window"] { position: static !important; }
+
+/* "Activity is delayed" (spec AC-042): a quiet notice card above the posts it does not remove. */
+.delayed {
+  margin: 0; padding: 0.8125rem 1.0625rem; border-radius: var(--r-sm);
+  background: var(--warn-soft); color: var(--ink-2); font-size: 0.875rem;
+}
+.delayed strong { color: var(--warn); font-weight: 600; }
+
+/* Below the list: loading more, a failure, and the end (`.empty` with padding 34 21 21). */
+.more { display: flex; flex-direction: column; align-items: center; gap: 0.5rem; text-align: center; color: var(--muted); font-size: 0.875rem; }
+.more p { margin: 0; }
+/* The next page loading: post cards in the feed's own column and gap, where the posts will land. */
+.moreSkeleton { display: flex; flex-direction: column; align-self: stretch; gap: 0.8125rem; text-align: left; }
+.more > p[role="status"] { padding: 1.3125rem; }
+.more > p[role="alert"] { padding: 1.3125rem 1.3125rem 0; color: var(--ink-2); }
+.end { align-self: stretch; padding: 2.125rem 1.3125rem 1.3125rem; }
+/* Scrolling loads the next page; for the keyboard the shared button shows when focused (clipped, it takes no space). */
+.showMore:not(:focus-visible) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+.srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* Loading the first page in the browser: three placeholder cards the size of a post, so nothing jumps. */
+.skeletons { display: flex; flex-direction: column; gap: 0.8125rem; }
+.skeleton {
+  display: grid; grid-template-columns: 2.75rem minmax(0, 1fr); column-gap: 0.8125rem; min-height: 11.8125rem;
+  padding: 1.3125rem 1.3125rem 0.8125rem; border-radius: var(--r-md); background: var(--card); box-shadow: var(--sh-1);
+}
+.skAvatar { width: max(44px, 2.75rem); height: max(44px, 2.75rem); border-radius: 62.4375rem; background: var(--chip); }
+.skLines { display: flex; flex-direction: column; gap: 0.8125rem; padding-top: 0.3125rem; }
+.skLines span { height: 0.8125rem; border-radius: 62.4375rem; background: var(--chip); animation: pulse 1.6s var(--ease-std) infinite; }
+.skLines span:nth-child(1) { width: 38%; }
+.skLines span:nth-child(2) { width: 62%; height: 1.75rem; }
+.skLines span:nth-child(3) { width: 84%; }
+@keyframes pulse { 50% { opacity: .55; } }
+
+@media (max-width: 760px) {
+  .skeleton { padding: 1.0625rem 0.9375rem 0.625rem; grid-template-columns: 2.5rem minmax(0, 1fr); column-gap: 0.6875rem; }
+  .skAvatar { width: 2.5rem; height: 2.5rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skLines span { animation: none; }
+}

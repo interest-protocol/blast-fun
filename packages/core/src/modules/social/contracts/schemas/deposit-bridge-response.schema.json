@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/deposit-bridge-response.schema.json",
+  "title": "Whether a deposit from another chain can start",
+  "description": "GET /api/social/me/deposits (OA-25): true while the CCTP bridge's latest activation record is complete for this deployment.",
+  "type": "object",
+  "properties": {
+    "available": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "available"
+  ],
+  "additionalProperties": false
+}

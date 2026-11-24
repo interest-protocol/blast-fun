@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/account-create-request.schema.json",
+  "title": "Blast Account creation",
+  "description": "POST /api/social/accounts. An empty object creates and saves a generated unique callsign and display name, with onboarding complete. Explicit callsign and optional display_name retain the existing creation behavior. A display_name without a callsign is refused.",
+  "type": "object",
+  "properties": {
+    "callsign": {
+      "type": "string"
+    },
+    "display_name": {
+      "type": "string"
+    }
+  },
+  "dependentRequired": { "display_name": ["callsign"] },
+  "additionalProperties": false
+}

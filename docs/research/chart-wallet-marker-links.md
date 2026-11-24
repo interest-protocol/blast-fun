@@ -1,0 +1,23 @@
+# Wallet links on coin chart markers
+
+Verified against Blast source on 2026-11-22.
+
+## Which wallet a marker represents
+
+The chart can carry the `actor` and original `timestampMs` already present on each activity row. The actor is the executing signer for a curve trade and the trader for a venue swap. The chart accepts those four buy and sell kinds with a wallet label. Vault claims stay outside this path. The chart receives the activity view, which can include live trades as well as loaded history. [Activity contract](../../packages/core/src/modules/launchpad-contract/activity.ts), [wallet labels](../../apps/web/src/components/launchpad/activity/wallet-labels.ts), [chart input](../../apps/web/src/components/launchpad/chart/ChartView.tsx), [activity publisher](../../apps/web/src/components/launchpad/activity/CoinActivity.tsx), [live activity merge](../../apps/web/src/components/launchpad/activity/activity-feed.ts)
+
+One visible badge can represent trades grouped first by candle and side and then by screen column and side. Carry the wallet and trade time through both stages. One distinct wallet can open directly. Offer a wallet chooser for a badge representing several distinct wallets, and use the latest represented trade for a wallet that appears more than once. The badge receives pointer and keyboard input. A dot marks the exact price point and leaves pointer input to the chart. [Marker grouping](../../apps/web/src/components/charts/wallet-markers.ts), [chart overlay](../../apps/web/src/components/charts/WalletChartMarkers.tsx), [overlay styles](../../apps/web/src/components/charts/PoolCandleChart.module.css)
+
+## Which destination to open
+
+Reuse `loadTraderProfiles` with the exact address and trade time. Its existing anonymous, rate-limited route does one bounded read, accepts up to four address and timestamp pairs, and returns `private, no-store` results. It applies the social naming rule at read time. A wallet must belong to a currently public account that had already enabled sharing and linked the wallet when the trade occurred. A currently public profile on a wallet linked after a trade therefore sends the older trade to the explorer. Private, unlinked and unresolved wallets also go to the explorer. The compact trade list looks up only the latest four confirmed trades, so missing keys in that list say nothing about the remaining chart trades. [Browser loader and polling hook](../../apps/web/src/components/launchpad/activity/trader-profiles.ts), [trade selection](../../apps/web/src/components/launchpad/activity/recent-trades.ts), [route](../../packages/server/src/modules/social/home/route.ts), [request contract](../../packages/core/src/modules/social/contracts/trader-profiles.ts), [naming rule](../../packages/core/src/modules/social/read-model/naming.ts), [route verification](../../packages/server/src/modules/social/home/trader-profiles.integration.test.ts)
+
+Use `profilePagePath(callsign)` for a public result. For a null result or lookup failure, use `explorerAccountUrl` with the viewer's explorer preference and the full address. The repository's explorer helper builds validated mainnet account URLs for SuiVision and Suiscan. [Profile path](../../packages/core/src/modules/social/contracts/profiles.ts), [explorer links](../../packages/core/src/lib/explorer.ts), [device preference](../../apps/web/src/components/blast-ui/device-prefs.ts)
+
+## Live trade cue
+
+A marked trade arriving while the chart is open can draw a single ring around its plotted dot. Match its activity position to the accepted trade cursor, then use the dot for that pool, candle and side. The ring fades in 280 ms and starts at most once every 600 ms. The mark stays fixed. Initial history and reduced motion use the same solid dots. [Accepted trade cue](../../apps/web/src/components/launchpad/chart/ChartLastTrade.tsx), [marker rendering](../../apps/web/src/components/charts/WalletChartMarkers.tsx)
+
+## Capacity
+
+Resolve the selected wallet on activation. The chart adds zero requests during page load, scrolling, range changes and idle time. Each wallet selection makes one lookup under normal conditions. The existing API gate can refresh the gate cookie and retry after a refusal. At 10,000 visible tabs and an illustrative one wallet selection per tab per five minutes, that is about 33 additional browser requests and up to 33 origin lookups per second on average before gate recovery. Burst capacity is unmeasured. [Capacity policy](../architecture/latency-and-capacity.md), [bounded profile read](../../packages/server/src/modules/social/home/trader-profiles.ts), [browser gate recovery](../../apps/web/src/lib/api-gate-client.ts)

@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/pnl-response.schema.json",
+  "type": "object",
+  "$defs": {
+    "usd": { "type": ["string", "null"], "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$" },
+    "figures": {
+      "type": "object",
+      "properties": {
+        "realized_usd": { "$ref": "#/$defs/usd" },
+        "unrealized_usd": { "$ref": "#/$defs/usd" },
+        "total_usd": { "$ref": "#/$defs/usd" }
+      },
+      "required": ["realized_usd", "unrealized_usd", "total_usd"]
+    }
+  },
+  "properties": {
+    "scope": { "const": "indexed_sale_coins" },
+    "period": { "const": "since_launch" },
+    "history_complete": { "type": "boolean" },
+    "totals": { "type": "object", "$ref": "#/$defs/figures", "unevaluatedProperties": false },
+    "assets": {
+      "type": "array",
+      "items": {
+        "allOf": [{ "$ref": "#/$defs/figures" }],
+        "type": "object",
+        "anyOf": [
+          { "properties": { "presale_id": { "type": "string" } } },
+          { "properties": { "launch_id": { "type": "string" } }, "required": ["launch_id"] }
+        ],
+        "properties": {
+          "presale_id": { "type": ["string", "null"], "pattern": "^0x[0-9a-f]{64}$" },
+          "launch_id": { "type": "string", "pattern": "^0x[0-9a-f]{64}$" },
+          "coin_type": { "type": "string" },
+          "symbol": { "type": "string" },
+          "icon_url": { "type": ["string", "null"] },
+          "tracked_balance": { "type": "string", "pattern": "^(0|[1-9][0-9]*)$" },
+          "basis_usd": { "$ref": "#/$defs/usd" }
+        },
+        "required": ["presale_id", "coin_type", "symbol", "icon_url", "tracked_balance", "basis_usd"],
+        "unevaluatedProperties": false
+      }
+    },
+    "wallet_sync": {
+      "type": "object",
+      "properties": {
+        "status": { "enum": ["ready", "syncing", "stale"] },
+        "checkpoint": { "type": ["string", "null"], "pattern": "^[0-9]+$" },
+        "as_of_ms": { "type": ["integer", "null"], "minimum": 0 }
+      },
+      "required": ["status", "checkpoint", "as_of_ms"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["scope", "period", "totals", "assets", "history_complete", "wallet_sync"],
+  "additionalProperties": false
+}

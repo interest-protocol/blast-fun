@@ -1,0 +1,682 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/feed-item.schema.json",
+  "title": "Social feed item",
+  "description": "One public feed item, as every feed, profile and item route answers it. No viewer-specific field. On-chain amounts are decimal strings in atoms, times are integer milliseconds, USD is a decimal string with two places. `kind` and `do_the_same.kind` are open strings: a client renders an unknown value generically.",
+  "type": "object",
+  "properties": {
+    "pinned": {
+      "type": "boolean",
+      "description": "Pinned by Blast in the home feed. Omitted on ordinary posts."
+    },
+    "entry_id": {
+      "type": "string",
+      "pattern": "^[alm]:",
+      "maxLength": 512,
+      "description": "a:<checkpoint>:<tx_slot>:<event_slot>:<part>, l:<presale_id>:<state> or m:<presale_id>:<kind>:<value>."
+    },
+    "kind": {
+      "$ref": "#/$defs/kind"
+    },
+    "occurred_at_ms": {
+      "$ref": "#/$defs/millis"
+    },
+    "presale": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/presale"
+        }
+      ]
+    },
+    "actor": {
+      "description": "The account for a named entry, the wallet address only for an unnamed presale post, null for lifecycle and milestone posts.",
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/accountActor"
+        },
+        {
+          "$ref": "#/$defs/addressActor"
+        }
+      ]
+    },
+    "amounts": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/amounts"
+        }
+      ]
+    },
+    "digest": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "minLength": 1
+        }
+      ]
+    },
+    "milestone_value": {
+      "description": "A milestone post's threshold; null for every other item.",
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+        }
+      ]
+    },
+    "presale_post": {
+      "type": "boolean",
+      "description": "True for lifecycle, milestone and big items."
+    },
+    "big": {
+      "type": "boolean",
+      "description": "A commit at or above big_commit_usd, or a trade at or above big_trade_usd, evaluated on each read."
+    },
+    "why": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/why"
+        }
+      ]
+    },
+    "reactions": {
+      "$ref": "#/$defs/reactions"
+    },
+    "through": {
+      "$ref": "#/$defs/through"
+    },
+    "do_the_same": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/doTheSame"
+        }
+      ]
+    },
+    "call": {
+      "type": "boolean",
+      "description": "OA-9: a named presale_commit of a presale whose coin now trades (lifecycle migrated). Its result is presale.market."
+    },
+    "backers": {
+      "description": "A lifecycle or milestone post's named backers of its presale (the naming rule applies), the largest first, at most 12; null on every other item.",
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "array",
+          "maxItems": 12,
+          "items": {
+            "$ref": "#/$defs/backer"
+          }
+        }
+      ]
+    }
+  },
+  "required": [
+    "entry_id",
+    "kind",
+    "occurred_at_ms",
+    "presale",
+    "actor",
+    "amounts",
+    "digest",
+    "milestone_value",
+    "presale_post",
+    "big",
+    "why",
+    "reactions",
+    "through",
+    "do_the_same",
+    "call",
+    "backers"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "millis": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "atoms": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)$"
+    },
+    "usd": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.[0-9]{2}$"
+    },
+    "kind": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "Open string. Known values: presale_commit, presale_claim, trade_buy, trade_sell, presale_created, presale_opened, presale_funded, presale_migrated, presale_cancelled, milestone_participants, milestone_raise, milestone_holders, launch_buy, launch_sell, boost_mint, boost_redeem.",
+      "examples": [
+        "presale_commit",
+        "presale_claim",
+        "trade_buy",
+        "trade_sell",
+        "presale_created",
+        "presale_opened",
+        "presale_funded",
+        "presale_migrated",
+        "presale_cancelled",
+        "milestone_participants",
+        "milestone_raise",
+        "milestone_holders",
+        "launch_buy",
+        "launch_sell",
+        "boost_mint",
+        "boost_redeem"
+      ]
+    },
+    "presale": {
+      "type": "object",
+      "properties": {
+        "presale_id": {
+          "type": "string",
+          "pattern": "^0x[0-9a-f]{64}$"
+        },
+        "symbol": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "icon_url": {
+          "type": "string"
+        },
+        "lifecycle": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Open string. Known values: pending, open, funded, cancelled, migrated.",
+          "examples": [
+            "pending",
+            "open",
+            "funded",
+            "cancelled",
+            "migrated"
+          ]
+        },
+        "decimals": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255,
+          "description": "The sale token's decimals: amounts.tokens divided by 10^decimals is whole tokens."
+        },
+        "venue": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Open string. Known values: cetus, bluefin.",
+          "examples": [
+            "cetus",
+            "bluefin"
+          ]
+        },
+        "start_ms": {
+          "$ref": "#/$defs/millis"
+        },
+        "end_ms": {
+          "$ref": "#/$defs/millis"
+        },
+        "raise_target": {
+          "$ref": "#/$defs/atoms",
+          "description": "Quote atoms."
+        },
+        "raised": {
+          "$ref": "#/$defs/atoms",
+          "description": "Quote atoms committed so far (total_commitments); final once the sale ended."
+        },
+        "participants": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "quote_symbol": {
+          "type": "string",
+          "minLength": 1
+        },
+        "quote_decimals": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "quote_usd": {
+          "description": "The Quote's latest USD price; null when missing or older than 120 s at the read.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/decimal"
+            }
+          ]
+        },
+        "market": {
+          "description": "Set once the presale migrated; null before.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/market"
+            }
+          ]
+        },
+        "coin_type": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Canonical sale coin type; optional for older cached responses."
+        },
+        "verified_team": {
+          "type": "boolean",
+          "description": "R3-23: Blast checked who is behind the sale (social_sale_trust); sent only when true."
+        }
+      },
+      "required": [
+        "presale_id",
+        "symbol",
+        "name",
+        "icon_url",
+        "lifecycle",
+        "decimals",
+        "venue",
+        "start_ms",
+        "end_ms",
+        "raise_target",
+        "raised",
+        "participants",
+        "quote_symbol",
+        "quote_decimals",
+        "quote_usd",
+        "market"
+      ],
+      "additionalProperties": false
+    },
+    "accountActor": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "account"
+        },
+        "callsign": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_]{1,18}[a-z0-9]$"
+        },
+        "display_name": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "minLength": 1
+            }
+          ]
+        },
+        "avatar_url": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "minLength": 1
+            }
+          ]
+        },
+        "x_handle": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "minLength": 1
+            }
+          ]
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^/@[a-z0-9][a-z0-9_]{1,18}[a-z0-9]$",
+          "description": "/@<callsign> (OA-4)."
+        },
+        "verified": {
+          "type": "boolean",
+          "description": "OA-8: the account has a linked X account."
+        }
+      },
+      "required": [
+        "type",
+        "callsign",
+        "display_name",
+        "avatar_url",
+        "x_handle",
+        "verified",
+        "path"
+      ],
+      "additionalProperties": false
+    },
+    "addressActor": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "address"
+        },
+        "address": {
+          "type": "string",
+          "pattern": "^0x[0-9a-f]{64}$"
+        },
+        "short": {
+          "type": "string",
+          "pattern": "^0x[0-9a-f]{4}\u2026[0-9a-f]{4}$"
+        }
+      },
+      "required": [
+        "type",
+        "address",
+        "short"
+      ],
+      "additionalProperties": false
+    },
+    "amounts": {
+      "type": "object",
+      "properties": {
+        "quote": {
+          "$ref": "#/$defs/atoms"
+        },
+        "quote_symbol": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "minLength": 1
+            }
+          ]
+        },
+        "quote_decimals": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 255
+            }
+          ]
+        },
+        "usd": {
+          "description": "The activity row's usd_value, priced by the indexer at the event's time; null when it stored none.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/usd"
+            }
+          ]
+        },
+        "tokens": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/atoms"
+            }
+          ]
+        },
+        "quote_refund": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/atoms"
+            }
+          ]
+        }
+      },
+      "required": [
+        "quote",
+        "quote_symbol",
+        "quote_decimals",
+        "usd",
+        "tokens",
+        "quote_refund"
+      ],
+      "additionalProperties": false
+    },
+    "why": {
+      "type": "object",
+      "properties": {
+        "why_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        }
+      },
+      "required": [
+        "why_id",
+        "text"
+      ],
+      "additionalProperties": false
+    },
+    "reactions": {
+      "type": "object",
+      "description": "Stored reactions per currently configured key, in configured order, zeros included.",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_]{0,31}$"
+      },
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "maxProperties": 8
+    },
+    "through": {
+      "type": "object",
+      "description": "Distinct accounts with a non-voided attribution to the item, and their non-null USD.",
+      "properties": {
+        "people": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "volume_usd": {
+          "$ref": "#/$defs/usd"
+        }
+      },
+      "required": [
+        "people",
+        "volume_usd"
+      ],
+      "additionalProperties": false
+    },
+    "doTheSame": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "Open string. Known values: commit, buy, long (later).",
+          "examples": [
+            "commit",
+            "buy",
+            "long"
+          ]
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "href": {
+          "description": "Null while enabled; the presale page (/presale/{id}) when disabled.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "pattern": "^/"
+            }
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "enabled",
+        "label",
+        "href"
+      ],
+      "additionalProperties": false
+    },
+    "decimal": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]{1,12})?$",
+      "description": "A non-negative decimal with at most 12 fraction digits."
+    },
+    "market": {
+      "type": "object",
+      "description": "A migrated presale's coin on the market. Prices are USD per whole sale token; a price older than 120 s at the read is null, and so is anything derived from it.",
+      "properties": {
+        "presale_price_usd": {
+          "description": "raise_target \u00f7 token_allocation in whole units, times the Quote's USD price.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/decimal"
+            }
+          ]
+        },
+        "price_usd": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/decimal"
+            }
+          ]
+        },
+        "price_as_of_ms": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/millis"
+            }
+          ]
+        },
+        "multiple": {
+          "description": "price_usd \u00f7 presale_price_usd with four places.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)\\.[0-9]{4}$"
+            }
+          ]
+        }
+      },
+      "required": [
+        "presale_price_usd",
+        "price_usd",
+        "price_as_of_ms",
+        "multiple"
+      ],
+      "additionalProperties": false
+    },
+    "backer": {
+      "type": "object",
+      "properties": {
+        "callsign": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_]{1,18}[a-z0-9]$"
+        },
+        "display_name": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "minLength": 1
+            }
+          ]
+        },
+        "avatar_url": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "minLength": 1
+            }
+          ]
+        },
+        "verified": {
+          "type": "boolean"
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^/@[a-z0-9][a-z0-9_]{1,18}[a-z0-9]$"
+        },
+        "usd": {
+          "description": "The USD of the backer's named commits to the presale; null when none was priced.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/usd"
+            }
+          ]
+        }
+      },
+      "required": [
+        "callsign",
+        "display_name",
+        "avatar_url",
+        "verified",
+        "path",
+        "usd"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

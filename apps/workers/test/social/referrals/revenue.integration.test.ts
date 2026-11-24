@@ -1,0 +1,660 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { readFile } from "node:fs/promises";
+import { Pool } from "pg";
+import { migrateDatabase } from "@blast/core/modules/database/migrations.ts";
+import {
+  autocommitReader,
+  withTransaction,
+} from "@blast/core/modules/database/transaction.ts";
+import {
+  collectReferralRevenue,
+  parseReferralAccountingProfile,
+  REFERRAL_RECEIPTS_SQL,
+} from "#workers/modules/social/referrals/collect.ts";
+import {
+  readReferralSummary,
+  readReferralInvitees,
+} from "@blast/server/modules/social/referrals/read.ts";
+import { insertNewAccount } from "@blast/server/modules/social/accounts/creation.ts";
+import { readReferralInviter } from "@blast/server/modules/social/referrals/share-read.ts";
+import {
+  urlAs,
+  FIXTURE_FINGERPRINT,
+} from "../../../../../packages/core/test/fixtures/modules/database/role-fixtures.ts";
+import {
+  presaleEvent,
+  feePayment,
+  launchEvent,
+  profile,
+  quote,
+  meme,
+  objectId,
+  start,
+} from "../../../../../packages/core/src/modules/defillama/fixtures.test.ts";
+
+const databaseUrl = process.env.MISSION_CONTROL_TEST_DATABASE_URL;
+const SUI = 1_000_000_000n;
+
+test(
+  "reserved X identity → invited wallet → confirmed fees → private exact revenue and 60% earnings",
+  { skip: !databaseUrl },
+  async (t) => {
+    assert.ok(databaseUrl);
+    const admin = new Pool({ connectionString: databaseUrl, max: 1 });
+    const web = new Pool({
+      connectionString: urlAs(databaseUrl, "blast_web"),
+      max: 1,
+    });
+    const watcher = new Pool({
+      connectionString: urlAs(databaseUrl, "blast_watcher"),
+      max: 1,
+    });
+    t.after(async () => {
+      await web.end();
+      await watcher.end();
+      await admin.end();
+    });
+    await migrateDatabase(admin);
+    const db = autocommitReader(web, "social");
+    const reservations = await admin.query(
+      "SELECT code,x_subject FROM social_referral_reservations ORDER BY code",
+    );
+    assert.equal(reservations.rows.length, 6);
+    assert.equal(
+      reservations.rows.find((r) => r.code === "cryptokaleo").x_subject,
+      "906234475604037637",
+    );
+    assert.ok(
+      await readReferralInviter(db, "irenezhao_"),
+      "pre-signup link resolves even with trailing underscore",
+    );
+    async function create(
+      callsign: string,
+      referral: string | null,
+      xSubject?: string,
+    ) {
+      return withTransaction(web, (tx) =>
+        insertNewAccount(
+          tx.forModule("social"),
+          {
+            privyDid: `did:privy:${callsign}`,
+            callsign,
+            displayName: callsign,
+            referralCallsign: referral,
+            x: xSubject
+              ? {
+                  xSubject,
+                  handle: "renamed_on_x",
+                  displayName: null,
+                  avatarUrl: null,
+                }
+              : null,
+          },
+          { findBlockedTerm: async () => null },
+        ),
+      );
+    }
+    const recruit = await create("first_follower", "cryptokaleo");
+    const impersonator = await create("fake_kaleo", null, "1111111111");
+    await admin.query(
+      "UPDATE social_accounts SET x_handle='CryptoKaleo' WHERE account_id=$1",
+      [impersonator],
+    );
+    assert.equal(
+      (
+        await admin.query(
+          "SELECT owner_account_id FROM social_referral_reservations WHERE code='cryptokaleo'",
+        )
+      ).rows[0].owner_account_id,
+      null,
+    );
+    const owner = await create(
+      "kaleo_on_blast",
+      "cryptokaleo",
+      "906234475604037637",
+    );
+    assert.equal(
+      (
+        await admin.query(
+          "SELECT owner_account_id FROM social_referral_reservations WHERE code='cryptokaleo'",
+        )
+      ).rows[0].owner_account_id,
+      owner,
+    );
+    assert.equal(
+      (await readReferralSummary(db, owner)).invited,
+      1,
+      "self referral excluded",
+    );
+    assert.equal(
+      (await readReferralSummary(db, owner)).referral_code,
+      "cryptokaleo",
+    );
+    assert.equal(
+      (await readReferralSummary(db, owner)).accounting?.as_of_ms,
+      null,
+      "no fabricated zero before ingestion",
+    );
+    await assert.rejects(create("cryptokaleo", null), /callsign is reserved/);
+    await assert.rejects(
+      admin.query(
+        "UPDATE social_accounts SET referrer_reservation_code='tradermayne' WHERE account_id=$1",
+        [recruit],
+      ),
+      /assigned only at creation/,
+    );
+    assert.equal((await readReferralSummary(db, impersonator)).invited, 0);
+    const sender = objectId("a");
+    await admin.query(
+      "UPDATE social_accounts SET created_at=to_timestamp($2/1000.0) WHERE account_id=$1",
+      [recruit, start - 1000],
+    );
+    await admin.query(
+      "INSERT INTO social_account_wallets(address,account_id,verified_at) VALUES ($1,$2,to_timestamp($3/1000.0))",
+      [sender, recruit, start - 1000],
+    );
+    await admin.query(
+      "INSERT INTO blast_infra_fixture.coin_metadata(coin_type,name,symbol,decimals) VALUES ($1,'Sui','SUI',9),($2,'Meme','MEME',9)",
+      [quote, meme],
+    );
+    const accountingProfile = parseReferralAccountingProfile({
+      network: "mainnet",
+      deployment_fingerprint: FIXTURE_FINGERPRINT,
+      launchpad_original_package: profile.launchpad_original_package,
+      presale_original_package: profile.presale_original_package,
+      core_original_package: profile.core_original_package,
+      first_checkpoint: "100",
+    });
+    const boundary = {
+      pipeline: "presale" as const,
+      checkpoint: 200,
+      timestampMs: start + 10000,
+      checkpointDigest: "referral-checkpoint-200",
+    };
+    await admin.query(
+      "UPDATE watermarks SET reader_lo=100 WHERE pipeline='intake'",
+    );
+    for (let cp = 100; cp <= 201; cp++)
+      await admin.query(
+        `INSERT INTO checkpoint_journal
+    (checkpoint,network,digest,epoch,timestamp_ms,total_transactions,format_version,payload,payload_hash)
+    VALUES ($1,'mainnet',$2,0,$3,0,1,''::bytea,decode(repeat('00',32),'hex'))`,
+        [cp, `referral-checkpoint-${cp}`, start + cp],
+      );
+    let index = 0;
+    async function receipt(
+      events: ReturnType<typeof presaleEvent>[],
+      checkpoint = 110 + index,
+      success = true,
+      wallet = sender,
+    ) {
+      const digest = `referral-receipt-${String(index++).padStart(3, "0")}`;
+      await admin.query(
+        `INSERT INTO blast_infra_fixture.transaction_evidence VALUES ($1,$2,$3,$4,$5,
+          (SELECT COALESCE(jsonb_agg(e || jsonb_build_object('bcs',encode(decode(e->>'bcs','base64'),'base64')) ORDER BY ordinal),'[]'::jsonb)
+           FROM jsonb_array_elements($6::jsonb) WITH ORDINALITY AS event(e,ordinal)))`,
+        [
+          digest,
+          checkpoint,
+          start + checkpoint,
+          wallet,
+          success,
+          JSON.stringify(
+            events.map((e) => ({
+              eventType: e.event_type,
+              bcs: Buffer.from(e.bcs).toString("base64"),
+            })),
+          ),
+        ],
+      );
+      return digest;
+    }
+    const sale = objectId("7");
+    function commit(id: string, amount = 100n * SUI) {
+      return presaleEvent("Committed", {
+        presale_id: id,
+        quote: amount,
+        wallet_commitment: amount,
+        total_commitments: amount,
+        participants: 1n,
+      });
+    }
+    function funded(id: string, accepted = 100n * SUI) {
+      return presaleEvent("PresaleFunded", {
+        presale_id: id,
+        total_commitments: 100n * SUI,
+        accepted_quote: accepted,
+        refundable_quote: 100n * SUI - accepted,
+        token_allocation: 1000n,
+        end_ms: 0n,
+        liquidity_deadline_ms: 0n,
+      });
+    }
+    function paid(id: string, amount = SUI) {
+      return feePayment("presale", {
+        origin: id,
+        quote_amount: amount,
+        partner_quote_amount: 20n * SUI,
+        meme_amount: 999999n,
+      });
+    }
+    // Events the ledger does not use must not stop it, even ones the SDK decoders reject.
+    await receipt([
+      { ...commit(sale), event_type: `${profile.presale_original_package}::events::QuoteAllowed<${quote}>` },
+      { ...commit(sale), event_type: `${profile.launchpad_original_package}::events::NotALedgerEvent<${quote}>` },
+    ]);
+    await receipt([commit(sale)]);
+    await receipt([funded(sale), paid(sale)]);
+    const collect = () =>
+      withTransaction(
+        watcher,
+        (tx) =>
+          collectReferralRevenue(
+            tx.forModule("social"),
+            boundary,
+            accountingProfile,
+          ),
+        { isolationLevel: "REPEATABLE READ" },
+      );
+    await collect();
+    const first = (await readReferralSummary(db, owner)).accounting!;
+    assert.deepEqual(first.assets, [
+      {
+        coin_type: quote,
+        symbol: "SUI",
+        decimals: 9,
+        volume_atoms: String(100n * SUI),
+        revenue_atoms: String(SUI),
+        earnings_atoms: String(600_000_000n),
+      },
+    ]);
+    assert.equal(first.as_of_ms, boundary.timestampMs);
+    await collect(); // JSONB cursor roundtrip, idempotent replay.
+    assert.deepEqual((await readReferralSummary(db, owner)).accounting, first);
+    await assert.rejects(
+      withTransaction(
+        watcher,
+        (tx) =>
+          collectReferralRevenue(tx.forModule("social"), boundary, {
+            ...accountingProfile,
+            first_checkpoint: "101",
+          }),
+        { isolationLevel: "REPEATABLE READ" },
+      ),
+      /profile changed/,
+    );
+    assert.deepEqual(
+      (await readReferralInvitees(db, owner, null)).invitees[0].accounting,
+      first,
+    );
+
+    // New receipts must appear after the published cursor. A successful overfilled sale only counts accepted principal.
+    const overflow = objectId("8"),
+      unpaid = objectId("9"),
+      cancelled = objectId("b"),
+      failed = objectId("c");
+    await receipt(
+      [
+        commit(overflow),
+        funded(overflow, 80n * SUI),
+        paid(overflow, 800_000_000n),
+      ],
+      201,
+    );
+    await receipt([commit(unpaid), funded(unpaid)], 201);
+    await receipt(
+      [
+        commit(cancelled),
+        funded(cancelled),
+        paid(cancelled),
+        presaleEvent("PresaleCancelled", {
+          presale_id: cancelled,
+          total_commitments: 100n * SUI,
+          refundable_quote: 100n * SUI,
+        }),
+      ],
+      201,
+    );
+    await receipt([commit(failed), funded(failed), paid(failed)], 201, false);
+    await receipt(
+      [commit(objectId("d")), funded(objectId("d")), paid(objectId("d"))],
+      201,
+      true,
+      objectId("f"),
+    );
+    await receipt(
+      [
+        launchEvent("LaunchTicketCreated", { ticket_id: objectId("e"), meme }),
+        launchEvent("LaunchCreated", { ticket_id: objectId("e"), quote }),
+        launchEvent("Bought", {
+          quote_in: 10n * SUI,
+          protocol_quote_fee: 100_000_000n,
+          creator_quote_fee: 50_000_000n,
+        }),
+      ],
+      201,
+    );
+    boundary.checkpoint = 201;
+    boundary.checkpointDigest = "referral-checkpoint-201";
+    boundary.timestampMs++;
+    await collect();
+    const next = (await readReferralSummary(db, owner)).accounting!;
+    assert.equal(next.assets[0].volume_atoms, String(290n * SUI)); // 100 + 80 + funded/unpaid100 + buy10
+    assert.equal(next.assets[0].revenue_atoms, "1900000000"); // 1 + .8 + .1; partner and creator fees excluded.
+    assert.equal(next.assets[0].earnings_atoms, "1140000000");
+    assert.equal(next.pending_events, 1);
+    assert.equal(
+      (await readReferralSummary(db, impersonator)).accounting?.assets.length,
+      0,
+    );
+    // Partner shares use actual claim splits, with event order inside a PTB. A later split must never rewrite an earlier one.
+    const partnerFollower = await create("partner_follower", "martypartymusic");
+    const partnerOwner = await create("marty_on_blast", null, "22506165");
+    const partnerWallet = objectId("6"),
+      partnerLaunch = objectId("0"),
+      partnerTicket = objectId("f");
+    await admin.query(
+      "UPDATE social_accounts SET created_at=to_timestamp($2/1000.0) WHERE account_id=$1",
+      [partnerFollower, start - 1000],
+    );
+    await admin.query(
+      "INSERT INTO social_account_wallets(address,account_id,verified_at) VALUES ($1,$2,to_timestamp($3/1000.0))",
+      [partnerWallet, partnerFollower, start - 1000],
+    );
+    function buy(fee: bigint) {
+      return launchEvent("Bought", {
+        launch_id: partnerLaunch,
+        quote_in: 100n * SUI,
+        protocol_quote_fee: fee,
+      });
+    }
+    function claim(net: bigint, partner: bigint) {
+      return feePayment("launch", {
+        origin: partnerLaunch,
+        quote_amount: net,
+        partner_quote_amount: partner,
+        meme_amount: 0n,
+        partner_meme_amount: 0n,
+      });
+    }
+    async function advance(cp: number) {
+      await admin.query(
+        `INSERT INTO checkpoint_journal (checkpoint,network,digest,epoch,timestamp_ms,total_transactions,format_version,payload,payload_hash)
+      VALUES ($1,'mainnet',$2,0,$3,0,1,''::bytea,decode(repeat('00',32),'hex'))`,
+        [cp, `referral-checkpoint-${cp}`, start + cp],
+      );
+      await admin.query(
+        "INSERT INTO blast_infra_fixture.checkpoint_headers(checkpoint,digest,timestamp_ms) VALUES ($1,$2,$3)",
+        [cp, `referral-checkpoint-${cp}`, start + cp],
+      );
+      boundary.checkpoint = cp;
+      boundary.checkpointDigest = `referral-checkpoint-${cp}`;
+      boundary.timestampMs = start + cp;
+    }
+    await advance(202);
+    await receipt(
+      [
+        launchEvent("LaunchTicketCreated", { ticket_id: partnerTicket, meme }),
+        launchEvent("LaunchCreated", {
+          launch_id: partnerLaunch,
+          ticket_id: partnerTicket,
+          quote,
+          partner_id: objectId("6"),
+        }),
+        buy(10n * SUI),
+        claim(8n * SUI, 2n * SUI),
+      ],
+      202,
+      true,
+      partnerWallet,
+    );
+    await collect();
+    assert.equal(
+      (await readReferralSummary(db, partnerOwner)).accounting!.assets[0]
+        .revenue_atoms,
+      String(8n * SUI),
+    );
+    await advance(203);
+    await receipt(
+      [buy(10n * SUI), claim(7n * SUI, 3n * SUI), buy(20n * SUI)],
+      203,
+      true,
+      partnerWallet,
+    );
+    await advance(204);
+    await receipt([claim(10n * SUI, 10n * SUI)], 204, true, partnerWallet);
+    await collect();
+    const partnerTotals = (await readReferralSummary(db, partnerOwner))
+      .accounting!;
+    assert.equal(partnerTotals.assets[0].revenue_atoms, String(25n * SUI));
+    assert.equal(partnerTotals.assets[0].earnings_atoms, String(15n * SUI));
+    assert.equal(partnerTotals.pending_events, 0);
+    await advance(205);
+    await receipt([buy(10n * SUI)], 205, true, partnerWallet);
+    await receipt([claim(8n * SUI, 2n * SUI)], 205, true, partnerWallet); // Cross-digest order is unavailable in the source view.
+    await advance(206);
+    await receipt([buy(10n * SUI)], 206, true, partnerWallet);
+    await advance(207);
+    await receipt([claim(7n * SUI, 3n * SUI)], 207, true, partnerWallet);
+    await collect();
+    const ambiguous = (await readReferralSummary(db, partnerOwner)).accounting!;
+    assert.equal(
+      ambiguous.assets[0].revenue_atoms,
+      String(25n * SUI),
+      "an earlier trade cannot inherit a later claim's split",
+    );
+    assert.ok(ambiguous.pending_events > 0);
+    await advance(208);
+    for (let i = 0; i < 65; i++) await receipt([paid(sale)], 208, false);
+    await collect();
+    assert.equal(
+      (await readReferralSummary(db, partnerOwner)).accounting!.as_of_ms,
+      start + 207,
+      "an incomplete page cannot publish newer amounts with an old date",
+    );
+    await collect();
+    assert.equal(
+      (await readReferralSummary(db, partnerOwner)).accounting!.as_of_ms,
+      start + 208,
+    );
+    // Sparse history is scanned window by window within one pass's time budget.
+    await advance(1208);
+    await advance(2208);
+    await advance(3000);
+    await collect();
+    assert.equal(
+      (await readReferralSummary(db, partnerOwner)).accounting!.as_of_ms,
+      start + 3000,
+    );
+
+    const migration =
+      "../../../../../packages/core/src/modules/database/migrations/0143_x_referral_revenue";
+    await admin.query(
+      await readFile(new URL(`${migration}.down.sql`, import.meta.url), "utf8"),
+    );
+    assert.equal(
+      (
+        await admin.query(
+          "SELECT 1 FROM social_worker_state WHERE name='referral-accounting'",
+        )
+      ).rowCount,
+      0,
+    );
+    await admin.query(
+      await readFile(new URL(`${migration}.up.sql`, import.meta.url), "utf8"),
+    );
+    assert.equal(
+      (await readReferralSummary(db, owner)).accounting!.as_of_ms,
+      null,
+      "a reapply starts with unpublished accounting until receipts replay",
+    );
+    // Presale-only accounting retains exact amounts without requiring market coverage.
+    await admin.query("DELETE FROM watermarks WHERE pipeline='market'");
+    const presaleOnly = parseReferralAccountingProfile({
+      ...accountingProfile,
+      launchpad_original_package: null,
+    });
+    const presaleBoundary = {
+      ...boundary,
+      checkpoint: 200,
+      checkpointDigest: "referral-checkpoint-200",
+      timestampMs: start + 200,
+    };
+    await withTransaction(
+      watcher,
+      (tx) =>
+        collectReferralRevenue(
+          tx.forModule("social"),
+          presaleBoundary,
+          presaleOnly,
+        ),
+      { isolationLevel: "REPEATABLE READ" },
+    );
+    assert.equal(
+      (await readReferralSummary(db, owner)).accounting!.as_of_ms,
+      start + 200,
+    );
+    assert.ok(
+      (
+        await admin.query(
+          "SELECT 1 FROM social_referral_events WHERE kind='presale_fee' LIMIT 1",
+        )
+      ).rowCount,
+      "presale-only profile replays collected fees after an explicit rebuild",
+    );
+    assert.equal(
+      (
+        await admin.query(
+          "SELECT 1 FROM social_referral_events WHERE kind='curve' LIMIT 1",
+        )
+      ).rowCount,
+      0,
+    );
+    const savedCursor = (
+      await admin.query(
+        "SELECT value FROM social_worker_state WHERE name='referral-accounting'",
+      )
+    ).rows[0].value;
+    const malformed = await receipt([commit(sale)], 201);
+    await admin.query(
+      "UPDATE blast_infra_fixture.transaction_evidence SET events=jsonb_set(events,'{0,bcs}',to_jsonb('!' || (events->0->>'bcs'))) WHERE digest=$1",
+      [malformed],
+    );
+    await assert.rejects(
+      withTransaction(
+        watcher,
+        (tx) =>
+          collectReferralRevenue(
+            tx.forModule("social"),
+            {
+              ...presaleBoundary,
+              checkpoint: 201,
+              checkpointDigest: "referral-checkpoint-201",
+              timestampMs: start + 201,
+            },
+            presaleOnly,
+          ),
+        { isolationLevel: "REPEATABLE READ" },
+      ),
+      /receipt is incomplete/,
+    );
+    assert.deepEqual(
+      (
+        await admin.query(
+          "SELECT value FROM social_worker_state WHERE name='referral-accounting'",
+        )
+      ).rows[0].value,
+      savedCursor,
+      "malformed base64 remains rejected without advancing the published cut",
+    );
+    await assert.rejects(
+      withTransaction(
+        watcher,
+        (tx) =>
+          collectReferralRevenue(
+            tx.forModule("social"),
+            {
+              ...boundary,
+              checkpoint: 200,
+              checkpointDigest: "referral-checkpoint-200",
+              timestampMs: start + 200,
+            },
+            accountingProfile,
+          ),
+        { isolationLevel: "REPEATABLE READ" },
+      ),
+      /profile changed/,
+    );
+
+    // #839: the evidence view encodes every Sui transaction's events, so a long
+    // catch-up range is read in short windows, each its own statement.
+    await admin.query(
+      "DELETE FROM social_worker_state WHERE name='referral-accounting'",
+    );
+    await admin.query(
+      "DELETE FROM blast_infra_fixture.transaction_evidence WHERE digest=$1",
+      [malformed],
+    );
+    await admin.query(
+      `INSERT INTO checkpoint_journal
+      (checkpoint,network,digest,epoch,timestamp_ms,total_transactions,format_version,payload,payload_hash)
+      SELECT cp,'mainnet','referral-checkpoint-'||cp,0,$1::bigint+cp,0,1,''::bytea,decode(repeat('00',32),'hex')
+      FROM generate_series(202,1300) cp ON CONFLICT DO NOTHING`,
+      [start],
+    );
+    const late = await receipt([commit(objectId("e"))], 1250);
+    const windows: [number, number][] = [];
+    const cursor = async () =>
+      (
+        await admin.query(
+          "SELECT value FROM social_worker_state WHERE name='referral-accounting'",
+        )
+      ).rows[0]?.value;
+    // Earlier receipts fill a page or two before the scan reaches the sparse range.
+    for (
+      let pass = 0;
+      pass < 5 && (await cursor())?.complete_checkpoint !== "1300";
+      pass++
+    )
+      await withTransaction(
+        watcher,
+        (tx) => {
+          const social = tx.forModule("social");
+          const spy = new Proxy(social, {
+            get(target, key, receiver) {
+              if (key !== "read") return Reflect.get(target, key, receiver);
+              return (sql: string, params?: unknown[]) => {
+                if (sql === REFERRAL_RECEIPTS_SQL)
+                  windows.push([Number(params![0]), Number(params![2])]);
+                return target.read(sql, params);
+              };
+            },
+          });
+          return collectReferralRevenue(
+            spy,
+            {
+              ...boundary,
+              checkpoint: 1300,
+              checkpointDigest: "referral-checkpoint-1300",
+              timestampMs: start + 1300,
+            },
+            accountingProfile,
+          );
+        },
+        { isolationLevel: "REPEATABLE READ" },
+      );
+    assert.ok(windows.length > 1);
+    for (const [after, through] of windows)
+      assert.ok(through - after <= 100, `scan window ${after}..${through}`);
+    assert.equal((await cursor()).complete_checkpoint, "1300");
+    assert.ok(
+      (
+        await admin.query(
+          "SELECT 1 FROM social_referral_events WHERE digest=$1",
+          [late],
+        )
+      ).rowCount,
+    );
+  },
+);

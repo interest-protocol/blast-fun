@@ -1,0 +1,21 @@
+-- Social feed R3-12 (OA-23's Feel lab, answered by OA-25 Q3/Q3a): the
+-- account's "Sound" switch, Settings -> Feel, and the same switch in the Blast
+-- mode header.
+--
+-- The live flag is per device (`blast.sound` in the browser), so the sound
+-- layer never waits on a request. The account keeps the choice here so it
+-- follows the person: a signed-in session copies it onto the device when it
+-- starts, and each toggle while signed in writes it back through
+-- `PUT /api/social/me/settings`.
+--
+-- OA-25 Q3a: sound is off for a signed-out visitor and on after the first
+-- sign-in. A visitor has no row, so the device default (off) holds; an account
+-- defaults to on until it turns the switch off. The default is a constant, so
+-- adding the column rewrites no row.
+--
+-- No grant changes: 0054's table-level grants already let the web read and
+-- update `social_accounts`, and no other role writes this column. No index:
+-- the column is only ever read and written with the account's own row, by its
+-- primary key.
+ALTER TABLE social_accounts
+  ADD COLUMN sound BOOLEAN NOT NULL DEFAULT true;

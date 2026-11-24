@@ -1,0 +1,31 @@
+import assert from 'node:assert/strict';
+import { writeFileSync } from 'node:fs';
+import { chromium } from 'playwright-core';
+const browser = await chromium.connectOverCDP(process.env.TRADING_CDP_URL), page = browser.contexts()[0].pages().find(p => p.url().includes('/trading-proof'));
+const out = process.env.TRADING_EVIDENCE_DIR;
+page.setDefaultTimeout(15000);
+const ticket = () => page.getByRole('region', { name: 'Trade', exact: true });
+const amount = () => ticket().locator('[data-panel-amount]');
+const results = [];
+try {
+ await page.reload(); await page.waitForFunction(() => !!window.tradingFixture);
+ await page.setViewportSize({ width: 1414, height: 1000 }); await page.emulateMedia({ reducedMotion: 'reduce' });
+ await page.evaluate(() => { window.tradingFixture.store.focus('A'); window.tradingFixture.state('A','ready'); });
+ await ticket().locator('[data-side="buy"]').focus(); await page.keyboard.press('q');
+ for (const init of [{repeat:true},{isComposing:true},{ctrlKey:true},{altKey:true},{metaKey:true},{shiftKey:true}]) await ticket().locator('[data-side="buy"]').evaluate((e,init) => e.dispatchEvent(new KeyboardEvent('keydown',{key:'e',code:'KeyE',bubbles:true,cancelable:true,...init})), init);
+ assert.equal(await ticket().locator('[data-side="buy"]').getAttribute('aria-pressed'),'true');
+ await page.getByRole('button',{name:'Edit layout',exact:true}).click(); await page.keyboard.press('e'); assert.equal(await ticket().locator('[data-side="buy"]').getAttribute('aria-pressed'),'true'); await page.keyboard.press('Escape');
+ await page.evaluate(() => window.tradingFixture.state('A','quote-loading')); await amount().fill('30');
+ await page.waitForFunction(() => document.querySelector('[data-panel-id="A"] [data-coin-submit]')?.disabled);
+ await page.keyboard.down('Shift'); await page.keyboard.down('Space'); await page.keyboard.down('Space'); await page.keyboard.up('Space'); await page.keyboard.up('Shift'); assert.equal(await page.getByRole('dialog').count(),0); assert.equal(await amount().inputValue(),'30','submit with a pending quote must not edit the amount');
+ await page.evaluate(() => window.tradingFixture.state('A','ready')); await page.waitForFunction(() => !document.querySelector('[data-panel-id="A"] [data-coin-submit]')?.disabled);
+ results.push('repeat, composition, modifier, layout-edit guards; pending submit preserves draft');
+ await ticket().getByRole('button',{name:'Edit amount presets'}).click();
+ await page.getByLabel('Buy preset 1',{exact:true}).fill('123.45'); await page.keyboard.press('Shift+Space'); assert.equal(await page.getByRole('dialog').count(),1); assert.equal(await page.getByLabel('Buy preset 1',{exact:true}).inputValue(),'123.45'); await page.keyboard.press('Escape');
+ const discovery=page.getByRole('region',{name:'Discover markets',exact:true}); await discovery.getByRole('button',{name:'Presales',exact:true}).click(); await discovery.getByRole('button',{name:'Open NOVA presale',exact:true}).click();
+ await page.getByRole('textbox',{name:'Commit amount',exact:true}).fill('100'); await page.waitForFunction(() => [...document.querySelectorAll('[data-presale-submit]')].some(e => e.textContent==='Commit'&&!e.disabled));
+ await page.keyboard.press('Shift+Space'); await page.getByRole('dialog',{name:'Confirm Commit',exact:true}).waitFor(); await page.keyboard.press('Shift+Space'); assert.equal(await page.getByRole('dialog',{name:'Confirm Commit',exact:true}).count(),1); await page.keyboard.press('Escape');
+ assert.equal(await page.getByRole('textbox',{name:'Commit amount',exact:true}).inputValue(),'100'); results.push('settings typing and submit suppression; presale Shift+Space opens existing commitment review');
+ await page.screenshot({path:`${out}/presale-shortcuts.png`});
+ writeFileSync(`${out}/guard-verification.json`,JSON.stringify(results,null,2)); console.log('PASS additional keyboard guards and presale confirmation');
+} catch(error) { await page.screenshot({path:`${out}/guard-failure.png`}); throw error; } finally { await browser.close(); }

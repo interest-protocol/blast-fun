@@ -1,0 +1,20 @@
+[
+  {
+    "finalityThreshold": 1000,
+    "minimumFee": 0,
+    "forwardFee": {
+      "low": 1736700,
+      "med": 1736800,
+      "high": 1736900
+    }
+  },
+  {
+    "finalityThreshold": 2000,
+    "minimumFee": 0,
+    "forwardFee": {
+      "low": 1736700,
+      "med": 1736800,
+      "high": 1736900
+    }
+  }
+]

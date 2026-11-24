@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/profile-items-page.schema.json",
+  "title": "Social profile items page",
+  "description": "GET /api/social/profiles/{callsign}/items 200: one page of the account's named items, newest first (occurred_at_ms, then entry_id, descending). Empty for a private account or one not sharing. The same for every caller; no viewer-specific field.",
+  "type": "object",
+  "properties": {
+    "items": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "$ref": "https://blast-v2.invalid/social/contracts/feed-item.schema.json"
+      }
+    },
+    "next_cursor": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "description": "Opaque. Pass back unchanged as cursor for the next page."
+        }
+      ]
+    },
+    "as_of": {
+      "$ref": "https://blast-v2.invalid/social/contracts/as-of.schema.json"
+    }
+  },
+  "required": [
+    "items",
+    "next_cursor",
+    "as_of"
+  ],
+  "additionalProperties": false
+}

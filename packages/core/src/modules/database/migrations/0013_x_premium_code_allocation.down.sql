@@ -1,0 +1,4 @@
+ALTER TABLE mission_control_invitation_allocations
+  DROP CONSTRAINT mission_control_invitation_allocation_weight_check,
+  DROP CONSTRAINT mission_control_invitation_allocations_policy_version_check,
+  DROP COLUMN x_premium_verified;

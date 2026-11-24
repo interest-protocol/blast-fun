@@ -1,0 +1,1723 @@
+{
+ "shapes": [
+  {
+   "kind": "array-filter-join",
+   "before": "[\n    $0,\n    $1 ? $2 : $3,\n    $5 ? \"\" : $4,\n    $7 ? $6 : \"\",\n    $9 ? $8 : \"\",\n    $11 ? $10 : \"\",\n    $13 ? $12 : \"\",\n    $15 ? $14 : \"\",\n  ]\n    .filter(Boolean)\n    .join(\" \")",
+   "after": "clsx($0, $1 ? $2 : $3, !$5 && $4, $7 && $6, $9 && $8, $11 && $10, $13 && $12, $15 && $14)",
+   "roles": [
+    "class",
+    "cond",
+    "class",
+    "class",
+    "class",
+    "cond",
+    "class",
+    "cond",
+    "class",
+    "cond",
+    "class",
+    "cond",
+    "class",
+    "cond",
+    "class",
+    "cond"
+   ]
+  },
+  {
+   "kind": "array-filter-join",
+   "before": "[$0, $1 ? $2 : $3, $4]\n    .filter(Boolean)\n    .join(\" \")",
+   "after": "clsx($0, $1 ? $2 : $3, $4)",
+   "roles": [
+    "class",
+    "cond",
+    "class",
+    "class",
+    "string"
+   ]
+  },
+  {
+   "kind": "array-filter-join",
+   "before": "[$0, $1, $2].filter(Boolean).join(\" \")",
+   "after": "clsx($0, $1, $2)",
+   "roles": [
+    "class",
+    "string",
+    "string"
+   ]
+  },
+  {
+   "kind": "array-filter-join",
+   "before": "[$0, $1, $3 ? $2 : \"\"].filter(Boolean).join(\" \")",
+   "after": "clsx($0, $1, $3 && $2)",
+   "roles": [
+    "class",
+    "class",
+    "class",
+    "cond"
+   ]
+  },
+  {
+   "kind": "array-filter-join",
+   "before": "[$0, $1].filter(Boolean).join(\" \")",
+   "after": "clsx($0, $1)",
+   "roles": [
+    "string",
+    "string"
+   ]
+  },
+  {
+   "kind": "array-filter-join",
+   "before": "[$0, $1].filter(Boolean).join(\" \")",
+   "after": "clsx($0, $1)",
+   "roles": [
+    "class",
+    "string"
+   ]
+  },
+  {
+   "kind": "array-filter-join",
+   "before": "[$0, $2 ? $1 : \"\", $4 ? $3 : \"\", $5 ?? \"\"].filter(Boolean).join(\" \")",
+   "after": "clsx($0, $2 && $1, $4 && $3, $5)",
+   "roles": [
+    "class",
+    "class",
+    "cond",
+    "class",
+    "cond",
+    "opt"
+   ]
+  },
+  {
+   "kind": "array-filter-join",
+   "before": "[$0, $2 ? $1 : \"\"].filter(Boolean).join(\" \")",
+   "after": "clsx($0, $2 && $1)",
+   "roles": [
+    "class",
+    "class",
+    "cond"
+   ]
+  },
+  {
+   "kind": "array-filter-join",
+   "before": "[$0, $2 ? $1 : null].filter(Boolean).join(\" \")",
+   "after": "clsx($0, $2 && $1)",
+   "roles": [
+    "class",
+    "class",
+    "cond"
+   ]
+  },
+  {
+   "kind": "array-join",
+   "before": "[$0, $1 ? $2 : $3].join(\" \")",
+   "after": "clsx($0, $1 ? $2 : $3)",
+   "roles": [
+    "class",
+    "cond",
+    "class",
+    "class"
+   ]
+  },
+  {
+   "kind": "array-join",
+   "before": "[$0, $1, $3 ? $2 : \"\"].join(\" \")",
+   "after": "clsx($0, $1, $3 && $2)",
+   "roles": [
+    "class",
+    "class",
+    "class",
+    "cond"
+   ]
+  },
+  {
+   "kind": "conditional",
+   "before": "$0 === undefined ? \"seg sm\" : `seg sm ${$0}`",
+   "after": "clsx(\"seg sm\", $0)",
+   "roles": [
+    "opt"
+   ]
+  },
+  {
+   "kind": "conditional",
+   "before": "$1 ? `${$0} ${$1}` : $0",
+   "after": "clsx($0, $1)",
+   "roles": [
+    "class",
+    "opt"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`${$0} ${$1 ? $2 : $3}`",
+   "after": "clsx($0, $1 ? $2 : $3)",
+   "roles": [
+    "class",
+    "cond",
+    "class",
+    "string"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`${$0} ${$1 ? $2 : $3}`",
+   "after": "clsx($0, $1 ? $2 : $3)",
+   "roles": [
+    "class",
+    "cond",
+    "class",
+    "class"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`${$0} ${$1 ? $2 : $3}`",
+   "after": "clsx($0, $1 ? $2 : $3)",
+   "roles": [
+    "class",
+    "cond",
+    "string",
+    "string"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`${$0} ${$1} ${$2}`",
+   "after": "clsx($0, $1, $2)",
+   "roles": [
+    "string",
+    "string",
+    "string"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`${$0} ${$1} ${$2}`",
+   "after": "clsx($0, $1, $2)",
+   "roles": [
+    "class",
+    "class",
+    "class"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`${$0} ${$1} mk-${$2}`",
+   "after": "clsx($0, $1, `mk-${$2}`)",
+   "roles": [
+    "class",
+    "class",
+    "string"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`${$0} ${$1} num`",
+   "after": "clsx($0, $1, \"num\")",
+   "roles": [
+    "class",
+    "class"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`${$0} ${$1}`",
+   "after": "clsx($0, $1)",
+   "roles": [
+    "class",
+    "class"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`${$0} ${$1}`",
+   "after": "clsx($0, $1)",
+   "roles": [
+    "string",
+    "class"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`${$0} ${$2 ? $1 : \"\"}`",
+   "after": "clsx($0, $2 && $1)",
+   "roles": [
+    "class",
+    "class",
+    "cond"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`${$0} inline-amt`",
+   "after": "clsx($0, \"inline-amt\")",
+   "roles": [
+    "class"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`${$0} mk-${$1}`",
+   "after": "clsx($0, `mk-${$1}`)",
+   "roles": [
+    "class",
+    "string"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`${$0} num ${$1}`",
+   "after": "clsx($0, \"num\", $1)",
+   "roles": [
+    "class",
+    "class"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`${$0} num`",
+   "after": "clsx($0, \"num\")",
+   "roles": [
+    "class"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`${$1} ${$2}${$0 === undefined ? \"\" : ` ${$0}`}`",
+   "after": "clsx($1, $2, $0)",
+   "roles": [
+    "opt",
+    "class",
+    "class"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`${$1}${$0 === undefined ? \"\" : ` ${$0}`}`",
+   "after": "clsx($1, $0)",
+   "roles": [
+    "opt",
+    "class"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`${$2}${$1 ? \"\" : ` ${$0}`}`",
+   "after": "clsx($2, !$1 && $0)",
+   "roles": [
+    "class",
+    "cond",
+    "class"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`${$2}${$1 ? ` ${$0}` : \"\"}`",
+   "after": "clsx($2, $1 && $0)",
+   "roles": [
+    "class",
+    "cond",
+    "class"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`${$4}${$1 ? ` ${$0}` : \"\"}${$3 ? ` ${$2}` : \"\"}`",
+   "after": "clsx($4, $1 && $0, $3 && $2)",
+   "roles": [
+    "class",
+    "cond",
+    "class",
+    "cond",
+    "class"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`av s${$0}`",
+   "after": "clsx(\"av\", `s${$0}`)",
+   "roles": [
+    "string"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`av s34 ${$0}`",
+   "after": "clsx(\"av s34\", $0)",
+   "roles": [
+    "class"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`btn ${$0 ? $1 : $2} btn-sm ${$3}`",
+   "after": "clsx(\"btn\", $0 ? $1 : $2, \"btn-sm\", $3)",
+   "roles": [
+    "cond",
+    "string",
+    "string",
+    "class"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`btn ${$0} btn-lg btn-block`",
+   "after": "clsx(\"btn\", $0, \"btn-lg btn-block\")",
+   "roles": [
+    "string"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`btn ${$0}`",
+   "after": "clsx(\"btn\", $0)",
+   "roles": [
+    "string"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`btn ${$3 ? $4 : $5} btn-sm${$1 ? \"\" : ` ${$0}`}${$2 ? ` ${$2}` : \"\"}`",
+   "after": "clsx(\"btn\", $3 ? $4 : $5, \"btn-sm\", !$1 && $0, $2)",
+   "roles": [
+    "class",
+    "cond",
+    "string",
+    "cond",
+    "string",
+    "string"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`btn btn-ink ${$0}`",
+   "after": "clsx(\"btn btn-ink\", $0)",
+   "roles": [
+    "class"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`btn btn-line ${$0}`",
+   "after": "clsx(\"btn btn-line\", $0)",
+   "roles": [
+    "class"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`btn btn-line btn-sm ${$0}`",
+   "after": "clsx(\"btn btn-line btn-sm\", $0)",
+   "roles": [
+    "class"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`btn btn-primary ${$0}`",
+   "after": "clsx(\"btn btn-primary\", $0)",
+   "roles": [
+    "class"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`btn btn-primary btn-lg ${$2}${$1 ? ` ${$0}` : \"\"}`",
+   "after": "clsx(\"btn btn-primary btn-lg\", $2, $1 && $0)",
+   "roles": [
+    "class",
+    "cond",
+    "class"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`btn btn-primary btn-sm ${$0}`",
+   "after": "clsx(\"btn btn-primary btn-sm\", $0)",
+   "roles": [
+    "class"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`btn btn-primary btn-sm ${$1}${$0 ? ` ${$0}` : \"\"}`",
+   "after": "clsx(\"btn btn-primary btn-sm\", $1, $0)",
+   "roles": [
+    "string",
+    "class"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`btn btn-primary btn-sm${$0 ? ` ${$0}` : \"\"}`",
+   "after": "clsx(\"btn btn-primary btn-sm\", $0)",
+   "roles": [
+    "string"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`btn btn-quiet btn-sm ${$0}`",
+   "after": "clsx(\"btn btn-quiet btn-sm\", $0)",
+   "roles": [
+    "class"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`btn btn-quiet btn-sm ${$2}${$1 ? ` ${$0}` : \"\"}`",
+   "after": "clsx(\"btn btn-quiet btn-sm\", $2, $1 && $0)",
+   "roles": [
+    "class",
+    "cond",
+    "class"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`btn btn-sm ${$0} ${$1}`",
+   "after": "clsx(\"btn btn-sm\", $0, $1)",
+   "roles": [
+    "class",
+    "class"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`btn btn-soft btn-sm ${$0}`",
+   "after": "clsx(\"btn btn-soft btn-sm\", $0)",
+   "roles": [
+    "class"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`card ${$0} ${$1} ${$2}`",
+   "after": "clsx(\"card\", $0, $1, $2)",
+   "roles": [
+    "class",
+    "class",
+    "class"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`card ${$0} ${$1}`",
+   "after": "clsx(\"card\", $0, $1)",
+   "roles": [
+    "class",
+    "class"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`card ${$0}`",
+   "after": "clsx(\"card\", $0)",
+   "roles": [
+    "class"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`card empty ${$0}`",
+   "after": "clsx(\"card empty\", $0)",
+   "roles": [
+    "class"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`empty ${$0}`",
+   "after": "clsx(\"empty\", $0)",
+   "roles": [
+    "class"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`icon-btn ${$0}`",
+   "after": "clsx(\"icon-btn\", $0)",
+   "roles": [
+    "class"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`icon-btn ${$2}${$1 ? ` ${$0}` : \"\"}`",
+   "after": "clsx(\"icon-btn\", $2, $1 && $0)",
+   "roles": [
+    "class",
+    "cond",
+    "class"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`mono ${$0}`",
+   "after": "clsx(\"mono\", $0)",
+   "roles": [
+    "class"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`num ${$0} ${$1}`",
+   "after": "clsx(\"num\", $0, $1)",
+   "roles": [
+    "class",
+    "class"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`num ${$0}`",
+   "after": "clsx(\"num\", $0)",
+   "roles": [
+    "class"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`num ${$0}`",
+   "after": "clsx(\"num\", $0)",
+   "roles": [
+    "string"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`num ${$1 ? \"\" : $0}`",
+   "after": "clsx(\"num\", !$1 && $0)",
+   "roles": [
+    "string",
+    "cond"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`num ${$2}${$1 ? ` ${$0}` : \"\"}`",
+   "after": "clsx(\"num\", $2, $1 && $0)",
+   "roles": [
+    "class",
+    "cond",
+    "class"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`num ${$2}${$1 ? ` ${$0}` : \"\"}`",
+   "after": "clsx(\"num\", $2, $1 && $0)",
+   "roles": [
+    "string",
+    "cond",
+    "class"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`num${$0 === undefined ? \"\" : ` ${$0}`}`",
+   "after": "clsx(\"num\", $0)",
+   "roles": [
+    "opt"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`num${$1 ? \"\" : ` ${$0}`}`",
+   "after": "clsx(\"num\", !$1 && $0)",
+   "roles": [
+    "string",
+    "cond"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`num${$1 ? ` ${$0}` : \"\"}`",
+   "after": "clsx(\"num\", $1 && $0)",
+   "roles": [
+    "class",
+    "cond"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`seg sm ${$0}`",
+   "after": "clsx(\"seg sm\", $0)",
+   "roles": [
+    "class"
+   ]
+  },
+  {
+   "kind": "template",
+   "before": "`wico ${$0}`",
+   "after": "clsx(\"wico\", $0)",
+   "roles": [
+    "class"
+   ]
+  }
+ ],
+ "cx": [
+  {
+   "args": "\"backbar\"",
+   "roles": []
+  },
+  {
+   "args": "\"badge ok\"",
+   "roles": []
+  },
+  {
+   "args": "\"badge warn\"",
+   "roles": []
+  },
+  {
+   "args": "\"banner-art\"",
+   "roles": []
+  },
+  {
+   "args": "\"banner-cover\"",
+   "roles": []
+  },
+  {
+   "args": "\"banner-edit\"",
+   "roles": []
+  },
+  {
+   "args": "\"banner\", $0 && \"banner-img\"",
+   "roles": [
+    "cond"
+   ]
+  },
+  {
+   "args": "\"bar sstrip-bar\"",
+   "roles": []
+  },
+  {
+   "args": "\"bar\", $0 && \"sm\", $1",
+   "roles": [
+    "cond",
+    "maybe"
+   ]
+  },
+  {
+   "args": "\"bfilters\"",
+   "roles": []
+  },
+  {
+   "args": "\"bk\"",
+   "roles": []
+  },
+  {
+   "args": "\"bs\"",
+   "roles": []
+  },
+  {
+   "args": "\"btn btn-ink follow\"",
+   "roles": []
+  },
+  {
+   "args": "\"btn btn-ink follow\", $0 && \"on\"",
+   "roles": [
+    "cond"
+   ]
+  },
+  {
+   "args": "\"btn btn-line\"",
+   "roles": []
+  },
+  {
+   "args": "\"btn btn-primary btn-lg btn-block notify-btn\", $0 && \"on\"",
+   "roles": [
+    "cond"
+   ]
+  },
+  {
+   "args": "\"btn btn-primary btn-lg btn-block\"",
+   "roles": []
+  },
+  {
+   "args": "\"btn btn-primary btn-sm\"",
+   "roles": []
+  },
+  {
+   "args": "\"btn btn-primary notify-btn\", $0 && \"on\"",
+   "roles": [
+    "cond"
+   ]
+  },
+  {
+   "args": "\"btn btn-primary\"",
+   "roles": []
+  },
+  {
+   "args": "\"btn btn-primary\", $0 && \"btn-lg btn-block\"",
+   "roles": [
+    "cond"
+   ]
+  },
+  {
+   "args": "\"btn btn-quiet btn-sm bk-more\"",
+   "roles": []
+  },
+  {
+   "args": "\"btn btn-quiet btn-sm cr-file\"",
+   "roles": []
+  },
+  {
+   "args": "\"btn btn-quiet btn-sm\"",
+   "roles": []
+  },
+  {
+   "args": "\"btn btn-quiet\"",
+   "roles": []
+  },
+  {
+   "args": "\"btn btn-sm notify-btn\", $0 && \"on\"",
+   "roles": [
+    "cond"
+   ]
+  },
+  {
+   "args": "\"btn btn-soft btn-block more\"",
+   "roles": []
+  },
+  {
+   "args": "\"btn btn-soft btn-sm btn-block\"",
+   "roles": []
+  },
+  {
+   "args": "\"cal-day\"",
+   "roles": []
+  },
+  {
+   "args": "\"cal-t\"",
+   "roles": []
+  },
+  {
+   "args": "\"cal-time num\"",
+   "roles": []
+  },
+  {
+   "args": "\"cap num\"",
+   "roles": []
+  },
+  {
+   "args": "\"card cal-item\"",
+   "roles": []
+  },
+  {
+   "args": "\"card cr-prev\"",
+   "roles": []
+  },
+  {
+   "args": "\"card empty cr-state\"",
+   "roles": []
+  },
+  {
+   "args": "\"card err err-page\"",
+   "roles": []
+  },
+  {
+   "args": "\"card err\"",
+   "roles": []
+  },
+  {
+   "args": "\"card friends\", $0 && \"sale-sec only-narrow\"",
+   "roles": [
+    "cond"
+   ]
+  },
+  {
+   "args": "\"card hero2\"",
+   "roles": []
+  },
+  {
+   "args": "\"card list-card\"",
+   "roles": []
+  },
+  {
+   "args": "\"card row-skel\"",
+   "roles": []
+  },
+  {
+   "args": "\"card sale-sec tg-card\"",
+   "roles": []
+  },
+  {
+   "args": "\"card sale-sec tg-card\", $0 && \"tg-wide\"",
+   "roles": [
+    "cond"
+   ]
+  },
+  {
+   "args": "\"card sale-sec\"",
+   "roles": []
+  },
+  {
+   "args": "\"card side-box\"",
+   "roles": []
+  },
+  {
+   "args": "\"card srow2\"",
+   "roles": []
+  },
+  {
+   "args": "\"cd-big num\"",
+   "roles": []
+  },
+  {
+   "args": "\"chartBox\"",
+   "roles": []
+  },
+  {
+   "args": "\"chartBox\", $0",
+   "roles": [
+    "string"
+   ]
+  },
+  {
+   "args": "\"chev\"",
+   "roles": []
+  },
+  {
+   "args": "\"claim-spin\"",
+   "roles": []
+  },
+  {
+   "args": "\"cm-dot\"",
+   "roles": []
+  },
+  {
+   "args": "\"cm-ring\"",
+   "roles": []
+  },
+  {
+   "args": "\"cm-why\"",
+   "roles": []
+  },
+  {
+   "args": "\"cm\"",
+   "roles": []
+  },
+  {
+   "args": "\"col\"",
+   "roles": []
+  },
+  {
+   "args": "\"conc\"",
+   "roles": []
+  },
+  {
+   "args": "\"cr-add\"",
+   "roles": []
+  },
+  {
+   "args": "\"cr-bar-row\"",
+   "roles": []
+  },
+  {
+   "args": "\"cr-calc\"",
+   "roles": []
+  },
+  {
+   "args": "\"cr-checks\"",
+   "roles": []
+  },
+  {
+   "args": "\"cr-cover-thumb\"",
+   "roles": []
+  },
+  {
+   "args": "\"cr-cta\"",
+   "roles": []
+  },
+  {
+   "args": "\"cr-ctl\"",
+   "roles": []
+  },
+  {
+   "args": "\"cr-dup\"",
+   "roles": []
+  },
+  {
+   "args": "\"cr-err\"",
+   "roles": []
+  },
+  {
+   "args": "\"cr-errs\"",
+   "roles": []
+  },
+  {
+   "args": "\"cr-field cr-name\"",
+   "roles": []
+  },
+  {
+   "args": "\"cr-field cr-sym\"",
+   "roles": []
+  },
+  {
+   "args": "\"cr-field cr-tag\"",
+   "roles": []
+  },
+  {
+   "args": "\"cr-fine\"",
+   "roles": []
+  },
+  {
+   "args": "\"cr-ident\"",
+   "roles": []
+  },
+  {
+   "args": "\"cr-in\", $0, $1, $2 && \"bad\"",
+   "roles": [
+    "string",
+    "maybe",
+    "cond"
+   ]
+  },
+  {
+   "args": "\"cr-l\"",
+   "roles": []
+  },
+  {
+   "args": "\"cr-line\", $0 && \"locked\"",
+   "roles": [
+    "cond"
+   ]
+  },
+  {
+   "args": "\"cr-lock\"",
+   "roles": []
+  },
+  {
+   "args": "\"cr-logo-btn\"",
+   "roles": []
+  },
+  {
+   "args": "\"cr-logo-img\"",
+   "roles": []
+  },
+  {
+   "args": "\"cr-logo\"",
+   "roles": []
+  },
+  {
+   "args": "\"cr-me\"",
+   "roles": []
+  },
+  {
+   "args": "\"cr-pv-banner\"",
+   "roles": []
+  },
+  {
+   "args": "\"cr-pv-big\"",
+   "roles": []
+  },
+  {
+   "args": "\"cr-pv-body\"",
+   "roles": []
+  },
+  {
+   "args": "\"cr-pv-top\"",
+   "roles": []
+  },
+  {
+   "args": "\"cr-qmark\", $0 && \"s34\", $1 && \"sui\"",
+   "roles": [
+    "cond",
+    "cond"
+   ]
+  },
+  {
+   "args": "\"cr-qsheet\"",
+   "roles": []
+  },
+  {
+   "args": "\"cr-quote\"",
+   "roles": []
+  },
+  {
+   "args": "\"cr-rec\"",
+   "roles": []
+  },
+  {
+   "args": "\"cr-recs\"",
+   "roles": []
+  },
+  {
+   "args": "\"cr-row cr-link\"",
+   "roles": []
+  },
+  {
+   "args": "\"cr-row\"",
+   "roles": []
+  },
+  {
+   "args": "\"cr-row\", $0",
+   "roles": [
+    "maybe"
+   ]
+  },
+  {
+   "args": "\"cr-rv-link\"",
+   "roles": []
+  },
+  {
+   "args": "\"cr-rv\"",
+   "roles": []
+  },
+  {
+   "args": "\"cr-sel\"",
+   "roles": []
+  },
+  {
+   "args": "\"cr-sheet\"",
+   "roles": []
+  },
+  {
+   "args": "\"cr-soon\"",
+   "roles": []
+  },
+  {
+   "args": "\"cr-sub\"",
+   "roles": []
+  },
+  {
+   "args": "\"cr-total bad\"",
+   "roles": []
+  },
+  {
+   "args": "\"cr-total ok\"",
+   "roles": []
+  },
+  {
+   "args": "\"cr-vest-t\"",
+   "roles": []
+  },
+  {
+   "args": "\"cr-vest\"",
+   "roles": []
+  },
+  {
+   "args": "\"cr-vsum\"",
+   "roles": []
+  },
+  {
+   "args": "\"cr-warn\"",
+   "roles": []
+  },
+  {
+   "args": "\"cr-x-sp\"",
+   "roles": []
+  },
+  {
+   "args": "\"cr\"",
+   "roles": []
+  },
+  {
+   "args": "\"dot\"",
+   "roles": []
+  },
+  {
+   "args": "\"facts compact\"",
+   "roles": []
+  },
+  {
+   "args": "\"flash\"",
+   "roles": []
+  },
+  {
+   "args": "\"fr-amt num\"",
+   "roles": []
+  },
+  {
+   "args": "\"fr-list act-list\"",
+   "roles": []
+  },
+  {
+   "args": "\"fr-list\"",
+   "roles": []
+  },
+  {
+   "args": "\"fr-row\"",
+   "roles": []
+  },
+  {
+   "args": "\"fr-top\"",
+   "roles": []
+  },
+  {
+   "args": "\"fr-why\"",
+   "roles": []
+  },
+  {
+   "args": "\"ftag\"",
+   "roles": []
+  },
+  {
+   "args": "\"h2-act\"",
+   "roles": []
+  },
+  {
+   "args": "\"h2-body\"",
+   "roles": []
+  },
+  {
+   "args": "\"h2-id\"",
+   "roles": []
+  },
+  {
+   "args": "\"ic\"",
+   "roles": []
+  },
+  {
+   "args": "\"icon-btn cr-x\"",
+   "roles": []
+  },
+  {
+   "args": "\"icon-btn star\", $0 && \"on\"",
+   "roles": [
+    "cond"
+   ]
+  },
+  {
+   "args": "\"icon-btn\", $0",
+   "roles": [
+    "string"
+   ]
+  },
+  {
+   "args": "\"know\"",
+   "roles": []
+  },
+  {
+   "args": "\"kv tg-foot\"",
+   "roles": []
+  },
+  {
+   "args": "\"kv\"",
+   "roles": []
+  },
+  {
+   "args": "\"l-hover\"",
+   "roles": []
+  },
+  {
+   "args": "\"l-off\"",
+   "roles": []
+  },
+  {
+   "args": "\"l-on\"",
+   "roles": []
+  },
+  {
+   "args": "\"lc-h\"",
+   "roles": []
+  },
+  {
+   "args": "\"links\"",
+   "roles": []
+  },
+  {
+   "args": "\"lrow\"",
+   "roles": []
+  },
+  {
+   "args": "\"m-commitbar cr-bar\"",
+   "roles": []
+  },
+  {
+   "args": "\"m-commitbar onSale\"",
+   "roles": []
+  },
+  {
+   "args": "\"mhead\"",
+   "roles": []
+  },
+  {
+   "args": "\"mini-pile\"",
+   "roles": []
+  },
+  {
+   "args": "\"mk-fallback\"",
+   "roles": []
+  },
+  {
+   "args": "\"mk\", $0",
+   "roles": [
+    "maybe"
+   ]
+  },
+  {
+   "args": "\"mk\", $0",
+   "roles": [
+    "string"
+   ]
+  },
+  {
+   "args": "\"mk\", $0, \"cr-mk-empty\"",
+   "roles": [
+    "string"
+   ]
+  },
+  {
+   "args": "\"mtiles\"",
+   "roles": []
+  },
+  {
+   "args": "\"mult\", $0 ? \"up\" : \"down\"",
+   "roles": [
+    "cond"
+   ]
+  },
+  {
+   "args": "\"muted\"",
+   "roles": []
+  },
+  {
+   "args": "\"num muted\"",
+   "roles": []
+  },
+  {
+   "args": "\"num r muted\"",
+   "roles": []
+  },
+  {
+   "args": "\"num r\"",
+   "roles": []
+  },
+  {
+   "args": "\"num\"",
+   "roles": []
+  },
+  {
+   "args": "\"overlays\"",
+   "roles": []
+  },
+  {
+   "args": "\"ovl\", $0 && \"on\"",
+   "roles": [
+    "cond"
+   ]
+  },
+  {
+   "args": "\"ph-hide\"",
+   "roles": []
+  },
+  {
+   "args": "\"phead cr-head\"",
+   "roles": []
+  },
+  {
+   "args": "\"plain flush\"",
+   "roles": []
+  },
+  {
+   "args": "\"plain side-note\"",
+   "roles": []
+  },
+  {
+   "args": "\"plain\"",
+   "roles": []
+  },
+  {
+   "args": "\"pre\"",
+   "roles": []
+  },
+  {
+   "args": "\"ptools\"",
+   "roles": []
+  },
+  {
+   "args": "\"qp-check\"",
+   "roles": []
+  },
+  {
+   "args": "\"qp-foot\"",
+   "roles": []
+  },
+  {
+   "args": "\"qp-group\"",
+   "roles": []
+  },
+  {
+   "args": "\"qp-row\"",
+   "roles": []
+  },
+  {
+   "args": "\"r\"",
+   "roles": []
+  },
+  {
+   "args": "\"rc-lbl\"",
+   "roles": []
+  },
+  {
+   "args": "\"rc-line\"",
+   "roles": []
+  },
+  {
+   "args": "\"rc-now\"",
+   "roles": []
+  },
+  {
+   "args": "\"rc-target\"",
+   "roles": []
+  },
+  {
+   "args": "\"rchart\"",
+   "roles": []
+  },
+  {
+   "args": "\"rows2\"",
+   "roles": []
+  },
+  {
+   "args": "\"sale-tag\"",
+   "roles": []
+  },
+  {
+   "args": "\"sbox\"",
+   "roles": []
+  },
+  {
+   "args": "\"sec-title\"",
+   "roles": []
+  },
+  {
+   "args": "\"seg sm cr-seg\"",
+   "roles": []
+  },
+  {
+   "args": "\"seg\", $0 && \"sm\", $1",
+   "roles": [
+    "cond",
+    "maybe"
+   ]
+  },
+  {
+   "args": "\"sgroup cr-g\"",
+   "roles": []
+  },
+  {
+   "args": "\"sheet-link\"",
+   "roles": []
+  },
+  {
+   "args": "\"side-h\"",
+   "roles": []
+  },
+  {
+   "args": "\"side-note-muted\"",
+   "roles": []
+  },
+  {
+   "args": "\"side-note-refusal\"",
+   "roles": []
+  },
+  {
+   "args": "\"side-pos\"",
+   "roles": []
+  },
+  {
+   "args": "\"since\"",
+   "roles": []
+  },
+  {
+   "args": "\"sl\"",
+   "roles": []
+  },
+  {
+   "args": "\"snote\"",
+   "roles": []
+  },
+  {
+   "args": "\"sort\", $0 && \"on\"",
+   "roles": [
+    "cond"
+   ]
+  },
+  {
+   "args": "\"sorts\"",
+   "roles": []
+  },
+  {
+   "args": "\"spark\"",
+   "roles": []
+  },
+  {
+   "args": "\"split-bar\"",
+   "roles": []
+  },
+  {
+   "args": "\"split-legend\"",
+   "roles": []
+  },
+  {
+   "args": "\"split\"",
+   "roles": []
+  },
+  {
+   "args": "\"sr-back num\"",
+   "roles": []
+  },
+  {
+   "args": "\"sr-f\"",
+   "roles": []
+  },
+  {
+   "args": "\"sr-fill\"",
+   "roles": []
+  },
+  {
+   "args": "\"sr-name\"",
+   "roles": []
+  },
+  {
+   "args": "\"sr-when\"",
+   "roles": []
+  },
+  {
+   "args": "\"sstrip\"",
+   "roles": []
+  },
+  {
+   "args": "\"st on\"",
+   "roles": []
+  },
+  {
+   "args": "\"st-bar\"",
+   "roles": []
+  },
+  {
+   "args": "\"st-dot\"",
+   "roles": []
+  },
+  {
+   "args": "\"st-l\"",
+   "roles": []
+  },
+  {
+   "args": "\"st-s\"",
+   "roles": []
+  },
+  {
+   "args": "\"st-txt\"",
+   "roles": []
+  },
+  {
+   "args": "\"status funded\"",
+   "roles": []
+  },
+  {
+   "args": "\"stepper cancelled\"",
+   "roles": []
+  },
+  {
+   "args": "\"stepper\"",
+   "roles": []
+  },
+  {
+   "args": "\"suf\"",
+   "roles": []
+  },
+  {
+   "args": "\"switch\"",
+   "roles": []
+  },
+  {
+   "args": "\"t\"",
+   "roles": []
+  },
+  {
+   "args": "\"tabBody\"",
+   "roles": []
+  },
+  {
+   "args": "\"tbl-note\"",
+   "roles": []
+  },
+  {
+   "args": "\"tbl-wrap\"",
+   "roles": []
+  },
+  {
+   "args": "\"tbl\"",
+   "roles": []
+  },
+  {
+   "args": "\"terms-grid\"",
+   "roles": []
+  },
+  {
+   "args": "\"terms\"",
+   "roles": []
+  },
+  {
+   "args": "\"th-amt num\"",
+   "roles": []
+  },
+  {
+   "args": "\"th-h\"",
+   "roles": []
+  },
+  {
+   "args": "\"th-r\"",
+   "roles": []
+  },
+  {
+   "args": "\"th\"",
+   "roles": []
+  },
+  {
+   "args": "\"theses\"",
+   "roles": []
+  },
+  {
+   "args": "\"thesis\"",
+   "roles": []
+  },
+  {
+   "args": "\"timer\"",
+   "roles": []
+  },
+  {
+   "args": "\"trust\"",
+   "roles": []
+  },
+  {
+   "args": "\"two\"",
+   "roles": []
+  },
+  {
+   "args": "\"v\"",
+   "roles": []
+  },
+  {
+   "args": "\"verb\"",
+   "roles": []
+  },
+  {
+   "args": "\"vest-viz\"",
+   "roles": []
+  },
+  {
+   "args": "\"vz-axis\"",
+   "roles": []
+  },
+  {
+   "args": "\"vz-cliff\"",
+   "roles": []
+  },
+  {
+   "args": "\"vz-ramp vz-linear\"",
+   "roles": []
+  },
+  {
+   "args": "\"vz-ramp\"",
+   "roles": []
+  },
+  {
+   "args": "\"vz-track\"",
+   "roles": []
+  },
+  {
+   "args": "\"wav\"",
+   "roles": []
+  },
+  {
+   "args": "\"when\"",
+   "roles": []
+  },
+  {
+   "args": "`av s${$0}`",
+   "roles": [
+    "string"
+   ]
+  },
+  {
+   "args": "`status ${$0}`",
+   "roles": [
+    "string"
+   ]
+  },
+  {
+   "args": "$0",
+   "roles": [
+    "string"
+   ]
+  },
+  {
+   "args": "$0 ? \"done\" : $1 ? \"now\" : \"\"",
+   "roles": [
+    "cond",
+    "cond"
+   ]
+  },
+  {
+   "args": "$0 ? \"ok\" : \"todo\"",
+   "roles": [
+    "cond"
+   ]
+  },
+  {
+   "args": "$0 ? \"todo\" : \"ok\"",
+   "roles": [
+    "cond"
+   ]
+  },
+  {
+   "args": "$0 ? \"up\" : \"down\"",
+   "roles": [
+    "cond"
+   ]
+  },
+  {
+   "args": "$0 && \"createPage\"",
+   "roles": [
+    "cond"
+   ]
+  },
+  {
+   "args": "$0, $1",
+   "roles": [
+    "string",
+    "string"
+   ]
+  },
+  {
+   "args": "$0, $1 && $2",
+   "roles": [
+    "string",
+    "cond",
+    "string"
+   ]
+  },
+  {
+   "args": "$0, $1 && $2, $3 && $4, $5 && $6, `mk-${$7}`",
+   "roles": [
+    "string",
+    "cond",
+    "string",
+    "cond",
+    "string",
+    "cond",
+    "string",
+    "string"
+   ]
+  },
+  {
+   "args": "$0, $1 && $2, $3 && $4, $5 && $6, $7 && $8, `mk-${$9}`",
+   "roles": [
+    "string",
+    "cond",
+    "string",
+    "cond",
+    "string",
+    "cond",
+    "string",
+    "cond",
+    "string",
+    "string"
+   ]
+  }
+ ]
+}

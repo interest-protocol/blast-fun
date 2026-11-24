@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/presale-viewer-request.schema.json",
+  "title": "Presale viewer request",
+  "description": "POST /api/social/presales/viewer: the presale ids on screen, a tab for the 'Backed by people you follow' filter, or mine for 'Your presales'.",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "presale_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 50,
+          "items": {
+            "type": "string",
+            "pattern": "^0x[0-9a-f]{64}$"
+          }
+        }
+      },
+      "required": [
+        "presale_ids"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "status": {
+          "enum": [
+            "live",
+            "upcoming",
+            "ended"
+          ]
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "mine": {
+          "const": true
+        }
+      },
+      "required": [
+        "mine"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

@@ -1,0 +1,173 @@
+/* Layout for the development transaction harness only. */
+.page {
+  display: grid;
+  gap: 24px;
+}
+
+.title {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 32px;
+}
+
+.note {
+  margin: 0;
+  color: var(--lp-muted);
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+  gap: 32px;
+  align-items: start;
+}
+
+.panel {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.heading {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 24px;
+}
+
+.subheading {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.stack {
+  display: grid;
+  gap: 12px;
+}
+
+.controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 13rem), 1fr));
+  gap: 12px 16px;
+}
+
+.control {
+  display: grid;
+  gap: 4px;
+}
+
+.controlLabel {
+  color: var(--lp-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.input,
+.select {
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--lp-line);
+  border-radius: var(--lp-radius);
+  background: var(--lp-surface);
+  color: var(--lp-ink);
+  font: inherit;
+}
+
+.indicative {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.button,
+.primary {
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--lp-line);
+  border-radius: var(--lp-radius);
+  background: var(--lp-surface);
+  color: var(--lp-ink);
+  font-family: var(--lp-font);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.primary {
+  border-color: var(--lp-accent);
+  background: var(--lp-accent);
+  color: var(--lp-accent-ink);
+  font-weight: 600;
+}
+
+.status {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-radius: var(--lp-radius);
+  background: var(--lp-raised);
+}
+
+.status p {
+  margin: 0;
+}
+
+.phase {
+  color: var(--lp-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.caution {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.details {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--lp-muted);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.facts {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.factRow {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 16px;
+}
+
+.factRow dt {
+  color: var(--lp-muted);
+}
+
+.factRow dd {
+  margin: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.code {
+  font-family: var(--lp-font-mono);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}

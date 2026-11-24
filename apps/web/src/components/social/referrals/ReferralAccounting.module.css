@@ -1,0 +1,39 @@
+.accounting {
+  min-width: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+  gap: 0.75rem 1rem;
+  margin: 0;
+}
+.metrics > div {
+  min-width: 0;
+}
+.metrics dt,
+.note {
+  color: var(--muted);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+.metrics dd {
+  margin: 0.25rem 0 0;
+  font-size: 1rem;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+.note {
+  margin: 0;
+}
+.invitee {
+  grid-column: 1 / -1;
+  min-width: 0;
+  width: 100%;
+  padding-top: 0.75rem;
+}
+
+@media (max-width: 760px) {
+  .invitee { padding-top: 0; }
+}

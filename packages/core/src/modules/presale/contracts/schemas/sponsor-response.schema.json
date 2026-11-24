@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/presale/contracts/sponsor-response.schema.json",
+  "title": "Sponsor response",
+  "description": "POST /api/presale/sponsor 200; sponsor_signature is empty (CA-7), gas_budget is MIST.",
+  "type": "object",
+  "properties": {
+    "reservation_id": {
+      "$ref": "defs.schema.json#/$defs/id"
+    },
+    "transaction_bytes": {
+      "$ref": "defs.schema.json#/$defs/base64"
+    },
+    "sponsor_signature": {
+      "const": ""
+    },
+    "expires_at_ms": {
+      "$ref": "defs.schema.json#/$defs/timestamp_ms"
+    },
+    "gas_budget": {
+      "$ref": "defs.schema.json#/$defs/uint"
+    }
+  },
+  "required": [
+    "reservation_id",
+    "transaction_bytes",
+    "sponsor_signature",
+    "expires_at_ms",
+    "gas_budget"
+  ],
+  "additionalProperties": false
+}

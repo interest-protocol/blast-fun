@@ -1,0 +1,76 @@
+/*
+ * The coin page's fees section, the overview's last group. Hierarchy is type
+ * and space, as in the overview: the group title, each ledger's heading and
+ * note, then its facts and table under their labels. Colors come from the
+ * launchpad theme tokens. Whole-pixel geometry only.
+ */
+
+/* The heading sits over its content as the overview's group titles do; the ledgers stand apart. */
+.fees {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.body {
+  display: grid;
+  gap: 24px;
+  min-width: 0;
+}
+
+.ledger {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+/* The overview's group title. */
+.heading {
+  margin: 0;
+  color: var(--lp-ink);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.subheading {
+  margin: 0;
+  color: var(--lp-ink);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+/* Facts under the label naming them. */
+.labeled {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* The overview's subhead. */
+.subhead {
+  margin: 0;
+  color: var(--lp-muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+}
+
+.note {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--lp-muted);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.mono {
+  font-family: var(--lp-font-mono);
+  font-size: 12px;
+}
+
+/* The shared Button owns the control; the section only places it. */
+.refresh {
+  justify-self: start;
+}

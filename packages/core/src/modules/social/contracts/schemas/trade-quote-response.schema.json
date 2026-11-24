@@ -1,0 +1,319 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/trade-quote-response.schema.json",
+  "title": "A trade quote",
+  "description": "POST /api/social/trades/quote 200 (private, no-store): the Cetus aggregator's route and its numbers in atoms (a sale coin's price impact from a second dry run of that route at a reference size, OA-29); quote_id only when the route was dry-run from the caller's own Blast wallet (R3-31 executes it within 20 s); unavailable_reason with no numbers when there is no quote.",
+  "type": "object",
+  "properties": {
+    "balance_failure": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "reason",
+        "coin_type",
+        "required_atoms",
+        "available_atoms"
+      ],
+      "properties": {
+        "reason": {
+          "enum": [
+            "input",
+            "gas"
+          ]
+        },
+        "coin_type": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 512
+        },
+        "required_atoms": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]{0,19})$"
+        },
+        "available_atoms": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]{0,19})$"
+        }
+      }
+    },
+    "quote_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^q1\\.[A-Za-z0-9_-]{16,2997}$"
+    },
+    "expires_at_ms": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "quoted_at_ms": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "side": {
+      "enum": [
+        "buy",
+        "sell"
+      ]
+    },
+    "in_coin": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 512,
+      "pattern": "^0x[0-9a-f]{64}::[A-Za-z_][A-Za-z0-9_]{0,127}::[A-Za-z_][A-Za-z0-9_]{0,127}(<.+>)?$"
+    },
+    "out_coin": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 512,
+      "pattern": "^0x[0-9a-f]{64}::[A-Za-z_][A-Za-z0-9_]{0,127}::[A-Za-z_][A-Za-z0-9_]{0,127}(<.+>)?$"
+    },
+    "amount_in": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^(0|[1-9][0-9]{0,19})$"
+    },
+    "amount_out": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^(0|[1-9][0-9]{0,19})$"
+    },
+    "min_out": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^(0|[1-9][0-9]{0,19})$"
+    },
+    "slippage_bps": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 500
+    },
+    "price_impact_bps": {
+      "description": "The aggregator's deviation from its market price net of the route's fees; where it has none (a Blast sale coin), for a dry-run quote, 1 - (amount_out/amount_in) / (reference out/reference in) from a second dry run of the same route at a reference size (OA-29), rounded half up. Otherwise null: price_impact_unavailable says why, or the quote is unavailable.",
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 10000
+    },
+    "price_impact_unavailable": {
+      "description": "Why price_impact_bps is null (OA-29): no_dry_run (the quote was not dry-run, so there is no reference run), too_small (a reference above rounding would be more than a tenth of the trade), reference_failed (the reference dry run did not execute or an output could not be read). Null when the impact is set and when the quote is unavailable.",
+      "enum": [
+        "no_dry_run",
+        "too_small",
+        "reference_failed",
+        null
+      ]
+    },
+    "fee_bps": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 10000
+    },
+    "fee_amount": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^(0|[1-9][0-9]{0,19})$"
+    },
+    "blast_fee_bps": {
+      "description": "Blast's app fee in basis points of the swap's output (BLAST_TRADE_FEE_BPS), taken from the output coin inside the swap; amount_out and min_out are net of it. 0 when Blast charges none; null only with unavailable_reason.",
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1000
+    },
+    "blast_fee_amount": {
+      "description": "Blast's fee in atoms of out_coin at the quoted fill; null only with unavailable_reason.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^(0|[1-9][0-9]{0,19})$"
+    },
+    "route": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "properties": {
+          "pool_id": {
+            "type": "string",
+            "pattern": "^0x[0-9a-f]{64}$"
+          },
+          "venue": {
+            "type": "string",
+            "pattern": "^[a-z0-9_]{1,32}$"
+          },
+          "in_coin": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 512,
+            "pattern": "^0x[0-9a-f]{64}::[A-Za-z_][A-Za-z0-9_]{0,127}::[A-Za-z_][A-Za-z0-9_]{0,127}(<.+>)?$"
+          },
+          "out_coin": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 512,
+            "pattern": "^0x[0-9a-f]{64}::[A-Za-z_][A-Za-z0-9_]{0,127}::[A-Za-z_][A-Za-z0-9_]{0,127}(<.+>)?$"
+          },
+          "amount_in": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]{0,19})$"
+          },
+          "amount_out": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]{0,19})$"
+          }
+        },
+        "required": [
+          "pool_id",
+          "venue",
+          "in_coin",
+          "out_coin",
+          "amount_in",
+          "amount_out"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "route_label": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "maxLength": 300
+    },
+    "price_per_out": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+    },
+    "amount_in_usd": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^(0|[1-9][0-9]*)\\.[0-9]{2}$"
+    },
+    "amount_out_usd": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^(0|[1-9][0-9]*)\\.[0-9]{2}$"
+    },
+    "network_fee": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "payer": {
+              "enum": [
+                "blast",
+                "wallet"
+              ]
+            },
+            "label": {
+              "enum": [
+                "Paid by Blast",
+                "Paid from your SUI"
+              ]
+            },
+            "estimate_mist": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^(0|[1-9][0-9]{0,19})$"
+            }
+          },
+          "required": [
+            "payer",
+            "label",
+            "estimate_mist"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "dry_run": {
+      "enum": [
+        "passed",
+        "not_run"
+      ]
+    },
+    "offer_refused": {
+      "enum": [
+        "sign_in",
+        "account_required",
+        "blast_wallet_missing",
+        "insufficient_balance",
+        null
+      ]
+    },
+    "unavailable_reason": {
+      "enum": [
+        "not_tradable",
+        "no_pool",
+        "pool_unavailable",
+        "dry_run_failed",
+        null
+      ]
+    }
+  },
+  "required": [
+    "quote_id",
+    "expires_at_ms",
+    "quoted_at_ms",
+    "side",
+    "in_coin",
+    "out_coin",
+    "amount_in",
+    "amount_out",
+    "min_out",
+    "slippage_bps",
+    "price_impact_bps",
+    "price_impact_unavailable",
+    "fee_bps",
+    "fee_amount",
+    "blast_fee_bps",
+    "blast_fee_amount",
+    "route",
+    "route_label",
+    "price_per_out",
+    "amount_in_usd",
+    "amount_out_usd",
+    "network_fee",
+    "dry_run",
+    "offer_refused",
+    "unavailable_reason"
+  ],
+  "additionalProperties": false
+}

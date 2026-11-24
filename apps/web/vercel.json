@@ -1,0 +1,49 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "git": {
+    "deploymentEnabled": {
+      "codex/partner-architecture-audit": false,
+      "codex/interaction-consistency": false,
+      "codex/mobile-layout-pass": false,
+      "develop": false,
+      "main": false,
+      "codex/blast-mode-dev-compose": false,
+      "codex/blast-mode-dev-release-20261021": false
+    }
+  },
+  "buildCommand": "npm run test:partner-live && npm run build && npm run check:partner-live -- --built",
+  "installCommand": "cd ../.. && npx --yes --ignore-scripts --package npm@12.0.2 npm ci --ignore-scripts --no-audit --no-fund",
+  "regions": ["iad1"],
+  "crons": [
+    {
+      "path": "/api/mission-control/maintenance/cleanup",
+      "schedule": "17 * * * *"
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/api/og",
+      "destination": "/social-card.png"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/api/og",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    },
+    {
+      "source": "/social-card.png",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    }
+  ]
+}

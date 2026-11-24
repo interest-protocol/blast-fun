@@ -1,0 +1,4 @@
+DROP TABLE IF EXISTS mission_control_launchpad_search_documents;
+DROP TABLE IF EXISTS mission_control_launchpad_thesis_moderation;
+DROP TABLE IF EXISTS mission_control_launchpad_theses;
+DROP TABLE IF EXISTS mission_control_launchpad_social_authors;

@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/presale/contracts/presale-list.schema.json",
+  "title": "Presale list",
+  "description": "GET /v1/presales: presale summaries.",
+  "type": "object",
+  "properties": {
+    "presales": {
+      "type": "array",
+      "items": {
+        "$ref": "defs.schema.json#/$defs/presale_summary"
+      }
+    },
+    "next_cursor": {
+      "anyOf": [
+        {
+          "$ref": "defs.schema.json#/$defs/page_cursor"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "freshness": {
+      "$ref": "defs.schema.json#/$defs/freshness"
+    }
+  },
+  "required": [
+    "presales",
+    "next_cursor",
+    "freshness"
+  ],
+  "additionalProperties": false
+}

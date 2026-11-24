@@ -1,0 +1,224 @@
+.more {
+  position: relative;
+}
+.disclosure { composes:theme from "./WorkspaceTheme.module.css";
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.5rem);
+  z-index: 10;
+  width: min(26.25rem, calc(100vw - 2rem));
+  display: grid;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-0.25rem);
+  border-radius: var(--r-sm);
+  background: var(--card);
+  box-shadow: var(--sh-pop);
+  /* It drops in from just above, never unfolding its height. */
+  transition:
+    opacity var(--t2) var(--ease-std),
+    transform var(--t2) var(--ease-std),
+    visibility var(--t2);
+}
+.disclosure[data-open="true"] {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+}
+.clip {
+  min-height: 0;
+  overflow: hidden;
+}
+.history {
+  padding: 1rem;
+  max-height: min(35rem, 65dvh);
+  overflow: auto;
+}
+.history h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.125rem;
+}
+.history p {
+  margin: 0 0 0.75rem;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+.list {
+  display: grid;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0 0 0.75rem;
+  padding: 0;
+}
+.list li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem;
+  background: var(--bg);
+  border-radius: var(--r-sm);
+}
+.identity {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 0.8125rem;
+}
+.identity span {
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+.coinType {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  white-space: nowrap;
+}
+/* The shortened coin type never splits at its ellipsis. */
+.identity :global(.num) {
+  white-space: nowrap;
+}
+.pages {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.8125rem;
+}
+@media (prefers-reduced-motion: reduce) {
+  .disclosure {
+    transition: opacity var(--t1) var(--ease-std);
+  }
+}
+
+.ordering {
+  display: flex;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+.ordering [data-panel-drag-handle] {
+  cursor: grab;
+}
+.announcement {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+@media (pointer: coarse) {
+  .ordering button,
+  .history button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+@media (max-width:1099px) {
+  .more {
+    position: static;
+  }
+  .disclosure {
+    position: fixed;
+    inset: 5rem 1rem auto;
+    width: auto;
+  }
+  .history {
+    max-height: min(35rem, calc(100dvh - 6rem));
+  }
+}
+/* Portalled controls remain inside the viewport, independently of card scrolling. */
+.panelMenu { composes:theme from "./WorkspaceTheme.module.css"; min-width:11.875rem; max-width:calc(100vw - 1rem); padding:0.375rem; border-radius:var(--r-sm); background:var(--card); color:var(--ink); box-shadow:var(--sh-pop); font:0.8125rem/1.4 var(--font); }
+.menuItem { display:flex; align-items:center; min-height:2.25rem; padding:0.5rem 0.75rem; border-radius:var(--r-button); cursor:pointer; }
+.menuItem[data-highlighted] { background:var(--raised); }
+@media (hover:hover) and (pointer:fine) { .menuItem:hover { background:var(--raised); } }
+.menuItem[data-disabled] { color:var(--muted); opacity:.5; cursor:default; }
+.menuItem:focus-visible { outline:0.125rem solid var(--focus-color,var(--ink)); outline-offset:-0.125rem; }
+.menuLabel { padding:0.375rem 0.75rem; font-size:0.6875rem; color:var(--muted); }
+.ordering { background:transparent; border-radius:var(--r-button); }
+.ordering svg { width:1rem; height:1rem; }
+.ordering [data-panel-drag-handle]:active { cursor:grabbing; }
+@media (pointer:coarse) { .menuItem { min-height:44px; } }
+
+/* The real tile follows the pointer; siblings move into the projected slots. */
+.sortable[data-panel-sorting="true"] {
+  transform: translate3d(var(--panel-sort-x, 0px), var(--panel-sort-y, 0px), 0);
+  transition: transform 160ms var(--ease);
+  will-change: transform;
+}
+.sortable[data-panel-dragging="true"] {
+  z-index: 20;
+  transition: none;
+}
+.ordering [data-panel-drag-handle] { touch-action: none; }
+@media (prefers-reduced-motion: reduce) {
+  .sortable[data-panel-sorting="true"] { transition: none; }
+}
+
+/* Card header controls: one options menu, a pointer-only grip, and an explicit collapse while expanded. */
+.iconButton { display:inline-flex; align-items:center; justify-content:center; flex:none; width:2rem; height:2rem; padding:0; border:0; border-radius:var(--r-button); background:transparent; color:var(--muted); cursor:pointer; }
+.iconButton svg { width:1.125rem; height:1.125rem; }
+@media (hover:hover) and (pointer:fine) { .iconButton:hover { background:var(--workspace-inset); color:var(--ink); } }
+.iconButton:focus-visible { outline:0.125rem solid var(--workspace-focus); outline-offset:1px; }
+.grip { position:absolute; top:50%; left:-0.875rem; z-index:1; display:inline-flex; align-items:center; justify-content:center; width:0.875rem; height:1.75rem; margin-top:-0.875rem; padding:0; border:0; border-radius:var(--r-inner); background:transparent; color:var(--muted); cursor:grab; opacity:0; touch-action:none; transition:opacity var(--t1) ease-out; }
+.grip svg { width:0.875rem; height:0.875rem; }
+.grip:active { cursor:grabbing; }
+.grip:disabled { display:none; }
+.grip:focus-visible { opacity:1; outline:0.125rem solid var(--workspace-focus); outline-offset:1px; }
+@media (hover:hover) and (pointer:fine) { .sortable:hover .grip { opacity:1; } }
+@media (pointer:coarse) { .grip { display:none; } .iconButton { width:44px; height:44px; } }
+@media (prefers-reduced-motion:reduce) { .grip { transition:none; } }
+.menuItem { gap:0.5625rem; }
+.menuItem svg { width:1rem; height:1rem; flex:none; color:var(--muted); }
+.menuItem[data-destructive] { color:var(--down); }
+.menuItem[data-destructive] svg { color:currentColor; }
+.menuSeparator { height:1px; margin:0.25rem 0.375rem; background:var(--hair); }
+
+/* Saved panels: their marks and a count, opening the existing saved-panel list. */
+.savedTrigger { display:inline-flex; align-items:center; gap:0.4375rem; height:2.5rem; padding:0 0.5rem 0 0.625rem; border:0; border-radius:var(--r-button); background:transparent; box-shadow:inset 0 0 0 1px var(--hair-2); color:var(--ink-2); font:inherit; font-size:0.8125rem; font-weight:600; white-space:nowrap; cursor:pointer; }
+.savedTrigger[aria-expanded="true"] { background:var(--card); box-shadow:inset 0 0 0 1.5px var(--ink); color:var(--ink); }
+.savedMarks { display:inline-flex; }
+.savedMarks > * { box-shadow:0 0 0 0.125rem var(--bg); border-radius:var(--r-inner); overflow:hidden; }
+.savedMarks > * + * { margin-left:-0.375rem; }
+.savedCount { display:inline-grid; place-items:center; min-width:1.25rem; height:1.25rem; padding:0 0.375rem; border-radius:62.4375rem; background:var(--chip); color:var(--ink-2); font-size:0.7188rem; font-variant-numeric:tabular-nums; }
+@media (hover:hover) and (pointer:fine) { .savedTrigger:hover { box-shadow:inset 0 0 0 1px var(--muted); } }
+.savedTrigger:focus-visible { outline:0.125rem solid var(--workspace-focus); outline-offset:0.125rem; }
+@media (pointer:coarse) { .savedTrigger { min-height:44px; } }
+.list li > [aria-hidden="true"]:first-child { flex:none; border-radius:var(--r-inner); overflow:hidden; }
+
+.iconButton,.savedTrigger { transition:transform 140ms var(--ease-std),background var(--t1) ease-out,color var(--t1) ease-out,box-shadow var(--t1) ease-out; }
+@media (prefers-reduced-motion:reduce) { .iconButton,.savedTrigger { transition:none; } }
+@media (pointer:fine) { .iconButton,.grip,.savedTrigger { min-width:0; min-height:0; } }
+.savedMarks > * > :is(svg,img),.list li > [aria-hidden="true"]:first-child > :is(svg,img) { width:100%; height:100%; }
+
+/* Scale pass. */
+.iconButton { width:1.75rem; height:1.75rem; border-radius:var(--r-button); }
+.iconButton svg { width:1rem; height:1rem; }
+.savedTrigger { height:2rem; gap:0.375rem; padding:0 0.375rem 0 0.5rem; font-size:0.7813rem; }
+.savedCount { min-width:1.125rem; height:1.125rem; font-size:0.6875rem; }
+@media (pointer:coarse) { .iconButton { width:44px; height:44px; } .savedTrigger { min-height:44px; } }
+
+/* The shared positioner clamps the popup to both viewport axes. */
+.savedLayer { z-index:80; }
+.savedLayer .disclosure { position:relative; inset:auto; width:min(26.25rem,calc(100vw - 2rem)); opacity:1; visibility:visible; transform:none; }
+.savedLayer .disclosure:is([data-starting-style],[data-ending-style]) { opacity:0; transform:translateY(-0.25rem); }
+:global(html[data-blast-input="keyboard"]) .savedLayer .disclosure { transition:none; }
+.savedLayer .history { max-height:min(35rem,var(--available-height)); }
+@media (prefers-reduced-motion:reduce) { .savedLayer .disclosure { transition:opacity var(--t1) var(--ease-std); } }
+
+/* Saved in the board header: 18px marks overlapping by 4px, "Saved", the count chip and the chevron. */
+.savedTrigger { gap:0.4375rem; box-shadow:none; color:var(--ink); font-size:0.8125rem; font-weight:600; }
+.savedMarks > * { width:1.125rem; height:1.125rem; border-radius:0.375rem; }
+.savedMarks > * + * { margin-left:-0.25rem; }
+.savedCount { min-width:1.125rem; height:1.125rem; padding:0 0.3125rem; border-radius:0.375rem; background:var(--control-hover); color:var(--muted); font-size:0.6875rem; font-variant-numeric:tabular-nums; }
+
+/* A narrow header (audit 01, 05): Saved is its marks and count, never a wrapped word. */
+.savedWord { white-space:nowrap; }
+@container blast-header (max-width:72rem) { .savedWord { display:none; } }
+@media (max-width:1099px) { .savedWord { display:none; } }

@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/bridge-withdraw-response.schema.json",
+  "title": "A withdrawal to another chain",
+  "description": "POST /api/social/me/bridge-withdrawals (201 built or refused, 200 a replay) and POST /api/social/me/bridge-withdrawals/{withdrawal_id}/settle (200): the withdrawal, the bytes its Blast wallet signs while built, and how far it got: burned on Sui, delivered on the destination by Circle, or failed (private, no-store).",
+  "type": "object",
+  "properties": {
+    "withdrawal_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "status": { "enum": ["built", "burned", "delivered", "failed"] },
+    "destination": { "enum": ["base", "arbitrum", "ethereum", "solana"] },
+    "recipient": { "type": "string", "pattern": "^(0x[0-9a-f]{40}|[1-9A-HJ-NP-Za-km-z]{32,44})$" },
+    "amount": { "type": "string", "pattern": "^[1-9][0-9]{0,19}$" },
+    "max_fee": { "type": "string", "pattern": "^(0|[1-9][0-9]{0,19})$" },
+    "receive": { "type": "string", "pattern": "^[1-9][0-9]{0,19}$" },
+    "network_fee": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "properties": {
+            "payer": { "enum": ["blast", "wallet"] },
+            "label": { "enum": ["Paid by Blast", "Paid from your SUI"] }
+          },
+          "required": ["payer", "label"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "reservation_id": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "transaction_bytes": { "type": ["string", "null"], "pattern": "^[A-Za-z0-9+/]+={0,2}$" },
+    "digest": { "type": ["string", "null"], "pattern": "^[1-9A-HJ-NP-Za-km-z]{32,44}$" },
+    "expires_at_ms": { "type": ["integer", "null"], "minimum": 0 },
+    "failure_code": {
+      "enum": ["insufficient_balance", "dry_run_failed", "sponsor_refused", "execution_failed", "mismatch", "expired", null]
+    },
+    "destination_tx_hash": {
+      "type": ["string", "null"],
+      "pattern": "^(0x[0-9a-f]{64}|[1-9A-HJ-NP-Za-km-z]{64,88})$"
+    },
+    "created_at_ms": { "type": "integer", "minimum": 0 },
+    "burned_at_ms": { "type": ["integer", "null"], "minimum": 0 },
+    "delivered_at_ms": { "type": ["integer", "null"], "minimum": 0 }
+  },
+  "required": [
+    "withdrawal_id",
+    "status",
+    "destination",
+    "recipient",
+    "amount",
+    "max_fee",
+    "receive",
+    "network_fee",
+    "reservation_id",
+    "transaction_bytes",
+    "digest",
+    "expires_at_ms",
+    "failure_code",
+    "destination_tx_hash",
+    "created_at_ms",
+    "burned_at_ms",
+    "delivered_at_ms"
+  ],
+  "additionalProperties": false
+}

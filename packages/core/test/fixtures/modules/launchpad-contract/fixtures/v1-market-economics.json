@@ -1,0 +1,2583 @@
+{
+ "description": "blast-infra /v1 summaries and trades with the inputs of their derived values. 'docs/api.md' cases are the published contract's examples; 'engine' cases are the answers of blast-infra lst/T-003-1@0de1de7 over its curve checkpoint fixture (tests/fixtures/curve, checkpoints 0-124), captured from GET /v1/pools and each pool's /trades by scripts/capture-v1-economics.ts. Recomputed through the canonical SDK by sdk-contract.test.ts.",
+ "provenance": {
+  "network": "localnet",
+  "deployment_fingerprint": "5d2f2a4be1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c",
+  "checkpoint": 124,
+  "timestamp_ms": 1790294757750,
+  "observed_ms": 1790806178916,
+  "lag_ms": 511421166
+ },
+ "cases": [
+  {
+   "source": "docs/api.md pools.pools[0]",
+   "venue": "blast_curve",
+   "price": "0.002528735632183908045977011494252873",
+   "market_cap": "2528730574712",
+   "inputs": {
+    "virtual_quote": "1500000000000",
+    "meme_reserve": "696000000000000",
+    "quote_reserve": "260000000000",
+    "graduation_target": "3000000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "2000000000",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   },
+   "supply": "999998000000000"
+  },
+  {
+   "source": "docs/api.md trades.trades[0]",
+   "venue": "blast_curve",
+   "price": "0.002528735632183908045977011494252873",
+   "market_cap": "2528730574712",
+   "inputs": {
+    "virtual_quote": "1500000000000",
+    "meme_reserve": "696000000000000",
+    "quote_reserve": "260000000000",
+    "graduation_target": "3000000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "2000000000",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "docs/api.md trades.trades[1]",
+   "venue": "blast_curve",
+   "price": "0.002192643005357142149702253200127779",
+   "market_cap": "2192643005357",
+   "inputs": {
+    "virtual_quote": "1500000000000",
+    "meme_reserve": "692007315505907",
+    "quote_reserve": "17325000000",
+    "graduation_target": "3000000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "docs/api.md trades.trades[0]",
+   "venue": "cetus",
+   "price": "0.015630001360689527819538611160823546",
+   "market_cap": "13285501156586",
+   "inputs": {
+    "virtual_quote": null,
+    "meme_reserve": null,
+    "quote_reserve": null,
+    "graduation_target": null,
+    "sqrt_price_x64": "147550340000000000000",
+    "meme_is_coin_a": false,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "150000000000000",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "docs/api.md ws_pool_created.pool",
+   "venue": "cetus",
+   "price": "0.015625",
+   "market_cap": "13281250000000",
+   "inputs": {
+    "virtual_quote": null,
+    "meme_reserve": null,
+    "quote_reserve": null,
+    "graduation_target": null,
+    "sqrt_price_x64": "147573952589676412928",
+    "meme_is_coin_a": false,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "150000000000000",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   },
+   "supply": "850000000000000"
+  },
+  {
+   "source": "docs/api.md ws_lifecycle.summary",
+   "venue": "blast_curve",
+   "price": "0.016531152037617514373158215082498106",
+   "market_cap": "16531116495640",
+   "inputs": {
+    "virtual_quote": "1500000000000",
+    "meme_reserve": "272213333333334",
+    "quote_reserve": "3000000000000",
+    "graduation_target": "3000000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "2150000000",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   },
+   "supply": "999997850000000"
+  },
+  {
+   "source": "engine GET /v1/pools blast_curve:0x7a79ac93eb3b3c2a93828a0a85367d15557e4d0b74bab119debb654c803f00fa",
+   "venue": "blast_curve",
+   "price": "0.00022857142848566987758319658004437",
+   "market_cap": "188571428485",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "175000000065659",
+    "quote_reserve": "30000000000",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "175000000065659",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   },
+   "supply": "824999999934341"
+  },
+  {
+   "source": "engine GET /v1/pools blast_curve:0x26f6bc569182e7ab9db81fab58a06e784e7e0d23dc1675fef444f4bf8ff75fb8",
+   "venue": "blast_curve",
+   "price": "0.000000228571428489643497825181859763",
+   "market_cap": "182753759412",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "175000000062616697",
+    "quote_reserve": "30000000000",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "803135440191984184",
+    "pending_burn_total": "0",
+    "balance_0x0": "3587742475154727",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   },
+   "supply": "799547697716829457"
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 120:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.00022857142848566987758319658004437",
+   "market_cap": "228571428485",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "175000000065659",
+    "quote_reserve": "30000000000",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 117:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000053195956280530478449727555405432",
+   "market_cap": "53195956280",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "362751911728723",
+    "quote_reserve": "9296934837",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 115:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000060446598689010266216146758026941",
+   "market_cap": "60446598689",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "340300890804958",
+    "quote_reserve": "10570031380",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 113:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000058141648853696463001283302513502",
+   "market_cap": "58141648853",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "346980723418500",
+    "quote_reserve": "10174031380",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 111:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000057005975650319222843574052503972",
+   "market_cap": "57005975650",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "350419954261201",
+    "quote_reserve": "9976031380",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 109:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000054215797641858620857678914768302",
+   "market_cap": "54215797641",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "359323891325712",
+    "quote_reserve": "9481031380",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 107:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000052575294265341770019822802283848",
+   "market_cap": "52575294265",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "364886809442859",
+    "quote_reserve": "9184031380",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 105:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000059150421553716918151467967039059",
+   "market_cap": "59150421553",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "344009232284522",
+    "quote_reserve": "10348291108",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 103:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000056870560046267898280619804583315",
+   "market_cap": "56870560046",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "350836902111875",
+    "quote_reserve": "9952291108",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 101:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000055747431006823474008586208176312",
+   "market_cap": "55747431006",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "354353389048225",
+    "quote_reserve": "9754291108",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 99:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000052988613408195662574601230072545",
+   "market_cap": "52988613408",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "363460937534576",
+    "quote_reserve": "9259291108",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 97:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.00005136692627757899042319966709051",
+   "market_cap": "51366926277",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "369153704185660",
+    "quote_reserve": "8962291108",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 95:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000056458259361810715477164721186485",
+   "market_cap": "56458259361",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "352115609331857",
+    "quote_reserve": "9879834397",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 93:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000054231400384994826104305983918594",
+   "market_cap": "54231400384",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "359272197632406",
+    "quote_reserve": "9483834397",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 91:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000053134772610867524881418662964565",
+   "market_cap": "53134772610",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "362960702556117",
+    "quote_reserve": "9285834397",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 89:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000050442208175534330717527371072972",
+   "market_cap": "50442208175",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "372522042088435",
+    "quote_reserve": "8790834397",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 83:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000048860272942895747136426424420339",
+   "market_cap": "48860272942",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "378504524905422",
+    "quote_reserve": "8493834397",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 81:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000054993471962379152885400683121849",
+   "market_cap": "54993471962",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "356774207735459",
+    "quote_reserve": "9620252390",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 79:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000052795982835456569748238554945632",
+   "market_cap": "52795982835",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "364123392681487",
+    "quote_reserve": "9224252390",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 78:3:0:0",
+   "venue": "blast_curve",
+   "price": "0.000051714039986276132422241661025746",
+   "market_cap": "51714039986",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "367912706008836",
+    "quote_reserve": "9026252390",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 77:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000057608747751498563026028821985012",
+   "market_cap": "57608747751",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "348581875753021",
+    "quote_reserve": "10081365351",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 75:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000054803672509694635643596330472333",
+   "market_cap": "54803672509",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "357391474951523",
+    "quote_reserve": "9586365351",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 73:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000053154230793175415770495447913765",
+   "market_cap": "53154230793",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "362894261908435",
+    "quote_reserve": "9289365351",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 72:3:0:0",
+   "venue": "blast_curve",
+   "price": "0.000061592731330547975914904559743032",
+   "market_cap": "61592731330",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "337119821567349",
+    "quote_reserve": "10764130596",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 71:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.00005869109357545997816222953871815",
+   "market_cap": "58691093575",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "345352750497649",
+    "quote_reserve": "10269130596",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 69:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000056420188514235838360997419972556",
+   "market_cap": "56420188514",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "352234388422606",
+    "quote_reserve": "9873130596",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 67:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000055301537697905863707564363710012",
+   "market_cap": "55301537697",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "355779087074916",
+    "quote_reserve": "9675130596",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 66:3:0:0",
+   "venue": "blast_curve",
+   "price": "0.000052553915657070101542831378589821",
+   "market_cap": "52553915657",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "364961018721346",
+    "quote_reserve": "9180130596",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 65:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000050406223167247654426660959690558",
+   "market_cap": "50406223167",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "372654990112517",
+    "quote_reserve": "8784130596",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 63:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000048824856799874478064242623338305",
+   "market_cap": "48824856799",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "378641778137228",
+    "quote_reserve": "8487130596",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 61:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000052714472095300448780273993602745",
+   "market_cap": "52714472095",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "364404800227764",
+    "quote_reserve": "9209406673",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 60:3:0:0",
+   "venue": "blast_curve",
+   "price": "0.000050563467226371532564190420679765",
+   "market_cap": "50563467226",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "372075091068672",
+    "quote_reserve": "8813406673",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 59:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000048979616574670027236427263616199",
+   "market_cap": "48979616574",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "378043111970293",
+    "quote_reserve": "8516406673",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 57:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000047937717568771371263136193248031",
+   "market_cap": "47937717568",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "382129304481809",
+    "quote_reserve": "8318406673",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 55:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000045381975054016636970441649024561",
+   "market_cap": "45381975054",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "392741978545125",
+    "quote_reserve": "7823406673",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 54:3:0:0",
+   "venue": "blast_curve",
+   "price": "0.000043882132973729580269663431407021",
+   "market_cap": "43882132973",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "399397328372628",
+    "quote_reserve": "7526406673",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 53:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.0000428962396821073678946405963976",
+   "market_cap": "42896239682",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "403960971903743",
+    "quote_reserve": "7328406673",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 51:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000047619396546727239576302371353206",
+   "market_cap": "47619396546",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "383404385586545",
+    "quote_reserve": "8257485475",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 49:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.0000455760947618179152532677278314",
+   "market_cap": "45576094761",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "391904694080190",
+    "quote_reserve": "7861485475",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 48:3:0:0",
+   "venue": "blast_curve",
+   "price": "0.000044571245583646798311085218193217",
+   "market_cap": "44571245583",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "396297775476141",
+    "quote_reserve": "7663485475",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 47:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000048555385595654064432372688828591",
+   "market_cap": "48555385595",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "379691011693873",
+    "quote_reserve": "8436043480",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 45:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.0000459830058751146619043180406282",
+   "market_cap": "45983005875",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "390166826603857",
+    "quote_reserve": "7941043480",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 43:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000044473181471359747998897182454681",
+   "market_cap": "44473181471",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "396734456503018",
+    "quote_reserve": "7644043480",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 42:3:0:0",
+   "venue": "blast_curve",
+   "price": "0.000049886243342769169068259280261244",
+   "market_cap": "49886243342",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "374592104793327",
+    "quote_reserve": "8686992894",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 41:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000047278372205060482730783120590849",
+   "market_cap": "47278372205",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "384784670992814",
+    "quote_reserve": "8191992894",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 39:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000045242480437747705993333572666213",
+   "market_cap": "45242480437",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "393346976598393",
+    "quote_reserve": "7795992894",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 37:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000044241336268376055650856237265794",
+   "market_cap": "44241336268",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "397772634787687",
+    "quote_reserve": "7597992894",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 36:3:0:0",
+   "venue": "blast_curve",
+   "price": "0.000041787480844943808360354373287314",
+   "market_cap": "41787480844",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "409285090849630",
+    "quote_reserve": "7102992894",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 35:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000039874801649052117836359588695363",
+   "market_cap": "39874801649",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "418986231982853",
+    "quote_reserve": "6706992894",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 33:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000038469695252131584196981788653538",
+   "market_cap": "38469695252",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "426569349885628",
+    "quote_reserve": "6409992894",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 31:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000040174129337180644797541446163259",
+   "market_cap": "40174129337",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "417422431292866",
+    "quote_reserve": "6769582743",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 30:3:0:0",
+   "venue": "blast_curve",
+   "price": "0.000038299173118352117629185511108278",
+   "market_cap": "38299173118",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "427517917747267",
+    "quote_reserve": "6373582743",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 29:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000036922358954229272603784127906789",
+   "market_cap": "36922358954",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "435415915947551",
+    "quote_reserve": "6076582743",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 27:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000036018484273384788055679034034979",
+   "market_cap": "36018484273",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "440845389897020",
+    "quote_reserve": "5878582743",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 25:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000033807802571271055723500552524442",
+   "market_cap": "33807802571",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "455030542448581",
+    "quote_reserve": "5383582743",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 24:3:0:0",
+   "venue": "blast_curve",
+   "price": "0.000032514996978572555657204768722231",
+   "market_cap": "32514996978",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "463988440563045",
+    "quote_reserve": "5086582743",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 23:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000031667128012010982488273410384357",
+   "market_cap": "31667128012",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "470158921180125",
+    "quote_reserve": "4888582743",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 21:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000034078289285714053056936433675057",
+   "market_cap": "34078289285",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "453221107154422",
+    "quote_reserve": "5445000000",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 19:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000032353200142856972438972047511101",
+   "market_cap": "32353200142",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "465147185859528",
+    "quote_reserve": "5049000000",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 18:3:0:0",
+   "venue": "blast_curve",
+   "price": "0.000031507457285714131300738622327287",
+   "market_cap": "31507457285",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "471348730725206",
+    "quote_reserve": "4851000000",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 17:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000029037435571428487344454423877794",
+   "market_cap": "29037435571",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "490986883636110",
+    "quote_reserve": "4257000000",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 15:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000027056091999999946915947496000104",
+   "market_cap": "27056091999",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "508646998982707",
+    "quote_reserve": "3762000000",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 12:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000025900889285714282754184081632653",
+   "market_cap": "25900889285",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "519866320089120",
+    "quote_reserve": "3465000000",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "6",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 119:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000228571428489643497825181859763",
+   "market_cap": "222753759412",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "175000000062616697",
+    "quote_reserve": "30000000000",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "985067564812962217",
+    "pending_burn_total": "6932124558361336",
+    "balance_0x0": "3587742475154727",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 116:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000053904419192021541549488682746",
+   "market_cap": "52532427623",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "360360212709148696",
+    "quote_reserve": "9425007966",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "985067564812962217",
+    "pending_burn_total": "6932124558361336",
+    "balance_0x0": "3587742475154727",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 114:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000051192171637800581580958025316",
+   "market_cap": "49889213013",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "369783257095152764",
+    "quote_reserve": "8930007966",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "985067564812962217",
+    "pending_burn_total": "6932124558361336",
+    "balance_0x0": "3587742475154727",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 112:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000049598426533827410501430304452",
+   "market_cap": "48336032392",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "375677400840363481",
+    "quote_reserve": "8633007966",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "985067564812962217",
+    "pending_burn_total": "6932124558361336",
+    "balance_0x0": "3587742475154727",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 110:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000056235160993899208739433041295",
+   "market_cap": "54843612510",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "352813381491918211",
+    "quote_reserve": "9840517309",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "985067564812962217",
+    "pending_burn_total": "6224989939337255",
+    "balance_0x0": "3587742475154727",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 108:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000054012750464822961674479113165",
+   "market_cap": "52676195901",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "359998651090054863",
+    "quote_reserve": "9444517309",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "985067564812962217",
+    "pending_burn_total": "6224989939337255",
+    "balance_0x0": "3587742475154727",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 106:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000052918346914564942493136605071",
+   "market_cap": "51608873550",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "363702164394381316",
+    "quote_reserve": "9246517309",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "985067564812962217",
+    "pending_burn_total": "6224989939337255",
+    "balance_0x0": "3587742475154727",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 104:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000050231343038903532309877913502",
+   "market_cap": "48988360036",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "373303124594482569",
+    "quote_reserve": "8751517309",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "985067564812962217",
+    "pending_burn_total": "6224989939337255",
+    "balance_0x0": "3587742475154727",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 102:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000048652744142066895010655829607",
+   "market_cap": "47448823833",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "379310923451973744",
+    "quote_reserve": "8454517309",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "985067564812962217",
+    "pending_burn_total": "6224989939337255",
+    "balance_0x0": "3587742475154727",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 100:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000053812205063534264337156636664",
+   "market_cap": "52511638952",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "360668842302321015",
+    "quote_reserve": "9408385702",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "985067564812962217",
+    "pending_burn_total": "5648430728523253",
+    "balance_0x0": "3587742475154727",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 98:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000051638687139044897575715000294",
+   "market_cap": "50390651931",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "368181043232301870",
+    "quote_reserve": "9012385702",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "985067564812962217",
+    "pending_burn_total": "5648430728523253",
+    "balance_0x0": "3587742475154727",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 96:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000050568729891080894598600574019",
+   "market_cap": "49346554061",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "372055729746900451",
+    "quote_reserve": "8814385702",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "985067564812962217",
+    "pending_burn_total": "5648430728523253",
+    "balance_0x0": "3587742475154727",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 94:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000047942841771156204658332022295",
+   "market_cap": "46784130003",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "382108882686663568",
+    "quote_reserve": "8319385702",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "985067564812962217",
+    "pending_burn_total": "5648430728523253",
+    "balance_0x0": "3587742475154727",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 92:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000046400912327762751436616469545",
+   "market_cap": "45279466848",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "388405848029345427",
+    "quote_reserve": "8022385702",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "985067564812962217",
+    "pending_burn_total": "5648430728523253",
+    "balance_0x0": "3587742475154727",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 90:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000053032207917854590686141018767",
+   "market_cap": "51791652255",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "363311517386648757",
+    "quote_reserve": "9267211929",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "985067564812962217",
+    "pending_burn_total": "4872317409676964",
+    "balance_0x0": "3587742475154727",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 88:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000050874662797279679421936390188",
+   "market_cap": "49684577498",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "370935371192456594",
+    "quote_reserve": "8871211929",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "985067564812962217",
+    "pending_burn_total": "4872317409676964",
+    "balance_0x0": "3587742475154727",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 82:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000049812691951273773334743905016",
+   "market_cap": "49569988705",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "374868556537075536",
+    "quote_reserve": "8673211929",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000000",
+    "pending_burn_total": "4872317409676964",
+    "balance_0x0": "0",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 81:3:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000047206769836246860989087664017",
+   "market_cap": "46976763469",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "385076377647898079",
+    "quote_reserve": "8178211929",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000000",
+    "pending_burn_total": "4872317409676964",
+    "balance_0x0": "0",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 80:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000045172437287069979816423439211",
+   "market_cap": "44952342834",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "393651815065775207",
+    "quote_reserve": "7782211929",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000000",
+    "pending_burn_total": "4872317409676964",
+    "balance_0x0": "0",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 78:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000043676090875180030583570978719",
+   "market_cap": "43463287097",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "400338299024292587",
+    "quote_reserve": "7485211929",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000000",
+    "pending_burn_total": "4872317409676964",
+    "balance_0x0": "0",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 76:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000048601987173997291934703198992",
+   "market_cap": "48396492610",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "379508936413782276",
+    "quote_reserve": "8444888460",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000000",
+    "pending_burn_total": "4228110318630253",
+    "balance_0x0": "0",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 75:3:0:0",
+   "venue": "blast_curve",
+   "price": "0.00000004653748208017474810208564303",
+   "market_cap": "46340716471",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "387835517807031009",
+    "quote_reserve": "8048888460",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000000",
+    "pending_burn_total": "4228110318630253",
+    "balance_0x0": "0",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 74:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000045018506259800592651939008347",
+   "market_cap": "44828163048",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "394324244290877348",
+    "quote_reserve": "7751888460",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000000",
+    "pending_burn_total": "4228110318630253",
+    "balance_0x0": "0",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 72:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.00000004401985714145246638490484883",
+   "market_cap": "43833736329",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "398772045161180571",
+    "quote_reserve": "7553888460",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000000",
+    "pending_burn_total": "4228110318630253",
+    "balance_0x0": "0",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 70:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000041572239345570071264539017969",
+   "market_cap": "41396467331",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "410343265807685951",
+    "quote_reserve": "7058888460",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000000",
+    "pending_burn_total": "4228110318630253",
+    "balance_0x0": "0",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 69:3:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000040137272096603779780862153127",
+   "market_cap": "39967567282",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "417614042619959448",
+    "quote_reserve": "6761888460",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000000",
+    "pending_burn_total": "4228110318630253",
+    "balance_0x0": "0",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 68:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000039194628692527562802342644937",
+   "market_cap": "39028909478",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "422606081816458116",
+    "quote_reserve": "6563888460",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000000",
+    "pending_burn_total": "4228110318630253",
+    "balance_0x0": "0",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 66:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000042731083039577680019431585954",
+   "market_cap": "42574021599",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "404740878390124000",
+    "quote_reserve": "7295016084",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000000",
+    "pending_burn_total": "3675578253898270",
+    "balance_0x0": "0",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 64:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000040796677791661307447929932881",
+   "market_cap": "40646726409",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "414225299675114659",
+    "quote_reserve": "6899016084",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000000",
+    "pending_burn_total": "3675578253898270",
+    "balance_0x0": "0",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 63:3:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000039846276881984972359988771782",
+   "market_cap": "39699818773",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "419136175092703574",
+    "quote_reserve": "6701016084",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000000",
+    "pending_burn_total": "3675578253898270",
+    "balance_0x0": "0",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 62:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000044416644660342670848444160493",
+   "market_cap": "44283814539",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "396986872800489567",
+    "quote_reserve": "7632824864",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000000",
+    "pending_burn_total": "2990548286097836",
+    "balance_0x0": "0",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 60:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000041957863001496609207046450133",
+   "market_cap": "41832385986",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "408453234698552334",
+    "quote_reserve": "7137824864",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000000",
+    "pending_burn_total": "2990548286097836",
+    "balance_0x0": "0",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 58:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000040516197434753689353934678703",
+   "market_cap": "40395031789",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "415656599835659791",
+    "quote_reserve": "6840824864",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000000",
+    "pending_burn_total": "2990548286097836",
+    "balance_0x0": "0",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 57:3:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000046950908936065900702597462409",
+   "market_cap": "46853383681",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "386124196779374447",
+    "quote_reserve": "8128882001",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000000",
+    "pending_burn_total": "2077174995697258",
+    "balance_0x0": "0",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 56:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000044421970624909267805634130225",
+   "market_cap": "44329698418",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "396963073743332325",
+    "quote_reserve": "7633882001",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000000",
+    "pending_burn_total": "2077174995697258",
+    "balance_0x0": "0",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 54:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000042449225118832865462676187603",
+   "market_cap": "42361050649",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "406082371415357246",
+    "quote_reserve": "7237882001",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000000",
+    "pending_burn_total": "2077174995697258",
+    "balance_0x0": "0",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 52:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000041479654080077632308556193839",
+   "market_cap": "41393493579",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "410800966857245994",
+    "quote_reserve": "7039882001",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000000",
+    "pending_burn_total": "2077174995697258",
+    "balance_0x0": "0",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 51:3:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000039104731483181539085209744875",
+   "market_cap": "39023504112",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "423091563948361311",
+    "quote_reserve": "6544882001",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000000",
+    "pending_burn_total": "2077174995697258",
+    "balance_0x0": "0",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 50:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000037255198548513568418136702346",
+   "market_cap": "37177812981",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "433466539709109089",
+    "quote_reserve": "6148882001",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000000",
+    "pending_burn_total": "2077174995697258",
+    "balance_0x0": "0",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 48:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000035897451847507784393078071017",
+   "market_cap": "35822886558",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "441587945248557590",
+    "quote_reserve": "5851882001",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000000",
+    "pending_burn_total": "2077174995697258",
+    "balance_0x0": "0",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 46:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000038888529157298348076235237174",
+   "market_cap": "38828584601",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "424266031025849658",
+    "quote_reserve": "6499081918",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000000",
+    "pending_burn_total": "1541445689840311",
+    "balance_0x0": "0",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 45:3:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000037044178174818521588559433987",
+   "market_cap": "36987076586",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "434699397082221505",
+    "quote_reserve": "6103081918",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000000",
+    "pending_burn_total": "1541445689840311",
+    "balance_0x0": "0",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 44:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000035690317937954786409735893456",
+   "market_cap": "35635303251",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "442867501081884692",
+    "quote_reserve": "5806081918",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000000",
+    "pending_burn_total": "1541445689840311",
+    "balance_0x0": "0",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 42:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000034801745875281884242880076262",
+   "market_cap": "34748100874",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "448485601094102552",
+    "quote_reserve": "5608081918",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000000",
+    "pending_burn_total": "1541445689840311",
+    "balance_0x0": "0",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 40:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000032629320718593186502896986733",
+   "market_cap": "32579024392",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "463174886426247389",
+    "quote_reserve": "5113081918",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000000",
+    "pending_burn_total": "1541445689840311",
+    "balance_0x0": "0",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 39:3:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000031359469053146978930836509122",
+   "market_cap": "31311130134",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "472459590846075872",
+    "quote_reserve": "4816081918",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000000",
+    "pending_burn_total": "1541445689840311",
+    "balance_0x0": "0",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 38:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000030526902704752428523071248305",
+   "market_cap": "30479847142",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "478858993962864659",
+    "quote_reserve": "4618081918",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000000",
+    "pending_burn_total": "1541445689840311",
+    "balance_0x0": "0",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 36:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.00000003224646922732780306864947865",
+   "market_cap": "32209670936",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "465916333229671241",
+    "quote_reserve": "5024156702",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000000",
+    "pending_burn_total": "1141157213555978",
+    "balance_0x0": "0",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 34:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000030568995497726955010336830646",
+   "market_cap": "30534111468",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "478529191549251868",
+    "quote_reserve": "4628156702",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000000",
+    "pending_burn_total": "1141157213555978",
+    "balance_0x0": "0",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 33:3:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000029747060347211131977676336599",
+   "market_cap": "29713114274",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "485095217260782763",
+    "quote_reserve": "4430156702",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000000",
+    "pending_burn_total": "1141157213555978",
+    "balance_0x0": "0",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 32:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000031785582542995241136142426968",
+   "market_cap": "31764855487",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "469282038730078506",
+    "quote_reserve": "4916402978",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000000",
+    "pending_burn_total": "652089836317702",
+    "balance_0x0": "0",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 30:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000029710980550402832426776696606",
+   "market_cap": "29691606321",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "485389667753811959",
+    "quote_reserve": "4421402978",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000000",
+    "pending_burn_total": "652089836317702",
+    "balance_0x0": "0",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 28:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000028499822783418646521625107587",
+   "market_cap": "28481238338",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "495596168626622312",
+    "quote_reserve": "4124402978",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000000",
+    "pending_burn_total": "652089836317702",
+    "balance_0x0": "0",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 27:3:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000031088786285714285398494705705",
+   "market_cap": "31088786285",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "474511930585683302",
+    "quote_reserve": "4752000000",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 26:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000029037435571428571147194529679",
+   "market_cap": "29037435571",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "490986883636108583",
+    "quote_reserve": "4257000000",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 24:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.00000002744676014285714261331760293",
+   "market_cap": "27446760142",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "505014068249044085",
+    "quote_reserve": "3861000000",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 22:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000026668224142857142664457318218",
+   "market_cap": "26668224142",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "512332577032862479",
+    "quote_reserve": "3663000000",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 21:3:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000024770889142857142720860502475",
+   "market_cap": "24770889142",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "531591737545565009",
+    "quote_reserve": "3168000000",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 20:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000023303426285714285592348871715",
+   "market_cap": "23303426285",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "548073911681803949",
+    "quote_reserve": "2772000000",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 18:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000022232232142857142774407193239",
+   "market_cap": "22232232142",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "561122244488977958",
+    "quote_reserve": "2475000000",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 16:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000020165451571428571384325547044",
+   "market_cap": "20165451571",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "589175995286592039",
+    "quote_reserve": "1881000000",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 15:3:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000018843603571428571410966118948",
+   "market_cap": "18843603571",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "609490639965171964",
+    "quote_reserve": "1485000000",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 14:2:0:0",
+   "venue": "blast_curve",
+   "price": "0.000000017881620571428571415369683555",
+   "market_cap": "17881620571",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "625670361101179836",
+    "quote_reserve": "1188000000",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  },
+  {
+   "source": "engine GET /v1/pools/.../trades 9:2:1:0",
+   "venue": "blast_curve",
+   "price": "0.000000017254299999999999994306081",
+   "market_cap": "17254299999",
+   "inputs": {
+    "virtual_quote": "10000000000",
+    "meme_reserve": "636942675159235669",
+    "quote_reserve": "990000000",
+    "graduation_target": "30000000000",
+    "sqrt_price_x64": null,
+    "meme_is_coin_a": null,
+    "currency_supply": "1000000000000000000",
+    "pending_burn_total": "0",
+    "balance_0x0": "0",
+    "meme_decimals": "9",
+    "quote_decimals": "9"
+   }
+  }
+ ]
+}

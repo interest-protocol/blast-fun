@@ -1,0 +1,86 @@
+{
+  "source": "Sui mainnet fullnode (gRPC GetObjects with content; SimulateTransaction of swap::swap_exact_in with expected_coin_out 1, allowable_slippage 0, no signature), through @mysten/sui 2.31",
+  "recorded_at": "2026-10-08T23:59:39.432Z",
+  "note": "YUM/SUI, a third-party DAO-fee pool (300 bps DAO fee) with the same wrapper and AMM as a Blast sale's: no Blast sale has migrated to Aftermath on mainnet yet.",
+  "pool": {
+    "object_id": "0x9ff6800ec82dc0545814e3ada989455dc1f40b1ce323eb708129a4ddc8a88eba",
+    "version": "683231225",
+    "type": "0xefe170ec0be4d762196bedecd7a065816576198a6527c99282a2551aaa7da38c::pool::Pool<0x0d1e4021d2141a891d20250ed3aa90b118648aa1cbdda16d5533e820736c6b1b::af_lp::AF_LP>",
+    "owner": {
+      "$kind": "ObjectOwner",
+      "ObjectOwner": "0xd8e2b14036e335601c06f47fd35809f2a8a8293a5bf86ab8df531240e0c5b634"
+    },
+    "content_base64": "n/aADsgtwFRYFOOtqYlFXcH0CxzjI+twgSmk3ciojroJWVVNSSBTVUkg8kzYi1ck0Lb2Iagj1EDwGZyFT3eEAH0Uu7WcBrbEFbDtsefntwAAAOgDAAAAAAAAAkowMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAyOjpzdWk6OlNVSUpiZWI0NjJmMmY4Njk4MGM4OTg5MmU2MDUyY2Y1ZTkwZGI0YjUwMzJkYjQ2MmY0NzY4NGI5Y2Q4YmRmNzI5ZmIwOjp5dW06OllVTQIAAMjp8hrR+IfjrmUAAAAAAACkSNKFlgebXLg7zQkAAAIAALLTWVvwBgAAstNZW/AGAAAAAAAAAAACAIBT7nuoCgAAgFPue6gKAAIAAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAAAAAAAAAECCQYCAABkp7O24A0AAAAAAAAAAAAAZKeztuANAAAAAAAAAAAHI+B8B8eq4isAAAAAAAAAAA=="
+  },
+  "wrapper": {
+    "object_id": "0xb33d3a61cd95eaf6437055f2fa189de41a378abba8a73016b56c499cd4b98af7",
+    "version": "683231225",
+    "type": "0x6f60a091637054e23915b8745c0c0d47b1d49618ee3435b5f68eccf6a44fb53d::pool::DaoFeePool<0x0d1e4021d2141a891d20250ed3aa90b118648aa1cbdda16d5533e820736c6b1b::af_lp::AF_LP>",
+    "owner": {
+      "$kind": "Shared",
+      "Shared": {
+        "initialSharedVersion": "387170068"
+      }
+    },
+    "content_base64": "sz06Yc2V6vZDcFXy+hid5Bo3iruopzAWtWxJnNS5ivef9oAOyC3AVFgU462piUVdwfQLHOMj63CBKaTdyKiOuiwB9x70ZQ0My5r3K3k44SSnCT58uzLDelYgSEYIDYiVcRA="
+  },
+  "vault": {
+    "object_id": "0xf194d9b1bcad972e45a7dd67dd49b3ee1e3357a00a50850c52cd51bb450e13b4",
+    "version": "1040908402",
+    "type": "0x2d9316f1f1a95f6d7c85a4e690ef7c359e6649773ef2c37ad7d9857adb6bef06::vault::ProtocolFeeVault",
+    "owner": {
+      "$kind": "Shared",
+      "Shared": {
+        "initialSharedVersion": "6668823"
+      }
+    },
+    "content_base64": "8ZTZsbytly5Fp91n3Umz7h4zV6AKUIUMUs1Ru0UOE7QBAAAAAAAAAB+wwKZ5CGD8g8jyb2+giYaK2U3pRoNI+Y37TN+JpTd3AEBjUr/GAQAAALLTWVvwBgAAnhhp0CkEAAAUu/CKxgIAAMUuvKKxAA=="
+  },
+  "swaps": [
+    {
+      "from": 0,
+      "amount_in": "7777777",
+      "amount_out": "47482491460"
+    },
+    {
+      "from": 0,
+      "amount_in": "123456789",
+      "amount_out": "751022399367"
+    },
+    {
+      "from": 0,
+      "amount_in": "165423177",
+      "amount_out": "1005025123330"
+    },
+    {
+      "from": 0,
+      "amount_in": "1000000000",
+      "amount_out": "5924377913536"
+    },
+    {
+      "from": 0,
+      "amount_in": "3333333333",
+      "amount_out": "18464042616948"
+    },
+    {
+      "from": 1,
+      "amount_in": "1234567891",
+      "amount_out": "188899"
+    },
+    {
+      "from": 1,
+      "amount_in": "99999999999",
+      "amount_out": "15293490"
+    },
+    {
+      "from": 1,
+      "amount_in": "2000000000000",
+      "amount_out": "303071360"
+    },
+    {
+      "from": 1,
+      "amount_in": "7654321000001",
+      "amount_out": "1129158647"
+    }
+  ]
+}

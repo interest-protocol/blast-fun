@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/profile-response.schema.json",
+  "title": "Social public profile",
+  "description": "GET /api/social/profiles/{callsign} 200: a Blast Account's public identity, whether it is verified (X linked), private, and whether its portfolio is public. The same for every caller; no viewer-specific field and no portfolio field.",
+  "type": "object",
+  "properties": {
+    "callsign": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_]{1,18}[a-z0-9]$"
+    },
+    "display_name": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "minLength": 1
+        }
+      ]
+    },
+    "avatar_url": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "minLength": 1
+        }
+      ]
+    },
+    "x_handle": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "minLength": 1
+        }
+      ]
+    },
+    "verified": {
+      "type": "boolean",
+      "description": "OA-8: the account has a linked X account (a Mission Control member always has)."
+    },
+    "private": {
+      "type": "boolean"
+    },
+    "portfolio_public": {
+      "type": "boolean",
+      "description": "OA-10: the owner turned on Public portfolio and the account is public, so GET …/portfolio answers."
+    },
+    "as_of": {
+      "$ref": "https://blast-v2.invalid/social/contracts/as-of.schema.json"
+    },
+    "bio": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160
+    }
+  },
+  "required": [
+    "callsign",
+    "display_name",
+    "avatar_url",
+    "x_handle",
+    "verified",
+    "private",
+    "portfolio_public",
+    "as_of"
+  ],
+  "additionalProperties": false
+}

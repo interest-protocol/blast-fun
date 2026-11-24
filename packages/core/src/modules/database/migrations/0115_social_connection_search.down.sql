@@ -1,0 +1,1 @@
+DROP INDEX social_accounts_connection_search_trgm_idx;

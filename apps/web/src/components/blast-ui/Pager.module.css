@@ -1,0 +1,17 @@
+/*
+ * The pages of a list, at the end of it (System board): 32px ghost buttons 2px apart
+ * with 9px corners; numbers are 13/600 muted and the current page is the ink chip;
+ * a step is ink while it can move and muted when it can't.
+ */
+.pager { display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap; gap: 0.125rem; min-width: 0; max-width: 100%; color: var(--muted); font-size: 0.8125rem; }
+.pager .page { --control-pad-start: 0.375rem; --control-pad-end: 0.375rem; min-width: 2rem; }
+.page[aria-current="page"] { background: var(--ink) !important; color: var(--bg) !important; }
+@media (hover:hover) and (pointer:fine) { .page[aria-current="page"]:hover { background: var(--ink) !important; color: var(--bg) !important; } }
+.pager .step:not(:disabled) { color: var(--ink); }
+.pager .step:disabled { background: transparent; color: var(--muted); }
+.gap { padding: 0 0.25rem; color: var(--muted); }
+.current { padding: 0 var(--s3); color: var(--ink-2); font-weight: 600; }
+
+@media (pointer: coarse) {
+  .pager .page { min-width: 44px; }
+}

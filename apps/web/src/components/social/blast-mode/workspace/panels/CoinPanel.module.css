@@ -1,0 +1,242 @@
+/*
+ * The coin panel inside its card: the hero figures, the selected view (the
+ * only part that scrolls) and the trade tray. The card header, which carries
+ * the coin's identity and the view tabs, is PanelChrome's.
+ */
+.panel { --blast-chart-plot-height:9.375rem; display:flex; flex-direction:column; gap:1.25rem; height:100%; min-height:0; min-width:0; font-size:0.8125rem; line-height:1.4; }
+.presentation { display:flex; flex:1; flex-direction:column; gap:1.25rem; min-height:0; min-width:0; }
+.presentation > p { margin:0; padding:0 0.25rem; color:var(--muted); font-size:0.75rem; }
+/* The 3px inset gives focus rings room inside the scroll container without moving its content edge. */
+.body { position:relative; flex:1; min-height:0; min-width:0; margin:-0.1875rem; padding:0.1875rem; overflow:auto; overflow-wrap:anywhere; scrollbar-width:thin; border-radius:var(--r-inner); }
+.body h3 { margin:0; color:var(--ink); font-size:0.8125rem; font-weight:600; }
+.body p { margin:0.25rem 0; color:var(--muted); font-size:0.75rem; }
+.panel :is(button,input,select):focus-visible { outline:0.125rem solid var(--workspace-focus); outline-offset:0.125rem; }
+.body:focus-visible { outline:0.125rem solid var(--workspace-focus); outline-offset:-0.125rem; }
+
+/* Price row, one line: the price, its 24 h move, and FDV as one quiet item. */
+.hero { display:flex; flex-wrap:wrap; align-items:center; gap:0.5rem 0.75rem; flex:none; min-width:0; }
+.price { display:flex; flex-wrap:wrap; align-items:center; gap:0.25rem 0.5rem; min-width:0; }
+.price > :global(button) { min-width:0; min-height:0; padding:0; }
+.hero .priceFigure { font-weight:600; }
+.pricePending { display:inline-block; font-size:1.5rem; font-weight:600; line-height:1.75rem; }
+.stale { padding:1px 0.375rem; border-radius:var(--r-inner); background:var(--warn-soft); color:var(--warn); font-size:0.7188rem; font-weight:600; line-height:1rem; }
+.change { display:inline-flex; align-items:center; }
+.fdv { display:inline-flex; align-items:baseline; gap:0.25rem; margin-left:auto; color:var(--muted); font-size:0.75rem; font-weight:500; white-space:nowrap; font-variant-numeric:tabular-nums; }
+.fdv :global(button) { min-width:0; min-height:0; padding:0; color:var(--ink-2); font-weight:500; }
+
+/*
+ * Chart view: a column in which only the chart gives way. The window words and
+ * Chart details sit in a quiet row at the top-right, above an unobstructed
+ * plot. With less than 96px of room (useChartRoom) the row goes and a compact
+ * plot fills the room; under 56px the chart steps aside and the view keeps
+ * only its own content, so the tray follows the price row with no empty band.
+ */
+.body[data-view="overview"] { display:flex; flex-direction:column; }
+.body[data-view="overview"] > * { flex:none; }
+.body[data-view="overview"] > .chartStage { display:flex; flex:1 1 auto; flex-direction:column; gap:0.5rem; min-height:0; overflow:hidden; }
+.chartStage { position:relative; min-width:0; }
+.chartStage > * { flex:none; }
+.chartStage > [data-chart-frame] { display:flex; flex:1 1 auto; flex-direction:column; min-height:0; }
+.chartStage [data-coin-chart] > [role="group"] { flex:1 1 auto; min-height:0; }
+/* Keep the shared 2px focus outline inside the clipped chart stage. */
+.chartTools { display:flex; align-items:center; justify-content:flex-start; flex-wrap:wrap; gap:0.375rem 0.75rem; min-height:2rem; padding:0.1875rem 0.1875rem 0.3125rem; }
+/* Compact room: the window control steps aside, but Chart details (last observation and its caveat) stays reachable. */
+.chartDetailsSlot { display:flex; align-items:center; gap:0.25rem; margin-left:auto; }
+.plot { display:block; width:100%; height:var(--blast-chart-plot-height); margin:0.1875rem 0; color:var(--muted); }
+.body .chartCaption { display:flex; flex-wrap:wrap; gap:0.1875rem 0.5rem; margin:0.25rem 0 0; font-size:0.7188rem; }
+.chartCaption [data-stale="true"],.chartSources [data-stale="true"] { color:var(--warn); font-weight:600; }
+.chartContext { display:grid; gap:0.1875rem; margin:0.25rem 0; color:var(--muted); font-size:0.75rem; }
+.chartContext strong { color:var(--ink); font-weight:500; }
+.chartSources,.chartPrice { display:flex; flex-wrap:wrap; gap:0.25rem 0.625rem; }
+.observedPrice { font-size:0.875rem; font-variant-numeric:tabular-nums; }
+.chartPrice .observedPrice { margin:0.125rem 0; }
+
+/* Who's buying: faces and one plain sentence under the chart. */
+.body .buyers { display:flex; flex:none; align-items:flex-start; gap:0.5rem; min-width:0; margin:0.75rem 0 0; color:var(--ink-2); font-size:0.75rem; font-weight:500; line-height:1.375rem; }
+.buyers > span:last-child { min-width:0; }
+
+/* Trades, holders and posts: one row per person, figures right-aligned. */
+.listHead { display:flex; align-items:center; gap:0.25rem; margin:0 0 0.5rem; }
+.body .listHead h3 { color:var(--muted); font-size:0.7188rem; font-weight:500; }
+.body .note { margin:0.125rem 0; color:var(--muted); font-size:0.75rem; line-height:1.4; }
+.body .warning { margin:0 0 0.5rem; color:var(--warn); font-size:0.75rem; font-weight:500; line-height:1.4; }
+.problem { color:var(--ink-2); }
+.rows { display:grid; gap:0.25rem; margin:0 0 0.5rem; padding:0; list-style:none; }
+/* One line per row: the person takes the room, then the side, the figure and the time in their own columns. */
+.rows > li { display:grid; grid-template-columns:minmax(0,1fr); grid-auto-flow:column; grid-auto-columns:auto; align-items:center; gap:0.75rem; min-height:max(44px, 2.75rem); padding:0.125rem 0; }
+.side { display:inline-flex; align-items:center; gap:0.1875rem; height:1.25rem; padding:0 0.375rem; border-radius:var(--r-inner); font-size:0.6875rem; font-weight:600; white-space:nowrap; }
+.side svg { margin:0; color:inherit; }
+.side[data-direction="up"] { background:var(--up-soft); color:var(--up); }
+.side[data-direction="down"] { background:var(--down-soft); color:var(--down); }
+.figure { display:inline-flex; align-items:center; justify-content:flex-end; gap:0.25rem; min-width:0; color:var(--ink); font-size:0.8125rem; font-weight:600; text-align:right; white-space:nowrap; font-variant-numeric:tabular-nums; }
+.figure :global(button) { align-items:center; gap:0.25rem; min-width:0; min-height:0; padding:0; }
+.rows :global(button) { min-width:0; min-height:0; }
+.when { min-width:1.75rem; color:var(--muted); font-size:0.75rem; font-weight:500; text-align:right; white-space:nowrap; }
+.when :global(button) { padding:0; color:inherit; }
+/* Secondary actions: soft pills; only the trade action is solid. */
+.pill { display:inline-flex; align-items:center; justify-content:center; gap:0.375rem; min-width:0; min-height:0; height:1.625rem; padding:0 0.625rem; border-radius:var(--r-button); background:var(--workspace-inset); color:var(--ink); font-size:0.75rem; font-weight:500; white-space:nowrap; transition:background var(--t1) ease-out; }
+
+.pill:disabled { color:var(--faint); cursor:not-allowed; }
+@media (hover:hover) and (pointer:fine) { .pill:not(:disabled):hover { background:var(--workspace-press); } }
+.posts { display:grid; gap:0.25rem; margin:0 0 0.5rem; padding:0; list-style:none; }
+.posts li { display:grid; grid-template-columns:1.75rem minmax(0,1fr) auto; align-items:center; gap:0.75rem; min-height:max(48px, 3rem); padding:0.25rem 0; }
+.posts li > button { display:flex; flex-direction:column; align-items:flex-start; gap:1px; min-width:0; min-height:2rem; padding:0; border:0; background:transparent; color:var(--ink); font:inherit; text-align:left; cursor:pointer; }
+.postMeta { display:flex; align-items:center; gap:0.25rem; max-width:100%; min-width:0; font-size:0.8125rem; white-space:nowrap; }
+.postMeta strong { overflow:hidden; font-weight:600; text-overflow:ellipsis; }
+.postMeta span { font-size:0.7188rem; }
+.postMeta span { overflow:hidden; color:var(--muted); text-overflow:ellipsis; }
+.verified { width:0.8125rem; height:0.8125rem; flex:none; }
+.postText { display:block; max-width:100%; overflow:hidden; color:var(--muted); font-size:0.75rem; font-weight:400; text-overflow:ellipsis; white-space:nowrap; }
+.posts time { flex-shrink:0; color:var(--muted); font-size:0.7188rem; }
+.postPages { display:flex; justify-content:space-between; gap:0.5rem; }
+.postPages { flex-wrap:wrap; }
+.postTime { color:var(--muted); font-size:0.7188rem; }
+.postTime button { min-width:0; min-height:0; padding:0; color:inherit; }
+@media (pointer:coarse) {
+  .posts li > button,.postTime button,.postPages .pill { min-height:44px; }
+  .postTime button { min-width:44px; justify-content:flex-end; }
+}
+@media (hover:hover) and (pointer:fine) { .posts li > button:hover .postText { color:var(--ink); } }
+
+/* Details: the chart's and the trade's, in a sheet inside a card or collapsed inline elsewhere. */
+.details { min-width:0; }
+.details > :global(button.btn) { width:auto; min-height:1.625rem; padding:0.125rem 0; justify-content:flex-start; gap:0.375rem; background:transparent; box-shadow:none; color:var(--muted); font-size:0.75rem; }
+.detailsContent { padding-block:0.5rem; }
+.detailsLayer { z-index:1100; }
+.detailsPopover {
+  width:max-content; max-width:min(20rem, calc(100vw - 1.5rem)); max-height:min(24rem, 70dvh); overflow-y:auto; padding:0.25rem 0.875rem;
+  background:var(--card); color:var(--ink); border-radius:var(--r-md); box-shadow:var(--sh-pop); font-size:0.8125rem;
+  transform-origin:var(--transform-origin); transition:opacity var(--t2) var(--ease-std), transform var(--t2) var(--ease-std);
+}
+.detailsPopover[data-starting-style], .detailsPopover[data-ending-style] { opacity:0; transform:scale(.97); }
+.detailsPopover > .detailsContent > :first-child { margin-top:0.25rem; }
+@media (prefers-reduced-motion:reduce) {
+  .detailsPopover { transition:opacity var(--t2) linear; }
+  .detailsPopover[data-starting-style], .detailsPopover[data-ending-style] { transform:none; }
+}
+.detailsContent ol { padding-left:1.3125rem; }
+.detailsContent li { margin-block:0.625rem; }
+
+/* The plot's preferred height; the chart view's column then gives it the room the card leaves. */
+@media (min-width:1100px) {
+  .panel { --blast-chart-plot-height:clamp(6rem,calc((100dvh - 37.5rem) / 2),15rem); }
+  .body:not([data-view="overview"]):has([role="status"]):not(:has(svg)) { display:grid; align-content:center; }
+}
+
+@media (min-width:1800px) and (min-height:1000px) { .panel { --blast-chart-plot-height:20rem; } }
+@media (max-width:1099px) { .panel { --blast-chart-plot-height:11.25rem; } }
+
+/* Blast mode's phone feed: one card per screen with a bigger price; the chart view's column fills the card. */
+/* 4px of padding (offset by margin) lets the big price's glyph box paint inside the clip. */
+:global([data-phone-feed]) .panel { overflow:hidden; margin-block:-0.25rem; padding-block:0.25rem; }
+:global([data-phone-feed]) .hero .priceFigure,:global([data-phone-feed]) .pricePending { font-size:2.25rem; line-height:2.5rem; }
+
+@media (pointer:coarse) {
+  .pill,.posts li > button { min-height:44px; }
+  .figure :global(button),.when :global(button) { min-height:44px; }
+}
+@media (prefers-reduced-motion:reduce) { .panel * { animation:none; transition:none; scroll-behavior:auto; } }
+
+/* Narrow phone cards: a slightly smaller price keeps the row on one line. */
+@container workspace-panel (max-width:360px) {
+  .hero { gap:0.25rem 0.5rem; }
+  :global([data-phone-feed]) .hero .priceFigure,:global([data-phone-feed]) .pricePending { font-size:1.75rem; line-height:2rem; }
+}
+
+/* Short desktop windows (1054×800 and below): tighter rhythm, a 56px plot floor, the price row on one line where it fits. */
+@media (min-width:1100px) and (max-height:840px) {
+  .panel { --blast-chart-plot-height:clamp(3.5rem,calc((100dvh - 40rem) / 2),7.5rem); gap:0.5rem; }
+  .presentation { gap:0.5rem; }
+  .hero { gap:0.25rem 0.75rem; }
+  .body .buyers { margin-top:0.5rem; }
+}
+
+.chartRegion { display:flex; flex:1 1 0; min-height:0; min-width:0; }
+.tradeRegion { flex:none; min-width:0; }
+.chartStage { min-height:11.25rem; }
+.panel[data-focus="true"] { height:auto; min-height:100%; gap:1rem; }
+.panel[data-focus="true"] .hero { min-height:2.5rem; }
+.panel[data-focus="true"] .body { margin:0; padding:0; overflow:visible; }
+
+/* Data changes never participate in the card's outer geometry. */
+.panel { gap:0.5rem; }
+.hero { height:2rem; min-height:2rem; flex-wrap:nowrap; overflow:hidden; }
+.price { flex-wrap:nowrap; overflow:hidden; }
+.presentation { gap:0.5rem; }
+.chartRegion { min-height:7.5rem; overflow:hidden; }
+.chartStage { min-height:0; height:100%; }
+.chartTools { flex:none; height:auto; }
+.tradeRegion { flex:none; }
+
+.hero { overflow:auto; scrollbar-width:thin; }
+.price,.fdv { flex-shrink:0; }
+@container workspace-panel (max-width:360px) {
+ .hero { height:3.75rem; min-height:3.75rem; display:grid; align-content:center; gap:0.125rem; }
+ .fdv { margin-left:0; }
+}
+
+/* Header market figures stay alongside the coin identity in terminal mode. */
+:global([data-presentation="focus"]) .hero { margin:0; padding:0; justify-content:flex-start; gap:1.75rem; }
+:global([data-presentation="focus"]) .priceFigure { font-size:1.75rem; }
+
+:global(header) .hero { margin:0; padding:0; justify-content:flex-start; gap:1.75rem; }
+:global(header) .hero .fdv { margin-left:0; }
+.tradeTableHead { display:grid; grid-template-columns:minmax(0,1fr) 2.25rem 4.125rem 1.875rem; gap:0.375rem; margin-bottom:0.5rem; color:var(--muted); font-size:0.625rem; }
+.tradeTableHead > :nth-child(n+3) { text-align:right; }
+:global([data-workspace-section="activity"]) .rows > li { display:grid; grid-template-columns:minmax(0,1fr) 2.25rem 4.125rem 1.875rem; grid-auto-flow:row; min-height:2.25rem; gap:0.375rem; }
+:global([data-workspace-section="activity"]) .side { padding:0; background:transparent; font-size:0.6875rem; font-weight:500; }
+:global([data-workspace-section="activity"]) .side svg { display:none; }
+:global([data-workspace-section="activity"]) .figure { font-size:0.75rem; font-weight:500; }
+:global([data-workspace-section="activity"]) .when { font-size:0.625rem; }
+@container terminal-activity (max-width:220px) {
+  .tradeTableHead { display:none; }
+  :global([data-workspace-section="activity"]) .rows > li { grid-template-columns:minmax(0,1fr) auto 1.875rem; gap:0.125rem 0.375rem; padding-block:0.375rem; }
+  :global([data-workspace-section="activity"]) .rows > li > :first-child { grid-column:1 / 3; }
+  :global([data-workspace-section="activity"]) .when { grid-column:3; grid-row:1; }
+  :global([data-workspace-section="activity"]) .side { grid-column:1; grid-row:2; }
+  :global([data-workspace-section="activity"]) .figure { grid-column:2 / 4; grid-row:2; }
+  .postMeta { flex-wrap:wrap; white-space:normal; }
+  .postMeta > span { display:none; }
+}
+@media (pointer:coarse) {
+  :global([data-workspace-section="activity"]) .rows > li { min-height:48px; }
+  .rows .figure button,.rows .when button { min-height:44px; min-width:44px; }
+  .rows .when button { justify-content:flex-end; }
+  .tradeTableHead,:global([data-workspace-section="activity"]) .rows > li { grid-template-columns:minmax(0,1fr) 36px 66px 44px; }
+  @container terminal-activity (max-width:220px) {
+    :global([data-workspace-section="activity"]) .rows > li { grid-template-columns:minmax(0,1fr) auto 44px; }
+  }
+}
+:global(header) .priceFigure { font-size:0.875rem; }
+
+@container terminal-activity (min-width:600px) {
+ .tradeTableHead,:global([data-workspace-section="activity"]) .rows > li { grid-template-columns:minmax(0,1fr) 6.25rem 10rem 5rem; gap:1.25rem; }
+ .tradeTableHead { font-size:0.75rem; }
+ :global([data-workspace-section="activity"]) .rows > li { min-height:max(44px, 2.75rem); }
+ :global([data-workspace-section="activity"]) .side,:global([data-workspace-section="activity"]) .when { font-size:0.75rem; }
+ :global([data-workspace-section="activity"]) .figure { font-size:0.8125rem; }
+}
+
+.priceUnavailable { color:var(--muted); font-size:0.8125rem; font-weight:500; line-height:1.5; }
+
+.priceNote { margin-inline-start:0.5rem; color:var(--muted); font-size:0.75rem; font-weight:500; vertical-align:middle; }
+
+/* Redesign: hero figures use the display face with tabular numerals. */
+.hero .priceFigure,:global([data-presentation="focus"]) .priceFigure { font-family:var(--display); font-variant-numeric:tabular-nums; }
+.heroFaces { flex:none; }
+
+/* The focus board's headline price (BlastMode.dc.html): 30px display figure, 650, tight tracking. */
+:global([data-board-head]) .priceFigure { font-size:1.875rem; line-height:2.0625rem; font-weight:650; letter-spacing:-.035em; }
+:global([data-board-head]) .pricePending { font-size:1.875rem; line-height:2.0625rem; }
+/* The focus board's chart card: toolbar, plot and "On chart" 12px apart; the toolbar's controls 8px apart. */
+.panel[data-focus="true"] .body[data-view="overview"] > .chartStage { gap:0.75rem; }
+.panel[data-focus="true"] .chartTools { gap:0.5rem; min-height:2rem; padding:0; }
+/* The focus board's tools are one line, in their order: a narrower card scrolls the row sideways (no scrollbar) instead of wrapping it and starving the plot. The 3px inset keeps focus rings in view. */
+.panel[data-focus="true"] .chartTools { flex-wrap:nowrap; overflow-x:auto; overflow-y:hidden; overscroll-behavior-x:contain; scrollbar-width:none; padding:0.1875rem; margin:-0.1875rem; }
+.panel[data-focus="true"] .chartTools::-webkit-scrollbar { display:none; }
+.panel[data-focus="true"] .chartTools > *,.panel[data-focus="true"] .chartTools > * > * { flex-shrink:0; }
+/* A card narrower than its tools (1280): the row fades at its end instead of cutting a label, and its last control can scroll clear of the fade. */
+@container focus-chart (max-width:44rem) { .panel[data-focus="true"] .chartTools { padding-inline-end:2rem; mask-image:linear-gradient(to right, black calc(100% - 2rem), transparent); } }
+.panel[data-focus="true"] .chartDetailsSlot { gap:0.5rem; }
+/* A compact task view gives the chart the screen's height, so its tools wrap to a second row instead of scrolling away (Blast mode audit, 2026-10-28). */
+.panel[data-focus="true"] :global([data-terminal-grid="stacked"]) .chartTools { flex-wrap:wrap; overflow:visible; mask-image:none; padding-inline-end:0.1875rem; row-gap:0.5rem; }

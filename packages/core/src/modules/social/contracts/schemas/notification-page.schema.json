@@ -1,0 +1,171 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/notification-page.schema.json",
+  "title": "A page of the caller's notifications",
+  "description": "GET /api/social/me/notifications 200: newest event first (keyset), the next page's cursor and the unread count (capped at 100).",
+  "type": "object",
+  "properties": {
+    "items": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$"
+          },
+          "kind": {
+            "enum": [
+              "fill",
+              "follow",
+              "claim",
+              "funded",
+              "soon",
+              "unlock",
+              "call_up"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "sub": {
+            "type": "string",
+            "maxLength": 600
+          },
+          "occurred_at_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "read": {
+            "type": "boolean"
+          },
+          "href": {
+            "type": "string",
+            "pattern": "^/"
+          },
+          "presale": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "presale_id": {
+                    "type": "string",
+                    "pattern": "^0x[0-9a-f]{64}$"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "symbol": {
+                    "type": "string"
+                  },
+                  "icon_url": {
+                    "type": "string"
+                  },
+                  "coin_type": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Canonical sale coin type; optional for older cached responses."
+                  }
+                },
+                "required": [
+                  "presale_id",
+                  "name",
+                  "symbol",
+                  "icon_url"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "actor": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "callsign": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9_]{1,18}[a-z0-9]$"
+                  },
+                  "display_name": {
+                    "oneOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "avatar_url": {
+                    "oneOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "verified": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "callsign",
+                  "display_name",
+                  "avatar_url",
+                  "verified"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "title",
+          "sub",
+          "occurred_at_ms",
+          "read",
+          "href",
+          "presale",
+          "actor"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "next_cursor": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      ]
+    },
+    "unread_count": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100
+    }
+  },
+  "required": [
+    "items",
+    "next_cursor",
+    "unread_count"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,63 @@
+{
+  "name": "@blast/core",
+  "version": "0.1.0",
+  "private": true,
+  "exports": {
+    "./web/contracts/validate.ts": null,
+    "./web/contracts/*.test.ts": null,
+    "./web/contracts/schemas/*": null,
+    "./web/contracts/*.ts": "./src/modules/social/contracts/*.ts",
+    "./web/format.ts": "./src/lib/format.ts",
+    "./web/exact-amount.ts": "./src/lib/exact-amount.ts",
+    "./modules/social/contracts/validate.ts": {
+      "browser": null,
+      "default": "./src/modules/social/contracts/validate.ts"
+    },
+    "./web/card-brand.ts": "./src/modules/mission-control/card-renderer/card-brand.ts",
+    "./web/card-editions.ts": "./src/modules/mission-control/card-renderer/editions.ts",
+    "./web/launchpad-read.ts": "./src/modules/launchpad-contract/read.ts",
+    "./modules/social/read-model/*": {
+      "browser": null,
+      "default": "./src/modules/social/read-model/*"
+    },
+    "./*": "./src/*"
+  },
+  "imports": {
+    "#metric-log": {
+      "browser": "./src/lib/logging.browser.ts",
+      "default": "./src/lib/logging.ts"
+    }
+  },
+  "scripts": {
+    "test": "npm run contracts:check && node --no-warnings --import ../../scripts/test-tsx-hooks.mjs --test --experimental-strip-types 'src/**/!(*.integration|*.external).test.ts' 'test/**/!(*.integration|*.external).test.ts'",
+    "contracts:generate": "node scripts/generate-contract-schemas.ts",
+    "contracts:check": "node scripts/generate-contract-schemas.ts --check",
+    "test:integration": "node ../../scripts/test-integration.mjs",
+    "test:defillama-infra": "test -n \"$DEFILLAMA_INFRA_CHECKOUT\" || { echo \"DEFILLAMA_INFRA_CHECKOUT must name a blast-infra checkout\" >&2; exit 1; }; node --no-warnings --import ../../scripts/test-tsx-hooks.mjs --test --experimental-strip-types src/modules/defillama/reporting.external.test.ts",
+    "test:sdk-contract": "node --no-warnings --test --experimental-strip-types src/modules/launchpad-contract/sdk-contract.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@cetusprotocol/aggregator-sdk": "1.7.3",
+    "@interest-protocol/blast-core": "0.3.0",
+    "@interest-protocol/blast-sdk": "0.3.0",
+    "@interest-protocol/blast-util-sdk": "0.2.0",
+    "@mysten/sui": "^3.0.1",
+    "@noble/hashes": "^2.4.0",
+    "@redis/client": "^6.3.0",
+    "@solana-program/token": "^0.17.0",
+    "@solana/kit": "^8.4.0",
+    "@vercel/functions": "^3.9.11",
+    "decimal.js": "^10.6.0",
+    "ipaddr.js": "2.5.0",
+    "jose": "^6.2.12",
+    "pg": "^8.23.1",
+    "pino": "10.0.0",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.23.1",
+    "ajv": "^8.20.0"
+  },
+  "type": "module"
+}

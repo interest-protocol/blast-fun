@@ -1,0 +1,579 @@
+/*
+ * Home (the Main board, 2026-10-27): the title row, the pinned carousel, then the
+ * sections — each a 20/650 title line over its own surface, 12px below it:
+ * Coins, Posts and Top traders in a 22px table card (8px inset, rows 12px
+ * inside on the 14px corner), Presales as a row of cards. Blocks keep 28px
+ * between them. Lengths are the board's px in rem, so the fluid root keeps
+ * its proportions at every width; colours are the shell's tokens. Phones
+ * (≤ 760px) follow the Mobile board: rows on the ground, the figures
+ * stacked. Motion is transform and opacity only; hover only where a
+ * pointer can hover.
+ */
+
+/* ---------- the page ---------- */
+.home { container: home / inline-size; min-width: 0; display: flex; flex-direction: column; --page-title-gap: 1.75rem; }
+.board { min-width: 0; display: flex; flex-direction: column; gap: 1.75rem; }
+/* A section with no rows keeps its title and source tabs but drops its list controls; while lists are late it goes, and the page's one line speaks for it. */
+.rowTools { display: contents; }
+.home [data-section]:has([data-list-empty], [data-list-none]) .rowTools { display: none; }
+.home[data-late] [data-section]:has([data-list-empty], [data-list-pending]):not(:focus-within) { display: none; }
+/* The line speaks only for sections it stands in for; with every list filled it goes. */
+.home:not(:has([data-section] [data-list-empty], [data-section] [data-list-pending])) .lateLine { display: none; }
+/* A public portfolio (the crew page) uses the tables' holdings rules in its own column. */
+.portfolio { container: home / inline-size; min-width: 0; display: flex; flex-direction: column; gap: 1rem; }
+
+/* ---------- the sections: a title line, then the section's surface ---------- */
+.sections { min-width: 0; display: flex; flex-direction: column; gap: 1.75rem; }
+/* The title line is the grid's first row; a section's own items on it (the traders' basis and search) take its middle and end. */
+.section {
+  position: relative; min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; column-gap: 0.625rem; row-gap: 0.75rem;
+  scroll-margin-top: calc(var(--shell-topbar-height, 4rem) + 0.75rem);
+}
+.section > * { grid-column: 1 / -1; min-width: 0; }
+.section[data-lifted] { z-index: 20; }
+.section[data-lifted] .sectionSurface { box-shadow: var(--sh-pop); }
+.sectionHead { min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 0.625rem; }
+.sectionHead h2 { margin: 0 0.5rem 0 0; font-size: 1.25rem; font-weight: 650; line-height: 1.45; letter-spacing: -.02em; }
+.sectionTools { margin-left: auto; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 0.625rem; }
+/* Search sits beside the source tabs and stays visible when Filters is closed. */
+.sectionTools:has(> .coinHead) { flex: 1 1 auto; margin-left: 0; }
+.coinHead { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 0.625rem; }
+.coinHead > .sources { flex: none; }
+.coinHead > .coinSearch { flex: 1 0 9rem; max-width: 19rem; justify-content: flex-start; text-align: start; color: var(--muted); }
+.searchKey { margin-inline-start: auto; min-width: 1.25rem; border-radius: var(--r-inner); background: var(--raised); font: 600 0.75rem/1.25rem var(--mono); text-align: center; }
+.coinControls { margin-left: auto; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 0.625rem; }
+/* The grip and the hide (Customize Home's drag mode): quiet until the line is hovered or they are focused; always there for a finger. */
+.grip, .hide {
+  width: 1.75rem; height: 1.75rem; border-radius: var(--r-button); display: inline-flex; align-items: center; justify-content: center;
+  color: var(--muted); opacity: 0; transition: opacity var(--t2) var(--ease-std), background var(--t2) var(--ease-std), color var(--t2) var(--ease-std), transform var(--t1) var(--ease-std);
+}
+.grip { cursor: grab; touch-action: none; }
+.grip svg, .hide svg { width: 1rem; height: 1rem; }
+.grip:focus-visible, .hide:focus-visible, .section[data-lifted] .grip { opacity: 1; }
+@media (hover: hover) and (pointer: fine) {
+  .sectionHead:hover :is(.grip, .hide) { opacity: 1; }
+  .grip:hover, .hide:hover { background: var(--chip); color: var(--ink-2); }
+}
+.grip:active { cursor: grabbing; color: var(--ink); background: var(--chip); }
+.hide:active { transform: scale(.97); transition-duration: 0s; }
+@media (hover: none) { .grip, .hide { opacity: 1; } }
+
+/* ---------- the table card ---------- */
+/* The surface is its own layer, so a page turn can resize it with a transform while the rows never scale. */
+.tableCard { position: relative; isolation: isolate; min-width: 0; padding: 0.5rem; border-radius: var(--r-md); }
+.sectionSurface {
+  position: absolute; inset: 0; z-index: -1; pointer-events: none; border-radius: inherit; transform-origin: top;
+  background: linear-gradient(180deg, var(--card-lit), transparent 10rem), var(--card); box-shadow: var(--sh-1);
+}
+@media (prefers-contrast: more) { .sectionSurface { outline: 1px solid var(--hair-2); outline-offset: -1px; } }
+
+/* ---------- the ledger: one header, rows on the 14px corner, nothing ruled ---------- */
+.listHead { display: grid; align-items: center; min-height: 2.5rem; padding: 0 0.75rem; font-size: 0.75rem; color: var(--muted); }
+.hEnd { justify-self: end; }
+.sortHead { padding: 0; border: 0; background: none; font: inherit; color: var(--muted); cursor: pointer; border-radius: var(--r-inner); transition: color var(--t2) var(--ease-std); }
+.sortHead[data-on] { color: var(--ink); font-weight: 600; }
+@media (hover: hover) and (pointer: fine) { .sortHead:hover { color: var(--ink); } }
+.list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; }
+.rankedList { position: relative; overflow-anchor: none; }
+
+.marketActivity {
+  --activity-ink: var(--pink-text);
+  --activity-fill: var(--pink-soft);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 3.625rem;
+  margin-block: 0.375rem 0.5rem;
+  padding: 0.375rem 0.5rem 0.375rem 0.75rem;
+  border-radius: var(--r-sm);
+  background: linear-gradient(105deg, var(--activity-fill), transparent 75%);
+}
+.marketActivity[data-direction="up"] { --activity-ink: var(--up); --activity-fill: var(--up-soft); }
+.marketActivity[data-direction="down"] { --activity-ink: var(--down); --activity-fill: var(--down-soft); }
+.marketActivityContent { flex: 1; min-width: 0; min-height: 44px; display: grid; align-content: center; gap: 0.125rem; }
+.marketActivityLabel { color: var(--muted); font-size: 0.75rem; font-weight: 600; }
+.marketActivityLink { color: var(--ink); border-radius: var(--r-inner); }
+.marketActivityQuote { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.125rem 0.375rem; font-size: 0.875rem; line-height: 1.25; }
+.marketActivitySymbol { font-weight: 700; }
+.marketActivityChange { flex: none; color: var(--activity-ink); font-variant-numeric: tabular-nums; font-weight: 700; }
+.marketActivityPeriod { color: var(--muted); font-size: 0.75rem; }
+@media (prefers-reduced-motion: no-preference) {
+  :global(html:not([data-blast-input="keyboard"])) .marketActivityQuote[data-arrival] { animation: home-price-arrive var(--t2) var(--ease-std) both; }
+  @keyframes home-price-arrive {
+    from { opacity: 0.55; transform: translateY(0.1875rem); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+}
+
+/* The coin columns (the board's): # · coin · price · 24h · volume · FDV · top 10 · age · 7d · Buy. */
+.cols { grid-template-columns: 2rem minmax(11.25rem, 1.6fr) minmax(0, 1fr) minmax(0, .8fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, .8fr) minmax(0, .6fr) 7.5rem auto; column-gap: 0.75rem; }
+.hRank, .rank { grid-column: 1; }
+.hIdent, .ident { grid-column: 2; }
+.hPrice, .price { grid-column: 3; justify-self: end; }
+.hChange, .change { grid-column: 4; justify-self: end; }
+.hVol, .vol { grid-column: 5; justify-self: end; }
+.hFdv, .fdv { grid-column: 6; justify-self: end; }
+.hTop, .top { grid-column: 7; justify-self: end; }
+.hAge, .age { grid-column: 8; justify-self: end; }
+.hWeek, .week { grid-column: 9; justify-self: end; }
+.rowActions { grid-column: 10; justify-self: end; min-width: 4rem; justify-content: end; }
+
+/* The row: 64px, lit on hover, never ruled; the ticker link covers its blank space. */
+.row { position: relative; display: grid; align-items: center; min-height: 4rem; padding: 0 0.75rem; border-radius: var(--r-sm); font-size: 0.9375rem; line-height: 1.45; transition: background var(--t2) var(--ease-std); }
+.row:has(> .expand), .coinRow { cursor: pointer; }
+/* The open control spans the row, so hovering anywhere lights the row, not the chevron's own box. */
+@media (hover: hover) and (pointer: fine) { .row:hover { background: var(--chip); } .row > button.expand:hover { background: transparent; color: var(--ink); } }
+.row:focus-within { outline: 1px solid var(--hair-2); outline-offset: -1px; }
+.row > *, .row button { min-width: 0; }
+.row button { touch-action: manipulation; }
+.row > button.expand { color: var(--muted); }
+.row .expand { position: static; justify-self: end; }
+.row .expand::before { content: ""; position: absolute; inset: 0; border-radius: var(--r-sm); }
+.row a, .row button:not(.expand) { position: relative; z-index: 1; }
+.coinRow a.symbol { position: static; touch-action: manipulation; }
+.coinRow a.symbol::before { content: ""; position: absolute; inset: 0; z-index: 1; }
+@supports selector(:has(*)) {
+  .coinRow a.symbol:focus-visible { outline: none; box-shadow: none; }
+  .coinRow:has(a.symbol:focus-visible) { outline: 0.125rem solid var(--focus-color, var(--ink)); outline-offset: -0.125rem; }
+}
+
+.rank { font-size: 0.8125rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ident { min-width: 0; display: flex; align-items: center; gap: 0.75rem; }
+/* The coin's mark: 38px on a 12px corner (its picture is read at 44). */
+.ident > span:first-child { flex: none; width: 2.375rem; height: 2.375rem; border-radius: 0.75rem; }
+.identText { min-width: 0; display: flex; flex-direction: column; line-height: 1.3; }
+.symbol { align-self: flex-start; max-width: 100%; min-width: 0; overflow-wrap: anywhere; white-space: normal; font-size: 0.9375rem; font-weight: 600; color: var(--ink); border-radius: var(--r-inner); }
+.symbol:active { opacity: .7; }
+.coinName { display: block; font-size: 0.8125rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.coinName.coinMeta { display: flex; align-items: center; gap: 0.375rem; }
+.coinNameText { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: inherit; }
+.coinVenue { flex: none; display: inline-flex; align-items: center; }
+.coinName img { width: 0.875rem; height: 0.875rem; }
+/* The figures: tabular, right-aligned, never wrapped; the 24h move is the row's coloured figure. */
+.price, .change, .vol, .fdv, .top, .age, .mobileFdv { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.price, .mobileFdv { font-weight: 600; }
+.marketQuote { grid-column: 3; display: flex; flex-direction: column; align-items: flex-end; }
+.mobileFdv, .mobileChange, .mobileOnly { display: none; }
+.mobileMarketLabel, .changeWindow { font-size: 0.75rem; color: var(--muted); font-weight: 400; }
+.price[data-stale]::before { content: "Stale "; font-size: 0.75rem; font-weight: 400; color: var(--muted); }
+.change { font-size: 0.875rem; font-weight: 600; color: var(--ink-2); }
+.fdv, .top { color: var(--muted); }
+.fdv[data-stale] { color: var(--faint); }
+.age { font-size: 0.8125rem; color: var(--muted); }
+.week { display: block; width: 7.5rem; height: 2rem; color: var(--muted); }
+/* Row actions sit above the link's hit area. */
+.rowActions { display: flex; align-items: center; gap: 0.25rem; position: relative; z-index: 2; pointer-events: none; }
+.rowActions button { pointer-events: auto; }
+@media (hover: hover) and (pointer: fine) {
+  .rowActions { opacity: 0; transition: opacity var(--t2) var(--ease-std); }
+  .row:hover .rowActions, .row:focus-within .rowActions { opacity: 1; }
+}
+@media (pointer: coarse) { .rowActions button { min-width: 44px; min-height: 44px; } }
+.up { color: var(--up); }
+.down { color: var(--down); }
+.quiet { color: var(--faint); }
+.ofTarget { font-size: 0.8125rem; font-weight: 400; color: var(--muted); }
+.metricLoading { display: inline-block; width: 2rem; height: 0.5rem; border-radius: var(--r-inner); background: var(--hair); animation: coin-pulse 1.2s ease-in-out infinite; }
+/* Leave room for the empty action or initial retry while the result is pending. */
+.coinResult { display: grid; min-height: 9.5rem; }
+.coinResult > * { justify-content: center; }
+
+/* A sale's row in a coin list (Following, the Watchlist): raised of target over the bar, the close, the backers and the stage, in the same grid. */
+.row[data-sale] .funding { grid-column: 3 / 6; }
+.row[data-sale] .closes { grid-column: 6; justify-self: end; }
+.row[data-sale] .backers { grid-column: 7; justify-self: end; }
+.row[data-sale] .saleStatus { grid-column: 8 / 10; justify-self: end; }
+.funding { min-width: 0; display: flex; flex-direction: column; gap: 0.4375rem; font-size: 0.8125rem; font-weight: 600; }
+.funding > :first-child { overflow-wrap: anywhere; }
+.funding .bar { width: 100%; height: 0.3125rem; }
+.closes, .backers { font-size: 0.8125rem; white-space: nowrap; }
+.saleStatus { display: flex; flex-direction: column; align-items: flex-end; gap: 0.25rem; font-size: 0.6875rem; color: var(--muted); }
+.saleStatus :global(.status) { text-transform: capitalize; }
+.mobileLabel { display: none; }
+
+/* The open item: the row and its card on one raised panel. */
+.item { min-width: 0; border-radius: var(--r-sm); transition: background 220ms var(--ease-std); }
+.item[data-expanded] { background: var(--raised); }
+.item[data-expanded] .row { background: transparent; }
+
+/* The footer: rows per page and the count, then the pager. */
+.tableFooter { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.75rem 0.75rem 0.375rem; }
+.footStart { display: flex; align-items: center; gap: 0.75rem; min-width: 0; }
+.footCount { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
+.rows { display: inline-flex; align-items: center; gap: 0.5rem; }
+.end { display: flex; flex-direction: column; align-items: center; gap: 0.5rem; padding: 0.8125rem 0 0; text-align: center; color: var(--muted); font-size: 0.875rem; }
+.end:empty { display: none; }
+.end p { margin: 0; }
+.end p[role="alert"] { color: var(--ink-2); }
+.caughtUp { margin: 0; padding: 1.3125rem; text-align: center; color: var(--muted); font-size: 0.875rem; }
+.marketNotice { margin: 0; padding: 0.25rem 0.75rem 0.75rem; color: var(--muted); font-size: 0.75rem; display: flex; flex-wrap: wrap; gap: 0.25rem 0.625rem; align-items: center; }
+.diagnostics { color: var(--muted); font-size: 0.75rem; overflow-wrap: anywhere; }
+/* "Activity is delayed": a quiet notice over the data, never in place of it. */
+.delayed { margin: 0 0 0.5rem; padding: 0.8125rem 1.0625rem; border-radius: var(--r-sm); background: var(--warn-soft); color: var(--ink-2); font-size: 0.875rem; }
+.delayed strong { color: var(--warn); font-weight: 600; }
+
+/* The live switch on the Coins title line: the shared switch in a 36px label, 6px in, its word 10px after it. */
+.rankingControls { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 0.25rem 0.5rem; font-size: 0.8125rem; }
+
+/* ---------- expanded trader holdings ---------- */
+.card { padding: 0.75rem 0.75rem 1.25rem; }
+.card[hidden] { display: none; }
+.detailLink { display: inline-flex; align-items: center; gap: 0.375rem; width: fit-content; min-height: 2.5rem; padding: 0.5rem 0.625rem; margin-top: auto; border-radius: var(--r-sm); font-size: 0.8125rem; font-weight: 500; color: var(--muted); text-decoration: none; }
+.detailLink svg { width: 0.875rem; height: 0.875rem; }
+.detailLink:focus-visible { outline: 0.125rem solid var(--focus-color, var(--ink)); outline-offset: 0.125rem; }
+@media (hover: hover) and (pointer: fine) { .detailLink:hover { background: var(--hair); color: var(--ink); text-decoration: none; } }
+.holdingsHeader { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-bottom: 0.75rem; }
+.holdingsHeader .previewHeading { margin-bottom: 0; }
+.previewHeading { margin: 0 0 0.75rem; font-size: 0.8125rem; font-weight: 650; }
+.activityRow { display: flex; align-items: center; gap: 0.625rem; padding: 0.625rem 0; font-size: 0.75rem; }
+.activityRow + .activityRow { border-top: 1px solid var(--hair); }
+
+.bar { display: block; height: 0.25rem; border-radius: var(--r-inner); background: var(--track); overflow: hidden; }
+.bar i { display: block; width: 100%; height: 100%; border-radius: inherit; background: var(--ink); transform: scaleX(0); transform-origin: left; }
+
+/* A direction's glyph: buys up, sells down, commitments pink, claims blue. */
+.glyph { flex: none; vertical-align: -0.125rem; margin-right: 0.25rem; }
+.glyph[data-kind="trade_buy"] { color: var(--up); }
+.glyph[data-kind="trade_sell"] { color: var(--down); }
+.glyph[data-kind="presale_commit"] { color: var(--pink-text); }
+.glyph[data-kind="presale_claim"] { color: var(--info); }
+/* The coin's mark in place of its word inside a sentence: a square, as every project's mark is (people are circles). */
+.coinWord { display: inline-flex; align-items: center; vertical-align: -0.25rem; margin: 0 1px; }
+.coinWord > span:first-child { width: 1.125rem !important; height: 1.125rem !important; border-radius: var(--r-inner) !important; overflow: hidden; }
+.coinWord > span:first-child > * { border-radius: var(--r-inner) !important; }
+.venue { display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.8125rem; color: var(--muted); }
+
+/* People in the thread: a name, a tag, when. */
+.name { font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-radius: var(--r-inner); }
+@media (hover: hover) and (pointer: fine) { a.name:hover { text-decoration: underline 1px; text-underline-offset: 0.1875rem; } }
+a.name:active { opacity: .6; }
+.ftag { flex: none; height: 1.125rem; padding: 0 0.4375rem; border-radius: 62.4375rem; background: var(--info-soft); color: var(--info); font-size: 0.6875rem; font-weight: 600; display: inline-flex; align-items: center; white-space: nowrap; }
+.when { flex: none; font-size: 0.75rem; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; border-radius: var(--r-inner); }
+@media (hover: hover) and (pointer: fine) { a.when:hover { color: var(--ink); } }
+.wallet { display: block; border-radius: 62.4375rem; overflow: hidden; }
+.wallet[data-size="26"] > span { width: 1.625rem !important; height: 1.625rem !important; }
+.wallet[data-size="30"] > span { width: 1.875rem !important; height: 1.875rem !important; }
+
+.threadNote { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; font-size: 0.8125rem; color: var(--muted); }
+.threadNote[role="alert"] { color: var(--ink-2); }
+.participants { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; }
+.participant { display: grid; grid-template-columns: 1.875rem minmax(0, 1fr); column-gap: 0.625rem; padding: 0.5625rem 0; border-top: 1px solid var(--hair); }
+.participant:first-child { border-top: 0; padding-top: 0; }
+.participant > span:first-child { width: 1.875rem !important; height: 1.875rem !important; margin-top: 0.125rem; }
+.participantBody { min-width: 0; display: flex; flex-direction: column; gap: 0.1875rem; }
+.participantHead { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.5rem; font-size: 0.875rem; }
+.participantHead .when { margin-left: auto; }
+.followers { font-size: 0.75rem; color: var(--muted); }
+.participantLine { margin: 0; font-size: 0.875rem; line-height: 1.4; color: var(--ink-2); text-wrap: pretty; }
+.eventsToggle { align-self: flex-start; }
+.events { margin: 0.125rem 0 0; padding: 0 0 0 0.625rem; list-style: none; display: flex; flex-direction: column; gap: 0.375rem; border-left: 0.125rem solid var(--hair-2); }
+.event { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.25rem 0.5rem; font-size: 0.8125rem; color: var(--ink-2); }
+.eventLine { color: var(--ink-2); }
+.participantLine .eventPost { margin-left: 0.375rem; }
+.eventUsd { color: var(--muted); }
+.eventPost { font-weight: 600; color: var(--pink-text); }
+.eventsMore { font-size: 0.75rem; color: var(--muted); }
+
+/* ---------- the tape: the newest followed events on one scrolling line ---------- */
+.tape { display: flex; align-items: center; gap: 0.8125rem; min-height: 2.25rem; padding: 0 0.8125rem; font-size: 0.8125rem; color: var(--ink-2); }
+.tapeLive { flex: none; display: inline-flex; align-items: center; gap: 0.4375rem; font-size: 0.75rem; font-weight: 600; letter-spacing: .02em; color: var(--pink-text); }
+/* The dot pulses once when the newest event changes (the element is keyed by it), never on a loop. */
+.tapeLive i { width: 0.4375rem; height: 0.4375rem; border-radius: 62.4375rem; background: var(--pink); animation: coin-pulse-pink 1.2s var(--ease-std) 1; }
+@keyframes coin-pulse-pink { 0%, 100% { box-shadow: 0 0 0 0 rgba(255, 76, 152, .45); } 70% { box-shadow: 0 0 0 0.4375rem rgba(255, 76, 152, 0); } }
+.tapeList { min-width: 0; flex: 1; margin: 0; padding: 0; list-style: none; display: flex; gap: 1.3125rem; overflow-x: auto; scrollbar-width: none; white-space: nowrap; }
+.tapeList::-webkit-scrollbar { display: none; }
+.tapeItem { flex: none; display: inline-flex; align-items: center; gap: 0.4375rem; }
+.tapeItem > span:first-child { width: 1.375rem !important; height: 1.375rem !important; }
+.tapeText { white-space: nowrap; }
+.tapeName { font-weight: 600; color: var(--ink); }
+.tapeText :global(.verified) { margin-left: 0.1875rem; }
+.tapeCoin { font-weight: 600; color: var(--ink); }
+@media (hover: hover) and (pointer: fine) { .tapeName:hover, .tapeCoin:hover { text-decoration: underline 1px; text-underline-offset: 0.1875rem; } }
+.tapeWhen { font-size: 0.75rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* ---------- presales: cards three abreast ---------- */
+.saleCards { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem; }
+.saleCards > li { min-width: 0; display: flex; }
+:global([data-blast-ui]) .saleCards .saleCard { border-radius: 1.25rem; }
+.saleCard { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.875rem; padding: 1.125rem; color: var(--ink); font-size: 0.9375rem; line-height: 1.45; text-decoration: none; transition: background var(--t2) var(--ease-std), transform var(--t1) var(--ease-std); }
+@media (hover: hover) and (pointer: fine) { a.saleCard:hover { background: var(--raised); color: var(--ink); text-decoration: none; } }
+a.saleCard:active { transform: scale(.98); }
+a.saleCard:focus-visible { outline: 0.125rem solid var(--focus-color, var(--ink)); outline-offset: 0; }
+.saleHead { min-width: 0; display: flex; align-items: center; gap: 0.75rem; }
+.saleHead > span:first-child { flex: none; width: 2.75rem; height: 2.75rem; border-radius: 0.8125rem; }
+.saleName { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.3; }
+.saleName > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.saleName > b { font-size: 1rem; font-weight: 600; }
+.saleName > span { font-size: 0.8125rem; color: var(--muted); }
+.saleHead > :global(.status) { flex: none; }
+.saleBar { display: block; height: 0.375rem; border-radius: 62.4375rem; background: var(--hair); overflow: hidden; }
+.saleBar i { display: block; width: 100%; height: 100%; border-radius: inherit; background: var(--ink); transform: scaleX(0); transform-origin: left; }
+.saleBar[data-tone="open"] i { background: var(--pink); }
+.saleBar[data-tone="pending"] i { background: var(--warn); }
+.saleBar[data-tone="funded"] i { background: var(--info); }
+.saleFoot { min-width: 0; display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; }
+.saleFoot b { font-size: 0.9375rem; font-weight: 600; }
+.saleTime { flex: none; font-size: 0.8125rem; color: var(--muted); }
+.salePager { justify-self: end; }
+@container home (max-width: 50rem) { .saleCards { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---------- posts: author · post · coin · time ---------- */
+.postCols { grid-template-columns: minmax(11.25rem, 1fr) minmax(0, 2.4fr) 7.5rem 3.5rem; column-gap: 0.75rem; }
+.row.postCols { min-height: 3.5rem; }
+.postAuthor { min-width: 0; display: flex; align-items: center; gap: 0.625rem; }
+/* A person is a 30px circle; a coin posting as itself, a tile on a 9px corner. */
+.postAuthor > span[aria-hidden="true"] { flex: none; width: 1.875rem; height: 1.875rem; }
+.postAuthor > span[class*=" mk-"] { border-radius: 0.5625rem; }
+.tName { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.875rem; font-weight: 600; color: var(--ink); border-radius: var(--r-inner); }
+@media (hover: hover) and (pointer: fine) { .tName:hover { text-decoration: underline 1px; text-underline-offset: 0.1875rem; } }
+.tName:active { opacity: .7; }
+/* One line: what happened, then the author's own words after it, quieter. */
+.postSummary { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.875rem; color: var(--ink); }
+.postSummary small { font-size: inherit; color: var(--muted); }
+.postCoin { min-width: 0; overflow: hidden; }
+.postCoinLink { max-width: 100%; display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.8125rem; font-weight: 600; color: var(--ink); }
+.postCoinLink > span:first-child { flex: none; width: 1.375rem; height: 1.375rem; border-radius: var(--r-inner); }
+.postWhen { justify-self: end; color: var(--muted); font-size: 0.8125rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.postSummary:active, .postWhen:active, .postCoinLink:active, .holdingIdentity:active { opacity: .7; }
+
+/* ---------- top traders: # · trader · P&L · holdings · open ---------- */
+.traderList { --trader-rank-width: 2rem; }
+.wideRanks { --trader-rank-width: 3.75rem; }
+.hugeRanks { --trader-rank-width: 6rem; }
+.traderCols { grid-template-columns: var(--trader-rank-width) minmax(12.5rem, 1.2fr) minmax(6.875rem, .7fr) minmax(0, 1.8fr) 2rem; column-gap: 0.75rem; }
+.row.traderCols > .expand { grid-column: 5; }
+.traderIdentity { min-width: 0; display: flex; align-items: center; gap: 0.75rem; }
+.traderIdentity > span:first-child { flex: none; width: 2.125rem; height: 2.125rem; }
+.traderIdentity .tName { font-size: 0.9375rem; }
+.traderPnl { justify-self: end; text-align: right; font-size: 0.9375rem; font-weight: 600; white-space: nowrap; }
+.hHoldings, .topHoldings { padding-left: 1.75rem; }
+.topHoldings { min-width: 0; display: flex; align-items: center; gap: 1.125rem; overflow: hidden; }
+.holdingIdentity { min-width: 0; display: inline-flex; align-items: center; gap: 0.375rem; font-size: 0.75rem; font-weight: 600; color: var(--ink); }
+.holdingIdentity > :not(.holdingSymbol) { flex: none; }
+.holdingSymbol { min-width: 0; max-width: 6.25rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.holdingPercent { font-size: 0.75rem; font-weight: 500; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.rank, .private { color: var(--muted); }
+.private { font-size: 0.75rem; }
+.holdingHead, .holdingRow { display: grid; grid-template-columns: minmax(10rem, 1.5fr) repeat(3, minmax(5.625rem, 1fr)); align-items: center; gap: 1rem; padding: 0.75rem 0; }
+.holdingHead { color: var(--muted); font-size: 0.75rem; }
+.holdingRow { font-size: 0.8125rem; border-top: 1px solid var(--hair); }
+.holdingRow > * { min-width: 0; overflow-wrap: anywhere; }
+.holdingRow > :not(:first-child), .holdingHead > :not(:first-child) { text-align: right; }
+.holdingAmount { display: block; margin-top: 0.25rem; color: var(--muted); font-size: 0.75rem; overflow-wrap: anywhere; }
+/* The basis and the search on the section's title line. */
+.section > .traderBasis { grid-row: 1; grid-column: 2; margin: 0; font-size: 0.8125rem; color: var(--muted); }
+.section:has(> .traderBasis) > .sectionHead { grid-column: 1; }
+.section:has(> .traderBasis) > .sectionHead h2 { margin-right: 0; }
+.section > .traderSearch { grid-row: 1; grid-column: 3; }
+.traderSearch { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
+.traderField { width: 17.5rem; min-width: 0; }
+.traderField input::-webkit-search-cancel-button { display: none; }
+
+/* ---------- Customize Home, menus and help ---------- */
+.customize { align-self: flex-end; }
+.settingsLayer { z-index: 100; }
+.sectionsMenu {
+  width: 18.75rem; max-width: calc(100vw - 1.5rem); display: flex; flex-direction: column; gap: 0.5rem; padding: 1rem;
+  background: var(--card); color: var(--ink); border-radius: var(--r-md); box-shadow: var(--sh-pop);
+  transform-origin: var(--transform-origin); transition: opacity 160ms var(--ease-std), transform 160ms var(--ease-std);
+}
+.sectionsMenu[data-starting-style], .sectionsMenu[data-ending-style] { opacity: 0; transform: scale(.97); }
+.sectionsMenu[data-instant], :global(html[data-blast-input="keyboard"]) .sectionsMenu { transition: none; }
+.menuLabel { display: block; margin: 0 0 0.375rem; padding: 0.5rem 0.5625rem 0.125rem; font-size: 0.875rem; font-weight: 600; color: var(--ink); }
+.sectionRow { display: flex; align-items: center; gap: 0.25rem; min-height: 2.5rem; padding: 0; border-radius: var(--r-button); cursor: pointer; font-size: 0.875rem; color: var(--ink); }
+@media (hover: hover) and (pointer: fine) { .sectionRow:hover { background: var(--raised); } }
+.sectionRow b { font-weight: 600; }
+.sectionRow label { display: flex; align-items: center; align-self: stretch; gap: 0.625rem; flex: 1; font-size: 0.8125rem; font-weight: 500; }
+.sectionRow[data-static] { cursor: default; }
+@media (hover: hover) and (pointer: fine) { .sectionRow[data-static]:hover { background: none; } }
+.selectMenu { min-width: 7.5rem; max-width: calc(100vw - 1.5rem); padding: 0.25rem; border-radius: var(--r-sm); background: var(--card); color: var(--ink); box-shadow: var(--sh-pop); }
+.selectOption { display: flex; align-items: center; justify-content: space-between; gap: 1rem; min-height: 2.25rem; padding: 0.5rem 0.75rem; border-radius: var(--r-inner); font-size: 0.8125rem; cursor: pointer; outline: none; }
+.selectOption[data-highlighted] { background: var(--hair); }
+@media (hover:hover) and (pointer:fine) { .selectOption:hover { background: var(--hair); } }
+.selectOption:focus-visible { outline: 0.125rem solid var(--focus-color, var(--ink)); outline-offset: -0.125rem; }
+.metricHelp { padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: inherit; display: inline-block; cursor: help; border-radius: var(--r-inner); }
+.metricHelp:focus-visible { outline: 0.125rem solid var(--focus-color, var(--ink)); outline-offset: 0.125rem; }
+.metricTip {
+  max-width: min(18.75rem, calc(100vw - 1.5rem)); padding: 0.625rem 0.75rem; font-size: 0.75rem; line-height: 1.5; background: var(--ink); color: var(--bg); border-radius: var(--r-button);
+  transform-origin: var(--transform-origin); transition: opacity 160ms var(--ease-std), transform 160ms var(--ease-std);
+}
+.metricTip[data-starting-style], .metricTip[data-ending-style] { opacity: 0; transform: scale(.97); }
+.metricTip[data-instant], :global(html[data-blast-input="keyboard"]) .metricTip { transition: none; }
+
+/* ---------- the Watchlist's unavailable rows ---------- */
+.unavailable { display: flex; align-items: center; justify-content: space-between; gap: 0.8125rem; padding: 0.8125rem 1.3125rem; font-size: 0.8125rem; color: var(--muted); }
+.unavailable > span:first-child { display: flex; flex-direction: column; gap: 0.125rem; min-width: 0; }
+.unavailable b { color: var(--ink); font-size: 0.875rem; font-weight: 600; }
+.unavailableId { color: var(--ink-2); }
+
+/* ---------- skeletons: a collapsed row's geometry ---------- */
+.skeleton .row { cursor: default; }
+.skMark { flex: none; width: 2.375rem; height: 2.375rem; border-radius: 0.75rem; background: var(--chip); }
+.skLine { display: block; height: 0.8125rem; margin: 0.1875rem 0; border-radius: 62.4375rem; background: var(--chip); animation: coin-pulse 1.6s var(--ease-std) infinite; }
+.skLine[data-w="30"] { width: 5rem; }
+.skLine[data-w="40"] { width: 7rem; height: 1.0625rem; }
+@keyframes coin-pulse { 50% { opacity: .55; } }
+
+/* Keep the trend when there is only room for the main trading figures. */
+@container home (max-width: 60rem) {
+  .cols { grid-template-columns: 2rem minmax(10rem, 1.6fr) minmax(0, 1fr) minmax(0, .8fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, .6fr) auto; }
+  .hTop, .top, .hAge, .age { display: none; }
+  .hWeek, .week { grid-column: 7; max-width: 100%; }
+  .rowActions { grid-column: 8; }
+  .row[data-sale] .funding { grid-column: 3 / 5; }
+  .row[data-sale] .closes { grid-column: 5; }
+  .row[data-sale] .backers { grid-column: 6; }
+  .row[data-sale] .saleStatus { grid-column: 7; }
+}
+/* Traders without room for a holdings column: the holdings under the name. */
+@container home (max-width: 48rem) {
+  .listHead.traderCols { display: none; }
+  .traderCols { grid-template-columns: var(--trader-rank-width) minmax(0, 1fr) auto 2rem; row-gap: 0.375rem; }
+  .row.traderCols { padding-block: 0.625rem; }
+  .row.traderCols > .rank { grid-row: 1; }
+  .traderIdentity { grid-column: 2; grid-row: 1; }
+  .traderPnl { grid-column: 3; grid-row: 1; }
+  .row.traderCols > .expand { grid-column: 4; grid-row: 1; }
+  .topHoldings { grid-column: 2 / -1; grid-row: 2; flex-wrap: wrap; gap: 0.375rem 0.75rem; padding-left: 0; }
+  .topHoldings:empty { display: none; }
+  .holdingHead, .holdingRow { grid-template-columns: minmax(5.3125rem, 1.5fr) repeat(3, minmax(0, 1fr)); gap: 0.5rem; font-size: 0.75rem; }
+  .holdingHead > * { min-width: 0; overflow-wrap: anywhere; }
+}
+
+/* ---------- a narrow column: the Mobile board's rows, figures stacked ---------- */
+@container home (max-width: 46rem) {
+  .listHead { display: none; }
+  /* A coin: the 40px mark, the ticker over its volume, the price over its move. */
+  .cols { grid-template-columns: 2.5rem minmax(0, 1fr) auto; grid-template-rows: auto auto; column-gap: 0.75rem; }
+  .row.cols { min-height: 3.875rem; align-content: center; }
+  .row.cols > .rank, .fdv, .top, .age, .week { display: none; }
+  .ident { display: contents; }
+  .ident > span:first-child { grid-column: 1; grid-row: 1 / 3; width: 2.5rem; height: 2.5rem; }
+  .ident > .identText { grid-column: 2; grid-row: 1; }
+  .identText > .coinName { display: none; }
+  .vol { grid-column: 2; grid-row: 2; justify-self: start; font-size: 0.75rem; line-height: 1.3; color: var(--muted); }
+  .vol::after { content: " vol"; }
+  .marketQuote { display: flex; grid-column: 4; grid-row: 1; align-self: end; min-width: 0; }
+  .marketQuote:has(.mobileFdv[title]) > .price[data-stale]::before { content: none; }
+  .marketQuote > .mobileFdv { max-width: 100%; flex-wrap: wrap; justify-content: flex-end; }
+  .price { grid-column: 3; grid-row: 1; line-height: 1.3; }
+  .change { grid-column: 3; grid-row: 2; font-size: 0.75rem; line-height: 1.3; }
+  .row > .desktopChange { display: none; }
+  .row.cols:not([data-sale]) { grid-template-columns: 2.5rem minmax(0, 1fr) clamp(2.5rem, 12vw, 4.5rem) clamp(6.75rem, 28vw, 8rem); }
+  .row.cols:not([data-sale]) > .week { display: block; width: 100%; height: 1.5rem; grid-column: 3; grid-row: 1 / 3; }
+  .row.cols:not([data-sale]) > .mobileChange { grid-column: 4; }
+  .row.cols:has(.rowActions) { grid-template-columns: 2.5rem minmax(0, 1fr) clamp(2.5rem, 10vw, 4rem) auto auto; }
+  .rowActions { grid-column: 5; grid-row: 1 / 3; min-width: 0; opacity: 1; }
+  .row.cols:has(.rowActions > :nth-child(2)) { grid-template-columns: 2.5rem minmax(0, 1fr) auto auto; }
+  .row.cols:has(.rowActions > :nth-child(2)) > .week { display: none; }
+  .row.cols:has(.rowActions > :nth-child(2)) > :is(.marketQuote, .mobileChange) { grid-column: 3; }
+  .row.cols:has(.rowActions > :nth-child(2)) > .rowActions { grid-column: 4; }
+  .row.cols[data-sale]:has(.rowActions) { grid-template-columns: 2.5rem minmax(0, 1fr) auto auto; }
+  .row[data-sale] > .rowActions { grid-column: 4; }
+  .marketQuote > .mobileFdv, .row > .mobileChange { display: inline-flex; align-items: baseline; gap: 0.25rem; }
+  .marketQuote > .mobileFdv { grid-column: 4; grid-row: 1; justify-self: end; line-height: 1.3; font-size: 0.75rem; }
+  /* The open control covers the row (no chevron is drawn); its focus is the row's ring. */
+  .row > .expand { grid-column: 3; grid-row: 1 / 3; opacity: 0; }
+  .row:has(> .expand:focus-visible) { outline: 0.125rem solid var(--focus-color, var(--ink)); outline-offset: -0.125rem; }
+  .row[data-sale] .funding { grid-column: 2; grid-row: 2; }
+  .row[data-sale] .closes { grid-column: 3; grid-row: 1; }
+  .row[data-sale] .saleStatus { grid-column: 3; grid-row: 2; }
+  .row[data-sale] .backers { display: none; }
+  .row[data-sale] .closes .mobileLabel { display: inline; margin-right: 0.25rem; color: var(--muted); }
+  /* A post: the author's face, the name over the post, the coin over the time. */
+  .postCols:not(.workspacePost) { grid-template-columns: 2.5rem minmax(0, 1fr) auto; grid-template-rows: auto auto; column-gap: 0.75rem; }
+  .row.postCols:not(.workspacePost) { min-height: 3.625rem; align-content: center; }
+  .postCols:not(.workspacePost) .postAuthor { display: contents; }
+  .postCols:not(.workspacePost) .postAuthor > span[aria-hidden="true"] { grid-column: 1; grid-row: 1 / 3; width: 2.5rem; height: 2.5rem; }
+  .postCols:not(.workspacePost) .postAuthor > span[class*=" mk-"] { border-radius: 0.75rem; }
+  .postCols:not(.workspacePost) .postAuthor > .identText { grid-column: 2; grid-row: 1; }
+  .postCols:not(.workspacePost) .tName { font-size: 0.9375rem; line-height: 1.3; }
+  .postCols:not(.workspacePost) .postSummary { grid-column: 2; grid-row: 2; font-size: 0.8125rem; line-height: 1.3; color: var(--muted); }
+  .postCols:not(.workspacePost) .postCoin { grid-column: 3; grid-row: 1; justify-self: end; }
+  .postCols:not(.workspacePost) .postCoinLink { font-size: 0.75rem; line-height: 1.3; }
+  .postCols:not(.workspacePost) .postCoinLink > span:first-child { display: none; }
+  .postCols:not(.workspacePost) .postWhen { grid-column: 3; grid-row: 2; font-size: 0.75rem; line-height: 1.3; }
+  .section > .traderSearch { grid-row: 2; grid-column: 1 / -1; }
+  .traderField { flex: 1; width: auto; }
+}
+
+/* ---------- phones: the Mobile board's page ---------- */
+@media (max-width: 760px) {
+  .home { --page-title-gap: 0.75rem; }
+  .board, .sections { gap: 1rem; }
+  .sectionHead h2 { font-size: 1.0625rem; }
+  /* The Mobile board opens the coins on their sources: the title stays for assistive technology. */
+  .section[data-section="coins"] > .sectionHead > h2 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .sectionTools:has(> .coinHead) { flex-basis: 100%; }
+  .coinHead > .sources:global(.seg) { display: grid; flex: 1 0 100%; min-width: 0; grid-auto-columns: minmax(0, 1fr); }
+  .coinHead > .sources:global(.seg) :global([role="tab"]) { min-height: 44px; padding-inline: 0.5rem; }
+  .coinHead > .coinSearch { max-width: none; }
+  .coinHead .coinSearch:global([data-ui-size]) { --control-height: max(44px, 2.75rem); }
+  .coinControls { display: contents; }
+  .rankingControls:has([data-incoming]) {
+    position: fixed;
+    z-index: 3;
+    bottom: calc(5.5625rem + env(safe-area-inset-bottom, 0px));
+    left: 50%;
+    translate: -50% 0;
+  }
+  /* Rows sit on the ground at the page gutter, as the board draws them. */
+  .tableCard { padding: 0; }
+  .sectionSurface { display: none; }
+  .row { padding: 0; border-radius: 0; }
+  /* An open row's raised panel bleeds 8px into the gutter, so its contents keep the rows' edge. */
+  .item[data-expanded] { margin-inline: -0.5rem; padding-inline: 0.5rem; }
+  .tableFooter { padding: 0.75rem 0 0; }
+  .tableFooter > nav, .section > .salePager { inline-size: 100%; justify-content: center; }
+  .card { padding: 0.5rem 0 1.25rem; }
+  .row.traderCols { padding-inline: 0; }
+}
+@media (max-width: 360px) {
+  .row.cols:not([data-sale]) { grid-template-columns: 2rem minmax(0, 1fr) 2.25rem auto; column-gap: 0.375rem; }
+  .row.cols:has(.rowActions):not([data-sale]) { grid-template-columns: 2rem minmax(0, 1fr) auto auto; }
+  .row.cols:has(.rowActions) > .week { display: none; }
+  .row.cols:not([data-sale]):has(.rowActions) > :is(.marketQuote, .mobileChange) { grid-column: 3; }
+  .row.cols:has(.rowActions) > .rowActions { grid-column: 4; }
+  .row.cols:not([data-sale]) .ident > span:first-child { width: 2rem; height: 2rem; }
+  .holdingHead { display: none; }
+  .holdingRow { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .holdingRow > :first-child { grid-column: 1 / -1; }
+  .holdingRow > :not(:first-child) { display: flex; flex-direction: column; gap: 0.25rem; text-align: left; }
+  .holdingRow > :empty { display: none; }
+}
+
+@media (pointer: coarse) {
+  .grip, .hide { opacity: 1; min-width: 44px; min-height: 44px; }
+  .selectOption { min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .item, .row, .card, .rowActions, .grip, .hide, .saleCard { transition: none; }
+  .tapeLive i, .metricLoading, .skLine { animation: none; }
+  .hide:active, a.saleCard:active { transform: none; opacity: .7; }
+  .sectionsMenu, .metricTip { transition: opacity var(--t1) linear; }
+  .sectionsMenu[data-starting-style], .sectionsMenu[data-ending-style], .metricTip[data-starting-style], .metricTip[data-ending-style] { transform: none; }
+}
+
+/* ---------- Blast mode's posts sidebar: the same post identity and summary, bounded ---------- */
+.workspacePost { grid-template-columns: minmax(0, 1fr) auto; gap: 0.625rem; margin-bottom: 0.625rem; padding: 0.5rem 0.75rem; background: var(--card); box-shadow: var(--sh-1); cursor: default; }
+.workspacePost .postAuthor { grid-column: 1; grid-row: 1; }
+.workspacePost .postWhen { grid-column: 2; grid-row: 1; font-size: 0.75rem; }
+.workspacePost .postSummary { grid-column: 1 / -1; grid-row: 2; display: flex; flex-direction: column; gap: 0.1875rem; white-space: normal; }
+.workspacePost .postSummary > span { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+.workspacePost .postSummary small { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; color: var(--muted); font-size: 0.8125rem; overflow-wrap: anywhere; }
+.workspaceRead { appearance: none; background: none; border: 0; padding: 0; text-align: left; font: inherit; cursor: pointer; width: 100%; }
+.workspaceRead:focus-visible { outline: 0.125rem solid var(--ink); outline-offset: 0.25rem; border-radius: var(--r-inner); }
+.workspaceAsset { grid-column: 1 / -1; grid-row: 3; display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; min-width: 0; }
+.personalResult { min-height: 12rem; display: grid; }
+.personalResult > .end { display: grid; align-content: center; }
+.phoneWindow { display: none; }
+@container home (max-width: 46rem) {
+  .home .phoneWindow { display: block; padding: .375rem 0; font-size: .75rem; color: var(--muted); text-align: end; }
+  .home .rankedList:not([data-volume-sort]) .vol, .home .mobileChange .changeWindow { display: none; }
+  .home .rankedList:not([data-volume-sort]) .row:not([data-sale]) .identText { grid-row: 1 / 3; align-self: center; }
+}
+@container home (max-width: 22rem) {
+  .home .row.cols:not([data-sale]) { grid-template-columns: 2.5rem minmax(0, 1fr) minmax(0, auto); }
+  .home .row.cols:not([data-sale]) > .week { display: none; }
+  .home .row.cols:not([data-sale]) > :is(.marketQuote, .mobileChange, .expand) { grid-column: 3; }
+}

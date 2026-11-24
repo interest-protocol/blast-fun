@@ -1,0 +1,1057 @@
+{
+  "provenance": {
+    "network": "localnet",
+    "deployment_fingerprint": "5d2f2a4be1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c",
+    "checkpoint": 124,
+    "timestamp_ms": 1790294757750,
+    "observed_ms": 1790823983449,
+    "lag_ms": 529225699
+  },
+  "activity": [
+    {
+      "position": "123:2:0:0",
+      "checkpoint": 123,
+      "timestamp_ms": 1790294742750,
+      "digest": "A9XMRaMfWTx7xaEru9qaTufrEJKAod2ztnzRP7SWZHj6",
+      "kind": "opening_delivery",
+      "source": null,
+      "actor": "0xf20d9577af078ad7d98e3008edcbf3d39472ed01dc35fafbd6f9ef281eb97ecd",
+      "lifecycle": null,
+      "amounts": {
+        "bid": "2000000000",
+        "meme": "101904196063870",
+        "refund_quote": "0"
+      }
+    },
+    {
+      "position": "122:2:2:1",
+      "checkpoint": 122,
+      "timestamp_ms": 1790294734750,
+      "digest": "5SAayfetaTPUCsGjhuT2B6uwcFSo9GZvaWPdnRVqsYmd",
+      "kind": "lifecycle",
+      "source": null,
+      "actor": null,
+      "lifecycle": "migrated",
+      "amounts": {}
+    },
+    {
+      "position": "122:2:2:0",
+      "checkpoint": 122,
+      "timestamp_ms": 1790294734750,
+      "digest": "5SAayfetaTPUCsGjhuT2B6uwcFSo9GZvaWPdnRVqsYmd",
+      "kind": "migration",
+      "source": null,
+      "actor": null,
+      "lifecycle": null,
+      "amounts": {
+        "meme": "190000000000000",
+        "quote": "26700000000",
+        "disposed_meme": "175000000065659",
+        "total_supply_after": "1000000000000000"
+      }
+    },
+    {
+      "position": "120:2:0:1",
+      "checkpoint": 120,
+      "timestamp_ms": 1790294674750,
+      "digest": "296ZNQAHaLb4XMHJSjFaSnNj4YzapZottcAaK5kYZQxn",
+      "kind": "lifecycle",
+      "source": null,
+      "actor": null,
+      "lifecycle": "migration_ready",
+      "amounts": {}
+    },
+    {
+      "position": "120:2:0:0",
+      "checkpoint": 120,
+      "timestamp_ms": 1790294674750,
+      "digest": "296ZNQAHaLb4XMHJSjFaSnNj4YzapZottcAaK5kYZQxn",
+      "kind": "curve_buy",
+      "source": "user",
+      "actor": "0xace0c432a721f88f20b9af4762f497b0f88645b55178357f384edaef30375b29",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "185874392546433",
+        "quote": "20912187034"
+      }
+    },
+    {
+      "position": "117:2:0:0",
+      "checkpoint": 117,
+      "timestamp_ms": 1790294610750,
+      "digest": "84g9PRnXhaAWgDf4o2sLrKBXBQNSbFgstWghxT2jM4pt",
+      "kind": "curve_sell",
+      "source": "user",
+      "actor": "0xace0c432a721f88f20b9af4762f497b0f88645b55178357f384edaef30375b29",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "22677798912894",
+        "quote": "1260365577"
+      }
+    },
+    {
+      "position": "115:2:0:0",
+      "checkpoint": 115,
+      "timestamp_ms": 1790294544693,
+      "digest": "2nTbv8BNuTfh3cnLX8YjgWTzvsP3VpeHYrCqHGbo2v9B",
+      "kind": "curve_buy",
+      "source": "user",
+      "actor": "0xf20d9577af078ad7d98e3008edcbf3d39472ed01dc35fafbd6f9ef281eb97ecd",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "6613034287406",
+        "quote": "400000000"
+      }
+    },
+    {
+      "position": "113:2:0:0",
+      "checkpoint": 113,
+      "timestamp_ms": 1790294336312,
+      "digest": "mX8kkXu3Q8hy5FC1phXPPTrd7WqxikcmazCskN9a9qC",
+      "kind": "curve_buy",
+      "source": "user",
+      "actor": "0x8f77c927ae948e8b9f8b2642fc8f64e4d6942fe7f79dff16cba805b423de7ca2",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "3404838534273",
+        "quote": "200000000"
+      }
+    },
+    {
+      "position": "111:2:0:0",
+      "checkpoint": 111,
+      "timestamp_ms": 1790294159607,
+      "digest": "GLLEi298deUFPy8PRmtrDCQ86ccpSsasZswYMv8SuW4V",
+      "kind": "curve_buy",
+      "source": "user",
+      "actor": "0xace0c432a721f88f20b9af4762f497b0f88645b55178357f384edaef30375b29",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "8814897693865",
+        "quote": "500000000"
+      }
+    },
+    {
+      "position": "109:2:0:0",
+      "checkpoint": 109,
+      "timestamp_ms": 1790294014578,
+      "digest": "6ou6KeJsuk37LSnnswZtnKuBWvNb7Ap35rT21vU44s7f",
+      "kind": "curve_buy",
+      "source": "user",
+      "actor": "0xf20d9577af078ad7d98e3008edcbf3d39472ed01dc35fafbd6f9ef281eb97ecd",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "5507288935975",
+        "quote": "300000000"
+      }
+    },
+    {
+      "position": "107:2:0:0",
+      "checkpoint": 107,
+      "timestamp_ms": 1790293901225,
+      "digest": "2xFW5eVsGQZyAamY6Ebn2nNi2sDAhNYAGgS6xriCwsbh",
+      "kind": "curve_sell",
+      "source": "user",
+      "actor": "0x8f77c927ae948e8b9f8b2642fc8f64e4d6942fe7f79dff16cba805b423de7ca2",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "21088461776098",
+        "quote": "1152617130"
+      }
+    },
+    {
+      "position": "105:2:0:0",
+      "checkpoint": 105,
+      "timestamp_ms": 1790293819548,
+      "digest": "6xz93HZwtfQWKbqoru7CFnFFq2Kx8CoKycjV3rfu8EJq",
+      "kind": "curve_buy",
+      "source": "user",
+      "actor": "0xace0c432a721f88f20b9af4762f497b0f88645b55178357f384edaef30375b29",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "6759393129079",
+        "quote": "400000000"
+      }
+    },
+    {
+      "position": "103:2:0:0",
+      "checkpoint": 103,
+      "timestamp_ms": 1790293682547,
+      "digest": "HtfrEVdySyjrP269nRrVnzTU9yqMCL6dXMrPqr9Fwgig",
+      "kind": "curve_buy",
+      "source": "user",
+      "actor": "0xf20d9577af078ad7d98e3008edcbf3d39472ed01dc35fafbd6f9ef281eb97ecd",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "3481322066986",
+        "quote": "200000000"
+      }
+    },
+    {
+      "position": "101:2:0:0",
+      "checkpoint": 101,
+      "timestamp_ms": 1790293490222,
+      "digest": "C3cfZHNv6kM9evNoktXKKXQxC3ZoiQ7tccEvqunDj1Dj",
+      "kind": "curve_buy",
+      "source": "user",
+      "actor": "0x8f77c927ae948e8b9f8b2642fc8f64e4d6942fe7f79dff16cba805b423de7ca2",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "9016473001487",
+        "quote": "500000000"
+      }
+    },
+    {
+      "position": "99:2:0:0",
+      "checkpoint": 99,
+      "timestamp_ms": 1790293329573,
+      "digest": "3PhtLEPfUGPkH9zTN7B5B9THVQeQcWaQQLHFuhNj3jx4",
+      "kind": "curve_buy",
+      "source": "user",
+      "actor": "0xace0c432a721f88f20b9af4762f497b0f88645b55178357f384edaef30375b29",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "5635838984573",
+        "quote": "300000000"
+      }
+    },
+    {
+      "position": "97:2:0:0",
+      "checkpoint": 97,
+      "timestamp_ms": 1790293200600,
+      "digest": "38vx3Fk9peDwDFZ3U8Wip2iCN6k7eTriCdJVToJmgN33",
+      "kind": "curve_sell",
+      "source": "user",
+      "actor": "0xf20d9577af078ad7d98e3008edcbf3d39472ed01dc35fafbd6f9ef281eb97ecd",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "17210196822024",
+        "quote": "908367856"
+      }
+    },
+    {
+      "position": "95:2:0:0",
+      "checkpoint": 95,
+      "timestamp_ms": 1790293103303,
+      "digest": "6V7sAsqnGL2AZ2rHG2oiJWaJCkkFGkePau2d2BPEXLV6",
+      "kind": "curve_buy",
+      "source": "user",
+      "actor": "0x8f77c927ae948e8b9f8b2642fc8f64e4d6942fe7f79dff16cba805b423de7ca2",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "7085022417543",
+        "quote": "400000000"
+      }
+    },
+    {
+      "position": "93:2:0:0",
+      "checkpoint": 93,
+      "timestamp_ms": 1790293037682,
+      "digest": "DegsZWTuhAfoXYmfzCRFzPcifN8Xsp3N6K4yoTZnGsTn",
+      "kind": "curve_buy",
+      "source": "user",
+      "actor": "0xace0c432a721f88f20b9af4762f497b0f88645b55178357f384edaef30375b29",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "3651619874473",
+        "quote": "200000000"
+      }
+    },
+    {
+      "position": "91:2:0:0",
+      "checkpoint": 91,
+      "timestamp_ms": 1790292829737,
+      "digest": "2wHLkxSdyKb2c22B9E9cWCZQzCrhWoxehcYNzGTWqXbm",
+      "kind": "curve_buy",
+      "source": "user",
+      "actor": "0xf20d9577af078ad7d98e3008edcbf3d39472ed01dc35fafbd6f9ef281eb97ecd",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "9465726136994",
+        "quote": "500000000"
+      }
+    },
+    {
+      "position": "89:2:0:0",
+      "checkpoint": 89,
+      "timestamp_ms": 1790292653468,
+      "digest": "AQkR8mJoVvmWZ7kL9DfSxjwq1tVAH3VrZfv7b49jv49y",
+      "kind": "curve_buy",
+      "source": "user",
+      "actor": "0x8f77c927ae948e8b9f8b2642fc8f64e4d6942fe7f79dff16cba805b423de7ca2",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "5922657988817",
+        "quote": "300000000"
+      }
+    },
+    {
+      "position": "83:2:0:0",
+      "checkpoint": 83,
+      "timestamp_ms": 1790292433875,
+      "digest": "BpX5z37XuPR7MyedJaGXeQrUB5ebZvuLKeDWScZxK9Vr",
+      "kind": "curve_sell",
+      "source": "user",
+      "actor": "0xace0c432a721f88f20b9af4762f497b0f88645b55178357f384edaef30375b29",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "21949815323195",
+        "quote": "1115153813"
+      }
+    },
+    {
+      "position": "81:2:0:0",
+      "checkpoint": 81,
+      "timestamp_ms": 1790292360958,
+      "digest": "2srSJSTpx3h9N4z5EZ5UrSyLnvUVyoSJsVvVfoVhchPL",
+      "kind": "curve_buy",
+      "source": "user",
+      "actor": "0xf20d9577af078ad7d98e3008edcbf3d39472ed01dc35fafbd6f9ef281eb97ecd",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "7275693096567",
+        "quote": "400000000"
+      }
+    },
+    {
+      "position": "79:2:0:0",
+      "checkpoint": 79,
+      "timestamp_ms": 1790292319717,
+      "digest": "EsESdnebbPU6D7dybDEucD1da5GDuxD3nUyEBhvBozBd",
+      "kind": "curve_buy",
+      "source": "user",
+      "actor": "0x8f77c927ae948e8b9f8b2642fc8f64e4d6942fe7f79dff16cba805b423de7ca2",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "3751420194075",
+        "quote": "200000000"
+      }
+    },
+    {
+      "position": "78:3:0:0",
+      "checkpoint": 78,
+      "timestamp_ms": 1790292310975,
+      "digest": "DN4GpwXHkutPg6e3PtzYH1VBsLh6yZduzNZgwYqBndjv",
+      "kind": "curve_sell",
+      "source": "user",
+      "actor": "0x8f77c927ae948e8b9f8b2642fc8f64e4d6942fe7f79dff16cba805b423de7ca2",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "19526091167490",
+        "quote": "1044561831"
+      }
+    },
+    {
+      "position": "77:2:0:0",
+      "checkpoint": 77,
+      "timestamp_ms": 1790292223152,
+      "digest": "3SGkxvU6yqu5TqDjVeaT67HFnbmM891gfPcRgBF8AUFK",
+      "kind": "curve_buy",
+      "source": "user",
+      "actor": "0xace0c432a721f88f20b9af4762f497b0f88645b55178357f384edaef30375b29",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "8721503206516",
+        "quote": "500000000"
+      }
+    },
+    {
+      "position": "75:2:0:0",
+      "checkpoint": 75,
+      "timestamp_ms": 1790292071263,
+      "digest": "DZUSvmZwg1mmRTNvwsv9QwSHCUkY9JdMJmUH76hWVNGV",
+      "kind": "curve_buy",
+      "source": "user",
+      "actor": "0xf20d9577af078ad7d98e3008edcbf3d39472ed01dc35fafbd6f9ef281eb97ecd",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "5447759087342",
+        "quote": "300000000"
+      }
+    },
+    {
+      "position": "73:2:0:0",
+      "checkpoint": 73,
+      "timestamp_ms": 1790291951050,
+      "digest": "8u2etgke64ggzvL6CgER3P55hKLHdfjLcKMhA4mh7B2f",
+      "kind": "curve_sell",
+      "source": "user",
+      "actor": "0x8f77c927ae948e8b9f8b2642fc8f64e4d6942fe7f79dff16cba805b423de7ca2",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "26034788223320",
+        "quote": "1460017592"
+      }
+    },
+    {
+      "position": "72:3:0:0",
+      "checkpoint": 72,
+      "timestamp_ms": 1790291902822,
+      "digest": "FKVdE99Xx1kVNm7ZXsFDQiCFQT5HRmWGVV8XpFww95zM",
+      "kind": "curve_buy",
+      "source": "user",
+      "actor": "0x8f77c927ae948e8b9f8b2642fc8f64e4d6942fe7f79dff16cba805b423de7ca2",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "8150599640997",
+        "quote": "500000000"
+      }
+    },
+    {
+      "position": "71:2:0:0",
+      "checkpoint": 71,
+      "timestamp_ms": 1790291862513,
+      "digest": "756k8ihbmGDV7H4jbbTzypiCvAUwqDE93GkRuu837AmY",
+      "kind": "curve_buy",
+      "source": "user",
+      "actor": "0xace0c432a721f88f20b9af4762f497b0f88645b55178357f384edaef30375b29",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "6812821545707",
+        "quote": "400000000"
+      }
+    },
+    {
+      "position": "69:2:0:0",
+      "checkpoint": 69,
+      "timestamp_ms": 1790291805652,
+      "digest": "H1RXw9kERb9Bu1618kmLBbqGPc7M1CcQe71YTSFXQ5Wz",
+      "kind": "curve_buy",
+      "source": "user",
+      "actor": "0xf20d9577af078ad7d98e3008edcbf3d39472ed01dc35fafbd6f9ef281eb97ecd",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "3509251665786",
+        "quote": "200000000"
+      }
+    },
+    {
+      "position": "67:2:0:0",
+      "checkpoint": 67,
+      "timestamp_ms": 1790291780467,
+      "digest": "Fvi1nuKQJuXPZ6Em3ikMtMf6EpVHfTDFnFfUrDg6H4ju",
+      "kind": "curve_buy",
+      "source": "user",
+      "actor": "0x8f77c927ae948e8b9f8b2642fc8f64e4d6942fe7f79dff16cba805b423de7ca2",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "9090112329965",
+        "quote": "500000000"
+      }
+    },
+    {
+      "position": "66:3:0:0",
+      "checkpoint": 66,
+      "timestamp_ms": 1790291692753,
+      "digest": "GQ3GhAb9UoxDj5fGaLXydR959ZxHgpgHujrHR8ThCyGA",
+      "kind": "curve_buy",
+      "source": "user",
+      "actor": "0x8f77c927ae948e8b9f8b2642fc8f64e4d6942fe7f79dff16cba805b423de7ca2",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "7617031677259",
+        "quote": "400000000"
+      }
+    },
+    {
+      "position": "65:2:0:0",
+      "checkpoint": 65,
+      "timestamp_ms": 1790291612958,
+      "digest": "8tKUY131n67D4cAobMjkwhZuKDHEgGekt3VKtZH7jnKR",
+      "kind": "curve_buy",
+      "source": "user",
+      "actor": "0xace0c432a721f88f20b9af4762f497b0f88645b55178357f384edaef30375b29",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "5926920144463",
+        "quote": "300000000"
+      }
+    },
+    {
+      "position": "63:2:0:0",
+      "checkpoint": 63,
+      "timestamp_ms": 1790291477125,
+      "digest": "2TYxvwuzj3foxGfdBW1yFnXgoPgDmyxg67iAkPjF6rsp",
+      "kind": "curve_sell",
+      "source": "user",
+      "actor": "0xf20d9577af078ad7d98e3008edcbf3d39472ed01dc35fafbd6f9ef281eb97ecd",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "14380785767136",
+        "quote": "715053316"
+      }
+    },
+    {
+      "position": "61:2:0:0",
+      "checkpoint": 61,
+      "timestamp_ms": 1790291372968,
+      "digest": "9kgQAWBU671u8BTpUdd3nUpS4wims9j3zNp351iPY2w9",
+      "kind": "curve_buy",
+      "source": "user",
+      "actor": "0x8f77c927ae948e8b9f8b2642fc8f64e4d6942fe7f79dff16cba805b423de7ca2",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "7593587932498",
+        "quote": "400000000"
+      }
+    },
+    {
+      "position": "60:3:0:0",
+      "checkpoint": 60,
+      "timestamp_ms": 1790291332768,
+      "digest": "5NFuVMsSQWiopPakmqkhk8eDtmpWcMcN8NCM1xZwkRFL",
+      "kind": "curve_buy",
+      "source": "user",
+      "actor": "0x8f77c927ae948e8b9f8b2642fc8f64e4d6942fe7f79dff16cba805b423de7ca2",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "5908340692604",
+        "quote": "300000000"
+      }
+    },
+    {
+      "position": "59:2:0:0",
+      "checkpoint": 59,
+      "timestamp_ms": 1790291300487,
+      "digest": "BmkkgCea7VTFSh2ijewZNVwBcovYjE9gV1M9GUNQcXz8",
+      "kind": "curve_buy",
+      "source": "user",
+      "actor": "0xace0c432a721f88f20b9af4762f497b0f88645b55178357f384edaef30375b29",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "4045330586400",
+        "quote": "200000000"
+      }
+    },
+    {
+      "position": "57:2:0:0",
+      "checkpoint": 57,
+      "timestamp_ms": 1790291259682,
+      "digest": "DuPoQB6ujY8WFxDjknGWudzcvJeMPmgW6KTWtdPrMDi",
+      "kind": "curve_buy",
+      "source": "user",
+      "actor": "0xf20d9577af078ad7d98e3008edcbf3d39472ed01dc35fafbd6f9ef281eb97ecd",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "10506547322682",
+        "quote": "500000000"
+      }
+    },
+    {
+      "position": "55:2:0:0",
+      "checkpoint": 55,
+      "timestamp_ms": 1790291163553,
+      "digest": "FHD46AQcDASiuTiaPpxnehakjxqCmZWtQrV9Z6JfviSA",
+      "kind": "curve_buy",
+      "source": "user",
+      "actor": "0x8f77c927ae948e8b9f8b2642fc8f64e4d6942fe7f79dff16cba805b423de7ca2",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "6588796329227",
+        "quote": "300000000"
+      }
+    },
+    {
+      "position": "54:3:0:0",
+      "checkpoint": 54,
+      "timestamp_ms": 1790291083867,
+      "digest": "9thRdBCfhxmFCs3PZ7NM318K97U5yMdRvX41dSPYAdG9",
+      "kind": "curve_buy",
+      "source": "user",
+      "actor": "0x8f77c927ae948e8b9f8b2642fc8f64e4d6942fe7f79dff16cba805b423de7ca2",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "4518007095803",
+        "quote": "200000000"
+      }
+    },
+    {
+      "position": "53:2:0:0",
+      "checkpoint": 53,
+      "timestamp_ms": 1790291012100,
+      "digest": "98GTaSQvV6ViLEuarG9XruBmb7RGfALkpG69kwzhuTc7",
+      "kind": "curve_sell",
+      "source": "user",
+      "actor": "0xace0c432a721f88f20b9af4762f497b0f88645b55178357f384edaef30375b29",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "20764228603231",
+        "quote": "919788013"
+      }
+    },
+    {
+      "position": "51:2:0:0",
+      "checkpoint": 51,
+      "timestamp_ms": 1790290892323,
+      "digest": "AXQhRRKZW3s2ZeAuXPUxs8ycGaPFPGLsTmvQ9JdmJB1v",
+      "kind": "curve_buy",
+      "source": "user",
+      "actor": "0xf20d9577af078ad7d98e3008edcbf3d39472ed01dc35fafbd6f9ef281eb97ecd",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "8415305408708",
+        "quote": "400000000"
+      }
+    },
+    {
+      "position": "49:2:0:0",
+      "checkpoint": 49,
+      "timestamp_ms": 1790290804222,
+      "digest": "95mVC19wRydyoo59mTnVSrGsHko9ZqU816rXwBxVXxDx",
+      "kind": "curve_buy",
+      "source": "user",
+      "actor": "0x8f77c927ae948e8b9f8b2642fc8f64e4d6942fe7f79dff16cba805b423de7ca2",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "4349150581991",
+        "quote": "200000000"
+      }
+    },
+    {
+      "position": "48:3:0:0",
+      "checkpoint": 48,
+      "timestamp_ms": 1790290772050,
+      "digest": "AGddeoLgXXMKaGaCRjyaYrYJ3ppM4612g6ozsxWyvL7w",
+      "kind": "curve_sell",
+      "source": "user",
+      "actor": "0x8f77c927ae948e8b9f8b2642fc8f64e4d6942fe7f79dff16cba805b423de7ca2",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "16774508870978",
+        "quote": "764832424"
+      }
+    },
+    {
+      "position": "47:2:0:0",
+      "checkpoint": 47,
+      "timestamp_ms": 1790290747797,
+      "digest": "CdrvghLBD9fd2AvSR8oz81mJRjeh6EuBDyaTrHFVRVAq",
+      "kind": "curve_buy",
+      "source": "user",
+      "actor": "0xace0c432a721f88f20b9af4762f497b0f88645b55178357f384edaef30375b29",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "10371056760884",
+        "quote": "500000000"
+      }
+    },
+    {
+      "position": "45:2:0:0",
+      "checkpoint": 45,
+      "timestamp_ms": 1790290723048,
+      "digest": "5E29Ftzo9Ja2Q1aNhu2VTA9oaH3KAD7JqoTEaSBD5NHF",
+      "kind": "curve_buy",
+      "source": "user",
+      "actor": "0xf20d9577af078ad7d98e3008edcbf3d39472ed01dc35fafbd6f9ef281eb97ecd",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "6501953600169",
+        "quote": "300000000"
+      }
+    },
+    {
+      "position": "43:2:0:0",
+      "checkpoint": 43,
+      "timestamp_ms": 1790290555975,
+      "digest": "2pRALWVYoKVoJzpHP1c6sv6PyLprTt4NB8ZJSxsitdJ3",
+      "kind": "curve_sell",
+      "source": "user",
+      "actor": "0x8f77c927ae948e8b9f8b2642fc8f64e4d6942fe7f79dff16cba805b423de7ca2",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "22366011827971",
+        "quote": "1032519919"
+      }
+    },
+    {
+      "position": "42:3:0:0",
+      "checkpoint": 42,
+      "timestamp_ms": 1790290484317,
+      "digest": "oh8B749jAQce4gzWvhdZKQtVrsg5MZ754HouX5TX5HU",
+      "kind": "curve_buy",
+      "source": "user",
+      "actor": "0x8f77c927ae948e8b9f8b2642fc8f64e4d6942fe7f79dff16cba805b423de7ca2",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "10090640537492",
+        "quote": "500000000"
+      }
+    },
+    {
+      "position": "41:2:0:0",
+      "checkpoint": 41,
+      "timestamp_ms": 1790290420578,
+      "digest": "C3QPhxmh3jULTYgnfAdHdexCkTM8HXhu1wCTvYog58CX",
+      "kind": "curve_buy",
+      "source": "user",
+      "actor": "0xace0c432a721f88f20b9af4762f497b0f88645b55178357f384edaef30375b29",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "8476682549523",
+        "quote": "400000000"
+      }
+    },
+    {
+      "position": "39:2:0:0",
+      "checkpoint": 39,
+      "timestamp_ms": 1790290316857,
+      "digest": "2hVpc5VCUDoqhM6BwYnz9xY16UT2tJW7CM5wjKd3CVuw",
+      "kind": "curve_buy",
+      "source": "user",
+      "actor": "0xf20d9577af078ad7d98e3008edcbf3d39472ed01dc35fafbd6f9ef281eb97ecd",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "4381401607401",
+        "quote": "200000000"
+      }
+    },
+    {
+      "position": "37:2:0:0",
+      "checkpoint": 37,
+      "timestamp_ms": 1790290244812,
+      "digest": "BiMhGgibPfnx2wt9d4RCxprcN87RLEmteptRgq2y2CuG",
+      "kind": "curve_buy",
+      "source": "user",
+      "actor": "0x8f77c927ae948e8b9f8b2642fc8f64e4d6942fe7f79dff16cba805b423de7ca2",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "11397331501323",
+        "quote": "500000000"
+      }
+    },
+    {
+      "position": "36:3:0:0",
+      "checkpoint": 36,
+      "timestamp_ms": 1790290220668,
+      "digest": "DrG9S2qJMeCuMv4q5tBRBGFibk83G7LvLrvKWrvEEni",
+      "kind": "curve_buy",
+      "source": "user",
+      "actor": "0x8f77c927ae948e8b9f8b2642fc8f64e4d6942fe7f79dff16cba805b423de7ca2",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "9604129721890",
+        "quote": "400000000"
+      }
+    },
+    {
+      "position": "35:2:0:0",
+      "checkpoint": 35,
+      "timestamp_ms": 1790290204443,
+      "digest": "BsC716cvXCCA7G9edUyNqDWVWCCzLhG2nnfwWJFdraCU",
+      "kind": "curve_buy",
+      "source": "user",
+      "actor": "0xace0c432a721f88f20b9af4762f497b0f88645b55178357f384edaef30375b29",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "7507286723747",
+        "quote": "300000000"
+      }
+    },
+    {
+      "position": "33:2:0:0",
+      "checkpoint": 33,
+      "timestamp_ms": 1790290108750,
+      "digest": "9W2yD7WbuV1UWJCSDBMFb1Nx5pp8aGgp282WJ22Qrqsv",
+      "kind": "curve_sell",
+      "source": "user",
+      "actor": "0xf20d9577af078ad7d98e3008edcbf3d39472ed01dc35fafbd6f9ef281eb97ecd",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "9239311709861",
+        "quote": "355993950"
+      }
+    },
+    {
+      "position": "31:2:0:0",
+      "checkpoint": 31,
+      "timestamp_ms": 1790289957733,
+      "digest": "8wbyvB4nXMjzemyuQzNSG1S7wVnKHyChLDxaUmKj2z1X",
+      "kind": "curve_buy",
+      "source": "user",
+      "actor": "0x8f77c927ae948e8b9f8b2642fc8f64e4d6942fe7f79dff16cba805b423de7ca2",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "9994531589856",
+        "quote": "400000000"
+      }
+    },
+    {
+      "position": "30:3:0:0",
+      "checkpoint": 30,
+      "timestamp_ms": 1790289894103,
+      "digest": "5X6KKVRtQNrEEScN9rjVsHKkFpy1aj5uiqEj7GWQ39Le",
+      "kind": "curve_buy",
+      "source": "user",
+      "actor": "0x8f77c927ae948e8b9f8b2642fc8f64e4d6942fe7f79dff16cba805b423de7ca2",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "7819018218281",
+        "quote": "300000000"
+      }
+    },
+    {
+      "position": "29:2:0:0",
+      "checkpoint": 29,
+      "timestamp_ms": 1790289838392,
+      "digest": "EZyyj9q5bZzmWQVy9dNLVfmQA6iA3TcKe4vgmELrYvSC",
+      "kind": "curve_buy",
+      "source": "user",
+      "actor": "0xace0c432a721f88f20b9af4762f497b0f88645b55178357f384edaef30375b29",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "5375179209974",
+        "quote": "200000000"
+      }
+    },
+    {
+      "position": "27:2:0:0",
+      "checkpoint": 27,
+      "timestamp_ms": 1790289750727,
+      "digest": "EKESaiSjVxD9g3RbbTSJopirgSf2t5KXFYYcRWEVfzns",
+      "kind": "curve_buy",
+      "source": "user",
+      "actor": "0xf20d9577af078ad7d98e3008edcbf3d39472ed01dc35fafbd6f9ef281eb97ecd",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "14043301026045",
+        "quote": "500000000"
+      }
+    },
+    {
+      "position": "25:2:0:0",
+      "checkpoint": 25,
+      "timestamp_ms": 1790289694738,
+      "digest": "7XALymbtojWLiSMYaoYT1iqAfV2UuuRyzd3ptN2BVKZR",
+      "kind": "curve_buy",
+      "source": "user",
+      "actor": "0x8f77c927ae948e8b9f8b2642fc8f64e4d6942fe7f79dff16cba805b423de7ca2",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "8868319133319",
+        "quote": "300000000"
+      }
+    },
+    {
+      "position": "24:3:0:0",
+      "checkpoint": 24,
+      "timestamp_ms": 1790289678622,
+      "digest": "BHpv8F3F1YfByyshtBzECrescqAVvbg6NZjUgt29s1aQ",
+      "kind": "curve_buy",
+      "source": "user",
+      "actor": "0x8f77c927ae948e8b9f8b2642fc8f64e4d6942fe7f79dff16cba805b423de7ca2",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "6108775810909",
+        "quote": "200000000"
+      }
+    },
+    {
+      "position": "23:2:0:0",
+      "checkpoint": 23,
+      "timestamp_ms": 1790289670425,
+      "digest": "FuAZUh8ffi38qq4MjXgVc2NH5kqxUo34nZzZEeZDLBG1",
+      "kind": "curve_sell",
+      "source": "user",
+      "actor": "0xace0c432a721f88f20b9af4762f497b0f88645b55178357f384edaef30375b29",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "17108903056266",
+        "quote": "550853084"
+      }
+    },
+    {
+      "position": "21:2:0:0",
+      "checkpoint": 21,
+      "timestamp_ms": 1790289503788,
+      "digest": "JAtS9V6Ebg7TaHdyMxeyjZaX7tbzvMgucsfL6UtTgo3U",
+      "kind": "curve_buy",
+      "source": "user",
+      "actor": "0xf20d9577af078ad7d98e3008edcbf3d39472ed01dc35fafbd6f9ef281eb97ecd",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "11806817918054",
+        "quote": "400000000"
+      }
+    },
+    {
+      "position": "19:2:0:0",
+      "checkpoint": 19,
+      "timestamp_ms": 1790289368827,
+      "digest": "8HwSMj9LBzeodhgy9PavABn3u8gzHALRrbdvQU9y15TR",
+      "kind": "curve_buy",
+      "source": "user",
+      "actor": "0x8f77c927ae948e8b9f8b2642fc8f64e4d6942fe7f79dff16cba805b423de7ca2",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "6139529417021",
+        "quote": "200000000"
+      }
+    },
+    {
+      "position": "18:3:0:0",
+      "checkpoint": 18,
+      "timestamp_ms": 1790289313225,
+      "digest": "ELyF76zwco5e4GmnbUgCpuvZCKDHdvuqYHwZaVPvE3on",
+      "kind": "curve_buy",
+      "source": "user",
+      "actor": "0x8f77c927ae948e8b9f8b2642fc8f64e4d6942fe7f79dff16cba805b423de7ca2",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "19441771381794",
+        "quote": "600000000"
+      }
+    },
+    {
+      "position": "17:2:0:0",
+      "checkpoint": 17,
+      "timestamp_ms": 1790289265542,
+      "digest": "ADYBD8RBWTwTBTARXvaD9NxhWdJ16dkprJuHjqGYqgMU",
+      "kind": "curve_buy",
+      "source": "user",
+      "actor": "0xace0c432a721f88f20b9af4762f497b0f88645b55178357f384edaef30375b29",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "17483514193131",
+        "quote": "500000000"
+      }
+    },
+    {
+      "position": "15:2:0:0",
+      "checkpoint": 15,
+      "timestamp_ms": 1790289193933,
+      "digest": "2CYceKdzN8tCHxNBsiAtbvu8ifu6CcUdbfviYSn4AtL3",
+      "kind": "curve_buy",
+      "source": "user",
+      "actor": "0xf20d9577af078ad7d98e3008edcbf3d39472ed01dc35fafbd6f9ef281eb97ecd",
+      "lifecycle": null,
+      "amounts": {
+        "meme": "11107127895348",
+        "quote": "300000000"
+      }
+    },
+    {
+      "position": "13:2:1:0",
+      "checkpoint": 13,
+      "timestamp_ms": 1790289154000,
+      "digest": "Bv89LoGnEPjjgmUy8czNtwzbjok4YiqzGoVfE1XKBDd6",
+      "kind": "opening_delivery",
+      "source": null,
+      "actor": "0xace0c432a721f88f20b9af4762f497b0f88645b55178357f384edaef30375b29",
+      "lifecycle": null,
+      "amounts": {
+        "bid": "1000000000",
+        "meme": "50952098031934",
+        "refund_quote": "0"
+      }
+    },
+    {
+      "position": "13:2:0:0",
+      "checkpoint": 13,
+      "timestamp_ms": 1790289154000,
+      "digest": "Bv89LoGnEPjjgmUy8czNtwzbjok4YiqzGoVfE1XKBDd6",
+      "kind": "opening_delivery",
+      "source": null,
+      "actor": "0x471ce1566680b3ff5b9f0386f5e68f7bf2e1c44fc6947ef8b5fb3d856baabaee",
+      "lifecycle": null,
+      "amounts": {
+        "bid": "500000000",
+        "meme": "25476049015967",
+        "refund_quote": "0"
+      }
+    },
+    {
+      "position": "12:2:1:0",
+      "checkpoint": 12,
+      "timestamp_ms": 1790289148000,
+      "digest": "HgbhsaMwbfuiTUWNTtvW2HaJFU4aequJRHza1475MtLQ",
+      "kind": "opening_settlement",
+      "source": "opening_round_settlement",
+      "actor": null,
+      "lifecycle": null,
+      "amounts": {
+        "bids": "3500000000",
+        "meme": "178332343111771",
+        "refund_quote": "0"
+      }
+    },
+    {
+      "position": "12:2:0:1",
+      "checkpoint": 12,
+      "timestamp_ms": 1790289148000,
+      "digest": "HgbhsaMwbfuiTUWNTtvW2HaJFU4aequJRHza1475MtLQ",
+      "kind": "lifecycle",
+      "source": null,
+      "actor": null,
+      "lifecycle": "live",
+      "amounts": {}
+    },
+    {
+      "position": "12:2:0:0",
+      "checkpoint": 12,
+      "timestamp_ms": 1790289148000,
+      "digest": "HgbhsaMwbfuiTUWNTtvW2HaJFU4aequJRHza1475MtLQ",
+      "kind": "opening_settlement",
+      "source": "opening_round_settlement",
+      "actor": null,
+      "lifecycle": null,
+      "amounts": {
+        "meme": "178332343111771",
+        "quote": "3500000000"
+      }
+    },
+    {
+      "position": "11:3:0:0",
+      "checkpoint": 11,
+      "timestamp_ms": 1790289098000,
+      "digest": "HgcYdU5aRnXHYshvXeaLNcGUodYx4964th2H6fXRDxMb",
+      "kind": "opening_join",
+      "source": null,
+      "actor": "0xf20d9577af078ad7d98e3008edcbf3d39472ed01dc35fafbd6f9ef281eb97ecd",
+      "lifecycle": null,
+      "amounts": {
+        "bids": "3500000000",
+        "quote": "2000000000"
+      }
+    },
+    {
+      "position": "11:2:0:0",
+      "checkpoint": 11,
+      "timestamp_ms": 1790289098000,
+      "digest": "3fGDZN5dLcSEy8MPNsw1hUb5dU7rTGfjffqDgj5aFmRr",
+      "kind": "opening_join",
+      "source": null,
+      "actor": "0xace0c432a721f88f20b9af4762f497b0f88645b55178357f384edaef30375b29",
+      "lifecycle": null,
+      "amounts": {
+        "bids": "1500000000",
+        "quote": "1000000000"
+      }
+    },
+    {
+      "position": "10:2:1:0",
+      "checkpoint": 10,
+      "timestamp_ms": 1790289083000,
+      "digest": "98eBjf2aE6bH5PdZq3VVZqhYzYfhLQd87cnfPYy4p6UT",
+      "kind": "opening_join",
+      "source": null,
+      "actor": "0x471ce1566680b3ff5b9f0386f5e68f7bf2e1c44fc6947ef8b5fb3d856baabaee",
+      "lifecycle": null,
+      "amounts": {
+        "bids": "500000000",
+        "quote": "500000000"
+      }
+    },
+    {
+      "position": "10:2:0:1",
+      "checkpoint": 10,
+      "timestamp_ms": 1790289083000,
+      "digest": "98eBjf2aE6bH5PdZq3VVZqhYzYfhLQd87cnfPYy4p6UT",
+      "kind": "lifecycle",
+      "source": null,
+      "actor": null,
+      "lifecycle": "opening_round",
+      "amounts": {}
+    }
+  ],
+  "next_cursor": null
+}

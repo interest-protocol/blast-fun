@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/presale/contracts/outcome-response.schema.json",
+  "title": "Outcome registration result",
+  "description": "201 recorded, 200 duplicate.",
+  "type": "object",
+  "properties": {
+    "status": {
+      "enum": [
+        "recorded",
+        "duplicate"
+      ]
+    }
+  },
+  "required": [
+    "status"
+  ],
+  "additionalProperties": false
+}

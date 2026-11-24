@@ -1,0 +1,68 @@
+{
+  "provenance": {
+    "network": "localnet",
+    "deployment_fingerprint": "5d2f2a4be1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c",
+    "checkpoint": 124,
+    "timestamp_ms": 1790294757750,
+    "observed_ms": 1790823983138,
+    "lag_ms": 529225388
+  },
+  "launch_id": "0x7a79ac93eb3b3c2a93828a0a85367d15557e4d0b74bab119debb654c803f00fa",
+  "bidders": [
+    {
+      "bidder": "0x471ce1566680b3ff5b9f0386f5e68f7bf2e1c44fc6947ef8b5fb3d856baabaee",
+      "contributed_quote": "500000000",
+      "join_count": 1,
+      "first_join": {
+        "checkpoint": 10,
+        "timestamp_ms": 1790289083000,
+        "digest": "98eBjf2aE6bH5PdZq3VVZqhYzYfhLQd87cnfPYy4p6UT",
+        "position": "10:2:1:0"
+      },
+      "delivery": {
+        "checkpoint": 13,
+        "timestamp_ms": 1790289154000,
+        "digest": "Bv89LoGnEPjjgmUy8czNtwzbjok4YiqzGoVfE1XKBDd6",
+        "meme": "25476049015967",
+        "refund_quote": "0"
+      }
+    },
+    {
+      "bidder": "0xace0c432a721f88f20b9af4762f497b0f88645b55178357f384edaef30375b29",
+      "contributed_quote": "1000000000",
+      "join_count": 1,
+      "first_join": {
+        "checkpoint": 11,
+        "timestamp_ms": 1790289098000,
+        "digest": "3fGDZN5dLcSEy8MPNsw1hUb5dU7rTGfjffqDgj5aFmRr",
+        "position": "11:2:0:0"
+      },
+      "delivery": {
+        "checkpoint": 13,
+        "timestamp_ms": 1790289154000,
+        "digest": "Bv89LoGnEPjjgmUy8czNtwzbjok4YiqzGoVfE1XKBDd6",
+        "meme": "50952098031934",
+        "refund_quote": "0"
+      }
+    },
+    {
+      "bidder": "0xf20d9577af078ad7d98e3008edcbf3d39472ed01dc35fafbd6f9ef281eb97ecd",
+      "contributed_quote": "2000000000",
+      "join_count": 1,
+      "first_join": {
+        "checkpoint": 11,
+        "timestamp_ms": 1790289098000,
+        "digest": "HgcYdU5aRnXHYshvXeaLNcGUodYx4964th2H6fXRDxMb",
+        "position": "11:3:0:0"
+      },
+      "delivery": {
+        "checkpoint": 123,
+        "timestamp_ms": 1790294742750,
+        "digest": "A9XMRaMfWTx7xaEru9qaTufrEJKAod2ztnzRP7SWZHj6",
+        "meme": "101904196063870",
+        "refund_quote": "0"
+      }
+    }
+  ],
+  "next_cursor": null
+}

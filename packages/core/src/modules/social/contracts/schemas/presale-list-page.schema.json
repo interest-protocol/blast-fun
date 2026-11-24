@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/presale-list-page.schema.json",
+  "title": "Presale list page",
+  "description": "GET /api/social/presales 200: one keyset page of a tab, the same for every caller.",
+  "type": "object",
+  "properties": {
+    "presales": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "$ref": "https://blast-v2.invalid/social/contracts/presale-summary.schema.json"
+      }
+    },
+    "next_cursor": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        }
+      ]
+    },
+    "status_counts": {
+      "description": "How many presales each tab holds now under the page's filters, whatever its status, sort or cursor. The server always sends it; partner v1 does not publish it, so it is not required.",
+      "type": "object",
+      "properties": {
+        "live": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "upcoming": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "ended": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "live",
+        "upcoming",
+        "ended"
+      ],
+      "additionalProperties": false
+    },
+    "as_of": {
+      "$ref": "https://blast-v2.invalid/social/contracts/as-of.schema.json"
+    }
+  },
+  "required": [
+    "presales",
+    "next_cursor",
+    "as_of"
+  ],
+  "additionalProperties": false
+}

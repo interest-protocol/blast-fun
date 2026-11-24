@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/wallet-challenge-response.schema.json",
+  "title": "Wallet link challenge",
+  "description": "POST /api/social/me/wallets/challenge 201: the personal message to sign, bound to the caller's account, this site and the address.",
+  "type": "object",
+  "properties": {
+    "challenge_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "address": {
+      "type": "string",
+      "pattern": "^0x[0-9a-f]{64}$"
+    },
+    "message": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048
+    },
+    "expires_at_ms": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "challenge_id",
+    "address",
+    "message",
+    "expires_at_ms"
+  ],
+  "additionalProperties": false
+}

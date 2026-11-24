@@ -1,0 +1,488 @@
+/*
+ * The commit panel and its dialogs (FEATURE-MAP §4 and §11, with R3's
+ * changes). Every value below was measured in the acceptance gate
+ * (`design/blast-feel-preview.html`, sha256 dd8cb26c…bd5ed) at 1440x950 and
+ * 390x844, light and dark, with the dialog open on Meridian.
+ */
+
+/* The trade sheet is 460 wide with a 17 gap, where a plain sheet is 440/21.
+ * Doubled class for specificity: one class would race the shared sheet rule. */
+.trade.trade {
+  width: min(28.75rem, 100%);
+  gap: 1.0625rem;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8125rem;
+}
+
+.readNotice { display: grid; gap: 0.875rem; padding: 1.25rem; border: 1px solid var(--hair); border-radius: var(--r-sm); background: var(--field); }
+.readNotice p { margin: 0; color: var(--muted); font-size: 0.875rem; line-height: 1.5; }
+.readNotice button { justify-self: start; }
+.paymentNotice { display: grid; gap: 0.5rem; padding: 0.75rem; border-radius: var(--r-sm); background: var(--field); }
+.paymentNotice p { margin: 0; font-size: 0.8125rem; color: var(--muted); line-height: 1.5; }
+.paymentNotice button { justify-self: start; }
+
+/* ----- the amount box ----- */
+
+/* The shared field material: an inset edge that reaches 3:1 before focus, and the focus ring attached inside it (zero gap). */
+.amt {
+  padding: 0.8125rem 0.9375rem 0.6875rem;
+  border-radius: var(--r-sm);
+  background: var(--control-field, var(--field));
+  box-shadow: var(--control-field-edge, inset 0 0 0 1px var(--hair));
+  cursor: var(--blast-cursor-text, text);
+  display: flex;
+  flex-direction: column;
+  gap: 0.1875rem;
+}
+.amt:focus-within {
+  box-shadow: var(--field-focus);
+}
+
+.amtTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.amtTop label, .amtTop > span {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+/* The amount and payment coin share one row. */
+.amtRow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.amtInput {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 2.125rem;
+  font-weight: 600;
+  letter-spacing: -.045em;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+/* The ring is the box's (`.amt:focus-within`), not the field's: over the shell's `:focus-visible` ring, as the gate's
+   `.amt-row input:focus-visible { box-shadow: none }`. */
+[data-blast-ui] .amtInput.amtInput:focus-visible { outline: none; box-shadow: none; }
+
+.amtFoot {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ----- the presets ----- */
+
+.presets {
+  display: grid;
+  grid-auto-columns: 1fr;
+  grid-auto-flow: column;
+  gap: 0.5rem;
+}
+.preset {
+  min-height: max(44px, 2.75rem);
+  border-radius: var(--r-button);
+  background: var(--card);
+  box-shadow: inset 0 0 0 1px var(--hair);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--ink);
+  transition: background var(--t2) var(--ease-std), box-shadow var(--t2) var(--ease-std), transform var(--t1) var(--ease-std);
+}
+@media (hover: hover) {
+  .preset:hover:not([disabled]) { box-shadow: inset 0 0 0 1px var(--hair-2); }
+}
+.preset[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--card);
+  box-shadow: none;
+}
+.preset:active:not([disabled]) { transform: scale(.97); }
+
+/* ----- the terms ----- */
+
+.terms {
+  margin: 0;
+  padding: 0 0.125rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4375rem;
+  font-size: 0.8125rem;
+}
+.terms > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  align-items: baseline;
+  gap: 0.5rem;
+}
+.terms dt small { display: block; font-size: 0.6875rem; }
+.terms dd { overflow-wrap: anywhere; }
+.commitTerms { margin: 0; color: var(--muted); font-size: 0.875rem; line-height: 1.5; }
+.terms dt { color: var(--muted); }
+.terms dd {
+  margin: 0;
+  font-weight: 600;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.num { font-variant-numeric: tabular-nums; }
+
+/* ----- the why box ----- */
+
+.whybox {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+.whyLbl {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+}
+.whyLbl b { font-weight: 600; }
+.whyLbl em {
+  font-style: normal;
+  font-weight: 400;
+  color: var(--muted);
+}
+.counter { font-variant-numeric: tabular-nums; } /* the label's ink, as the gate's `.counter` */
+.near { color: var(--warn); }
+.whybox textarea {
+  min-height: 3.4375rem;
+  padding: 0.75rem 0.875rem;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: var(--field);
+  box-shadow: inset 0 0 0 1px var(--hair);
+  font: inherit;
+  font-size: 0.9375rem;
+  line-height: 1.45;
+  color: var(--ink);
+  resize: none;
+}
+.whybox textarea::placeholder { color: var(--faint); }
+.whybox textarea:focus-visible {
+  outline: none;
+  box-shadow: var(--field-focus);
+}
+.whyErr textarea { box-shadow: inset 0 0 0 1px var(--down); }
+.whyErr textarea:focus-visible { box-shadow: inset 0 0 0 0.125rem var(--down); }
+/* Empty, it still takes the box's 6 px gap, as the gate's `.whybox .hint` does. */
+.hint {
+  font-size: 0.75rem;
+  color: var(--down);
+  min-height: 0;
+}
+
+/* Why blasting is off (OA-13: the reference draws no such line in the panel;
+ * Create's review has the same one, in the same tone, above a disabled CTA). */
+.note {
+  margin: 0;
+  padding: 0.6875rem 0.8125rem;
+  border-radius: var(--r-sm);
+  background: var(--raised);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+
+.note[data-commit-pending] { overflow-wrap: anywhere; }
+
+/* The one primary action fills its column; the shared Button owns its height, corners, colour and busy state. */
+.primary { width: 100%; }
+
+/* ----- the dialog around it (§11) ----- */
+
+.mhead {
+  display: flex;
+  align-items: center;
+  gap: 0.8125rem;
+  padding-right: 2.75rem;
+}
+.mhead .t {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.mhead .t b {
+  font-size: 1.3125rem;
+  font-weight: 700;
+  letter-spacing: -.035em;
+}
+.mhead .t > span {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.when { font-variant-numeric: tabular-nums; }
+
+.mraise {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.9375rem;
+  border-radius: var(--r-sm);
+  background: var(--raised);
+}
+.raiseRow {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.raiseRow b {
+  font-size: 1.3125rem;
+  font-weight: 700;
+  letter-spacing: -.035em;
+  font-variant-numeric: tabular-nums;
+}
+.raiseRow > span {
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+.legend {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+}
+.facts > div {
+  padding: 0.8125rem 0.9375rem;
+  border-radius: var(--r-sm);
+  background: var(--raised);
+  display: flex;
+  flex-direction: column;
+  gap: 0.1875rem;
+  min-width: 0;
+}
+/* The gate's `.sheet .facts.compact > div` at 760 px and below. */
+@media (max-width: 760px) {
+  .facts > div { padding: 0.75rem; }
+}
+.facts span {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.facts b {
+  overflow-wrap: anywhere;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: -.02em;
+  font-variant-numeric: tabular-nums;
+}
+.facts small {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.via {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+.via b { color: var(--ink); font-weight: 600; }
+
+.plain {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+
+/* The quiet footer link: next to a primary action, as §11 renders it for a
+ * pending sale and for the Blast dialog. */
+.sheetLink {
+  min-height: max(44px, 2.75rem);
+  border-radius: var(--r-button);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--ink-2);
+  text-underline-offset: 0.1875rem;
+  transition: color var(--t2) var(--ease-std), transform var(--t1) var(--ease-std);
+}
+.sheetLink svg { width: 1rem; height: 1rem; }
+@media (hover: hover) {
+  .sheetLink:hover { color: var(--ink); text-decoration: underline; }
+}
+[data-blast-ui] .sheetLink:focus-visible { outline: 0.125rem solid var(--ink-2); outline-offset: 0.1875rem; box-shadow: none; }
+.sheetLink:active { transform: scale(.97); } /* OA-31: the gate's `.sheet-link:active` */
+
+/* A press under reduced motion dips instead of scaling (OA-31). */
+@media (prefers-reduced-motion: reduce) {
+  .preset:active:not([disabled]), .sheetLink:active { transform: none; opacity: .7; }
+}
+
+@media (max-width: 760px) {
+  .facts { grid-template-columns: 1fr; }
+  .mhead .t > span { flex-wrap: wrap; overflow-wrap: normal; }
+  .legend { flex-wrap: wrap; }
+  .terms > div { grid-template-columns: 1fr; gap: 0.1875rem; }
+  .terms dd { text-align: left; }
+  /* iOS zooms a field under 16px on focus; the amount is already 34. */
+  .whybox textarea { font-size: 1rem; }
+}
+
+/* The coin shares the amount field’s single border and focus ring. */
+.paymentCoin { display: inline-flex; align-items: center; gap: 0.5rem; flex: none; height: max(44px, 2.75rem); max-width: 45%; min-width: 0; border: 0; border-radius: var(--r-button); padding: 0.25rem 0.5rem; background: var(--chip); color: var(--ink); font: inherit; font-size: 1rem; font-weight: 600; overflow: hidden; }
+.paymentCoin[data-layout="field"] { max-width: 70%; }
+.paymentCoin > svg { width: 1rem; height: 1rem; flex: none; transform: rotate(90deg); }
+.paymentCoin > span, .currencyChoice > span { min-width: 0; overflow: hidden; }
+.paymentCoin > [data-ui-label] > span > span:last-child > :is(b, span),
+.currencyChoice > [data-ui-label] > span > span:last-child > :is(b, span) { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.paymentCoin:has(select) { padding: 0; }
+.paymentCoin > select { min-height: max(44px, 2.75rem); max-width: 100%; border: 0; padding: 0.5rem 0.75rem; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.amtFoot > span:last-child { margin-left: auto; text-align: right; }
+
+/* Buy keeps the decision between persistent navigation and one purchase action. */
+.purchaseRead { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.panel.purchase { flex: 1; min-height: 0; gap: 0; }
+.purchaseBody { display: flex; flex-direction: column; flex: 1; min-height: 0; gap: 0.75rem; overflow-y: auto; overscroll-behavior: contain; padding: 0.25rem 0.25rem 1rem; margin: -0.25rem -0.25rem 0; scrollbar-gutter: stable; }
+.purchaseBody > * { flex-shrink: 0; }
+.context { margin: 0; color: var(--muted); font-size: 0.875rem; line-height: 1.5; }
+.purchase .amt { padding: 0.75rem 1rem; gap: 0.5rem; }
+.purchase .amtTop label { font-size: 0.875rem; }
+.purchase .amtRow { gap: 0.75rem; }
+.purchase .amtInput { font-size: 2.25rem; line-height: 1.2; letter-spacing: -.035em; }
+[data-blast-ui] .purchase .amtInput:focus-visible { outline: none; box-shadow: none; }
+.purchase .amtFoot { justify-content: flex-end; flex-wrap: wrap; gap: 0.5rem; font-size: 0.875rem; }
+.currencyChoice { position: relative; display: inline-flex; align-items: center; gap: 0.5rem; min-width: 0; max-width: 55%; border-radius: var(--r-button); }
+.currencyChoice[data-selectable], button.currencyChoice { height: max(44px, 2.75rem); padding: 0.25rem; background: var(--chip); flex: none; }
+.currencyChoice > select { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
+.currencyChoice:focus-within { box-shadow: var(--field-focus); }
+.currencyChoice > svg { width: 1rem; height: 1rem; flex: none; transform: rotate(90deg); }
+.currencyChoice:has(select:disabled) { opacity: .5; }
+.purchase .preset { height: max(44px, 2.75rem); border-radius: var(--r-button); background: var(--raised); box-shadow: none; font-size: 0.875rem; }
+.purchase .preset[aria-pressed="true"] { background: var(--ink); color: var(--card); box-shadow: none; }
+.allocation { display: flex; flex-direction: column; gap: 0.75rem; padding: 1rem; background: var(--raised); border-radius: var(--r-button-lg); }
+.allocationHeading { display: flex; flex-direction: column; gap: 0.25rem; }
+.allocationHeading > span { font-size: 0.875rem; font-weight: 500; color: var(--muted); }
+.estimate { font-size: 1.75rem; font-weight: 600; letter-spacing: -.025em; line-height: 1.2; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.allocationHeading small { font-size: 0.875rem; line-height: 1.4; color: var(--muted); }
+.purchase .terms { gap: 0.5rem; font-size: 0.875rem; }
+.purchase .terms > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 0.5rem; align-items: baseline; }
+.purchase .terms dd { overflow-wrap: anywhere; }
+.purchaseFooter { flex: none; display: flex; flex-direction: column; gap: 0.75rem; padding-top: 0.75rem; background: var(--card); }
+.purchaseFooter p { margin: 0; font-size: 0.875rem; line-height: 1.4; color: var(--ink-2); text-align: center; }
+.compact .purchaseBody { position: relative; flex: none; overflow: visible; padding: 0.25rem; margin: -0.25rem; gap: 0.5rem; scrollbar-gutter: auto; }
+.compact .allocation { padding: 0.75rem; gap: var(--s3); }
+.compact .estimate { font-size: 1.375rem; }
+.compact .allocationHeading small, .compact .purchaseFooter p { font-size: 0.75rem; }
+.compact .purchaseFooter { padding-top: 0.5rem; gap: 0.5rem; }
+/* A legacy `.btn` placeholder (the coin sheet's loading state) keeps the primary's height; shared Buttons own theirs. */
+[data-blast-ui] .purchaseFooter > button:not([data-ui-button]) { min-height: 3.25rem; height: auto; padding-block: 0.875rem; line-height: 1.4; }
+.disclosure { padding: 0.25rem 0; font-size: 0.875rem; }
+.disclosure summary { display: flex; align-items: center; gap: 0.5rem; min-height: max(44px, 2.75rem); cursor: pointer; font-weight: 600; list-style: none; }
+.disclosure summary::-webkit-details-marker { display: none; }
+.disclosure summary > svg { margin-left: auto; width: 1.125rem; height: 1.125rem; flex: none; transform: rotate(90deg); }
+.disclosure[open] summary > svg { transform: rotate(-90deg); }
+.disclosure[open] summary { margin-bottom: 0.75rem; }
+.detailsLink { align-self: flex-start; font-size: 0.875rem; font-weight: 500; color: var(--ink-2); padding-block: 0.5rem; text-underline-offset: 0.25rem; }
+@media (hover:hover) and (pointer:fine) { .detailsLink:hover { text-decoration: underline; } }
+.optional { color: var(--muted); padding-top: var(--s4); }
+.optional summary { font-weight: 400; flex-wrap: wrap; }
+.optional summary > span { font-size: 0.875rem; }
+.optional .whybox { margin-top: 0.75rem; }
+.purchaseBody > .presets > span { display: grid; place-items: center; }
+.purchaseBody > .presets > span, .purchaseBody > .disclosure[aria-hidden] { pointer-events: none; }
+@media (max-width: 380px) {
+  .purchase .amt { padding-inline: 0.75rem; }
+  .purchase .amtInput { font-size: 2rem; }
+  .purchase .estimate { font-size: 1.625rem; }
+  .purchase .terms > div { grid-template-columns: 1fr; }
+  .purchaseFooter p { text-align: left; }
+}
+
+.receipt { display: flex; flex-direction: column; align-items: center; gap: 1.25rem; padding: 1.25rem 0 0.25rem; text-align: center; }
+.receiptCheck { position: relative; display: grid; place-items: center; width: 3.25rem; height: 3.25rem; border-radius: 50%; background: var(--pink-soft); color: var(--pink); opacity: 1; transform: scale(1); transition: opacity var(--t2) var(--ease), transform var(--t3) var(--ease); }
+.receiptCheck::before { content: ""; position: absolute; inset: 0; border: 1px solid var(--hair-2); border-radius: inherit; opacity: 0; transform: scale(1.55); transition: opacity var(--t3) var(--ease), transform var(--t3) var(--ease); pointer-events: none; }
+.receiptCheck svg { width: 1.625rem; height: 1.625rem; clip-path: inset(0); transition: clip-path var(--t2) var(--ease) 40ms; }
+.receipt h2 { margin: 0; font-family: var(--display); font-size: 1.75rem; font-weight: 700; letter-spacing: -.5px; }
+.receipt p { margin: 0; color: var(--muted); font-size: 0.9375rem; line-height: 1.6; overflow-wrap: anywhere; }
+.receipt strong { color: var(--ink); font-weight: 600; }
+.receiptActions { display: grid; grid-template-columns: 1fr 1fr; gap: 0.625rem; width: 100%; margin-top: 0.25rem; }
+@starting-style {
+  .receiptCheck { opacity: .4; transform: scale(.9); }
+  .receiptCheck::before { opacity: .55; transform: scale(.9); }
+  .receiptCheck svg { clip-path: inset(0 100% 0 0); }
+}
+@media (prefers-reduced-motion: reduce) { .receiptCheck, .receiptCheck::before, .receiptCheck svg { transition: none; } }
+:global(html[data-blast-input="keyboard"]) .receiptCheck,
+:global(html[data-blast-input="keyboard"]) .receiptCheck::before,
+:global(html[data-blast-input="keyboard"]) .receiptCheck svg { transition: none; }
+
+@media (prefers-contrast: more) { .amt:focus-within { outline: 0.125rem solid var(--ink); outline-offset: -0.125rem; } }
+
+/* The summary and form scroll together; the action and refund terms own their space. */
+.trade.trade:has(.dialogPanel) { height: min(56.25rem, calc(var(--sheet-viewport-height, 100dvh) - 2.625rem)); overflow: hidden; padding-top: 4.375rem; padding-bottom: 0; }
+.trade.trade > .dialogPanel { flex: 1; min-height: 0; margin-bottom: 0; }
+.dialogPanel .purchaseBody { gap: 1.0625rem; padding-top: 0.25rem; scroll-padding-block: 0.5rem; }
+.dialogPanel .purchaseBody > .mhead { padding-right: 0; }
+.dialogPanel > :last-child { position: static; flex-shrink: 0; margin-top: 0; }
+@media (max-width: 760px) {
+  .trade.trade:has(.dialogPanel) { height: calc(var(--sheet-viewport-height, 100dvh) * .92); }
+  .dialogPanel .facts { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.375rem; }
+  .dialogPanel .facts > div { padding: 0.625rem 0.5rem; }
+  .dialogPanel .facts b { font-size: 0.8125rem; }
+}
+.compact .amt { padding: 0.625rem 0.75rem; gap: 0.25rem; }
+.compact .amtInput { font-size: 1.625rem; }
+.compactDetails { position: relative; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(10rem, 100%), 1fr)); gap: 0 0.75rem; }
+.compactDetails > button { display: flex; align-items: center; gap: 0.5rem; min-height: max(44px, 2.75rem); text-align: left; font-size: 0.875rem; color: var(--muted); }
+.compactDetails > button:first-child { font-weight: 600; color: var(--ink); }
+.compactDetails > button > span:last-child { margin-left: auto; }
+@media (pointer: coarse) {
+  .compact .currencyChoice select, .compact textarea { font-size: 16px; }
+}
+
+.balance { margin-left: auto; min-width: 0; text-align: right; overflow-wrap: anywhere; }
+
+/* The detail rail's amount box is tighter; it keeps the shared field edge and attached focus ring. */
+:global([data-sale-transition]) :global(.side-box) .amt {
+  border-radius: var(--r-button);
+  padding: 0.875rem;
+}
+:global([data-sale-transition]) :global(.side-box) .preset { background: var(--raised); box-shadow: none; }
+:global([data-sale-transition]) :global(.side-box) .preset[aria-pressed="true"] { background: var(--ink); color: var(--card); }
+:global([data-sale-transition]) :global(.side-box) .preset:focus-visible { outline: 0.125rem solid var(--ink); outline-offset: 0.1875rem; }
+:global([data-sale-transition]) :global(.side-box) .disclosure { border: 0; padding-top: 0; }
+:global([data-sale-transition]) :global(.side-box) .note { border-radius: var(--r-button); }
+:global([data-sale-transition]) :global(.side-box) .commitTerms { font-size: 0.8125rem; }

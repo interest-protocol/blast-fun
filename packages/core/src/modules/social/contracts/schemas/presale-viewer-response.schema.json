@@ -1,0 +1,320 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/presale-viewer-response.schema.json",
+  "title": "Presale viewer response",
+  "description": "POST /api/social/presales/viewer 200 (private, no-store): per presale, the caller's followed backers and own position; with a status, those presales' rows.",
+  "type": "object",
+  "properties": {
+    "presales": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^0x[0-9a-f]{64}$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "following": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "properties": {
+                "account": {
+                  "type": "object",
+                  "properties": {
+                    "callsign": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9_]{1,18}[a-z0-9]$"
+                    },
+                    "display_name": {
+                      "oneOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "avatar_url": {
+                      "oneOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "verified": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "callsign",
+                    "display_name",
+                    "avatar_url",
+                    "verified"
+                  ],
+                  "additionalProperties": false
+                },
+                "commitment_usd": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+                    }
+                  ]
+                },
+                "commitment_atoms": {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)$"
+                },
+                "last_commit_ms": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "why": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                },
+                "commits": {
+                  "type": "array",
+                  "maxItems": 20,
+                  "items": {
+                    "type": "array",
+                    "prefixItems": [
+                      {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      {
+                        "oneOf": [
+                          {
+                            "type": "null"
+                          },
+                          {
+                            "type": "string",
+                            "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]*)$"
+                      }
+                    ],
+                    "minItems": 3,
+                    "maxItems": 3,
+                    "items": false
+                  }
+                }
+              },
+              "required": [
+                "account",
+                "commitment_usd",
+                "commitment_atoms",
+                "last_commit_ms",
+                "why",
+                "commits"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "following_total_usd": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+          },
+          "following_total_atoms": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)$"
+          },
+          "mine": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "commitment_usd": {
+                    "oneOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+                      }
+                    ]
+                  },
+                  "commitment_atoms": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]*)$"
+                  },
+                  "commits": {
+                    "type": "array",
+                    "maxItems": 20,
+                    "items": {
+                      "type": "array",
+                      "prefixItems": [
+                        {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        {
+                          "oneOf": [
+                            {
+                              "type": "null"
+                            },
+                            {
+                              "type": "string",
+                              "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "pattern": "^(0|[1-9][0-9]*)$"
+                        }
+                      ],
+                      "minItems": 3,
+                      "maxItems": 3,
+                      "items": false
+                    }
+                  },
+                  "claimed": {
+                    "type": "boolean"
+                  },
+                  "refund_usd": {
+                    "oneOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+                      }
+                    ]
+                  },
+                  "refund_atoms": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]*)$"
+                  },
+                  "claimable_tokens": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^(0|[1-9][0-9]*)$"
+                  },
+                  "claimed_tokens": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]*)$"
+                  },
+                  "claim_wallet_claimed": {
+                    "type": "boolean"
+                  },
+                  "buyer_vesting": {
+                    "oneOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "schedule_id": {
+                            "type": "string",
+                            "pattern": "^0x[0-9a-f]{64}$"
+                          },
+                          "beneficiary": {
+                            "type": "string",
+                            "pattern": "^0x[0-9a-f]{64}$"
+                          },
+                          "total": {
+                            "type": "string",
+                            "pattern": "^(0|[1-9][0-9]*)$"
+                          },
+                          "claimed": {
+                            "type": "string",
+                            "pattern": "^(0|[1-9][0-9]*)$"
+                          },
+                          "remaining": {
+                            "type": "string",
+                            "pattern": "^(0|[1-9][0-9]*)$"
+                          }
+                        },
+                        "required": [
+                          "schedule_id",
+                          "beneficiary",
+                          "total",
+                          "claimed",
+                          "remaining"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "claim_wallet_participated": {
+                    "type": "boolean"
+                  },
+                  "claim_wallet_commitment_atoms": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]*)$"
+                  }
+                },
+                "required": [
+                  "commitment_usd",
+                  "commitment_atoms",
+                  "commits",
+                  "claimed",
+                  "refund_usd",
+                  "refund_atoms"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "required": [
+          "following",
+          "following_total_usd",
+          "following_total_atoms",
+          "mine"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "rows": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "$ref": "https://blast-v2.invalid/social/contracts/presale-summary.schema.json"
+          }
+        }
+      ]
+    }
+  },
+  "required": [
+    "presales",
+    "rows"
+  ],
+  "additionalProperties": false
+}

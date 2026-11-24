@@ -1,0 +1,274 @@
+.chart {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 8px 12px;
+}
+
+.control {
+  display: grid;
+  gap: 4px;
+  color: var(--lp-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+@media (pointer: coarse) {
+  .controls .refresh[data-ui-size] { font-size: 16px; }
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+}
+
+.legend[data-in-filters] { grid-column: 1 / -1; }
+.legend[data-in-filters] .legendItem { min-height: 2.75rem; }
+
+.swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--lp-ink);
+  border-radius: 2px;
+}
+
+.swatch[data-source="curve"] {
+  background: var(--lp-ink);
+}
+
+.swatch[data-source="venue"] {
+  background: transparent;
+}
+
+.swatch[data-marker] {
+  width: 0;
+  height: 14px;
+  border: 0;
+  border-left: 2px dashed var(--lp-accent-text);
+  border-radius: 0;
+}
+
+.figure {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+}
+
+.axis {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--lp-muted);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.canvas {
+  position: relative;
+  min-width: 0;
+  border-radius: 8px;
+  background: var(--lp-canvas);
+  box-shadow: inset 0 0 0 1px var(--lp-line);
+}
+
+.compactCanvas { min-inline-size: 0; }
+
+.svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.svg line,
+.svg rect {
+  vector-effect: non-scaling-stroke;
+}
+
+.hatch {
+  stroke: var(--lp-muted);
+  stroke-width: 1;
+}
+
+.gap {
+  opacity: 0.35;
+}
+
+.candle[data-direction="up"] {
+  color: var(--lp-up);
+}
+
+.candle[data-direction="down"] {
+  color: var(--lp-down);
+}
+
+/* Unchanged: neither rise nor fall colour; the level ticks on both sides carry it. */
+.candle[data-direction="flat"] {
+  color: var(--lp-ink);
+}
+
+.wick {
+  stroke: currentColor;
+  stroke-width: 1;
+}
+
+.body {
+  fill: currentColor;
+  stroke: currentColor;
+  stroke-width: 1;
+}
+
+.volume {
+  fill: currentColor;
+  opacity: 0.35;
+}
+
+.candle[data-source="venue"] .body {
+  fill: var(--lp-canvas);
+  stroke-width: 2;
+}
+
+.candle[data-source="venue"] .volume {
+  fill: none;
+  stroke: currentColor;
+  opacity: 0.6;
+}
+
+.marker {
+  stroke: var(--lp-accent-text);
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
+}
+
+/* In the band above the price pane (chart-geometry LABEL_BAND: 20 px of a 200 px canvas), never over a candle. */
+.markerLabel {
+  position: absolute;
+  top: 2px;
+  padding: 0 4px;
+  color: var(--lp-accent-text);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.note {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--lp-muted);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.source {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.sourceTitle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  margin: 0;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+/*
+ * A block, not a grid: a disclosure's grid content sizes to the table, so the
+ * table would widen the page instead of scrolling inside its own region.
+ */
+.tableDetails {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.tableDetails[open] > summary {
+  margin-bottom: 8px;
+}
+
+.tableDetails summary {
+  min-height: 2.75rem;
+  display: list-item;
+  align-content: center;
+  color: var(--lp-accent-text);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 24px;
+  cursor: pointer;
+}
+
+.compactHead {
+  padding-inline: var(--coin-chart-heading-inset, 0);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: .5rem;
+}
+.chart .compactHead h2 { margin: 0; font-size: 1.0625rem; font-weight: 650; }
+.compactHead h2 span { color: var(--ink-2); font-weight: 400; white-space: nowrap; }
+.compactTools { display: flex; gap: .5rem; margin-inline-start: auto; }
+.compactTools .filterTrigger { --control-height: max(44px, 2.75rem); --control-hover: transparent; }
+.filters .filterClose,
+.chart .chartRetry { --control-height: max(44px, 2.75rem); }
+
+.chart[data-compact-chart] {
+  container-type: inline-size;
+  row-gap: .5rem;
+  --coin-plot-height: 14.75rem;
+  --coin-candle-tiles-width: min(100cqi, 24.5rem);
+  --coin-readout-height: calc(2.75rem + (var(--coin-candle-tiles-width) - 1.5rem) / 4);
+}
+
+.chart[data-compact-chart][data-chart-style="line"] {
+  --coin-plot-height: 12.75rem;
+  --coin-readout-height: 2.75rem;
+}
+
+@media (min-width: 761px) {
+  .chart[data-compact-chart] { --coin-plot-height: 26.5rem; }
+  .chart[data-compact-chart][data-chart-style="line"] { --coin-plot-height: 22.5rem; }
+}
+
+.chartState { min-block-size: calc(var(--coin-plot-height) + var(--coin-readout-height)); }
+.chart .chartEmpty { justify-content: center; background: transparent; }
+.chartSkeleton {
+  block-size: calc(var(--coin-plot-height) + var(--coin-readout-height));
+  visibility: hidden;
+  animation: showChartSkeleton 0s var(--t4) both;
+}
+@keyframes showChartSkeleton {
+  to { visibility: visible; }
+}
+
+.filterLayer { z-index: 1100; }
+.filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; width: 14rem; max-width: calc(100vw - 1.5rem); padding: .75rem; border-radius: var(--r-sm); background: var(--card); box-shadow: var(--sh-pop); }
+.filters .control { color: var(--muted); }
+.filterClose { grid-column: 1 / -1; justify-self: end; }
+
+@media (max-width: 760px) {
+  .filterInterval[data-line-interval] { display: none; }
+}

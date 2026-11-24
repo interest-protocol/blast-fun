@@ -1,0 +1,563 @@
+"use client";
+
+import { WalletTradesProvider } from "#web/components/launchpad/activity/wallet-trades.tsx";
+import { exactDecimal, exactText, multiplyExact } from "@blast/core/web/exact-amount.ts";
+import { SUI_COIN_TYPE } from "@blast/core/lib/sui/coin-types.ts";
+import { fdvInQuote } from "@blast/core/modules/social/prices/valuation.ts";
+import { NO_VALUE, shortAddress as shortId } from "@blast/core/web/format.ts";
+import { MEME_TOTAL_SUPPLY_WHOLE_TOKENS } from "@interest-protocol/blast-sdk/launchpad";
+import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
+import { useCallback, useId, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import type { VenuePoolKey } from "#web/components/launchpad/activity/activity-live.ts";
+import { IndexedPoolTrades } from "#web/components/social/coins/IndexedPoolTrades.tsx";
+import { CoinTradeVisibility } from "#web/components/social/coins/coin-trade-visibility.ts";
+import { listOriginHistoryState, useListOrigin } from "#web/components/blast-ui/list-restoration.ts";
+
+import { usePhoneLayout } from "#web/components/blast-ui/use-shell-prefs.ts";
+import { poolPrices } from "#web/components/charts/candle-data.ts";
+import { CoinPriceCurrencyProvider, useCoinPriceCurrency } from "#web/components/launchpad/chart/CoinPriceCurrency.tsx";
+import { Button, ButtonLink, DisclosureSummary } from "#web/components/blast-ui/Button.tsx";
+import { CopyAddress } from "#web/components/blast-ui/CopyAddress.tsx";
+import { DexIdentity } from "#web/components/blast-ui/DexIdentity.tsx";
+import { Disclosure } from "#web/components/blast-ui/Disclosure.tsx";
+import { EmptyState } from "#web/components/blast-ui/EmptyState.tsx";
+import { Sheet, SheetClose, SheetHeading } from "#web/components/blast-ui/Sheet.tsx";
+import { useHydrated } from "#web/components/ui-libraries/use-hydrated.tsx";
+import { SectionBoundary } from "#web/components/launchpad/primitives/SectionBoundary.tsx";
+import type { TerminalSlots } from "#web/components/launchpad/LaunchpadTerminal.tsx";
+import { formatAmountShort } from "#web/components/launchpad/coin/coin-format.ts";
+import { readableUsd } from "#web/lib/market-format.ts";
+import { allocationRows, coinIdentity, coinMarketOffline, feeRouteLabel, pageLifecycle, sectionData, venueMarketCatchingUp, venueRoute } from "#web/components/launchpad/coin/coin-view.ts";
+import { coinCreatorAddress, witnessVenue, type CoinPage } from "@blast/core/modules/launchpad-coin/contracts.ts";
+import type { LaunchPageDetails } from "@blast/core/modules/launchpad-coin/transfer.ts";
+import type { LegacyCoinMarket } from "@blast/core/modules/launchpad-discovery/rows.ts";
+import { createQuoteOf } from "@blast/core/web/contracts/create.ts";
+
+import { CoinPageWallet } from "#web/components/blast-ui/CoinPageWallet.tsx";
+import { CoinMark } from "#web/components/blast-ui/CoinMark.tsx";
+import { CoinLegacyMark, CoinVerifiedMark, PreviousIcon, TelegramIcon } from "#web/components/blast-ui/Icons.tsx";
+import { useCoinTrade } from "./use-coin-trade.ts";
+import { ChartLastTrade } from "#web/components/launchpad/chart/ChartLastTrade.tsx";
+import { ChartTradeContext } from "#web/components/launchpad/chart/chart-trade-context.ts";
+import { LiveFigureCue } from "#web/components/blast-ui/LiveFigureCue.tsx";
+import { useAppQueryClient } from "#web/lib/query/provider.tsx";
+import { pollInterval } from "#web/lib/query/polling.ts";
+import { legacyCoinMarketQuery } from "./bonding-client.ts";
+import { poolCoinMetadata } from "./pool-coin-metadata.ts";
+import styles from "./bonding-coin.module.css";
+import { ChartCard, CoinCover, CoinIdentityHeader, CoinPriceFigure, CoinTradingActivity, Fact, MarketOverview, MarketPriceRow } from "./CoinPageParts.tsx";
+import { bpsPercent } from "@blast/core/lib/bps.ts";
+
+const ZERO = BigInt(0);
+const ALL_BPS = BigInt(10_000);
+const creatorShare = (protocolBps: string) => bpsPercent(ALL_BPS - BigInt(protocolBps));
+
+function Card({ title, children }: Readonly<{ title: string; children: ReactNode }>) {
+  return <section className={styles.card}><h2>{title}</h2>{children}</section>;
+}
+function coinView(page: CoinPage, tick: ReturnType<typeof useCoinTrade>["tick"] = null) {
+  const identity = coinIdentity(page);
+  const curve = sectionData(page.curve);
+  const coin = sectionData(page.coin);
+  const fresh = page.fresh.status === "read" ? page.fresh.launch : null;
+  const lifecycle = pageLifecycle(page);
+  const pool = sectionData(page.venue);
+  const quoteType = curve?.launch.quoteType ?? fresh?.quoteType ?? "";
+  const quote = createQuoteOf(quoteType);
+  const quoteKey = quote?.symbol === "SUI" ? "sui" : quote?.symbol === "USDC" ? "usdc" : quoteType;
+  const quoteMark = <QuoteMark coinType={quoteType} coinKey={quoteKey} symbol={identity.quoteSymbol} markSymbol={quote?.symbol === "TEST_SUI" ? "TSUI" : quote?.symbol} />;
+  const venue = venueRoute(page)?.venue ?? (curve ? witnessVenue(curve.launch.launch.migrationWitness) : null);
+  const inputs = tick?.economics?.inputs ?? curve?.launch.economics.inputs;
+  const economics = lifecycle === "migrated" || page.source.kind === "venue" ? pool?.economics : tick?.economics ?? curve?.launch.economics;
+  const memeDecimals = economics ? Number(economics.inputs.memeDecimals) : identity.memeDecimals;
+  const quoteDecimals = economics?.inputs.quoteDecimals != null ? Number(economics.inputs.quoteDecimals) : identity.quoteDecimals;
+  const amount = (value: bigint, decimals = quoteDecimals) => <span className={styles.amount}>{decimals === null ? NO_VALUE : <>{formatAmountShort(value, decimals)}{quoteMark}</>}</span>;
+  const progress = tick?.progress ?? (curve?.progressBps == null ? null : Math.min(100, Math.max(0, Number(curve.progressBps) / 100)));
+  return { identity, curve, coin, fresh, quoteMark, amount, lifecycle, venue, inputs, economics, progress, pool, memeDecimals, quoteDecimals };
+
+}
+type View = ReturnType<typeof coinView>;
+
+function statusLabel(lifecycle: View["lifecycle"], confirmed: boolean) {
+  switch (lifecycle) {
+    case "migrated": return "Graduated";
+    case "migration_ready": return "Graduating";
+    case "opening_round": return "Opening round";
+    default: return confirmed ? "Bonding" : "Unconfirmed";
+  }
+}
+
+function CreatorByline({ page }: Readonly<{ page: CoinPage }>) {
+  const creator = coinCreatorAddress(page);
+  if (!creator) {
+    return page.fresh.status === "read" && page.fresh.launch.creatorRecipient?.kind === "account"
+      ? <span className={styles.creator}>Created by a Blast account</span>
+      : null;
+  }
+  return (
+    <span className={styles.creator}>
+      <CopyAddress value={creator} label="Created by" copyLabel="Copy creator wallet address" name={page.creatorName} />
+    </span>
+  );
+}
+
+function Identity({ page, view, fallbackLogo, verified }: Readonly<{ page: CoinPage; view: View; fallbackLogo?: string; verified: boolean }>) {
+  const { identity, lifecycle } = view;
+  return <CoinIdentityHeader
+    coin={{ key: identity.coinType ?? page.launchId, coinType: identity.coinType ?? undefined, iconUrl: identity.iconUrl || fallbackLogo || null, round: false }}
+    name={identity.name ?? identity.symbol}
+    symbol={identity.symbol}
+    status={statusLabel(lifecycle, page.confirmed)}
+    graduated={lifecycle === "migrated"}
+    mark={verified ? <CoinVerifiedMark /> : null}
+  >
+    <CreatorByline page={page} />
+  </CoinIdentityHeader>;
+}
+
+function QuoteMark({ coinType, coinKey, symbol, markSymbol = symbol }: Readonly<{ coinType: string; coinKey: string; symbol: string; markSymbol?: string }>) {
+  return <><CoinMark coin={{ key: coinKey, coinType, round: true, iconUrl: null, symbol: markSymbol }} size={18} /><span>{symbol}</span></>;
+}
+
+type PriceUnits = Readonly<{ memeDecimals: number; quoteDecimals: number; quoteSymbol: string; quoteMark: ReactNode }>;
+
+function priceUnits(view: View): PriceUnits | null {
+  const { memeDecimals, quoteDecimals, quoteMark, identity } = view;
+  return memeDecimals === null || quoteDecimals === null ? null : {
+    memeDecimals, quoteDecimals, quoteSymbol: identity.quoteSymbol, quoteMark,
+  };
+}
+
+function PriceValue({ units, price: rawPrice, tradeId }: Readonly<{ units: PriceUnits; price: string; tradeId: string | null }>) {
+  const { memeDecimals, quoteDecimals, quoteMark, quoteSymbol } = units;
+  const currency = useCoinPriceCurrency();
+  const prices = poolPrices(memeDecimals, quoteDecimals, currency?.quoteUsd);
+  return <CoinPriceFigure price={prices.price(rawPrice)} tradeId={tradeId} quoteSymbol={prices.usd ? undefined : quoteSymbol} quoteMark={quoteMark} />;
+}
+
+function hasMarketSound(view: View, poolKey: string | null) {
+  if (view.lifecycle === "migrated") return poolKey !== null;
+  return view.lifecycle !== "migration_ready" && view.inputs?.quoteReserve != null && view.inputs.graduationTarget != null;
+}
+
+function MarketPrice({ units, price, tradeId = null, activity, showSound, showCurrency }: Readonly<{
+  units: PriceUnits | null; price?: string | null; tradeId?: string | null; activity?: ReactNode; showSound?: boolean; showCurrency?: boolean;
+}>) {
+  return <MarketPriceRow price={price != null && units ? <PriceValue units={units} price={price} tradeId={tradeId} /> : null}
+    activity={activity} showSound={showSound} showCurrency={showCurrency} />;
+}
+
+function ProgressCard({ view, tradeId, children }: Readonly<{ view: View; tradeId: string | null; children?: ReactNode }>) {
+  if (!view.curve || !view.inputs) return null;
+  return <section className={`${styles.card} ${styles.progressCard} ${styles.marketStats}`} aria-label="Launch progress">
+    <RaiseProgress view={view} tradeId={tradeId} />
+    {children}
+  </section>;
+}
+
+function ProgressFacts({ view, tradeId }: Readonly<{ view: View; tradeId: string | null }>) {
+  const { economics, coin, venue, lifecycle } = view;
+  const currency = useCoinPriceCurrency();
+  const rate = exactDecimal(currency?.rate);
+  const fdv = fdvInQuote(economics?.price, economics?.inputs.currencySupply, economics?.inputs.quoteDecimals);
+  const fdvLabel = fdv && rate ? readableUsd(exactText(multiplyExact(fdv, rate))) : null;
+  if (!fdvLabel && !coin && !venue) return null;
+  return <dl className={styles.stats}>
+    {fdvLabel && <Fact label="FDV"><LiveFigureCue tradeId={tradeId} value={fdvLabel}>{fdvLabel}</LiveFigureCue></Fact>}
+    {coin ? <Fact label="Holders">{coin.stats.holders.toLocaleString("en-US")}</Fact> : null}
+    {venue ? <Fact label={lifecycle === "migrated" ? "Trading on" : "Graduates to"}><DexIdentity venue={venue} size={18} /></Fact> : null}
+  </dl>;
+}
+
+function RaiseProgress({ view, tradeId }: Readonly<{ view: View; tradeId: string | null }>) {
+  const { inputs, amount, progress, quoteDecimals } = view;
+  if (view.lifecycle === "migration_ready") return <div className={styles.migrationState}><strong>Graduation target reached</strong><span>Migration pending</span></div>;
+  if (inputs?.quoteReserve == null || inputs.graduationTarget === null) return null;
+  const raised = quoteDecimals === null ? NO_VALUE : formatAmountShort(inputs.quoteReserve, quoteDecimals);
+  const percent = progress === null ? null : `${progress.toLocaleString("en-US", { maximumFractionDigits: 1 })}%`;
+  return <>
+    <div className={styles.raised}>
+      <span>
+        <b><LiveFigureCue tradeId={tradeId} value={raised}>{amount(inputs.quoteReserve)}</LiveFigureCue></b>
+        <small>of {amount(inputs.graduationTarget)} to graduate</small>
+      </span>
+      {percent && <strong className={styles.progressPercent}><LiveFigureCue tradeId={tradeId} value={percent}>{percent}</LiveFigureCue></strong>}
+    </div>
+    {progress === null ? null : <progress aria-label="Raise progress" max={100} value={progress} />}
+  </>;
+}
+
+function AllocationCard({ view }: Readonly<{ view: View }>) {
+  const { curve, identity, lifecycle, fresh } = view;
+  if (!curve) return null;
+  const graduated = lifecycle === "migrated";
+  const { launch, economics } = curve;
+  const { symbol } = identity;
+  const decimals = launch.economics.inputs.memeDecimals;
+  const memeDecimals = Number(decimals);
+  const initialSupply = fresh?.atomicSupply ?? MEME_TOTAL_SUPPLY_WHOLE_TOKENS * BigInt(10) ** decimals;
+  const migration = graduated ? launch.migration : null;
+  const soldOnCurve = economics && migration ? economics.curveMeme - migration.disposedMeme : null;
+  return (
+    <Card title="Tokenomics">
+      <dl className={styles.facts}>
+        <Fact label={graduated ? "Curve allocation" : "On the curve"}>{bpsPercent(curve.plan.curveMemeBps)}</Fact>
+        {soldOnCurve !== null ? (
+          <Fact label="Sold on the curve">{formatAmountShort(soldOnCurve, memeDecimals)}{"\u00A0"}{symbol}</Fact>
+        ) : null}
+        {!graduated && economics ? (
+          <Fact label="Projected curve sales">{formatAmountShort(economics.curveMemeReleased, memeDecimals)}{"\u00A0"}{symbol}</Fact>
+        ) : null}
+        {migration && migration.disposedMeme > ZERO ? (
+          <Fact label={migration.totalSupplyAfter < initialSupply ? "Burned at graduation" : "Sent to the burn address at graduation"}>
+            {formatAmountShort(migration.disposedMeme, memeDecimals)}{"\u00A0"}{symbol}
+          </Fact>
+        ) : null}
+        <Fact label="For the pool">{bpsPercent(curve.plan.lpMemeBps)}</Fact>
+        {curve.plan.protocolMemeBps > ZERO ? <Fact label="Blast">{bpsPercent(curve.plan.protocolMemeBps)}</Fact> : null}
+        {allocationRows(curve.plan).map((recipient) => <Fact key={recipient.key} label={shortId(recipient.recipient.destination)}>{bpsPercent(recipient.memeBps)}</Fact>)}
+      </dl>
+    </Card>
+  );
+}
+
+function FeesCard({ view }: Readonly<{ view: View }>) {
+  const { curve, coin, identity } = view;
+  const policy = coin?.feePolicy;
+  const graduated = view.lifecycle === "migrated";
+  const curvePolicy = graduated ? null : policy?.curve;
+  if (!curve) return null;
+  const poolFeeRate = curve.launch.launch.poolFeeRate;
+  const routes = curve.split.routes.filter(({ bps }) => bps > ZERO);
+  return (
+    <Card title={graduated ? "Pool fees" : "Where money goes"}>
+      <dl className={styles.facts}>
+        {graduated && poolFeeRate !== null ? <Fact label="Pool trading fee">{Number(poolFeeRate) / 10_000}%</Fact> : null}
+        {!graduated ? <Fact label="Raised">{bpsPercent(curve.plan.lpQuoteBps)} pool · {bpsPercent(curve.plan.protocolQuoteBps)} Blast</Fact> : null}
+        {curvePolicy ? (
+          <Fact label="Curve fees">
+            Creator {creatorShare(curvePolicy.protocol_bps)} · Blast {bpsPercent(BigInt(curvePolicy.protocol_bps))}
+          </Fact>
+        ) : null}
+        {policy?.lp ? <>
+          <Fact label={`Blast’s share of pool fees (${identity.quoteSymbol})`}>{bpsPercent(BigInt(policy.lp.quote_bps))}</Fact>
+          <Fact label={`Blast’s share of pool fees (${identity.symbol})`}>{bpsPercent(BigInt(policy.lp.meme_bps))}</Fact>
+        </> : null}
+      </dl>
+      {routes.length ? <>
+        <p className={styles.note}>Who gets the remaining pool fees</p>
+        <dl className={styles.facts}>
+          {routes.map(({ destination, bps }) => (
+            <Fact key={destination.kind === "Address" ? destination.address : destination.kind} label={feeRouteLabel(destination)}>
+              {bpsPercent(bps)}
+            </Fact>
+          ))}
+        </dl>
+      </> : null}
+    </Card>
+  );
+}
+
+function LaunchHistory({ view }: Readonly<{ view: View }>) {
+  const { curve, inputs, amount, fresh, identity } = view;
+  if (!curve || !inputs) return null;
+  return <section className={styles.card} aria-label="Launch history"><Disclosure title="Launch history">
+    <dl className={styles.facts}>
+      {inputs.graduationTarget !== null ? <Fact label="Graduation target">{amount(inputs.graduationTarget)}</Fact> : null}
+      {inputs.virtualQuote !== null ? <Fact label="Virtual starting liquidity">{amount(inputs.virtualQuote)}</Fact> : null}
+      <Fact label="Raise allocation">{bpsPercent(curve.plan.lpQuoteBps)} pool · {bpsPercent(curve.plan.protocolQuoteBps)} Blast</Fact>
+      {fresh ? <><Fact label={`Curve trading fee (${identity.quoteSymbol})`}>{bpsPercent(fresh.quoteFeeBps)}</Fact><Fact label={`Curve trading fee (${identity.symbol})`}>{bpsPercent(fresh.memeFeeBps)}</Fact></> : null}
+    </dl>
+  </Disclosure></section>;
+}
+
+function TermsCard({ view }: Readonly<{ view: View }>) {
+  const { curve, inputs, amount, fresh, lifecycle, identity } = view;
+  if (!curve || !inputs) return null;
+  const poolFeeRate = curve.launch.launch.poolFeeRate;
+  return (
+<Card title="Terms"><dl className={styles.facts}>
+            {inputs.virtualQuote !== null ? <Fact label="Virtual starting liquidity">{amount(inputs.virtualQuote)}</Fact> : null}
+            {inputs.graduationTarget !== null ? <Fact label="Raise target">{amount(inputs.graduationTarget)}</Fact> : null}
+            {lifecycle !== "migrated" && poolFeeRate !== null ? <Fact label="Pool fee">{Number(poolFeeRate) / 10_000}%</Fact> : null}
+            {fresh ? <><Fact label={`Trading fee (${identity.quoteSymbol})`}>{bpsPercent(fresh.quoteFeeBps)}</Fact><Fact label={`Trading fee (${identity.symbol})`}>{bpsPercent(fresh.memeFeeBps)}</Fact></> : null}
+            <Fact label="Liquidity">Locked forever</Fact>
+          </dl></Card>
+  );
+}
+
+function AboutCard({ details, view }: Readonly<{ details: LaunchPageDetails | null; view: View }>) {
+  const phone = usePhoneLayout();
+  const { curve } = view;
+  if (!details?.tagline && !details?.links.length && !curve?.launch.metadata?.description && !(phone && details?.cover)) return null;
+  return (
+<Card title="About">
+          {phone && details?.cover ? <CoinCover cover={details.cover} inAbout /> : null}
+          {details?.tagline ? <p className={styles.tagline}>{details.tagline}</p> : null}
+          {curve?.launch.metadata?.description && curve.launch.metadata.description.trim() !== details?.tagline.trim() ? <p className={styles.note}>{curve.launch.metadata.description}</p> : null}
+          <AboutLinks links={details?.links ?? []} />
+        </Card>
+  );
+}
+
+function AboutLinks({ links }: Readonly<{ links: LaunchPageDetails["links"] }>) {
+  return <div className={styles.links}>
+    {links.map((link) => (
+      <ButtonLink href={link.url} key={link.label} rel="noopener noreferrer" size="sm" target="_blank">
+        {link.label === "Telegram" ? <TelegramIcon /> : null}
+        {link.label}
+      </ButtonLink>
+    ))}
+  </div>;
+}
+
+function CoinBackLink({ origin, tradeJump = true }: Readonly<{ origin: string | null; tradeJump?: boolean }>) {
+  const from = coinBackOrigin(origin);
+  const label = from?.pathname === "/" ? "Home" : "Bonding curves";
+  const href = from ? `${from.pathname}${from.search}${from.hash}` : "/bonding";
+
+  return <div className={styles.back}>
+    <Link href={href} replace onNavigate={(event) => {
+      if (!from || window.history.length < 2) {
+        return;
+      }
+      const navigation = window.navigation;
+      if (navigation) {
+        const previous = navigation.entries()[(navigation.currentEntry?.index ?? 0) - 1];
+        const { blastOriginEntry } = listOriginHistoryState();
+        const matches = blastOriginEntry
+          ? previous?.key === blastOriginEntry && coinBackOrigin(previous.url)?.pathname === from.pathname
+          : previous?.url === from.href;
+        if (!matches) return;
+      }
+      event.preventDefault();
+      window.history.back();
+    }}>
+      {from ? <><PreviousIcon strokeWidth="2" />{label}</> : <><PreviousIcon strokeWidth="2" />Bonding</>}
+    </Link>
+    <CoinPageWallet />
+    {tradeJump ? <ButtonLink className={styles.tradeJump} href="#coin-trade" size="sm">Trade</ButtonLink> : null}
+  </div>;
+}
+
+function coinBackOrigin(origin: string | null | undefined): URL | null {
+  if (typeof origin !== "string") {
+    return null;
+  }
+  try {
+    const from = new URL(origin);
+    return from.origin === window.location.origin && (from.pathname === "/" || from.pathname === "/bonding")
+      ? from
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function CoinPageHeader({ page, view, details, verified, marketCatchingUp }: Readonly<{
+  page: CoinPage; view: View; details: LaunchPageDetails | null; verified: boolean; marketCatchingUp: boolean;
+}>) {
+  const origin = useListOrigin(page.launchId);
+  return <>
+    <CoinBackLink origin={origin} />
+    {details?.cover ? <CoinCover cover={details.cover} /> : null}
+    <Identity page={page} view={view} fallbackLogo={details?.iconUrl} verified={verified} />
+    {!page.confirmed ? <EmptyState framed title="Launch could not be confirmed" role="alert" action={<ButtonLink href={`/coin/${page.launchId}`}>Reload</ButtonLink>}>The launch could not be read. Try again in a moment.</EmptyState> : null}
+    {!marketCatchingUp && (page.curve.state === "stale" || page.coin.state === "stale" || page.venue?.state === "stale") ? <p className={styles.notice} role="status">Market data is delayed. Trading availability follows the latest chain read.</p> : null}
+    {page.conflict && !marketCatchingUp ? <p className={styles.notice} role="status">The index is catching up with this launch. Trading follows its current chain state.</p> : null}
+  </>;
+}
+
+function CoinMarket({ snapshot, page, chart, poolKey, checkpoint }: Readonly<{
+  snapshot: View; page: CoinPage; chart: ReactNode; poolKey: string | null; checkpoint: number | null;
+}>) {
+  const { tick, lastTrade, receivedAt } = useCoinTrade(snapshot.identity.coinType, poolKey, checkpoint);
+  const graduated = snapshot.lifecycle === "migrated";
+  const view = !graduated && tick ? coinView(page, tick) : snapshot;
+  const tradeId = tick?.showCue ? tick.trade.cursor : null;
+  const price = graduated && tick ? tick.trade.price : view.economics?.price;
+  const context = coinTradeSource(view, poolKey, lastTrade, receivedAt);
+  return <ChartTradeContext value={context}>
+    <div className={styles.market}>
+      <MarketPrice units={priceUnits(view)} price={price} tradeId={tradeId} showSound={hasMarketSound(view, poolKey)}
+        showCurrency={view.identity.quoteType !== null} activity={context && <ChartLastTrade placement="headline" />} />
+      <CoinMarketCards graduated={graduated} view={view} tick={tick} tradeId={tradeId} chart={chart} />
+    </div>
+  </ChartTradeContext>;
+}
+
+function CoinMarketCards({ graduated, view, tick, tradeId, chart }: Readonly<{
+  graduated: boolean; view: View; tick: ReturnType<typeof useCoinTrade>["tick"]; tradeId: string | null; chart: ReactNode;
+}>) {
+  const phone = usePhoneLayout();
+  const phoneProgress = phone && !graduated;
+  const facts = view.curve && view.inputs ? <ProgressFacts view={view} tradeId={tradeId} /> : null;
+  const stats = graduated ? <GraduatedMarketOverview key="stats" view={view} tick={tick} tradeId={tradeId} /> : (
+    <ProgressCard key="stats" view={view} tradeId={tradeId}>{phone ? null : facts}</ProgressCard>
+  );
+  const chartCard = chart ? <ChartCard key="chart">{chart}</ChartCard> : null;
+  return <>
+    {phoneProgress ? [stats, chartCard] : [chartCard, stats]}
+    {phoneProgress && facts ? <div className={`${styles.card} ${styles.progressFacts}`}>{facts}</div> : null}
+  </>;
+}
+
+function coinTradeSource(view: View, poolKey: string | null, trade: ReturnType<typeof useCoinTrade>["lastTrade"], receivedAt: number | null) {
+  if (!poolKey || !view.identity.coinType) return null;
+  return {
+    poolKey, trade, receivedAt, decimals: view.quoteDecimals, symbol: view.identity.quoteSymbol,
+    quoteType: view.identity.quoteType, placement: "headline" as const,
+  };
+}
+
+function GraduatedMarketOverview({ view, tick, tradeId }: Readonly<{
+  view: View; tick: ReturnType<typeof useCoinTrade>["tick"]; tradeId: string | null;
+}>) {
+  return <MarketOverview fdv={tick ? tick.trade.fdvUsd : view.pool?.fdvUsd} holders={view.coin?.stats.holders}
+    volume={view.pool?.stats.day.volumeUsd} venue={view.venue} tradeId={tradeId} />;
+}
+
+function coinPageMarket(page: CoinPage, view: View) {
+  const graduated = view.lifecycle === "migrated";
+  const poolKey = graduated ? venueRoute(page)?.poolKey ?? null : page.source.kind === "curve" ? page.source.poolKey : null;
+  const provenance = (graduated ? page.venue : page.curve)?.provenance;
+  const marketKey = [page.launchId, poolKey, provenance?.network, provenance?.deployment].join(":");
+  const marketCatchingUp = venueMarketCatchingUp(page);
+  const marketOffline = marketCatchingUp && coinMarketOffline(page);
+  const showMarket = !marketOffline || view.coin !== null || view.pool !== null;
+  return { graduated, poolKey, marketKey, marketCatchingUp, marketOffline, showMarket, checkpoint: provenance?.checkpoint ?? null };
+}
+
+function CoinTradePlacement({ execution, symbol }: Readonly<{ execution: ReactNode; symbol: string | null }>) {
+  const phone = usePhoneLayout();
+  const hydrated = useHydrated();
+  const [open, setOpen] = useState(false);
+  const [host, setHost] = useState<HTMLDivElement | null>(null);
+  const title = useId();
+  // The portal stays mounted when its destination changes or the sheet closes.
+  const placeExecution = useCallback((destination: HTMLElement | null) => {
+    if (!destination) return;
+    const panel = host ?? destination.ownerDocument.createElement("div");
+    destination.append(panel);
+    if (!host) setHost(panel);
+  }, [host]);
+
+  return <>
+    {phone ? (
+      <>
+        <div className={styles.tradeDock}>
+          <Button aria-haspopup="dialog" onClick={(event) => {
+            event.currentTarget.focus({ preventScroll: true });
+            setOpen(true);
+          }} size="lg" variant="primary">Trade</Button>
+        </div>
+        <Sheet open={open} onRequestClose={() => setOpen(false)} labelledBy={title} className={styles.tradeSheet} hasDock>
+          <SheetHeading id={title} title={symbol ? `Trade $${symbol}` : "Trade"} />
+          <SheetClose onClick={() => setOpen(false)} />
+          <div ref={placeExecution} />
+        </Sheet>
+      </>
+    ) : (
+      <aside className={styles.aside} id="coin-trade" tabIndex={-1}>
+        <section aria-label="Trade" className={styles.card} ref={hydrated ? placeExecution : undefined}>
+          {hydrated ? null : execution}
+        </section>
+      </aside>
+    )}
+    {host ? createPortal(<CoinTradeVisibility value={!phone || open}>{execution}</CoinTradeVisibility>, host) : null}
+  </>;
+}
+
+function LegacyMarketDetails({ market, decimals, symbol }: Readonly<{ market?: LegacyCoinMarket; decimals: number; symbol: string }>) {
+  const { totalSupplyAtoms, feeRate } = market ?? {};
+  const { description, links } = poolCoinMetadata(market?.description);
+  const hasAbout = Boolean(description || links.length);
+  if (!hasAbout && totalSupplyAtoms === undefined && feeRate === undefined) return null;
+  return <div className={styles.details}>
+    {hasAbout ? <Card title="About">
+      {description ? <p className={styles.tagline}>{description}</p> : null}
+      {links.length ? <AboutLinks links={links} /> : null}
+    </Card> : null}
+    <div className={styles.pair}>
+      {totalSupplyAtoms !== undefined ? <Card title="Tokenomics">
+        <dl className={styles.facts}><Fact label="Total supply">{formatAmountShort(BigInt(totalSupplyAtoms), decimals)}{"\u00A0"}{symbol}</Fact></dl>
+      </Card> : null}
+      {feeRate !== undefined ? <Card title="Pool fees">
+        <dl className={styles.facts}><Fact label="Pool trading fee">{feeRate / 10_000}%</Fact></dl>
+      </Card> : null}
+    </div>
+  </div>;
+}
+
+export function LegacyCoinScreen({ coinType, name, symbol, logoUrl, chart, decimals, poolKey, trade, legacy = true, verified = false, verifiedCommunity = false }: Readonly<{
+  coinType: string; name: string; symbol: string; logoUrl: string; chart: ReactNode; decimals: number;
+  poolKey: VenuePoolKey; trade: ReactNode; legacy?: boolean; verified?: boolean; verifiedCommunity?: boolean;
+}>) {
+  const origin = useListOrigin(coinType);
+  const units = {
+    coinType, symbol, iconUrl: logoUrl, memeDecimals: decimals,
+    quoteType: SUI_COIN_TYPE, quoteSymbol: "SUI", quoteDecimals: 9,
+    quoteMark: <QuoteMark coinType={SUI_COIN_TYPE} coinKey="sui" symbol="SUI" />,
+  };
+  // Keep the headline on the latest pool observation even when the selected chart range has no candles.
+  const { data, isRefetchError } = useQuery({
+    ...legacyCoinMarketQuery(),
+    refetchInterval: (query) => pollInterval(60_000, query),
+  }, useAppQueryClient());
+  const market = data?.legacyMarket?.[coinType];
+  const fdvUsd = data?.legacyFdvUsd?.[coinType];
+  const mark = <>{verified || verifiedCommunity ? <CoinVerifiedMark community={verifiedCommunity} /> : null}{legacy ? <CoinLegacyMark /> : null}</>;
+  return <div className={styles.page} data-legacy-coin="">
+    <CoinBackLink origin={origin} tradeJump={trade != null} />
+    <CoinIdentityHeader coin={{ key: coinType, coinType, iconUrl: logoUrl, round: false }} name={name} symbol={symbol} status="Graduated" graduated mark={mark} />
+    <div className={styles.layout} data-no-trade={trade == null || undefined}>
+      <CoinPriceCurrencyProvider quoteType={SUI_COIN_TYPE} quoteSymbol="SUI">
+        <div className={styles.market}>
+          <MarketPrice units={units} price={isRefetchError ? undefined : market?.price} />
+          <ChartCard><SectionBoundary subject="chart">{chart}</SectionBoundary></ChartCard>
+          <MarketOverview fdv={isRefetchError ? undefined : fdvUsd} venue={poolKey.split(":")[0]} />
+        </div>
+      </CoinPriceCurrencyProvider>
+      {trade == null ? null : <CoinTradePlacement execution={<SectionBoundary subject="execution">{trade}</SectionBoundary>} symbol={symbol} />}
+      <div className={styles.activity}>
+        <Card title="Trades">
+          <SectionBoundary subject="trades" key={poolKey}>
+            <IndexedPoolTrades poolKey={poolKey} units={units} />
+          </SectionBoundary>
+        </Card>
+      </div>
+      <LegacyMarketDetails market={market} decimals={decimals} symbol={symbol} />
+    </div>
+  </div>;
+}
+
+/** A launch's permanent page, preserving chart, execution and migration contracts. */
+export function BondingCoinScreen({ page, details, verified = false, slots }: Readonly<{ page: CoinPage; details: LaunchPageDetails | null; verified?: boolean; slots: TerminalSlots }>) {
+  const view = coinView(page);
+  const { graduated, poolKey, marketKey, marketCatchingUp, marketOffline, showMarket, checkpoint } = coinPageMarket(page, view);
+  const slot = (name: keyof TerminalSlots) => <SectionBoundary subject={name} key={`${page.launchId}:${name}`}>{slots[name]}</SectionBoundary>;
+  return <div className={styles.page} data-bonding-coin="" data-has-cover={!!details?.cover || undefined}>
+    <CoinPageHeader page={page} view={view} details={details} verified={verified} marketCatchingUp={marketCatchingUp} />
+    <WalletTradesProvider key={page.launchId} deployer={view.coin?.launcher ?? null}>
+      <div className={styles.layout} data-graduated={graduated || undefined} data-market-offline={marketOffline || undefined} data-no-market={!showMarket || undefined}>
+        {showMarket ? (
+          <CoinPriceCurrencyProvider key={page.launchId} quoteType={view.identity.quoteType} quoteSymbol={view.identity.quoteSymbol}>
+            <CoinMarket key={marketKey} snapshot={view} page={page} poolKey={poolKey} checkpoint={checkpoint} chart={marketOffline || slots.chart == null ? null : slot("chart")} />
+          </CoinPriceCurrencyProvider>
+        ) : null}
+        <CoinTradePlacement execution={slot("execution")} symbol={view.identity.symbol} />
+        {marketOffline ? null : <div className={styles.activity}><CoinTradingActivity key={page.launchId} trades={slots.activity} holders={slots.holders} /></div>}
+        <div className={styles.details}>
+          {view.curve ? <details className={styles.card}><DisclosureSummary>Token &amp; fees</DisclosureSummary>
+            <div className={styles.pair}><AllocationCard view={view} /><FeesCard view={view} /></div>
+            {graduated ? <LaunchHistory view={view} /> : <TermsCard view={view} />}
+          </details> : null}
+          <AboutCard details={details} view={view} />
+          <Disclosure title="Theses">{slot("theses")}</Disclosure>
+        </div>
+      </div>
+    </WalletTradesProvider>
+  </div>;
+}

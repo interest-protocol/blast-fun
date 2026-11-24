@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/trade-request.schema.json",
+  "title": "Build a trade",
+  "description": "POST /api/social/trades: an offered quote's id with its own amount_in and min_out (which must match it), the client's key for this trade (a UUID v4, resent on every retry), and accept_fee to pay the network fee from the wallet when Blast will not sponsor it.",
+  "type": "object",
+  "properties": {
+    "quote_id": {
+      "type": "string",
+      "pattern": "^q1\\.[A-Za-z0-9_-]{16,2997}$"
+    },
+    "amount_in": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]{0,19}$"
+    },
+    "min_out": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]{0,19})$"
+    },
+    "idempotency_key": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "accept_fee": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "quote_id",
+    "amount_in",
+    "min_out",
+    "idempotency_key"
+  ],
+  "additionalProperties": false
+}

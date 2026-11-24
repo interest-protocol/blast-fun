@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/presale/contracts/allowlist-response.schema.json",
+  "title": "Allowlist",
+  "description": "POST /api/presale/allowlists 201 and GET /api/presale/allowlists/{allowlist_id} 200; root without 0x (CL-15).",
+  "type": "object",
+  "properties": {
+    "allowlist_id": {
+      "$ref": "defs.schema.json#/$defs/id"
+    },
+    "root": {
+      "$ref": "defs.schema.json#/$defs/hex32"
+    },
+    "leaf_count": {
+      "$ref": "defs.schema.json#/$defs/uint"
+    },
+    "entry_count": {
+      "$ref": "defs.schema.json#/$defs/count"
+    },
+    "total_cap": {
+      "$ref": "defs.schema.json#/$defs/uint"
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "quote_not_allowed",
+              "normalized_address"
+            ]
+          },
+          "message": {
+            "$ref": "defs.schema.json#/$defs/message"
+          },
+          "row": {
+            "$ref": "defs.schema.json#/$defs/row"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "allowlist_id",
+    "root",
+    "leaf_count",
+    "entry_count",
+    "total_cap",
+    "warnings"
+  ],
+  "additionalProperties": false
+}

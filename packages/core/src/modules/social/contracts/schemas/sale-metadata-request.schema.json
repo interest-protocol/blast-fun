@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/sale-metadata-request.schema.json",
+  "title": "Sale metadata request",
+  "description": "PUT /api/social/sales/{presale_id}/metadata (R3-24): the creator's six text fields, each optional; a string sets it (blank clears), null clears it, an absent field is unchanged. Closed: no term of the sale is a field, so a request naming one is 400 invalid_request.",
+  "type": "object",
+  "properties": {
+    "tagline": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "maxLength": 1024
+        }
+      ]
+    },
+    "site": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "maxLength": 1024
+        }
+      ]
+    },
+    "x_handle": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "maxLength": 1024
+        }
+      ]
+    },
+    "telegram": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "maxLength": 1024
+        }
+      ]
+    },
+    "docs_url": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "maxLength": 1024
+        }
+      ]
+    },
+    "audit_url": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "maxLength": 1024
+        }
+      ]
+    }
+  },
+  "additionalProperties": false
+}

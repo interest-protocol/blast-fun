@@ -1,0 +1,739 @@
+import { deploymentIdentity } from "@blast/core/lib/config/deployment-identity.ts";
+import assert from "node:assert/strict";
+import test from "node:test";
+import {
+  MARKET_STREAM_BUDGET as B,
+  MARKET_STREAM_PATH,
+  marketStreamPools,
+} from "@blast/core/modules/launchpad-contract/market-stream.ts";
+import { privateRoute } from "@blast/core/modules/backend-api/private-routes.ts";
+import { signPrivateRequest } from "@blast/core/modules/backend-api/private-gateway.ts";
+import { quotaNamespace } from "@blast/core/lib/web-security/redis-rate-limits.ts";
+import { MarketStreamRelay } from "@blast/server/modules/launchpad-market/stream-relay.ts";
+import type { RelaySocket } from "@blast/server/modules/social/activity/hint-relay.ts";
+import {
+  infraProvenanceFixture,
+  FIXTURE_FINGERPRINT,
+  poolSummaryFixture,
+} from "../../../packages/server/test/fixtures/modules/launchpad-contract/fixtures.ts";
+import { hintsConfig } from "../src/app/hints/config.ts";
+import { createHintsServer } from "../src/app/hints/server.ts";
+import { validateBackendFleet } from "../src/app/config/fleet.ts";
+import { fleetFixture } from "./fleet-fixture.ts";
+
+const expected = {
+  network: "mainnet",
+  deployment: FIXTURE_FINGERPRINT,
+} as const;
+const pool = (index = 1) => `blast_curve:0x${index.toString(16).padStart(64, "0")}`;
+const request = (pools = [pool()], cursor?: string) =>
+  new Request(
+    `https://frontend.test${MARKET_STREAM_PATH}?${new URLSearchParams([...pools.map((value) => ["pool", value]), ...(cursor ? [["cursor", cursor]] : [])])}`,
+  );
+const provenance = (checkpoint = 10) =>
+  infraProvenanceFixture({ checkpoint, timestamp_ms: checkpoint * 1000 });
+const frame = (type: string, checkpoint = 10, fields: Record<string, unknown> = {}) => ({
+  type,
+  cursor: `${checkpoint}:1:1:0`,
+  checkpoint,
+  timestamp_ms: checkpoint * 1000,
+  provenance: provenance(checkpoint),
+  ...fields,
+});
+const snapshot = (key = pool(), checkpoint = 10) =>
+  frame("snapshot", checkpoint, { topic: `pool:${key}` });
+const trade = (checkpoint = 11, key = pool()) => ({
+  ...frame("trade", checkpoint),
+  trade: {
+    cursor: `${checkpoint}:1:1:0`,
+    checkpoint,
+    timestamp_ms: checkpoint * 1000,
+    pool_key: key,
+    side: "buy",
+    kind: "buy",
+    price: "0.000000000000000000000000000000000001",
+    quote_amount: "9007199254740993",
+    meme_amount: "123",
+    volume_usd: "1.25",
+    labels: ["whale"],
+  },
+});
+
+class Socket implements RelaySocket {
+  sent: Record<string, unknown>[] = [];
+  closed = 0;
+  onmessage: RelaySocket["onmessage"] = null;
+  onclose: RelaySocket["onclose"] = null;
+  onerror: RelaySocket["onerror"] = null;
+  send(value: string) {
+    assert.ok(new TextEncoder().encode(value).byteLength <= 4096);
+    this.sent.push(JSON.parse(value));
+  }
+  close() {
+    this.closed++;
+  }
+  receive(value: unknown) {
+    this.onmessage?.({ data: JSON.stringify(value) } as Parameters<
+      NonNullable<RelaySocket["onmessage"]>
+    >[0]);
+  }
+  hello() {
+    this.receive({ type: "hello", protocol: 1, provenance: provenance() });
+  }
+}
+const read = async (reader: ReadableStreamDefaultReader<Uint8Array>) => {
+  const value = await reader.read();
+  assert.equal(value.done, false);
+  const text = new TextDecoder().decode(value.value);
+  return {
+    text,
+    event: text.match(/^event: (.+)$/m)?.[1],
+    data: JSON.parse(text.match(/^data: (.+)$/m)![1]!) as Record<string, unknown>,
+  };
+};
+
+test("market stream is an exact browser-only signed GET/HEAD with one or two canonical pools", () => {
+  assert.equal(privateRoute("GET", MARKET_STREAM_PATH, "browser")?.workBudgetMs, 300_000);
+  assert.equal(privateRoute("HEAD", MARKET_STREAM_PATH, "browser")?.maxBodyBytes, 0);
+  assert.equal(privateRoute("GET", MARKET_STREAM_PATH, "ssr-read"), null);
+  assert.equal(privateRoute("POST", MARKET_STREAM_PATH, "browser"), null);
+  assert.deepEqual(marketStreamPools(request([pool(), pool(2)])), [pool(), pool(2)]);
+  for (const query of [
+    "",
+    "pool=feed",
+    `pool=${pool()}&pool=${pool()}`,
+    `pool=${pool()}&pool=${pool(2)}&pool=${pool(3)}`,
+    `pool=${pool()}&wallet=x`,
+    `pool=${pool()}&cursor=invalid`,
+  ]) {
+    assert.throws(() =>
+      marketStreamPools(new Request(`https://frontend.test${MARKET_STREAM_PATH}?${query}`)),
+    );
+  }
+});
+
+test("presale clients share the socket and receive only their fills beyond a scoped fence", async () => {
+  const sale = (index: number) => `0x${index.toString(16).padStart(64, "0")}`;
+  const scoped = (id: string) => new Request(`https://frontend.test${MARKET_STREAM_PATH}?presale=${id}`);
+  const socket = new Socket();
+  const relay = new MarketStreamRelay(() => socket, expected);
+  const a = relay.stream(scoped(sale(1))).body!.getReader();
+  await read(a);
+  socket.hello();
+  await read(a);
+  assert.deepEqual(socket.sent[0], { op: "subscribe", topics: ["activity"] });
+  socket.receive({ type: "pong", activity_checkpoint: 12 });
+  assert.equal((await read(a)).data.presale_checkpoint, 12);
+  const fill = {
+    type: "presale_pool_swap", presale_id: sale(1), pool_key: `bluefin:${sale(3)}`,
+    cursor: "13:0:3:0", timestamp_ms: 13_000, side: "sell", coin_atoms: "9007199254740993", quote_atoms: "41",
+  };
+  socket.receive({ ...fill, internal: "discard" });
+  const frame = await read(a);
+  assert.equal(frame.event, "presale");
+  assert.deepEqual(frame.data, fill);
+  const b = relay.stream(scoped(sale(2))).body!.getReader();
+  await read(b);
+  await read(b);
+  assert.equal((await read(b)).data.presale_checkpoint, 13);
+  socket.receive({ ...fill, cursor: "14:0:3:0" });
+  socket.receive({ ...fill, presale_id: sale(2), cursor: "15:0:3:0" });
+  assert.equal((await read(a)).data.cursor, "14:0:3:0");
+  assert.equal((await read(b)).data.cursor, "15:0:3:0");
+  await a.cancel();
+  await b.cancel();
+});
+
+test("one socket shares pool topics, committed fences and precise replay-shaped trades across clients", async () => {
+  const socket = new Socket();
+  let opened = 0;
+  const relay = new MarketStreamRelay(() => {
+    opened++;
+    return socket;
+  }, expected);
+  const a = relay.stream(request()).body!.getReader();
+  const b = relay.stream(request()).body!.getReader();
+  assert.equal(opened, 1);
+  await read(a);
+  await read(b);
+  socket.hello();
+  assert.deepEqual(socket.sent[0], {
+    op: "subscribe",
+    topics: ["activity", `pool:${pool()}`],
+  });
+  socket.receive(snapshot());
+  assert.equal((await read(a)).data.checkpoint, 10);
+  await read(b);
+  const value = trade();
+  value.cursor = "11:1:1:2"; // Lifecycle messages may precede the trade's outer part.
+  socket.receive(value);
+  const first = await read(a);
+  const second = await read(b);
+  assert.equal(first.event, "market");
+  assert.equal(first.text, second.text);
+  assert.match(first.text, /^id: 11:1:1:2/m);
+  assert.equal(JSON.stringify(first.data).includes("labels"), false);
+  assert.equal((first.data.trade as Record<string, unknown>).quote_amount, "9007199254740993");
+  const late = relay.stream(request([pool(), pool(2)], "11:1:1:2")).body!.getReader();
+  assert.equal((await read(late)).event, "resync");
+  assert.equal((await read(late)).data.state, "connecting");
+  assert.equal(
+    (await read(late)).data.checkpoint,
+    11,
+    "late join fence covers every prejoin trade",
+  );
+  assert.deepEqual(socket.sent.at(-1), {
+    op: "subscribe",
+    topics: [`pool:${pool(2)}`],
+  });
+  socket.receive(snapshot(pool(2), 12));
+  assert.equal((await read(late)).data.pool_key, pool(2));
+  await late.cancel();
+  assert.deepEqual(socket.sent.at(-1), {
+    op: "unsubscribe",
+    topics: [`pool:${pool(2)}`],
+  });
+  await a.cancel();
+  assert.equal(socket.closed, 0);
+  await b.cancel();
+  assert.equal(socket.closed, 1);
+});
+
+test("a pool the engine never snapshots fails only its own clients and never resets other pools", async () => {
+  const socket = new Socket();
+  const relay = new MarketStreamRelay(() => socket, expected);
+  const served = relay.stream(request()).body!.getReader();
+  const original = globalThis.setTimeout;
+  const timers: { run: () => void; ms: number }[] = [];
+  globalThis.setTimeout = ((run: () => void, ms: number) => {
+    timers.push({ run, ms });
+    return original(() => {}, 3_600_000);
+  }) as typeof setTimeout;
+  let stalled: ReadableStreamDefaultReader<Uint8Array>;
+  try {
+    stalled = relay.stream(request([pool(2)])).body!.getReader();
+    await read(served);
+    await read(stalled);
+    // A slow upstream handshake is the handshake timer's fault, never a pool's.
+    assert.equal(
+      timers.some(({ ms }) => ms === 10_000),
+      false,
+    );
+    socket.hello();
+  } finally {
+    globalThis.setTimeout = original;
+  }
+  try {
+    socket.receive({ type: "pong" });
+    socket.receive(snapshot());
+    assert.equal((await read(served)).data.pool_key, pool());
+    // The engine sends nothing for pool 2 (for example a coin it does not index).
+    const deadlines = timers.filter(({ ms }) => ms === 10_000);
+    assert.equal(deadlines.length, 2, "each pool's deadline starts at the upstream subscribe");
+    deadlines.at(-1)!.run();
+    const failed = await read(stalled);
+    assert.equal(failed.event, "status");
+    assert.deepEqual(failed.data, { state: "unavailable", pool_key: pool(2) });
+    assert.equal((await stalled.read()).done, true);
+    assert.deepEqual(socket.sent.at(-1), { op: "unsubscribe", topics: [`pool:${pool(2)}`] });
+    assert.equal(socket.closed, 0);
+    socket.receive(trade());
+    assert.equal((await read(served)).event, "market");
+  } finally {
+    await served.cancel();
+  }
+});
+
+test("authoritative closed candles retain exact decimals and bounded representative snapshots stay upstream-only", async () => {
+  const socket = new Socket();
+  const relay = new MarketStreamRelay(() => socket, expected);
+  const reader = relay.stream(request()).body!.getReader();
+  await read(reader);
+  socket.hello();
+  const example = snapshot() as Record<string, unknown>;
+  example.summary = poolSummaryFixture();
+  example.trades = Array.from({ length: 50 }, (_, i) => ({
+    ...trade().trade,
+    cursor: `9:1:${i}:0`,
+    inputs: {
+      virtual_quote: "1500000000000",
+      meme_reserve: "696000000000000",
+      quote_reserve: "260000000000",
+      graduation_target: "3000000000000",
+      meme_decimals: "6",
+      quote_decimals: "9",
+    },
+    curve: {
+      protocol_meme_fee_delta: "20000000000",
+      creator_meme_fee_delta: "20000000000",
+    },
+  }));
+  assert.ok(JSON.stringify(example).length < B.maxUpstreamFrameChars);
+  socket.receive(example);
+  const live = await read(reader);
+  assert.equal(live.event, "status");
+  assert.equal("trades" in live.data, false);
+  const candle = {
+    bucket_start: 10000,
+    interval: "1s",
+    open: "0.1",
+    high: "0.2",
+    low: "0.1",
+    close: "0.2",
+    volume_quote: "9007199254740993",
+    volume_meme: "4",
+    volume_usd: "1.25",
+    buys: 1,
+    sells: 0,
+    trades: 1,
+  };
+  socket.receive(frame("candle_closed", 11, { pool_key: pool(), interval: "1s", candle }));
+  assert.deepEqual((await read(reader)).data.candle, candle);
+  await reader.cancel();
+});
+
+const openingRound = (bidders = 3) => ({
+  duration_ms: "3600000",
+  starts_at_ms: "1790000000000",
+  ends_at_ms: "1790003600000",
+  total_committed_quote: "9007199254740993",
+  bidder_count: bidders,
+  settlement: null,
+  delivered_count: 0,
+  undelivered_count: bidders,
+  state: "open",
+});
+
+test("an opening round frame reaches the pool's clients as a market event with its exact round", async () => {
+  const socket = new Socket();
+  const relay = new MarketStreamRelay(() => socket, expected);
+  const reader = relay.stream(request()).body!.getReader();
+  await read(reader);
+  socket.hello();
+  socket.receive(snapshot());
+  await read(reader);
+  socket.receive(frame("opening_round", 11, { pool_key: pool(), opening_round: openingRound(3) }));
+  const live = await read(reader);
+  assert.equal(live.event, "market");
+  assert.match(live.text, /^id: 11:1:1:0/m);
+  assert.deepEqual(live.data.opening_round, openingRound(3));
+  socket.receive({
+    ...frame("opening_round", 12, { pool_key: pool(), opening_round: openingRound(4) }),
+    cursor: "12:2:0:0",
+  });
+  assert.equal(
+    ((await read(reader)).data.opening_round as Record<string, unknown>).bidder_count,
+    4,
+  );
+  // A bid's trade, its round, then a later trade of the same checkpoint: each has its own cursor.
+  const tradeAt = (cursor: string) => ({
+    ...trade(13),
+    cursor,
+    trade: { ...trade(13).trade, cursor },
+  });
+  socket.receive(tradeAt("13:1:1:0"));
+  socket.receive({
+    ...frame("opening_round", 13, { pool_key: pool(), opening_round: openingRound(5) }),
+    cursor: "13:1:2:0",
+  });
+  socket.receive(tradeAt("13:1:3:0"));
+  const sequence = [await read(reader), await read(reader), await read(reader)];
+  assert.deepEqual(
+    sequence.map((event) => [event.data.type, event.data.cursor]),
+    [
+      ["trade", "13:1:1:0"],
+      ["opening_round", "13:1:2:0"],
+      ["trade", "13:1:3:0"],
+    ],
+  );
+  await reader.cancel();
+});
+
+test("bad deployments, cursor relationships, opening fills and lost continuity force explicit recovery", async () => {
+  const invalid: Array<(socket: Socket) => void> = [
+    (s) => s.receive({ ...trade(), provenance: provenance(99) }),
+    (s) => s.receive({ ...snapshot(), topic: pool() }),
+    (s) =>
+      s.receive({
+        ...trade(),
+        trade: { ...trade().trade, cursor: "11:1:1:9" },
+      }),
+    (s) =>
+      s.receive({
+        ...trade(),
+        trade: { ...trade().trade, cursor: "11:1:2:0" },
+      }),
+    (s) =>
+      s.receive({
+        ...trade(),
+        trade: { ...trade().trade, kind: "opening_round_fill" },
+      }),
+    (s) =>
+      s.receive({
+        ...trade(),
+        provenance: {
+          ...provenance(11),
+          deployment_fingerprint: "f".repeat(64),
+        },
+      }),
+    (s) =>
+      s.receive(
+        frame("opening_round", 11, {
+          pool_key: pool(),
+          opening_round: { ...openingRound(3), undelivered_count: 2 },
+        }),
+      ),
+    (s) => s.receive(frame("opening_round", 11, { pool_key: pool() })),
+    (s) => s.receive(frame("resync_required", 11, { reason: "lagged" })),
+    (s) => s.onclose?.({} as never),
+  ];
+  for (const bad of invalid) {
+    const socket = new Socket();
+    const relay = new MarketStreamRelay(() => socket, expected);
+    const reader = relay.stream(request()).body!.getReader();
+    await read(reader);
+    socket.hello();
+    socket.receive(snapshot());
+    await read(reader);
+    bad(socket);
+    assert.equal((await read(reader)).event, "resync");
+    assert.equal((await reader.read()).done, true);
+    assert.equal(socket.closed, 1);
+    await reader.cancel();
+  }
+});
+
+test("topic, subscribe frame and downstream byte bounds refuse work and disconnect slow readers", async () => {
+  const socket = new Socket();
+  const relay = new MarketStreamRelay(() => socket, expected);
+  const readers = Array.from({ length: 32 }, (_, i) =>
+    relay.stream(request([pool(i * 2), pool(i * 2 + 1)])).body!.getReader(),
+  );
+  assert.equal(relay.stream(request([pool(64)])).status, 503);
+  socket.hello();
+  const subscriptions = socket.sent.filter((value) => value.op === "subscribe");
+  assert.ok(subscriptions.length > 1);
+  assert.equal(subscriptions.flatMap((value) => value.topics).length, 65);
+  for (const reader of readers) {
+    await reader.cancel();
+  }
+  assert.equal(socket.closed, 1);
+
+  const activeSocket = new Socket();
+  const owner = new MarketStreamRelay(() => activeSocket, expected);
+  const slow = owner.stream(request()).body!.getReader();
+  const healthy = owner.stream(request()).body!.getReader();
+  await read(healthy);
+  activeSocket.hello();
+  activeSocket.receive(snapshot());
+  await read(healthy);
+  for (let checkpoint = 11; checkpoint < 200; checkpoint++) {
+    activeSocket.receive(trade(checkpoint));
+    assert.equal((await read(healthy)).event, "market");
+  }
+  let queued = 0;
+  for (;;) {
+    const next = await slow.read();
+    if (next.done) {
+      break;
+    }
+    queued += next.value!.byteLength;
+  }
+  assert.ok(queued <= B.queueBytesPerClient, String(queued));
+  assert.equal(activeSocket.closed, 0, "one slow browser does not stop healthy viewers");
+  await healthy.cancel();
+  assert.equal(activeSocket.closed, 1);
+});
+
+test("opted-in fleet counts activity plus market subscriptions and every additional physical socket", () => {
+  const plan = fleetFixture();
+  plan.hints.marketStream = true;
+  plan.marketSubscribedTabs = 10_000;
+  const env = {
+    BLAST_BACKEND_FLEET_CONFIG: JSON.stringify(plan),
+    BLAST_BACKEND_MARKET_STREAM_ENABLED: "true",
+  };
+  const local = {
+    role: "hints",
+    maxHintStreams: 512,
+    maxInflight: 64,
+  } as const;
+  assert.throws(() => validateBackendFleet(env, local), /after one process failure/);
+  plan.marketSubscribedTabs = 200;
+  const result = validateBackendFleet(
+    { ...env, BLAST_BACKEND_FLEET_CONFIG: JSON.stringify(plan) },
+    local,
+  )!;
+  assert.equal(result.demand.infraHintSockets, plan.hints.replicas * 2);
+  delete plan.marketSubscribedTabs;
+  assert.throws(
+    () => validateBackendFleet({ ...env, BLAST_BACKEND_FLEET_CONFIG: JSON.stringify(plan) }, local),
+    /bounded market/,
+  );
+});
+
+test("shared browser fleet explicitly budgets unified tabs and legacy coexistence", () => {
+  const plan = fleetFixture();
+  plan.hints.marketStream = true;
+  plan.hints.sharedBrowserStream = true;
+  plan.marketSubscribedTabs = 10_000;
+  const local = {
+    role: "hints",
+    maxHintStreams: 512,
+    maxInflight: 64,
+  } as const;
+  const check = () =>
+    validateBackendFleet(
+      {
+        BLAST_BACKEND_FLEET_CONFIG: JSON.stringify(plan),
+        BLAST_BACKEND_MARKET_STREAM_ENABLED: "true",
+      },
+      local,
+    );
+  assert.throws(check, /explicit bounded legacy/);
+  plan.legacyMarketStreams = 200;
+  assert.equal(check()!.streamsAfterFailure, 10_240);
+  plan.legacyMarketStreams = 241;
+  assert.throws(check, /after one process failure/);
+  plan.legacyMarketStreams = 10_001;
+  assert.throws(check, /explicit bounded legacy/);
+  plan.legacyMarketStreams = 200;
+  plan.hints.sharedBrowserStream = false;
+  assert.throws(check, /reserve requires shared/);
+  delete plan.legacyMarketStreams;
+  assert.throws(check, /after one process failure/);
+  plan.hints.sharedBrowserStream = true;
+  plan.hints.marketStream = false;
+  plan.marketSubscribedTabs = 0;
+  plan.legacyMarketStreams = 0;
+  assert.throws(check, /settings differ/);
+});
+
+test(
+  "native enabled profile shares hint and market permits, authenticates, and drains the market owner",
+  { timeout: 5000 },
+  async () => {
+    const plan = fleetFixture();
+    plan.visibleSubscribedTabs = 1;
+    plan.marketSubscribedTabs = 1;
+    plan.utilizationPercent = 100;
+    plan.hints = { replicas: 3, maxHintStreams: 1, marketStream: true };
+    const env = {
+      NODE_ENV: "production",
+      BLAST_DEPLOYMENT_TARGET: "production",
+      BLAST_REDIS_NAMESPACE: "market-stream-native",
+      BLAST_BACKEND_INGRESS_MODE: "direct",
+      BLAST_QUOTA_REDIS_URL: "redis://127.0.0.1:6379",
+      RATE_LIMIT_SUBJECT_PEPPER: "p".repeat(32),
+      BLAST_BACKEND_HINTS_GATEWAY_SECRET: "h".repeat(32),
+      BLAST_INFRA_ORIGIN: "https://infra.test",
+      BLAST_INFRA_READ_MODE: "committed-markets",
+      BLAST_INFRA_READ_ORIGIN: "https://reader.test",
+      BLAST_INFRA_API_KEY: "i".repeat(32),
+      BLAST_BACKEND_FLEET_CONFIG: JSON.stringify(plan),
+      BLAST_BACKEND_MARKET_STREAM_ENABLED: "true",
+      BLAST_BACKEND_MAX_HINT_STREAMS: "1",
+      NEXT_PUBLIC_SITE_URL: "https://frontend.test",
+      BLAST_NETWORK: "mainnet",
+      BLAST_DEPLOYMENT_FINGERPRINT: FIXTURE_FINGERPRINT,
+    };
+    const configured = {
+      ...env,
+      BLAST_BACKEND_EXPECTED_QUOTA_NAMESPACE: quotaNamespace(
+        env.BLAST_REDIS_NAMESPACE,
+        deploymentIdentity(env),
+      ),
+    };
+    const socket = new Socket();
+    const slots = globalThis as unknown as Record<symbol, unknown>;
+    const marketKey = Symbol.for("blast.launchpad.market-stream");
+    const oldMarket = slots[marketKey];
+    let opened = 0;
+    slots[marketKey] = new MarketStreamRelay(() => {
+      opened++;
+      return socket;
+    }, expected);
+    const nonces = new Set<string>();
+    const redis = {
+      async execute(args: string[]) {
+        if (args[0] === "PING") {
+          return "PONG";
+        }
+        if (nonces.has(args[1]!)) {
+          return null;
+        }
+        nonces.add(args[1]!);
+        return "OK";
+      },
+      close() {},
+    };
+    const runtime = createHintsServer(
+      { ...hintsConfig(configured), port: 0, hostname: "127.0.0.1" },
+      redis,
+      redis,
+    );
+    const origin = `http://127.0.0.1:${runtime.server.port}`;
+    const send = (path: string, method = "GET") => {
+      const target = new Request(origin + path, { method });
+      const headers = signPrivateRequest(
+        target,
+        new Uint8Array(),
+        env.BLAST_BACKEND_HINTS_GATEWAY_SECRET,
+        {
+          namespace: quotaNamespace(env.BLAST_REDIS_NAMESPACE, deploymentIdentity(env)),
+          purpose: "browser",
+          siteOrigin: env.NEXT_PUBLIC_SITE_URL,
+          ip: "192.0.2.111",
+        },
+      );
+      return fetch(target, { headers });
+    };
+    let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+    try {
+      const bare = await fetch(origin + MARKET_STREAM_PATH + `?pool=${pool()}`);
+      assert.equal(bare.status, 403);
+      await bare.text();
+      const invalidHead = await send(MARKET_STREAM_PATH + "?pool=invalid", "HEAD");
+      assert.equal(invalidHead.status, 400);
+      assert.equal(await invalidHead.text(), "");
+      const head = await send(MARKET_STREAM_PATH + `?pool=${pool()}`, "HEAD");
+      assert.equal(head.status, 200);
+      assert.equal(head.headers.get("content-type"), "text/event-stream");
+      assert.equal(head.headers.get("cache-control"), "private, no-store");
+      assert.equal(head.headers.get("x-accel-buffering"), "no");
+      assert.equal(await head.text(), "");
+      assert.equal(opened, 0);
+      const connected = await send(MARKET_STREAM_PATH + `?pool=${pool()}`);
+      assert.equal(connected.status, 200);
+      assert.equal(connected.headers.get("content-type"), "text/event-stream");
+      assert.equal(connected.headers.get("cache-control"), "private, no-store");
+      assert.equal(connected.headers.get("x-accel-buffering"), "no");
+      reader = connected.body!.getReader();
+      assert.equal(
+        new TextDecoder().decode((await reader.read()).value),
+        'event: status\ndata: {"state":"connecting"}\n\n',
+      );
+      socket.hello();
+      socket.receive(snapshot());
+      await reader.read();
+      const activity = await send("/api/social/activity/hints");
+      assert.equal(activity.status, 503);
+      await activity.text();
+      await runtime.drain();
+      assert.equal(socket.closed, 1);
+    } finally {
+      await reader?.cancel().catch(() => {});
+      await runtime.drain();
+      if (oldMarket === undefined) {
+        delete slots[marketKey];
+      } else {
+        slots[marketKey] = oldMarket;
+      }
+    }
+    const disabled = fleetFixture();
+    disabled.visibleSubscribedTabs = 1;
+    assert.throws(
+      () =>
+        hintsConfig({
+          ...configured,
+          BLAST_BACKEND_FLEET_CONFIG: JSON.stringify(disabled),
+          BLAST_BACKEND_MAX_HINT_STREAMS: "512",
+        }),
+      /market stream settings/,
+    );
+  },
+);
+
+test("one shared stream combines sanitized activity hints with pool updates and supports hint-only clients", async () => {
+  const socket = new Socket();
+  const relay = new MarketStreamRelay(() => socket, expected);
+  const combined = relay.stream(new Request(request().url + "&activity=true")).body!.getReader();
+  await read(combined);
+  socket.hello();
+  assert.equal((await read(combined)).data.type, "hello");
+  assert.deepEqual(socket.sent[0], {
+    op: "subscribe",
+    topics: ["activity", `pool:${pool()}`],
+  });
+  socket.receive({ type: "pong" });
+  assert.equal((await read(combined)).data.type, "pong");
+  socket.receive(snapshot());
+  assert.equal((await read(combined)).data.state, "live");
+  socket.receive({
+    type: "activity",
+    activity_id: "committed-activity",
+    ignored: "never-forward",
+  });
+  const hint = await read(combined);
+  assert.equal(hint.event, "hint");
+  assert.deepEqual(hint.data, {
+    type: "activity",
+    activity_id: "committed-activity",
+  });
+  socket.receive(trade());
+  assert.equal((await read(combined)).event, "market");
+  const hintOnly = relay
+    .stream(new Request(`https://frontend.test${MARKET_STREAM_PATH}?activity=true`))
+    .body!.getReader();
+  await read(hintOnly);
+  assert.equal((await read(hintOnly)).data.type, "hello");
+  assert.equal((await read(hintOnly)).data.type, "pong");
+  socket.receive({
+    type: "presale_lifecycle",
+    presale_id: "0x" + "a".repeat(64),
+    state: "funded",
+    private: "omit",
+  });
+  assert.equal((await read(hintOnly)).data.type, "presale_lifecycle");
+  assert.equal((await read(combined)).data.type, "presale_lifecycle");
+  await combined.cancel();
+  assert.equal(socket.closed, 0, "hint-only client retains the common upstream");
+  await hintOnly.cancel();
+  assert.equal(socket.closed, 1);
+  assert.deepEqual(
+    marketStreamPools(new Request(`https://frontend.test${MARKET_STREAM_PATH}?activity=true`)),
+    [],
+  );
+  for (const query of [
+    "activity=false",
+    "activity=true&activity=true",
+    "activity=true&pool=feed",
+  ]) {
+    assert.throws(() =>
+      marketStreamPools(new Request(`https://frontend.test${MARKET_STREAM_PATH}?${query}`)),
+    );
+  }
+});
+
+test("upstream heartbeat silence forces recovery instead of keeping stale prices live", async () => {
+  const original = globalThis.setInterval;
+  let beat: (() => void) | undefined;
+  globalThis.setInterval = ((callback: () => void) => {
+    beat = callback;
+    return original(() => {}, 3_600_000);
+  }) as typeof setInterval;
+  const socket = new Socket();
+  const relay = new MarketStreamRelay(() => socket, expected);
+  const reader = relay.stream(request()).body!.getReader();
+  globalThis.setInterval = original;
+  try {
+    await read(reader);
+    socket.hello();
+    socket.receive({ type: "pong" });
+    socket.receive(snapshot());
+    await read(reader);
+    beat!();
+    await reader.read(); // Shared heartbeat comment.
+    socket.receive({ type: "pong" });
+    beat!();
+    await reader.read();
+    beat!(); // The previous private ping never received its pong.
+    const recovery = await read(reader);
+    assert.equal(recovery.event, "resync");
+    assert.equal(recovery.data.reason, "upstream-silent");
+    assert.equal(socket.closed, 1);
+  } finally {
+    globalThis.setInterval = original;
+    await reader.cancel();
+  }
+});

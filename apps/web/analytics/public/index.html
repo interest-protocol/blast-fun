@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en" data-blast-ui data-theme="system">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="robots" content="noindex,nofollow" />
+    <title>Analytics · Blast</title>
+    <link rel="stylesheet" href="/tokens.css" />
+    <link rel="stylesheet" href="/controls.css" />
+    <link rel="stylesheet" href="/page-header.css" />
+    <link rel="stylesheet" href="/empty-state.css" />
+    <link rel="stylesheet" href="/skeleton.css" />
+    <link rel="stylesheet" href="/dashboard.css" />
+    <script type="module" src="/dashboard.js"></script>
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to analytics</a>
+    <header class="topbar">
+      <a class="brand" href="/">blast <small>Analytics</small></a>
+      <div class="header-actions">
+        <span class="tag private-tag">Private workspace</span>
+        <form action="/auth/logout" method="post">
+          <button
+            class="button"
+            data-ui-button
+            data-ui-size="lg"
+            data-ui-variant="ghost"
+            type="submit"
+          >
+            Sign out
+          </button>
+        </form>
+      </div>
+    </header>
+    <main id="main">
+      <header class="phead" data-page-head>
+        <div>
+          <h1>The bigger picture</h1>
+          <p class="sub">Tracked onchain activity</p>
+        </div>
+        <div class="actions">
+          <button
+            id="refresh"
+            class="button"
+            data-ui-button
+            data-ui-size="lg"
+            data-ui-variant="primary"
+            type="button"
+          >
+            Refresh snapshot
+          </button>
+        </div>
+      </header>
+      <p id="status" class="freshness" role="status" aria-live="polite"></p>
+      <div id="error" class="empty" role="alert" hidden>
+        <p class="title">Snapshot could not load</p>
+        <p class="body">Use Refresh snapshot to try again.</p>
+        <p class="caption">snapshot_unavailable</p>
+      </div>
+      <div
+        id="pending"
+        class="kpis"
+        aria-label="Loading analytics"
+        role="status"
+        aria-busy="true"
+        hidden
+      >
+        <span class="box pending-card" aria-hidden="true"></span
+        ><span class="box pending-card" aria-hidden="true"></span
+        ><span class="box pending-card" aria-hidden="true"></span
+        ><span class="box pending-card" aria-hidden="true"></span>
+      </div>
+      <div id="content" hidden>
+        <section class="kpis" aria-label="Key metrics">
+          <article class="card kpi">
+            <span class="label">Active wallets · 24h</span
+            ><strong id="wallet-dau" class="amount">—</strong>
+            <p>Onchain addresses</p>
+          </article>
+          <article class="card kpi">
+            <span class="label">Active wallets · 30d</span
+            ><strong id="wallet-mau" class="amount">—</strong>
+            <p>Onchain addresses</p>
+          </article>
+          <article class="card kpi">
+            <span class="label">Coins launched</span
+            ><strong id="coins" class="amount">—</strong>
+            <p>Since coverage began</p>
+          </article>
+          <article class="card kpi">
+            <span class="label">Tracked transactions</span
+            ><strong id="transactions" class="amount">—</strong>
+            <p>Selected launch, presale and trade facts</p>
+          </article>
+        </section>
+        <section class="analysis-grid">
+          <article class="card volume">
+            <div class="section-head">
+              <h2>Trading volume</h2>
+              <label class="period-label" for="period"
+                >Period
+                <select
+                  class="input"
+                  data-ui-input
+                  data-ui-size="lg"
+                  id="period"
+                >
+                  <option value="24h">24 hours</option>
+                  <option value="30d" selected>30 days</option>
+                  <option value="coverage">Since coverage</option>
+                </select></label
+              >
+            </div>
+            <div class="volume-value">
+              <strong id="volume" class="amount">—</strong
+              ><span id="volume-label">Priced turnover · USD</span>
+            </div>
+            <p id="pricing" class="caption"></p>
+            <div class="chart-wrap">
+              <div
+                id="chart"
+                role="img"
+                aria-label="Daily priced turnover for up to 30 UTC days. Exact values are in the daily table."
+              ></div>
+            </div>
+            <p id="chart-note" class="caption">
+              Chart coordinates are approximate. The daily table keeps exact
+              values.
+            </p>
+          </article>
+          <aside class="card coverage">
+            <h2>What’s counted</h2>
+            <dl>
+              <div>
+                <dt>Onchain coverage</dt>
+                <dd id="coverage">—</dd>
+              </div>
+              <div>
+                <dt>Pricing</dt>
+                <dd>
+                  Historical quote oracle<small
+                    >At most 60s old · 1% uncertainty</small
+                  >
+                </dd>
+              </div>
+              <div>
+                <dt>Volume scope</dt>
+                <dd>
+                  Registered pool executions<small
+                    >Each swap hop counts once</small
+                  >
+                </dd>
+              </div>
+              <div>
+                <dt>Window boundary</dt>
+                <dd id="window-end">—</dd>
+              </div>
+            </dl>
+          </aside>
+        </section>
+        <section class="secondary-grid" aria-label="Activity details">
+          <article class="card">
+            <h2>Wallets and accounts</h2>
+            <dl class="metrics">
+              <div>
+                <dt>Unique wallets since coverage</dt>
+                <dd id="unique-wallets">—</dd>
+              </div>
+            </dl>
+            <p class="caption">
+              Wallets are addresses, not accounts or unique people.
+            </p>
+            <p class="unavailable">Account activity is not collected.</p>
+          </article>
+          <article class="card">
+            <h2>Presales and receipts</h2>
+            <dl class="metrics">
+              <div>
+                <dt>Presales created</dt>
+                <dd id="presales">—</dd>
+              </div>
+              <div>
+                <dt>Commit events</dt>
+                <dd id="commits">—</dd>
+              </div>
+              <div>
+                <dt>Claim events</dt>
+                <dd id="claims">—</dd>
+              </div>
+              <div>
+                <dt>Swap receipts</dt>
+                <dd id="swaps">—</dd>
+              </div>
+            </dl>
+            <p class="caption">
+              Since coverage. Commit counts do not measure net funds raised.
+            </p>
+          </article>
+        </section>
+        <section class="card daily">
+          <div class="section-head">
+            <h2>Daily trading activity</h2>
+            <span class="tag">UTC buckets</span>
+          </div>
+          <p class="caption">
+            Days end at the indexed checkpoint. Partial days remain partial.
+          </p>
+          <div
+            id="daily-scroll"
+            class="table-scroll"
+            tabindex="0"
+            role="region"
+            aria-label="Exact daily trading activity"
+          >
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Date (UTC)</th>
+                  <th scope="col">Swap receipts</th>
+                  <th scope="col">Priced receipts</th>
+                  <th scope="col">Priced USD turnover</th>
+                </tr>
+              </thead>
+              <tbody id="daily"></tbody>
+            </table>
+          </div>
+          <div id="daily-empty" class="empty compact" hidden>
+            <p class="title">No daily receipts in this snapshot</p>
+          </div>
+        </section>
+        <section class="card native">
+          <h2>Quote asset turnover</h2>
+          <p class="caption">
+            Atomic units since coverage, including unpriced receipts. Never sum
+            across assets.
+          </p>
+          <div id="quotes" class="quote-list"></div>
+        </section>
+      </div>
+      <footer>
+        Private aggregate snapshots. No account telemetry is collected here.
+      </footer>
+    </main>
+    <dialog id="inspection" aria-labelledby="inspection-title">
+      <div class="section-head">
+        <h2 id="inspection-title">Exact value</h2>
+        <form method="dialog">
+          <button
+            class="button"
+            data-ui-button
+            data-ui-size="lg"
+            data-ui-variant="ghost"
+            type="submit"
+            autofocus
+          >
+            Close
+          </button>
+        </form>
+      </div>
+      <p id="exact-value" class="exact-value"></p>
+      <button
+        class="button"
+        data-ui-button
+        data-ui-size="lg"
+        data-ui-variant="primary"
+        type="button"
+        id="copy"
+      >
+        Copy value
+      </button>
+      <p id="copy-status" class="caption" role="status" aria-live="polite"></p>
+    </dialog>
+  </body>
+</html>

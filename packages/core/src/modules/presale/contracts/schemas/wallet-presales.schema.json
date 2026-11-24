@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/presale/contracts/wallet-presales.schema.json",
+  "title": "Wallet presale positions",
+  "description": "GET /v1/wallets/{address}/presales (CL-2).",
+  "type": "object",
+  "properties": {
+    "positions": {
+      "type": "array",
+      "items": {
+        "$ref": "defs.schema.json#/$defs/wallet_view",
+        "type": "object",
+        "unevaluatedProperties": false
+      }
+    },
+    "next_cursor": {
+      "anyOf": [
+        {
+          "$ref": "defs.schema.json#/$defs/page_cursor"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "freshness": {
+      "$ref": "defs.schema.json#/$defs/freshness"
+    }
+  },
+  "required": [
+    "positions",
+    "next_cursor",
+    "freshness"
+  ],
+  "additionalProperties": false
+}

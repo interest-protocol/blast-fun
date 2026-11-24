@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/portfolio-history-response.schema.json",
+  "title": "Portfolio history response",
+  "description": "Redesign gap 13 (contracts/portfolio.ts PortfolioHistory): one range of the portfolio chart from the daily snapshots (0097); empty points while the range is not covered.",
+  "type": "object",
+  "properties": {
+    "range": {
+      "enum": [
+        "1w",
+        "1m",
+        "all"
+      ]
+    },
+    "points": {
+      "type": "array",
+      "maxItems": 400,
+      "items": {
+        "type": "object",
+        "properties": {
+          "day": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+          },
+          "value_usd": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)\\.[0-9]{2}$"
+          }
+        },
+        "required": [
+          "day",
+          "value_usd"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "change_bps": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "pattern": "^(0|-?[1-9][0-9]*)$"
+        }
+      ]
+    }
+  },
+  "required": [
+    "range",
+    "points",
+    "change_bps"
+  ],
+  "additionalProperties": false
+}

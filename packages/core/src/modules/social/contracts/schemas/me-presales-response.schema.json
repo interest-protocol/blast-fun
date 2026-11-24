@@ -1,0 +1,741 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/me-presales-response.schema.json",
+  "title": "Social viewer presales",
+  "description": "GET /api/social/me/presales 200 (private, no-store): the caller's own presale positions, followed presales, sale coins held and vesting schedules, each with its presale's summary, each position and coin with its sale coin's cost basis and P&L (R3-32). Created presales match the caller\u2019s uncontested linked wallets or verified app publications.",
+  "type": "object",
+  "properties": {
+    "positions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "presale": {
+            "type": "object",
+            "description": "A presale as profile rows show it.",
+            "properties": {
+              "presale_id": {
+                "type": "string",
+                "pattern": "^0x[0-9a-f]{64}$"
+              },
+              "symbol": {
+                "type": "string",
+                "minLength": 1
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "icon_url": {
+                "type": "string"
+              },
+              "status": {
+                "enum": [
+                  "pending",
+                  "open",
+                  "closed",
+                  "funded",
+                  "trading",
+                  "cancelled"
+                ]
+              },
+              "venue": {
+                "type": "string"
+              },
+              "start_ms": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "end_ms": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "fill_pct": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "quote_symbol": {
+                "description": "R3-40: the sale's quote coin (USDC or SUI).",
+                "type": "string",
+                "minLength": 1
+              },
+              "quote_decimals": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "launched_ms": {
+                "description": "R3-85: when the sale coin launched (its presale_lifecycle migrated time); null until it has.",
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                ]
+              },
+              "first_unlock_ms": {
+                "description": "R3-85: the sale's first unlock, the earliest cliff end of its vesting_schedules; null without one.",
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                ]
+              },
+              "coin_type": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Canonical sale coin type; optional for older cached responses."
+              },
+              "verified_team": {
+                "type": "boolean",
+                "description": "R3-23: Blast checked who is behind the sale (social_sale_trust); sent only when true."
+              }
+            },
+            "required": [
+              "presale_id",
+              "symbol",
+              "name",
+              "icon_url",
+              "status",
+              "venue",
+              "start_ms",
+              "end_ms",
+              "fill_pct",
+              "quote_symbol",
+              "quote_decimals",
+              "launched_ms",
+              "first_unlock_ms"
+            ],
+            "additionalProperties": false
+          },
+          "committed_usd": {
+            "description": "USDC at face value; another quote at its price when at most 120 s old, else null (R3-40).",
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)\\.[0-9]{2}$"
+              }
+            ]
+          },
+          "committed_atoms": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)$",
+            "description": "R3-40: the same commitment in quote atoms."
+          },
+          "status": {
+            "enum": [
+              "open",
+              "closed",
+              "claimable",
+              "delivered"
+            ]
+          },
+          "claimed_tokens": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+              }
+            ]
+          },
+          "refunded_usd": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)\\.[0-9]{2}$"
+              }
+            ]
+          },
+          "refunded_atoms": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$"
+              }
+            ],
+            "description": "R3-40: quote atoms refunded by claiming; null until claimed."
+          },
+          "value_usd": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)\\.[0-9]{2}$"
+              }
+            ]
+          },
+          "multiple": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)\\.[0-9]{4}$"
+              }
+            ]
+          },
+          "basis_usd": {
+            "description": "R3-32: USD paid for the sale coin held now (average cost, at each acquisition's event time); the known part when basis_complete is false; null when nothing was acquired or nothing of it is known.",
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)\\.[0-9]{2}$"
+              }
+            ]
+          },
+          "basis_complete": {
+            "description": "R3-32: false when part of what is held came with no priced acquisition (a transfer in, an airdrop, a reward, a vesting claim, an unpriced commit or trade), or the basis could not be read.",
+            "type": "boolean"
+          },
+          "pnl_usd": {
+            "description": "R3-32: value - basis at the coin's fresh price, signed; null when the basis is zero or unknown, or without a price.",
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+              }
+            ]
+          },
+          "pnl_multiple": {
+            "description": "R3-32: value / basis, four places; null with pnl_usd.",
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)\\.[0-9]{4}$"
+              }
+            ]
+          }
+        },
+        "required": [
+          "presale",
+          "committed_usd",
+          "committed_atoms",
+          "status",
+          "claimed_tokens",
+          "refunded_usd",
+          "refunded_atoms",
+          "value_usd",
+          "multiple",
+          "basis_usd",
+          "basis_complete",
+          "pnl_usd",
+          "pnl_multiple"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "watchlist": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "type": "object",
+        "description": "A presale as profile rows show it.",
+        "properties": {
+          "presale_id": {
+            "type": "string",
+            "pattern": "^0x[0-9a-f]{64}$"
+          },
+          "symbol": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "icon_url": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "open",
+              "closed",
+              "funded",
+              "trading",
+              "cancelled"
+            ]
+          },
+          "venue": {
+            "type": "string"
+          },
+          "start_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "end_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "fill_pct": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "quote_symbol": {
+            "description": "R3-40: the sale's quote coin (USDC or SUI).",
+            "type": "string",
+            "minLength": 1
+          },
+          "quote_decimals": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "launched_ms": {
+            "description": "R3-85: when the sale coin launched (its presale_lifecycle migrated time); null until it has.",
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "integer",
+                "minimum": 0
+              }
+            ]
+          },
+          "first_unlock_ms": {
+            "description": "R3-85: the sale's first unlock, the earliest cliff end of its vesting_schedules; null without one.",
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "integer",
+                "minimum": 0
+              }
+            ]
+          },
+          "coin_type": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Canonical sale coin type; optional for older cached responses."
+          },
+          "verified_team": {
+            "type": "boolean",
+            "description": "R3-23: Blast checked who is behind the sale (social_sale_trust); sent only when true."
+          }
+        },
+        "required": [
+          "presale_id",
+          "symbol",
+          "name",
+          "icon_url",
+          "status",
+          "venue",
+          "start_ms",
+          "end_ms",
+          "fill_pct",
+          "quote_symbol",
+          "quote_decimals",
+          "launched_ms",
+          "first_unlock_ms"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "coins": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "presale": {
+            "type": "object",
+            "description": "A presale as profile rows show it.",
+            "properties": {
+              "presale_id": {
+                "type": "string",
+                "pattern": "^0x[0-9a-f]{64}$"
+              },
+              "symbol": {
+                "type": "string",
+                "minLength": 1
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "icon_url": {
+                "type": "string"
+              },
+              "status": {
+                "enum": [
+                  "pending",
+                  "open",
+                  "closed",
+                  "funded",
+                  "trading",
+                  "cancelled"
+                ]
+              },
+              "venue": {
+                "type": "string"
+              },
+              "start_ms": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "end_ms": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "fill_pct": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "quote_symbol": {
+                "description": "R3-40: the sale's quote coin (USDC or SUI).",
+                "type": "string",
+                "minLength": 1
+              },
+              "quote_decimals": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "launched_ms": {
+                "description": "R3-85: when the sale coin launched (its presale_lifecycle migrated time); null until it has.",
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                ]
+              },
+              "first_unlock_ms": {
+                "description": "R3-85: the sale's first unlock, the earliest cliff end of its vesting_schedules; null without one.",
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                ]
+              },
+              "coin_type": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Canonical sale coin type; optional for older cached responses."
+              },
+              "verified_team": {
+                "type": "boolean",
+                "description": "R3-23: Blast checked who is behind the sale (social_sale_trust); sent only when true."
+              }
+            },
+            "required": [
+              "presale_id",
+              "symbol",
+              "name",
+              "icon_url",
+              "status",
+              "venue",
+              "start_ms",
+              "end_ms",
+              "fill_pct",
+              "quote_symbol",
+              "quote_decimals",
+              "launched_ms",
+              "first_unlock_ms"
+            ],
+            "additionalProperties": false
+          },
+          "quantity": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+          },
+          "value_usd": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)\\.[0-9]{2}$"
+              }
+            ]
+          },
+          "multiple": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)\\.[0-9]{4}$"
+              }
+            ]
+          },
+          "basis_usd": {
+            "description": "R3-32: USD paid for the sale coin held now (average cost, at each acquisition's event time); the known part when basis_complete is false; null when nothing was acquired or nothing of it is known.",
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)\\.[0-9]{2}$"
+              }
+            ]
+          },
+          "basis_complete": {
+            "description": "R3-32: false when part of what is held came with no priced acquisition (a transfer in, an airdrop, a reward, a vesting claim, an unpriced commit or trade), or the basis could not be read.",
+            "type": "boolean"
+          },
+          "pnl_usd": {
+            "description": "R3-32: value - basis at the coin's fresh price, signed; null when the basis is zero or unknown, or without a price.",
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+              }
+            ]
+          },
+          "pnl_multiple": {
+            "description": "R3-32: value / basis, four places; null with pnl_usd.",
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)\\.[0-9]{4}$"
+              }
+            ]
+          }
+        },
+        "required": [
+          "presale",
+          "quantity",
+          "value_usd",
+          "multiple",
+          "basis_usd",
+          "basis_complete",
+          "pnl_usd",
+          "pnl_multiple"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "vestings": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "properties": {
+          "schedule_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "presale": {
+            "type": "object",
+            "description": "A presale as profile rows show it.",
+            "properties": {
+              "presale_id": {
+                "type": "string",
+                "pattern": "^0x[0-9a-f]{64}$"
+              },
+              "symbol": {
+                "type": "string",
+                "minLength": 1
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "icon_url": {
+                "type": "string"
+              },
+              "status": {
+                "enum": [
+                  "pending",
+                  "open",
+                  "closed",
+                  "funded",
+                  "trading",
+                  "cancelled"
+                ]
+              },
+              "venue": {
+                "type": "string"
+              },
+              "start_ms": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "end_ms": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "fill_pct": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "quote_symbol": {
+                "description": "R3-40: the sale's quote coin (USDC or SUI).",
+                "type": "string",
+                "minLength": 1
+              },
+              "quote_decimals": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "launched_ms": {
+                "description": "R3-85: when the sale coin launched (its presale_lifecycle migrated time); null until it has.",
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                ]
+              },
+              "first_unlock_ms": {
+                "description": "R3-85: the sale's first unlock, the earliest cliff end of its vesting_schedules; null without one.",
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                ]
+              },
+              "coin_type": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Canonical sale coin type; optional for older cached responses."
+              },
+              "verified_team": {
+                "type": "boolean",
+                "description": "R3-23: Blast checked who is behind the sale (social_sale_trust); sent only when true."
+              }
+            },
+            "required": [
+              "presale_id",
+              "symbol",
+              "name",
+              "icon_url",
+              "status",
+              "venue",
+              "start_ms",
+              "end_ms",
+              "fill_pct",
+              "quote_symbol",
+              "quote_decimals",
+              "launched_ms",
+              "first_unlock_ms"
+            ],
+            "additionalProperties": false
+          },
+          "total": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+          },
+          "claimed": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+          },
+          "claimable": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+          },
+          "start_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "cliff_end_ms": {
+            "description": "When the cliff ends: nothing unlocks before it (start_ms + cliff_ms; start_ms without a cliff).",
+            "type": "integer",
+            "minimum": 0
+          },
+          "end_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "vested_pct": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "claimable_usd": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)\\.[0-9]{2}$"
+              }
+            ]
+          }
+        },
+        "required": [
+          "schedule_id",
+          "presale",
+          "total",
+          "claimed",
+          "claimable",
+          "start_ms",
+          "cliff_end_ms",
+          "end_ms",
+          "vested_pct",
+          "claimable_usd"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "created": {
+      "type": "array",
+      "maxItems": 200,
+      "items": {
+        "$ref": "#/properties/watchlist/items"
+      }
+    }
+  },
+  "required": [
+    "positions",
+    "watchlist",
+    "coins",
+    "vestings",
+    "created"
+  ],
+  "additionalProperties": false
+}

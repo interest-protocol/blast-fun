@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/presale/contracts/allowlist-create-request.schema.json",
+  "title": "Allowlist create request (JSON)",
+  "description": "POST /api/presale/allowlists as JSON; cap is Quote atoms. The CSV form is multipart/form-data with a file part file (header wallet,cap) and a form field quote (CL-6c).",
+  "type": "object",
+  "properties": {
+    "quote": {
+      "$ref": "defs.schema.json#/$defs/coin_type"
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "wallet": {
+            "$ref": "defs.schema.json#/$defs/address"
+          },
+          "cap": {
+            "$ref": "defs.schema.json#/$defs/uint"
+          }
+        },
+        "required": [
+          "wallet",
+          "cap"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 1,
+      "maxItems": 65536
+    },
+    "include_blast_holders": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "required": [
+    "quote",
+    "entries"
+  ],
+  "additionalProperties": false
+}

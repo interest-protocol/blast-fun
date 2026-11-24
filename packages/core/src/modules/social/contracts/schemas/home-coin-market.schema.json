@@ -1,0 +1,349 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/home-coin-market.schema.json",
+  "title": "Home coin market",
+  "description": "Redesign gaps 1, 2, 8 and 10 (contracts/coin-market.ts HomeCoinMarket): one coin's price, its move and buy/sell pressure over 5m, 1h, 4h and 24h in its Blast pool, and its FDV and market cap.",
+  "type": "object",
+  "properties": {
+    "coin_type": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 512
+    },
+    "presale_id": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "pattern": "^0x[0-9a-f]{64}$"
+        }
+      ]
+    },
+    "decimals": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "quote": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 512
+        },
+        "symbol": {
+          "type": "string",
+          "minLength": 1
+        },
+        "decimals": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "type",
+        "symbol",
+        "decimals"
+      ],
+      "additionalProperties": false
+    },
+    "clock_ms": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "price_usd": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+        }
+      ]
+    },
+    "price_as_of_ms": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "windows": {
+      "type": "object",
+      "properties": {
+        "5m": {
+          "$ref": "#/$defs/window"
+        },
+        "1h": {
+          "$ref": "#/$defs/window"
+        },
+        "4h": {
+          "$ref": "#/$defs/window"
+        },
+        "24h": {
+          "$ref": "#/$defs/window"
+        }
+      },
+      "required": [
+        "5m",
+        "1h",
+        "4h",
+        "24h"
+      ],
+      "additionalProperties": false
+    },
+    "supply": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "total": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)$"
+            },
+            "escrowed": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)$"
+            },
+            "circulating": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)$"
+            }
+          },
+          "required": [
+            "total",
+            "escrowed",
+            "circulating"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "fdv_usd": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)\\.[0-9]{2}$"
+        }
+      ]
+    },
+    "market_cap_usd": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)\\.[0-9]{2}$"
+        }
+      ]
+    },
+    "pool": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^0x[0-9a-f]{64}$"
+            },
+            "venue": {
+              "type": "string",
+              "enum": [
+                "cetus",
+                "bluefin",
+                "aftermath"
+              ]
+            },
+            "coin_atoms": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)$"
+            },
+            "quote_atoms": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)$"
+            },
+            "as_of_ms": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "id",
+            "venue",
+            "coin_atoms",
+            "quote_atoms",
+            "as_of_ms"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "liquidity_usd": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)\\.[0-9]{2}$"
+        }
+      ]
+    },
+    "as_of": {
+      "$ref": "https://blast-v2.invalid/social/contracts/as-of.schema.json"
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "window": {
+      "type": "object",
+      "properties": {
+        "from_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "to_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "open_usd": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+            }
+          ]
+        },
+        "open_as_of_ms": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "change_bps": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "change_usd": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]*[1-9])?$"
+            }
+          ]
+        },
+        "buys": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sells": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "bought_atoms": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "sold_atoms": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "bought_usd": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)\\.[0-9]{2}$"
+            }
+          ]
+        },
+        "sold_usd": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)\\.[0-9]{2}$"
+            }
+          ]
+        },
+        "unpriced_buys": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unpriced_sells": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "buyers": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sellers": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "from_ms",
+        "to_ms",
+        "open_usd",
+        "open_as_of_ms",
+        "change_bps",
+        "change_usd",
+        "buys",
+        "sells",
+        "bought_atoms",
+        "sold_atoms",
+        "bought_usd",
+        "sold_usd",
+        "unpriced_buys",
+        "unpriced_sells",
+        "buyers",
+        "sellers"
+      ]
+    }
+  },
+  "required": [
+    "coin_type",
+    "presale_id",
+    "decimals",
+    "quote",
+    "clock_ms",
+    "price_usd",
+    "price_as_of_ms",
+    "windows",
+    "supply",
+    "fdv_usd",
+    "market_cap_usd",
+    "pool",
+    "liquidity_usd",
+    "as_of"
+  ]
+}

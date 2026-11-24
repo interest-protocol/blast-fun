@@ -1,0 +1,1 @@
+DROP TABLE mission_control_bonding_feature;

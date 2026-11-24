@@ -1,0 +1,125 @@
+.trigger {
+  display: inline-flex;
+  align-items: baseline;
+  max-width: 100%;
+  min-width: 0;
+  padding: 0.1875rem 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 0.1875rem;
+  touch-action: manipulation;
+  transition: color var(--t1) var(--ease), transform var(--t1) var(--ease-std);
+}
+.trigger:focus-visible,
+.popup :focus-visible {
+  outline: 0.125rem solid var(--focus-color,var(--ink));
+  outline-offset: 0.1875rem;
+}
+@media (hover: hover) and (pointer: fine) {
+  .trigger:hover {
+    color: var(--pink-text);
+  }
+  /* The press snaps in; the release eases back. */
+  .trigger:active {
+    transform: scale(.97);
+    transition-duration: 0s;
+  }
+}
+.layer {
+  z-index: 1100;
+  max-width: calc(100vw - 2rem);
+}
+.tip,
+.popup {
+  box-sizing: border-box;
+  width: max-content;
+  max-width: min(25rem, calc(100vw - 2rem));
+  padding: var(--s4);
+  border-radius: var(--r-sm);
+  box-shadow: var(--sh-pop);
+  transition:
+    opacity var(--t1) var(--ease),
+    transform var(--t1) var(--ease);
+}
+.tip {
+  color: var(--tip-fg);
+  background: var(--tip-bg);
+}
+.popup {
+  color: var(--ink);
+  background: var(--card);
+  border: 1px solid var(--hair);
+}
+.tip[data-starting-style],
+.tip[data-ending-style],
+.popup[data-starting-style],
+.popup[data-ending-style] {
+  opacity: 0;
+  transform: translateY(-0.1875rem);
+}
+/* The next tooltip in a group (moving across prices) is already there: no entrance. */
+.tip[data-instant] {
+  transition: none;
+}
+.caption {
+  display: block;
+  margin: 0 0 0.5rem;
+  font: 500 0.75rem/1.4 var(--font);
+}
+.value {
+  display: block;
+  font: 400 0.75rem/1.7 var(--mono);
+  overflow-wrap: anywhere;
+  white-space: normal;
+  user-select: text;
+}
+.actions {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--s3);
+  margin-top: var(--s4);
+}
+.actions button {
+  min-height: max(44px, 2.75rem);
+}
+/* Reduced motion: the tooltip and the inspector fade where they stand. */
+@media (prefers-reduced-motion: reduce) {
+  .trigger {
+    transition: opacity var(--t1) var(--ease-std);
+  }
+  .tip,
+  .popup {
+    transition: opacity var(--t1) var(--ease-std);
+  }
+  .tip[data-starting-style],
+  .tip[data-ending-style],
+  .popup[data-starting-style],
+  .popup[data-ending-style] {
+    transform: none;
+  }
+  /* The dip snaps in and fades back, like every other press under reduced motion. */
+  .trigger:active {
+    transform: none;
+    opacity: .7;
+    transition-duration: 0s;
+  }
+}
+/* Mouse targets grow toward 32px tall, the look stays quiet (Blast mode live audit F25, 2026-11-20); stacked figures in coin rows widen on one side only (about 24px). Touch widens to 44px below. */
+.trigger { position:relative; }
+.trigger::after { content:""; position:absolute; top:min(0rem, calc((100% - 2rem) / 2)); bottom:min(0rem, calc((100% - 2rem) / 2)); left:0; right:0; }
+/* On touch the inspector keeps its quiet look but answers a 44px target (Blast mode audit 30, 2026-10-28). */
+@media (pointer:coarse) {
+  .trigger { position:relative; }
+  .trigger::after { content:""; position:absolute; top:min(0px, calc((100% - 44px) / 2)); bottom:min(0px, calc((100% - 44px) / 2)); left:min(0px, calc((100% - 44px) / 2)); right:min(0px, calc((100% - 44px) / 2)); }
+}
+
+.description {
+  display: block;
+  max-width: 32ch;
+  margin: var(--s2) 0 0;
+  font: 400 .8125rem/1.5 var(--font);
+}

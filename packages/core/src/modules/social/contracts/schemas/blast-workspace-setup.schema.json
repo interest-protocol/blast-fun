@@ -1,0 +1,1474 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/blast-workspace-setup.schema.json",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "type": "number",
+      "const": 1
+    },
+    "panels": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "panel_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "chain": {
+            "type": "string",
+            "const": "sui"
+          },
+          "network": {
+            "type": "string",
+            "enum": [
+              "mainnet",
+              "testnet",
+              "devnet",
+              "localnet"
+            ]
+          },
+          "coin_type": {
+            "type": "string",
+            "minLength": 1
+          },
+          "presale_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "active_namespace": {
+            "type": "string",
+            "enum": [
+              "coin",
+              "presale"
+            ]
+          },
+          "coin": {
+            "type": "object",
+            "properties": {
+              "tabs": {
+                "type": "object",
+                "properties": {
+                  "selected": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "overview",
+                          "people",
+                          "activity",
+                          "posts"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "enabled": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "overview",
+                        "people",
+                        "activity",
+                        "posts"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "selected",
+                  "enabled"
+                ],
+                "additionalProperties": false
+              },
+              "chart": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "renderer": {
+                        "type": "string",
+                        "const": "sparkline"
+                      }
+                    },
+                    "required": [
+                      "renderer"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "renderer": {
+                        "type": "string",
+                        "const": "recharts"
+                      },
+                      "window": {
+                        "type": "string",
+                        "enum": [
+                          "1h",
+                          "6h",
+                          "24h",
+                          "7d",
+                          "30d",
+                          "launch"
+                        ]
+                      },
+                      "viewport": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "from_ms": {
+                                "type": "number"
+                              },
+                              "to_ms": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "from_ms",
+                              "to_ms"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "interval": {
+                        "type": "string",
+                        "enum": [
+                          "1s",
+                          "1m",
+                          "5m",
+                          "15m",
+                          "1h",
+                          "4h",
+                          "1d",
+                          "1w"
+                        ]
+                      },
+                      "style": {
+                        "type": "string",
+                        "enum": [
+                          "line",
+                          "candles"
+                        ]
+                      },
+                      "volume": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "renderer",
+                      "window",
+                      "viewport"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "trade": {
+                "type": "object",
+                "properties": {
+                  "side": {
+                    "type": "string",
+                    "enum": [
+                      "buy",
+                      "sell"
+                    ]
+                  },
+                  "buy": {
+                    "type": "object",
+                    "properties": {
+                      "typed": {
+                        "type": "string"
+                      },
+                      "mode": {
+                        "type": "string",
+                        "enum": [
+                          "typed",
+                          "all",
+                          "half",
+                          "quarter"
+                        ]
+                      },
+                      "unit": {
+                        "type": "string",
+                        "enum": [
+                          "usd",
+                          "token"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "typed",
+                      "mode"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "sell": {
+                    "type": "object",
+                    "properties": {
+                      "typed": {
+                        "type": "string"
+                      },
+                      "mode": {
+                        "type": "string",
+                        "enum": [
+                          "typed",
+                          "all",
+                          "half",
+                          "quarter"
+                        ]
+                      },
+                      "unit": {
+                        "type": "string",
+                        "enum": [
+                          "usd",
+                          "token"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "typed",
+                      "mode"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "slippage_bps": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 500
+                  }
+                },
+                "required": [
+                  "side",
+                  "buy",
+                  "sell",
+                  "slippage_bps"
+                ],
+                "additionalProperties": false
+              },
+              "navigation": {
+                "type": "object",
+                "properties": {
+                  "scroll_top": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "expanded_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                },
+                "required": [
+                  "scroll_top",
+                  "expanded_ids"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "tabs",
+              "chart",
+              "trade",
+              "navigation"
+            ],
+            "additionalProperties": false
+          },
+          "presale": {
+            "type": "object",
+            "properties": {
+              "tabs": {
+                "type": "object",
+                "properties": {
+                  "selected": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "overview",
+                          "people",
+                          "activity",
+                          "posts"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "enabled": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "overview",
+                        "people",
+                        "activity",
+                        "posts"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "selected",
+                  "enabled"
+                ],
+                "additionalProperties": false
+              },
+              "chart": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "renderer": {
+                        "type": "string",
+                        "const": "sparkline"
+                      }
+                    },
+                    "required": [
+                      "renderer"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "renderer": {
+                        "type": "string",
+                        "const": "recharts"
+                      },
+                      "window": {
+                        "type": "string",
+                        "enum": [
+                          "1h",
+                          "6h",
+                          "24h",
+                          "7d",
+                          "30d",
+                          "launch"
+                        ]
+                      },
+                      "viewport": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "from_ms": {
+                                "type": "number"
+                              },
+                              "to_ms": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "from_ms",
+                              "to_ms"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "interval": {
+                        "type": "string",
+                        "enum": [
+                          "1s",
+                          "1m",
+                          "5m",
+                          "15m",
+                          "1h",
+                          "4h",
+                          "1d",
+                          "1w"
+                        ]
+                      },
+                      "style": {
+                        "type": "string",
+                        "enum": [
+                          "line",
+                          "candles"
+                        ]
+                      },
+                      "volume": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "renderer",
+                      "window",
+                      "viewport"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "trade": {
+                "type": "object",
+                "properties": {
+                  "side": {
+                    "type": "string",
+                    "enum": [
+                      "buy",
+                      "sell"
+                    ]
+                  },
+                  "buy": {
+                    "type": "object",
+                    "properties": {
+                      "typed": {
+                        "type": "string"
+                      },
+                      "mode": {
+                        "type": "string",
+                        "enum": [
+                          "typed",
+                          "all",
+                          "half",
+                          "quarter"
+                        ]
+                      },
+                      "unit": {
+                        "type": "string",
+                        "enum": [
+                          "usd",
+                          "token"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "typed",
+                      "mode"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "sell": {
+                    "type": "object",
+                    "properties": {
+                      "typed": {
+                        "type": "string"
+                      },
+                      "mode": {
+                        "type": "string",
+                        "enum": [
+                          "typed",
+                          "all",
+                          "half",
+                          "quarter"
+                        ]
+                      },
+                      "unit": {
+                        "type": "string",
+                        "enum": [
+                          "usd",
+                          "token"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "typed",
+                      "mode"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "slippage_bps": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 500
+                  }
+                },
+                "required": [
+                  "side",
+                  "buy",
+                  "sell",
+                  "slippage_bps"
+                ],
+                "additionalProperties": false
+              },
+              "navigation": {
+                "type": "object",
+                "properties": {
+                  "scroll_top": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "expanded_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                },
+                "required": [
+                  "scroll_top",
+                  "expanded_ids"
+                ],
+                "additionalProperties": false
+              },
+              "terms_open": {
+                "type": "boolean"
+              },
+              "friends_all": {
+                "type": "boolean"
+              },
+              "commitment": {
+                "type": "object",
+                "properties": {
+                  "amount": {
+                    "type": "string"
+                  },
+                  "why": {
+                    "type": "string",
+                    "maxLength": 1120
+                  },
+                  "payment_coin_type": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "amount",
+                  "why",
+                  "payment_coin_type"
+                ],
+                "additionalProperties": false
+              },
+              "views_version": {
+                "type": "number",
+                "const": 2
+              }
+            },
+            "required": [
+              "tabs",
+              "chart",
+              "trade",
+              "navigation",
+              "terms_open",
+              "friends_all",
+              "commitment"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "panel_id",
+          "chain",
+          "network",
+          "coin_type",
+          "presale_id",
+          "active_namespace",
+          "coin",
+          "presale"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "visible_order": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "retained_order": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "desktop_capacity": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4
+    },
+    "focused_panel_id": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "mobile_panel_id": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "selected_view": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "Coins",
+                "Presales",
+                "Bonding",
+                "Traders",
+                "Activity",
+                "Feed",
+                "Portfolio"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "enabled_views": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "Coins",
+              "Presales",
+              "Bonding",
+              "Traders",
+              "Activity",
+              "Feed",
+              "Portfolio"
+            ]
+          }
+        },
+        "collapsed": {
+          "type": "boolean"
+        },
+        "controls": {
+          "type": "object",
+          "properties": {
+            "Coins": {
+              "type": "object",
+              "properties": {
+                "source": {
+                  "type": "string",
+                  "enum": [
+                    "discover",
+                    "following",
+                    "watchlist"
+                  ]
+                },
+                "sort": {
+                  "type": "string",
+                  "enum": [
+                    "relevant",
+                    "trending",
+                    "newest",
+                    "held"
+                  ]
+                },
+                "window": {
+                  "type": "string",
+                  "enum": [
+                    "1h",
+                    "24h"
+                  ]
+                },
+                "min_participants": {
+                  "anyOf": [
+                    {
+                      "type": "number",
+                      "const": 0
+                    },
+                    {
+                      "type": "number",
+                      "const": 2
+                    },
+                    {
+                      "type": "number",
+                      "const": 5
+                    },
+                    {
+                      "type": "number",
+                      "const": 10
+                    }
+                  ]
+                },
+                "age": {
+                  "type": "string",
+                  "enum": [
+                    "24h",
+                    "7d",
+                    "30d",
+                    "all"
+                  ]
+                },
+                "tradable": {
+                  "type": "boolean"
+                },
+                "page": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9999
+                },
+                "rows": {
+                  "anyOf": [
+                    {
+                      "type": "number",
+                      "const": 5
+                    },
+                    {
+                      "type": "number",
+                      "const": 10
+                    },
+                    {
+                      "type": "number",
+                      "const": 20
+                    }
+                  ]
+                },
+                "live": {
+                  "type": "boolean"
+                },
+                "navigation": {
+                  "type": "object",
+                  "properties": {
+                    "scroll_top": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "expanded_ids": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "anchor": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "coin_type": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "index": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "offset": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "coin_type",
+                            "index",
+                            "offset"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "scroll_top",
+                    "expanded_ids"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "source",
+                "sort",
+                "window",
+                "min_participants",
+                "age",
+                "tradable",
+                "page",
+                "rows",
+                "live",
+                "navigation"
+              ],
+              "additionalProperties": false
+            },
+            "Presales": {
+              "type": "object",
+              "properties": {
+                "window": {
+                  "type": "string",
+                  "enum": [
+                    "1h",
+                    "24h"
+                  ]
+                },
+                "page": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9999
+                },
+                "rows": {
+                  "anyOf": [
+                    {
+                      "type": "number",
+                      "const": 5
+                    },
+                    {
+                      "type": "number",
+                      "const": 10
+                    },
+                    {
+                      "type": "number",
+                      "const": 20
+                    }
+                  ]
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "live",
+                    "upcoming",
+                    "ended"
+                  ]
+                },
+                "sort": {
+                  "type": "string",
+                  "enum": [
+                    "ending",
+                    "backed",
+                    "opening",
+                    "interest",
+                    "recent",
+                    "best"
+                  ]
+                },
+                "scope": {
+                  "type": "string",
+                  "enum": [
+                    "all",
+                    "watch",
+                    "following"
+                  ]
+                },
+                "view": {
+                  "type": "string",
+                  "enum": [
+                    "list",
+                    "calendar",
+                    "backed",
+                    "mine"
+                  ]
+                },
+                "layout": {
+                  "type": "string",
+                  "enum": [
+                    "list",
+                    "cards"
+                  ]
+                },
+                "calendar_range": {
+                  "type": "string",
+                  "enum": [
+                    "past",
+                    "all",
+                    "upcoming"
+                  ]
+                },
+                "navigation": {
+                  "type": "object",
+                  "properties": {
+                    "scroll_top": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "expanded_ids": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "anchor": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "coin_type": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "index": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "offset": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "coin_type",
+                            "index",
+                            "offset"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "scroll_top",
+                    "expanded_ids"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "status",
+                "sort",
+                "scope",
+                "view",
+                "layout",
+                "calendar_range",
+                "navigation"
+              ],
+              "additionalProperties": false
+            },
+            "Bonding": {
+              "type": "object",
+              "properties": {
+                "view": {
+                  "type": "string",
+                  "enum": [
+                    "new",
+                    "near_graduation",
+                    "graduated"
+                  ]
+                },
+                "navigation": {
+                  "type": "object",
+                  "properties": {
+                    "scroll_top": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "expanded_ids": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    }
+                  },
+                  "required": [
+                    "scroll_top",
+                    "expanded_ids"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "view",
+                "navigation"
+              ],
+              "additionalProperties": false
+            },
+            "Traders": {
+              "type": "object",
+              "properties": {
+                "window": {
+                  "type": "string",
+                  "enum": [
+                    "1h",
+                    "24h"
+                  ]
+                },
+                "search": {
+                  "type": "string",
+                  "maxLength": 128
+                },
+                "search_draft": {
+                  "type": "string",
+                  "maxLength": 128
+                },
+                "page": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9999
+                },
+                "rows": {
+                  "anyOf": [
+                    {
+                      "type": "number",
+                      "const": 5
+                    },
+                    {
+                      "type": "number",
+                      "const": 10
+                    },
+                    {
+                      "type": "number",
+                      "const": 20
+                    }
+                  ]
+                },
+                "live": {
+                  "type": "boolean"
+                },
+                "navigation": {
+                  "type": "object",
+                  "properties": {
+                    "scroll_top": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "expanded_ids": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "anchor": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "actor_key": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "index": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "offset": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "actor_key",
+                            "index",
+                            "offset"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "scroll_top",
+                    "expanded_ids"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "window",
+                "search",
+                "search_draft",
+                "page",
+                "rows",
+                "live",
+                "navigation"
+              ],
+              "additionalProperties": false
+            },
+            "Activity": {
+              "type": "object",
+              "properties": {
+                "window": {
+                  "type": "string",
+                  "enum": [
+                    "1h",
+                    "24h"
+                  ]
+                },
+                "kinds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "trade_buy",
+                      "trade_sell",
+                      "presale_commit",
+                      "presale_claim"
+                    ]
+                  }
+                },
+                "page": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9999
+                },
+                "rows": {
+                  "anyOf": [
+                    {
+                      "type": "number",
+                      "const": 5
+                    },
+                    {
+                      "type": "number",
+                      "const": 10
+                    },
+                    {
+                      "type": "number",
+                      "const": 20
+                    }
+                  ]
+                },
+                "cursors": {
+                  "type": "array",
+                  "items": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "navigation": {
+                  "type": "object",
+                  "properties": {
+                    "scroll_top": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "expanded_ids": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "anchor": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "entry_id": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "index": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "offset": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "entry_id",
+                            "index",
+                            "offset"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "scroll_top",
+                    "expanded_ids"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "window",
+                "kinds",
+                "navigation"
+              ],
+              "additionalProperties": false
+            },
+            "Feed": {
+              "type": "object",
+              "properties": {
+                "tab": {
+                  "type": "string",
+                  "const": "for_you"
+                },
+                "page": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9999
+                },
+                "rows": {
+                  "anyOf": [
+                    {
+                      "type": "number",
+                      "const": 5
+                    },
+                    {
+                      "type": "number",
+                      "const": 10
+                    },
+                    {
+                      "type": "number",
+                      "const": 20
+                    }
+                  ]
+                },
+                "cursors": {
+                  "type": "array",
+                  "items": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "navigation": {
+                  "type": "object",
+                  "properties": {
+                    "scroll_top": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "expanded_ids": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "anchor": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "entry_id": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "index": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "offset": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "entry_id",
+                            "index",
+                            "offset"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "scroll_top",
+                    "expanded_ids"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "tab",
+                "navigation"
+              ],
+              "additionalProperties": false
+            },
+            "Portfolio": {
+              "type": "object",
+              "properties": {
+                "tab": {
+                  "type": "string",
+                  "enum": [
+                    "summary",
+                    "coins",
+                    "presales"
+                  ]
+                },
+                "coins": {
+                  "type": "object",
+                  "properties": {
+                    "search": {
+                      "type": "string",
+                      "maxLength": 200
+                    },
+                    "page": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9999
+                    },
+                    "hide_small": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "search",
+                    "page",
+                    "hide_small"
+                  ],
+                  "additionalProperties": false
+                },
+                "presales": {
+                  "type": "object",
+                  "properties": {
+                    "search": {
+                      "type": "string",
+                      "maxLength": 200
+                    },
+                    "page": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9999
+                    }
+                  },
+                  "required": [
+                    "search",
+                    "page"
+                  ],
+                  "additionalProperties": false
+                },
+                "navigation": {
+                  "type": "object",
+                  "properties": {
+                    "scroll_top": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "expanded_ids": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    }
+                  },
+                  "required": [
+                    "scroll_top",
+                    "expanded_ids"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "tab",
+                "coins",
+                "presales",
+                "navigation"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "Coins",
+            "Presales",
+            "Traders",
+            "Activity",
+            "Feed",
+            "Portfolio"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "selected_view",
+        "enabled_views",
+        "collapsed",
+        "controls"
+      ],
+      "additionalProperties": false
+    },
+    "desktop_slots": {
+      "type": "array",
+      "maxItems": 4,
+      "items": {
+        "anyOf": [
+          {
+            "type": "string",
+            "minLength": 1
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "presentation": {
+      "type": "string",
+      "enum": [
+        "focus",
+        "compare"
+      ]
+    }
+  },
+  "required": [
+    "schema_version",
+    "panels",
+    "visible_order",
+    "retained_order",
+    "desktop_capacity",
+    "focused_panel_id",
+    "mobile_panel_id",
+    "data"
+  ],
+  "additionalProperties": false,
+  "description": "WorkspaceV1 structural schema generated from the accepted model. Runtime validateWorkspace additionally enforces normalized Sui struct tags, uniqueness, membership, selections, focus, chart viewport order and nesting <=16. No retention cap."
+}

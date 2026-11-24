@@ -1,0 +1,27 @@
+/* A recovery task on its own card: centred, with room for several actions (not an empty state). */
+.recovery {
+  min-width: 0;
+  padding: 3.4375rem 1.3125rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.recovery p,
+.recovery h1 {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.recovery input {
+  box-sizing: border-box;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  color: var(--ink);
+  font: inherit;
+}

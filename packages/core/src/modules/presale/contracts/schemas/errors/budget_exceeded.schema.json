@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/presale/contracts/errors/budget_exceeded.schema.json",
+  "title": "budget_exceeded error",
+  "description": "HTTP 429 with a Retry-After header; route-specific fields sit inside error (CL-10), and the body never carries retryAfterSeconds (CL-23). reason names the exceeded budget (CL-25): daily_limit until the next UTC day, open_reservations until the earliest open reservation expires.",
+  "type": "object",
+  "properties": {
+    "error": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "const": "budget_exceeded"
+        },
+        "message": {
+          "$ref": "../defs.schema.json#/$defs/message"
+        },
+        "reason": {
+          "enum": [
+            "daily_limit",
+            "open_reservations"
+          ]
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "reason"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "error"
+  ],
+  "additionalProperties": false
+}

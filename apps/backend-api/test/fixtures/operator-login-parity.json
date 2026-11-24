@@ -1,0 +1,212 @@
+[
+  {
+    "name": "admitted IPv4",
+    "status": 204,
+    "body": "",
+    "retryAfter": null,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:admin_login_ip:v1:111d6cfba45deb13ff8fd006548e486f04e6d74f734cd840b5ab28db48ab75d6:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:admin_login_global:v1:7f33886d5d044afb206234853a47d523f3dfdc5e7e663f410e429662996bc3e2:60"
+        ],
+        "arguments": ["0", "60", "5", "1", "60", "100", "2"]
+      }
+    ]
+  },
+  {
+    "name": "admitted IPv6 counts its /64",
+    "status": 204,
+    "body": "",
+    "retryAfter": null,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:admin_login_ip:v1:0559f7161f64ccb9d1c8650c2960ec738f8acc9ce5859419db65fcf2a7b8304d:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:admin_login_global:v1:7f33886d5d044afb206234853a47d523f3dfdc5e7e663f410e429662996bc3e2:60"
+        ],
+        "arguments": ["0", "60", "5", "1", "60", "100", "2"]
+      }
+    ]
+  },
+  {
+    "name": "IPv4-mapped IPv6 is not canonical",
+    "status": 400,
+    "body": "{\"error\":\"Login admission refused\"}",
+    "retryAfter": null,
+    "redis": []
+  },
+  {
+    "name": "compatible dotted IPv6 is not canonical",
+    "status": 400,
+    "body": "{\"error\":\"Login admission refused\"}",
+    "retryAfter": null,
+    "redis": []
+  },
+  {
+    "name": "compatible hex IPv6 retains its network",
+    "status": 204,
+    "body": "",
+    "retryAfter": null,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:admin_login_ip:v1:cb3d044120b559058d7254fa02409be4bdee3711095da38f9f591829b33f6e5e:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:admin_login_global:v1:7f33886d5d044afb206234853a47d523f3dfdc5e7e663f410e429662996bc3e2:60"
+        ],
+        "arguments": ["0", "60", "5", "1", "60", "100", "2"]
+      }
+    ]
+  },
+  {
+    "name": "loopback IPv6 retains its network",
+    "status": 204,
+    "body": "",
+    "retryAfter": null,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:admin_login_ip:v1:cb3d044120b559058d7254fa02409be4bdee3711095da38f9f591829b33f6e5e:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:admin_login_global:v1:7f33886d5d044afb206234853a47d523f3dfdc5e7e663f410e429662996bc3e2:60"
+        ],
+        "arguments": ["0", "60", "5", "1", "60", "100", "2"]
+      }
+    ]
+  },
+  {
+    "name": "uppercase IPv6 is not canonical",
+    "status": 400,
+    "body": "{\"error\":\"Login admission refused\"}",
+    "retryAfter": null,
+    "redis": []
+  },
+  {
+    "name": "zone identifier refused",
+    "status": 400,
+    "body": "{\"error\":\"Login admission refused\"}",
+    "retryAfter": null,
+    "redis": []
+  },
+  {
+    "name": "forwarded chain refused",
+    "status": 400,
+    "body": "{\"error\":\"Login admission refused\"}",
+    "retryAfter": null,
+    "redis": []
+  },
+  {
+    "name": "IP budget refused",
+    "status": 429,
+    "body": "",
+    "retryAfter": "30",
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:admin_login_ip:v1:5b32a6ea93a9fb63752adb4077b78e13856ef6fc892d6ea8c87b73d028f3100d:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:admin_login_global:v1:7f33886d5d044afb206234853a47d523f3dfdc5e7e663f410e429662996bc3e2:60"
+        ],
+        "arguments": ["0", "60", "5", "1", "60", "100", "2"]
+      }
+    ]
+  },
+  {
+    "name": "global budget refused",
+    "status": 429,
+    "body": "",
+    "retryAfter": "7",
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:admin_login_ip:v1:9adcdad49650b60906c904c3fd90001777e4bda29ff4e3998c0bbc4f5cab46a4:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:admin_login_global:v1:7f33886d5d044afb206234853a47d523f3dfdc5e7e663f410e429662996bc3e2:60"
+        ],
+        "arguments": ["0", "60", "5", "1", "60", "100", "2"]
+      }
+    ]
+  },
+  {
+    "name": "lost quota answer",
+    "status": 503,
+    "body": "{\"error\":\"Login admission unavailable\"}",
+    "retryAfter": null,
+    "redis": [
+      {
+        "keys": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:admin_login_ip:v1:7a29f00af8bee63df381e84d3cc10e7b88c23e1b7a49b7d25fcd82c9e7c02222:60",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:{partner-quota}:admin_login_global:v1:7f33886d5d044afb206234853a47d523f3dfdc5e7e663f410e429662996bc3e2:60"
+        ],
+        "arguments": ["0", "60", "5", "1", "60", "100", "2"]
+      }
+    ]
+  },
+  {
+    "name": "operator token is not the admission token",
+    "status": 401,
+    "body": "{\"error\":\"Login admission refused\"}",
+    "retryAfter": null,
+    "redis": []
+  },
+  {
+    "name": "no credential",
+    "status": 401,
+    "body": "{\"error\":\"Login admission refused\"}",
+    "retryAfter": null,
+    "redis": []
+  },
+  {
+    "name": "GET refused",
+    "status": 405,
+    "body": "{\"error\":\"Login admission refused\"}",
+    "retryAfter": null,
+    "redis": []
+  },
+  {
+    "name": "query string refused",
+    "status": 403,
+    "body": "{\"error\":\"Login admission refused\"}",
+    "retryAfter": null,
+    "redis": []
+  },
+  {
+    "name": "origin refused",
+    "status": 403,
+    "body": "{\"error\":\"Login admission refused\"}",
+    "retryAfter": null,
+    "redis": []
+  },
+  {
+    "name": "partner key refused",
+    "status": 403,
+    "body": "{\"error\":\"Login admission refused\"}",
+    "retryAfter": null,
+    "redis": []
+  },
+  {
+    "name": "gateway proof refused",
+    "status": 403,
+    "body": "{\"error\":{\"code\":\"gateway_forbidden\"}}",
+    "retryAfter": null,
+    "redis": []
+  },
+  {
+    "name": "wrong content type",
+    "status": 415,
+    "body": "{\"error\":\"Login admission refused\"}",
+    "retryAfter": null,
+    "redis": []
+  },
+  {
+    "name": "invalid body",
+    "status": 400,
+    "body": "{\"error\":\"Login admission refused\"}",
+    "retryAfter": null,
+    "redis": []
+  },
+  {
+    "name": "not an address",
+    "status": 400,
+    "body": "{\"error\":\"Login admission refused\"}",
+    "retryAfter": null,
+    "redis": []
+  }
+]

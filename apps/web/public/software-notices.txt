@@ -1,0 +1,11 @@
+TradingView Lightweight Charts™
+Copyright (с) 2025 TradingView, Inc.
+https://www.tradingview.com/
+
+Licensed under the Apache License, Version 2.0.
+https://www.apache.org/licenses/LICENSE-2.0
+
+Reown AppKit and WalletConnect (included through Privy)
+Portions © 2025 Reown, Inc. All Rights Reserved
+/licenses/reown-appkit.md
+/licenses/walletconnect.md

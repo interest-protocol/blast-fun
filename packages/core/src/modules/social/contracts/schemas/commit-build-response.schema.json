@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/commit-build-response.schema.json",
+  "title": "A presale commit to sign",
+  "description": "POST /api/social/me/commits 200: the commit the server built with the presale SDK for the caller's Blast wallet, as a transaction kind (no sender, no gas) for the browser to sign and submit.",
+  "type": "object",
+  "properties": {
+    "presale_id": {
+      "type": "string",
+      "pattern": "^0x[0-9a-f]{64}$"
+    },
+    "sender": {
+      "type": "string",
+      "pattern": "^0x[0-9a-f]{64}$"
+    },
+    "fee": {
+      "enum": [
+        "sponsored",
+        "wallet"
+      ]
+    },
+    "route": {
+      "enum": [
+        "open",
+        "allowlisted",
+        "uncapped"
+      ]
+    },
+    "quote_type": {
+      "type": "string",
+      "pattern": "^0x[0-9a-f]{64}::[A-Za-z_][A-Za-z0-9_]{0,127}::[A-Za-z_][A-Za-z0-9_]{0,127}$"
+    },
+    "amount": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]{0,19}$"
+    },
+    "transaction_kind_bytes": {
+      "description": "Standard base64; at most Sui's 128 KiB transaction size (a wallet's many coins are merged inside it).",
+      "type": "string",
+      "maxLength": 174764,
+      "pattern": "^[A-Za-z0-9+/]+={0,2}$"
+    },
+    "sponsored": {
+      "description": "A sponsored swap-and-commit: the gas reservation the server already made for exactly this kind. The browser signs transaction_bytes and executes the reservation; it does not ask POST /api/presale/sponsor.",
+      "type": "object",
+      "properties": {
+        "reservation_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "transaction_bytes": {
+          "type": "string",
+          "maxLength": 174764,
+          "pattern": "^[A-Za-z0-9+/]+={0,2}$"
+        },
+        "expires_at_ms": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "reservation_id",
+        "transaction_bytes",
+        "expires_at_ms"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "presale_id",
+    "sender",
+    "fee",
+    "route",
+    "quote_type",
+    "amount",
+    "transaction_kind_bytes"
+  ],
+  "additionalProperties": false
+}

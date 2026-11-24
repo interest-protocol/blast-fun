@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en" data-blast-ui data-theme="system">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="robots" content="noindex,nofollow" />
+    <title>Team access · Blast Analytics</title>
+    <link rel="stylesheet" href="/tokens.css" />
+    <link rel="stylesheet" href="/controls.css" />
+    <link rel="stylesheet" href="/page-header.css" />
+    <link rel="stylesheet" href="/empty-state.css" />
+    <link rel="stylesheet" href="/dashboard.css" />
+    <script type="module" src="/dashboard.js"></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/">blast <small>Analytics</small></a
+      ><span class="tag private-tag">Private workspace</span>
+    </header>
+    <main class="sign-in">
+      <section class="card">
+        <header class="phead" data-page-head>
+          <h1>The bigger picture</h1>
+        </header>
+        <p>Enter a one-time access code from your analytics administrator.</p>
+        <form action="/auth/login" method="post">
+          <label for="password">One-time code · required</label
+          ><input
+            class="input"
+            data-ui-input
+            data-ui-size="lg"
+            id="password"
+            name="password"
+            type="password"
+            autocomplete="one-time-code"
+            required
+            minlength="43"
+            maxlength="43"
+            pattern="[A-Za-z0-9_\-]{43}"
+            spellcheck="false"
+            autocapitalize="none"
+            autocorrect="off"
+            aria-describedby="code-help login-error"
+          />
+          <div id="login-error" class="empty compact" role="alert" hidden>
+            <p class="title">This code cannot be used</p>
+            <p class="body">Ask your administrator for a fresh code.</p>
+            <p class="caption">access_invalid</p>
+          </div>
+          <button
+            class="button"
+            data-ui-button
+            data-ui-size="lg"
+            data-ui-variant="primary"
+            type="submit"
+          >
+            Open analytics
+          </button>
+        </form>
+        <p class="caption" id="code-help">
+          Codes work once and expire after one hour. Sessions last up to four
+          hours.
+        </p>
+      </section>
+    </main>
+  </body>
+</html>

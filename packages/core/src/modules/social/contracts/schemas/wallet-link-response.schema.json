@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/wallet-link-response.schema.json",
+  "title": "Linked wallet",
+  "description": "POST /api/social/me/wallets 201 (200 when it was already linked): the wallet as GET /api/social/me lists it.",
+  "type": "object",
+  "properties": {
+    "wallet": {
+      "type": "object",
+      "properties": {
+        "address": {
+          "type": "string",
+          "pattern": "^0x[0-9a-f]{64}$"
+        },
+        "kind": {
+          "enum": [
+            "embedded",
+            "slush",
+            "external"
+          ]
+        },
+        "linked_at_ms": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "address",
+        "kind",
+        "linked_at_ms"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "wallet"
+  ],
+  "additionalProperties": false
+}

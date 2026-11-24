@@ -1,0 +1,1 @@
+ALTER TABLE presale_sponsor_reservations DROP COLUMN deployment_fingerprint;

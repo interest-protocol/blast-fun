@@ -1,0 +1,11 @@
+.amountFit {
+  container-type: inline-size;
+  /* In a wrapping row the coin can move down before the amount would need to go below 1rem. */
+  flex: 1 1 min(100%, calc(var(--amount-em-width, 1) * 1rem));
+  min-inline-size: 0;
+  --amount-font-size: min(calc(100cqi / var(--amount-em-width, 1)), var(--amount-max-size, 2.125rem));
+}
+
+.amountFit > input {
+  inline-size: 100%;
+}

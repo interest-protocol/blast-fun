@@ -1,0 +1,3 @@
+DROP INDEX IF EXISTS mission_control_campaign_telemetry_blastoff_window_idx;
+DROP TABLE IF EXISTS mission_control_campaign_telemetry_blastoff_facts;
+DROP TABLE IF EXISTS mission_control_campaign_telemetry_projection;

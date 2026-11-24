@@ -1,0 +1,21 @@
+.icon {
+  display: inline-block;
+  flex: none;
+  width: 1.25em;
+  height: 1.25em;
+  vertical-align: middle;
+  background: center / contain no-repeat;
+}
+
+.icon[data-wallet-label="deployer"] { background-image: url("/blast-helmet.svg"); }
+.icon[data-wallet-label="whale"] { background-image: url("/wallet-labels/whale.webp"); }
+.icon[data-wallet-label="sniper"] { background-image: url("/wallet-labels/sniper.webp"); }
+
+:global([data-theme="dark"]) .icon:not([data-wallet-label="deployer"]) {
+  filter: contrast(.72) brightness(1.55);
+}
+@media (prefers-color-scheme: dark) {
+  :global([data-blast-ui]:not([data-theme="light"])) .icon:not([data-wallet-label="deployer"]) {
+    filter: contrast(.72) brightness(1.55);
+  }
+}

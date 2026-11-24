@@ -1,0 +1,893 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/presale/contracts/defs.schema.json",
+  "title": "Shared definitions of the presale contract",
+  "$defs": {
+    "uint": {
+      "description": "An on-chain u64 (atoms, bps, counts, indexes) as an unsigned decimal string (CL-11).",
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)$"
+    },
+    "int": {
+      "description": "A signed integer as a decimal string, never -0.",
+      "type": "string",
+      "pattern": "^(0|-?[1-9][0-9]*)$"
+    },
+    "fee_bps": {
+      "description": "A non-negative rate in bps exactly as Circle reports it, possibly fractional, e.g. \"1.3\" (CL-7).",
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+    },
+    "address": {
+      "description": "0x and 64 lowercase hex characters.",
+      "type": "string",
+      "pattern": "^0x[0-9a-f]{64}$"
+    },
+    "coin_type": {
+      "description": "A canonical coin type, 0x<64 hex>::<module>::<Name>.",
+      "type": "string",
+      "pattern": "^0x[0-9a-f]{64}::[A-Za-z_][A-Za-z0-9_]{0,127}::[A-Za-z_][A-Za-z0-9_]{0,127}(<.+>)?$"
+    },
+    "digest": {
+      "description": "A Sui transaction digest, base58.",
+      "type": "string",
+      "pattern": "^[1-9A-HJ-NP-Za-km-z]{32,44}$"
+    },
+    "hex32": {
+      "description": "32 bytes as 64 lowercase hex characters without 0x: allowlist and reward roots, the reward manifest digest, and proof entries (CL-15).",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "proof": {
+      "description": "A Merkle proof, leaf to root; at most 16 entries (65,536 leaves).",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/hex32"
+      },
+      "maxItems": 16
+    },
+    "event_cursor": {
+      "description": "A blast-infra event cursor, <checkpoint>:<tx_slot>:<event_slot>:<part> (CL-12); opaque to clients.",
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*):(0|[1-9][0-9]*):(0|[1-9][0-9]*):(0|[1-9][0-9]*)$"
+    },
+    "page_cursor": {
+      "description": "An opaque page token.",
+      "type": "string",
+      "minLength": 1
+    },
+    "id": {
+      "description": "An opaque server-issued identifier.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "base64": {
+      "description": "Standard base64.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9+/]+={0,2}$"
+    },
+    "message": {
+      "description": "Text for people; branch on code.",
+      "type": "string",
+      "minLength": 1
+    },
+    "timestamp_ms": {
+      "description": "Unix time in milliseconds, a JSON integer.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "checkpoint": {
+      "description": "A checkpoint sequence number, a JSON integer.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "count": {
+      "description": "An off-chain count, a JSON integer.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "row": {
+      "description": "A 1-based data row number.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "lifecycle": {
+      "description": "The SDK PresaleLifecycle, lowercase.",
+      "enum": [
+        "pending",
+        "open",
+        "funded",
+        "migrated",
+        "cancelled"
+      ]
+    },
+    "venue_kind": {
+      "description": "The SDK PresaleVenue. Proposed CA-G1 (canonical presale publication): aftermath, a sale the Aftermath DAO-pool vendor package (blast_aftermath_dao_presale, contracts ADR 0104) creates and migrates.",
+      "enum": [
+        "cetus",
+        "bluefin",
+        "aftermath"
+      ]
+    },
+    "aftermath_venue": {
+      "description": "The Aftermath DAO-pool vendor venue (contracts ADR 0104): the vendor package, the sale's PoolCreation binding and LP coin (PoolCreationReserved), and after migration the Aftermath pool and the DAO-fee pool (Migrated); each id is null until its event is indexed.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "aftermath"
+        },
+        "vendor_package_id": {
+          "$ref": "#/$defs/address"
+        },
+        "pool_creation_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/address"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "lp_type": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/coin_type"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "pool_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/address"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dao_fee_pool_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/address"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "vendor_package_id",
+        "pool_creation_id",
+        "lp_type",
+        "pool_id",
+        "dao_fee_pool_id"
+      ],
+      "additionalProperties": false
+    },
+    "eligibility_kind": {
+      "description": "The SDK EligibilityPolicy kind.",
+      "enum": [
+        "open",
+        "allowlisted"
+      ]
+    },
+    "presale_abort_name": {
+      "description": "A package-wide abort name from the SDK's PRESALE_ABORTS table.",
+      "enum": [
+        "EAboveFeePolicy",
+        "EAllowanceUnchanged",
+        "EBelowMinimumCommitment",
+        "EInitialSupplyNotZero",
+        "EInvalidAssetPair",
+        "EInvalidEligibilityPolicy",
+        "EInvalidEligibilityProof",
+        "EInvalidFees",
+        "EInvalidHardCap",
+        "EInvalidLifecycle",
+        "EInvalidRaiseAllocation",
+        "EInvalidRaiseTarget",
+        "EInvalidTokenAllocation",
+        "EInvalidUncappedPhase",
+        "EInvalidVenue",
+        "EInvalidWindow",
+        "ELiquidityDeadlineNotReached",
+        "EMissingSetting",
+        "ENoCommitment",
+        "EParticipantCapacityReached",
+        "EPresaleEnded",
+        "EPresaleFilled",
+        "EPresaleNotEnded",
+        "EPresaleNotStarted",
+        "EPresaleStarted",
+        "EProtocolFeesIncreased",
+        "EProtocolFeesUnchanged",
+        "EQuoteNotAllowed",
+        "ESaleTokenNotUnregulated",
+        "ETotalCommitmentOverflow",
+        "EUncappedPhaseNotOpen",
+        "EUnguardedDelay",
+        "EUnreachableRaise",
+        "EUnseedablePrice",
+        "EVenueNotAllowed",
+        "EWalletCapExceeded",
+        "EWrongEligibilityPolicy",
+        "EWrongPresaleCap",
+        "EZeroCommitment"
+      ]
+    },
+    "freshness": {
+      "description": "The read path's position; every blast-infra 200 response and snapshot carries it.",
+      "type": "object",
+      "properties": {
+        "checkpoint": {
+          "$ref": "#/$defs/checkpoint"
+        },
+        "timestamp_ms": {
+          "$ref": "#/$defs/timestamp_ms"
+        },
+        "cursor": {
+          "$ref": "#/$defs/event_cursor"
+        }
+      },
+      "required": [
+        "checkpoint",
+        "timestamp_ms",
+        "cursor"
+      ],
+      "additionalProperties": false
+    },
+    "transaction": {
+      "type": "object",
+      "properties": {
+        "digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "timestamp_ms": {
+          "$ref": "#/$defs/timestamp_ms"
+        }
+      },
+      "required": [
+        "digest",
+        "timestamp_ms"
+      ],
+      "additionalProperties": false
+    },
+    "share": {
+      "type": "object",
+      "properties": {
+        "bps": {
+          "$ref": "#/$defs/uint"
+        },
+        "amount": {
+          "$ref": "#/$defs/uint"
+        }
+      },
+      "required": [
+        "bps",
+        "amount"
+      ],
+      "additionalProperties": false
+    },
+    "recipient_share": {
+      "type": "object",
+      "properties": {
+        "address": {
+          "$ref": "#/$defs/address"
+        },
+        "bps": {
+          "$ref": "#/$defs/uint"
+        },
+        "amount": {
+          "$ref": "#/$defs/uint"
+        },
+        "vesting": {
+          "$ref": "#/$defs/recipient_vesting"
+        }
+      },
+      "required": [
+        "address",
+        "bps",
+        "amount",
+        "vesting"
+      ],
+      "additionalProperties": false
+    },
+    "windows": {
+      "description": "Section 2.1 windows. Generation 2 (contracts ADR 0110): after an early close under a hard cap with closes_when_filled, end_ms and liquidity_deadline_ms are the actual ones PresaleFunded carries; hard_cap_from_ms is null without a hard cap.",
+      "type": "object",
+      "properties": {
+        "start_ms": {
+          "$ref": "#/$defs/timestamp_ms"
+        },
+        "end_ms": {
+          "$ref": "#/$defs/timestamp_ms"
+        },
+        "liquidity_deadline_ms": {
+          "$ref": "#/$defs/timestamp_ms"
+        },
+        "uncapped_from_ms": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/timestamp_ms"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "hard_cap_from_ms": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/timestamp_ms"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "start_ms",
+        "end_ms",
+        "liquidity_deadline_ms",
+        "uncapped_from_ms",
+        "hard_cap_from_ms"
+      ],
+      "additionalProperties": false
+    },
+    "totals": {
+      "description": "Section 2.1 totals; fill_rate_bps is null while open.",
+      "type": "object",
+      "properties": {
+        "total_commitments": {
+          "$ref": "#/$defs/uint"
+        },
+        "remaining_commitments": {
+          "$ref": "#/$defs/uint"
+        },
+        "participants": {
+          "$ref": "#/$defs/uint"
+        },
+        "fill_rate_bps": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/uint"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "accepted_quote": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/uint"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "refundable_quote": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/uint"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "total_commitments",
+        "remaining_commitments",
+        "participants",
+        "fill_rate_bps",
+        "accepted_quote",
+        "refundable_quote"
+      ],
+      "additionalProperties": false
+    },
+    "commitment_entry": {
+      "description": "CL-1: one commitment; wallet is the committing transaction's sender.",
+      "type": "object",
+      "properties": {
+        "cursor": {
+          "$ref": "#/$defs/event_cursor"
+        },
+        "digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "timestamp_ms": {
+          "$ref": "#/$defs/timestamp_ms"
+        },
+        "wallet": {
+          "$ref": "#/$defs/address"
+        },
+        "quote": {
+          "$ref": "#/$defs/uint"
+        },
+        "wallet_commitment": {
+          "$ref": "#/$defs/uint"
+        },
+        "total_commitments": {
+          "$ref": "#/$defs/uint"
+        },
+        "participants": {
+          "$ref": "#/$defs/uint"
+        }
+      },
+      "required": [
+        "cursor",
+        "digest",
+        "timestamp_ms",
+        "wallet",
+        "quote",
+        "wallet_commitment",
+        "total_commitments",
+        "participants"
+      ],
+      "additionalProperties": false
+    },
+    "presale_summary": {
+      "description": "One GET /v1/presales row (T-002-AC-3); windows and totals are the section 2.1 objects (CL-14).",
+      "type": "object",
+      "properties": {
+        "presale_id": {
+          "$ref": "#/$defs/address"
+        },
+        "sale_token": {
+          "$ref": "#/$defs/coin_type"
+        },
+        "quote": {
+          "$ref": "#/$defs/coin_type"
+        },
+        "lifecycle": {
+          "$ref": "#/$defs/lifecycle"
+        },
+        "windows": {
+          "$ref": "#/$defs/windows"
+        },
+        "raise": {
+          "type": "object",
+          "properties": {
+            "target": {
+              "$ref": "#/$defs/uint"
+            }
+          },
+          "required": [
+            "target"
+          ],
+          "additionalProperties": false
+        },
+        "eligibility_kind": {
+          "$ref": "#/$defs/eligibility_kind"
+        },
+        "venue": {
+          "description": "Proposed CA-G1: a CLMM venue, or the Aftermath vendor venue.",
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "$ref": "#/$defs/clmm_venue_kind"
+                },
+                "venue": {
+                  "$ref": "#/$defs/coin_type"
+                }
+              },
+              "required": [
+                "kind",
+                "venue"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "$ref": "#/$defs/aftermath_venue"
+            }
+          ]
+        },
+        "totals": {
+          "$ref": "#/$defs/totals"
+        },
+        "cancellation_reason": {
+          "anyOf": [
+            {
+              "enum": [
+                "raise_missed",
+                "liquidity_deadline"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "created": {
+          "type": "object",
+          "properties": {
+            "checkpoint": {
+              "$ref": "#/$defs/checkpoint"
+            },
+            "timestamp_ms": {
+              "$ref": "#/$defs/timestamp_ms"
+            }
+          },
+          "required": [
+            "checkpoint",
+            "timestamp_ms"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "presale_id",
+        "sale_token",
+        "quote",
+        "lifecycle",
+        "windows",
+        "raise",
+        "eligibility_kind",
+        "venue",
+        "totals",
+        "cancellation_reason",
+        "created"
+      ],
+      "additionalProperties": false
+    },
+    "wallet_view": {
+      "description": "Section 2.2: one wallet's commitment and delivery. Open: each user closes it with unevaluatedProperties.",
+      "type": "object",
+      "properties": {
+        "address": {
+          "$ref": "#/$defs/address"
+        },
+        "presale_id": {
+          "$ref": "#/$defs/address"
+        },
+        "commitment": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "quote": {
+                  "$ref": "#/$defs/uint"
+                },
+                "wallet_cap": {
+                  "$ref": "#/$defs/uint"
+                }
+              },
+              "required": [
+                "quote",
+                "wallet_cap"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "commits": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "digest": {
+                "$ref": "#/$defs/digest"
+              },
+              "timestamp_ms": {
+                "$ref": "#/$defs/timestamp_ms"
+              },
+              "quote": {
+                "$ref": "#/$defs/uint"
+              },
+              "wallet_commitment": {
+                "$ref": "#/$defs/uint"
+              }
+            },
+            "required": [
+              "digest",
+              "timestamp_ms",
+              "quote",
+              "wallet_commitment"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "claim": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "digest": {
+                  "$ref": "#/$defs/digest"
+                },
+                "timestamp_ms": {
+                  "$ref": "#/$defs/timestamp_ms"
+                },
+                "tokens": {
+                  "$ref": "#/$defs/uint"
+                },
+                "quote_refund": {
+                  "$ref": "#/$defs/uint"
+                },
+                "relayed_by": {
+                  "$ref": "#/$defs/address"
+                },
+                "vesting_id": {
+                  "description": "Proposed CA-G5: the schedule the claim locked the tokens in under participant vesting; null when they were paid out.",
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/address"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "digest",
+                "timestamp_ms",
+                "tokens",
+                "quote_refund",
+                "relayed_by",
+                "vesting_id"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "eligibility": {
+          "type": "object",
+          "properties": {
+            "eligible": {
+              "type": "boolean"
+            },
+            "wallet_cap": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/uint"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "source": {
+              "enum": [
+                "open",
+                "allowlist",
+                "uncapped"
+              ]
+            }
+          },
+          "required": [
+            "eligible",
+            "wallet_cap",
+            "source"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "address",
+        "presale_id",
+        "commitment",
+        "commits",
+        "claim",
+        "eligibility"
+      ]
+    },
+    "clmm_venue_kind": {
+      "description": "Proposed CA-G1: the venues the presale package migrates to itself, into a CLMM pool and a Vault.",
+      "enum": [
+        "cetus",
+        "bluefin"
+      ]
+    },
+    "recipient_vesting": {
+      "description": "Proposed CA-V1 (presale-team-vesting spec §5.2, ahead of interface contract revision 3): null for a share that does not vest; else its terms, and its schedule once migration made it (null until then, and for good in a cancelled sale).",
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "terms": {
+              "$ref": "#/$defs/vesting_terms"
+            },
+            "schedule": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/vesting_schedule"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "terms",
+            "schedule"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "vesting_terms": {
+      "description": "The presale vesting terms with exact durations in milliseconds.",
+      "type": "object",
+      "properties": {
+        "cliff_delay_ms": {
+          "$ref": "#/$defs/uint"
+        },
+        "period_duration_ms": {
+          "$ref": "#/$defs/uint"
+        },
+        "periods": {
+          "$ref": "#/$defs/uint"
+        }
+      },
+      "required": [
+        "cliff_delay_ms",
+        "period_duration_ms",
+        "periods"
+      ],
+      "additionalProperties": false
+    },
+    "vesting_schedule": {
+      "description": "The vesting schedule indexed from the core payout events. The end timestamp is exact.",
+      "type": "object",
+      "properties": {
+        "vesting_id": {
+          "$ref": "#/$defs/address"
+        },
+        "presale_id": {
+          "$ref": "#/$defs/address"
+        },
+        "beneficiary": {
+          "$ref": "#/$defs/address"
+        },
+        "coin_type": {
+          "$ref": "#/$defs/coin_type"
+        },
+        "asset": {
+          "enum": [
+            "sale_token",
+            "quote"
+          ]
+        },
+        "share": {
+          "description": "Proposed CA-G5: participant, a participant's claimed tokens under participant vesting, vesting from its claim (paid in the sale token).",
+          "enum": [
+            "token",
+            "raise",
+            "participant"
+          ]
+        },
+        "total": {
+          "$ref": "#/$defs/uint"
+        },
+        "released": {
+          "$ref": "#/$defs/uint"
+        },
+        "start_ms": {
+          "$ref": "#/$defs/timestamp_ms"
+        },
+        "cliff_ms": {
+          "$ref": "#/$defs/uint"
+        },
+        "period_ms": {
+          "$ref": "#/$defs/uint"
+        },
+        "periods": {
+          "$ref": "#/$defs/uint"
+        },
+        "end_ms": {
+          "$ref": "#/$defs/uint"
+        },
+        "closed": {
+          "type": "boolean"
+        },
+        "created": {
+          "type": "object",
+          "properties": {
+            "digest": {
+              "$ref": "#/$defs/digest"
+            },
+            "timestamp_ms": {
+              "$ref": "#/$defs/timestamp_ms"
+            },
+            "checkpoint": {
+              "$ref": "#/$defs/checkpoint"
+            }
+          },
+          "required": [
+            "digest",
+            "timestamp_ms",
+            "checkpoint"
+          ],
+          "additionalProperties": false
+        },
+        "last_claim": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "digest": {
+                  "$ref": "#/$defs/digest"
+                },
+                "timestamp_ms": {
+                  "$ref": "#/$defs/timestamp_ms"
+                },
+                "amount": {
+                  "$ref": "#/$defs/uint"
+                }
+              },
+              "required": [
+                "digest",
+                "timestamp_ms",
+                "amount"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "vesting_id",
+        "presale_id",
+        "beneficiary",
+        "coin_type",
+        "asset",
+        "share",
+        "total",
+        "released",
+        "start_ms",
+        "cliff_ms",
+        "period_ms",
+        "periods",
+        "end_ms",
+        "closed",
+        "created",
+        "last_claim"
+      ],
+      "additionalProperties": false
+    },
+    "hard_cap": {
+      "description": "Proposed CA-G3: the sale's blast_presale::HardCap (contracts ADR 0110): from starts_after_ms into the window the sale takes Quote only up to its raise; with closes_when_filled anyone may settle it as soon as the raise is full.",
+      "type": "object",
+      "properties": {
+        "starts_after_ms": {
+          "$ref": "#/$defs/timestamp_ms"
+        },
+        "closes_when_filled": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "starts_after_ms",
+        "closes_when_filled"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/watchlist-page.schema.json",
+  "title": "Watchlist page",
+  "description": "GET /api/social/me/watchlist 200: one keyset page of the caller's starred presales, newest first; with include=follows, then the followed presales not starred, newest follow first (private, never cached).",
+  "type": "object",
+  "properties": {
+    "items": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "type": "object",
+        "properties": {
+          "presale": {
+            "$ref": "https://blast-v2.invalid/social/contracts/presale-summary.schema.json"
+          },
+          "added_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "starred": {
+            "type": "boolean"
+          },
+          "followed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "presale",
+          "added_ms",
+          "starred",
+          "followed"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "total": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "next_cursor": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        }
+      ]
+    },
+    "as_of": {
+      "$ref": "https://blast-v2.invalid/social/contracts/as-of.schema.json"
+    }
+  },
+  "required": [
+    "items",
+    "total",
+    "next_cursor",
+    "as_of"
+  ],
+  "additionalProperties": false
+}

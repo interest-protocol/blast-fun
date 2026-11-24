@@ -1,0 +1,117 @@
+[
+  {
+    "path": "fonts/Inter-Black.ttf",
+    "bytes": 419968,
+    "sha256": "6342d3ea6dc088b43867f615e807d898adf100c93edb978b8e52c5eb71a264da"
+  },
+  {
+    "path": "fonts/Inter-BlackItalic.ttf",
+    "bytes": 428036,
+    "sha256": "1737f7d5b391520e9adcc3ea8c730a0854fe6fdd9b9c93c4100c89beb215a931"
+  },
+  {
+    "path": "fonts/Inter-Bold.ttf",
+    "bytes": 420428,
+    "sha256": "288316099b1e0a47a4716d159098005eef7c0066921f34e3200393dbdb01947f"
+  },
+  {
+    "path": "fonts/Inter-BoldItalic.ttf",
+    "bytes": 425296,
+    "sha256": "948405a16cdc62701da5f4005ed068ca5f4d27061d98f7974ccfc37831d9581d"
+  },
+  {
+    "path": "fonts/Inter-ExtraBold.ttf",
+    "bytes": 421796,
+    "sha256": "e6756ad5690b77606aa62249a7b420d9902d45cae4b0048a24911fd4324b0a22"
+  },
+  {
+    "path": "fonts/Inter-ExtraBoldItalic.ttf",
+    "bytes": 428284,
+    "sha256": "31b58a00cb9e8d00cb936057285282310e81d2f834461264c543c96983af64a6"
+  },
+  {
+    "path": "fonts/Inter-Medium.ttf",
+    "bytes": 417300,
+    "sha256": "97ad806f526e41546d46365bb3a393145f75b7b1568913db74549ad8b8dba872"
+  },
+  {
+    "path": "fonts/Inter-SemiBold.ttf",
+    "bytes": 419744,
+    "sha256": "78a843fade9d4612a5567302fb595b56976eb5fcebf4fea5a5912d638bafcde3"
+  },
+  {
+    "path": "editions/8-bit.png",
+    "bytes": 1748981,
+    "sha256": "c289308020f12289b745dd3fffec1ce23bbfda38dbe130ba696bd952f6fae7e1"
+  },
+  {
+    "path": "editions/aurora.png",
+    "bytes": 1216086,
+    "sha256": "35833c32682741d926a6be2c09888644ccc8abff8afa5533b245977ebbf2104b"
+  },
+  {
+    "path": "editions/blast-launch-day.png",
+    "bytes": 3630786,
+    "sha256": "67ae8a2bb6e325af0f5082df528ef1a42fb65c9d167bb2b648f927ae1bbd5199"
+  },
+  {
+    "path": "editions/bronze.png",
+    "bytes": 1704973,
+    "sha256": "e82c56d41e20091c6e2c6f9ca722c0f26d1ea7c8207d3ad1788526a2e7290b7a"
+  },
+  {
+    "path": "editions/cosmic.png",
+    "bytes": 650750,
+    "sha256": "28ae343a131579982e9605c9a9e8a58e76dc49b5f5640834af82141ea720048d"
+  },
+  {
+    "path": "editions/countdown.png",
+    "bytes": 3649444,
+    "sha256": "82a2d5f496d38541845ce33b566a1a350d129f99252ddf2b70491aab685d9669"
+  },
+  {
+    "path": "editions/lunar.png",
+    "bytes": 392556,
+    "sha256": "7e1f2a2f1ce8c8911e1611e22d36b08a9b765616256d352ead4b4e3c9110abf6"
+  },
+  {
+    "path": "editions/manifest.png",
+    "bytes": 4382608,
+    "sha256": "7147421f2113c144d0ca0981002a6c6ccafe28bd698f352db593fa2bd3d3b9f5"
+  },
+  {
+    "path": "editions/pearl.png",
+    "bytes": 896002,
+    "sha256": "69320fe8e0195cf4ee560e6cd26ee4ab31c31f4b39a9aa66b663256260c96329"
+  },
+  {
+    "path": "editions/prism.png",
+    "bytes": 546564,
+    "sha256": "008c146afdeffe5ff8e707af1e64b92a468d0c7ec34672b2dd767ccd3244a0fd"
+  },
+  {
+    "path": "editions/quasar.png",
+    "bytes": 4479911,
+    "sha256": "791fc1add0b72d6a14d705ae4075251dea0397ba078a40f69371544f73fa3db8"
+  },
+  {
+    "path": "editions/recruit.png",
+    "bytes": 329896,
+    "sha256": "e6e974d6f462a21fd571e3f46d8e4c82591c962e48fd9127757b3ed25198a466"
+  },
+  {
+    "path": "editions/silver.png",
+    "bytes": 1878231,
+    "sha256": "6156b60fe7b02a8bcca70ab214f756b9a22ea1d23307f2d5dbf851696efc05af"
+  },
+  {
+    "path": "editions/sui.png",
+    "bytes": 20535,
+    "sha256": "23249b375a1c17d3d6528c921b6b88f24a86410aa53a9e986cae04a3923bdcad"
+  },
+  {
+    "path": "default-avatar.png",
+    "bytes": 33679,
+    "sha256": "5dcfe3f240f7c0a1266826943adb5ba45804080fb75b968d492e39a1cbee998c"
+  }
+]

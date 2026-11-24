@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/why-request.schema.json",
+  "title": "Social why request",
+  "description": "POST /api/social/items/{entry_id}/why body. Closed: exactly text, a string (the body is at most 4 KiB). The text rules (NFC, trimmed, 1 to 280 code points, one line, no link, no blocked term) answer their own 422 codes.",
+  "type": "object",
+  "properties": {
+    "text": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "text"
+  ],
+  "additionalProperties": false
+}

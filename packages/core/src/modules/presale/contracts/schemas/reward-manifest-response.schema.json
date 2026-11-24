@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/presale/contracts/reward-manifest-response.schema.json",
+  "title": "Reward manifest",
+  "description": "GET /api/presale/rewards/rounds/{round_id}/manifest 200: the SDK RewardManifest JSON plus its accounting (CL-13).",
+  "type": "object",
+  "properties": {
+    "version": {
+      "const": 2
+    },
+    "vaultId": {
+      "$ref": "defs.schema.json#/$defs/address"
+    },
+    "number": {
+      "$ref": "defs.schema.json#/$defs/uint"
+    },
+    "startCheckpoint": {
+      "$ref": "defs.schema.json#/$defs/uint"
+    },
+    "endCheckpoint": {
+      "$ref": "defs.schema.json#/$defs/uint"
+    },
+    "root": {
+      "$ref": "defs.schema.json#/$defs/hex32"
+    },
+    "manifestDigest": {
+      "$ref": "defs.schema.json#/$defs/hex32"
+    },
+    "memeAmount": {
+      "$ref": "defs.schema.json#/$defs/uint"
+    },
+    "quoteAmount": {
+      "$ref": "defs.schema.json#/$defs/uint"
+    },
+    "allocations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "index": {
+            "$ref": "defs.schema.json#/$defs/uint"
+          },
+          "beneficiary": {
+            "$ref": "defs.schema.json#/$defs/address"
+          },
+          "memeAmount": {
+            "$ref": "defs.schema.json#/$defs/uint"
+          },
+          "quoteAmount": {
+            "$ref": "defs.schema.json#/$defs/uint"
+          },
+          "proof": {
+            "$ref": "defs.schema.json#/$defs/proof"
+          }
+        },
+        "required": [
+          "index",
+          "beneficiary",
+          "memeAmount",
+          "quoteAmount",
+          "proof"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 1,
+      "maxItems": 65536
+    },
+    "accounting": {
+      "type": "object",
+      "properties": {
+        "policy_version": {
+          "$ref": "defs.schema.json#/$defs/message"
+        },
+        "exclusions": {
+          "type": "array",
+          "items": {
+            "$ref": "defs.schema.json#/$defs/address"
+          }
+        },
+        "start_checkpoint": {
+          "$ref": "defs.schema.json#/$defs/checkpoint"
+        },
+        "end_checkpoint": {
+          "$ref": "defs.schema.json#/$defs/checkpoint"
+        }
+      },
+      "required": [
+        "policy_version",
+        "exclusions",
+        "start_checkpoint",
+        "end_checkpoint"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "version",
+    "vaultId",
+    "number",
+    "startCheckpoint",
+    "endCheckpoint",
+    "root",
+    "manifestDigest",
+    "memeAmount",
+    "quoteAmount",
+    "allocations",
+    "accounting"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,19 @@
+-- Social feed T-026 with R3-27: the social worker settles commit rows of the
+-- transaction log (0084).
+--
+-- A commit is logged by the web runtime inside POST /api/social/intents, as
+-- `submitted` with its digest (key `commit:<digest>`). Nothing in the browser
+-- comes back to settle it: the commit dialog executes and is gone. The social
+-- worker's intent step does, as `blast_watcher`: when the indexer shows the
+-- transaction it marks the row `confirmed` (the account's own wallet sent it)
+-- or `failed` / `mismatch` (another wallet did), and the expiry step marks a
+-- row whose transaction never appeared in 24 hours `failed` / `expired`.
+--
+-- So the watcher needs to read and update rows, and nothing else: it never
+-- inserts one (a commit with no row was registered before 0084 and is left
+-- alone) and never deletes one. 0084's trigger still holds for this role as
+-- for every other: only `state`, `digest`, `settled_at_ms` and
+-- `failure_code` change, a settled row is final, and a digest is never
+-- replaced. No column grant: the statement names only those columns anyway,
+-- and the trigger is the rule.
+GRANT SELECT, UPDATE ON TABLE social_transactions TO blast_watcher;

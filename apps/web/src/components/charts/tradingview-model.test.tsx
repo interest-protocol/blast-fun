@@ -1,0 +1,285 @@
+import { combinedVolumes } from "./candle-data";
+import assert from "node:assert/strict";
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
+import test from "node:test";
+import { seriesChange } from "./series-change";
+import { exactChartCandle, exactChartPrice, migrationCaptionOffset, nearestPriceSeries } from "./chart-inspection-model";
+import { exactChartScale } from "./exact-chart-scale";
+import {
+  chartData,
+  chartTimestamp,
+  sparkTimeScale,
+  distinctTicks,
+  elapsedTimeScale,
+  pannedPosition,
+  pointerX,
+  trackpadGestures,
+  visibleMove,
+  wheelAction,
+  wheelPixels,
+  withAlpha,
+} from "./tradingview-model";
+import { scheduleLines } from "../vesting/schedule-series";
+
+test("a live Home price amends the tail without moving the time grid or its history", () => {
+  const base = 1_795_000_000_000;
+  const latest = base + 83_000_000;
+  const previous = sparkTimeScale(base, latest);
+  const next = sparkTimeScale(base, latest + 15_000);
+  assert.deepEqual(next.timeline, previous.timeline);
+  const prices = (scale: typeof next, at: number, value: number) => chartData([
+    { time: scale.timestamp(base), value: 0.5 },
+    { time: scale.timestamp(base + 12_000_000), value: 0.7 },
+    { time: scale.timestamp(at), value },
+  ]);
+  assert.equal(seriesChange(prices(previous, latest, 1), prices(next, latest + 15_000, 1.01)), "tail");
+});
+
+test("canvas scales retain tiny prices and distinguish large, tightly spaced prices", () => {
+  for (const values of [
+    ["0.00000000000000000001", "0.00000000000000000002"],
+    ["100000000000000000000.0001", "100000000000000000000.0002"],
+    ["0", "123.45"],
+  ]) {
+    const scale = exactChartScale(values);
+    assert.equal(scale.coordinate(values[0]!), 0);
+    assert.equal(scale.coordinate(values[1]!), 100);
+    assert.ok(scale.format(0).length <= 12);
+    assert.ok(scale.format(100).length <= 12);
+  }
+  const flat = exactChartScale(["0", "0"]);
+  assert.ok(Number.isFinite(flat.coordinate("0")));
+  assert.equal(flat.format(flat.coordinate("0")), "0");
+});
+
+test("compact coin ticks round to the chosen precision and carry across a digit", () => {
+  const tiny = exactChartScale(["0.000067345", "0.000067389"]);
+  assert.equal(tiny.format(0, 3, true), "0.0₄673");
+  assert.equal(tiny.format(100, 3, true), "0.0₄674");
+  const carry = exactChartScale(["0.009994", "0.009998"]);
+  assert.equal(carry.format(100, 3, true), "0.01");
+});
+
+test("inspection reports a held close only inside a flat line on the same source", () => {
+  const curve = { times: [10, 30], values: new Map([[10, "1.000000000005"], [30, "1.000000000005"]]) };
+  const venue = { times: [30, 50], values: new Map([[30, "5"], [50, "6"]]) };
+  assert.equal(exactChartPrice([curve, venue], 20, -1, true), "1.000000000005");
+  assert.equal(exactChartPrice([curve, venue], 20, -1, false), undefined);
+  assert.equal(exactChartPrice([curve, venue], 40, -1, true), undefined);
+  assert.equal(exactChartPrice([curve, venue], 30, -1, false), undefined);
+  assert.equal(exactChartPrice([curve, venue], 30, 0, false), "1.000000000005");
+  assert.equal(exactChartPrice([curve, venue], 30, 1, false), "5");
+});
+
+test("inspection takes OHLC and volume from the selected pool even when their closes match", () => {
+  const curve = { open: "1", high: "3", low: "1", close: "2", volume: "0.003" };
+  const venue = { open: "2", high: "4", low: "0.9", close: "2", volume: "93.1" };
+  const series = [curve, venue].map((candle) => ({
+    values: new Map([[10, candle.close]]), times: [10], candles: new Map([[10, candle]]),
+  }));
+  assert.equal(exactChartCandle(series, 10, 0), curve);
+  assert.equal(exactChartCandle(series, 10, 1), venue);
+  assert.equal(exactChartCandle(series, 10, -1), undefined);
+  assert.equal(exactChartCandle(series.slice(1), 10, -1), venue);
+  assert.equal(exactChartCandle(series, 11, 0), undefined);
+});
+
+test("a graduation caption stays within a narrow plot as its line pans", () => {
+  for (const x of [2, 50, 80, 120, 168]) {
+    const left = x + migrationCaptionOffset(x, 170, 124);
+    assert.ok(left >= 4 && left + 124 <= 166);
+  }
+});
+
+test("a tap on a candle wick takes priority over another pool with a closer close", () => {
+  const curve = { close: 10, top: 10, bottom: 50 };
+  const venue = { close: 53, top: 52, bottom: 55 };
+  assert.equal(nearestPriceSeries([curve, venue], 50), 0);
+  assert.equal(nearestPriceSeries([curve, venue], 53), 1);
+  assert.equal(nearestPriceSeries([curve, curve], 50), -1);
+});
+
+test("timestamp sorting keeps the last observation without inventing missing samples", () => {
+  assert.deepEqual(
+    chartData([
+      { time: chartTimestamp(3000), value: 3 },
+      { time: chartTimestamp(1000), value: 1 },
+      { time: chartTimestamp(1000), value: 2 },
+    ]),
+    [
+      { time: chartTimestamp(1000), value: 2 },
+      { time: chartTimestamp(3000), value: 3 },
+    ],
+  );
+});
+
+test("continuous cliffs split at the exact release, while steps retain the value after each release", () => {
+  const points = [
+    { x: 0, y: 0 },
+    { x: 0.5, y: 0 },
+    { x: 0.5, y: 0.3 },
+    { x: 1, y: 1 },
+  ];
+  assert.deepEqual(scheduleLines(points, false), [
+    points.slice(0, 2),
+    points.slice(2),
+  ]);
+  assert.deepEqual(scheduleLines(points, true), [
+    [points[0], points[2], points[3]],
+  ]);
+  assert.deepEqual(
+    scheduleLines(
+      [
+        { x: 0, y: 0 },
+        { x: 0, y: 0 },
+        { x: 1, y: 1 },
+      ],
+      false,
+    ),
+    [
+      [
+        { x: 0, y: 0 },
+        { x: 1, y: 1 },
+      ],
+    ],
+  );
+});
+
+test("every production chart shares one library loader and creation point", () => {
+  const root = new URL("../", import.meta.url);
+  const files: string[] = [];
+  function visit(path: string) {
+    for (const entry of readdirSync(path, { withFileTypes: true })) {
+      const next = join(path, entry.name);
+      if (entry.isDirectory()) visit(next);
+      else if (/\.tsx?$/.test(next) && !/\.test\./.test(next)) files.push(next);
+    }
+  }
+  visit(root.pathname);
+  const engines = files.filter((path) =>
+    /createChart\(/.test(readFileSync(path, "utf8")),
+  );
+  assert.equal(engines.length, 1);
+  assert.ok(engines[0]!.endsWith("/charts/TradingViewChart.tsx"));
+  for (const path of files)
+    assert.doesNotMatch(
+      readFileSync(path, "utf8"),
+      /(?:from|import\()\s*["'](?:recharts|liveline)["']/,
+    );
+});
+
+test("irregular time spacing is proportional, with drawing error bounded below a pixel", () => {
+  for (const input of [
+    [0, 400, 1000],
+    [0, 60_000, 86_400_000],
+    [0, 1, 86_400_000],
+  ]) {
+    const scale = elapsedTimeScale(input);
+    assert.ok(scale.timeline.length <= 4097);
+    for (const at of input) {
+      const actual = (scale.snap(at) - input[0]!) / (input.at(-1)! - input[0]!);
+      const expected = (at - input[0]!) / (input.at(-1)! - input[0]!);
+      assert.ok(Math.abs(actual - expected) * 1414 < 0.2);
+      assert.ok(scale.timeline.includes(scale.snap(at)));
+    }
+  }
+});
+
+test("same-bucket pool volumes are summed exactly once without combining their OHLC", () => {
+  assert.deepEqual(
+    combinedVolumes([
+      {
+        at: 60_000,
+        volume: "100000000000000000000.000000000000000001",
+        down: true,
+      },
+      { at: 60_000, volume: "0.000000000000000002", down: false },
+      { at: 180_000, volume: "7", down: true },
+    ]),
+    [
+      {
+        at: 60_000,
+        volume: "100000000000000000000.000000000000000003",
+        combined: true,
+        color: "var(--muted)",
+      },
+      { at: 180_000, volume: "7", combined: false, color: "var(--down)" },
+    ],
+  );
+});
+
+
+test("historical TSUI tick and last-value labels leave room for the plot", () => {
+  const values = ["0.000199795432711782189195387208639779", "0.00022123456789123456789123456789"];
+  const scale = exactChartScale(values);
+  for (const coordinate of [-10, 0, 25, 50, 75, 100, 110]) {
+    const label = scale.format(coordinate);
+    assert.ok(label.length <= 12, `axis label is too long: ${label}`);
+    assert.ok(Number(label) > 0);
+  }
+  assert.notEqual(scale.format(0), scale.format(100));
+});
+
+
+test("adaptive axis precision distinguishes narrow moves within the compact label budget", () => {
+  for (const values of [["1.000001", "1.000002"], ["1.000000001", "1.000000002"], ["0.0001997954", "0.0001997955"], ["1234.0001", "1234.0002"]]) {
+    const scale = exactChartScale(values);
+    assert.notEqual(scale.format(0), scale.format(100));
+    assert.ok(scale.format(0).length <= 12);
+    assert.ok(scale.format(100).length <= 12);
+  }
+});
+
+test("a price line takes the move across the visible range, over every segment together", () => {
+  const rising = [{ time: 1, value: 1 }, { time: 2, value: 3 }, { time: 3, value: 2 }, { time: 4, value: 0.5 }];
+  const all = { from: -Infinity, to: Infinity };
+  assert.equal(visibleMove([rising], all), "down");
+  assert.equal(visibleMove([rising], { from: 1, to: 3 }), "up");
+  assert.equal(visibleMove([rising], { from: 2, to: 4 }), "down");
+  assert.equal(visibleMove([rising], { from: 1.5, to: 2.5 }), null, "one value in view has no move");
+  assert.equal(visibleMove([[{ time: 1, value: 2 }], [{ time: 1.5 }, { time: 5, value: 2 }]], all), "up", "flat is up, whitespace skipped");
+  assert.equal(visibleMove([[{ time: 1, value: 5 }], [{ time: 9, value: 4 }]], all), "down");
+  assert.equal(visibleMove([], all), null);
+});
+
+test("an area fades from its line colour", () => {
+  assert.equal(withAlpha("#0f7f48", 0.2), "rgba(15, 127, 72, 0.2)");
+  assert.equal(withAlpha("#fff", 0), "rgba(255, 255, 255, 0)");
+  assert.equal(withAlpha("rgb(63, 211, 139)", 0.2), "rgba(63, 211, 139, 0.2)");
+  assert.equal(withAlpha("oklch(0.7 0.1 150)", 0.2), "rgba(0, 0, 0, 0)");
+});
+
+test("zoomed-in axis ticks gain digits until no two labels read the same (audit F40)", () => {
+  const format = (value: number, significant = 3) => value.toPrecision(significant);
+  assert.deepEqual(distinctTicks([1.2341, 1.2342, 1.2343], format), ["1.23410", "1.23420", "1.23430"]);
+  assert.deepEqual(distinctTicks([1, 2], format), ["1.00", "2.00"]);
+  // A formatter that cannot say more keeps its own labels.
+  assert.deepEqual(distinctTicks([1.01, 1.02], () => "1"), ["1", "1"]);
+});
+
+test("a plain vertical wheel scrolls the page, a sideways swipe pans the chart, Ctrl/⌘ zooms (audit F41)", () => {
+  const wheel = (deltaX: number, deltaY: number, keys: Partial<{ ctrlKey: boolean; metaKey: boolean }> = {}) =>
+    wheelAction({ ctrlKey: false, metaKey: false, deltaX, deltaY, ...keys });
+  assert.equal(wheel(0, 120), "page");
+  assert.equal(wheel(4, 120), "page");
+  assert.equal(wheel(-60, 8), "pan");
+  assert.equal(wheel(60, 0), "pan");
+  assert.equal(wheel(60, 0, { ctrlKey: true }), "zoom");
+  assert.equal(wheel(0, -120, { metaKey: true }), "zoom");
+  // Swiping right by two bar widths shows two later bars; lines and pages scale to pixels.
+  assert.equal(pannedPosition(3, 20, 10), 5);
+  assert.equal(pannedPosition(3, -20, 10), 1);
+  assert.equal(wheelPixels(3, 1), 48);
+  assert.equal(wheelPixels(1, 2), 800);
+  assert.equal(wheelPixels(7, 0), 7);
+});
+
+test("Safari gesture events zoom only for a desktop trackpad, and a missing pointer falls back to the centre (audit F41)", () => {
+  assert.equal(trackpadGestures({ GestureEvent: class {} }, { maxTouchPoints: 0 }), true, "Mac Safari trackpad pinch");
+  assert.equal(trackpadGestures({ GestureEvent: class {} }, { maxTouchPoints: 5 }), false, "iOS: the library already zooms a touch pinch");
+  assert.equal(trackpadGestures({}, { maxTouchPoints: 0 }), false);
+  assert.equal(pointerX(150, 100), 50);
+  assert.equal(pointerX(undefined as unknown as number, 100), null);
+  assert.equal(pointerX(Number.NaN, 100), null);
+});

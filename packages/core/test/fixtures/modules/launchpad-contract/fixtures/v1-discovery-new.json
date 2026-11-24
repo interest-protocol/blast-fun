@@ -1,0 +1,365 @@
+{
+  "provenance": {
+    "network": "localnet",
+    "deployment_fingerprint": "5d2f2a4be1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c",
+    "checkpoint": 124,
+    "timestamp_ms": 1790294757750,
+    "observed_ms": 1790823983229,
+    "lag_ms": 529225479
+  },
+  "pools": [
+    {
+      "pool_key": "blast_curve:0x7a79ac93eb3b3c2a93828a0a85367d15557e4d0b74bab119debb654c803f00fa",
+      "venue": "blast_curve",
+      "pool_id": "0x7a79ac93eb3b3c2a93828a0a85367d15557e4d0b74bab119debb654c803f00fa",
+      "coin": "0xc87fedd65e88c8517369ab363f8104caa51c711b323307b60ae2f447165ccd04::meme::MEME",
+      "metadata": {
+        "name": "TOAD fixture",
+        "symbol": "TOAD",
+        "description": "Fixture coin b",
+        "icon_url": "https://blast.fun/icons/toad.png"
+      },
+      "quote": "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI",
+      "lifecycle": "migrated",
+      "created_cursor": "10:2:0:0",
+      "created_at_ms": 1790289083000,
+      "launch": {
+        "venue": "0xd617711ff37d35a2616a1e6aaca58f245fefdf9d1fc40e0c9b2ed208e37b0f70::mock_adapter::Venue",
+        "lp_fee_split": {
+          "routes": [
+            {
+              "destination": {
+                "kind": "owner"
+              },
+              "bps": "5000"
+            },
+            {
+              "destination": {
+                "kind": "auto_lp"
+              },
+              "bps": "2000"
+            },
+            {
+              "destination": {
+                "kind": "holder_rewards"
+              },
+              "bps": "1000"
+            },
+            {
+              "destination": {
+                "kind": "burn"
+              },
+              "bps": "1000"
+            },
+            {
+              "destination": {
+                "kind": "address",
+                "address": "0x0000000000000000000000000000000000000000000000000000000000007ea3"
+              },
+              "bps": "1000"
+            }
+          ]
+        },
+        "allocation_plan": {
+          "curve_meme_bps": "7000",
+          "lp_meme_bps": "1900",
+          "lp_quote_bps": "8900",
+          "protocol_meme_bps": "100",
+          "protocol_quote_bps": "100",
+          "recipients": [
+            {
+              "destination": "0x0000000000000000000000000000000000000000000000000000000000007ea3",
+              "meme_bps": "1000",
+              "quote_bps": "1000"
+            }
+          ]
+        },
+        "opening_round_ms": "60000",
+        "creation_fee": "0",
+        "partner_id": null,
+        "expected_vault_id": "0xfb10e95ee2c670676851418f5a72945c0443a28994b4c1d4644741a5b22c574a",
+        "pool_tier": null
+      },
+      "public_start_ms": "1790289083000",
+      "partner": null,
+      "migration": {
+        "cursor": "122:2:2:0",
+        "timestamp_ms": 1790294734750,
+        "meme": "190000000000000",
+        "quote": "26700000000",
+        "disposed_meme": "175000000065659",
+        "total_supply_after": "1000000000000000",
+        "pool_key": null,
+        "allocations": [
+          {
+            "cursor": "122:2:0:0",
+            "destination": "0x0000000000000000000000000000000000000000000000000000000000007ea3",
+            "meme": "100000000000000",
+            "quote": "3000000000"
+          }
+        ]
+      },
+      "opening_round": {
+        "duration_ms": "60000",
+        "starts_at_ms": "1790289083000",
+        "ends_at_ms": "1790289143000",
+        "total_committed_quote": "3500000000",
+        "bidder_count": 3,
+        "settlement": {
+          "checkpoint": 12,
+          "timestamp_ms": 1790289148000,
+          "digest": "HgbhsaMwbfuiTUWNTtvW2HaJFU4aequJRHza1475MtLQ"
+        },
+        "delivered_count": 3,
+        "undelivered_count": 0,
+        "state": "settled"
+      },
+      "price": "0.00022857142848566987758319658004437",
+      "market_cap": "188571428485",
+      "inputs": {
+        "virtual_quote": "10000000000",
+        "meme_reserve": "175000000065659",
+        "quote_reserve": "30000000000",
+        "graduation_target": "30000000000",
+        "sqrt_price_x64": null,
+        "meme_is_coin_a": null,
+        "currency_supply": "1000000000000000",
+        "pending_burn_total": "0",
+        "balance_0x0": "175000000065659",
+        "meme_decimals": "6",
+        "quote_decimals": "9"
+      },
+      "supply": "824999999934341",
+      "windows": {
+        "5m": {
+          "volume_quote": "22572552611",
+          "volume_usd": "76.71846318663625",
+          "buys": 2,
+          "sells": 1,
+          "trades": 3,
+          "net_quote_flow": "20051821457",
+          "buyers": 2,
+          "sellers": 1
+        },
+        "1h": {
+          "volume_quote": "38168324149",
+          "volume_usd": "129.72459170141375",
+          "buys": 28,
+          "sells": 7,
+          "trades": 35,
+          "net_quote_flow": "22856049919",
+          "buyers": 3,
+          "sellers": 3
+        },
+        "6h": {
+          "volume_quote": "53092311539",
+          "volume_usd": "181.1626078799392",
+          "buys": 51,
+          "sells": 12,
+          "trades": 63,
+          "net_quote_flow": "27032062529",
+          "buyers": 3,
+          "sellers": 3
+        },
+        "24h": {
+          "volume_quote": "53092311539",
+          "volume_usd": "181.1626078799392",
+          "buys": 51,
+          "sells": 12,
+          "trades": 63,
+          "net_quote_flow": "27032062529",
+          "buyers": 3,
+          "sellers": 3
+        },
+        "all": {
+          "volume_quote": "53092311539",
+          "volume_usd": "181.1626078799392",
+          "buys": 51,
+          "sells": 12,
+          "trades": 63,
+          "net_quote_flow": "27032062529",
+          "buyers": 3,
+          "sellers": 3
+        }
+      },
+      "holders": 6,
+      "last_trade_cursor": "120:2:0:0",
+      "quote_usd": {
+        "price": "339875000",
+        "expo": -8,
+        "publish_time": 1790290594,
+        "age_ms": 4163750
+      }
+    },
+    {
+      "pool_key": "blast_curve:0x26f6bc569182e7ab9db81fab58a06e784e7e0d23dc1675fef444f4bf8ff75fb8",
+      "venue": "blast_curve",
+      "pool_id": "0x26f6bc569182e7ab9db81fab58a06e784e7e0d23dc1675fef444f4bf8ff75fb8",
+      "coin": "0x27edca4d96f367e697f9aaaea7d38328a60970c25d0c7f3927848051b082295f::meme::MEME",
+      "metadata": {
+        "name": "Froggy",
+        "symbol": "FROG",
+        "description": "The frog that leapt the curve",
+        "icon_url": "https://blast.fun/icons/froggy.png"
+      },
+      "quote": "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI",
+      "lifecycle": "migrated",
+      "created_cursor": "9:2:0:0",
+      "created_at_ms": 1790289063000,
+      "launch": {
+        "venue": "0xd617711ff37d35a2616a1e6aaca58f245fefdf9d1fc40e0c9b2ed208e37b0f70::mock_adapter::Venue",
+        "lp_fee_split": {
+          "routes": [
+            {
+              "destination": {
+                "kind": "owner"
+              },
+              "bps": "5000"
+            },
+            {
+              "destination": {
+                "kind": "auto_lp"
+              },
+              "bps": "2000"
+            },
+            {
+              "destination": {
+                "kind": "holder_rewards"
+              },
+              "bps": "1000"
+            },
+            {
+              "destination": {
+                "kind": "burn"
+              },
+              "bps": "1000"
+            },
+            {
+              "destination": {
+                "kind": "address",
+                "address": "0x0000000000000000000000000000000000000000000000000000000000007ea3"
+              },
+              "bps": "1000"
+            }
+          ]
+        },
+        "allocation_plan": {
+          "curve_meme_bps": "7000",
+          "lp_meme_bps": "1900",
+          "lp_quote_bps": "8900",
+          "protocol_meme_bps": "100",
+          "protocol_quote_bps": "100",
+          "recipients": [
+            {
+              "destination": "0x0000000000000000000000000000000000000000000000000000000000007ea3",
+              "meme_bps": "1000",
+              "quote_bps": "1000"
+            }
+          ]
+        },
+        "opening_round_ms": "0",
+        "creation_fee": "0",
+        "partner_id": null,
+        "expected_vault_id": "0x9a7a38147c24a97826e76c28058fb4665bf9706355f30cd4bc0ea63bc6ae2095",
+        "pool_tier": null
+      },
+      "public_start_ms": "1790289063000",
+      "partner": null,
+      "migration": {
+        "cursor": "121:2:2:0",
+        "timestamp_ms": 1790294704750,
+        "meme": "190000000000000000",
+        "quote": "26700000000",
+        "disposed_meme": "181932124620978033",
+        "total_supply_after": "803135440191984184",
+        "pool_key": null,
+        "allocations": [
+          {
+            "cursor": "121:2:0:0",
+            "destination": "0x0000000000000000000000000000000000000000000000000000000000007ea3",
+            "meme": "100000000000000000",
+            "quote": "3000000000"
+          }
+        ]
+      },
+      "opening_round": null,
+      "price": "0.000000228571428489643497825181859763",
+      "market_cap": "182753759412",
+      "inputs": {
+        "virtual_quote": "10000000000",
+        "meme_reserve": "175000000062616697",
+        "quote_reserve": "30000000000",
+        "graduation_target": "30000000000",
+        "sqrt_price_x64": null,
+        "meme_is_coin_a": null,
+        "currency_supply": "803135440191984184",
+        "pending_burn_total": "0",
+        "balance_0x0": "3587742475154727",
+        "meme_decimals": "9",
+        "quote_decimals": "9"
+      },
+      "supply": "799547697716829457",
+      "windows": {
+        "5m": {
+          "volume_quote": "21282820237",
+          "volume_usd": "72.33498528050375",
+          "buys": 2,
+          "sells": 0,
+          "trades": 2,
+          "net_quote_flow": "21282820237",
+          "buyers": 2,
+          "sellers": 0
+        },
+        "1h": {
+          "volume_quote": "37626525528",
+          "volume_usd": "127.88315363829",
+          "buys": 28,
+          "sells": 7,
+          "trades": 35,
+          "net_quote_flow": "23139114946",
+          "buyers": 3,
+          "sellers": 3
+        },
+        "6h": {
+          "volume_quote": "49271972345",
+          "volume_usd": "168.0097105952557",
+          "buys": 53,
+          "sells": 11,
+          "trades": 64,
+          "net_quote_flow": "30493668129",
+          "buyers": 4,
+          "sellers": 3
+        },
+        "24h": {
+          "volume_quote": "49271972345",
+          "volume_usd": "168.0097105952557",
+          "buys": 53,
+          "sells": 11,
+          "trades": 64,
+          "net_quote_flow": "30493668129",
+          "buyers": 4,
+          "sellers": 3
+        },
+        "all": {
+          "volume_quote": "49271972345",
+          "volume_usd": "168.0097105952557",
+          "buys": 53,
+          "sells": 11,
+          "trades": 64,
+          "net_quote_flow": "30493668129",
+          "buyers": 4,
+          "sellers": 3
+        }
+      },
+      "holders": 6,
+      "last_trade_cursor": "119:2:0:0",
+      "quote_usd": {
+        "price": "339875000",
+        "expo": -8,
+        "publish_time": 1790290594,
+        "age_ms": 4163750
+      }
+    }
+  ],
+  "next_cursor": null
+}

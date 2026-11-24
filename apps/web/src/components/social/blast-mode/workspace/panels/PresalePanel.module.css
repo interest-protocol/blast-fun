@@ -1,0 +1,269 @@
+/* Presale panel: funding hero, tabbed body, and one commit tray. Tokens come from the workspace frame.
+   Rhythm: 20px between sections, 12px between related groups, 8px inside a group, 4px between rows.
+   Controls are 32px (small ones 26px) on fine pointers and at least 44px on coarse ones. */
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  color: var(--ink);
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+.panel :where(h3, h4, p), .feesBody :where(p) { margin: 0; }
+.panel :is(button, input, select, textarea) { scroll-margin-block: 6rem; }
+/* The registered display-face role for a stand-alone panel title (display-face.test.ts). */
+.header h2 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 1.0625rem;
+  line-height: 1.2;
+}
+
+/* Funding hero: the ring, then the raised amount, its target and backers beside it. */
+.hero { position: relative; display: flex; align-items: center; gap: 1.25rem; flex: none; min-width: 0; }
+.heroRing { display: flex; flex: none; }
+.ringPct { color: var(--ink); font-size: 1.0625rem; font-weight: 600; letter-spacing: -.02em; line-height: 1.25rem; font-variant-numeric: tabular-nums; }
+.ringWord { color: var(--muted); font-size: 0.6563rem; font-weight: 500; line-height: 0.8125rem; }
+.heroText { display: flex; flex: 1 1 auto; flex-direction: column; gap: 0.5rem; min-width: 0; }
+.raise { display: flex; flex-direction: column; gap: 0.25rem; min-width: 0; }
+.raiseKicker { display: none; color: var(--muted); font-size: 0.75rem; line-height: 1rem; }
+.raiseFigure { display: flex; align-items: baseline; min-width: 0; color: var(--ink); }
+.raiseFigure :global(button) { padding: 0; }
+.raiseUnit { margin-left: 0.125rem; color: var(--muted); font-size: 0.9375rem; font-weight: 500; }
+/* The coin mark stays before "raised of …", on its first line, never on a line of its own; the text wraps rather than clipping. */
+.raiseOf { display: flex; flex-wrap: nowrap; align-items: flex-start; gap: 0.25rem; min-width: 0; color: var(--muted); font-size: 0.75rem; line-height: 1.125rem; font-variant-numeric: tabular-nums; }
+.raiseOf > :global(span[aria-hidden]) { flex: none; }
+.raiseText { min-width: 0; overflow-wrap: anywhere; }
+.raiseOf b { color: var(--ink-2); font-weight: 500; }
+.raiseOf b :global(button) { padding: 0; }
+.raiseVerb { display: inline; }
+.backers { display: flex; align-items: center; gap: 0.5rem; min-width: 0; color: var(--muted); font-size: 0.75rem; line-height: 1.125rem; }
+.backers > span:not([aria-hidden]) { min-width: 0; }
+.backers b { color: var(--ink); font-weight: 500; font-variant-numeric: tabular-nums; }
+
+/* Inline values in the hero and sale line read as text: the app-wide 2.8rem touch minimum on buttons would stretch these lines. */
+:is(.hero, .heroCompact, .saleLine) button { min-width: 0; min-height: 0; }
+
+/* List tabs: the same facts on one ~32px line, so the list keeps the card's height; a narrow card wraps it instead of clipping. */
+.heroCompact { display: flex; align-items: center; gap: 0.5rem; flex: none; min-width: 0; min-height: 2rem; }
+.heroCompact > :first-child { flex: none; }
+.compactLine { display: flex; flex: 1 1 auto; flex-wrap: wrap; align-items: center; gap: 0.125rem 0.5rem; min-width: 0; color: var(--muted); font-size: 0.75rem; line-height: 1.125rem; font-variant-numeric: tabular-nums; }
+.compactRaise { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.25rem; min-width: 0; }
+.compactRaise > :global(span[aria-hidden]) { flex: none; }
+.compactRaise b, .compactCount b { color: var(--ink-2); font-weight: 500; }
+.compactRaise :global(button) { padding: 0; }
+b.compactFigure { color: var(--ink); font-size: 0.9375rem; font-weight: 600; letter-spacing: -.01em; }
+.compactBackers { display: inline-flex; flex: 1 1 auto; align-items: center; gap: 0.375rem; min-width: 0; }
+.compactCount { min-width: 0; }
+
+/* Tab body: the only scrolling region. */
+.body {
+  flex: 1 1 auto;
+  min-height: max(48px, 3rem);
+  overflow: auto;
+  overflow-wrap: anywhere;
+  scrollbar-width: thin;
+  border-radius: var(--r-inner);
+}
+
+/* Sale tab: the price and the sale-page link on one line, timing and venue on the next. Two lines fit the body's 48px minimum, so the tab never scrolls. */
+.saleLine { display: grid; gap: 0.125rem; color: var(--muted); font-size: 0.7813rem; line-height: 1.25rem; font-variant-numeric: tabular-nums; }
+.saleLine > p > span { white-space: nowrap; }
+.saleLine :global(button) { padding: 0; }
+.dot { color: var(--faint); }
+
+.priceLine { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0 0.75rem; }
+/* One quiet link to the full sale page (every other term lives there). */
+a.salePage { display: inline-flex; align-items: center; gap: 0.125rem; color: var(--ink-2); font-weight: 500; white-space: nowrap; text-decoration: none; }
+a.salePage svg { width: 0.875rem; height: 0.875rem; color: var(--muted); }
+@media (hover: hover) and (pointer: fine) {
+  a.salePage:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 0.1875rem; }
+}
+a.salePage:focus-visible { outline: 0.125rem solid var(--workspace-focus); outline-offset: 0.125rem; border-radius: var(--r-inner); }
+
+/* Exact fact rows (commit Details and the confirmation). */
+.facts { display: grid; gap: 0.25rem; margin: 0; font-size: 0.8125rem; font-variant-numeric: tabular-nums; }
+.facts > div { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; min-height: 1.5rem; padding: 0.125rem 0; }
+.facts dt { flex: none; max-width: 50%; color: var(--muted); font-size: 0.75rem; }
+.facts dd { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 0.25rem; min-width: 0; margin: 0; color: var(--ink); font-weight: 500; text-align: right; overflow-wrap: anywhere; }
+.facts dd :global(button) { padding: 0; }
+
+/* Backers: one row per person, no captions; the list's scope is its accessible description. */
+.people { display: grid; gap: 0.25rem; margin: 0; padding: 0; list-style: none; }
+.person { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 0.75rem; min-height: max(48px, 3rem); padding: 0.25rem 0; }
+.personAmount { display: flex; flex-direction: column; align-items: flex-end; color: var(--ink); font-size: 0.8125rem; font-weight: 500; line-height: 1.125rem; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.personAmount small { color: var(--muted); font-size: 0.7188rem; font-weight: 500; line-height: 1rem; }
+.personAmount :global(button) { padding: 0; }
+.note { color: var(--muted); font-size: 0.75rem; line-height: 1.4; }
+.warning { margin-bottom: 0.5rem; padding: 0.5rem 0.75rem; border-radius: var(--r-sm); background: var(--workspace-inset); color: var(--ink-2); font-size: 0.75rem; }
+
+/* Your position once claims or refunds are in play. */
+.position { display: grid; gap: 0.5rem; flex: none; padding: 0.75rem; border-radius: var(--r-sm); background: var(--raised); font-size: 0.7813rem; }
+.position :where(p) { color: var(--ink-2); }
+.positionHead { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.25rem 0.5rem; }
+.positionHead h3 { font-size: 0.8125rem; font-weight: 600; }
+.positionHead > span { display: inline-flex; align-items: center; gap: 0.3125rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.positionHead b { color: var(--ink); font-weight: 500; }
+.positionHead b :global(button) { padding: 0; }
+.positionTiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; margin: 0; }
+.positionTiles > div { min-width: 0; padding: 0.625rem 0.75rem; border-radius: var(--r-sm); background: var(--card); }
+.positionTiles dt { color: var(--muted); font-size: 0.6875rem; font-weight: 500; line-height: 0.875rem; }
+.positionTiles dd { display: flex; align-items: center; flex-wrap: wrap; gap: 0.25rem; margin: 0.25rem 0 0; font-size: 0.8125rem; font-weight: 500; font-variant-numeric: tabular-nums; }
+.positionTiles dd :global(button) { padding: 0; }
+.positionAction { justify-self: start; min-height: 2rem; }
+/* Only Commit is a solid action; claims and links here are soft pills. */
+.position :global(.btn.btn-primary) { justify-self: start; width: auto; height: 2rem; min-height: 2rem; padding: 0 0.875rem; border-radius: var(--r-button); font-size: 0.8125rem; font-weight: 600; }
+.position :global(.btn.btn-primary):not(:disabled) { background: var(--workspace-accent-soft); color: var(--workspace-accent-text); box-shadow: none; }
+@media (hover: hover) and (pointer: fine) {
+  .position :global(.btn.btn-primary):not(:disabled,[aria-disabled="true"],[aria-busy="true"]):hover { background: var(--workspace-accent-line); color: var(--workspace-accent-text); }
+}
+
+/* Commit controls, directly on the card: amount and payment coin, a full-width Commit, then one muted line with the expected allocation. */
+.commit { display: flex; flex-direction: column; gap: 0.5rem; flex: none; }
+.trayRow { display:grid; grid-template-columns:minmax(0,1fr); gap:0.5rem; min-width:0; }
+.paymentControls { display:flex; align-items:center; justify-content:space-between; gap:0.5rem; min-width:0; }
+.amountField {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 0;
+  height: 2rem;
+  padding: 0 0.625rem;
+  border-radius: var(--r-button);
+  background: var(--control-field);
+}
+.amountField[data-invalid] { box-shadow: inset 0 0 0 1px var(--down); }
+.currency { flex: none; color: var(--muted); font-size: 1rem; font-weight: 500; }
+.commit .amountField input {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: -.01em;
+  font-variant-numeric: tabular-nums;
+}
+/* Long amounts step the type down; balance and payment controls have their own row. */
+.commit .amountField[data-length="mid"] :is(input, .currency) { font-size: 0.875rem; }
+.commit .amountField[data-length="long"] :is(input, .currency) { font-size: 0.75rem; }
+.commit .amountField input::placeholder { color: var(--faint); }
+.max {
+  flex: none;
+}
+/* The shared controls own Max geometry; Details keeps its specialized hit area. */
+.max, .more { min-width: 0; min-height: 0; }
+@media (hover: hover) and (pointer: fine) {
+}
+.pay { display: flex; flex: 0 1 auto; min-width: 0; }
+/* The shared picker caps itself at 70% of its parent; here the parent is sized by the picker, so that cap squeezed the coin label to nothing. Fill the row instead; a long symbol ellipsizes. */
+.commit .pay > button { max-width: 100%; }
+.commit .cta { width: 100%; height: 2rem; min-height: 2rem; padding: 0 0.875rem; border-radius: var(--r-button); font-size: 0.8438rem; font-weight: 600; white-space: nowrap; }
+.meta { display: flex; align-items: center; flex-wrap: wrap; gap: 0.25rem 0.75rem; min-width: 0; padding: 0 0.125rem; color: var(--muted); font-size: 0.75rem; line-height: 1.25rem; font-variant-numeric: tabular-nums; }
+.meta > span { display: inline-flex; align-items: center; gap: 0.25rem; min-width: 0; }
+.meta b { color: var(--ink-2); font-weight: 500; }
+.meta b :global(button) { padding: 0; }
+/* Details: a quiet info icon at the end of the meta line (its name and tooltip say "Commit details"). */
+.more {
+  display: inline-grid;
+  place-items: center;
+  width: 1.375rem;
+  height: 1.25rem;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-inner);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.more svg { width: 1rem; height: 1rem; }
+.more[aria-expanded="true"] { background: var(--workspace-inset); color: var(--ink); }
+@media (hover: hover) and (pointer: fine) {
+  .more:hover { background: var(--workspace-press); color: var(--ink); }
+}
+.notices { display: grid; gap: 0.25rem; padding: 0 0.125rem; color: var(--ink-2); font-size: 0.75rem; line-height: 1.4; }
+.notices:empty { display: none; }
+.notices [role="alert"] { color: var(--down); }
+.notices button { margin-left: 0.25rem; }
+.fees { display: block; }
+.feesBody { display: grid; gap: 0.75rem; padding: 0.25rem 0.125rem 0.125rem; }
+.why { display: grid; gap: 0.5rem; color: var(--muted); font-size: 0.75rem; }
+.why em { color: var(--faint); font-style: normal; }
+.why textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 4rem;
+  padding: 0.5rem 0.625rem;
+  border: 0;
+  border-radius: var(--r-button);
+  background: var(--field);
+  box-shadow: inset 0 0 0 1px var(--hair);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.8438rem;
+  resize: vertical;
+}
+
+/* Narrow panels: a shorter target line, and no facepile in the compact hero. */
+@container workspace-panel (max-width: 420px) {
+  .raiseVerb { display: none; }
+  .compactBackers > :global(span[aria-hidden]:not(:first-child)) { display: none; }
+}
+
+/* Phones: the ring holds the raised amount and the sale line centres under it. */
+@media (max-width:1099px) {
+  @container workspace-panel (max-width: 520px) {
+    .hero { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: "ring" "backers"; justify-items: center; row-gap: 0.75rem; }
+    .heroRing { grid-area: ring; }
+    .heroRing svg { width: 10.5rem; height: 10.5rem; }
+    /* About 8px on screen: the ring's 72-unit drawing is scaled up 2.33×. */
+    .heroRing circle { stroke-width: 0.2125rem; }
+    .heroText { display: contents; }
+    .ringPct, .ringWord, .raiseVerb { display: none; }
+    .raise { grid-area: ring; align-self: center; justify-self: center; align-items: center; gap: 0.25rem; max-width: 8.25rem; text-align: center; }
+    .raiseKicker { display: block; }
+    .raiseFigure { justify-content: center; }
+    .raiseFigure :global(.num) { font-size: 1.75rem; line-height: 2rem; letter-spacing: -.03em; }
+    .raiseOf { justify-content: center; }
+    .backers { grid-area: backers; justify-content: center; }
+    .saleLine { text-align: center; }
+    .priceLine { justify-content: center; }
+  }
+}
+
+@media (pointer: coarse) {
+  .amountField, .commit .cta, .position :global(.btn.btn-primary) { height: 44px; min-height: 44px; }
+  .amountField, .commit .cta { border-radius: var(--r-button); }
+  .amountField { padding-right: 9px; }
+  .commit .cta { font-size: 15px; }
+  .why textarea { font-size: 16px; }
+  /* Keep the details action easy to reach without changing its visible size. */
+  .more { position: relative; }
+  .more::after { content: ""; position: absolute; inset: -12px -11px; }
+}
+
+/* Narrow cards: the one-line hero drops the backers count instead of cutting it mid-word (the Backers list states it). */
+@container workspace-panel (max-width:360px) { .compactBackers { display:none; } }
+
+.presentation { display:flex; flex-direction:column; flex:1; min-height:0; gap:1rem; }
+.summaryRegion { flex:1; min-height:10rem; overflow:auto; }
+.commitRegion { flex:none; min-width:0; }
+.panel[data-focus="true"] { height:auto; min-height:100%; }
+
+/* Focus commitments use the same field and action scale as the coin ticket. */
+:global([data-workspace-section="trade"]) .commit .amountField { height:max(48px, 3rem); }
+:global([data-workspace-section="trade"]) .commit .amountField input { font-size:1.5rem; }
+:global([data-workspace-section="trade"]) .commit .amountField[data-length="mid"] input { font-size:1rem; }
+:global([data-workspace-section="trade"]) .commit .amountField[data-length="long"] input { font-size:0.875rem; }
+:global([data-workspace-section="trade"]) .commit .cta { height:auto; min-height:max(48px, 3rem); padding:0.75rem 1rem; font-size:0.9375rem; white-space:normal; overflow-wrap:anywhere; }
+@media (pointer:coarse) { :global([data-workspace-section="trade"]) .commit .cta { min-height:52px; } }

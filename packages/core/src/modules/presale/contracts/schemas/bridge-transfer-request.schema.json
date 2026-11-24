@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/presale/contracts/bridge-transfer-request.schema.json",
+  "title": "Bridge transfer registration",
+  "description": "POST /api/presale/bridge/transfers; idempotent on (source, tx_hash); amount is USDC atoms.",
+  "type": "object",
+  "properties": {
+    "source": {
+      "enum": [
+        "solana",
+        "base",
+        "arbitrum",
+        "ethereum"
+      ]
+    },
+    "tx_hash": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "sui_address": {
+      "$ref": "defs.schema.json#/$defs/address"
+    },
+    "amount": {
+      "$ref": "defs.schema.json#/$defs/uint"
+    },
+    "presale_id": {
+      "$ref": "defs.schema.json#/$defs/address"
+    }
+  },
+  "required": [
+    "source",
+    "tx_hash",
+    "sui_address",
+    "amount",
+    "presale_id"
+  ],
+  "additionalProperties": false
+}

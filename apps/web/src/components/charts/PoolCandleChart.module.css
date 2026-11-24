@@ -1,0 +1,217 @@
+.plot { position: relative; width: 100%; height: 16.25rem; min-height: 12.5rem; }
+.migration { position: absolute; top: 0; bottom: 1.5rem; border-left: 1px dashed var(--muted); pointer-events: none; }
+.migrationCaption {
+  position: absolute;
+  inset-block-start: .25rem;
+  inline-size: max-content;
+  color: var(--ink-2);
+  font-size: .75rem;
+  line-height: 1rem;
+  white-space: nowrap;
+}
+
+.controls { display:flex; align-items:center; flex-wrap:wrap; gap:0.5rem; margin-bottom:0.5rem; }
+
+.tradePosition {
+  position: absolute;
+  z-index: 1;
+  pointer-events: none;
+  width: max-content;
+  --shift-x: .375rem;
+  --shift-y: calc(-100% - .375rem);
+  max-width: max(0px, calc(var(--trade-room) - .375rem));
+  transform: translate(var(--shift-x), var(--shift-y));
+}
+.tradePosition[data-left] { --shift-x: calc(-100% - .375rem); }
+.tradePosition[data-below] { --shift-y: .375rem; }
+.tradeAmount {
+  display: block;
+  padding: .1875rem .4375rem;
+  border-radius: var(--r-inner);
+  background: var(--card);
+  color: var(--up);
+  font-size: .8125rem;
+  line-height: 1.125rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.tradeAmount[data-candle-trade-amount="sell"] { color: var(--down); }
+.tradeAmount[data-leaving] { opacity: 0; transition: opacity var(--t2) var(--ease-std); }
+@media (prefers-reduced-motion: reduce) {
+  .tradeAmount[data-leaving] { opacity: 1; transition: none; }
+}
+
+
+.volumeLabel {
+  position: absolute;
+  z-index: 1;
+  pointer-events: none;
+  inset-inline-start: 0;
+  padding: 0 .25rem;
+  border-radius: var(--r-inner);
+  background: var(--card);
+  color: var(--ink-2);
+  font-size: .75rem;
+  font-variant-numeric: tabular-nums;
+}
+.readout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0 .5rem;
+  min-block-size: var(--coin-readout-height, 2.75rem);
+  font-variant-numeric: tabular-nums;
+}
+:global([data-amounts="hidden"]) .readout > * { display: none; }
+.inspectionAmount {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: .5rem;
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+  overflow-wrap: anywhere;
+}
+.inspectionContext {
+  color: var(--ink-2);
+  font-size: .75rem;
+  font-weight: 400;
+  line-height: 1rem;
+}
+.inspectionGuide {
+  position: absolute;
+  z-index: 1;
+  inset-block-start: 0;
+  border-inline-start: 1px solid var(--muted);
+  pointer-events: none;
+}
+
+.plot[data-coin-plot] { block-size: var(--coin-plot-height, 16.25rem); }
+
+.readout[data-mode="candles"] {
+  align-content: start;
+  min-block-size: var(--coin-readout-height, 8.25rem);
+}
+.lineContext, .candleContext {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0 .5rem;
+  line-height: 1rem;
+}
+.candleContext strong { color: var(--ink); font-weight: 550; }
+.candleFields {
+  grid-column: 1 / -1;
+  display: grid;
+  inline-size: min(100%, 24.5rem);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: .5rem;
+  margin: 0;
+  line-height: 1rem;
+}
+.candleFields > div {
+  display: grid;
+  align-content: center;
+  aspect-ratio: 1;
+  min-inline-size: 0;
+  gap: .25rem;
+  padding: .5rem;
+  border-radius: var(--r-sm);
+  background: var(--raised);
+}
+.candleFields > :first-child { background: var(--chip); }
+.candleFields dt { color: var(--ink-2); font-size: .75rem; }
+.candleFields dd {
+  margin: 0;
+  color: var(--ink);
+  font-size: .875rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.candleContext { overflow-wrap: anywhere; }
+
+.exactTrigger { justify-self: end; --control-hover: transparent; }
+.exactLayer { z-index: 1100; }
+.exactValues {
+  max-inline-size: min(20rem, calc(100vw - 2rem));
+  padding: .75rem;
+  border-radius: var(--r-sm);
+  background: var(--card);
+  color: var(--ink);
+  box-shadow: var(--sh-pop);
+}
+.exactValues dl { display: grid; gap: .5rem; margin: .5rem 0 0; }
+.exactValues dl > div { display: grid; grid-template-columns: 3.5rem minmax(0, 1fr); gap: .5rem; }
+.exactValues dt { color: var(--ink-2); }
+.exactValues dd { margin: 0; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+
+@media (max-width: 360px) {
+  .candleFields > div { padding-inline: .1875rem; text-align: center; }
+  .candleFields dd { font-size: .75rem; }
+}
+
+.walletToggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  min-height: 2.75rem;
+  color: var(--ink-2);
+  font-size: .8125rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.walletOverlay, .walletDots {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.walletOverlay {
+  /* Lightweight Charts puts its interactive canvas at z-index 2. */
+  z-index: 3;
+  color: var(--up);
+  font-size: .75rem;
+  font-variant-numeric: tabular-nums;
+}
+.walletOverlay [data-side="sell"] { color: var(--down); }
+.walletDots {
+  fill: currentColor;
+  stroke: var(--card);
+  stroke-width: 1.25;
+}
+.walletRipple {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1;
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+@media (prefers-reduced-motion: reduce) {
+  .walletRipple { display: none; }
+}
+.walletMark[data-ui-button] {
+  position: absolute;
+  pointer-events: auto;
+}
+.walletGlyphs {
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+}
+.walletGlyphs b { width: 1em; }
+.walletGlyphs small { font-size: inherit; }
+.walletChoices {
+  display: grid;
+  max-block-size: min(20rem, var(--available-height));
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.walletChoices h2 { margin: 0 .75rem .25rem; font-size: .875rem; }
+.walletChoice { font-variant-numeric: tabular-nums; }

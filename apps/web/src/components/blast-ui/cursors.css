@@ -1,0 +1,85 @@
+@media (hover: hover) and (pointer: fine) and (forced-colors: none) {
+  [data-blast-ui] {
+    --blast-cursor-arrow: url("/blast-ui/cursors/arrow.svg") 8 7, default;
+    --blast-cursor-hand: url("/blast-ui/cursors/hand.svg") 16 7, pointer;
+    --blast-cursor-pressed: url("/blast-ui/cursors/pressed.svg") 16 7, pointer;
+    --blast-cursor-text: url("/blast-ui/cursors/text.svg") 17 17, text;
+    --blast-cursor-grab: url("/blast-ui/cursors/grab.svg") 17 17, grab;
+    --blast-cursor-grabbing: url("/blast-ui/cursors/grabbing.svg") 17 17, grabbing;
+    --blast-cursor-blocked: url("/blast-ui/cursors/blocked.svg") 17 17, not-allowed;
+    --blast-cursor-busy: url("/blast-ui/cursors/busy.svg") 8 7, progress;
+    cursor: var(--blast-cursor-arrow, default);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    [data-blast-ui]:not([data-theme="light"]) {
+      --blast-cursor-arrow: url("/blast-ui/cursors/arrow-dark.svg") 8 7, default;
+      --blast-cursor-hand: url("/blast-ui/cursors/hand-dark.svg") 16 7, pointer;
+      --blast-cursor-pressed: url("/blast-ui/cursors/pressed-dark.svg") 16 7, pointer;
+      --blast-cursor-text: url("/blast-ui/cursors/text-dark.svg") 17 17, text;
+      --blast-cursor-grab: url("/blast-ui/cursors/grab-dark.svg") 17 17, grab;
+      --blast-cursor-grabbing: url("/blast-ui/cursors/grabbing-dark.svg") 17 17, grabbing;
+      --blast-cursor-blocked: url("/blast-ui/cursors/blocked-dark.svg") 17 17, not-allowed;
+      --blast-cursor-busy: url("/blast-ui/cursors/busy-dark.svg") 8 7, progress;
+    }
+  }
+
+  [data-blast-ui][data-theme="dark"] {
+    --blast-cursor-arrow: url("/blast-ui/cursors/arrow-dark.svg") 8 7, default;
+    --blast-cursor-hand: url("/blast-ui/cursors/hand-dark.svg") 16 7, pointer;
+    --blast-cursor-pressed: url("/blast-ui/cursors/pressed-dark.svg") 16 7, pointer;
+    --blast-cursor-text: url("/blast-ui/cursors/text-dark.svg") 17 17, text;
+    --blast-cursor-grab: url("/blast-ui/cursors/grab-dark.svg") 17 17, grab;
+    --blast-cursor-grabbing: url("/blast-ui/cursors/grabbing-dark.svg") 17 17, grabbing;
+    --blast-cursor-blocked: url("/blast-ui/cursors/blocked-dark.svg") 17 17, not-allowed;
+    --blast-cursor-busy: url("/blast-ui/cursors/busy-dark.svg") 8 7, progress;
+  }
+
+  [data-blast-ui] :where([draggable="true"], [data-handle], [data-mode="sheet"] [data-grab]),
+  [data-blast-ui] :where([draggable="true"], [data-handle], [data-mode="sheet"] [data-grab]) * {
+    cursor: var(--blast-cursor-grab, grab) !important;
+  }
+
+  [data-blast-ui] :where(button, a[href], select, summary, label[for], [role="button"], [role="link"], [role="tab"], [role="checkbox"], [role="switch"], input[type="button"], input[type="submit"], input[type="reset"], input[type="checkbox"], input[type="radio"], input[type="range"], input[type="color"], input[type="file"]),
+  [data-blast-ui] :where(button, a[href], select, summary, label[for], [role="button"], [role="link"], [role="tab"], [role="checkbox"], [role="switch"], input[type="button"], input[type="submit"], input[type="reset"], input[type="checkbox"], input[type="radio"], input[type="range"], input[type="color"], input[type="file"]) * {
+    cursor: var(--blast-cursor-hand, pointer) !important;
+  }
+
+  [data-blast-ui] :where(button, a[href], summary, [role="button"], [role="tab"]):active,
+  [data-blast-ui] :where(button, a[href], summary, [role="button"], [role="tab"]):active * {
+    cursor: var(--blast-cursor-pressed, pointer) !important;
+  }
+
+  [data-blast-ui] :where(input:not([type]), input[type="text"], input[type="password"], input[type="search"], input[type="email"], input[type="url"], input[type="tel"], input[type="number"], textarea, [contenteditable=""], [contenteditable="true"], [role="textbox"]),
+  [data-blast-ui] :where([contenteditable=""], [contenteditable="true"]) * {
+    cursor: var(--blast-cursor-text, text) !important;
+  }
+
+  [data-blast-ui] [data-grip],
+  [data-blast-ui] [data-grip] * {
+    cursor: var(--blast-cursor-grab, grab) !important;
+  }
+
+  [data-blast-ui] [data-dragging],
+  [data-blast-ui] [data-dragging] *,
+  body.blast-card-dragging [data-blast-ui],
+  body.blast-card-dragging [data-blast-ui] * {
+    cursor: var(--blast-cursor-grabbing, grabbing) !important;
+  }
+
+  [data-blast-ui] :is(:disabled, [aria-disabled="true"]),
+  [data-blast-ui] :is(:disabled, [aria-disabled="true"]) * {
+    cursor: var(--blast-cursor-blocked, not-allowed) !important;
+  }
+
+  /* shortcut: native cursor images are static; use an overlay if animated loading is needed. */
+  [data-blast-ui] :is([aria-busy="true"], [data-cursor-busy="true"]),
+  [data-blast-ui] :is([aria-busy="true"], [data-cursor-busy="true"]) * {
+    cursor: var(--blast-cursor-busy, progress) !important;
+  }
+
+  html [data-blast-ui][data-cursor-mounting],
+  html [data-blast-ui][data-cursor-mounting] * {
+    cursor: none !important;
+  }
+}

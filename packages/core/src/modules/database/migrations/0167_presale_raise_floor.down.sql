@@ -1,0 +1,2 @@
+DROP TABLE social_presale_publish_approvals;
+DROP TABLE social_presale_raise_floor_rollout;

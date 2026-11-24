@@ -1,0 +1,2 @@
+DROP TABLE mission_control_provider_backoff;
+DROP TABLE mission_control_x_verification_jobs;

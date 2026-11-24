@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/claim-request.schema.json",
+  "title": "Record, then settle, a presale claim",
+  "description": "PUT /api/social/me/claims/{request_id} (R3-63): the sale and the kind of claim, with a schedule for vesting or a vault for creator actions; then the same body with the signed transaction's digest, or with why nothing was sent. Never both.",
+  "type": "object",
+  "properties": {
+    "presale_id": {
+      "type": "string",
+      "pattern": "^0x[0-9a-f]{64}$"
+    },
+    "kind": {
+      "enum": [
+        "claim_refund",
+        "claim_tokens",
+        "claim_vesting",
+        "collect_fees",
+        "claim_residuals"
+      ]
+    },
+    "schedule_id": {
+      "type": "string",
+      "pattern": "^0x[0-9a-f]{64}$"
+    },
+    "vault_id": {
+      "type": "string",
+      "pattern": "^0x[0-9a-f]{64}$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^[1-9A-HJ-NP-Za-km-z]{32,44}$"
+    },
+    "failure": {
+      "enum": [
+        "rejected",
+        "dry_run_failed"
+      ]
+    },
+    "transaction_bytes": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 180000,
+      "pattern": "^[A-Za-z0-9+/]+={0,2}$",
+      "description": "Canonical base64 full Sui TransactionData bytes. Required before execution; digest and sender must match the caller\u2019s server-proven Blast wallet."
+    }
+  },
+  "required": [
+    "presale_id",
+    "kind"
+  ],
+  "not": {
+    "properties": {
+      "digest": true,
+      "failure": true
+    },
+    "required": [
+      "digest",
+      "failure"
+    ]
+  },
+  "if": {
+    "properties": {
+      "kind": {
+        "const": "claim_vesting"
+      }
+    }
+  },
+  "then": {
+    "properties": {
+      "schedule_id": true
+    },
+    "required": [
+      "schedule_id"
+    ]
+  },
+  "else": {
+    "not": {
+      "properties": {
+        "schedule_id": true
+      },
+      "required": [
+        "schedule_id"
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "enum": [
+              "collect_fees",
+              "claim_residuals"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "vault_id": true
+        },
+        "required": [
+          "vault_id"
+        ]
+      },
+      "else": {
+        "not": {
+          "properties": {
+            "vault_id": true
+          },
+          "required": [
+            "vault_id"
+          ]
+        }
+      }
+    }
+  ],
+  "additionalProperties": false
+}

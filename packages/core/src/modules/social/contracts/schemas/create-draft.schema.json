@@ -1,0 +1,388 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/create-draft.schema.json",
+  "title": "A presale draft",
+  "description": "What the creator edits on the Create page (contracts/create.ts CreateDraft). Dollars have at most two decimals; BPS may exceed 10,000 while the form is being filled (the totals then say so); the creator's own fee row is the first and only one with self: true.",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "maxLength": 32
+    },
+    "symbol": {
+      "type": "string",
+      "pattern": "^[A-Z0-9]{0,10}$"
+    },
+    "tagline": {
+      "type": "string",
+      "maxLength": 120
+    },
+    "supply": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "decimals": {
+      "description": "Token precision: 6 or 9, defaulting to 9 for older drafts.",
+      "type": "integer",
+      "enum": [
+        6,
+        9
+      ]
+    },
+    "burnable": {
+      "type": "boolean"
+    },
+    "target": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 10000000000000
+    },
+    "days": {
+      "enum": [
+        1,
+        3,
+        7,
+        14
+      ]
+    },
+    "eligibility": {
+      "enum": [
+        "open",
+        "allowlist"
+      ]
+    },
+    "wallet_cap": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 10000000000000
+    },
+    "min_commitment": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 10000000000000
+    },
+    "max_wallets": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 655360
+    },
+    "allowlist_id": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        }
+      ]
+    },
+    "lift": {
+      "type": "boolean"
+    },
+    "lift_hours": {
+      "enum": [
+        1,
+        6,
+        24
+      ]
+    },
+    "lift_access": {
+      "enum": [
+        "eligible",
+        "anyone"
+      ]
+    },
+    "lift_max_wallets": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 655360
+    },
+    "lift_min": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 10000000000000
+    },
+    "lift_hard_cap": {
+      "type": "boolean"
+    },
+    "buyers_bps": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1000000
+    },
+    "pool_bps": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1000000
+    },
+    "token_recipients": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "$ref": "#/$defs/vestingRecipient"
+      }
+    },
+    "raise_recipients": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "$ref": "#/$defs/vestingRecipient"
+      }
+    },
+    "venue": {
+      "enum": [
+        "cetus",
+        "bluefin"
+      ]
+    },
+    "pool_fee": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000000
+    },
+    "lp_days": {
+      "enum": [
+        7,
+        14,
+        30
+      ]
+    },
+    "start_ms": {
+      "description": "When commitments open (epoch ms), or null to open them as the sale is published. Older drafts omit it (null).",
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8640000000000000
+        }
+      ]
+    },
+    "launch_when_filled": {
+      "description": "Close at the target with a hard cap from the start, independently of lifting wallet limits. Older drafts default to the scheduled end.",
+      "type": "boolean"
+    },
+    "holders_bps": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1000000
+    },
+    "fee_recipients": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "properties": {
+          "self": {
+            "type": "boolean"
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 20
+          },
+          "address": {
+            "type": "string",
+            "maxLength": 66
+          },
+          "bps": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000
+          }
+        },
+        "required": [
+          "self",
+          "label",
+          "address",
+          "bps"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "quote_type": {
+      "description": "The coin the sale raises: USDC (the default), SUI, USDsui, WAL, DEEP, hashiBTC, or TEST_SUI for test sales. Every amount is in this coin. Optional on a save; always in an answer.",
+      "enum": [
+        "0xdba34672e30cb065b1f93e3ab55318768fd6fef66c15942c9f7cb846e2f900e7::usdc::USDC",
+        "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI",
+        "0x44f838219cf67b058f3b37907b655f226153c18e33dfcd0da559a844fea9b1c1::usdsui::USDSUI",
+        "0x356a26eb9e012a68958082340d4c4116e7f55615cf27affcff209cf0ae544f59::wal::WAL",
+        "0xdeeb7a4662eec9f2f3def03fb937a663dddaa2e215b8078a284d026b7946c270::deep::DEEP",
+        "0xd30fb3f8914efdbeb7b8e85fae1d65dc584b44a1281f66737b92bb9f03a59d06::btc::BTC",
+        "0x963331df9a26c8674c33eb97655fe44807d5ff1aa4092bcbe2bdbe044b17b03d::test_sui::TEST_SUI"
+      ]
+    },
+    "site": {
+      "description": "R3-25: the links as typed (each optional, blank when unset); a wrong one is an issue in the links section. Optional on a save; always in an answer.",
+      "type": "string",
+      "maxLength": 512
+    },
+    "x_handle": {
+      "description": "A pasted profile link or an @ is accepted and kept as the bare handle (at most 64 characters).",
+      "type": "string",
+      "maxLength": 512
+    },
+    "telegram": {
+      "type": "string",
+      "maxLength": 512
+    },
+    "docs_url": {
+      "type": "string",
+      "maxLength": 512
+    },
+    "audit_url": {
+      "type": "string",
+      "maxLength": 512
+    },
+    "buyer_vesting": {
+      "type": "object",
+      "properties": {
+        "vest": {
+          "type": "boolean"
+        },
+        "cliff": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "duration": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "cliff_unit": {
+          "enum": [
+            "months",
+            "weeks",
+            "days",
+            "hours",
+            "minutes",
+            "seconds",
+            "milliseconds"
+          ],
+          "default": "months"
+        },
+        "duration_unit": {
+          "enum": [
+            "months",
+            "weeks",
+            "days",
+            "hours",
+            "minutes",
+            "seconds",
+            "milliseconds"
+          ],
+          "default": "months"
+        }
+      },
+      "required": [
+        "vest",
+        "cliff",
+        "duration",
+        "cliff_unit",
+        "duration_unit"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "name",
+    "symbol",
+    "tagline",
+    "supply",
+    "burnable",
+    "target",
+    "days",
+    "eligibility",
+    "wallet_cap",
+    "min_commitment",
+    "max_wallets",
+    "allowlist_id",
+    "lift",
+    "lift_hours",
+    "lift_access",
+    "lift_max_wallets",
+    "lift_min",
+    "lift_hard_cap",
+    "buyers_bps",
+    "pool_bps",
+    "token_recipients",
+    "raise_recipients",
+    "venue",
+    "pool_fee",
+    "lp_days",
+    "holders_bps",
+    "fee_recipients"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "vestingRecipient": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "address": {
+          "type": "string",
+          "maxLength": 66
+        },
+        "bps": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "vest": {
+          "type": "boolean"
+        },
+        "cliff": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "duration": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "cliff_unit": {
+          "enum": [
+            "months",
+            "weeks",
+            "days",
+            "hours",
+            "minutes",
+            "seconds",
+            "milliseconds"
+          ],
+          "default": "months"
+        },
+        "duration_unit": {
+          "enum": [
+            "months",
+            "weeks",
+            "days",
+            "hours",
+            "minutes",
+            "seconds",
+            "milliseconds"
+          ],
+          "default": "months"
+        }
+      },
+      "required": [
+        "label",
+        "address",
+        "bps",
+        "vest",
+        "cliff",
+        "duration"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

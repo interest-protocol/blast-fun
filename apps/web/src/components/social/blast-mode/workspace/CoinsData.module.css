@@ -1,0 +1,256 @@
+/* Search and filters share a row; secondary lists and settings live in the tray. */
+/* Sticky controls pin to the scrollport's very top and paint over its top inset and side gutters,
+ * so no row shows between the tabs and the search, or beside it (audit BM-01). */
+.discoveryControls { --cover-top:var(--data-body-top, 0rem); --cover-inline:var(--data-body-inline, 0rem); position:sticky; top:calc(-1 * var(--cover-top)); z-index:2; display:grid; gap:0.5rem; margin:calc(-1 * var(--cover-top)) calc(-1 * var(--cover-inline)) 0.25rem; padding:var(--cover-top) var(--cover-inline) 0.75rem; background:var(--card); }
+/* Trending · New · Saved: one segmented track; the pressed list carries the shared neutral thumb. */
+.categories { display:flex; gap:0; padding:0.1875rem; border-radius:var(--r-button); background:var(--track); }
+.categories button { flex:1; min-width:0; font-size:0.75rem; }
+.categories button:focus-visible,.clearFilters:focus-visible { outline:0.125rem solid var(--workspace-focus); outline-offset:0.125rem; }
+.clearFilters { padding:0 0.25rem; color:var(--ink); font-size:0.75rem; }
+.rankingNote { margin:0; color:var(--muted); font-size:0.7188rem; line-height:1.5; }
+/* The coin list takes focus from script when the button that opened it leaves; it is a landmark, not a control, so it draws no ring. */
+:global([data-blast-ui]) .listRegion.listRegion[tabindex="-1"]:focus-visible { outline:none; box-shadow:none; }
+.rowIdentity { min-width:0; flex:1; overflow:hidden; }
+.rowIdentity button { display:block; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:inherit; color:inherit; }
+.searchRow { display:flex; align-items:center; gap:0.5rem; }
+/* The search icon and the field share one FieldGroup edge and focus ring. */
+.search { flex:1 1 auto; min-width:0; padding-inline:0.625rem !important; }
+.search > svg { flex:none; width:1rem; height:1rem; color:var(--muted); }
+.search input { flex:1; width:0; min-width:0; padding-inline:0 !important; background:transparent; box-shadow:none; font-size:0.8125rem; }
+.iconButton { position:relative; display:inline-grid; flex:none; place-items:center; width:1.75rem; height:1.75rem; padding:0; border:0; border-radius:var(--r-button); background:var(--chip); color:var(--muted); cursor:pointer; }
+.iconButton svg { width:0.9375rem; height:0.9375rem; }
+.iconButton:disabled { color:var(--faint); cursor:not-allowed; }
+@media (hover:hover) and (pointer:fine) { .iconButton:not(:disabled):hover { background:var(--workspace-press); color:var(--ink); } }
+.pills { display:flex; flex-wrap:wrap; align-items:center; gap:0.5rem; min-width:0; }
+.pills :global(button.btn.btn-sm) { min-height:1.625rem; height:1.625rem; padding:0 0.625rem; border:0; border-radius:var(--r-button); background:var(--chip); color:var(--ink-2); box-shadow:none; font-size:0.75rem; font-weight:600; }
+.pills :global(button.btn)[aria-expanded="true"] { background:var(--chip); color:var(--ink); }
+.filtersButton { display:inline-flex; justify-content:center; gap:0.3125rem; width:auto; height:2rem; padding:0 0.5rem; background:transparent; font:600 0.75rem var(--font); }
+/* A sort other than the default stays on the rail, beside the source, so the order is explained. */
+.sortNote { color:var(--muted); font-size:0.7188rem; font-weight:500; white-space:nowrap; }
+/* Live audit F31: open, the trigger keeps the press fill, so the tray below reads as its own. */
+.filtersButton[aria-expanded="true"] { background:var(--workspace-press); color:var(--ink); }
+.filtersButton[data-active]:not([aria-expanded="true"]) { color:var(--ink); }
+.badge { position:static; display:grid; place-items:center; min-width:0.875rem; height:0.875rem; padding:0 0.1875rem; border-radius:62.4375rem; background:var(--ink); color:var(--card); font-size:0.5938rem; font-weight:700; line-height:1; }
+/* The window and the filters, opened from the filter button: one quiet tray. */
+.filterPanel { display:grid; gap:0.75rem; padding:0.75rem; border-radius:var(--r-sm); background:var(--workspace-inset); }
+/* One row layout for every tray setting (live audit F31): label left at 12px, control right. */
+.filterRow { display:flex; align-items:center; justify-content:space-between; gap:0.5rem; min-height:2rem; color:var(--muted); font-size:0.75rem; }
+.controls { display:flex; align-items:center; flex-wrap:wrap; gap:0.5rem; margin-bottom:0; }
+.controls :global(button.btn.btn-sm) { min-height:1.625rem; height:1.625rem; padding:0 0.625rem; border-radius:var(--r-button); font-size:0.75rem; }
+.controls :global(button.btn-line) { border-color:transparent; background:var(--chip); box-shadow:none; }
+.controls :global(select) { min-height:1.625rem; padding-block:0.125rem; background:var(--chip); border-color:transparent; color:var(--ink); font-size:0.75rem; }
+.paused { justify-content:space-between; padding:0 0.625rem 0.5rem; }
+.searchSummary { margin:0 0 0.5rem; padding:0 0.625rem; font-size:0.75rem; }
+.visuallyHidden { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+
+/*
+ * Rail rows: one grammar for every Data view, designed for a 328px rail and
+ * full-width phones. A row is [mark] [identity over context] [figures]
+ * [action]; nothing is cut: every piece has a line with room for it, and a
+ * long piece wraps at a word rather than losing its end. Rows are tonal (no
+ * divider lines) and a row whose asset is on screen sits on the raised tone.
+ */
+.list { display:grid; gap:0; min-width:0; margin:0; padding:0; list-style:none; }
+.row { position:relative; min-width:0; border-radius:var(--r-sm); }
+.row[data-expanded="true"] { background:var(--raised); }
+.head { position:relative; display:grid; grid-template-columns:1.75rem minmax(0,1fr) auto; align-items:center; gap:0.625rem; min-height:3.5rem; padding:0.5rem 0.5rem 0.5rem 0.625rem; border-radius:var(--r-sm); }
+/*
+ * Coins and Presales rows are two designed lines. Line one: symbol, the
+ * sparkline (or funding ring), price (or raised) and overlapping participants.
+ * Line two keeps venue/contract or participation beside the change/target.
+ */
+.head:is([data-cols="coin"],[data-cols="sale"]) { grid-template-columns:1.75rem minmax(0,1fr) auto max-content 2.5rem; grid-template-rows:auto auto; row-gap:0.125rem; }
+.head:is([data-cols="coin"],[data-cols="sale"]) > :is(.text,.figs) { display:contents; }
+.head:is([data-cols="coin"],[data-cols="sale"]) > .tile { grid-column:1; grid-row:1 / span 2; }
+.head:is([data-cols="coin"],[data-cols="sale"]) .t1 { grid-column:2; grid-row:1; }
+.head:is([data-cols="coin"],[data-cols="sale"]) .t2 { grid-column:2 / span 2; grid-row:2; }
+.head:is([data-cols="coin"],[data-cols="sale"]) > :is(.spark,.ring) { grid-column:3; grid-row:1; }
+.head:is([data-cols="coin"],[data-cols="sale"]) .figTop { grid-column:4; grid-row:1; justify-self:end; }
+.head:is([data-cols="coin"],[data-cols="sale"]) .figSub { grid-column:4; grid-row:2; justify-self:end; text-align:right; }
+.head[data-disclosure]:is([data-cols="coin"],[data-cols="sale"]) :is(.t1,.t2,.figTop,.figSub) { position:relative; z-index:1; }
+.participants { grid-column:5; grid-row:1 / span 2; justify-self:end; position:relative; z-index:1; pointer-events:auto; margin:0; }
+.head[data-cols="search"],.head[data-cols="position"] { grid-template-columns:1.75rem minmax(0,1fr) minmax(0,max-content) 2.5rem; }
+/* A search or ecosystem row reads like a ranked row (36px mark, 56px row) and the whole row is its Add (live audit F8):
+ * the button's layer covers the row, and the inspectable address stays above it. */
+.head[data-cols="search"] { grid-template-columns:2.25rem minmax(0,1fr) minmax(0,max-content) 2.5rem; }
+.head[data-cols="search"] > .tile { width:2.25rem; height:2.25rem; }
+.head[data-cols="search"] > .tile > * { width:100%; height:100%; }
+.head[data-cols="search"] > .add { position:static; }
+.head[data-cols="search"] > .add::after { content:""; position:absolute; inset:0; border-radius:var(--r-sm); }
+.head[data-cols="search"] > .add:focus-visible { outline:0; }
+/* The stretched ::after must keep the row as its box: the shared press scale would make the button the containing block,
+ * shrink the overlay on mouse-down and drop a ticker-side click (Fable review B1). The row takes the press instead. */
+.head[data-cols="search"] > .add.add:active { transform:none; }
+.head[data-cols="search"]:has(> .add:not(:disabled):active) { background:var(--workspace-press); }
+.head[data-cols="search"]:has(> .add:focus-visible) { outline:0.125rem solid var(--workspace-focus); outline-offset:-0.125rem; }
+.head[data-cols="search"] :is(.t2,.figs) :global(button) { position:relative; z-index:1; }
+@media (hover:hover) and (pointer:fine) { .head[data-cols="search"]:has(> .add:not(:disabled):hover:not(:active)) { background:var(--workspace-inset); } }
+.head[data-cols="holding"] { grid-template-columns:1.75rem minmax(0,1fr) minmax(0,max-content) max-content; }
+.head[data-cols="person"] { grid-template-columns:minmax(0,1fr) minmax(0,max-content); }
+.head[data-cols="event"] { grid-template-columns:1.75rem minmax(0,1fr) minmax(0,max-content) 2.5rem; }
+
+/* The whole head is the row's control (open the coin, or disclose a trader); the content above it passes the pointer through except to its own controls. */
+.toggle { position:absolute; inset:0; width:100%; height:100%; margin:0; padding:0; border:0; border-radius:inherit; background:transparent; cursor:pointer; }
+.head[data-disclosure] > :not(.toggle) { position:relative; z-index:1; pointer-events:none; }
+.head[data-disclosure] > :not(.toggle) :is(button,a),.head[data-disclosure] > :is(button,a):not(.toggle) { pointer-events:auto; }
+.row .head > .toggle:focus-visible { outline:0.125rem solid var(--workspace-focus); outline-offset:-0.125rem; }
+@media (hover:hover) and (pointer:fine) {
+  .toggle:hover { background:var(--workspace-inset); }
+}
+
+.tile { display:block; width:1.75rem; height:1.75rem; }
+.text { display:flex; flex-direction:column; gap:1px; min-width:0; }
+/* A name that does not fit beside the symbol takes the next line; the symbol is one unbroken word. */
+.t1 { display:flex; flex-wrap:wrap; align-items:baseline; column-gap:0.375rem; min-width:0; color:var(--ink); font-size:0.8125rem; font-weight:600; line-height:1.125rem; }
+.t1 > strong,.t1 strong { flex:none; color:var(--ink); font-weight:600; white-space:nowrap; }
+.t1 > :global(.coinVerified) { align-self:center; }
+.name { min-width:0; color:var(--muted); font-size:0.7188rem; font-weight:500; }
+.t2 { display:flex; flex-wrap:wrap; align-items:center; gap:0.125rem 0.25rem; min-width:0; color:var(--muted); font-size:0.7188rem; line-height:1rem; }
+.count { white-space:nowrap; }
+.t2 :global(button) { padding-block:0; }
+.wrap { white-space:normal; overflow-wrap:anywhere; }
+.mark { display:inline-flex; flex:none; }
+.t2 .mark > span,.figs .mark > span { width:0.8125rem; height:0.8125rem; }
+.t2 .mark img,.figs .mark img { width:0.8125rem; height:0.8125rem; }
+/* A few recognisable faces at 18px, overlapping; the count beside them is the information. */
+.faces { display:inline-flex; flex:none; }
+.faces:empty { display:none; }
+.faces > span { display:inline-flex; }
+.faces > span > span { width:1.125rem; height:1.125rem; box-shadow:0 0 0 1.5px var(--card); }
+.faces > span > span + span { margin-left:-0.3125rem; }
+.faces > span > span :is(img,span,svg) { width:100%; height:100%; }
+.row[data-expanded="true"] .faces > span > span { box-shadow:0 0 0 1.5px var(--raised); }
+/* A venue as its mark alone; the name stays for assistive technology without a global utility class. */
+.venueMark > span:has(> img) > span { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+
+.spark { display:block; width:max(44px, 2.75rem); height:1.125rem; }
+.ring { display:flex; justify-content:center; }
+
+.figs { display:flex; flex-direction:column; align-items:flex-end; gap:1px; min-width:0; max-width:8.25rem; text-align:right; font-variant-numeric:tabular-nums; }
+.figTop { display:inline-flex; align-items:center; justify-content:flex-end; gap:0.25rem; max-width:100%; color:var(--ink); font-size:0.8125rem; font-weight:600; line-height:1.125rem; overflow-wrap:anywhere; }
+.figSub { max-width:100%; color:var(--muted); font-size:0.7188rem; font-weight:500; line-height:1rem; overflow-wrap:anywhere; }
+.figSub[data-direction="up"] { color:var(--up); }
+.figSub[data-direction="down"] { color:var(--down); }
+.figs :global(button) { padding-block:0; text-align:right; }
+
+/* The row's one action: add the asset's panel, or a check when it is already on screen. */
+.add { color:var(--ink-2); }
+.staleMark { color:var(--warn); font-size:1.125rem; line-height:0.875rem; }
+.add[data-open="true"] { background:transparent; color:var(--ink); }
+.add:disabled { background:var(--track); color:var(--faint); cursor:not-allowed; }
+.slot { display:block; width:1.75rem; }
+.addSkeleton { width:1.75rem; height:1.75rem; border-radius:var(--r-button); }
+@media (hover:hover) and (pointer:fine) {
+  .add:not(:disabled):hover { background:var(--workspace-press); }
+  .add[data-open="true"]:not(:disabled):hover { background:var(--workspace-inset); }
+}
+
+.notes { display:grid; gap:0.25rem; padding:0 0.625rem 0.5rem 3rem; color:var(--muted); font-size:0.7188rem; line-height:1rem; }
+.notes p { display:flex; align-items:center; gap:0.375rem; min-width:0; margin:0; overflow-wrap:anywhere; }
+.notes :global(button) { padding-block:0; }
+.facts { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:0.75rem 0.5rem; margin:0; padding:0.75rem; border-radius:var(--r-sm); background:var(--workspace-inset); }
+.facts > div { display:grid; gap:0.125rem; min-width:0; }
+.facts dt { color:var(--muted); font-size:0.6875rem; font-weight:500; line-height:1.4; }
+.facts dd { min-width:0; margin:0; color:var(--ink-2); font-size:0.75rem; line-height:1.4; overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
+.facts abbr { text-decoration:none; }
+/* A shortened coin type is already middle-truncated: it stays on one line, and the full value is one tap away. */
+.facts dd[data-identity] { overflow-wrap:normal; white-space:nowrap; }
+.facts dd[data-identity] :global(button) { overflow:hidden; text-overflow:ellipsis; }
+.facts :global(button) { max-width:100%; padding-block:0; font:inherit; }
+.coinLink { display:inline-flex; align-items:center; gap:0.25rem; color:inherit; text-decoration:none; border-radius:var(--r-inner); }
+.coinLink:focus-visible { outline:0.125rem solid var(--workspace-focus); outline-offset:0.125rem; }
+@media (hover:hover) and (pointer:fine) { .coinLink:hover { text-decoration:underline; text-underline-offset:0.1875rem; } }
+.note,.reason { margin:0; color:var(--muted); font-size:0.7188rem; line-height:1.5; overflow-wrap:anywhere; }
+
+/* Stacked figures widen their inspect target away from each other, never into the line beside them (Fable review B2). */
+@media not (pointer:coarse) {
+  .figTop :global(button)::after { bottom:0; }
+  :is(.figSub,.t2) :global(button)::after { top:0; }
+}
+@media (pointer:coarse) {
+  .add::before { content:""; position:absolute; inset:-8px; }
+  .figTop :global(button),.figSub :global(button),.t2 :global(button),.notes :global(button),.facts :global(button) { position:relative; }
+  .figTop :global(button)::after { content:""; position:absolute; inset:-12px -6px -2px; }
+  .figSub :global(button)::after { content:""; position:absolute; inset:-2px -6px -12px; }
+  .t2 :global(button)::after,.notes :global(button)::after,.facts :global(button)::after { content:""; position:absolute; inset:-12px -4px; }
+  .controls :global(button.btn.btn-sm),.controls :global(select),.pills :global(button.btn.btn-sm) { min-height:44px; }
+  .iconButton::before { content:""; position:absolute; inset:-8px; }
+  .search input { font-size:16px; }
+}
+@media (prefers-contrast:more) {
+  .row { box-shadow:inset 0 0 0 1px var(--hair-2); }
+  .add { box-shadow:inset 0 0 0 1px var(--hair-2); }
+}
+.listTools { justify-content:space-between; margin-bottom:1rem; }
+.listTools > :last-child { margin-inline-start:auto; }
+.listTools :global(button.btn.btn-sm) { min-height:1.625rem; height:1.625rem; padding:0 0.625rem; border:0; border-radius:var(--r-button); background:var(--chip); color:var(--ink-2); box-shadow:none; font-size:0.75rem; font-weight:600; }
+@media (pointer:coarse) { .listTools :global(button.btn.btn-sm) { min-height:44px; height:auto; } }
+
+/*
+ * The app's global `button` minimum (2.8rem, app/globals.css) is a touch target.
+ * On fine pointers the Data views draw every control at its own size, so an
+ * inspect trigger or the "+" never stretches a row; coarse pointers keep 44px.
+ */
+@media (pointer:fine), (pointer:none) {
+  :is(.discoveryControls,.controls,.listTools,.list,.searchSummary,.paused) button { min-width:0; min-height:0; }
+}
+
+/* Coins read as aligned rows; their small history preview is secondary to identity and price. */
+.head[data-cols="coin"] { grid-template-columns:2.25rem minmax(0,1fr) max-content auto; }
+.head[data-cols="coin"] .t2 { grid-column:2; }
+.head[data-cols="coin"] > .spark { display:none; }
+.head[data-cols="coin"] :is(.figTop,.figSub) { grid-column:3; }
+.head[data-cols="coin"] > .participants { grid-column:4; }
+.head[data-cols="coin"]:not(:has(> .participants)) { grid-template-columns:2.25rem minmax(0,1fr) max-content; }
+.head[data-cols="sale"] { grid-template-columns:2.25rem minmax(0,1fr) auto max-content auto; }
+.head[data-cols="sale"]:not(:has(> .participants)) { grid-template-columns:2.25rem minmax(0,1fr) auto max-content; }
+@media (hover:hover) and (pointer:fine) { .categories button:not([aria-pressed="true"]):hover { color:var(--ink); } }
+@media (pointer:coarse) { .filtersButton { min-height:44px; } .filtersButton::before { display:none; } }
+
+/* Redesign: a 36px mark beside each coin and presale row in the discovery rail. */
+.head:is([data-cols="coin"],[data-cols="sale"]) > .tile { width:2.25rem; height:2.25rem; }
+.head:is([data-cols="coin"],[data-cols="sale"]) > .tile > * { width:100%; height:100%; }
+.rowIdentity { font-variant-numeric:tabular-nums; }
+
+/*
+ * Discover (BlastMode.dc.html): search with the filter button, Trending · New · Saved as quiet
+ * chips, 56px coin rows (34px mark, ticker over venue and volume, price over change), and the
+ * pager centred under them. The current coin's row is raised.
+ */
+:global(#workspace-data) .discoveryControls { gap:0.625rem; margin-bottom:0; padding-bottom:0.625rem; }
+:global(#workspace-data) .searchRow { gap:0.375rem; }
+:global(#workspace-data) .search > svg { width:0.9375rem; height:0.9375rem; }
+:global(#workspace-data) .search input { padding-block:0 !important; line-height:1.25rem; }
+/* 13px only with a fine pointer: on touch the shared 16px input text stays, or iOS zooms the page. */
+@media (pointer:fine) { :global(#workspace-data) .search input { font-size:0.8125rem; } }
+:global(#workspace-data) .categories { justify-content:flex-start; gap:0.25rem; padding:0; background:transparent; }
+:global(#workspace-data) .categories button { flex:none; padding-inline:0.625rem; font-size:0.75rem; }
+:global(#workspace-data) .categories button[aria-pressed="true"] { background:var(--chip); box-shadow:none; color:var(--ink); }
+:global(#workspace-data) .list { padding:0; }
+:global(#workspace-data) .row { border-radius:0.75rem; }
+:global(#workspace-data) .row[data-on-screen="true"] { background:var(--workspace-inset); }
+:global(#workspace-data) .head[data-cols="coin"],
+:global(#workspace-data) .head[data-cols="coin"]:not(:has(> .participants)) { grid-template-columns:2.125rem minmax(0,1fr) max-content; column-gap:0.625rem; row-gap:0; align-content:center; min-height:3.5rem; padding:0 0.625rem; }
+:global(#workspace-data) .head[data-cols="coin"] > .participants { display:none; }
+/* Search and ecosystem rows share the list with coin rows: the same 34px mark column, so every ticker starts on one line. */
+:global(#workspace-data) .head[data-cols="search"] { grid-template-columns:2.125rem minmax(0,1fr) minmax(0,max-content) 2.5rem; }
+:global(#workspace-data) .head[data-cols="search"] > .tile { justify-self:center; }
+:global(#workspace-data) .head:is([data-cols="coin"],[data-cols="sale"]) > .tile { width:2.125rem; height:2.125rem; overflow:hidden; border-radius:0.6875rem; }
+:global(#workspace-data) .head:is([data-cols="coin"],[data-cols="sale"]) .t1 { font-size:0.875rem; line-height:1.125rem; }
+:global(#workspace-data) .head:is([data-cols="coin"],[data-cols="sale"]) .t2 { gap:0.3125rem; font-size:0.75rem; line-height:1rem; }
+:global(#workspace-data) .t2 .mark > span,:global(#workspace-data) .t2 .mark img { width:0.75rem; height:0.75rem; }
+:global(#workspace-data) .head:is([data-cols="coin"],[data-cols="sale"]) .figTop { font-size:0.8125rem; line-height:1.0625rem; }
+:global(#workspace-data) .head:is([data-cols="coin"],[data-cols="sale"]) .figSub { font-size:0.75rem; line-height:1rem; font-weight:600; }
+/* Presale rows in the rail match coin rows: backers already sit under the ticker, so the faces go; the ring
+ * spans both lines between name and figures, and the ticker keeps its full width while the figures wrap. */
+:global(#workspace-data) .head[data-cols="sale"],
+:global(#workspace-data) .head[data-cols="sale"]:not(:has(> .participants)) { grid-template-columns:2.125rem minmax(min-content,1fr) auto minmax(4rem,max-content); column-gap:0.625rem; row-gap:0; align-content:center; min-height:3.5rem; padding:0 0.625rem; }
+:global(#workspace-data) .head[data-cols="sale"] > .participants { display:none; }
+:global(#workspace-data) .head[data-cols="sale"] .t2 { grid-column:2; }
+:global(#workspace-data) .head[data-cols="sale"] > .ring { grid-row:1 / span 2; align-self:center; }
+:global(#workspace-data) .coinsPager { justify-content:center; padding:0.625rem 0 0; }
+
+/* A symbol shared with another row (audit 08): the venue is named beside its mark, then the contract. */
+:global(#workspace-data) .t2 .venueMark[data-named] > span { display:inline-flex; align-items:center; gap:0.25rem; width:auto; height:auto; }
+.venueMark[data-named] > span:has(> img) > span { position:static; width:auto; height:auto; overflow:visible; clip-path:none; color:var(--ink-2); font-weight:600; }
+.rowContract { flex:none; color:var(--muted); font-variant-numeric:tabular-nums; }

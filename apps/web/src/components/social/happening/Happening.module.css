@@ -1,0 +1,57 @@
+/* ---------- the trending coins and the collapsed column's strip (R3-10) ---------- */
+.trendingCoins { width: 100%; container-type: inline-size; background: transparent; border: 0; box-shadow: none; }
+.trendingRow { width: 100%; min-height: 3.375rem; display: flex; align-items: center; gap: 0.625rem; padding: 0.5rem; border-radius: var(--r-sm); text-align: left; transition: background 150ms ease, transform 100ms var(--ease-std); }
+.trendingTicker { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.8125rem; font-weight: 600; }
+/* The ticker and its verified mark: the ticker ellipsises, the mark never shrinks. */
+.tickerNamed { flex: 1; min-width: 0; display: flex; align-items: center; gap: 0.25rem; }
+.tickerNamed > .trendingTicker { flex: 0 1 auto; }
+.trendingSpark { width: 4.5rem; height: 1.5rem; flex: none; color: var(--muted); }
+.trendingSpark.up { color: var(--up); }
+.trendingSpark.down { color: var(--down); }
+.trendingSpark svg { display: block; }
+@container (max-width: 300px) { .trendingCoins .trendingSpark { display: none; } }
+.trendingValue { flex: none; max-width: 40%; display: flex; flex-direction: column; align-items: flex-end; gap: 0.125rem; font-size: 0.75rem; line-height: 1.3; font-variant-numeric: tabular-nums; }
+.trendingValue > * { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trendingValue > span { color: var(--muted); }
+.trendingValue > .up { color: var(--up); }
+.trendingValue > .down { color: var(--down); }
+.trendingPlaceholder { width: 1.75rem; height: 1.75rem; flex: none; border-radius: var(--r-sm); background: var(--chip); }
+@media (hover: hover) and (pointer: fine) { button.trendingRow:hover { background: var(--raised); } }
+button.trendingRow:active { background: var(--hair); transform: scale(.97); }
+.trendingCoins .trendingRow:focus-visible { box-shadow: inset 0 0 0 0.125rem var(--focus-color, var(--ink)); }
+@media (prefers-reduced-motion: reduce) { .trendingRow { transition: background 150ms ease; } button.trendingRow:active { transform: none; opacity: .7; } }
+
+.coinMini { width: max(44px, 2.75rem); min-height: 6.75rem; display: flex; flex-direction: column; }
+.coinStatus { min-height: 6.75rem; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem; font-size: 0.6875rem; }
+.coinMini b { max-width: 100%; overflow: hidden; text-overflow: ellipsis; font-size: 0.6875rem; font-weight: 700; letter-spacing: -.01em; line-height: 1; white-space: nowrap; }
+
+.pile { display: flex; padding-left: 0.375rem; flex: none; }
+.pile > span { width: 1.125rem !important; height: 1.125rem !important; margin-left: -0.375rem; box-shadow: 0 0 0 0.125rem var(--card); }
+
+.notify[aria-pressed="true"] { color: var(--ink); background: var(--chip); }
+.notify[aria-pressed="true"] svg path:first-child { fill: currentColor; fill-opacity: .14; }
+
+/* ---------- live line and pulse ---------- */
+.pulse { position: relative; width: 0.4375rem; height: 0.4375rem; border-radius: 62.4375rem; background: var(--up); flex: none; }
+.pulse::after { content: ""; position: absolute; inset: -0.4375rem; border-radius: inherit; background: rgba(22, 163, 95, .45); pointer-events: none; animation: happening-pulse 2.4s var(--ease-std) infinite; }
+@keyframes happening-pulse { 0% { transform: scale(.3333); opacity: 1; } 70%, 100% { transform: scale(1); opacity: 0; } }
+.liveLine { margin: 0; font-size: 0.9375rem; line-height: 1.45; color: var(--muted); text-wrap: pretty; }
+.liveLine strong { color: var(--ink); font-weight: 600; }
+
+/* ---------- the live card above the feed, ≤1219 (§2.1) ---------- */
+.mHappening { display: none; flex-direction: column; gap: 0.8125rem; padding: 1.0625rem 1.3125rem; margin-bottom: 0.8125rem; }
+@media (max-width: 1219px) { .mHappening { display: flex; } }
+.mhTop { display: flex; align-items: flex-start; gap: 0.625rem; }
+.mhTop .pulse { margin-top: 0.4375rem; }
+.ticker { display: flex; align-items: center; gap: 0.375rem; min-height: 1.125rem; overflow: hidden; white-space: nowrap; font-size: 0.8125rem; color: var(--muted); }
+.rpile { display: inline-flex; align-items: center; gap: 0.375rem; margin-left: 0.25rem; }
+.rpile .pile { padding-left: 0.375rem; }
+.up { color: var(--up); }
+.down { color: var(--down); }
+.coinMini:not([aria-busy]) { animation: coinStripReveal var(--t2) var(--ease); }
+@keyframes coinStripReveal { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .coinMini:not([aria-busy]) { animation-duration: var(--t1) !important; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .pulse::after { animation: none; display: none; }
+}

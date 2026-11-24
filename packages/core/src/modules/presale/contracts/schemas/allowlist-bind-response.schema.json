@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/presale/contracts/allowlist-bind-response.schema.json",
+  "title": "Allowlist bind response",
+  "description": "POST /api/presale/allowlists/{allowlist_id}/bind 200 (CL-6d).",
+  "type": "object",
+  "properties": {
+    "allowlist_id": {
+      "$ref": "defs.schema.json#/$defs/id"
+    },
+    "presale_id": {
+      "$ref": "defs.schema.json#/$defs/address"
+    },
+    "root": {
+      "$ref": "defs.schema.json#/$defs/hex32"
+    },
+    "leaf_count": {
+      "$ref": "defs.schema.json#/$defs/uint"
+    }
+  },
+  "required": [
+    "allowlist_id",
+    "presale_id",
+    "root",
+    "leaf_count"
+  ],
+  "additionalProperties": false
+}

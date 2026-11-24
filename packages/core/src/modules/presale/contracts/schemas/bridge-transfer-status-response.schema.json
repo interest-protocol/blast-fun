@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/presale/contracts/bridge-transfer-status-response.schema.json",
+  "title": "Bridge transfer status",
+  "description": "GET /api/presale/bridge/transfers/{id} 200; error is invalid_burn, attestation_timeout, or Circle's delayReason text (CL-7).",
+  "type": "object",
+  "properties": {
+    "status": {
+      "enum": [
+        "sent",
+        "attested",
+        "minted",
+        "failed"
+      ]
+    },
+    "timestamps": {
+      "type": "object",
+      "properties": {
+        "sent_ms": {
+          "$ref": "defs.schema.json#/$defs/timestamp_ms"
+        },
+        "attested_ms": {
+          "anyOf": [
+            {
+              "$ref": "defs.schema.json#/$defs/timestamp_ms"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "minted_ms": {
+          "anyOf": [
+            {
+              "$ref": "defs.schema.json#/$defs/timestamp_ms"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "failed_ms": {
+          "anyOf": [
+            {
+              "$ref": "defs.schema.json#/$defs/timestamp_ms"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "sent_ms",
+        "attested_ms",
+        "minted_ms",
+        "failed_ms"
+      ],
+      "additionalProperties": false
+    },
+    "sui_digest": {
+      "anyOf": [
+        {
+          "$ref": "defs.schema.json#/$defs/digest"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "error": {
+      "anyOf": [
+        {
+          "$ref": "defs.schema.json#/$defs/message"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "status",
+    "timestamps",
+    "sui_digest",
+    "error"
+  ],
+  "additionalProperties": false
+}

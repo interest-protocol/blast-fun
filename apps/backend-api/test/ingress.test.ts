@@ -1,0 +1,104 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { ingressAddress, ingressTrust } from "@blast/core/lib/web-security/ingress.ts";
+
+test("explicit ingress modes reject implicit or broad proxy trust", () => {
+  for (const environment of [
+    {},
+    { BLAST_BACKEND_INGRESS_MODE: "proxy" },
+    { BLAST_BACKEND_INGRESS_MODE: "trusted-proxy" },
+    { BLAST_BACKEND_INGRESS_MODE: "direct", BLAST_BACKEND_TRUSTED_PROXY_CIDRS: "127.0.0.1/32" },
+  ]) {
+    assert.throws(() => ingressTrust(environment));
+  }
+  for (const cidr of [
+    "0.0.0.0/0",
+    "::/0",
+    "10.0.0.0/8",
+    "172.16.0.0/12",
+    "192.168.0.0/16",
+    "fc00::/7",
+    "::ffff:0:0/96",
+    "bad/32",
+  ]) {
+    assert.throws(
+      () =>
+        ingressTrust({
+          BLAST_BACKEND_INGRESS_MODE: "trusted-proxy",
+          BLAST_BACKEND_TRUSTED_PROXY_CIDRS: cidr,
+        }),
+      cidr,
+    );
+  }
+});
+
+test("proxy CIDRs normalize mapped IPv6 and accept only one overwrite address", () => {
+  const trust = ingressTrust({
+    BLAST_BACKEND_INGRESS_MODE: "trusted-proxy",
+    BLAST_BACKEND_TRUSTED_PROXY_CIDRS: "127.0.0.0/24,2001:db8:feed::/64,::ffff:192.0.2.0/120",
+  });
+  const request = (ip: string) =>
+    new Request("https://backend.test", { headers: { "x-forwarded-for": ip } });
+  for (const peer of ["127.0.0.2", "::ffff:127.0.0.2", "2001:db8:feed::a", "192.0.2.3"]) {
+    assert.equal(ingressAddress(request("::ffff:198.51.100.7"), peer, trust), "198.51.100.7");
+  }
+  assert.equal(ingressAddress(request("198.51.100.7"), "127.0.1.1", trust), null);
+  for (const ip of [
+    "",
+    "198.51.100.7, 203.0.113.1",
+    "198.51.100.7:90",
+    "unavailable",
+    "fe80::1%eth0",
+  ]) {
+    assert.equal(ingressAddress(request(ip), "127.0.0.2", trust), null, ip);
+  }
+  const duplicate = new Headers();
+  duplicate.append("x-forwarded-for", "198.51.100.7");
+  duplicate.append("x-forwarded-for", "198.51.100.7");
+  assert.equal(
+    ingressAddress(new Request("https://backend.test", { headers: duplicate }), "127.0.0.2", trust),
+    null,
+  );
+  const direct = ingressTrust({ BLAST_BACKEND_INGRESS_MODE: "direct" });
+  assert.equal(
+    ingressAddress(request("203.0.113.9"), "::ffff:198.51.100.7", direct),
+    "198.51.100.7",
+  );
+  assert.equal(ingressAddress(request("203.0.113.9"), null, direct), null);
+});
+
+test("even a valid gateway proof cannot bypass trusted ingress peer validation", async () => {
+  const { createBackendHttp } = await import("../src/app/server.ts");
+  const { signGatewayRequest } = await import("@blast/core/modules/backend-api/gateway.ts");
+  let work = 0;
+  const namespace = "a".repeat(64);
+  const secret = "s".repeat(32);
+  const http = createBackendHttp({
+    namespace,
+    gatewaySecret: secret,
+    ingress: ingressTrust({
+      BLAST_BACKEND_INGRESS_MODE: "trusted-proxy",
+      BLAST_BACKEND_TRUSTED_PROXY_CIDRS: "192.0.2.0/24",
+    }),
+    redis: {
+      async execute() {
+        work++;
+        return "OK";
+      },
+    },
+    ready: async () => true,
+    async handle() {
+      work++;
+      return Response.json({ ok: true });
+    },
+  });
+  const target = new Request("https://backend.test/internal/public-read/api/v1/prices");
+  const signed = new Request(target, {
+    headers: signGatewayRequest(target, secret, "198.51.100.7", namespace),
+  });
+  const response = await http.fetch(signed, "127.0.0.1");
+  assert.equal(response.status, 503);
+  assert.equal(work, 0);
+  await response.body?.cancel();
+  await http.drain();
+});

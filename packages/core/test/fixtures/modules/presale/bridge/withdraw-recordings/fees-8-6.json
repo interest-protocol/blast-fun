@@ -1,0 +1,10 @@
+[
+  {
+    "finalityThreshold": 1000,
+    "minimumFee": 0
+  },
+  {
+    "finalityThreshold": 2000,
+    "minimumFee": 0
+  }
+]

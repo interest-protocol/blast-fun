@@ -1,0 +1,693 @@
+/*
+ * Create (the CreateToken, CreateRaise, Create and CreateReview boards): the
+ * page's title block and step bar, each step's cards, the right column per
+ * step (also folded under the step below 1220px), and the sheets the page
+ * opens (the allowlist and CSV reviews, the coin picker, publishing). Every
+ * rule is scoped under the Blast UI root; components emit both the module
+ * class and its plain name (`cx`). Lengths are the boards' px ÷ 16.
+ */
+:global([data-blast-ui]) .cr-list-upload { flex-wrap: wrap; }
+:global([data-blast-ui]) .cr-list-upload .cr-ctl { flex: 1 0 100%; flex-wrap: wrap; gap: 0.5rem; }
+:global([data-blast-ui]) .cr-list-body { min-width: 0; overflow-wrap: anywhere; }
+:global([data-blast-ui]) .cr-list-header { min-width: 0; padding: 2.125rem var(--sheet-px) 1.0625rem; display: flex; flex-direction: column; gap: 0.5rem; overflow-wrap: anywhere; }
+:global([data-blast-ui]) .cr-list-header p { margin: 0; font-size: 0.875rem; line-height: 1.5; }
+:global([data-blast-ui]) .cr-list-filename { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+:global([data-blast-ui]) .cr-list-summary { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+:global([data-blast-ui]) .cr-list-scroll { min-height: 0; flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; margin: 0 var(--sheet-px); }
+:global([data-blast-ui]) .cr-list-body p { margin: 0; font-size: 0.875rem; line-height: 1.5; }
+:global([data-blast-ui]) .cr-list-notice { display: flex; flex: none; align-items: flex-start; gap: 0.625rem; margin: 0 var(--sheet-px) 1rem; padding: 0.75rem; border-radius: var(--r-sm); background: var(--raised); font-size: 0.8125rem; line-height: 1.5; overflow-wrap: anywhere; }
+:global([data-blast-ui]) .cr-list-notice > svg { width: 1.125rem; height: 1.125rem; flex: none; margin-top: 1px; }
+:global([data-blast-ui]) .cr-list-notice p { margin: 0.1875rem 0 0; color: var(--muted); }
+:global([data-blast-ui]) .cr-csv-header { padding: 2.125rem var(--sheet-px) 1.3125rem; display: flex; flex-direction: column; gap: 0.8125rem; overflow-wrap: anywhere; }
+:global([data-blast-ui]) .cr-csv-header p { margin: 0; }
+:global([data-blast-ui]) .cr-csv-header [tabindex="-1"]:focus { outline: none; box-shadow: none; }
+:global([data-blast-ui]) .cr-csv-header h2 + p { margin-top: 0.5rem; padding-right: 2.5rem; font-size: 0.8125rem; }
+:global([data-blast-ui]) .cr-csv-filename { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+:global([data-blast-ui]) .cr-csv-summary { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.875rem; line-height: 1.5; }
+:global([data-blast-ui]) .cr-csv-summary span { color: var(--muted); }
+:global([data-blast-ui]) .cr-csv-categories { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; font-size: 0.75rem; line-height: 1.5; color: var(--ink-2); }
+:global([data-blast-ui]) .cr-csv-rules { margin: 0; font-size: 0.75rem; line-height: 1.5; color: var(--muted); }
+:global([data-blast-ui]) .cr-csv-diagnostics { min-height: 0; flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 0 var(--sheet-px) 0.8125rem; border-top: 1px solid var(--hair); scrollbar-gutter: stable; }
+:global([data-blast-ui]) .cr-list-errors { margin: 0; padding: 0; list-style: none; font-size: 0.8125rem; line-height: 1.5; }
+:global([data-blast-ui]) .cr-list-errors li { display: grid; grid-template-columns: 3.75rem 3.875rem minmax(0, 1fr) minmax(0, 1fr); gap: 0.75rem; padding: 0.8125rem 0; border-bottom: 1px solid var(--hair); align-items: baseline; }
+:global([data-blast-ui]) .cr-list-errors li:last-child { border-bottom: 0; }
+:global([data-blast-ui]) .cr-csv-line { font-variant-numeric: tabular-nums; font-size: 0.75rem; color: var(--muted); }
+:global([data-blast-ui]) .cr-csv-field { font-size: 0.75rem; font-weight: 600; }
+:global([data-blast-ui]) .cr-list-errors code { min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.75rem; }
+:global([data-blast-ui]) .cr-csv-reason { min-width: 0; overflow-wrap: anywhere; }
+:global([data-blast-ui]) .cr-csv-empty { font-family: var(--font); font-style: italic; color: var(--muted); }
+@media (max-width: 600px) {
+  :global([data-blast-ui]) .cr-csv-header { padding-top: 1.75rem; gap: 0.625rem; }
+  :global([data-blast-ui]) .cr-list-errors li { grid-template-columns: 3.75rem minmax(0, 1fr); gap: 0.25rem 0.75rem; }
+  :global([data-blast-ui]) .cr-list-errors code, :global([data-blast-ui]) .cr-csv-reason { grid-column: 2; }
+}
+:global([data-blast-ui]) .cr-list-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 0.8125rem; }
+:global([data-blast-ui]) .cr-list-table th, :global([data-blast-ui]) .cr-list-table td { text-align: left; vertical-align: top; padding: 0.75rem 0.5rem; border-bottom: 1px solid var(--hair); overflow-wrap: anywhere; }
+:global([data-blast-ui]) .cr-list-table th { position: sticky; top: 0; z-index: 1; background: var(--card); }
+:global([data-blast-ui]) .cr-list-table th:first-child { width: 72%; }
+:global([data-blast-ui]) .cr-list-table :is(th, td):last-child { text-align: right; font-variant-numeric: tabular-nums; }
+:global([data-blast-ui]) .cr-list-table code { display: block; font-family: var(--mono); font-size: 0.75rem; overflow-wrap: anywhere; }
+:global([data-blast-ui]) .cr-list-line { display: block; margin-top: 0.25rem; font-size: 0.75rem; color: var(--muted); }
+:global([data-blast-ui]) .cr-list-pages { padding: 0.8125rem var(--sheet-px); }
+@media (max-width: 760px) {
+  :global([data-blast-ui]) .cr-list-header { padding-top: 1.75rem; }
+  :global([data-blast-ui]) .cr-list-table th:first-child { width: 60%; }
+}
+
+/* ---------- page: back bar, title, step bar ---------- */
+/* The back link sits where the title block starts (26px under the top bar), 10px over the title; the board's title gap is 22px. */
+.createPage { display: flex; flex-direction: column; min-width: 0; line-height: 1.45; --page-title-top: 0; --page-title-gap: 1.375rem; }
+:global([data-blast-ui]) .backbar { display: flex; align-items: center; height: 1.75rem; margin: 1.625rem 0 0.625rem; }
+:global([data-blast-ui]) .backbar a { height: 1.75rem; margin-left: -0.25rem; padding-right: 0.375rem; border-radius: var(--r-inner); display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.8125rem; font-weight: 600; color: var(--muted); transition: color var(--t2) var(--ease-std), transform var(--t1) var(--ease-std); }
+:global([data-blast-ui]) .backbar a svg { width: 1rem; height: 1rem; }
+@media (hover: hover) and (pointer: fine) { :global([data-blast-ui]) .backbar a:hover { color: var(--ink); } }
+:global([data-blast-ui]) .backbar a:active { transform: scale(.97); }
+@media (prefers-reduced-motion: reduce) { :global([data-blast-ui]) .backbar a:active { transform: none; opacity: .7; } }
+
+/* The step bar: the shared segmented links; a finished step's check is ink, 6px before its label. */
+:global([data-blast-ui]) .cr-steps a { gap: 0.375rem; }
+:global([data-blast-ui]) .cr-steps a > svg { color: var(--ink); }
+/* Beside the title (≥1220px): bottom-aligned with it and reaching the right column's edge, taking no height of its own. */
+@media (min-width: 1220px) {
+  :global([data-blast-ui]) .cr-steps-bar { position: relative; z-index: 1; display: flex; justify-content: flex-end; align-items: flex-end; height: 2.3625rem; margin: 0 calc(-1 * (var(--gap) + var(--aside))) -2.3625rem 0; pointer-events: none; }
+  :global([data-blast-ui]) .cr-steps-bar > * { pointer-events: auto; }
+}
+/* Under the title, pinned below the top bar while the step scrolls; four equal columns that fit from 360px up, so no step is ever scrolled out of view. */
+@media (max-width: 1219px) {
+  .createPage > :global([data-page-head]) { order: 1; }
+  :global([data-blast-ui]) .cr-steps-bar { order: 2; position: sticky; top: calc(var(--cr-header-top, env(safe-area-inset-top, 0px)) + var(--cr-header-height, var(--shell-header-height, 4rem))); z-index: 10; margin: -0.375rem 0 calc(var(--page-title-gap) - 0.375rem); padding: 0.375rem 0; background: var(--bg); }
+  :global([data-blast-ui]) .cr-steps-bar > .cr-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); width: 100%; }
+  :global([data-blast-ui]) .cr-steps-bar > .cr-steps a { min-width: 0; padding-inline: 0.25rem; gap: 0.25rem; }
+  .createPage > .cr-body { order: 3; }
+}
+
+/* ---------- the step ---------- */
+/* Groups are spaced 2x their inner gap (MA-2): cards 32px apart, a card's fields 16px. */
+:global([data-blast-ui]) .cr-body { display: flex; flex-direction: column; gap: var(--blast-space-8); min-width: 0; container-type: inline-size; }
+/* A step change moves focus here for screen readers; the step is no control, so it draws no ring (the doubled class outranks the shared `[tabindex]` ring). */
+:global([data-blast-ui]) .cr-body.cr-body:is(:focus, :focus-visible) { outline: none; box-shadow: none; }
+:global([data-blast-ui]) .cr-fields[hidden] { display: none; }
+:global([data-blast-ui]) .cr-allocation-step:not([hidden]) { display: contents; }
+:global([data-blast-ui]) .cr-fields { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 1rem; }
+/* A part a link opens lands under the top bar (and the pinned step bar where it is pinned). */
+:global([data-blast-ui]) .cr-g { scroll-margin-top: calc(var(--cr-header-top, env(safe-area-inset-top, 0px)) + var(--cr-header-height, var(--shell-header-height, 4rem)) + 1.25rem); }
+@media (max-width: 1219px) { :global([data-blast-ui]) .cr-g { scroll-margin-top: calc(var(--cr-header-top, env(safe-area-inset-top, 0px)) + var(--cr-header-height, var(--shell-header-height, 4rem)) + var(--cr-nav-height, 3.25rem) + 1.25rem); } }
+:global([data-blast-ui]) .cr-g:focus { outline: none; }
+
+/* A step's card: 22px in, its title 17/650. */
+:global([data-blast-ui]) .cr-card { min-width: 0; padding: 1.375rem; display: flex; flex-direction: column; gap: 1rem; }
+:global([data-blast-ui]) .cr-card.cr-token, :global([data-blast-ui]) .cr-card.cr-details { gap: 1.125rem; }
+:global([data-blast-ui]) .cr-card h2 { margin: 0; font-size: 1.0625rem; font-weight: 650; line-height: 1.45; }
+:global([data-blast-ui]) .cr-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; min-width: 0; }
+:global([data-blast-ui]) .cr-card-head > span { min-width: 0; font-size: 0.8125rem; color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; overflow-wrap: anywhere; }
+
+/* Fields: a 13/600 label over the control, 8px apart, then 12px help and errors; side by side 12px apart. */
+:global([data-blast-ui]) .cr-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; align-items: start; }
+:global([data-blast-ui]) .cr-grid-target { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); }
+:global([data-blast-ui]) .cr-span { grid-column: 1 / -1; }
+:global([data-blast-ui]) .cr-field { min-width: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+:global([data-blast-ui]) .cr-field > :is([data-ui-field], [data-ui-select], [data-ui-input], [data-ui-button], .seg, .cr-quote, .cr-unit) { width: 100%; }
+:global([data-blast-ui]) .cr-label { font-size: 0.8125rem; font-weight: 600; line-height: 1.45; color: var(--ink); }
+:global([data-blast-ui]) .cr-help { font-size: 0.75rem; line-height: 1.45; color: var(--muted); text-wrap: pretty; }
+:global([data-blast-ui]) .cr-err { font-size: 0.75rem; line-height: 1.45; color: var(--down); overflow-wrap: anywhere; }
+:global([data-blast-ui]) .cr-err:empty { display: none; }
+/* A met condition reads in the neutral ink family, never green. */
+:global([data-blast-ui]) .cr-ok { display: inline-flex; align-items: center; gap: 0.25rem; color: var(--muted); }
+:global([data-blast-ui]) .cr-ok svg { width: 0.75rem; height: 0.75rem; }
+/* Both timing descriptions size the same cell at the current width and text size. */
+:global([data-blast-ui]) .cr-timing-help { display: grid; grid-template-columns: minmax(0, 1fr); }
+:global([data-blast-ui]) .cr-timing-help > span { grid-area: 1 / 1; }
+:global([data-blast-ui]) .cr-timing-help > [aria-hidden="true"] { visibility: hidden; }
+:global([data-blast-ui]) .cr-in { min-width: 0; }
+:global([data-blast-ui]) .cr-in.money input, :global([data-blast-ui]) .cr-in.int input, :global([data-blast-ui]) .cr-in.pct input { font-variant-numeric: tabular-nums; }
+:global([data-blast-ui]) .cr-in.pct input { text-align: right; }
+:global([data-blast-ui]) .cr-in .pre, :global([data-blast-ui]) .cr-in .suf { flex: none; font-size: 0.875rem; font-weight: 500; color: var(--muted); white-space: nowrap; }
+/* The target's coin after the amount: its mark and symbol. */
+:global([data-blast-ui]) .cr-coin { display: inline-flex; align-items: center; gap: 0.4375rem; font-size: 0.9375rem; font-weight: 600; }
+/* A disclosure row (Advanced, Links): the shared trigger across the card, its note quieter. */
+:global([data-blast-ui]) .cr-disclosure-group { display: flex; flex-direction: column; min-width: 0; }
+/* Fill or border, never both: the Advanced row keeps the control fill and drops its edge (kept for more contrast). */
+:global([data-blast-ui]) .cr-disclosure { width: 100%; --control-edge: transparent; }
+@media (prefers-contrast: more) { :global([data-blast-ui]) .cr-disclosure { --control-edge: var(--muted); } }
+:global([data-blast-ui]) .cr-disclosure-note { font-weight: 500; color: var(--muted); }
+/* A folded Review row names what is missing in the attention ink (the checklist's to-do colour). */
+:global([data-blast-ui]) .cr-fold-attn { color: var(--warn); }
+:global([data-blast-ui]) .cr-collapse-body { padding-top: 0.875rem; }
+/* A step's secondary parts folded into rows in one card: each row names the part and shows its value, and opens in place. */
+/* Folded rows are plain rows in the card (no box in a box): 44px tall, split by one hairline; a value too long for the line moves under the label whole. */
+:global([data-blast-ui]) .cr-card.cr-folds { padding: 0.25rem 0.625rem; gap: 0; }
+:global([data-blast-ui]) .cr-fold { display: flex; flex-direction: column; min-width: 0; }
+:global([data-blast-ui]) .cr-fold + .cr-fold { border-top: 1px solid var(--hair); }
+:global([data-blast-ui]) .cr-fold-h .cr-fold-row { --control-height: 2.75rem; color: var(--ink); }
+/* A row's value is never cut (DS rule 25): the label wraps, and the value moves to the next line whole. */
+:global([data-blast-ui]) .cr-fold-label { min-width: 0; }
+:global([data-blast-ui]) .cr-fold-label > .cr-disclosure-note { display: inline-block; max-width: 100%; }
+:global([data-blast-ui]) .cr-fold-body { display: flex; flex-direction: column; gap: 1rem; padding-inline: 0.5rem; padding-bottom: 1rem; }
+:global([data-blast-ui]) .cr-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.5rem; }
+/* Phones: the step's primary action stays in reach, pinned just above the tab bar (which already clears the home indicator) while the
+   step scrolls. Every step puts it after its cards, on the page background, and the bar is opaque from edge to edge (the shadow fills the
+   page gutters; the clip keeps it to the bar's own height), so nothing scrolls through around the buttons. Sticky keeps it in the flow,
+   so at the end of the step it sits below the last field, never over it. */
+@media (max-width: 760px) {
+  /* Its top edge is the sheet button area's fade (1.3125rem, clear to the page colour), drawn edge to edge by the border image's
+     side outset, which paints the gutters without widening the page; what scrolls under it softens instead of being sliced. */
+  :global([data-blast-ui]) .cr-sticky-action { position: sticky; bottom: var(--shell-phone-nav-height, max(5.25rem, calc(3.125rem + env(safe-area-inset-bottom, 0px)))); z-index: 5; padding-block: calc(var(--blast-space-3) + 1.3125rem) var(--blast-space-3); border-image: linear-gradient(to bottom, transparent, var(--bg) 1.3125rem) fill 0 / 0 / 0 100vmax; }
+  /* The page keeps the tab bar and the bar's own height (a 44-52px button plus its padding) clear, so a focused field or row
+     scrolls fully above the sticky action instead of half behind it. */
+  :global(html):has(.cr-sticky-action) { scroll-padding-bottom: calc(max(5.25rem, calc(3.125rem + env(safe-area-inset-bottom, 0px))) + 4.75rem); }
+}
+:global([data-blast-ui]) .cr-note { margin: 0; font-size: 0.8125rem; line-height: 1.45; color: var(--muted); }
+:global([data-blast-ui]) .muted { color: var(--muted); font-weight: 500; }
+
+/* ---------- Token ---------- */
+:global([data-blast-ui]) .cr-ident { display: flex; align-items: flex-start; gap: 1.125rem; min-width: 0; }
+:global([data-blast-ui]) .cr-logo-col { flex: none; display: flex; flex-direction: column; align-items: center; gap: 0.5rem; }
+:global([data-blast-ui]) .cr-logo { position: relative; width: 7rem; height: 7rem; padding: 0; border-radius: 1.875rem; box-shadow: 0 0 0 1px var(--hair-2); cursor: pointer; transition: transform var(--t1) var(--ease-std); }
+:global([data-blast-ui]) .cr-logo:focus-visible { outline: 0.125rem solid var(--focus-color, var(--ink)); outline-offset: 0.125rem; }
+:global([data-blast-ui]) .cr-logo:active { transform: scale(.97); }
+@media (prefers-reduced-motion: reduce) { :global([data-blast-ui]) .cr-logo:active { transform: none; opacity: .7; } }
+:global([data-blast-ui]) .cr-logo .mk { width: 7rem; height: 7rem; border-radius: inherit; overflow: hidden; }
+:global([data-blast-ui]) .cr-logo-badge { position: absolute; right: -0.375rem; bottom: -0.375rem; width: 2rem; height: 2rem; border-radius: 50%; display: grid; place-items: center; background: var(--chip); color: var(--ink); box-shadow: 0 0 0 0.1875rem var(--card), inset 0 0 0 1px var(--hair-2); transition: transform var(--t2) var(--ease); }
+:global([data-blast-ui]) .cr-logo-badge svg { width: 0.9375rem; height: 0.9375rem; }
+@media (hover: hover) and (pointer: fine) { :global([data-blast-ui]) .cr-logo:hover .cr-logo-badge { transform: scale(1.08); } }
+:global([data-blast-ui]) .cr-logo-title { margin-top: 0.25rem; font-size: 0.8125rem; font-weight: 600; }
+:global([data-blast-ui]) .cr-logo-note { max-width: 7.5rem; font-size: 0.75rem; line-height: 1.45; color: var(--muted); text-align: center; }
+:global([data-blast-ui]) .cr-ident-fields { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.875rem; }
+
+/* ---------- the coin's marks ---------- */
+:global([data-blast-ui]) .mk { width: max(44px, 2.75rem); height: max(44px, 2.75rem); border-radius: var(--r-sm); flex: none; position: relative; display: block; }
+:global([data-blast-ui]) .mk > svg { width: 100%; height: 100%; display: block; border-radius: inherit; }
+:global([data-blast-ui]) .mk > img { width: 100%; height: 100%; display: block; object-fit: cover; border-radius: inherit; }
+:global([data-blast-ui]) .mk.round { border-radius: 62.4375rem; }
+:global([data-blast-ui]) .mk.round::after { content: ""; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 1px var(--hair); pointer-events: none; }
+:global([data-blast-ui]) .mk.s44 { width: 2.75rem; height: 2.75rem; border-radius: var(--r-sm); }
+:global([data-blast-ui]) .mk.s46 { width: 2.875rem; height: 2.875rem; border-radius: var(--r-sm); }
+:global([data-blast-ui]) .mk.s50 { width: 3.125rem; height: 3.125rem; border-radius: 0.9375rem; }
+:global([data-blast-ui]) .mk.s56 { width: 3.5rem; height: 3.5rem; border-radius: 1.0625rem; }
+:global([data-blast-ui]) .mk.s72 { width: 4.5rem; height: 4.5rem; border-radius: var(--r-md); }
+:global([data-blast-ui]) .mk.s112 { width: 7rem; height: 7rem; border-radius: inherit; }
+:global([data-blast-ui]) .cr-mk-empty { display: grid; place-items: center; background: var(--raised); border: 0.125rem dashed var(--hair-2); color: var(--faint); }
+:global([data-blast-ui]) .cr-mk-empty svg { width: 40%; height: 40%; }
+:global([data-blast-ui]) .spin { width: 1.0625rem; height: 1.0625rem; border-radius: 62.4375rem; border: 0.125rem solid currentColor; border-right-color: transparent; opacity: .9; animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---------- Raise ---------- */
+/* "Raised in": the only coin as a quiet label, or the shared disclosure trigger that opens the picker. */
+:global([data-blast-ui]) span.cr-quote { min-height: 2.5rem; padding: 0 0.875rem 0 0.5rem; border-radius: var(--r-button); background: var(--chip); display: inline-flex; align-items: center; gap: 0.625rem; font-size: 0.9375rem; font-weight: 600; }
+/* A raise coin's round mark: a fixed square (`--qmark`, set by `QuoteMark`), the artwork filling it edge to edge, a hairline ring so white logos keep their edge. */
+:global([data-blast-ui]) .cr-qmark { flex: none; position: relative; display: block; width: var(--qmark, 1.5rem); height: var(--qmark, 1.5rem); border-radius: 62.4375rem; overflow: hidden; background: var(--chip); }
+:global([data-blast-ui]) .cr-qmark > :is(svg, img) { display: block; width: 100%; height: 100%; object-fit: cover; }
+:global([data-blast-ui]) .cr-qmark > [data-coin-monogram] { box-shadow: none; font-size: calc(var(--qmark, 1.5rem) * .5); line-height: 1; }
+:global([data-blast-ui]) .cr-qmark::after { content: ""; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 1px var(--hair-2); pointer-events: none; }
+:global([data-blast-ui]) .cr-qsheet.cr-qsheet { width: min(28.75rem, 100%); gap: 1.0625rem; }
+/* R3-86: Raise in as an inset grouped list (oa41 8306–8322): the chosen coin is only the ink check (selection is never pink); hover a faint tint and press a firmer one, so neither reads as chosen. */
+:global([data-blast-ui]) .qp-group { display: flex; flex-direction: column; border-radius: var(--r-sm); background: var(--raised); overflow: hidden; }
+:global([data-blast-ui]) .qp-row { position: relative; width: 100%; display: flex; align-items: center; gap: 0.8125rem; min-height: 4rem; padding: 0.75rem 1rem; text-align: left; transition: background var(--t1) var(--ease-std); }
+:global([data-blast-ui]) .qp-row + .qp-row::before { content: ""; position: absolute; top: 0; left: 3.9375rem; right: 0; height: 1px; background: var(--hair-2); }
+:global([data-blast-ui]) .qp-row .t { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; line-height: 1.3; }
+:global([data-blast-ui]) .qp-row .t b { font-size: 1rem; font-weight: 600; letter-spacing: -.01em; }
+:global([data-blast-ui]) .qp-row .t span { font-size: 0.8125rem; color: var(--muted); }
+:global([data-blast-ui]) .qp-check { flex: none; width: 1.375rem; height: 1.375rem; display: grid; place-items: center; color: var(--ink); opacity: 0; transform: scale(.6); transition: opacity var(--t1) var(--ease-std), transform var(--t2) var(--ease); }
+:global([data-blast-ui]) .qp-check svg { width: 1.25rem; height: 1.25rem; stroke-width: 2.6; }
+:global([data-blast-ui]) .qp-row[aria-checked="true"] .qp-check { opacity: 1; transform: none; }
+@media (hover: hover) and (pointer: fine) { :global([data-blast-ui]) .qp-row:hover { background: color-mix(in oklab, var(--ink) 3%, var(--raised)); } :global([data-blast-ui]) .qp-row:hover + .qp-row::before { opacity: 0; } }
+:global([data-blast-ui]) .qp-row:active + .qp-row::before { opacity: 0; }
+:global([data-blast-ui]) .qp-row:active { background: color-mix(in oklab, var(--ink) 8%, var(--raised)); transition-duration: 0s; }
+:global([data-blast-ui]) .qp-row[aria-disabled="true"] { background: transparent; cursor: not-allowed; }
+:global([data-blast-ui]) .qp-row[aria-disabled="true"] :is(.cr-qmark, .t b) { opacity: .5; }
+:global([data-blast-ui]) .qp-group .qp-row:focus-visible { box-shadow: inset 0 0 0 0.125rem var(--focus-color,var(--ink)); outline: none; }
+:global([data-blast-ui]) .qp-foot { margin: -0.5rem 0.25rem 0; font-size: 0.8125rem; line-height: 1.45; color: var(--muted); text-wrap: pretty; }
+@media (prefers-reduced-motion: reduce) { :global([data-blast-ui]) .qp-check { transition: none; transform: none; } }
+:global([data-blast-ui]) .cr-seg button:disabled { opacity: .45; }
+:global([data-blast-ui]) .cr-check-line { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8125rem; line-height: 1.45; text-wrap: pretty; }
+:global([data-blast-ui]) .cr-check-line > svg { flex: none; width: 1rem; height: 1rem; }
+:global([data-blast-ui]) .cr-check-line.ok { color: var(--muted); }
+:global([data-blast-ui]) .cr-check-line.todo { color: var(--warn); }
+:global([data-blast-ui]) .cr-check-line.todo > i { flex: none; width: 0.4375rem; height: 0.4375rem; margin: 0 0.25rem; border-radius: 50%; background: currentColor; }
+:global([data-blast-ui]) .cr-capacity { display: flex; flex-direction: column; gap: 0.1875rem; color: var(--ink); }
+:global([data-blast-ui]) .cr-capacity > span:last-child { color: var(--muted); font-size: 0.8125rem; }
+/* A switch row: the setting's name (and its line) beside the switch; space, not a hairline, sets the first in a card apart. */
+:global([data-blast-ui]) .cr-toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding-top: 0.875rem; }
+:global([data-blast-ui]) .cr-toggle-row.plain { padding-top: 0; }
+:global([data-blast-ui]) .cr-toggle-text { min-width: 0; display: flex; flex-direction: column; line-height: 1.35; }
+:global([data-blast-ui]) .cr-toggle-text b { font-size: 0.875rem; font-weight: 600; }
+:global([data-blast-ui]) .cr-toggle-text span { font-size: 0.75rem; color: var(--muted); text-wrap: pretty; }
+:global([data-blast-ui]) .cr-sub { display: flex; flex-direction: column; gap: 1rem; padding-top: 1rem; }
+/* New optional fields fade in only after a pointer action; keyboard changes stay immediate. */
+:global([data-blast-ui]) .cr[data-pointer-reveal] :is(.cr-sub, .cr-vest) { transition: opacity var(--t2) var(--ease); }
+@starting-style {
+  :global([data-blast-ui]) .cr[data-pointer-reveal] :is(.cr-sub, .cr-vest) { opacity: .7; }
+}
+@media (prefers-reduced-motion: reduce) {
+  :global([data-blast-ui]) .cr[data-pointer-reveal] :is(.cr-sub, .cr-vest) { transition-duration: var(--t1) !important; transition-timing-function: var(--ease-std); }
+  @starting-style {
+    :global([data-blast-ui]) .cr[data-pointer-reveal] :is(.cr-sub, .cr-vest) { opacity: .85; }
+  }
+}
+
+/* Launch: the pool's make-up, set apart by space; the Summary states the prices. */
+:global([data-blast-ui]) .cr-kv { margin: 0; padding-top: 0.875rem; display: flex; flex-direction: column; gap: 0.625rem; }
+:global([data-blast-ui]) .cr-kv > div { display: flex; justify-content: space-between; gap: 1rem; font-size: 0.875rem; }
+:global([data-blast-ui]) .cr-kv dt { color: var(--muted); }
+:global([data-blast-ui]) .cr-kv dd { margin: 0; font-weight: 600; text-align: right; overflow-wrap: anywhere; }
+
+/* Splits: the bar (10px, rounded segments 3px apart) and its total. */
+:global([data-blast-ui]) .cr-bar-row { display: flex; align-items: center; gap: 0.75rem; }
+:global([data-blast-ui]) .cr-total { flex: none; max-width: 50%; height: 1.5rem; padding: 0 0.625rem; border-radius: 62.4375rem; display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.75rem; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+:global([data-blast-ui]) .cr-total svg { flex: none; width: 0.75rem; height: 0.75rem; stroke-width: 3; }
+:global([data-blast-ui]) .cr-total.ok { background: var(--chip); color: var(--ink-2); }
+:global([data-blast-ui]) .cr-total.bad { background: var(--warn-soft); color: var(--warn); }
+:global([data-blast-ui]) .dot { flex: none; display: block; width: 0.5rem; height: 0.5rem; border-radius: 0.1875rem; }
+/* The fixed shares in columns set apart by space, not boxes (no box inside a card where space works, MA-6): buyers and
+   the pool editable, Blast and the pool's raise locked (a muted value and the lock). */
+:global([data-blast-ui]) .cr-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--blast-space-4) var(--blast-space-6); }
+:global([data-blast-ui]) .cr-tile { min-width: 0; display: flex; flex-direction: column; gap: 0.375rem; }
+:global([data-blast-ui]) .cr-tile-label { display: flex; align-items: center; gap: 0.375rem; font-size: 0.75rem; color: var(--muted); }
+:global([data-blast-ui]) .cr-tile-value { display: flex; align-items: center; gap: 0.375rem; font-size: 1.25rem; font-weight: 600; line-height: 1.45; font-variant-numeric: tabular-nums; }
+:global([data-blast-ui]) .cr-tile-value.locked { color: var(--muted); }
+:global([data-blast-ui]) .cr-tile .cr-in { max-width: 7rem; }
+:global([data-blast-ui]) .cr-tile-sub { font-size: 0.75rem; line-height: 1.45; color: var(--muted); overflow-wrap: anywhere; }
+:global([data-blast-ui]) .cr-lock { display: inline-grid; color: var(--muted); }
+:global([data-blast-ui]) .cr-lock svg { width: 0.875rem; height: 0.875rem; }
+:global([data-blast-ui]) .cr-buyer-vesting { display: flex; flex-direction: column; min-width: 0; }
+:global([data-blast-ui]) .cr-buyer-schedule .cr-vest { margin: 0.75rem 0 0; }
+
+/* Recipients: one row per wallet in the board's columns, set apart by space. */
+:global([data-blast-ui]) .cr-recs { --cr-cols: 0.625rem minmax(0, .8fr) minmax(0, 1.3fr) 4.75rem 7rem 2.5rem; display: flex; flex-direction: column; gap: 0.5rem; padding-top: 0.875rem; }
+:global([data-blast-ui]) .cr-recs.fees { --cr-cols: 0.625rem minmax(0, .8fr) minmax(0, 1.3fr) 4.75rem 8.75rem; padding-top: 0; }
+:global([data-blast-ui]) .cr-recs.fees:has(.cr-x) { --cr-cols: 0.625rem minmax(0, .8fr) minmax(0, 1.3fr) 4.75rem 8.75rem 2.5rem; }
+:global([data-blast-ui]) .cr-columns, :global([data-blast-ui]) .cr-rec { display: grid; grid-template-columns: var(--cr-cols); gap: 0.5rem; align-items: center; }
+:global([data-blast-ui]) .cr-columns { font-size: 0.75rem; color: var(--muted); }
+:global([data-blast-ui]) .cr-columns > span:first-child { grid-column: 1; }
+:global([data-blast-ui]) .cr-rec { min-height: 2.5rem; }
+:global([data-blast-ui]) .cr-rec-group { display: flex; flex-direction: column; gap: 0.5rem; }
+:global([data-blast-ui]) .cr-me { min-width: 0; font-size: 0.875rem; font-weight: 600; }
+:global([data-blast-ui]) .cr-wallet { min-width: 0; overflow-wrap: anywhere; font-size: 0.875rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+:global([data-blast-ui]) .cr-fee-total { font-size: 0.8125rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+:global([data-blast-ui]) .cr-vest-t { display: flex; align-items: center; gap: 0.5rem; width: 100%; }
+:global([data-blast-ui]) .cr-vest-name { display: none; font-size: 0.875rem; font-weight: 600; }
+:global([data-blast-ui]) .cr-x { justify-self: center; color: var(--muted); }
+:global([data-blast-ui]) .cr-errs { grid-column: 2 / -1; display: flex; flex-direction: column; gap: 0.25rem; overflow-wrap: anywhere; }
+:global([data-blast-ui]) .cr-errs:not(:has(.cr-err:not(:empty))) { display: none; }
+/* A recipient's schedule, inset under its row by space alone (no filled box, MA-6). */
+:global([data-blast-ui]) .cr-vest { margin-left: 1.125rem; display: flex; flex-direction: column; gap: 0.75rem; min-width: 0; }
+:global([data-blast-ui]) .cr-unit { display: flex; gap: 0.5rem; min-width: 0; }
+:global([data-blast-ui]) .cr-unit .cr-xs { flex: 1; min-width: 0; }
+:global([data-blast-ui]) .cr-unit-select { flex: none; width: 8.25rem; }
+/* The chart scales with its width and its box hugs the drawing (600 by 90 units, never wider than 600px), so the Cliff label, HTML
+   at the top-left corner, sits on the cliff area at any width and stays 12px (Floor 1). */
+:global([data-blast-ui]) .cr-vsum { min-width: 0; font-size: 0.8125rem; line-height: 1.45; color: var(--muted); overflow-wrap: anywhere; }
+:global([data-blast-ui]) .cr-add { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem; font-size: 0.75rem; color: var(--muted); }
+/* Trading fees: Blast's locked share, then the split of the rest. */
+:global([data-blast-ui]) .cr-fee-box { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.75rem 0.875rem; border-radius: var(--r-sm); box-shadow: inset 0 0 0 1px var(--hair); }
+:global([data-blast-ui]) .cr-fee-box-text { min-width: 0; display: flex; flex-direction: column; gap: 0.125rem; }
+:global([data-blast-ui]) .cr-fee-basis { margin: 0; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.25rem 1rem; font-size: 0.8125rem; }
+:global([data-blast-ui]) .cr-fee-basis b { font-weight: 600; }
+:global([data-blast-ui]) .cr-fee-basis span { color: var(--muted); }
+
+/* ---------- Details (the cover, description and links) ---------- */
+:global([data-blast-ui]) .cr-cover { display: flex; flex-direction: column; gap: 0.5rem; min-width: 0; }
+:global([data-blast-ui]) .cr-cover-head { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
+:global([data-blast-ui]) .cr-cover-actions { display: flex; gap: 0.375rem; }
+/* The cover at the 3:1 it is stored and shown at, with the centre safe area (the middle phones keep) outlined. */
+:global([data-blast-ui]) .cr-cover-frame { position: relative; overflow: hidden; aspect-ratio: 3 / 1; border-radius: 1.125rem; background: var(--bg); box-shadow: inset 0 0 0 1px var(--hair); }
+:global([data-blast-ui]) .cr-cover-frame img { display: block; width: 100%; height: 100%; object-fit: cover; }
+:global([data-blast-ui]) .cr-safe { position: absolute; inset: 4% 16.7%; border-radius: var(--r-button); box-shadow: 0 0 0 1px var(--hair-2); pointer-events: none; }
+:global([data-blast-ui]) .cr-cover-frame.has-cover .cr-safe { box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--on-pink) 75%, transparent), 0 0 0 100vmax color-mix(in srgb, var(--scrim) 60%, transparent); }
+:global([data-blast-ui]) .cr-safe-label { position: absolute; left: calc(16.7% + 0.625rem); top: calc(4% + 0.5rem); font-size: var(--text-2xs); font-weight: 600; color: var(--muted); pointer-events: none; }
+:global([data-blast-ui]) .cr-cover-frame.has-cover .cr-safe-label { color: var(--on-pink); text-shadow: 0 1px 0.125rem var(--scrim); }
+:global([data-blast-ui]) .cr-cover-guide { display: flex; flex-direction: column; gap: 0.125rem; font-size: 0.8125rem; line-height: 1.45; color: var(--muted); }
+:global([data-blast-ui]) .cr-cover-guide b { font-weight: 600; color: var(--ink); }
+:global([data-blast-ui]) .cr-cover-hint { font-size: 0.8125rem; line-height: 1.45; color: var(--warn); }
+:global([data-blast-ui]) .cr-desc-foot { display: flex; justify-content: space-between; gap: 1rem; font-size: 0.75rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* ---------- Review ---------- */
+/* The hero (12px inside) sits 24px over the folds: 2x its inner gap (MA-2). */
+:global([data-blast-ui]) .cr-review { display: flex; flex-direction: column; gap: var(--blast-space-6); min-width: 0; }
+:global([data-blast-ui]) .cr-review:focus { outline: none; }
+/* The coin over its cover: bottom-left, white on the photo. */
+:global([data-blast-ui]) .cr-hero { position: relative; min-width: 0; }
+:global([data-blast-ui]) .cr-hero.has-cover { overflow: hidden; border-radius: var(--r-md); }
+:global([data-blast-ui]) .cr-hero img { display: block; width: 100%; aspect-ratio: 3 / 1; object-fit: cover; }
+:global([data-blast-ui]) .cr-hero-id { display: flex; align-items: center; gap: 0.75rem; min-width: 0; }
+:global([data-blast-ui]) .cr-hero.has-cover .cr-hero-id { position: absolute; left: 1.125rem; right: 1.125rem; bottom: 1rem; color: var(--on-pink); text-shadow: 0 1px 0.375rem var(--scrim); }
+:global([data-blast-ui]) .cr-hero.has-cover .mk { box-shadow: 0 0 0 0.25rem var(--scrim); }
+:global([data-blast-ui]) .cr-hero-id .t { min-width: 0; display: flex; flex-direction: column; line-height: 1.15; }
+:global([data-blast-ui]) .cr-hero-id .t b { font-family: var(--display); font-size: 1.625rem; font-weight: 650; letter-spacing: -.03em; overflow-wrap: break-word; }
+:global([data-blast-ui]) .cr-hero-id .t span { font-size: 0.8125rem; }
+/* A missing value is the muted dash, never a placeholder that reads as data. */
+:global([data-blast-ui]) .cr-none { color: var(--muted); font-weight: 400; }
+/* A quieter line under a value: the rest of a split, after the share that matters. */
+:global([data-blast-ui]) .cr-detail { margin: 0; font-size: 0.8125rem; font-weight: 400; color: var(--muted); }
+:global([data-blast-ui]) .cr-group dd > .cr-detail { flex-basis: 100%; }
+/* A value's text may shrink below its longest word (a flex item's min-width is auto), so a long run wraps inside the
+   card instead of pushing past its left edge; an icon keeps its size. */
+:global([data-blast-ui]) .cr-group dd > span:not(:has(img)) { min-width: 0; }
+:global([data-blast-ui]) .cr-group { padding: 1rem 1.25rem 0.5rem; min-width: 0; }
+/* Review's groups are folded rows; the open group's rows sit in the row's own padding. */
+:global([data-blast-ui]) .cr-fold-body > .cr-group { padding: 0; }
+:global([data-blast-ui]) .cr-group dl { margin: 0; font-size: 0.9375rem; }
+:global([data-blast-ui]) .cr-group dl > div { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; padding: 0.625rem 0; }
+:global([data-blast-ui]) .cr-group dt { flex: none; max-width: 45%; color: var(--muted); }
+:global([data-blast-ui]) .cr-group dd { margin: 0; min-width: 0; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 0.25rem 0.5rem; font-weight: 600; text-align: right; overflow-wrap: break-word; }
+
+/* ---------- the right column ---------- */
+:global([data-blast-ui]) .cr-aside { display: flex; flex-direction: column; gap: 0.625rem; min-width: 0; }
+:global([data-blast-ui]) .cr-aside[data-step="review"] { gap: 0.75rem; }
+:global([data-blast-ui]) .cr-aside-label { font-size: 0.8125rem; font-weight: 600; line-height: 1.45; color: var(--muted); }
+/* Folded under the step below 1220px, where the shell hides its column. */
+:global([data-blast-ui]) .cr-aside-inline { min-width: 0; }
+:global([data-blast-ui]) .cr-aside .cr-preview-toggle { display: none; }
+:global([data-blast-ui]) .cr-preview-body { display: contents; }
+@media (max-width: 760px) {
+  :global([data-blast-ui]) .cr-aside .cr-preview-toggle { display: flex; justify-content: space-between; min-height: 2.75rem; }
+  :global([data-blast-ui]) .cr-preview-body:not([data-open]) { display: none; }
+}
+/* Wide screens: the rail card holds the preview and the main action, so the
+   folded column and its action row leave the page (display: none also takes
+   them out of the accessibility tree and the tab order). */
+@media (min-width: 1220px) { :global([data-blast-ui]) :is(.cr-aside-inline, .cr-aside-action) { display: none; } }
+/* The cover slot at 3:1: the cover, or the quiet note that none is added. */
+:global([data-blast-ui]) .cr-cover-slot { display: grid; place-items: center; aspect-ratio: 3 / 1; overflow: hidden; border-radius: 1rem; background: var(--raised); font-size: 0.8125rem; color: var(--muted); }
+:global([data-blast-ui]) .cr-cover-slot img { display: block; width: 100%; height: 100%; object-fit: cover; }
+:global([data-blast-ui]) .cr-id { display: flex; align-items: center; gap: 0.75rem; min-width: 0; padding: 0 0.625rem; }
+:global([data-blast-ui]) .cr-id .t { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.3; }
+:global([data-blast-ui]) .cr-id .t b { font-size: 1rem; font-weight: 600; overflow-wrap: break-word; }
+:global([data-blast-ui]) .cr-id .t span { font-size: 0.8125rem; color: var(--muted); }
+/* In the Preview the logo overlaps the cover's foot, ringed in the card colour. */
+:global([data-blast-ui]) .cr-id.over { margin-top: -2.125rem; }
+:global([data-blast-ui]) .cr-id.over .mk { box-shadow: 0 0 0 0.25rem var(--card); }
+:global([data-blast-ui]) .cr-id.over .t { padding-top: 1.875rem; }
+:global([data-blast-ui]) .cr-appear { padding: 0.5rem 0.5rem 1.125rem; display: flex; flex-direction: column; gap: 1rem; }
+:global([data-blast-ui]) .cr-summary { padding: 1.125rem; display: flex; flex-direction: column; gap: 0.75rem; }
+:global([data-blast-ui]) .cr-rows { margin: 0; display: flex; flex-direction: column; gap: 0.75rem; }
+/* Fact rows set apart by space alone, no hairlines. */
+:global([data-blast-ui]) .cr-rows > div { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; font-size: 0.875rem; }
+:global([data-blast-ui]) .cr-rows dt { color: var(--muted); }
+:global([data-blast-ui]) .cr-rows dd { margin: 0; min-width: 0; display: flex; align-items: center; justify-content: flex-end; gap: 0.5rem; font-weight: 600; text-align: right; overflow-wrap: break-word; }
+:global([data-blast-ui]) .cr-rows.compact { gap: 0.5rem; padding: 0 0.625rem; }
+:global([data-blast-ui]) .cr-rows.compact > div { font-size: 0.8125rem; }
+/* 2 px in from each side: the shell's aside clips at its edge, and the focus ring draws outside the button. */
+:global([data-blast-ui]) .cr-aside-cta { width: calc(100% - 0.25rem); margin-inline: 0.125rem; }
+/* The folded column's action (Raise's Continue, Review's Publish) follows it full width; Publish's reason line sits on its own row above the button. */
+:global([data-blast-ui]) .cr-aside-action { flex-direction: column; align-items: stretch; }
+:global([data-blast-ui]) .cr-preview { padding: 0.5rem 0.5rem 0.75rem; display: flex; flex-direction: column; gap: 0.875rem; }
+:global([data-blast-ui]) .cr-progress { height: 0.375rem; margin: 0 0.625rem; border-radius: 62.4375rem; background: var(--track); }
+:global([data-blast-ui]) .cr-raised { display: flex; align-items: center; gap: 0.4375rem; padding: 0 0.625rem; font-variant-numeric: tabular-nums; }
+:global([data-blast-ui]) .cr-raised b { font-size: 0.9375rem; font-weight: 600; }
+:global([data-blast-ui]) .cr-raised > span:last-child { font-size: 0.8125rem; color: var(--muted); }
+/* What is left before publishing: open sections first, each fix a link to its field; ready ones checked. */
+:global([data-blast-ui]) .cr-ready { padding: 0.875rem 1rem; border-radius: 1.125rem; background: var(--card); display: flex; flex-direction: column; gap: 0.625rem; font-size: 0.8125rem; }
+:global([data-blast-ui]) .cr-ready-head { display: flex; justify-content: space-between; gap: 0.75rem; }
+:global([data-blast-ui]) .cr-ready-head > span { color: var(--muted); }
+:global([data-blast-ui]) .cr-checks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.375rem; }
+:global([data-blast-ui]) .cr-checks li { display: flex; align-items: center; gap: 0.625rem; min-width: 0; }
+:global([data-blast-ui]) .cr-checks li.todo { align-items: flex-start; }
+:global([data-blast-ui]) .cr-checks .ic { flex: none; width: 1rem; height: 1rem; margin-top: 0.125rem; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--warn); }
+:global([data-blast-ui]) .cr-checks .t { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; line-height: 1.4; }
+:global([data-blast-ui]) .cr-checks .t b { font-weight: 600; }
+:global([data-blast-ui]) .cr-checks .t button { padding: 0; text-align: left; font-size: 0.8125rem; line-height: 1.4; color: var(--warn); overflow-wrap: anywhere; }
+@media (hover: hover) and (pointer: fine) { :global([data-blast-ui]) .cr-checks .t button:hover { text-decoration: underline; text-underline-offset: 0.1875rem; } }
+:global([data-blast-ui]) .cr-checks .t button:focus-visible { border-radius: 0.25rem; outline: 0.125rem solid var(--focus-color, var(--ink)); }
+@media (pointer: coarse) { :global([data-blast-ui]) .cr-checks .t button { min-height: 44px; } }
+/* Publishing: a faint brand wash over the card, the first buy or the off line, and Publish. */
+:global([data-blast-ui]) .cr-publish:global(.card) { padding: 1.125rem; display: flex; flex-direction: column; gap: 0.875rem; background: linear-gradient(180deg, var(--card-lit), transparent 10rem), var(--card); }
+/* Phones: Publish and Launch sit in the sticky bar, so the folded card keeps only a field or a line. It drops its chrome and sits
+   0.5rem under Review's last row, so Launch's first buy ends above the bar's fade at 390 x 844. */
+@media (max-width: 760px) {
+  :global([data-blast-ui]) .cr-aside-inline .cr-publish:global(.card) { padding: 0; border-radius: 0; background: none; box-shadow: none; outline: 0; }
+  :global([data-blast-ui]) .cr-aside-inline:has(.cr-publish) { margin-top: -0.75rem; }
+}
+:global([data-blast-ui]) .cr-publish h2 { margin: 0; font-size: 1.0625rem; font-weight: 650; }
+:global([data-blast-ui]) .cr-signs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.875rem; }
+:global([data-blast-ui]) .cr-signs li { display: flex; align-items: flex-start; gap: 0.75rem; }
+:global([data-blast-ui]) .cr-signs .n { flex: none; width: 1.75rem; height: 1.75rem; border-radius: 50%; display: grid; place-items: center; background: var(--chip); color: var(--muted); font-size: 0.8125rem; font-weight: 700; }
+:global([data-blast-ui]) .cr-signs .n.next { background: var(--ink); color: var(--card); }
+:global([data-blast-ui]) .cr-signs .t { min-width: 0; display: flex; flex-direction: column; line-height: 1.35; }
+:global([data-blast-ui]) .cr-signs .t b { font-weight: 600; overflow-wrap: break-word; }
+:global([data-blast-ui]) .cr-signs .t span { font-size: 0.8125rem; color: var(--muted); }
+:global([data-blast-ui]) .cr-fee-row { display: flex; justify-content: space-between; gap: 1rem; padding-top: 0.625rem; font-size: 0.875rem; box-shadow: 0 -1px 0 var(--hair); }
+:global([data-blast-ui]) .cr-fee-row span { color: var(--muted); }
+:global([data-blast-ui]) .cr-fee-row b { font-weight: 600; }
+/* The money sentence: right above the money action, once (amount, direction, worst case, and what locks). */
+:global([data-blast-ui]) .cr-cost { min-width: 0; overflow-wrap: anywhere; margin: 0; font-size: 0.875rem; line-height: 1.45; font-weight: 550; color: var(--ink); text-wrap: pretty; }
+:global([data-blast-ui]) .cr-publish-btn { width: 100%; }
+/* OA-13: publishing is not open yet. The card says so above a disabled Publish, in the info tone. */
+:global([data-blast-ui]) .cr-soon { margin: 0; display: flex; gap: 0.625rem; padding: 0.8125rem 0.9375rem; border-radius: var(--r-sm); background: var(--info-soft); font-size: 0.8125rem; line-height: 1.45; color: var(--ink-2); text-wrap: pretty; }
+
+/* ---------- switches (the System board's 46 × 28; on is ink) ---------- */
+:global([data-blast-ui]) .switch { position: relative; flex: none; width: 2.875rem; height: 1.75rem; padding: 0; border-radius: 62.4375rem; background: var(--hair-2); box-shadow: inset 0 0 0 0.0625rem var(--muted); transition: background var(--t3) var(--ease-std), box-shadow var(--t3) var(--ease-std); }
+:global([data-blast-ui]) .switch::after { content: ""; position: absolute; top: 0.1875rem; left: 0.1875rem; width: 1.375rem; height: 1.375rem; border-radius: 50%; background: var(--on-pink); box-shadow: 0 1px 0.125rem var(--scrim); transform-origin: left; transition: transform var(--t3) var(--ease), background var(--t3) var(--ease-std); }
+:global([data-blast-ui]) .switch[aria-checked="true"] { background: var(--ink); box-shadow: none; }
+:global([data-blast-ui]) .switch[aria-checked="true"]::after { background: var(--bg); transform: translateX(1.125rem); }
+:global([data-blast-ui]) .switch:active::after { transform: scaleX(1.15); }
+:global([data-blast-ui]) .switch[aria-checked="true"]:active::after { transform: translateX(0.9375rem) scaleX(1.15); }
+:global([data-blast-ui]) .switch:focus-visible { outline: 0.125rem solid var(--focus-color, var(--ink)); outline-offset: 0.125rem; }
+:global([data-blast-ui]) .switch:disabled { opacity: .45; cursor: not-allowed; }
+@media (prefers-reduced-motion: reduce) { :global([data-blast-ui]) .switch, :global([data-blast-ui]) .switch::after { transition: none; } }
+/* A 28px switch keeps a 44px touch target on any touch screen. */
+@media (pointer: coarse) { :global([data-blast-ui]) .switch::before { content: ""; position: absolute; inset: -8px -2px; } }
+
+/* ---------- narrower ---------- */
+/* Recipients in a narrow step: name and share on one line, the wallet and vesting under them. */
+@container (max-width: 40.625rem) {
+  :global([data-blast-ui]) .cr-recs, :global([data-blast-ui]) .cr-recs.fees, :global([data-blast-ui]) .cr-recs.fees:has(.cr-x) { --cr-cols: 0.625rem minmax(0, 1fr) 4.75rem 2.5rem; }
+  :global([data-blast-ui]) .cr-columns { display: none; }
+  :global([data-blast-ui]) .cr-rec { row-gap: 0.5rem; }
+  :global([data-blast-ui]) .cr-rec > :is(.cr-addr, .cr-wallet) { grid-column: 2 / -1; grid-row: 2; }
+  :global([data-blast-ui]) .cr-rec > .cr-pct { grid-column: 3; grid-row: 1; }
+  :global([data-blast-ui]) .cr-rec > .cr-x { grid-column: 4; grid-row: 1; }
+  :global([data-blast-ui]) .cr-rec > .cr-fee-total { grid-column: 2 / -1; justify-self: start; width: auto; }
+  /* Label left, switch right: aligned with the buyers' vesting row. */
+  :global([data-blast-ui]) .cr-rec > .cr-vest-t { grid-column: 2 / -1; justify-content: space-between; }
+  :global([data-blast-ui]) .cr-vest-name { display: inline; }
+  :global([data-blast-ui]) .cr-tiles { grid-template-columns: minmax(0, 1fr); }
+  :global([data-blast-ui]) .cr-vest { margin-left: 0; }
+}
+@container (max-width: 30rem) {
+  :global([data-blast-ui]) .cr-grid, :global([data-blast-ui]) .cr-grid-target { grid-template-columns: minmax(0, 1fr); }
+}
+/* Phones (no Mobile board for Create): the desktop columns stacked in board order, 18px in. */
+@media (max-width: 760px) {
+  .createPage { --page-title-gap: 0.75rem; }
+  :global([data-blast-ui]) .backbar { margin-top: 0.375rem; }
+  :global([data-blast-ui]) .cr-card { padding: 1.125rem; }
+  :global([data-blast-ui]) .cr-logo, :global([data-blast-ui]) .cr-logo .mk, :global([data-blast-ui]) .mk.s112 { width: 5rem; height: 5rem; }
+  :global([data-blast-ui]) .cr-logo { border-radius: var(--r-md); }
+  :global([data-blast-ui]) .cr-logo-note { max-width: 5.5rem; }
+  :global([data-blast-ui]) .cr-ident { gap: 0.875rem; }
+  :global([data-blast-ui]) .cr-actions > * { flex: 1 1 auto; }
+  :global([data-blast-ui]) .cr-group { padding-inline: 1rem; }
+  :global([data-blast-ui]) .cr-group dl > div { flex-wrap: wrap; gap: 0.125rem 1rem; }
+  :global([data-blast-ui]) .cr-group dt { max-width: none; }
+  :global([data-blast-ui]) .cr-group dd { margin-left: auto; }
+  :global([data-blast-ui]) .cr-hero.has-cover img, :global([data-blast-ui]) .cr-cover-slot { aspect-ratio: 2 / 1; }
+  :global([data-blast-ui]) .cr-hero-id .t b { font-size: 1.375rem; }
+}
+@media (pointer: coarse) {
+  :global([data-blast-ui]) .backbar a { min-height: 44px; }
+}
+
+/* ---------- sheets ---------- */
+:global([data-blast-ui]) .cr-sheet.cr-sheet { width: min(32.5rem, 100%); padding: 0; gap: 0; overflow: hidden; }
+:global([data-blast-ui]) .cr-sheet.cr-list-sheet { width: min(48.75rem, 100%); }
+:global([data-blast-ui]) .cr-sheet.cr-csv-sheet { width: min(48.75rem, 100%); }
+:global([data-blast-ui]) .cr-cta { position: static; margin: 0; background: var(--card); display: flex; flex-direction: column; gap: 0.25rem; }
+:global([data-blast-ui]) .snote { margin: 0; font-size: 0.8125rem; line-height: 1.5; color: var(--muted); }
+/* The creation scene follows confirmed publish steps, inside the existing review sheet. */
+:global([data-blast-ui]) .cr-sheet:has(> .cr-launch) { --sh-pop: 0 0.5rem 1.5rem -0.75rem rgba(15,14,19,.035), 0 1.5rem 4rem -1.25rem rgba(15,14,19,.075); }
+:global([data-blast-ui]) .cr-sheet.cr-sheet:has(> .cr-launch) { overflow-x: hidden; overflow-y: auto; }
+:global([data-blast-ui]) .cr-sheet:has(> .cr-launch) > .cr-cta { position: sticky; bottom: 0; background: linear-gradient(to bottom, transparent, var(--card) 1.3125rem); }
+:global([data-blast-ui]) .cr-launch { position: relative; isolation: isolate; flex: none; overflow-x: clip; padding: 2.375rem var(--sheet-px) 1.5rem; display: flex; flex-direction: column; align-items: center; gap: 1.25rem; }
+:global([data-blast-ui]) .cr-launch-eyebrow { padding: 0.25rem 0.625rem; border: 1px solid var(--hair); border-radius: 62.4375rem; font-size: var(--text-2xs); font-weight: 600; letter-spacing: .06em; color: var(--muted); max-width: calc(100% - 3rem); overflow-wrap: anywhere; }
+:global([data-blast-ui]) .cr-launch-scene { position: relative; width: 100%; height: 17.625rem; flex: none; perspective: 56.25rem; }
+:global([data-blast-ui]) .cr-launch-halo { position: absolute; inset: 0.75rem 0 2.5rem; border-radius: 50%; background: radial-gradient(ellipse at 50% 40%, var(--pink-soft), transparent 67%); opacity: .3; }
+:global([data-blast-ui]) .cr-launch-grid { position: absolute; inset: 5.625rem 0 2.5rem; border-radius: 50%; background-image: linear-gradient(var(--hair) 1px, transparent 1px), linear-gradient(90deg, var(--hair) 1px, transparent 1px); background-size: 1.5rem 1.5rem; opacity: .35; transform: rotateX(65deg); mask-image: radial-gradient(ellipse, black 10%, transparent 70%); }
+:global([data-blast-ui]) .cr-launch-coin { position: absolute; z-index: 3; left: calc(50% - 3.75rem); top: 3.375rem; width: 7.5rem; display: flex; flex-direction: column; align-items: center; gap: 0.875rem; transform: translateX(0) translateY(-1rem) rotateZ(-8deg); }
+:global([data-blast-ui]) .cr-launch-coin-volume { position: relative; width: 7.5rem; height: 7.5rem; transform-style: preserve-3d; transform: rotateX(12deg) rotateY(-24deg); animation: crLaunchForge 2600ms var(--ease-io) infinite, crLaunchCoinTilt 2600ms var(--ease-io) infinite; animation-play-state: paused; }
+:global([data-blast-ui]) .cr-launch-coin-face { position: absolute; inset: 0; display: grid; place-items: center; border: 0.125rem solid #e3b2ca; border-radius: 50%; background: linear-gradient(135deg, #f5d7e7 0%, #d597b7 30%, #b0648b 65%, #e4adc7 100%); box-shadow: inset 1px 0.125rem 0.1875rem rgba(255,255,255,.4), inset -0.125rem -0.1875rem 0.25rem rgba(92,29,62,.14), inset 0 0 0 0.1875rem rgba(255,255,255,.16), inset 0 0 0 0.3125rem rgba(121,49,86,.18); transform: translateZ(0.125rem); backface-visibility: hidden; }
+/* Rotate the existing catches within the rim; keep the logo and elevation fixed. */
+:global([data-blast-ui]) .cr-launch-coin-face::before,
+:global([data-blast-ui]) .cr-launch-quote-volume::before { --reflection-turn: -16deg; --reflection-catch: 1.2; content: ""; position: absolute; z-index: 1; inset: 0; border-radius: inherit; background: radial-gradient(ellipse 24% 16% at 28% 10%, rgb(255 255 255 / calc(.5 * var(--reflection-catch))), rgb(255 255 255 / calc(.12 * var(--reflection-catch))) 55%, transparent 100%), radial-gradient(ellipse 14% 10% at 76% 87%, rgb(255 255 255 / calc(.24 * var(--reflection-catch))), transparent 100%), conic-gradient(from 20deg, transparent, rgba(255,255,255,.12) 70deg, transparent 120deg, rgba(255,255,255,.2) 210deg, transparent 270deg, rgba(70,6,43,.05) 310deg, transparent); mask-image: radial-gradient(closest-side, transparent 84%, black 90%); pointer-events: none; animation: crLaunchReflection 2600ms var(--ease-io) infinite; animation-play-state: paused; }
+:global([data-blast-ui]) .cr-launch-quote-volume::before { opacity: .9; animation-delay: -1300ms; }
+:global([data-blast-ui][data-theme="dark"]) :is(.cr-launch-coin-face, .cr-launch-quote-volume)::before { --reflection-turn: -12deg; --reflection-catch: 1; }
+@media (prefers-color-scheme: dark) {
+  :global([data-blast-ui]):not([data-theme="light"]) :is(.cr-launch-coin-face, .cr-launch-quote-volume)::before { --reflection-turn: -12deg; --reflection-catch: 1; }
+}
+:global([data-blast-ui]) .cr-launch-coin-face .mk { width: 6.375rem; height: 6.375rem; border: 0.125rem solid rgba(255,255,255,.32); border-radius: 50%; overflow: hidden; box-shadow: inset 0 0.125rem 0.5rem rgba(70, 6, 43, .14); }
+:global([data-blast-ui]) .cr-launch-coin-edge { position: absolute; inset: 0; border: 1px solid rgba(132,57,97,.16); border-radius: 50%; background: radial-gradient(ellipse at 25% 10%, rgba(255,255,255,.2), transparent 45%), linear-gradient(145deg, #dd9fbc, #b6668e); }
+:global([data-blast-ui]) .cr-launch-coin-edge:nth-of-type(2) { transform: translateZ(-0.125rem); }
+:global([data-blast-ui]) .cr-launch-coin-edge:nth-of-type(3) { transform: translateZ(-0.25rem); }
+:global([data-blast-ui]) .cr-launch-coin-edge:nth-of-type(4) { transform: translateZ(-0.375rem); }
+:global([data-blast-ui]) .cr-launch-coin-edge:nth-of-type(5) { transform: translateZ(-0.5rem); }
+:global([data-blast-ui]) .cr-launch-coin-edge:nth-of-type(6) { transform: translateZ(-0.625rem); }
+:global([data-blast-ui]) .cr-launch-coin-edge:nth-of-type(7) { transform: translateZ(-0.75rem); }
+:global([data-blast-ui]) .cr-launch-coin-edge:nth-of-type(8) { transform: translateZ(-0.875rem); }
+:global([data-blast-ui]) .cr-launch-coin-edge:nth-of-type(9) { transform: translateZ(-1rem); }
+:global([data-blast-ui]) .cr-launch-coin-back { position: absolute; inset: 0; display: grid; place-items: center; border: 0.3125rem solid #ffbddf; border-radius: 50%; background: #cc458f; color: #ffe5f4; font-size: 3.625rem; transform: translateZ(-1.125rem) rotateY(180deg); backface-visibility: hidden; }
+:global([data-blast-ui]) .cr-launch-coin-shine { position: absolute; inset: 0; border-radius: 50%; background: radial-gradient(ellipse at 28% 20%, rgba(255,255,255,.16), transparent 62%); transform: translateZ(0.1875rem); pointer-events: none; backface-visibility: hidden; }
+:global([data-blast-ui]) .cr-launch-ticker { font-family: var(--display); font-size: 0.9375rem; font-weight: 700; letter-spacing: -.02em; max-width: 8.75rem; overflow-wrap: anywhere; }
+:global([data-blast-ui]) .cr-launch-registry { position: absolute; inset: 0; opacity: .4; transition: opacity var(--t4) var(--ease); }
+:global([data-blast-ui]) .cr-launch-orbit { position: absolute; left: calc(50% - 7rem); top: 0.5rem; width: 14rem; height: 14rem; border: 1px solid var(--pink-line); border-radius: 50%; transform-style: preserve-3d; }
+:global([data-blast-ui]) .cr-launch-orbit-one { animation: crLaunchOrbitOne 3000ms linear infinite; animation-play-state: paused; transform: rotateX(65deg) rotateZ(-20deg); }
+:global([data-blast-ui]) .cr-launch-orbit-two { border-style: dashed; animation: crLaunchOrbitTwo 4200ms linear infinite; animation-play-state: paused; transform: rotateY(65deg) rotateZ(30deg); }
+:global([data-blast-ui]) .cr-launch-orbit-three { border-color: var(--hair-2); transform: rotateX(30deg) rotateY(-55deg); opacity: .35; }
+:global([data-blast-ui]) .cr-launch-orbit i { position: absolute; width: 0.5rem; height: 0.5rem; background: var(--pink); border: 0.125rem solid var(--card); border-radius: 50%; top: -0.25rem; left: calc(50% - 0.25rem); box-shadow: 0 0 0 0.25rem var(--pink-soft); }
+:global([data-blast-ui]) .cr-launch-orbit i:nth-child(2) { top: auto; bottom: 12%; left: 14%; width: 0.375rem; height: 0.375rem; }
+:global([data-blast-ui]) .cr-launch-orbit i:nth-child(3) { top: 56%; left: auto; right: -0.1875rem; width: 0.375rem; height: 0.375rem; }
+:global([data-blast-ui]) .cr-launch-spark { position: absolute; z-index: 2; color: var(--pink); line-height: 1; opacity: .8; animation: crLaunchSpark 2400ms var(--ease-io) infinite alternate; animation-play-state: paused; }
+:global([data-blast-ui]) .cr-launch-spark-one { left: 14%; top: 1.5rem; font-size: 1.5625rem; }
+:global([data-blast-ui]) .cr-launch-spark-two { right: 11%; top: 8rem; font-size: 2.125rem; animation-duration: 3000ms; animation-delay: -1200ms; }
+:global([data-blast-ui]) .cr-launch-spark-three { right: 25%; top: 0.5rem; font-size: 0.75rem; animation-duration: 2800ms; animation-delay: -700ms; }
+:global([data-blast-ui]) .cr-launch-quote { position: absolute; z-index: 2; left: calc(50% + 1.375rem); top: 3.875rem; width: 6.25rem; display: flex; align-items: center; flex-direction: column; gap: 0.875rem; opacity: 0; transform: translateX(2rem) translateY(-0.375rem) rotateZ(8deg); transition: transform 500ms var(--ease), opacity var(--t4) var(--ease); }
+:global([data-blast-ui]) .cr-launch-quote-volume { animation: crLaunchQuoteTilt 2600ms var(--ease-io) infinite; animation-delay: -1300ms; animation-play-state: paused; position: relative; width: 6.25rem; height: 6.25rem; display: grid; place-items: center; border-radius: 50%; border: 0.125rem solid #a4c4e3; background: linear-gradient(135deg, #d1e6f9 0%, #95b8d9 30%, #5684b0 65%, #adcbe7 100%); box-shadow: inset 1px 0.125rem 0.1875rem rgba(255,255,255,.36), inset -0.125rem -0.1875rem 0.25rem rgba(15,44,80,.14), inset 0 0 0 0.1875rem rgba(255,255,255,.12), 0.4375rem 0.375rem 0 #517da6, 0.5rem 0.375rem 0 0.125rem #94b4d2; transform: rotateY(-18deg); }
+:global([data-blast-ui]) .cr-launch-quote-volume .cr-qmark { width: 5rem; height: 5rem; border: 0.125rem solid rgba(255,255,255,.32); border-radius: 50%; overflow: hidden; box-shadow: inset 0 0.125rem 0.5rem rgba(0,24,81,.12); }
+:global([data-blast-ui]) .cr-launch-quote-volume .cr-qmark svg { width: 100%; height: 100%; }
+:global([data-blast-ui]) .cr-launch-coin-face .mk::before,
+:global([data-blast-ui]) .cr-launch-quote-volume .cr-qmark::before { content: ""; position: absolute; z-index: 1; inset: 0; border-radius: inherit; background: radial-gradient(ellipse at 28% 20%, rgba(255,255,255,.18), transparent 60%), linear-gradient(155deg, transparent 45%, rgba(0,0,0,.1)); box-shadow: inset 0 1px 0.25rem rgba(255,255,255,.16), inset 0 -0.125rem 0.3125rem rgba(0,0,0,.1); pointer-events: none; }
+:global([data-blast-ui]) .cr-launch-connect { position: absolute; top: 7.0625rem; left: calc(50% - 1.875rem); width: 4.5rem; height: 0.125rem; border-radius: 62.4375rem; background: var(--pink-line); opacity: 0; transition: opacity var(--t4) var(--ease); }
+:global([data-blast-ui]) .cr-launch-connect i { position: absolute; top: -1px; width: 0.25rem; height: 0.25rem; border-radius: 50%; background: var(--pink); opacity: 0; animation: crLaunchConnect 1600ms linear infinite; animation-play-state: paused; }
+:global([data-blast-ui]) .cr-launch-connect i:nth-child(2) { animation-delay: -530ms; }
+:global([data-blast-ui]) .cr-launch-connect i:nth-child(3) { animation-delay: -1060ms; }
+:global([data-blast-ui]) .cr-launch-platform { position: absolute; z-index: 1; left: calc(50% - 7.1875rem); bottom: 3.875rem; width: 14.375rem; height: 2.5rem; border-radius: 50%; border: 1px solid var(--pink-line); border-bottom: 0.125rem solid var(--pink-line); background: color-mix(in srgb, var(--pink-soft) 18%, transparent); box-shadow: var(--sh-2); transform: scaleX(.76); transition: transform 500ms var(--ease); }
+:global([data-blast-ui]) .cr-launch-platform > span { position: absolute; inset: 0.3125rem 0.875rem; border: 1px solid var(--pink-line); border-radius: 50%; }
+:global([data-blast-ui]) .cr-launch:is([data-stage="2"], [data-stage="3"]) .cr-launch-platform > span:not(:last-child) { animation: crLaunchRipple 3600ms var(--ease-io) infinite; animation-play-state: paused; }
+:global([data-blast-ui]) .cr-launch-platform > span:nth-child(2) { inset: 0.625rem 2.25rem; animation-delay: -1800ms; }
+:global([data-blast-ui]) .cr-launch-platform > span:nth-child(3) { inset: 0.875rem 4.0625rem; background: var(--pink-soft); }
+:global([data-blast-ui]) .cr-launch-venue { position: absolute; bottom: 1.5rem; left: 0; width: 100%; display: flex; align-items: center; justify-content: center; gap: 0.5rem; opacity: 0; transform: translateY(0.5rem); transition: opacity var(--t4) var(--ease), transform var(--t4) var(--ease); }
+/* Keep the forge pose across stage changes; the second animation adds only a tiny tilt. */
+:global([data-blast-ui]) .cr-launch:is([data-stage="2"], [data-stage="3"])[data-paused="false"] .cr-launch-coin-volume { animation-play-state: paused, running; }
+:global([data-blast-ui]) .cr-launch[data-stage="0"][data-paused="false"] .cr-launch-coin-face::before,
+:global([data-blast-ui]) .cr-launch:is([data-stage="2"], [data-stage="3"])[data-paused="false"] .cr-launch-quote-volume,
+:global([data-blast-ui]) .cr-launch:is([data-stage="2"], [data-stage="3"])[data-paused="false"] :is(.cr-launch-coin-face, .cr-launch-quote-volume)::before { animation-play-state: running; }
+:global([data-blast-ui]) .cr-launch[data-stage="0"][data-paused="false"] .cr-launch-coin-volume,
+:global([data-blast-ui]) .cr-launch[data-paused="false"] .cr-launch-spark { animation-play-state: running; }
+:global([data-blast-ui]) .cr-launch[data-stage="1"][data-paused="false"] .cr-launch-orbit { animation-play-state: running; }
+:global([data-blast-ui]) .cr-launch[data-stage="1"] .cr-launch-registry { opacity: 1; }
+:global([data-blast-ui]) .cr-launch:is([data-stage="2"], [data-stage="3"]) .cr-launch-registry { opacity: .2; }
+:global([data-blast-ui]) .cr-launch:is([data-stage="2"], [data-stage="3"]) .cr-launch-scene[data-motion="false"] .cr-launch-coin { transform: translateX(-3.625rem) translateY(-1rem) rotateZ(-8deg); }
+:global([data-blast-ui]) .cr-launch:is([data-stage="2"], [data-stage="3"]) .cr-launch-quote { opacity: 1; transform: translateX(0) translateY(-0.375rem) rotateZ(8deg); }
+:global([data-blast-ui]) .cr-launch:is([data-stage="2"], [data-stage="3"]) .cr-launch-connect,
+:global([data-blast-ui]) .cr-launch:is([data-stage="2"], [data-stage="3"]) .cr-launch-venue { opacity: 1; transform: translateY(0); }
+:global([data-blast-ui]) .cr-launch:is([data-stage="2"], [data-stage="3"]) .cr-launch-platform { transform: scaleX(1); }
+:global([data-blast-ui]) .cr-launch:is([data-stage="2"], [data-stage="3"])[data-paused="false"] .cr-launch-connect i { animation-play-state: running; }
+:global([data-blast-ui]) .cr-launch:is([data-stage="2"], [data-stage="3"])[data-paused="false"] .cr-launch-platform > span { animation-play-state: running; }
+:global([data-blast-ui]) .cr-launch[data-paused="true"] .cr-launch-connect i,
+:global([data-blast-ui]) .cr-launch[data-published="true"] .cr-launch-connect i { animation: none; opacity: 0; }
+:global([data-blast-ui]) .cr-launch-seal { position: absolute; z-index: 5; top: 7.375rem; left: calc(50% - 1.25rem); display: grid; place-items: center; width: 2.5rem; height: 2.5rem; border: 0.1875rem solid var(--card); border-radius: 50%; background: var(--ink); color: var(--card); box-shadow: 0 0.1875rem 0.625rem var(--hair-2); animation: crLaunchArrive 400ms var(--ease) both; }
+:global([data-blast-ui]) .cr-launch-seal svg { width: 1.25rem; height: 1.25rem; }
+:global([data-blast-ui]) .cr-launch-copy { text-align: center; width: 100%; }
+:global([data-blast-ui]) .cr-launch-title { margin: 0; font-family: var(--display); font-size: clamp(1.625rem, 5vw, 2.125rem); line-height: 1.08; font-weight: 700; letter-spacing: -.035em; text-wrap: balance; }
+:global([data-blast-ui]) .cr-launch-title:focus { outline: none; box-shadow: none; }
+:global([data-blast-ui]) .cr-launch-copy p { margin: 0.625rem 0 0; font-size: 0.875rem; line-height: 1.45; color: var(--muted); text-wrap: balance; overflow-wrap: anywhere; }
+:global([data-blast-ui]) .cr-launch-list { width: 100%; display: flex; flex-direction: column; gap: 0.5rem; }
+:global([data-blast-ui]) .cr-launch-list h3 { margin: 0; font-size: 0.8125rem; font-weight: 600; line-height: 1.45; color: var(--muted); }
+:global([data-blast-ui]) .cr-launch-steps { width: 100%; list-style: none; margin: 0; padding: 0.25rem 0.8125rem; border-radius: var(--r-sm); background: var(--raised); }
+:global([data-blast-ui]) .cr-launch-steps li { display: grid; grid-template-columns: 1.625rem minmax(0, 1fr) auto; align-items: center; gap: 0.625rem; padding: 0.75rem 0; font-size: 0.8125rem; }
+:global([data-blast-ui]) .cr-launch-step-icon { display: grid; place-items: center; width: 1.625rem; height: 1.625rem; border: 1px solid var(--hair-2); border-radius: 50%; color: var(--muted); font-size: var(--text-2xs); }
+:global([data-blast-ui]) .cr-launch-step-icon svg { width: 0.875rem; height: 0.875rem; }
+:global([data-blast-ui]) .cr-launch-steps small { font-size: var(--text-2xs); color: var(--muted); }
+:global([data-blast-ui]) .cr-launch-steps [data-active="true"] { font-weight: 600; }
+:global([data-blast-ui]) .cr-launch-steps [data-active="true"] .cr-launch-step-icon { background: var(--ink); color: var(--bg); border-color: transparent; }
+:global([data-blast-ui]) .cr-launch-steps [data-complete="true"] .cr-launch-step-icon { background: var(--chip); color: var(--ink); border-color: transparent; }
+:global([data-blast-ui]) .cr-launch-error { width: 100%; margin: 0; padding: 0.8125rem; border-radius: var(--r-sm); background: var(--warn-soft); color: var(--ink); font-size: 0.8125rem; line-height: 1.5; overflow-wrap: anywhere; }
+:global([data-blast-ui]) .cr-launch-cta { flex: none; gap: 0.625rem; }
+/* Paused: the error banner joins the column, so its gaps tighten from 1.25rem to 1rem and the sheet still fits without scrolling. */
+:global([data-blast-ui]) .cr-launch:has(> .cr-launch-error) { gap: 0.75rem; padding-bottom: 1rem; }
+:global([data-blast-ui]) .cr-launch-cta .snote { margin: 0; text-align: center; }
+:global([data-blast-ui]) .cr-launch-spinner { display: inline-block; width: 1rem; height: 1rem; margin-right: 0.625rem; border: 0.125rem solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin 800ms linear infinite; }
+/* Keep the sprite crisp above the scrim's blur and in front of the creation sheet. */
+:global([data-blast-ui]) .cr-sheet { z-index: 1; }
+:global([data-blast-ui]) .cr-launch-flight { position: fixed; inset: 0; overflow: clip; pointer-events: none; z-index: 2; }
+:global([data-blast-ui]) .cr-launch-rocket { --rocket-size: 15rem; --flight-angle: calc(-1 * atan2(100dvh, 100vw)); position: absolute; left: -5rem; bottom: -1.25rem; width: var(--rocket-size); opacity: 0; }
+:global([data-blast-ui]) .cr-launch-rocket img { position: relative; display: block; width: 100%; height: auto; }
+/* Attach the exhaust to the supplied right-side artwork's engine, behind the hull. */
+:global([data-blast-ui]) .cr-launch-rocket::before { content: ""; position: absolute; left: 5%; top: 62%; width: 48%; height: 18%; border-radius: 70% 25% 25% 70%; background: linear-gradient(90deg, transparent, #ff2d7855 20%, #ff2d78 55%, #ffb56b 80%, #fff6dd); transform: translate(-95%, -50%); transform-origin: 100% 50%; }
+:global([data-blast-ui]) .cr-launch-rocket[data-flying="true"] { animation: crLaunchFlight 5600ms linear; }
+:global([data-blast-ui]) .cr-launch-rocket[data-flying="true"]::before { animation: crLaunchExhaust 160ms linear infinite alternate; }
+@keyframes crLaunchExhaust {
+  from { opacity: .7; transform: translate(-95%, -50%) scaleX(.8) scaleY(.9); }
+  to { opacity: 1; transform: translate(-95%, -50%) scaleX(1.1) scaleY(1.05); }
+}
+@keyframes crLaunchFlight {
+  from { opacity: 0; transform: translate(0, 0) rotate(var(--flight-angle)); }
+  5%, 90% { opacity: 1; }
+  30% { transform: translate(calc(32vw + var(--rocket-size) * .32), calc(-32dvh - var(--rocket-size) * .32)) rotate(var(--flight-angle)); }
+  70% { transform: translate(calc(46vw + var(--rocket-size) * .46), calc(-46dvh - var(--rocket-size) * .46)) rotate(var(--flight-angle)); animation-timing-function: cubic-bezier(.4, 0, 1, 1); }
+  to { opacity: 0; transform: translate(calc(100vw + var(--rocket-size)), calc(-100dvh - var(--rocket-size))) rotate(var(--flight-angle)) scale(.82); }
+}
+@media (max-width: 760px) {
+  :global([data-blast-ui]) .cr-launch-flight { display: none; }
+}
+@keyframes crLaunchReflection { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(var(--reflection-turn)); } }
+@keyframes crLaunchCoinTilt { 0%, 100% { rotate: y 0deg; } 50% { rotate: y 1.5deg; } }
+@keyframes crLaunchQuoteTilt { 0%, 100% { rotate: y 0deg; } 50% { rotate: y -1.5deg; } }
+@keyframes crLaunchForge { 0%, 100% { transform: rotateX(12deg) rotateY(-24deg) translateY(0); } 50% { transform: rotateX(-6deg) rotateY(24deg) translateY(-0.5rem); } }
+@keyframes crLaunchOrbitOne { from { transform: rotateX(65deg) rotateZ(-20deg); } to { transform: rotateX(65deg) rotateZ(340deg); } }
+@keyframes crLaunchOrbitTwo { from { transform: rotateY(65deg) rotateZ(30deg); } to { transform: rotateY(65deg) rotateZ(-330deg); } }
+@keyframes crLaunchSpark { from { opacity: .55; transform: translate3d(0, 0.125rem, 0) rotate(-8deg) scale(.92); } to { opacity: .9; transform: translate3d(0.1875rem, -0.3125rem, 0) rotate(8deg) scale(1.06); } }
+@keyframes crLaunchRipple { 0% { opacity: 0; transform: scale(.94); } 35% { opacity: .8; } 100% { opacity: 0; transform: scale(1.06); } }
+@keyframes crLaunchConnect { 0% { opacity: 0; transform: translateX(0); } 20%, 80% { opacity: 1; } 100% { opacity: 0; transform: translateX(4.25rem); } }
+@keyframes crLaunchArrive { from { opacity: 0; transform: translateY(0.625rem) scale(.94); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@media (max-width: 400px) {
+  :global([data-blast-ui]) .cr-launch { gap: 1rem; padding-top: 2rem; }
+  :global([data-blast-ui]) .cr-launch-scene { height: 17.625rem; transform: scale(.94); transform-origin: 50% 50%; margin: -0.375rem 0; }
+  :global([data-blast-ui]) .cr-launch-steps li { gap: 0.4375rem; font-size: 0.75rem; }
+}
+@media (max-width: 760px) {
+  :global([data-blast-ui]) .cr-launch-spark-one { top: 0; }
+  :global([data-blast-ui]) .cr-launch-spark-two { right: 4%; top: 0; font-size: 1.625rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  :global([data-blast-ui]) .cr-launch *, :global([data-blast-ui]) .cr-launch-spinner,
+  :global([data-blast-ui]) .cr-launch :is(.cr-launch-coin-face, .cr-launch-quote-volume)::before { animation: none !important; transition: none !important; }
+  :global([data-blast-ui]) .cr-launch-flight { display: none; }
+}
+
+:global([data-blast-ui]) .cr-launch[data-paused="true"] .cr-launch-scene { transform: scale(.78); transform-origin: center; margin: -1.9375rem 0; }
+/* Scaled under .8 the coins' 15px tickers and the venue's name would read under 12px (Floor 1), so they go; the eyebrow above still
+   names the coin, and the venue keeps its mark. */
+:global([data-blast-ui]) .cr-launch[data-paused="true"] :is(.cr-launch-ticker, .cr-launch-venue > span > span) { display: none; }
+/* Short screens (up to 900 px tall: 1280x800, 390x844): a paused sheet shrinks its scene, so the error, all four steps and the note show.
+   A running sheet keeps the full scene: the coins and their tickers are the show, and the sheet scrolls under the sticky button. */
+@media (max-height: 900px) {
+  :global([data-blast-ui]) .cr-launch[data-paused="true"] { gap: 0.875rem; padding-top: 1.25rem; }
+  :global([data-blast-ui]) .cr-launch[data-paused="true"] .cr-launch-scene { transform: scale(.56); transform-origin: center; margin: -3.875rem 0; }
+  /* Paused, the error, the steps, the note and the button show without scrolling (MA-5): tighter gaps and no subtitle; the scene drops its orbits and sparks. */
+  :global([data-blast-ui]) .cr-launch:has(> .cr-launch-error) { gap: 0.625rem; }
+  :global([data-blast-ui]) .cr-launch[data-paused="true"] :is(.cr-launch-registry, .cr-launch-spark) { display: none; }
+}
+/* Very short screens: the running scene steps down a little, as it did before the 2026-11-15 pass, but to .82 (not .78) so the 15px tickers stay at 12px. */
+@media (max-height: 720px) {
+  :global([data-blast-ui]) .cr-launch[data-paused="false"] { gap: 1rem; padding-top: 1.75rem; }
+  :global([data-blast-ui]) .cr-launch[data-paused="false"] .cr-launch-scene { transform: scale(.82); transform-origin: center; margin: -1.5938rem 0; }
+}
+:global([data-blast-ui]) .cr-sheet > [aria-label="Close"] { z-index: 6; }
+:global([data-blast-ui]) .cr-allowlist { min-width: 0; }
+:global([data-blast-ui]) .cr-allowlist-heading { display: flex; align-items: center; gap: 0.25rem; min-width: 0; font-size: 0.9375rem; }
+:global([data-blast-ui]) .cr-allowlist-heading b { font-weight: 600; }
+:global([data-blast-ui]) .cr-file-card { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; padding: 1rem; margin-top: 0.5rem; border-radius: var(--r-sm); background: var(--raised); }
+:global([data-blast-ui]) .cr-file-mark { display: grid; place-items: center; width: 2.625rem; height: max(48px, 3rem); flex: none; border-radius: var(--r-button); background: var(--card); box-shadow: inset 0 0 0 1px var(--hair); font: 600 var(--text-2xs) var(--mono); color: var(--muted); }
+:global([data-blast-ui]) .cr-file-details { display: flex; flex-direction: column; gap: 0.25rem; min-width: 0; flex: 1 1 9.375rem; }
+:global([data-blast-ui]) .cr-file-details strong { overflow-wrap: anywhere; font-size: 0.875rem; font-weight: 600; line-height: 1.25rem; }
+:global([data-blast-ui]) .cr-file-details > span { color: var(--muted); font-size: 0.8125rem; line-height: 1.1875rem; }
+:global([data-blast-ui]) .cr-uploaded { display: inline-flex; align-items: center; gap: 0.25rem; color: var(--ink-2); font-size: 0.75rem; font-weight: 600; }
+:global([data-blast-ui]) .cr-uploaded svg { width: 0.875rem; height: 0.875rem; }
+:global([data-blast-ui]) .cr-file-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; flex: 1 0 100%; }
+:global([data-blast-ui]) .cr-file-actions .btn { min-height: 2.5rem; }
+:global([data-blast-ui]) .cr-holder-row { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding-top: 0.75rem; }
+:global([data-blast-ui]) .cr-holder-row > div { min-width: 0; }
+:global([data-blast-ui]) .cr-holder-summary { display: block; margin-top: 0.25rem; color: var(--muted); font-size: 0.8125rem; line-height: 1.25rem; overflow-wrap: anywhere; }
+:global([data-blast-ui]) .cr-info { flex: none; display: inline-grid; place-items: center; width: 2rem; height: 2rem; border-radius: 50%; color: var(--muted); background: transparent; font-size: 1rem; }
+:global([data-blast-ui]) .cr-info:focus-visible { box-shadow: var(--focus); }
+.cr-info-layer { z-index: 1100; max-width: calc(100vw - 2rem); }
+.cr-info-popup { max-width: min(20rem, calc(100vw - 2rem)); padding: 0.75rem 0.875rem; border-radius: var(--r-sm); background: var(--ink); color: var(--card); box-shadow: var(--sh-pop); font: 400 0.8125rem/1.5 var(--font); text-wrap: pretty; }
+@media (pointer: coarse) {
+  :global([data-blast-ui]) .cr-info { width: 44px; height: 44px; }
+  :global([data-blast-ui]) .cr-file-actions .btn { min-height: 44px; }
+}
+@media (max-width: 407px) {
+  :global([data-blast-ui]) .cr-file-card { padding: 0.75rem; gap: 0.625rem; }
+  :global([data-blast-ui]) .cr-uploaded { margin-left: 3.25rem; }
+  :global([data-blast-ui]) .cr-holder-row .cr-allowlist-heading { font-size: 0.875rem; }
+}

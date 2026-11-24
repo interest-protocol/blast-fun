@@ -1,0 +1,32 @@
+.root {
+  display: contents;
+}
+/* Accordions must move neighbouring content. Keep this layout exception local and short. */
+.collapsePanel {
+  height: var(--collapsible-panel-height);
+  overflow: clip;
+  transition:
+    height var(--t2) var(--ease-std),
+    opacity 160ms var(--ease-std);
+}
+.collapsePanel[data-ending-style] {
+  transition-duration: 160ms, var(--t1);
+}
+.collapsePanel[data-starting-style],
+.collapsePanel[data-ending-style] {
+  height: 0;
+  opacity: 0;
+}
+.collapsePanel[hidden] {
+  display: none;
+}
+/* Reduced motion: the height lands at once and the contents fade in. */
+@media (prefers-reduced-motion: reduce) {
+  .collapsePanel,
+  .collapsePanel[data-ending-style] {
+    transition: opacity var(--t1) var(--ease-std);
+  }
+}
+:global(html[data-blast-input="keyboard"]) .collapsePanel {
+  transition: none;
+}

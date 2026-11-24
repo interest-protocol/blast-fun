@@ -1,0 +1,460 @@
+# Render Blueprint for the blast-v2 services in project "Blast Backend",
+# environment "Production". Exported from the live Render configuration on
+# 2026-11-11 and checked against https://render.com/schema/render.yaml.json.
+#
+# Review-only: no Blueprint instance is connected, so committing this file
+# changes nothing on Render. Connecting one re-applies this file to live
+# services and needs Jose's approval. Env values stay in Render; every key is
+# listed with `sync: false` so a Blueprint never carries a secret.
+#
+# When a service setting or env name changes on Render, update this file in
+# the same change. blast-infra, blast-infra-reader and gas-pool are declared
+# in their own repositories.
+projects:
+  - name: Blast Backend
+    environments:
+      - name: Production
+        networking:
+          isolation: disabled
+        permissions:
+          protection: disabled
+        services:
+          - type: web
+            name: blast-backend-api
+            runtime: docker
+            branch: main
+            region: virginia
+            plan: 1c-2g
+            numInstances: 4
+            autoDeployTrigger: "off"
+            maxShutdownDelaySeconds: 300
+            healthCheckPath: /v1/health
+            dockerfilePath: ./apps/backend-api/Dockerfile
+            dockerContext: .
+            envVars:
+              - key: ADMIN_LOGIN_ADMISSION_TOKEN
+                sync: false
+              - key: ADMISSION_TOKEN_HMAC_KEY
+                sync: false
+              - key: BLAST_BACKEND_EXPECTED_QUOTA_NAMESPACE
+                sync: false
+              - key: BLAST_BACKEND_FLEET_CONFIG
+                sync: false
+              - key: BLAST_BACKEND_GATEWAY_SECRET
+                sync: false
+              - key: BLAST_BACKEND_INGRESS_MODE
+                sync: false
+              - key: BLAST_BACKEND_MAX_PRIVATE_WORK_MS
+                sync: false
+              - key: BLAST_CACHE_REDIS_URL
+                sync: false
+              - key: BLAST_DEPLOYMENT_FINGERPRINT
+                sync: false
+              - key: BLAST_GATE_SECRET
+                sync: false
+              - key: BLAST_INFRA_API_KEY
+                sync: false
+              - key: BLAST_INFRA_ORIGIN
+                sync: false
+              - key: BLAST_INFRA_READ_MODE
+                sync: false
+              - key: BLAST_INFRA_READ_ORIGIN
+                sync: false
+              - key: BLAST_LAUNCHPAD_ENABLED
+                sync: false
+              - key: BLAST_NETWORK
+                sync: false
+              - key: BLAST_PARTNER_CAPACITY_CONFIG
+                sync: false
+              - key: BLAST_PARTNER_RELEASE_FIXTURE_UUID
+                sync: false
+              - key: BLAST_PRESALE_ENABLED
+                sync: false
+              - key: BLAST_QUOTA_REDIS_URL
+                sync: false
+              - key: BLAST_REDIS_NAMESPACE
+                sync: false
+              - key: BLAST_SOCIAL_ENABLED
+                sync: false
+              - key: BLAST_TEST_SUI_PRICE_ENABLED
+                sync: false
+              - key: BLAST_TRADE_FEE_BPS
+                sync: false
+              - key: BLAST_TRADE_FEE_RECEIVER
+                sync: false
+              - key: BLAST_TRADING_ENABLED
+                sync: false
+              - key: BLAST_X_USER_ID
+                sync: false
+              - key: BLOB_READ_WRITE_TOKEN
+                sync: false
+              - key: CARD_IMAGE_BLOB_ACCESS
+                sync: false
+              - key: COMPLETION_SESSION_TOKEN_KEY
+                sync: false
+              - key: CREATOR_CLAIM_SIGNER_KEY
+                sync: false
+              - key: CRON_SECRET
+                sync: false
+              - key: DATABASE_REPLICA_URL
+                sync: false
+              - key: DATABASE_URL
+                sync: false
+              - key: DEFILLAMA_PROFILE
+                sync: false
+              - key: DEFILLAMA_READ_DATABASE_URL
+                sync: false
+              - key: LAUNCHPAD_SUBJECT_PEPPER
+                sync: false
+              - key: LAUNCH_ASSET_BLOB_READ_WRITE_TOKEN
+                sync: false
+              - key: MISSION_CONTROL_CODES_OPEN_AT
+                sync: false
+              - key: MISSION_CONTROL_TEAM_PASSWORD
+                sync: false
+              - key: NEXT_PUBLIC_SITE_URL
+                sync: false
+              - key: NODE_ENV
+                sync: false
+              - key: NUCLEAR_CODE_ENCRYPTION_KEY
+                sync: false
+              - key: NUCLEAR_CODE_KEY_VERSION
+                sync: false
+              - key: NUCLEAR_CODE_LOOKUP_KEY
+                sync: false
+              - key: PARTNER_VERIFIER_DATABASE_URL
+                sync: false
+              - key: PORT
+                sync: false
+              - key: PRESALE_ADMIN_TOKEN
+                sync: false
+              - key: PRESALE_GAS_POOL_TOKEN
+                sync: false
+              - key: PRESALE_GAS_POOL_URL
+                sync: false
+              - key: PRESALE_SPONSOR_ADDRESS
+                sync: false
+              - key: PRIVY_APP_ID
+                sync: false
+              - key: PRIVY_APP_SECRET
+                sync: false
+              - key: PRIVY_JWT_VERIFICATION_KEY
+                sync: false
+              - key: RATE_LIMIT_SUBJECT_PEPPER
+                sync: false
+              - key: SOCIAL_DATA_API_KEY
+                sync: false
+              - key: VERCEL_ENV
+                sync: false
+              - key: VERCEL_GIT_COMMIT_REF
+                sync: false
+              - key: VERCEL_TARGET_ENV
+                sync: false
+              - key: X_ACCESS_TOKEN
+                sync: false
+              - key: X_ACCESS_TOKEN_SECRET
+                sync: false
+              - key: X_API_BEARER_TOKEN
+                sync: false
+          - type: web
+            name: blast-backend-hints
+            runtime: docker
+            branch: main
+            region: virginia
+            plan: starter
+            numInstances: 2
+            autoDeployTrigger: "off"
+            maxShutdownDelaySeconds: 20
+            healthCheckPath: /v1/health
+            dockerfilePath: ./apps/backend-api/Dockerfile
+            dockerContext: .
+            dockerCommand: bun run src/hints-main.ts
+            envVars:
+              - key: BLAST_BACKEND_EXPECTED_QUOTA_NAMESPACE
+                sync: false
+              - key: BLAST_BACKEND_FLEET_CONFIG
+                sync: false
+              - key: BLAST_BACKEND_HINTS_GATEWAY_SECRET
+                sync: false
+              - key: BLAST_BACKEND_INGRESS_MODE
+                sync: false
+              - key: BLAST_BACKEND_LISTEN_HOST
+                sync: false
+              - key: BLAST_BACKEND_MARKET_STREAM_ENABLED
+                sync: false
+              - key: BLAST_BACKEND_MAX_ADMIN_INFLIGHT
+                sync: false
+              - key: BLAST_BACKEND_MAX_HINT_STREAMS
+                sync: false
+              - key: BLAST_BACKEND_MAX_INFLIGHT
+                sync: false
+              - key: BLAST_DEPLOYMENT_FINGERPRINT
+                sync: false
+              - key: BLAST_INFRA_API_KEY
+                sync: false
+              - key: BLAST_INFRA_ORIGIN
+                sync: false
+              - key: BLAST_INFRA_READ_MODE
+                sync: false
+              - key: BLAST_INFRA_READ_ORIGIN
+                sync: false
+              - key: BLAST_NETWORK
+                sync: false
+              - key: BLAST_QUOTA_REDIS_URL
+                sync: false
+              - key: BLAST_REDIS_NAMESPACE
+                sync: false
+              - key: NEXT_PUBLIC_SITE_URL
+                sync: false
+              - key: NODE_ENV
+                sync: false
+              - key: RATE_LIMIT_SUBJECT_PEPPER
+                sync: false
+              - key: VERCEL_ENV
+                sync: false
+              - key: VERCEL_GIT_COMMIT_REF
+                sync: false
+              - key: VERCEL_TARGET_ENV
+                sync: false
+          - type: worker
+            name: blast-keeper
+            runtime: docker
+            branch: main
+            region: virginia
+            plan: 0.5c-512mb
+            numInstances: 1
+            autoDeployTrigger: "off"
+            maxShutdownDelaySeconds: 300
+            dockerfilePath: ./apps/workers/Dockerfile
+            dockerContext: .
+            dockerCommand: /app/apps/workers/start.sh blast-keeper
+            envVars:
+              - fromGroup: blast-workers-common
+              - key: BLAST_INFRA_API_KEY
+                sync: false
+              - key: BLAST_INFRA_ORIGIN
+                sync: false
+              - key: BLAST_INFRA_READ_MODE
+                value: committed-markets
+              - key: BLAST_INFRA_READ_ORIGIN
+                value: https://blast-infra-reader.onrender.com
+              - key: BLAST_LAUNCHPAD_ENABLED
+                sync: false
+              - key: BLAST_WORKER_ALERT_WEBHOOK_URL
+                sync: false
+              - key: BLAST_WORKER_DELIVERY_BATCH_SIZE
+                sync: false
+              - key: BLAST_WORKER_FEE_CLAIM_GAS_MULTIPLE
+                sync: false
+              - key: BLAST_WORKER_FEE_CLAIM_INTERVAL_MS
+                sync: false
+              - key: BLAST_WORKER_FUNDING_ALERT_MIST
+                sync: false
+              - key: BLAST_WORKER_OPENING_ROUND_ALERT_MS
+                sync: false
+              - key: BLAST_WORKER_SIGNER_KEY
+                sync: false
+              - key: GAS_POOL_SPONSOR_ADDRESS
+                sync: false
+              - key: WATCHER_DATABASE_URL
+                sync: false
+          - type: worker
+            name: vault-buyback
+            runtime: docker
+            branch: main
+            region: virginia
+            plan: 0.5c-512mb
+            numInstances: 1
+            autoDeployTrigger: "off"
+            maxShutdownDelaySeconds: 300
+            dockerfilePath: ./apps/workers/Dockerfile
+            dockerContext: .
+            dockerCommand: /app/apps/workers/start.sh vault-buyback
+            envVars:
+              - fromGroup: blast-workers-common
+              - key: BLAST_BUYBACK_ADMIN_CAP_ID
+                sync: false
+              - key: BLAST_BUYBACK_ALERT_WEBHOOK_URL
+                sync: false
+              - key: BLAST_BUYBACK_SIGNER_KEY
+                sync: false
+              - key: BLAST_INFRA_API_KEY
+                sync: false
+              - key: BLAST_INFRA_ORIGIN
+                sync: false
+              - key: BLAST_INFRA_READ_MODE
+                value: committed-markets
+              - key: BLAST_INFRA_READ_ORIGIN
+                value: https://blast-infra-reader.onrender.com
+              - key: BLAST_LAUNCHPAD_ENABLED
+                sync: false
+              - key: BLAST_WORKER_FUNDING_ALERT_MIST
+                sync: false
+              - key: WATCHER_DATABASE_URL
+                sync: false
+          - type: worker
+            name: vault-rewards
+            runtime: docker
+            branch: main
+            region: virginia
+            plan: 0.5c-512mb
+            numInstances: 1
+            autoDeployTrigger: "off"
+            maxShutdownDelaySeconds: 300
+            dockerfilePath: ./apps/workers/Dockerfile
+            dockerContext: .
+            dockerCommand: /app/apps/workers/start.sh vault-rewards
+            envVars:
+              - fromGroup: blast-workers-common
+              - key: BLAST_INFRA_API_KEY
+                sync: false
+              - key: BLAST_WORKER_ALERT_WEBHOOK_URL
+                sync: false
+              - key: BLAST_WORKER_FUNDING_ALERT_MIST
+                sync: false
+              - key: PRESALE_ALERT_WEBHOOK_URL
+                sync: false
+              - key: PRESALE_SPONSOR_ADDRESS
+                sync: false
+              - key: REWARDS_PRICE_MAX_AGE_MS
+                sync: false
+              - key: REWARDS_PRICE_MAX_CONFIDENCE_BPS
+                sync: false
+              - key: VAULT_REWARDS_ADMIN_CAP_ID
+                sync: false
+              - key: VAULT_REWARDS_RELAY_BATCH
+                sync: false
+              - key: VAULT_REWARDS_SIGNER_KEY
+                sync: false
+              - key: WATCHER_DATABASE_URL
+                sync: false
+          - type: worker
+            name: rewards-planner
+            runtime: docker
+            branch: main
+            region: virginia
+            plan: 0.5c-512mb
+            numInstances: 1
+            autoDeployTrigger: "off"
+            maxShutdownDelaySeconds: 300
+            dockerfilePath: ./apps/workers/Dockerfile
+            dockerContext: .
+            dockerCommand: /app/apps/workers/start.sh rewards-planner
+            envVars:
+              - fromGroup: blast-workers-common
+              - key: BLAST_WORKER_ALERT_WEBHOOK_URL
+                sync: false
+              - key: BLAST_WORKER_FUNDING_ALERT_MIST
+                sync: false
+              - key: REWARDS_BLOB_TOKEN
+                sync: false
+              - key: REWARDS_PLANNER_DATABASE_URL
+                sync: false
+              - key: REWARDS_PRICE_MAX_AGE_MS
+                sync: false
+              - key: REWARDS_PRICE_MAX_CONFIDENCE_BPS
+                sync: false
+          - type: worker
+            name: social-worker
+            runtime: docker
+            branch: main
+            region: virginia
+            plan: 0.5c-512mb
+            numInstances: 1
+            autoDeployTrigger: "off"
+            maxShutdownDelaySeconds: 300
+            dockerfilePath: ./apps/workers/Dockerfile
+            dockerContext: .
+            dockerCommand: /app/apps/workers/start.sh social
+            envVars:
+              - fromGroup: blast-workers-common
+              - key: BLAST_SOCIAL_ENABLED
+                sync: false
+              - key: PRESALE_SUI_GRPC_URL
+                sync: false
+              - key: SOCIAL_REFERRAL_PROFILE
+                sync: false
+              - key: WATCHER_DATABASE_URL
+                sync: false
+          - type: cron
+            name: blast-defillama-publisher
+            runtime: node
+            branch: main
+            region: virginia
+            plan: starter
+            autoDeployTrigger: "off"
+            schedule: 15 * * * *
+            buildCommand: npm install --global npm@12.0.2 --ignore-scripts --no-audit --no-fund && npm ci --omit=dev --ignore-scripts --no-audit --no-fund --workspace=@blast/web
+            startCommand:
+              'if [ "${DEFILLAMA_ENABLED:-false}" != "true" ]; then echo "DefiLlama publisher inactive: awaiting the fresh package deployment profile"; exit 0; fi; exec node --max-old-space-size=384
+              --no-warnings --experimental-strip-types apps/web/scripts/defillama-publish.ts --scheduled'
+            envVars:
+              - key: BLAST_DEPLOYMENT_FINGERPRINT
+                sync: false
+              - key: BLAST_NETWORK
+                sync: false
+              - key: DEFILLAMA_ENABLED
+                sync: false
+              - key: DEFILLAMA_FRONTEND_FEE_HISTORY
+                sync: false
+              - key: DEFILLAMA_PROFILE
+                sync: false
+              - key: DEFILLAMA_SOURCE_DATABASE_URL
+                sync: false
+              - key: DEFILLAMA_SUI_ARCHIVE_GRAPHQL_URL
+                sync: false
+              - key: DEFILLAMA_WRITE_DATABASE_URL
+                sync: false
+              - key: NODE_ENV
+                sync: false
+              - key: NODE_VERSION
+                sync: false
+              - key: TZ
+                sync: false
+          - type: keyvalue
+            name: blast-read-cache
+            region: virginia
+            plan: 256mb
+            maxmemoryPolicy: allkeys-lru
+            persistenceMode: "off"
+            ipAllowList:
+              - source: 0.0.0.0/0
+                description: Vercel dynamic egress; authenticated TLS only
+          - type: keyvalue
+            name: blast-partner-quotas
+            region: virginia
+            plan: 256mb
+            maxmemoryPolicy: noeviction
+            persistenceMode: journal-snapshot
+            ipAllowList:
+              - source: 0.0.0.0/0
+                description: Vercel dynamic egress; authenticated TLS only
+        envVarGroups:
+          - name: blast-workers-common
+            envVars:
+              - key: BLAST_DEPLOYMENT_FINGERPRINT
+                sync: false
+              - key: BLAST_NETWORK
+                sync: false
+              - key: BLAST_WORKER_BATCH_SIZE
+                sync: false
+              - key: BLAST_WORKER_CONFIRM_TIMEOUT_MS
+                sync: false
+              - key: BLAST_WORKER_ENVIRONMENT
+                sync: false
+              - key: BLAST_WORKER_GAS_BUDGET_MIST
+                sync: false
+              - key: BLAST_WORKER_LEASE_TTL_MS
+                sync: false
+              - key: BLAST_WORKER_MAX_ATTEMPTS
+                sync: false
+              - key: BLAST_WORKER_POLL_INTERVAL_MS
+                sync: false
+              - key: BLAST_WORKER_PROVIDER_TIMEOUT_MS
+                sync: false
+              - key: BLAST_WORKER_RETRY_BASE_MS
+                sync: false
+              - key: BLAST_WORKER_RETRY_MAX_MS
+                sync: false
+              - key: BLAST_WORKER_SUI_GRPC_URL
+                sync: false

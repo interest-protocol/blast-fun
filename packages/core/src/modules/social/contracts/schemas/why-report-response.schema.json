@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/why-report-response.schema.json",
+  "title": "Social why reported",
+  "description": "Answer of POST /api/social/whys/{why_id}/reports: the reported why, and whether this account had already reported it (201 with false, 200 with true). The reason is never echoed.",
+  "type": "object",
+  "properties": {
+    "why_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "already_reported": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "why_id",
+    "already_reported"
+  ],
+  "additionalProperties": false
+}

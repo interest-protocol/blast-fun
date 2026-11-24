@@ -1,0 +1,28 @@
+{
+  "provenance": {
+    "network": "localnet",
+    "deployment_fingerprint": "5d2f2a4be1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c",
+    "checkpoint": 10,
+    "timestamp_ms": 1790289083000,
+    "observed_ms": 1790829653303,
+    "lag_ms": 540570303
+  },
+  "coin": "0xc87fedd65e88c8517369ab363f8104caa51c711b323307b60ae2f447165ccd04::meme::MEME",
+  "snapshot": {
+    "state": "complete",
+    "checkpoint": 10,
+    "timestamp_ms": 1790289083000
+  },
+  "holder_count": "0",
+  "held_supply": "0",
+  "top_1": {
+    "amount": "0",
+    "share_bps": null
+  },
+  "top_10": {
+    "amount": "0",
+    "share_bps": null
+  },
+  "holders": [],
+  "next_cursor": null
+}

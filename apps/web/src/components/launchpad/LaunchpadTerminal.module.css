@@ -1,0 +1,416 @@
+/*
+ * Terminal composition. Mobile first; the desktop composition starts at
+ * 64rem (TERMINAL_DESKTOP_MEDIA in terminal-layout.ts). Region visibility
+ * comes from terminalRegionVisibility via data-desktop / data-mobile.
+ * Regions are separated by space and type, never boxes or dividers; colors
+ * come from the launchpad theme (primitives/LaunchpadTheme.module.css).
+ */
+
+.terminal {
+  --discovery-width: 16rem;
+  --rail-width: 20rem;
+  --mobile-nav-height: 56px;
+
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 32px;
+  padding-bottom: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom));
+}
+
+.discovery,
+.workspace,
+.rail {
+  min-width: 0;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 32px;
+  align-content: start;
+}
+
+.discoveryHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 44px;
+}
+
+.regionLabel,
+.panelHeading {
+  margin: 0 0 12px;
+  color: var(--lp-ink);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+}
+
+.discoveryHeader .regionLabel {
+  margin: 0;
+}
+
+.collapseToggle {
+  display: none;
+}
+
+.pending {
+  margin: 0;
+  color: var(--lp-muted);
+}
+
+.marketHeader {
+  min-width: 0;
+}
+
+.marketHeader .regionLabel {
+  margin-bottom: 4px;
+  color: var(--lp-muted);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 16px;
+}
+
+.marketTitle {
+  margin: 0 0 8px;
+  font-family: var(--font-display), ui-monospace, monospace;
+  font-size: var(--display-fluid-xl);
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: var(--display-tracking-xl);
+}
+
+.launchIdLabel {
+  margin: 0;
+  color: var(--lp-muted);
+  font-size: 12px;
+}
+
+.launchId {
+  display: block;
+  overflow-wrap: anywhere;
+  font-family: var(--lp-font-mono);
+  font-size: 13px;
+}
+
+.chart {
+  min-height: 16rem;
+}
+
+.tabs {
+  display: none;
+}
+
+/* Mobile bottom navigation: Discover, Chart, Trade, Theses. */
+.mobileNav {
+  position: fixed;
+  inset: auto 0 0;
+  z-index: 10;
+  padding-bottom: env(safe-area-inset-bottom);
+  box-shadow: 0 -1px 0 var(--lp-line);
+  background: var(--lp-surface);
+}
+
+.mobileNavList {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mobileNavButton {
+  width: 100%;
+  min-width: 0;
+  min-height: var(--mobile-nav-height);
+  padding: 0 8px;
+  border-top: 2px solid transparent;
+  color: var(--lp-muted);
+  font-family: var(--lp-font);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* Current view and open Trade: ink, weight, and a pink bar, not color alone. */
+.mobileNavButton[aria-current="true"],
+.mobileNavButton[aria-expanded="true"] {
+  border-top-color: var(--lp-accent);
+  background: var(--lp-selected);
+  color: var(--lp-ink);
+  font-weight: 700;
+}
+
+@media (max-width: 63.999rem) {
+  .terminal [data-mobile="hidden"] {
+    display: none;
+  }
+
+  /* Mobile Discover hides the market header but keeps its page heading. */
+  .terminal .market[data-mobile="hidden"] {
+    display: block;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  /* The rail belongs to the Trade surface on mobile; hidden before hydration too. */
+  .rail {
+    display: none;
+  }
+
+  .panelHeading {
+    display: block;
+  }
+}
+
+@media (min-width: 64rem) {
+  .terminal {
+    grid-template-columns: var(--discovery-width) minmax(0, 1fr) var(--rail-width);
+    align-items: start;
+    gap: 24px;
+    padding-bottom: 0;
+  }
+
+  .terminal[data-discovery="collapsed"] {
+    --discovery-width: 44px;
+  }
+
+  .terminal [data-desktop="hidden"] {
+    display: none;
+  }
+
+  .mobileNav {
+    display: none;
+  }
+
+  .collapseToggle {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    min-height: 44px;
+    border-radius: var(--lp-radius);
+    color: var(--lp-muted);
+    font-size: 18px;
+    font-weight: 600;
+  }
+
+  @media (hover:hover) and (pointer:fine) { .collapseToggle:hover {
+    background: var(--lp-raised);
+    color: var(--lp-ink);
+  } }
+
+  .terminal[data-discovery="collapsed"] .discoveryHeader {
+    justify-content: center;
+  }
+
+  .terminal[data-discovery="collapsed"] .discoveryHeader .regionLabel,
+  .terminal[data-discovery="collapsed"] .discoveryBody {
+    display: none;
+  }
+
+  .discoveryBody {
+    margin-top: 12px;
+  }
+
+  .rail {
+    position: sticky;
+    top: 24px;
+  }
+
+  .tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 24px;
+    margin-bottom: -16px;
+  }
+
+  .tab {
+    min-width: 0;
+    min-height: 44px;
+    padding: 0;
+    border-bottom: 2px solid transparent;
+    color: var(--lp-muted);
+    font-family: var(--lp-font);
+    font-size: 14px;
+    font-weight: 500;
+  }
+
+  @media (hover:hover) and (pointer:fine) { .tab:hover {
+    color: var(--lp-ink);
+  } }
+
+  /* The selected tab: ink, weight, and a pink underline, not color alone. */
+  .tab[aria-selected="true"] {
+    border-bottom-color: var(--lp-accent);
+    color: var(--lp-ink);
+    font-weight: 700;
+  }
+
+  /* The selected tab names the panel on desktop. */
+  .panelHeading {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+/* Global search trigger (top center of the launchpad header). */
+.searchTrigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 164px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--lp-line);
+  border-radius: var(--lp-radius);
+  background: var(--lp-surface);
+  color: var(--lp-ink);
+  font-family: var(--lp-font);
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.searchGlyph {
+  font-size: 18px;
+  line-height: 1;
+}
+
+/* The `/` shortcut, shown where a keyboard is likely. */
+.searchKey {
+  display: none;
+}
+
+@media (min-width: 64rem) {
+  .searchTrigger {
+    justify-content: flex-start;
+    width: 320px;
+    color: var(--lp-muted);
+  }
+
+  .searchKey {
+    display: inline-block;
+    margin-left: auto;
+    padding: 0 6px;
+    border: 1px solid var(--lp-line);
+    border-radius: 6px;
+    color: var(--lp-muted);
+    font-family: var(--lp-font-mono);
+    font-size: 12px;
+    line-height: 20px;
+  }
+}
+
+/* Focused surfaces: Search and mobile Trade. */
+.surface {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: var(--lp-canvas);
+  color: var(--lp-ink);
+  font-family: var(--lp-font);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.surface[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.surface::backdrop {
+  background: rgb(16 23 33 / 56%);
+}
+
+:global(html):has(.surface:modal) {
+  overflow: hidden;
+}
+
+.surfaceHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px var(--blast-gutter);
+  padding-top: calc(8px + env(safe-area-inset-top));
+}
+
+.surfaceTitle {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.surfaceClose {
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--lp-line);
+  border-radius: var(--lp-radius);
+  background: var(--lp-surface);
+  font-family: var(--lp-font);
+  font-weight: 500;
+}
+
+.surfaceBody {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px var(--blast-gutter);
+  padding-bottom: calc(16px + env(safe-area-inset-bottom));
+}
+
+@media (min-width: 64rem) {
+  .surface[data-layout="responsive"] {
+    inset: 64px 0 auto;
+    width: min(640px, 100% - 2 * var(--blast-gutter));
+    height: auto;
+    max-height: calc(100dvh - 128px);
+    margin: 0 auto;
+    border: 1px solid var(--lp-line);
+    border-radius: 16px;
+    background: var(--lp-surface);
+    box-shadow: 0 16px 48px rgb(16 23 33 / 24%);
+  }
+}
+
+/* Native dialogs retain their top-layer pixels through close, without delaying focus return. */
+.surface {
+  opacity: 1;
+  transform: none;
+  transition: opacity 160ms cubic-bezier(.23,1,.32,1), transform 200ms cubic-bezier(.23,1,.32,1), display 200ms allow-discrete, overlay 200ms allow-discrete;
+}
+.surface:not([open]) { opacity: 0; transform: translateY(8px); transition-duration: 140ms; }
+.surface::backdrop { opacity: 1; transition: opacity 160ms cubic-bezier(.23,1,.32,1), display 160ms allow-discrete, overlay 160ms allow-discrete; }
+.surface:not([open])::backdrop { opacity: 0; }
+@starting-style {
+  .surface[open] { opacity: 0; transform: translateY(8px); }
+  .surface[open]::backdrop { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .surface { transition: opacity 120ms linear, display 120ms allow-discrete, overlay 120ms allow-discrete; }
+  .surface, .surface:not([open]) { transform: none; }
+  @starting-style { .surface[open] { transform: none; } }
+}
+:global(html[data-blast-input="keyboard"]) .surface,
+:global(html[data-blast-input="keyboard"]) .surface::backdrop { transition: none; }

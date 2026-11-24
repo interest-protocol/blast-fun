@@ -1,0 +1,32 @@
+-- Social feed T-024 and T-026: registering an intent (POST
+-- /api/social/intents) and resolving it in the social worker.
+--
+-- The table itself is 0054's and needs no change: `tx_digest` is already the
+-- primary key, so the route's read, its `ON CONFLICT DO NOTHING` insert and
+-- its retry are all primary-key work, and `status` already allows the four
+-- values the worker moves a row to ('pending', 'applied', 'rejected_sender',
+-- 'late'). The grants are 0054's too: the web inserts and the watcher
+-- inserts, updates and deletes.
+--
+-- What is missing is the worker's own access path. Its step reads the
+-- *pending* rows oldest first, in keyset order, and its expiry deletes the
+-- pending rows older than 24 hours. Both are a small, moving slice of a table
+-- that grows with every commit ever made and is never pruned of its resolved
+-- rows, so neither may scan it. A partial index on the pending rows only,
+-- ordered the way the step pages, keeps the work proportional to what is
+-- actually pending: it holds one entry per unresolved intent (seconds' worth
+-- of commits), and resolving an intent removes that entry.
+--
+-- `(registered_at, tx_digest)` because `registered_at` alone is not unique --
+-- several people commit in the same millisecond -- and the digest is the
+-- primary key, so the pair is a total order and the step's cursor can be
+-- exactly `(registered_at, tx_digest)`.
+CREATE INDEX social_intents_pending_idx ON social_intents (registered_at, tx_digest) WHERE status = 'pending';
+
+-- The resolved rows are the airdrop's evidence and are never deleted, so
+-- nothing reads them by status; a sender's own history, though, is read by
+-- account (the portfolio's "through" totals come from social_attributions,
+-- but an operator answering "what did this account register" has no path).
+-- One index on the account makes that a bounded read instead of a sequential
+-- scan over every intent ever registered.
+CREATE INDEX social_intents_account_idx ON social_intents (account_id, registered_at DESC);

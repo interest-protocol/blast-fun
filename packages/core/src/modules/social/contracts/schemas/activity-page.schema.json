@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/activity-page.schema.json",
+  "title": "Recent activity",
+  "description": "GET /api/social/activity 200 (Cache-Control: public, s-maxage=10, stale-while-revalidate=20): one keyset page of the newest commits and claims (and trades while trading is visible) across every sale the web shows, newest first, bounded by the watermark. The same for every caller; no viewer field.",
+  "type": "object",
+  "properties": {
+    "events": {
+      "type": "array",
+      "maxItems": 30,
+      "items": {
+        "$ref": "#/$defs/event"
+      }
+    },
+    "next_cursor": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]{0,15}):(0|[1-9][0-9]{0,18}):(0|[1-9][0-9]{0,9}):(0|[1-9][0-9]{0,9}):(0|[1-9][0-9]{0,9})$"
+        }
+      ],
+      "description": "The before parameter of the next (older) page: <timestamp_ms>:<checkpoint>:<tx_slot>:<event_slot>:<part>. Null when this page reached the end."
+    },
+    "as_of": {
+      "$ref": "https://blast-v2.invalid/social/contracts/as-of.schema.json"
+    }
+  },
+  "required": [
+    "events",
+    "next_cursor",
+    "as_of"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "wholeUnits": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]{1,18})?$",
+      "description": "A non-negative plain decimal in whole units."
+    },
+    "event": {
+      "type": "object",
+      "properties": {
+        "activity_id": {
+          "type": "string",
+          "pattern": "^[0-9]+:[0-9]+:[0-9]+:[0-9]+$"
+        },
+        "kind": {
+          "enum": [
+            "presale_commit",
+            "presale_claim",
+            "trade_buy",
+            "trade_sell"
+          ]
+        },
+        "occurred_at_ms": {
+          "$ref": "https://blast-v2.invalid/social/contracts/feed-item.schema.json#/$defs/millis"
+        },
+        "actor": {
+          "oneOf": [
+            {
+              "$ref": "https://blast-v2.invalid/social/contracts/feed-item.schema.json#/$defs/accountActor"
+            },
+            {
+              "$ref": "https://blast-v2.invalid/social/contracts/feed-item.schema.json#/$defs/addressActor"
+            }
+          ],
+          "description": "Named by the naming rule at the event, else the wallet only."
+        },
+        "presale_id": {
+          "type": "string",
+          "pattern": "^0x[0-9a-f]{64}$",
+          "description": "The shown sale the row belongs to; a trade's is the sale whose coin it is."
+        },
+        "sale_name": {
+          "type": "string"
+        },
+        "symbol": {
+          "type": "string"
+        },
+        "quote_symbol": {
+          "type": "string"
+        },
+        "usd": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "https://blast-v2.invalid/social/contracts/feed-item.schema.json#/$defs/usd"
+            }
+          ],
+          "description": "A commit's or a trade's USD amount, a claim's refund in USD; null when the indexer priced none."
+        },
+        "quote": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/wholeUnits"
+            }
+          ],
+          "description": "A commit's or a trade's quote amount in whole quote units; null for a claim."
+        },
+        "tokens": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/wholeUnits"
+            }
+          ],
+          "description": "Whole sale tokens: a claim's delivered tokens or a trade's coin quantity."
+        },
+        "refund": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/wholeUnits"
+            }
+          ],
+          "description": "A claim's refund in whole quote units."
+        }
+      },
+      "required": [
+        "activity_id",
+        "kind",
+        "occurred_at_ms",
+        "actor",
+        "presale_id",
+        "sale_name",
+        "symbol",
+        "quote_symbol",
+        "usd",
+        "quote",
+        "tokens",
+        "refund"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

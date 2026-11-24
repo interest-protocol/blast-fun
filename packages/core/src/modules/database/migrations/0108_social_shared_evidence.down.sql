@@ -1,0 +1,10 @@
+DROP FUNCTION social_lock_portfolio_sources();
+DROP TRIGGER social_accounts_portfolio_revision ON social_accounts;
+DROP TRIGGER social_account_wallets_portfolio_revision ON social_account_wallets;
+DROP TRIGGER social_notification_preferences_portfolio_revision ON social_notification_preferences;
+DROP TRIGGER mission_control_account_wallets_portfolio_revision ON mission_control_account_wallets;
+DROP TRIGGER mission_control_account_identities_portfolio_revision ON mission_control_account_identities;
+DROP TRIGGER presale_embedded_wallets_portfolio_revision ON presale_embedded_wallets;
+DROP FUNCTION social_bump_portfolio_source_revision();
+DROP TABLE social_portfolio_source_revision;
+DROP TABLE social_portfolio_balance_observations;

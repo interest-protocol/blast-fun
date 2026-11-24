@@ -1,0 +1,45 @@
+/*
+ * What the UI libraries would otherwise put in inline styles the CSP refuses
+ * (OA-28, docs/product/social-feed/ui-libraries.md). Static, so `style-src
+ * 'self'` admits it, and in the server's HTML from the first paint.
+ */
+
+/*
+ * base-ui's scrollbar-hiding rule (ScrollArea's viewport, a Select's popup).
+ * base-ui writes it as a hoisted `\3c style precedence>`; React drops the nonce
+ * from such a style in server HTML (Next passes only a script nonce), so
+ * `LibraryProviders` turns those elements off (`disableStyleElements`) and
+ * the rule lives here instead.
+ */
+.base-ui-disable-scrollbar {
+  scrollbar-width: none;
+}
+
+.base-ui-disable-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/*
+ * base-ui's visually hidden helpers when the server rendered them: the
+ * native input beside a Switch, Checkbox, Radio, Select, NumberField or
+ * OTPField (always `aria-hidden` and out of the tab order), and the "x" a
+ * Progress or Meter keeps for screen readers. Their `style` attribute is
+ * dropped by the CSP and hydration does not write it again; without this
+ * they would show. Rendered in the browser they carry the same declarations
+ * inline, through the CSSOM, which win over these.
+ */
+[data-blast-ui] input[aria-hidden="true"][tabindex="-1"],
+[data-blast-ui] [role="progressbar"] > span[role="presentation"],
+[data-blast-ui] [role="meter"] > span[role="presentation"] {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

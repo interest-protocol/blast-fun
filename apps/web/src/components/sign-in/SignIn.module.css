@@ -1,0 +1,96 @@
+/* The sign-in sheet (FEATURE-MAP §8.2): mark tile, title, methods, fine print. */
+
+.mark {
+  width: 3.4375rem;
+  height: 3.4375rem;
+  border-radius: 1.0625rem;
+  background: var(--pink-soft);
+  display: grid;
+  place-items: center;
+}
+.mark svg { width: 2.125rem; height: 1.4375rem; }
+
+.methods { display: flex; flex-direction: column; gap: 0.5rem; }
+.walletGroup { display: flex; flex-direction: column; gap: 0.5rem; margin: 0.3125rem 0; }
+.walletMethods { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; }
+.groupLabel { margin: 0; color: var(--muted); font-size: 0.75rem; font-weight: 600; }
+.methods button.method {
+  height: 3.4375rem;
+  justify-content: flex-start;
+  padding: 0 1.3125rem;
+  gap: 0.8125rem;
+  font-size: 0.9375rem;
+  border-radius: var(--r-button-lg);
+}
+.methods button.method svg { width: 1.1875rem; height: 1.1875rem; flex: none; }
+.methods button.method img { width: 1.5rem; height: 1.5rem; flex: none; }
+.methods button.method[disabled] { cursor: default; }
+.walletMethods button.method { height: 5rem; min-width: 0; flex-direction: column; justify-content: center; gap: 0.5rem; padding: 0.5rem; font-size: 0.8125rem; line-height: 1.2; text-align: center; white-space: normal; }
+
+.spin {
+  flex: none;
+  width: 1.0625rem;
+  height: 1.0625rem;
+  border-radius: 62.4375rem;
+  border: 0.125rem solid currentColor;
+  border-right-color: transparent;
+  opacity: .9;
+  animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.message {
+  margin: -0.5rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--muted);
+  text-align: center;
+  text-wrap: balance;
+}
+.message[role="alert"] { color: var(--down); }
+
+.fine {
+  margin: 0.75rem 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-align: center;
+  text-wrap: balance;
+}
+.fine a { color: inherit; }
+@media (hover: hover) {
+  .fine a:hover { text-decoration: underline; text-underline-offset: 0.125rem; }
+}
+.fine a:active { opacity: .6; } /* OA-31: a text link dips */
+
+/* `/sign-in`: the same card in the page, centred in the column. */
+.page {
+  display: grid;
+  justify-items: center;
+  padding: 3.4375rem 0 2.125rem;
+}
+.card {
+  --sheet-px: 1.75rem;
+  width: min(27.5rem, 100%);
+  background: var(--card);
+  border-radius: var(--r-lg);
+  box-shadow: var(--sh-pop);
+  padding: 2.125rem var(--sheet-px) 1.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.3125rem;
+}
+.card > * { flex-shrink: 0; }
+.back {
+  display: inline-flex;
+  align-items: center;
+  min-height: max(44px, 2.75rem);
+  margin: 0.5625rem 0 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+@media (max-width: 760px) {
+  .page { padding: 1.3125rem 0; }
+  .card { --sheet-px: 1.3125rem; padding: 1.75rem var(--sheet-px) 1.3125rem; }
+}
+
+@media (prefers-reduced-motion: reduce) { .spin { animation: none; } }

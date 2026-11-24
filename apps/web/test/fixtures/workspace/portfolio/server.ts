@@ -1,0 +1,41 @@
+import { readFileSync } from "node:fs";
+import { sign } from "node:crypto";
+import { createPrivyTokenVerifier } from "@blast/core/lib/privy-adapter/token-verifier.ts";
+import { PostgresRateLimitEnforcer } from "@blast/core/modules/database/postgres-rate-limits.ts";
+import { createRuntimePool } from "@blast/core/modules/database/pool.ts";
+import { autocommitReader } from "@blast/core/modules/database/transaction.ts";
+import { PostgresSocialAccounts } from "@blast/server/modules/social/accounts/repository.ts";
+import { createSocialRouteKit } from "@blast/server/modules/social/route-kit/route.ts";
+import { SOCIAL_CONFIG_DEFAULTS } from "@blast/core/modules/social/contracts/config.ts";
+import { createSocialMeRoute } from "@blast/server/modules/social/accounts/me-route.ts";
+import { createSocialSettingsRoute } from "@blast/server/modules/social/accounts/settings-route.ts";
+import { createSocialWorkspaceRoute } from "@blast/server/modules/social/workspace/route.ts";
+import { createSocialPortfolioRoute } from "@blast/server/modules/social/portfolio/route.ts";
+import { createSocialProfileRoutes } from "@blast/server/modules/social/profiles/route.ts";
+import { createSocialHomeRoutes } from "@blast/server/modules/social/home/route.ts";
+import { parseTradeCoinListQuery, readTradeCoinPage } from "@blast/server/modules/social/trades/coin-list.ts";
+import { portfolioFixtureConfiguration } from "./configuration.ts";
+const configuration = portfolioFixtureConfiguration();
+const authentication = JSON.parse(readFileSync(`${configuration.directory}/auth.json`, "utf8"));
+const runtime = new URL(configuration.url);
+runtime.searchParams.set("options", "-c role=blast_web");
+export const pool = createRuntimePool(runtime.toString(), { max: 2, connectionTimeoutMs: 3000, idleInTransactionMs: 3000, idleTimeoutMs: 1000, lockTimeoutMs: 1000, statementTimeoutMs: 5000 });
+const accounts = new PostgresSocialAccounts(() => pool);
+const kit = createSocialRouteKit({ expectedOrigin: configuration.origin, verifyAccessToken: createPrivyTokenVerifier({ appId: "t020-browser", verificationKey: authentication.publicKey }), limiter: new PostgresRateLimitEnforcer({ pool, subjectPepper: "t020-fixture-pepper-01234567890123456789" }), accounts, primary: () => pool, metricSampleRate: 0, tradingVisible: () => true });
+const database = () => autocommitReader(pool, "social");
+const common = { kit, database, now: () => authentication.now, config: async () => SOCIAL_CONFIG_DEFAULTS };
+export const meRoute = createSocialMeRoute({ kit, accounts });
+export const settingsRoute = createSocialSettingsRoute({ kit, database });
+export const workspaceRoute = createSocialWorkspaceRoute({ kit, database });
+export const portfolioRoute = createSocialPortfolioRoute({ ...common, wallets: accounts });
+export const profiles = createSocialProfileRoutes({ ...common, primary: database });
+export const home = createSocialHomeRoutes({ ...common, ledgerDatabase: database, wallets: accounts, terms: null });
+// The existing production public coin-list boundary, with the same parser/read and route policy.
+export const tradeCoins = kit.route({ name: "GET /api/social/trades/coins", auth: "none", bucket: "social_read_trade_coins", cache: "public" }, async context => context.json(await readTradeCoinPage(database(), parseTradeCoinListQuery(new URL(context.request.url)), authentication.now)));
+export function fixtureToken(n: number) {
+  if (!Number.isInteger(n) || n < 1 || n > 3) throw new Error("Unknown Portfolio fixture account");
+  const now = Math.floor(Date.now() / 1000);
+  const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
+  const payload = `${encode({ alg: "ES256", typ: "JWT" })}.${encode({ aud: "t020-browser", exp: now + 3600, iat: now - 60, iss: "privy.io", sid: "t020-browser", sub: `did:privy:t020-${n}` })}`;
+  return `${payload}.${sign("sha256", Buffer.from(payload), { dsaEncoding: "ieee-p1363", key: authentication.privateKey }).toString("base64url")}`;
+}

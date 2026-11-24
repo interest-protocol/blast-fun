@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/presale/contracts/allowlist-bind-request.schema.json",
+  "title": "Allowlist bind request",
+  "description": "POST /api/presale/allowlists/{allowlist_id}/bind.",
+  "type": "object",
+  "properties": {
+    "presale_id": {
+      "$ref": "defs.schema.json#/$defs/address"
+    }
+  },
+  "required": [
+    "presale_id"
+  ],
+  "additionalProperties": false
+}

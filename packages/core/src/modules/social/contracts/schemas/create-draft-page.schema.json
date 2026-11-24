@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/create-draft-page.schema.json",
+  "title": "A page of the caller's presale drafts",
+  "description": "GET /api/social/me/drafts: most recently saved first (keyset), and the next page's cursor. With resume=true, only drafts edited after the account's latest publication are returned.",
+  "type": "object",
+  "properties": {
+    "items": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "type": "object",
+        "properties": {
+          "draft_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 32
+          },
+          "symbol": {
+            "type": "string",
+            "maxLength": 10
+          },
+          "target": {
+            "type": "number",
+            "minimum": 0
+          },
+          "logo_url": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "pattern": "^https://\\S{1,2040}$"
+              }
+            ]
+          },
+          "updated_at_ms": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "draft_id",
+          "version",
+          "name",
+          "symbol",
+          "target",
+          "logo_url",
+          "updated_at_ms"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "next_cursor": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]{12}$",
+          "maxLength": 256
+        }
+      ]
+    }
+  },
+  "required": [
+    "items",
+    "next_cursor"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/presale/contracts/allowlist-entries-response.schema.json",
+  "title": "Owner allowlist entries",
+  "type": "object",
+  "properties": {
+    "quote": {
+      "$ref": "defs.schema.json#/$defs/coin_type"
+    },
+    "source": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "file_name": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "uploaded_count": {
+              "$ref": "defs.schema.json#/$defs/count"
+            },
+            "include_blast_holders": {
+              "type": "boolean"
+            },
+            "added_count": {
+              "$ref": "defs.schema.json#/$defs/count"
+            },
+            "holder_cap": {
+              "anyOf": [
+                {
+                  "$ref": "defs.schema.json#/$defs/uint"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "file_name",
+            "uploaded_count",
+            "include_blast_holders",
+            "added_count",
+            "holder_cap"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 65536,
+      "items": {
+        "type": "object",
+        "properties": {
+          "wallet": {
+            "$ref": "defs.schema.json#/$defs/address"
+          },
+          "cap": {
+            "$ref": "defs.schema.json#/$defs/uint"
+          }
+        },
+        "required": [
+          "wallet",
+          "cap"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "quote",
+    "source",
+    "entries"
+  ],
+  "additionalProperties": false
+}

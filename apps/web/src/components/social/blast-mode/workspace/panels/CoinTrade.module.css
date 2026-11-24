@@ -1,0 +1,273 @@
+/* Fixed rows keep amount, quote, action and feedback aligned across data states. */
+.form { container:coin-trade / inline-size; display:flex; flex-direction:column; gap:0.5rem; flex:none; min-width:0; }
+.form[hidden] { display:none; }
+
+/* Side, denomination and balance, amount/payment, presets, quote, action. */
+.tray { display:grid; grid-template-columns:minmax(0,1fr); grid-template-areas:"side" "entry" "meta" "cta"; align-items:center; gap:0.375rem; }
+.entry { grid-area:entry; display:grid; grid-template-columns:minmax(0,1fr) 8rem; grid-template-areas:"label label" "amount pay" "presets presets"; align-items:center; gap:0.375rem 0.5rem; min-width:0; }
+.amountLabel { grid-area:label; color:var(--muted); font-size:0.75rem; font-weight:500; }
+.presets { grid-area:presets; display:flex; gap:0.375rem; }
+.presets > button { flex:1; background:transparent; color:var(--muted); }
+.presets > button[aria-pressed="true"] { background:var(--workspace-inset); color:var(--ink); font-weight:600; box-shadow:none; }
+
+.ticketHeader { grid-area:side; display:flex; align-items:center; gap:0.5rem; min-width:0; }
+.ticketHeader > .side { flex:1; }
+
+/* Buy / Sell: the same track and thumb as the panel tabs. */
+.side { grid-area:side; display:flex; gap:0.125rem; height:2.125rem; padding:0.125rem; border-radius:var(--r-button); background:var(--track); }
+.sideButton { flex:1; display:inline-flex; align-items:center; justify-content:center; min-width:max(44px, 2.75rem); min-height:0; height:1.875rem; padding:0 0.625rem; border-radius:var(--r-inner); color:var(--muted); font-size:0.8125rem; font-weight:600; white-space:nowrap; transition:background var(--t1) ease-out,color var(--t1) ease-out; }
+.sideButton[aria-pressed="true"] { background:var(--thumb); color:var(--ink); box-shadow:var(--thumb-sh); }
+.sideButton:disabled { cursor:not-allowed; }
+
+/* The field and the pay chip are grid items of the tray; the wrapper only groups them for assistive order. */
+.amountRow { display:contents; }
+.amountField { grid-area:amount; display:flex; align-items:center; gap:0.25rem; min-width:0; height:2rem; padding:0 0.1875rem 0 0.625rem; border-radius:var(--r-button); background:var(--control-field); }
+.currency { flex:none; color:var(--muted); font-size:1rem; font-weight:600; line-height:1; }
+.amountField input { flex:1 1 0; width:0; min-width:0; height:100%; padding:0; border:0; border-radius:0; background:transparent; color:var(--ink); font-size:1rem; font-weight:600; letter-spacing:-.01em; font-variant-numeric:tabular-nums; text-overflow:clip; }
+/* Long amounts step down rather than run under the chips; past 12px the field scrolls with its caret. */
+.amountField input[data-length="medium"] { font-size:0.875rem; }
+.amountField input[data-length="long"] { font-size:0.75rem; letter-spacing:0; }
+.amountField:has(input[data-length="medium"]) .currency { font-size:0.875rem; }
+.amountField:has(input[data-length="long"]) .currency { font-size:0.75rem; }
+.amountField input::placeholder { color:var(--faint); font-weight:500; }
+.amountField input:disabled { cursor:not-allowed; color:var(--muted); }
+.chip { flex:none; min-width:0; min-height:0; height:1.625rem; padding:0 0.5rem; border-radius:var(--r-inner); background:var(--workspace-inset); color:var(--ink-2); font-size:0.75rem; font-weight:600; white-space:nowrap; }
+.chip:disabled { color:var(--muted); cursor:not-allowed; }
+
+.pay { grid-area:pay; display:inline-flex; align-items:center; gap:0.375rem; min-width:0; min-height:0; height:2rem; padding:0 0.5rem 0 0.375rem; border-radius:var(--r-button); background:var(--field); box-shadow:inset 0 0 0 1px var(--hair); color:var(--ink); font-size:0.7813rem; font-weight:600; text-align:left; }
+.pay > span:first-child { flex:none; width:1.25rem; height:1.25rem; }
+.pay > span:first-child > * { width:100%; height:100%; }
+.pay > svg { flex:none; width:0.8125rem; height:0.8125rem; color:var(--muted); }
+/* Disabled controls read as one family: muted words on their own fill, never faded by opacity (blast-ui: disabled text is readable). */
+.pay:disabled { cursor:not-allowed; color:var(--muted); }
+.paySymbol { white-space:nowrap; }
+
+/* Use the established workspace action color. */
+.cta { grid-area:cta; display:inline-flex; align-items:center; justify-content:center; gap:0.5rem; width:100%; min-width:0; min-height:0; height:2rem; padding:0 0.875rem; border-radius:var(--r-button); font-size:0.8125rem; font-weight:600; white-space:nowrap; transition:background var(--t1) ease-out; }
+.cta:disabled { background:var(--track); color:var(--faint); cursor:not-allowed; }
+
+
+/* Estimated receive, material price impact and the details trigger. */
+.meta { grid-area:meta; display:flex; flex-wrap:wrap; align-items:center; gap:0.125rem 0.75rem; min-width:0; margin-top:-0.125rem; padding:0 0.125rem 0 0; color:var(--muted); font-size:0.75rem; line-height:1rem; font-variant-numeric:tabular-nums; }
+.meta b { color:var(--ink-2); font-weight:500; }
+.quote { display:inline-flex; flex-wrap:wrap; align-items:center; gap:0.125rem 0.75rem; min-width:0; }
+.quote:empty { display:none; }
+/* Inline, so the no-break spaces hold the amount to its ticker; only the shared .ticker breaks (blast-ui). */
+.quote .receive { min-width:0; max-width:100%; white-space:normal; }
+.quote > span { white-space:nowrap; }
+.quote .alert { color:var(--warn); font-weight:500; }
+.quote .alert[data-tone="down"] { color:var(--down); }
+.quote .notice { color:var(--ink-2); white-space:normal; }
+.avail { display:inline-flex; align-items:center; gap:0.25rem; min-width:0; white-space:nowrap; }
+.avail :global(button) { min-width:0; min-height:0; padding:0; color:inherit; font:inherit; }
+.detailsSlot { display:flex; margin-left:auto; }
+/* The text trigger keeps fees, route and slippage discoverable. */
+.detailsSlot > :global(button.btn) { position:relative; display:inline-grid; place-items:center; width:1.375rem; height:1.25rem; min-width:0; min-height:0; padding:0; border-radius:var(--r-inner); background:transparent; box-shadow:none; color:var(--muted); }
+.detailsSlot > :global(button.btn) svg { width:1rem; height:1rem; }
+.detailsSlot > :global(button.btn[aria-expanded="true"]) { background:var(--workspace-inset); color:var(--ink); }
+.modeNote { margin:0; padding:0 0.25rem; color:var(--muted); font-size:0.75rem; }
+.modeNote button { min-height:1.75rem; padding:0 0.25rem; color:var(--ink); text-decoration:underline; font:inherit; }
+
+/* Secondary actions keep their hit areas with a surface only on interaction. */
+.pill { display:inline-flex; align-items:center; justify-content:center; min-width:0; min-height:0; height:1.625rem; padding:0 0.625rem; border-radius:var(--r-button); background:transparent; color:var(--muted); font-size:0.75rem; font-weight:500; white-space:nowrap; }
+
+/* Notices sit under the tray; they never cover the action. */
+.notices { display:flex; flex-direction:column; gap:0.25rem; max-height:6rem; overflow:auto; scrollbar-width:thin; color:var(--muted); font-size:0.75rem; line-height:1.4; }
+/* Nothing but the (portalled) Details holder: no row, so no gap under the tray. */
+
+.notices p { margin:0; }
+.consent { display:flex; align-items:flex-start; gap:0.5rem; color:var(--ink); font-size:0.75rem; }
+.consent input { flex:none; width:1rem; height:1rem; margin:1px 0 0; }
+
+/* Details: slippage, the quote's fees, route and network. */
+.tradeFacts { display:grid; grid-template-columns:minmax(0,1fr); gap:0.5rem 0.75rem; margin:0; font-size:0.8125rem; line-height:1.4; font-variant-numeric:tabular-nums; }
+.tradeFacts > div { min-width:0; display:flex; justify-content:space-between; align-items:baseline; gap:0.75rem; }
+.tradeFacts .wideFact { grid-column:1 / -1; display:flex; justify-content:space-between; align-items:baseline; gap:0.5rem; }
+.tradeFacts dt { flex-shrink:0; color:var(--muted); }
+.tradeFacts dd { min-width:0; margin:0; overflow-wrap:anywhere; }
+.tradeFacts dd { text-align:right; }
+.tradeFacts button { min-width:0; min-height:0; padding:0; }
+.route { display:inline-flex; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:0.25rem 0.5rem; }
+
+
+@media (hover:hover) and (pointer:fine) {
+  .sideButton:not([aria-pressed="true"],:disabled):hover { color:var(--ink); background:color-mix(in srgb,var(--thumb) 55%,transparent); }
+  .chip:not(:disabled):hover,.pill:hover { background:var(--workspace-press); }
+  .pay:not(:disabled):hover { box-shadow:inset 0 0 0 1px var(--hair-2); }
+
+  .detailsSlot > :global(button.btn):hover { background:var(--workspace-inset); color:var(--ink); }
+}
+
+/* Tighten spacing while retaining the payment/receive denomination. */
+@container coin-trade (max-width:300px) {
+  .tray { gap:0.375rem; }
+  .amountField { padding-left:0.5rem; }
+  .chip { padding:0 0.375rem; font-size:0.75rem; }
+  .pay { gap:0.25rem; padding:0 0.375rem 0 0.3125rem; }
+}
+
+@media (pointer:coarse) {
+  .side { height:auto; }
+  .sideButton { position:relative; min-width:56px; min-height:40px; }
+  .amountField { min-height:44px; }
+  /* Touch: a long amount steps down at rest so every digit shows, and returns to 16px while focused (iOS zooms into a focused field below 16px). */
+  .amountField input:is([data-length="medium"],[data-length="long"]):focus { font-size:16px; letter-spacing:-.01em; }
+  .chip { position:relative; min-width:44px; min-height:32px; }
+  /* Each compact control keeps a 44px hit area around its drawn size. */
+  .sideButton::before,.chip::before { content:""; position:absolute; top:50%; left:50%; width:max(100%,44px); height:max(100%,44px); transform:translate(-50%,-50%); }
+  .pill,.pay,.cta { min-height:44px; }
+  .detailsSlot > :global(button.btn)::after { content:""; position:absolute; inset:-12px -11px; }
+  .consent { min-height:44px; align-items:center; }
+  .consent input { width:20px; height:20px; }
+}
+@media (prefers-contrast:more) {
+  .pay { box-shadow:inset 0 0 0 1px var(--hair-2); }
+}
+@media (prefers-reduced-motion:reduce) { .form * { transition:none; } }
+
+/* These rows reserve the same room for quote, error, and zero-balance states. */
+.form { gap:0.25rem; }
+.tray { grid-template-rows:1.875rem auto 2rem 2.25rem; gap:0.25rem; }
+.entry { grid-template-rows:1.125rem 2rem 1.625rem; gap:0.25rem 0.5rem; }
+.side { height:1.875rem; }
+.sideButton { height:1.625rem; }
+.amountLabel { display:flex; justify-content:space-between; align-items:center; gap:0.5rem; min-width:0; overflow:hidden; white-space:nowrap; }
+.amountLabel > span:first-child { flex:none; }
+.amountLabel .avail { overflow:hidden; font-size:0.75rem; }
+.avail b { min-width:0; overflow:hidden; text-overflow:ellipsis; }
+.meta { height:2rem; flex-wrap:nowrap; overflow:auto; }
+.quote { flex:1; row-gap:0; }
+.quote .receive { font-size:0.75rem; row-gap:0; }
+.quote .alert { font-size:0.75rem; }
+.cta { height:2.25rem; }
+.cta:disabled { color:var(--muted); }
+.detailsSlot > :global(button.btn) { display:inline-flex; width:auto; gap:0.1875rem; font-size:0.75rem; }
+.notices { height:auto; min-height:0; max-height:none; overflow:visible; }
+.notices[data-empty="true"] { height:0; margin-top:-0.25rem; }
+@media (pointer:coarse) {
+ .tray { grid-template-rows:44px auto 48px 44px; }
+ .entry { grid-template-rows:22px 44px 44px; }
+ .side,.sideButton,.chip,.cta { height:44px; }
+ .side { padding:0; }
+ .meta { height:48px; }
+}
+
+.currency[data-token="true"] { display:none; }
+
+.paySymbol { overflow:hidden; text-overflow:ellipsis; }
+/* A compact composer follows the decision: side/settings, amount, quote, action. */
+:global([data-workspace-section="trade"]) .form { flex:none; gap:0; }
+:global([data-workspace-section="trade"]) .tray { display:flex; flex:none; flex-direction:column; align-items:stretch; gap:0.75rem; }
+:global([data-workspace-section="trade"]) .entry { flex:none; grid-template-columns:minmax(0,1fr); grid-template-areas:"label" "amount" "pay" "presets"; grid-template-rows:auto; gap:0.625rem; margin:0; padding:0; }
+:global([data-workspace-section="trade"]) .side { flex:1; height:2.5rem; padding:0.1875rem; background:var(--track); border-radius:var(--r-button); }
+:global([data-workspace-section="trade"]) .sideButton { height:2.125rem; border-radius:var(--r-inner); box-shadow:none; }
+:global([data-workspace-section="trade"]) .sideButton[aria-pressed="true"] { background:var(--thumb); box-shadow:var(--thumb-sh); color:var(--ink); }
+:global([data-workspace-section="trade"]) .amountLabel { min-height:1.25rem; flex-wrap:wrap; overflow:visible; white-space:normal; }
+:global([data-workspace-section="trade"]) .amountField { height:5rem; background:var(--control-field); }
+:global([data-workspace-section="trade"]) .amountField input { font-size:2.25rem; letter-spacing:-.025em; }
+:global([data-workspace-section="trade"]) .amountField input[data-length="medium"] { font-size:1rem; }
+:global([data-workspace-section="trade"]) .amountField input[data-length="long"] { font-size:0.75rem; }
+:global([data-workspace-section="trade"]) .pay { height:auto; min-height:2rem; justify-self:end; max-width:100%; padding-inline:0.5rem; gap:0.375rem; background:var(--workspace-inset); box-shadow:none; }
+:global([data-workspace-section="trade"]) .payText { flex-direction:row; flex-wrap:wrap; align-items:baseline; gap:0.25rem; }
+:global([data-workspace-section="trade"]) .cta { flex:none; height:auto; min-height:max(48px, 3rem); font-size:0.9375rem; white-space:normal; overflow-wrap:anywhere; }
+:global([data-workspace-section="trade"]) .presets > button { background:var(--workspace-inset); }
+:global([data-workspace-section="trade"]) .presets > button[aria-pressed="true"] { background:var(--thumb); box-shadow:var(--thumb-sh); color:var(--ink); }
+:global([data-workspace-section="trade"]) .meta { flex:none; height:auto; min-height:2.25rem; padding:0; flex-wrap:wrap; overflow:visible; }
+:global([data-workspace-section="trade"]) .receive { min-width:0; max-width:100%; }
+:global([data-workspace-section="trade"]) .receive b { min-width:0; overflow-wrap:anywhere; }
+:global([data-workspace-section="trade"]) .notices { min-height:0; margin-top:0.75rem; }
+:global([data-workspace-section="trade"]) .notices[data-empty="true"] { height:auto; margin:0; }
+.presetRow { grid-area:presets; display:flex; align-items:center; gap:0.25rem; min-width:0; }
+.presetRow .presets { flex:1; min-width:0; }
+.presetRow .chip { overflow:hidden; text-overflow:ellipsis; }
+.payLabel { font-size:0.75rem; line-height:1rem; font-weight:400; }
+.payText { display:flex; flex:1; flex-direction:column; min-width:0; line-height:1rem; }
+@container coin-trade (max-width:300px) {
+ :global([data-workspace-section="trade"]) .amountField input[data-length="short"] { font-size:2rem; }
+}
+@container coin-trade (max-width:230px) {
+ .entry { grid-template-columns:minmax(0,1fr); grid-template-areas:"label" "amount" "pay" "presets"; grid-template-rows:auto; }
+ :global([data-workspace-section="trade"]) .presets { flex-wrap:wrap; }
+ :global([data-workspace-section="trade"]) .presets > button { flex-basis:40%; }
+ .presetRow { align-items:flex-end; }
+}
+@media (pointer:coarse) {
+ :global([data-workspace-section="trade"]) .side { height:52px; }
+ :global([data-workspace-section="trade"]) .sideButton { height:44px; }
+ :global([data-workspace-section="trade"]) .cta { min-height:52px; }
+}
+
+/* Redesign: a large centred amount, a 4-up preset grid and one large primary action. */
+:global([data-workspace-section="trade"]) .amountField { justify-content:center; gap:0.125rem; }
+/* Width follows the typed length (`--amount-chars`, set by fitAmount) so the sign sits beside the digits in every browser; `field-sizing` fits it exactly where supported. */
+:global([data-workspace-section="trade"]) .amountField input { flex:0 1 auto; width:calc(var(--amount-chars, 4) * 1ch); min-width:1ch; max-width:100%; text-align:center; font-family:var(--display); }
+@supports (field-sizing:content) {
+ :global([data-workspace-section="trade"]) .amountField input { field-sizing:content; width:auto; }
+}
+:global([data-workspace-section="trade"]) .currency { font-family:var(--display); font-size:1.75rem; color:var(--muted); }
+:global([data-workspace-section="trade"]) .amountField:has(input[data-length="medium"]) .currency { font-size:1rem; }
+:global([data-workspace-section="trade"]) .amountField:has(input[data-length="long"]) .currency { font-size:0.75rem; }
+:global([data-workspace-section="trade"]) .presets { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:0.375rem; }
+:global([data-workspace-section="trade"]) .presets > button { min-width:0; }
+@container coin-trade (max-width:230px) {
+ :global([data-workspace-section="trade"]) .presets { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+
+/*
+ * The ticket card (BlastMode.dc.html): 16px card with a lit top; Buy/Sell and settings, the
+ * amount label row, a large centred amount box with its estimate, a 4-up preset grid, the
+ * payment coin, one large primary action and a quiet centred Details.
+ */
+:global([data-workspace-section="trade"]) .form { gap:0; padding:1rem; border-radius:1.25rem; background:linear-gradient(180deg,var(--card-lit),transparent 40%),var(--card); box-shadow:var(--sh-1); }
+:global([data-workspace-section="trade"]) .tray { gap:0.875rem; }
+:global([data-workspace-section="trade"]) .side { height:2.5rem; border-radius:0.625rem; }
+:global([data-workspace-section="trade"]) .sideButton { border-radius:0.4375rem; font-size:0.875rem; }
+/* Trade settings is the board's 40px icon button at the row's end; the Buy/Sell track beside it is 40px too. */
+:global([data-workspace-section="trade"]) .ticketHeader button[data-ui-icon][data-ui-size] { --control-height:2.5rem; }
+:global([data-workspace-section="trade"]) .entry { gap:0.5rem; grid-template-areas:none; }
+:global([data-workspace-section="trade"]) .entry > * { grid-area:auto; }
+:global([data-workspace-section="trade"]) .amountLabel { min-height:0; color:var(--muted); font-size:0.75rem; line-height:1rem; font-weight:400; }
+:global([data-workspace-section="trade"]) .amountLabel .avail b { color:var(--ink); font-weight:600; }
+:global([data-workspace-section="trade"]) .amountField { grid-area:auto; flex-direction:column; justify-content:flex-start; gap:0.25rem; height:7.625rem; padding:1.25rem 0.875rem 1.125rem; margin-bottom:0.375rem; background:var(--control-field); box-shadow:inset 0 0 0 1px var(--hair-2); }
+.amountLine { display:flex; align-items:baseline; justify-content:center; gap:0.125rem; max-width:100%; min-width:0; }
+:global([data-workspace-section="trade"]) .amountField input { height:auto; padding:0; font-size:3.25rem; line-height:4rem; font-weight:650; letter-spacing:-.04em; }
+:global([data-workspace-section="trade"]) .amountField input[data-length="medium"] { font-size:2.25rem; }
+:global([data-workspace-section="trade"]) .amountField input[data-length="long"] { font-size:1.5rem; }
+:global([data-workspace-section="trade"]) .currency { font-size:1.875rem; font-weight:600; line-height:1; }
+:global([data-workspace-section="trade"]) .amountField:has(input[data-length="medium"]) .currency { font-size:1.5rem; }
+:global([data-workspace-section="trade"]) .amountField:has(input[data-length="long"]) .currency { font-size:1rem; }
+:global([data-workspace-section="trade"]) .amountField .quote { flex:none; justify-content:center; color:var(--muted); font-size:0.75rem; line-height:1rem; }
+:global([data-workspace-section="trade"]) .amountField .receive { color:var(--muted); font-size:0.75rem; }
+:global([data-workspace-section="trade"]) .presetRow { margin-bottom:0.375rem; }
+:global([data-workspace-section="trade"]) .presets > button { background:var(--chip); box-shadow:none; color:var(--ink); font-size:0.8125rem; }
+:global([data-workspace-section="trade"]) .presets > button[aria-pressed="true"] { background:var(--thumb); box-shadow:none; color:var(--ink); }
+:global([data-workspace-section="trade"]) .presets > button:disabled { background:var(--track); color:var(--muted); }
+:global([data-workspace-section="trade"]) .pay { justify-self:stretch; width:100%; min-width:0; padding-inline:0.5rem 0.625rem; gap:0.5rem; background:var(--control-field); box-shadow:inset 0 0 0 1px var(--hair); font-size:0.8125rem; }
+:global([data-workspace-section="trade"]) .payText { flex-direction:row; align-items:baseline; gap:0.25rem; line-height:1.25rem; }
+:global([data-workspace-section="trade"]) .payLabel { font-size:0.8125rem; line-height:1.25rem; font-weight:600; }
+:global([data-workspace-section="trade"]) .cta { font-size:1rem; }
+:global([data-workspace-section="trade"]) .meta { justify-content:center; min-height:0; margin-top:0; }
+:global([data-workspace-section="trade"]) .detailsSlot { margin:0; }
+:global([data-workspace-section="trade"]) .detailsSlot > :global(button.btn),
+:global([data-workspace-section="trade"]) .detailsSlot > button { width:auto; gap:0.375rem; background:transparent; box-shadow:none; color:var(--muted); font-size:0.75rem; font-weight:500; }
+:global([data-workspace-section="trade"]) .notices:not([data-empty="true"]) { margin-top:0.75rem; }
+/* With nothing to say, the notices (an empty status line kept for announcements, or one naming a pending read to assistive technology only) take no height. */
+:global([data-workspace-section="trade"]) .notices:not(:has(> :not(:empty, [data-pending]))) { gap:0; }
+
+/* The amount and its quote line sit centred in the box. The quote line keeps a 20px row (the Retry's height) even before a quote,
+ * so the digits never move when the estimate, "Getting a quote…" or Retry arrives. */
+:global([data-workspace-section="trade"]) .amountField { justify-content:center; padding-block:0.75rem; }
+:global([data-workspace-section="trade"]) .amountLine { flex:none; }
+:global([data-workspace-section="trade"]) .amountField .quote { min-height:1.25rem; }
+:global([data-workspace-section="trade"]) .amountField:not(:has(> .quote:not(:empty))) .amountLine { margin-bottom:1.5rem; }
+@media (pointer:coarse) {
+ :global([data-workspace-section="trade"]) .amountField { height:calc(6.5rem + 44px); }
+}
+/* Audit 13/19: the quote's state speaks beside the amount: "Getting a quote…", then "Quote unavailable" with Retry. */
+.waiting { color:var(--muted); }
+.quote .quoteRetry[data-ui-size] { --control-height:1.25rem; --control-pad:0.25rem; color:var(--ink); font-size:0.75rem; }
+/* Audit 18/20: the action keeps one line at the ticket's narrowest, so a long amount or a prerequisite never changes the form's height. */
+:global([data-workspace-section="trade"]) .cta { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; overflow-wrap:normal; }
+/* Audit 21: Details reads the slippage limit; Trade settings edits it. */
+.slippageNote { margin:0; color:var(--muted); font-size:0.75rem; }
+.slippageNote b { color:var(--ink); font-weight:600; }

@@ -1,0 +1,39 @@
+{
+  "provenance": {
+    "network": "localnet",
+    "deployment_fingerprint": "5d2f2a4be1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c",
+    "checkpoint": 124,
+    "timestamp_ms": 1790294757750,
+    "observed_ms": 1790829665418,
+    "lag_ms": 534907668
+  },
+  "coin": "0x27edca4d96f367e697f9aaaea7d38328a60970c25d0c7f3927848051b082295f::meme::MEME",
+  "snapshot": {
+    "state": "complete",
+    "checkpoint": 124,
+    "timestamp_ms": 1790294757750
+  },
+  "holder_count": "6",
+  "held_supply": "597694095590364137",
+  "top_1": {
+    "amount": "175872616585214455",
+    "share_bps": "2942"
+  },
+  "top_10": {
+    "amount": "597694095590364137",
+    "share_bps": "10000"
+  },
+  "holders": [
+    {
+      "address": "0xace0c432a721f88f20b9af4762f497b0f88645b55178357f384edaef30375b29",
+      "balance": "175872616585214455",
+      "share_bps": "2942"
+    },
+    {
+      "address": "0x8f77c927ae948e8b9f8b2642fc8f64e4d6942fe7f79dff16cba805b423de7ca2",
+      "balance": "129745835606790027",
+      "share_bps": "2170"
+    }
+  ],
+  "next_cursor": "eyJ2IjoxLCJzIjoiY29pbl9ob2xkZXJzOjB4MjZmNmJjNTY5MTgyZTdhYjlkYjgxZmFiNThhMDZlNzg0ZTdlMGQyM2RjMTY3NWZlZjQ0NGY0YmY4ZmY3NWZiOCIsImsiOltdLCJ0IjpbIjAwMTI5NzQ1ODM1NjA2NzkwMDI3IiwiMHg4Zjc3YzkyN2FlOTQ4ZThiOWY4YjI2NDJmYzhmNjRlNGQ2OTQyZmU3Zjc5ZGZmMTZjYmE4MDViNDIzZGU3Y2EyIl19"
+}

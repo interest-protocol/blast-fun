@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/wallet-sign-out-response.schema.json",
+  "title": "Wallet sign-out",
+  "description": "DELETE /api/social/sign-in/session 200: the wallet session is revoked (if there was one) and its cookies are cleared.",
+  "type": "object",
+  "properties": {
+    "signed_in": {
+      "const": false
+    }
+  },
+  "required": [
+    "signed_in"
+  ],
+  "additionalProperties": false
+}

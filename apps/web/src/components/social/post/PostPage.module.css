@@ -1,0 +1,15 @@
+/* A post's permalink page: a way back Home, the shared page header and the one card (FEATURE-MAP §3.7; the page is not drawn in the design). */
+.page { min-width: 0; }
+/* `[data-back-bar]` lets the page header below drop its top padding (PageHeader.module.css). */
+.backbar { display: flex; align-items: center; min-height: max(44px, 2.75rem); margin-top: 1.3125rem; }
+.back {
+  width: 2.25rem; height: 2.25rem; margin-left: -0.375rem; border-radius: var(--r-button); display: grid; place-items: center; color: var(--ink);
+  transition: background var(--t2) var(--ease-std), transform var(--t1) var(--ease-std);
+}
+.back svg { width: 1.1875rem; height: 1.1875rem; }
+.back:active { transform: scale(.97); }
+@media (hover: hover) { .back:hover { background: var(--chip); } }
+@media (max-width: 760px) { .backbar { margin-top: 0.8125rem; } }
+@media (pointer: coarse) { .back { width: 44px; height: 44px; } }
+/* A press under reduced motion dips instead of scaling (OA-31). */
+@media (prefers-reduced-motion: reduce) { .back:active { transform: none; opacity: .7; } }

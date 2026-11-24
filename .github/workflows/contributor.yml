@@ -1,0 +1,66 @@
+name: Contributor checks
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: contributor-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  contributor:
+    name: Contributor gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    env:
+      CI: "true"
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+          # The generated PR merge commit and its parents include the event base.
+          fetch-depth: 2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24.18.0"
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: "1.4.2"
+      - name: Install locked dependencies
+        run: |
+          npm install --global npm@12.0.2 --ignore-scripts --no-audit --no-fund
+          npm ci --ignore-scripts --no-audit --no-fund
+      - name: Check lint and package boundaries
+        run: npm run lint
+      - name: Run unit and synthetic partner tests
+        run: |
+          npm test
+          npm run test:partner-live
+      - name: Check React diagnostics on changed lines
+        working-directory: apps/web
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git merge-base --is-ancestor "$PR_BASE_SHA" HEAD
+          npx --yes react-doctor@0.9.17 . --yes --verbose --scope lines --base "$PR_BASE_SHA" \
+            --no-parallel --blocking warning --no-supply-chain --no-telemetry
+      - name: Build web and verify production boundaries
+        env:
+          BLAST_DEPLOYMENT_TARGET: local
+          NEXT_PUBLIC_SITE_URL: http://127.0.0.1:3000
+          NEXT_TELEMETRY_DISABLED: "1"
+          TURBO_TASKS_AVAILABLE_PARALLELISM: "1"
+        run: |
+          npm run build -w @blast/web
+          CHECK_PRODUCTION_BUILD=1 node --no-warnings --import ./scripts/test-tsx-hooks.mjs \
+            --test --test-concurrency=1 --experimental-strip-types apps/web/test/production-boundaries.test.ts
+      - name: Check workspace types
+        run: npm run typecheck

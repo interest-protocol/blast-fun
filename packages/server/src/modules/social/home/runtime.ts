@@ -1,0 +1,63 @@
+import { optionalSource } from "../optional-source.ts";
+import { processSingleton } from "@blast/core/lib/process-singleton.ts";
+import { runtimeConfig } from "@blast/server/config/runtime-config.ts";
+import { createPresaleTermsReader, type PresaleTermsReader } from "@blast/core/modules/presale/terms/index.ts";
+import { blastInfraFetch } from "@blast/core/modules/read-routing/blast-infra.ts";
+import { getSocialConfig } from "@blast/core/modules/social/config/reader.ts";
+
+import type { HomeActivityStreamPage, HomeCoinsByIds, HomeCoinsPage, HomeThreadPage } from "@blast/core/modules/social/contracts/home.ts";
+import { socialFeedDatabase } from "@blast/server/modules/social/feed/runtime.ts";
+import { socialPortfolioDatabase } from "@blast/server/modules/social/portfolio/runtime.ts";
+import { sharedSocialRouteKit, socialAccounts } from "@blast/server/modules/social/route-kit/shared-runtime.ts";
+import { createSocialHomeRoutes } from "@blast/server/modules/social/home/route.ts";
+import { createReadCache } from "@blast/server/modules/social/read-cache.ts";
+import type { TraderPortfolioRead } from "@blast/server/modules/social/home/traders.ts";
+import type { HomeChartTradesPage, HomeCoinMarket, HomeHoldersPage } from "@blast/core/modules/social/contracts/coin-market.ts";
+import { readTrackedPoolMarket } from "@blast/server/modules/launchpad-market/legacy-fdv.ts";
+
+/**
+ * The process's Home routes: the public reads on the replica (like the
+ * feed), the Following read on the primary through the kit. The sales'
+ * terms (FDV) come from blast-infra's projection through the presale terms
+ * reader (each request carrying blast-infra's key), which keeps a final split
+ * in memory for an hour.
+ */
+export const readHomeTerms: PresaleTermsReader = (presaleId, signal) =>
+  optionalSource("home_presale_terms", () => processSingleton("social.home-terms", () => {
+    const { infra } = runtimeConfig();
+    return createPresaleTermsReader({ origin: () => infra.origin, fetch: blastInfraFetch({ infra }), timeoutMs: 2_500, cacheMs: 3_600_000, maxEntries: 2_000 });
+  })(presaleId, signal), null);
+
+export function socialHomeRoutes(): ReturnType<typeof createSocialHomeRoutes> {
+  return processSingleton("social.home-routes", () => createSocialHomeRoutes({
+    kit: sharedSocialRouteKit(),
+    database: socialFeedDatabase,
+    ledgerDatabase: socialPortfolioDatabase,
+    wallets: socialAccounts(),
+    config: getSocialConfig,
+    terms: readHomeTerms,
+    trackedPoolMarket: readTrackedPoolMarket,
+    caches: homeReadCaches(),
+  }));
+}
+
+/**
+ * The page's reads are public and the same for everyone, so a process keeps
+ * each answer for as long as the CDN keeps the route's (`s-maxage=10`): a
+ * burst of page views shares one read per distinct view instead of each
+ * scanning the window's activity rows again on the replica. In-flight reads
+ * are shared too. A failed read is not kept. Bounded; the oldest entries go.
+ */
+export const HOME_PAGE_READ_TTL_MS = 10_000;
+function homeReadCaches() {
+  return processSingleton("social.home-read-caches", () => ({
+    activity: createReadCache<HomeActivityStreamPage>(HOME_PAGE_READ_TTL_MS, 64),
+    thread: createReadCache<HomeThreadPage>(HOME_PAGE_READ_TTL_MS, 64),
+    discover: createReadCache<HomeCoinsPage>(HOME_PAGE_READ_TTL_MS, 64),
+    coins: createReadCache<HomeCoinsByIds>(HOME_PAGE_READ_TTL_MS, 64),
+    portfolios: createReadCache<ReadonlyMap<string, TraderPortfolioRead>>(HOME_PAGE_READ_TTL_MS, 64),
+    market: createReadCache<HomeCoinMarket>(HOME_PAGE_READ_TTL_MS, 256),
+    holders: createReadCache<HomeHoldersPage>(HOME_PAGE_READ_TTL_MS, 128),
+    trades: createReadCache<HomeChartTradesPage>(HOME_PAGE_READ_TTL_MS, 256),
+  }));
+}

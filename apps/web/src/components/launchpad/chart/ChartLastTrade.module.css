@@ -1,0 +1,50 @@
+.slot {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  column-gap: .625rem;
+  min-inline-size: 0;
+  min-block-size: 1.5rem;
+}
+.label { grid-area: 1 / 1; color: var(--muted); font-size: .8125rem; white-space: nowrap; }
+.age { display: inline-grid; font-variant-numeric: tabular-nums; }
+.age::before, .age > span { grid-area: 1 / 1; }
+.age::before { content: "88m ago"; visibility: hidden; }
+.label[data-idle], .measure { visibility: hidden; }
+.measure::before { content: attr(data-width-sample); }
+.measure, .value {
+  grid-area: 1 / 2;
+  justify-self: start;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  padding: .125rem .5rem;
+  box-sizing: border-box;
+  font-size: .9375rem;
+  line-height: 1.25rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.measure { overflow-wrap: anywhere; }
+.value { position: relative; border-radius: var(--r-inner); background: var(--chip); color: var(--ink); }
+[data-chart-last-trade="headline"] .value[data-trade-cue="buy"] { background: var(--up-soft); }
+[data-chart-last-trade="headline"] .value[data-trade-cue="sell"] { background: var(--down-soft); }
+@container (max-width: 25.5rem) {
+  .slot[data-chart-last-trade="headline"] {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: .125rem;
+  }
+  [data-chart-last-trade="headline"] :is(.measure, .value) { grid-area: 2 / 1; }
+}
+.text { position: relative; }
+.fill { position: absolute; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0; }
+.fill[data-fill-side="buy"] { background: var(--up-soft); }
+.fill[data-fill-side="sell"] { background: var(--down-soft); }
+@supports (color: color-mix(in srgb, black, white)) {
+  .fill[data-fill-side="buy"] { background: color-mix(in srgb, var(--up) 36%, var(--card)); }
+  .fill[data-fill-side="sell"] { background: color-mix(in srgb, var(--down) 36%, var(--card)); }
+}
+/* The header supplies the cue whenever the matching candle label cannot be shown. */
+.slot:has(+ figure [data-candle-trade-amount]) .fill { visibility: hidden; }
+@media (prefers-reduced-motion: reduce) {
+  .fill { display: none; }
+}

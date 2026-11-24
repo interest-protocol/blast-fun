@@ -1,0 +1,186 @@
+.field {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem 0.8125rem;
+  min-width: 0;
+}
+.date,
+.time {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+  color: var(--ink-2);
+  font-size: 0.8125rem;
+  font-weight: 550;
+}
+.dateGroup {
+  display: flex;
+  align-items: center;
+  height: 2.875rem;
+  border: 1px solid var(--hair-2);
+  border-radius: var(--r-button);
+  background: var(--field);
+  padding-left: 0.8125rem;
+}
+.dateGroup:focus-within {
+  box-shadow: var(--field-focus);
+}
+/* React Aria's autofill bridge must stay hidden when CSP blocks inline styles. */
+.field [aria-hidden="true"]:has(> input) {
+  display: none;
+}
+.dateGroup[data-invalid] {
+  border-color: var(--down);
+}
+.dateInput {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  font-size: 1rem;
+  font-weight: 400;
+  min-width: 0;
+}
+.segment {
+  padding: 0.1875rem 1px;
+  border-radius: 0.1875rem;
+  outline: none;
+  font-variant-numeric: tabular-nums;
+  white-space: pre;
+}
+.segment[data-focused] {
+  color: var(--ink);
+  background: var(--chip);
+}
+.segment[data-placeholder] {
+  color: var(--muted);
+}
+.trigger {
+  display: grid;
+  place-items: center;
+  width: max(44px, 2.75rem);
+  height: max(44px, 2.75rem);
+  flex: none;
+  border-radius: var(--r-button);
+  color: var(--ink-2);
+}
+:global([data-blast-ui]) .field .segment:focus-visible,
+:global([data-blast-ui]) .dateGroup .trigger:focus-visible {
+  box-shadow: none;
+  outline: none;
+}
+.popover {
+  background: var(--card);
+  color: var(--ink);
+  font-family: var(--font);
+  border: 1px solid var(--hair-2);
+  border-radius: var(--r-sm);
+  box-shadow: var(--sh-2);
+  padding: 1rem;
+  max-width: calc(100vw - 1.5rem);
+  z-index: 100;
+}
+.popover [role="dialog"] {
+  outline: none;
+}
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+.header h2 {
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin: 0;
+}
+.header button {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--r-button);
+  font-size: 1.5rem;
+}
+.calendar {
+  border-spacing: 0.125rem;
+  font-size: 0.8125rem;
+}
+.calendar th {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: var(--muted);
+  height: 1.75rem;
+}
+.popover .day {
+  display: grid;
+  place-items: center;
+  width: 2.125rem;
+  height: 2.125rem;
+  border-radius: var(--r-button);
+  outline: none;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+  position: relative;
+  box-shadow: none;
+}
+:global([data-blast-ui]) .popover .day:focus-visible,
+:global([data-blast-ui]) .popover .header button:focus-visible {
+  box-shadow: none;
+  outline: none;
+}
+.day[data-outside-month] {
+  color: var(--muted);
+}
+.day[data-today]::after {
+  content: "";
+  position: absolute;
+  bottom: 0.25rem;
+  width: 0.1875rem;
+  height: 0.1875rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+.day[data-selected] {
+  background: var(--ink);
+  color: var(--bg);
+}
+:global([data-blast-ui]) .popover .day[data-focus-visible],
+:global([data-blast-ui]) .popover .header button[data-focus-visible] {
+  outline: 0.125rem solid var(--ink);
+  outline-offset: 0.125rem;
+}
+.day[data-hovered]:not([data-selected]) {
+  background: var(--raised);
+}
+@media (hover:hover) and (pointer:fine) { .header button:hover {
+  background: var(--raised);
+} }
+.error {
+  color: var(--down);
+  font-size: 0.75rem;
+  grid-column: 1 / -1;
+}
+.field .timezone {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+.occurrences {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+}
+.occurrences span {
+  width: 100%;
+}
+.occurrences button[aria-pressed="true"] {
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+@media (max-width: 500px) {
+  .field {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 1rem;
+  }
+}

@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/presale/contracts/reward-allocations-response.schema.json",
+  "title": "Reward allocations",
+  "description": "GET /api/presale/rewards/{presale_id}/wallets/{wallet} 200: unpaid allocations of open rounds.",
+  "type": "object",
+  "properties": {
+    "allocations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "round_id": {
+            "$ref": "defs.schema.json#/$defs/address"
+          },
+          "number": {
+            "$ref": "defs.schema.json#/$defs/uint"
+          },
+          "index": {
+            "$ref": "defs.schema.json#/$defs/uint"
+          },
+          "meme_amount": {
+            "$ref": "defs.schema.json#/$defs/uint"
+          },
+          "quote_amount": {
+            "$ref": "defs.schema.json#/$defs/uint"
+          },
+          "proof": {
+            "$ref": "defs.schema.json#/$defs/proof"
+          },
+          "claim_deadline_ms": {
+            "$ref": "defs.schema.json#/$defs/timestamp_ms"
+          },
+          "delivery": {
+            "enum": [
+              "relay",
+              "self_claim"
+            ]
+          }
+        },
+        "required": [
+          "round_id",
+          "number",
+          "index",
+          "meme_amount",
+          "quote_amount",
+          "proof",
+          "claim_deadline_ms",
+          "delivery"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "allocations"
+  ],
+  "additionalProperties": false
+}

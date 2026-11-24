@@ -1,0 +1,31 @@
+/*
+ * Where a menu on base-ui's `Menu` sits (OA-28 M2b). base-ui's positioner
+ * places it beside its trigger through the CSSOM (`position: fixed`, `top`,
+ * `left`); the popup inside it is the menu's box (`AppShell.module.css`'s
+ * `.menu`, `PostMenu.module.css`'s `.menu`).
+ */
+.positioner { z-index: 70; }
+
+/*
+ * The menu grows from its trigger: base-ui's `--transform-origin`, the trigger's
+ * spot on the edge that faces it, whichever side the menu landed on. Without it,
+ * `--menu-ox` (the trigger's spot along the menu's edge, set per menu) on the
+ * facing edge; beside the collapsed rail the Create menu grows from 24px down
+ * its left edge.
+ */
+.popup { transform-origin: var(--transform-origin, var(--menu-ox, 0px) 0%); }
+.popup[data-side="top"] { transform-origin: var(--transform-origin, var(--menu-ox, 0px) 100%); }
+.popup[data-side="right"] { transform-origin: var(--transform-origin, 0px 1.5rem); }
+
+/*
+ * Phones: an action sheet docked to the bottom edge, 8px in from the sides
+ * and above the home indicator, whatever the trigger (the gate's `.menu` at
+ * ≤760px). Its rise and sink are `menu-motion.ts`.
+ */
+@media (max-width: 760px) {
+  .positioner:not([data-anchored]) {
+    position: fixed !important;
+    inset: auto 0.5rem calc(0.5rem + env(safe-area-inset-bottom, 0px)) 0.5rem !important;
+    transform: none !important;
+  }
+}

@@ -1,0 +1,297 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/presale/contracts/presale-policy.schema.json",
+  "title": "GET /v1/presales/policy",
+  "description": "The presale's governed values: the FeePolicy's rates (`fee_policy::ProtocolFees`) and the CreationPolicy's venues, allowed quotes and partner list. The quotes are the presale pipeline's rows.",
+  "type": "object",
+  "properties": {
+    "creation_policy_id": {
+      "anyOf": [
+        {
+          "$ref": "defs.schema.json#/$defs/address"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "fee_policy_id": {
+      "anyOf": [
+        {
+          "$ref": "defs.schema.json#/$defs/address"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "fee_policy": {
+      "$ref": "#/$defs/governed"
+    },
+    "creation_policy": {
+      "type": "object",
+      "properties": {
+        "venues": {
+          "$ref": "#/$defs/governed_set"
+        },
+        "quotes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "quote_type": {
+                "type": "string"
+              },
+              "allowed": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "quote_type",
+              "allowed"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "partners": {
+          "type": "array",
+          "items": {
+            "description": "A partner on the product's list (`partner_list`); a removed partner stays until `accepted_until_ms` (Unix ms) ends its acceptance of new sales.",
+            "type": "object",
+            "properties": {
+              "partner_id": {
+                "$ref": "defs.schema.json#/$defs/address"
+              },
+              "accepted_until_ms": {
+                "anyOf": [
+                  {
+                    "$ref": "defs.schema.json#/$defs/uint"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "partner_id",
+              "accepted_until_ms"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "venues",
+        "quotes",
+        "partners"
+      ],
+      "additionalProperties": false
+    },
+    "provenance": {
+      "$ref": "#/$defs/provenance"
+    }
+  },
+  "required": [
+    "creation_policy_id",
+    "fee_policy_id",
+    "fee_policy",
+    "creation_policy",
+    "provenance"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "pending": {
+      "description": "A scheduled change of a governed value: the proposed value (`value`, `action` or `member`, null for a notice-only change), the notice it was scheduled under and when it may apply (Unix ms, decimal strings). It stays pending past `ready_at_ms` until applied.",
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "delay_ms": {
+              "$ref": "defs.schema.json#/$defs/uint"
+            },
+            "ready_at_ms": {
+              "$ref": "defs.schema.json#/$defs/uint"
+            }
+          },
+          "required": [
+            "delay_ms",
+            "ready_at_ms"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "governed": {
+      "description": "A governed value (`blast_admin::delayed*`): the value in force, the notice a change must give (ms) and the scheduled change. Null before the event that creates it.",
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "in_force": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/protocol_rates"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "delay_ms": {
+              "$ref": "defs.schema.json#/$defs/uint"
+            },
+            "pending": {
+              "$ref": "#/$defs/pending"
+            }
+          },
+          "required": [
+            "in_force",
+            "delay_ms",
+            "pending"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "governed_set": {
+      "description": "A governed allowlist (`blast_admin::delayed_set`): its members, the notice an admission must give (ms) and the scheduled admission. Null before the event that creates it.",
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "members": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "delay_ms": {
+              "$ref": "defs.schema.json#/$defs/uint"
+            },
+            "pending": {
+              "$ref": "#/$defs/pending"
+            }
+          },
+          "required": [
+            "members",
+            "delay_ms",
+            "pending"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "network": {
+      "description": "The Sui network of the indexed Blast deployment, as the canonical SDK's deployment manifest names it.",
+      "enum": [
+        "mainnet",
+        "testnet",
+        "devnet",
+        "localnet"
+      ]
+    },
+    "deployment_fingerprint": {
+      "description": "The canonical SDK's deploymentFingerprint of the indexed deployment manifest: sha256, 64 lowercase hex characters.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "provenance": {
+      "description": "Where a market-data answer comes from. Over HTTP, checkpoint is memory's applied checkpoint when the request arrived: the body reflects it or a later one, so lag_ms is an upper bound. On the socket, it is the message's own checkpoint. checkpoint, timestamp_ms and lag_ms are null before the first checkpoint.",
+      "type": "object",
+      "properties": {
+        "network": {
+          "$ref": "#/$defs/network"
+        },
+        "deployment_fingerprint": {
+          "description": "The indexed deployment's fingerprint (BLAST_DEPLOYMENT_FINGERPRINT, required).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/deployment_fingerprint"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "checkpoint": {
+          "anyOf": [
+            {
+              "$ref": "defs.schema.json#/$defs/count"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "timestamp_ms": {
+          "anyOf": [
+            {
+              "$ref": "defs.schema.json#/$defs/timestamp_ms"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The checkpoint's timestamp."
+        },
+        "observed_ms": {
+          "description": "The engine's wall clock when it served the answer or sent the frame.",
+          "$ref": "defs.schema.json#/$defs/timestamp_ms"
+        },
+        "lag_ms": {
+          "anyOf": [
+            {
+              "$ref": "defs.schema.json#/$defs/count"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "observed_ms minus timestamp_ms, floored at 0."
+        }
+      },
+      "required": [
+        "network",
+        "deployment_fingerprint",
+        "checkpoint",
+        "timestamp_ms",
+        "observed_ms",
+        "lag_ms"
+      ],
+      "additionalProperties": false
+    },
+    "protocol_rates": {
+      "type": "object",
+      "properties": {
+        "raise_bps": {
+          "$ref": "defs.schema.json#/$defs/uint"
+        },
+        "token_bps": {
+          "$ref": "defs.schema.json#/$defs/uint"
+        },
+        "lp_fee_meme_bps": {
+          "$ref": "defs.schema.json#/$defs/uint"
+        },
+        "lp_fee_quote_bps": {
+          "$ref": "defs.schema.json#/$defs/uint"
+        }
+      },
+      "required": [
+        "raise_bps",
+        "token_bps",
+        "lp_fee_meme_bps",
+        "lp_fee_quote_bps"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

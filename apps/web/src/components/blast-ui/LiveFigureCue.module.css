@@ -1,0 +1,6 @@
+.figure { position: relative; display: inline-block; max-inline-size: 100%; }
+.mark { position: absolute; inset-inline: 0; inset-block-end: 0; block-size: 1.5px; background: var(--ink); opacity: 0; pointer-events: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mark { display: none; }
+}

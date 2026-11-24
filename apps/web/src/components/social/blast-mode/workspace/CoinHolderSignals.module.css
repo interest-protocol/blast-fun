@@ -1,0 +1,10 @@
+.trigger { display:flex; align-items:center; gap:0.4375rem; max-width:100%; min-height:1.875rem; padding:0.1875rem 0.3125rem; margin:0.125rem -0.3125rem 0; border-radius:var(--r-inner); color:var(--muted); font:500 0.625rem/1.4 var(--font); text-align:left; }
+.trigger:focus-visible,.popup :focus-visible { outline:0.125rem solid var(--workspace-focus); outline-offset:0.125rem; }
+.trigger:active { background:var(--workspace-press); }
+.layer { z-index:1100; max-width:calc(100vw - 2rem); }
+.popup { composes:theme from "./WorkspaceTheme.module.css"; box-sizing:border-box; width:20rem; max-width:calc(100vw - 2rem); max-height:70dvh; overflow:auto; padding:var(--s4); border-radius:var(--r-sm); background:var(--card); color:var(--ink); border:1px solid var(--hair); box-shadow:var(--sh-pop); }
+.title { margin:0; font:600 0.9375rem/1.4 var(--font); }
+.people { display:grid; gap:1rem; padding:0; margin:1rem 0; list-style:none; }
+.people li { min-width:0; overflow-wrap:anywhere; }
+@media (hover:hover) and (pointer:fine) { .trigger:hover { background:var(--workspace-inset); color:var(--ink); } }
+@media (pointer:coarse) { .trigger { min-height:44px; } }

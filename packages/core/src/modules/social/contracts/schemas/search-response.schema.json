@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/search-response.schema.json",
+  "title": "Search answer",
+  "description": "GET /api/social/search 200: presales and people for a term (or suggestions), the same for every caller.",
+  "type": "object",
+  "properties": {
+    "query": {
+      "type": "string",
+      "maxLength": 64
+    },
+    "presales": {
+      "type": "array",
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "properties": {
+          "presale_id": {
+            "type": "string",
+            "pattern": "^0x[0-9a-f]{64}$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "symbol": {
+            "type": "string"
+          },
+          "icon_url": {
+            "type": "string"
+          },
+          "phase": {
+            "enum": [
+              "pending",
+              "open",
+              "closed",
+              "funded",
+              "trading",
+              "cancelled"
+            ]
+          },
+          "coin_type": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Canonical sale coin type; optional for older cached responses."
+          },
+          "verified_team": {
+            "type": "boolean",
+            "description": "R3-23: Blast checked who is behind the sale (social_sale_trust); sent only when true."
+          }
+        },
+        "required": [
+          "presale_id",
+          "name",
+          "symbol",
+          "icon_url",
+          "phase"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "people": {
+      "type": "array",
+      "maxItems": 6,
+      "items": {
+        "type": "object",
+        "properties": {
+          "callsign": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_]{1,18}[a-z0-9]$"
+          },
+          "display_name": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "avatar_url": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "verified": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "callsign",
+          "display_name",
+          "avatar_url",
+          "verified"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "as_of": {
+      "$ref": "https://blast-v2.invalid/social/contracts/as-of.schema.json"
+    }
+  },
+  "required": [
+    "query",
+    "presales",
+    "people",
+    "as_of"
+  ],
+  "additionalProperties": false
+}

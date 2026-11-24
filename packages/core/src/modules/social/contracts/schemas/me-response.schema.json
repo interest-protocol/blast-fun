@@ -1,0 +1,149 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/me-response.schema.json",
+  "title": "Social account of the caller",
+  "description": "GET /api/social/me 200. Privy DIDs and X subjects never appear.",
+  "type": "object",
+  "properties": {
+    "account": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/account"
+        }
+      ]
+    }
+  },
+  "required": [
+    "account"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "nullableText": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "minLength": 1
+        }
+      ]
+    },
+    "millis": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "wallet": {
+      "type": "object",
+      "properties": {
+        "address": {
+          "type": "string",
+          "pattern": "^0x[0-9a-f]{64}$"
+        },
+        "kind": {
+          "enum": [
+            "embedded",
+            "slush",
+            "external"
+          ]
+        },
+        "linked_at_ms": {
+          "$ref": "#/$defs/millis"
+        }
+      },
+      "required": [
+        "address",
+        "kind",
+        "linked_at_ms"
+      ],
+      "additionalProperties": false
+    },
+    "account": {
+      "type": "object",
+      "properties": {
+        "account_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "kind": {
+          "enum": [
+            "member",
+            "new"
+          ]
+        },
+        "callsign": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_]{1,18}[a-z0-9]$"
+        },
+        "display_name": {
+          "$ref": "#/$defs/nullableText"
+        },
+        "avatar_url": {
+          "$ref": "#/$defs/nullableText"
+        },
+        "x_handle": {
+          "$ref": "#/$defs/nullableText"
+        },
+        "verified": {
+          "type": "boolean",
+          "description": "OA-8: the account has a linked X account (a Mission Control member always has)."
+        },
+        "onboarding": {
+          "type": "object",
+          "properties": {
+            "shown": {
+              "type": "boolean"
+            },
+            "completed": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "shown",
+            "completed"
+          ],
+          "additionalProperties": false
+        },
+        "privacy": {
+          "enum": [
+            "public",
+            "private"
+          ]
+        },
+        "sharing_since_ms": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/millis"
+            }
+          ]
+        },
+        "wallets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/wallet"
+          }
+        }
+      },
+      "required": [
+        "account_id",
+        "kind",
+        "callsign",
+        "display_name",
+        "avatar_url",
+        "x_handle",
+        "verified",
+        "onboarding",
+        "privacy",
+        "sharing_since_ms",
+        "wallets"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

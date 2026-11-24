@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/presale/contracts/presale-commitments.schema.json",
+  "title": "Presale commitments",
+  "description": "GET /v1/presales/{presale_id}/commitments, newest first (CL-1); next_cursor is the next page's before.",
+  "type": "object",
+  "properties": {
+    "commitments": {
+      "type": "array",
+      "items": {
+        "$ref": "defs.schema.json#/$defs/commitment_entry"
+      }
+    },
+    "next_cursor": {
+      "anyOf": [
+        {
+          "$ref": "defs.schema.json#/$defs/event_cursor"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "freshness": {
+      "$ref": "defs.schema.json#/$defs/freshness"
+    }
+  },
+  "required": [
+    "commitments",
+    "next_cursor",
+    "freshness"
+  ],
+  "additionalProperties": false
+}

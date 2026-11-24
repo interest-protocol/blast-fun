@@ -1,0 +1,301 @@
+/* The selected coin uses a large chart and a compact trade ticket. */
+.chart { height:var(--workspace-section-height,26.25rem); min-height:15rem; }
+.chart > div { display:flex; flex-direction:column; height:100%; min-height:0; }
+.trade h2,.details h2 { margin:0 0 1rem; color:var(--ink); font-size:0.875rem; line-height:1.4; font-weight:650; }
+.tradeToggle { display:none; }
+.activity { container:terminal-activity / inline-size; height:var(--workspace-section-height,17.5rem); min-height:12.5rem; display:flex; flex-direction:column; }
+.activityBody { flex:1; min-height:0; overflow:auto; padding:0.25rem; margin:-0.25rem; scrollbar-width:thin; }
+:where(.activity,.details) p { color:var(--muted); font-size:0.8125rem; line-height:1.5; }
+.details { min-height:var(--workspace-section-height,15rem); }
+.tabs { display:flex; flex-wrap:wrap; gap:0.25rem; margin-bottom:1rem; }
+.tabs button { border:0; border-radius:var(--r-button); padding:0.5rem 0.625rem; background:transparent; color:var(--muted); font:600 0.75rem var(--font); cursor:pointer; }
+.tabs button[aria-pressed="true"] { color:var(--ink); background:var(--workspace-inset); }
+.facts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1rem; margin:0; font-variant-numeric:tabular-nums; }
+.facts > div { min-width:0; }
+.facts dt { color:var(--muted); font-size:0.75rem; }
+.facts dd { margin:0.25rem 0 0; color:var(--ink); font-size:0.875rem; overflow-wrap:anywhere; }
+.identity { margin-top:1.25rem; display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap; }
+.identity button { max-width:100%; overflow-wrap:anywhere; }
+.holders { display:grid; gap:0.75rem; padding:0; list-style:none; }
+.holders li { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:0.75rem; }
+:global([data-blast-ui]) .tabs button:focus-visible { outline:0.125rem solid var(--workspace-focus); outline-offset:0.125rem; }
+@media (hover:hover) and (pointer:fine) { .tabs button:not([aria-pressed="true"]):hover { background:var(--workspace-inset); color:var(--ink); } }
+@media (max-width:1099px) { .chart { height:var(--workspace-section-height,17.5rem); min-height:15rem; } }
+@media (pointer:coarse) { .tabs button { min-height:44px; } }
+
+/* Terminal surfaces share a single quiet canvas and thin structural dividers. */
+.details { min-height:0; border-top:1px solid var(--hair); }
+.details .facts { gap:0.75rem; }
+:where(.details) p { margin:0.75rem 0 0; font-size:0.75rem; }
+.position h2 { margin:0 0 1.125rem; font-size:0.8125rem; font-weight:600; }
+.position p { color:var(--muted); font-size:0.75rem; line-height:1.5; }
+.position .facts { grid-template-columns:repeat(3,minmax(0,1fr)); }
+.metrics { display:flex; align-items:center; flex-wrap:wrap; gap:1rem 1.75rem; margin:0; }
+.metrics dt { color:var(--muted); font-size:0.75rem; margin-bottom:0.3125rem; }
+.metrics dd { color:var(--ink); margin:0; font-size:0.875rem; font-variant-numeric:tabular-nums; }
+.tabs { gap:0; margin:-0.375rem -0.5rem 1rem; }
+.tabs button[aria-pressed="true"] { background:transparent; color:var(--ink); }
+.tabs button { padding:0.5rem; }
+/* Notes in the lower tabs are 12px; :where keeps this below the shared EmptyState title and body. */
+:where(.activityBody) p { font-size:0.75rem; }
+@container workspace-panel (max-width:460px) { .position .facts { grid-template-columns:minmax(0,1fr); } }
+.funding { display:flex; flex-direction:column; min-height:0; overflow:auto; }
+.funding > div { flex:1; min-height:0; height:auto; }
+.trade h2,.details h2 { font-size:0.8125rem; margin-bottom:1rem; }
+.details { border-top:0; margin-top:0.375rem; }
+.details .facts { display:flex; flex-direction:column; gap:0.625rem; }
+.details .facts > div { display:flex; justify-content:space-between; align-items:baseline; gap:0.75rem; }
+.details .facts dd { margin:0; font-size:0.75rem; }
+.details .identity { margin-top:1rem; font-size:0.75rem; }
+:where(.details) p { font-size:0.75rem; }
+.metrics { gap:1.125rem 2rem; }
+.metrics dd { min-height:1.25rem; font-size:0.8125rem; font-weight:600; }
+.metrics dd button { padding:0; min-height:0; font-size:inherit; max-width:100%; flex-wrap:wrap; }
+.metrics dd :global(.figure) { font-size:inherit; }
+.tabs { gap:0.125rem; margin:-0.25rem -0.25rem 1rem; }
+.tabs button { border-radius:var(--r-inner); padding:0.4375rem 0.5rem; font-weight:500; }
+.tabs button[aria-pressed="true"] { background:var(--thumb); box-shadow:var(--thumb-sh); color:var(--ink); }
+.position .facts dt { font-size:0.75rem; }
+.position .facts dd { font-size:0.875rem; font-weight:600; }
+.position p { margin-bottom:0; font-size:0.75rem; }
+.funding { gap:1rem; }
+.position .facts { display:flex; flex-wrap:wrap; gap:1.25rem 4rem; }
+.position .facts > div { min-width:10rem; }
+.metrics dd :global(.num) { font-size:0.875rem; line-height:1.25rem; }
+
+@media(max-width:460px) { .metrics { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0.875rem 1.25rem; } }
+
+.holdingSymbol { font-size:0.75rem; color:var(--muted); font-weight:400; }
+.metrics > div { min-width:0; }
+.metrics dd { overflow-wrap:anywhere; }
+
+.positionStatus { display:inline-flex; align-items:center; flex-wrap:wrap; gap:0.125rem 0.5rem; max-width:100%; }
+.positionAction,.metrics .positionAction { display:inline-flex; align-items:center; justify-content:center; width:auto; min-width:max(44px, 2.75rem); min-height:1.5rem; height:auto; padding:0 0.25rem; border-radius:var(--r-inner); background:transparent; color:var(--ink); font:inherit; text-decoration:underline; text-underline-offset:0.1875rem; }
+.positionAction:focus-visible { outline:0.125rem solid var(--workspace-focus); outline-offset:0.125rem; }
+@media (pointer:coarse) { .positionAction,.metrics .positionAction { min-height:44px; } }
+
+.metrics { align-items:start; }
+
+.pnl[data-direction="up"] { color:var(--up); }
+.pnl[data-direction="down"] { color:var(--down); }
+.pnlPercent { display:inline-flex; margin-left:0; padding:0.125rem 0.375rem; border-radius:var(--r-inner); background:var(--workspace-inset); font-size:0.75rem; line-height:1rem; font-weight:600; white-space:nowrap; }
+.pnl[data-direction="up"] .pnlPercent { background:var(--up-soft); }
+.pnl[data-direction="down"] .pnlPercent { background:var(--down-soft); }
+
+.funding > div:last-child { display:flex; flex-direction:column; gap:0.5rem; }
+/* No commitments yet: the note takes the chart's place, centred in the card, not a line at its top. */
+.chartEmpty { flex:1; justify-content:center; min-height:12rem; }
+
+/* Keep repeated identity in the header and the remaining market facts compact. */
+.trade h2,.details h2 { margin-bottom:0.625rem; overflow-wrap:anywhere; }
+.details .facts { gap:0.375rem; }
+:where(.details) p { margin-top:0.5rem; }
+.details .identity { margin-top:0.5rem; }
+.detailHeading { display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:0.25rem 0.5rem; margin-bottom:0.5rem; }
+.detailHeading h2 { margin:0; }
+.observed { color:var(--muted); font-size:0.75rem; }
+.observed button { padding:0; font:inherit; }
+.detailFoot { display:flex; justify-content:space-between; flex-wrap:wrap; gap:0.25rem 0.5rem; margin-top:0.375rem; color:var(--muted); font-size:0.75rem; line-height:1rem; }
+
+/* The header carries market context; personal figures live in Your holdings. */
+.priceMetrics { display:flex; align-items:center; flex-wrap:wrap; gap:0.5rem 0.8125rem; margin:0; }
+.priceMetrics .priceMetric { min-width:0; max-width:100%; }
+.priceMetrics .priceMetric dt { margin:0; }
+.priceMetrics .priceMetric dd,.priceMetrics .priceMetric dd :global(.num) { font-size:1.75rem; line-height:2.25rem; font-weight:600; letter-spacing:-.035em; }
+.priceMetrics .priceMetric dd { padding-inline-end:0.1875rem; }
+.priceMetrics .priceMetric dd > button { max-width:100%; text-align:left; }
+.priceMetrics .priceMetric dd :global(.num) { white-space:normal; overflow-wrap:anywhere; }
+.positionMetrics { max-width:30rem; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); grid-template-areas:"value pnl" "balance pnl"; align-items:start; gap:0.1875rem 0.8125rem; margin:0 0 1rem; padding-inline-end:0.1875rem; }
+.positionValue { grid-area:value; }
+.positionBalance { grid-area:balance; }
+.positionPnl { grid-area:pnl; }
+.positionMetrics dt { margin-bottom:0.25rem; }
+.positionMetrics .positionValue dd > button { font-size:1.25rem; line-height:1.625rem; font-weight:600; letter-spacing:-.025em; }
+.positionMetrics .positionBalance dd { font-size:0.75rem; line-height:1.125rem; font-weight:400; color:var(--muted); }
+.positionMetrics .pnl { display:inline-flex; font-size:1.125rem; line-height:1.625rem; font-weight:550; letter-spacing:-.025em; }
+.positionMetrics .pnl > button { display:flex; align-items:baseline; flex-wrap:wrap; gap:0.125rem 0.375rem; text-align:left; }
+.positionMetrics .pnlPercent { margin:0; padding:0; background:transparent; font-size:0.75rem; line-height:1.125rem; font-weight:500; letter-spacing:normal; }
+
+
+.activityBody:has(> [role="status"]:only-child),.activityBody:has(> p:only-child) { display:grid; place-content:center; text-align:center; }
+.activityBody .coverage { margin:0 0 0.75rem; font-size:0.75rem; line-height:1.5; color:var(--muted); }
+
+.emptyContext { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:0.625rem; min-height:10rem; padding:1.5rem 0.75rem; text-align:center; color:var(--muted); }
+.emptyContext strong { color:var(--ink-2); font-size:0.875rem; font-weight:600; }
+.activityBody .emptyContext p { max-width:32ch; margin:0; font-size:0.8125rem; line-height:1.5; }
+
+/* Market facts remain separate from private holdings and the trade decision. */
+.marketOverview { display:grid; grid-template-columns:minmax(7.75rem,.95fr) minmax(0,3fr); align-items:stretch; gap:0.75rem; min-width:0; }
+.marketOverview .priceMetrics { display:flex; justify-content:center; flex-direction:column; align-items:flex-start; gap:0.125rem; padding:0.5rem 0; }
+.marketOverview .priceMetric dt { margin-bottom:0.25rem; color:var(--muted); font-size:0.75rem; line-height:1rem; }
+.marketOverview .priceMetric dt > span { margin-left:0.375rem; }
+.marketFacts { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:0.375rem; margin:0; padding:0; font-variant-numeric:tabular-nums; }
+.marketOverview > .marketFacts:only-child { grid-column:1 / -1; }
+.marketFacts > div { display:flex; flex-direction:column; justify-content:center; min-width:0; padding:0.375rem 0.625rem; }
+.marketFacts dt { margin-bottom:0.25rem; color:var(--muted); font-size:0.75rem; line-height:1rem; }
+.marketFacts dd { margin:0; color:var(--ink); font-size:1.125rem; line-height:1.5rem; font-weight:650; overflow-wrap:anywhere; }
+.marketFacts dd > [data-direction] { padding:0; background:transparent; font-size:inherit; font-weight:inherit; line-height:inherit; }
+.marketFacts dd button { max-width:100%; padding:0; font:inherit; color:inherit; text-align:left; overflow-wrap:anywhere; }
+.tabs button { min-height:2rem; padding:0.375rem 0.625rem; font-size:0.8125rem; font-weight:600; line-height:1.25rem; }
+.ticketPosition { flex:none; margin:0 0 1.5rem; padding:0; background:transparent; border-radius:0; }
+.ticketPosition .positionMetrics { max-width:none; margin:0; gap:0.25rem 1rem; }
+.ticketPosition .positionMetrics dt { color:var(--muted); font-size:0.75rem; line-height:1rem; font-weight:400; }
+.ticketPosition .positionValue dd > button { font-size:1.75rem; line-height:2.25rem; font-weight:650; letter-spacing:-.035em; }
+.ticketPosition .positionBalance dd { color:var(--ink-2); font-size:0.8125rem; line-height:1.25rem; font-weight:500; }
+.ticketPosition .positionBalance dd > button { font-weight:inherit; }
+.ticketPosition .holdingSymbol { font-size:0.75rem; font-weight:400; }
+.ticketPosition .pnl { font-size:1.25rem; line-height:2.25rem; font-weight:600; letter-spacing:-.025em; }
+@container workspace-panel (max-width:600px) {
+ .marketOverview { grid-template-columns:minmax(0,1fr); gap:0.5rem; }
+ .marketFacts { display:flex; flex-wrap:wrap; gap:0.5rem 1rem; }
+ .marketFacts > div { padding:0; border:0; }
+ .marketFacts dt { font-size:0.6875rem; margin-bottom:0.125rem; }
+ .marketFacts dd { font-size:0.875rem; white-space:nowrap; }
+}
+@media (pointer:coarse) { .tabs button { min-height:44px; } }
+
+.details > button { margin-top:0.75rem; }
+
+/* Account holdings and selected-market research share the lower workspace surface. */
+.activity { scroll-margin-block:0.75rem; }
+.tabs { flex:none; gap:0.25rem; margin:0 0 0.75rem; padding:0; }
+.tabs button[aria-selected="true"] { background:var(--thumb); box-shadow:var(--thumb-sh); color:var(--ink); }
+.activityBody[role="tabpanel"]:focus-visible { outline:0.125rem solid var(--workspace-focus); outline-offset:-0.125rem; border-radius:var(--r-inner); }
+
+
+.freshness { display:flex; align-items:center; gap:0.25rem; color:var(--muted); font-size:0.6875rem; font-weight:400; white-space:normal; }
+.marketFacts .freshness button { display:inline-flex; flex:none; align-items:center; justify-content:center; min-height:1.5rem; min-width:1.5rem; }
+@media (pointer:coarse) { .marketFacts .freshness button { min-height:44px; min-width:44px; } }
+
+/* Narrow desktop panels also need room for complete market figures. */
+@container workspace-panel (600px < width <= 800px) {
+ .marketFacts { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+
+@container workspace-panel (max-width:600px) {
+ .marketOverview { gap:0.25rem; }
+ .marketOverview .priceMetrics { padding:0; }
+ .marketFacts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); align-items:start; gap:0.75rem 1rem; }
+ .marketFacts > div { min-width:0; max-width:100%; }
+ .marketFacts dt { min-height:0.875rem; line-height:0.875rem; }
+ .marketFacts dd { line-height:1.25rem; white-space:normal; }
+ .marketFacts dd > [data-direction] { max-width:100%; height:auto; min-height:1.25rem; white-space:normal; overflow-wrap:anywhere; }
+}
+
+/* Redesign: the price is a display figure with today's move; stats are compact tonal tiles. */
+.priceMetrics .priceMetric dd { display:flex; align-items:center; flex-wrap:wrap; gap:0.25rem 0.625rem; }
+.priceMetrics .priceMetric dd :global(.num) { font-family:var(--display); font-variant-numeric:tabular-nums; }
+.priceMetrics .priceMetric dd .priceChange :global(.num) { font-family:var(--font); font-size:0.75rem; line-height:1; letter-spacing:0; font-weight:600; }
+.priceChange { display:inline-flex; flex:none; }
+.marketFacts { grid-template-columns:repeat(auto-fit,minmax(6.5rem,1fr)); gap:0.5rem; align-items:stretch; }
+.marketFacts > div { justify-content:center; min-width:0; padding:0.625rem 0.75rem; border-radius:var(--r-sm); background:var(--chip); }
+.marketFacts dt { margin-bottom:0.125rem; font-size:0.75rem; line-height:1rem; }
+.marketFacts dd { display:flex; align-items:center; flex-wrap:wrap; gap:0.125rem 0.25rem; font-size:1.0625rem; line-height:1.375rem; font-weight:650; white-space:normal; font-variant-numeric:tabular-nums; }
+.factRefreshButton { color:var(--muted); }
+@media (pointer:coarse) { .factRefreshButton { min-width:44px; min-height:44px; } }
+
+/* Portfolio and coin context: the shared `Segmented` tablist at its content width; a narrow card scrolls it sideways rather than wrapping. */
+.contextTabs { flex:none; width:fit-content; max-width:100%; margin:0 0 0.75rem; overflow-x:auto; overscroll-behavior-x:contain; scrollbar-width:none; }
+/* Each tab keeps its whole label (audit BM-02: a 320px card squeezed five tabs into equal 51px columns and the labels ran into each other). */
+[data-blast-ui] .contextTabs { grid-auto-columns:max-content; }
+.contextTabs::-webkit-scrollbar { display:none; }
+/* With the scrollbar hidden, each end fades while more tabs lie past it (data-more-* from ContextTabs), and a focused tab stops clear of the fade. */
+@property --context-fade-start { syntax:"<length>"; inherits:false; initial-value:0px; }
+@property --context-fade-end { syntax:"<length>"; inherits:false; initial-value:0px; }
+.contextTabs {
+  scroll-padding-inline:2rem;
+  mask:linear-gradient(black, black) no-clip subtract,
+    linear-gradient(to right, black, transparent) 0 0 / var(--context-fade-start, 0px) 100% no-repeat no-clip,
+    linear-gradient(to right, transparent, black) 100% 0 / var(--context-fade-end, 0px) 100% no-repeat no-clip;
+  transition:--context-fade-start var(--t1) ease-out, --context-fade-end var(--t1) ease-out;
+}
+.contextTabs[data-more-start] { --context-fade-start:2rem; }
+.contextTabs[data-more-end] { --context-fade-end:2rem; }
+
+/* Redesign: lower-context views are one segmented track carrying the shared neutral thumb. */
+.activity > .tabs { display:flex; flex-wrap:nowrap; gap:0; width:fit-content; max-width:100%; overflow-x:auto; scrollbar-width:none; padding:0.1875rem; border-radius:var(--r-button); background:var(--track); }
+.activity > .tabs::-webkit-scrollbar { display:none; }
+.activity > .tabs button { flex:none; border-radius:var(--r-inner); font-size:0.8125rem; font-weight:600; }
+.activity > .tabs button:not([aria-pressed="true"],[aria-selected="true"]) { background:transparent; box-shadow:none; color:var(--muted); }
+@media (hover:hover) and (pointer:fine) { .activity > .tabs button:not([aria-pressed="true"],[aria-selected="true"]):hover { background:transparent; color:var(--ink); } }
+
+/*
+ * The focus board (BlastMode.dc.html, 2026-10-27). The chart card's first row is the panel
+ * header: the coin chip, price and today's move, the market stats, then full screen and options.
+ */
+.chart { container:focus-chart / inline-size; }
+.chart > div:not(.chartHead) { flex:1; height:auto; min-height:0; }
+.chart > .chartHead { display:flex; flex:none; height:auto; min-width:0; }
+/* The market stats wrap to a second row only when the row can't hold them: the spacer before them shrinks to nothing first, so on the second row they start at the left. */
+.boardHead { display:flex; flex-wrap:wrap; align-items:center; gap:0.75rem; row-gap:0.75rem; flex:1; min-width:0; }
+.coinChip { display:flex; flex:none; align-items:center; gap:0.625rem; min-height:2.75rem; max-width:100%; padding:0.1875rem 0.625rem 0.1875rem 0.375rem; border-radius:0.75rem; background:var(--chip); min-width:0; }
+.coinMark { display:block; flex:none; width:2rem; height:2rem; overflow:hidden; border-radius:0.625rem; }
+.coinMark > * { width:100%; height:100%; }
+.coinNames { display:flex; flex-direction:column; align-items:flex-start; row-gap:0.25rem; min-width:0; }
+.coinTitle { display:flex; flex-wrap:wrap; align-items:center; gap:0.25rem; min-width:0; max-width:100%; min-height:1.25rem; }
+.coinTitle > nav { flex:none; margin-block:-0.25rem; }
+/* Change coin is 20px with no padding (BlastMode.dc.html); the 28px links count as 20px so the row keeps its height. When the row is short of room the links move under the name, a long name ends in an ellipsis, and the ticker is never cut: it wraps only when it alone is wider than the card. */
+.coinTitle .changeCoin[data-ui-disclosure]:not([data-ui-icon])[data-ui-size] { --control-height:1.25rem; --control-pad-block:0; --control-pad-start:0; --control-pad-end:0; --control-gap:0.375rem; background:transparent; box-shadow:none; color:var(--ink); }
+.coinTitle .changeCoin { flex:0 1 auto; min-width:0; max-width:100%; }
+.changeCoin > span:first-child { display:flex; align-items:baseline; gap:0.375rem; min-width:0; }
+.changeCoin :global(.coinVerified) { flex:none; align-self:center; }
+.changeCoin strong { flex:none; max-width:100%; font-size:0.9375rem; line-height:1.25rem; font-weight:600; white-space:normal; text-align:start; }
+.coinName { flex:0 1 auto; min-width:0; overflow:hidden; color:var(--muted); font-size:0.75rem; font-weight:400; white-space:nowrap; text-overflow:ellipsis; }
+.coinMeta { display:flex; flex-wrap:wrap; align-items:center; gap:0 0.3125rem; min-height:1.125rem; color:var(--muted); font-size:0.75rem; line-height:1rem; }
+.coinMeta :is(button,[data-inspect-value]) { color:inherit; }
+.venue { display:inline-flex; align-items:center; }
+.venue :is(img,svg) { width:0.75rem; height:0.75rem; }
+.address { font-family:var(--mono); font-size:0.75rem; white-space:nowrap; }
+.copy { flex:none; }
+/* Hit areas of at least 32px without moving the quiet controls (live audit F25): the coin name, its copy and the fact refresh. */
+button.changeCoin::after, .copy::after, .factRefreshButton::after { content:""; position:absolute; top:min(0rem, calc((100% - 2rem) / 2)); bottom:min(0rem, calc((100% - 2rem) / 2)); left:min(0rem, calc((100% - 2rem) / 2)); right:min(0rem, calc((100% - 2rem) / 2)); }
+.boardPrice { display:flex; flex:none; flex-direction:column; line-height:1.1; }
+.boardPriceFigure { display:flex; align-items:center; gap:0.5rem; min-height:2.0625rem; }
+.boardPriceFigure > :global(button) { min-height:0; padding:0; }
+/* Audit 12: a coin without a USD price keeps the price slot as a dash at the price's size; unknown facts are quiet dashes. */
+.priceMissing { color:var(--faint); font-size:1.75rem; font-weight:600; line-height:1; }
+.missingFigure { color:var(--faint); }
+.today { font-size:0.8125rem; line-height:1.1; font-weight:600; font-variant-numeric:tabular-nums; color:var(--muted); }
+.today[data-direction="up"] { color:var(--up); }
+.today[data-direction="down"] { color:var(--down); }
+.headSpacer { flex:1; min-width:0; }
+.boardHead .marketFacts { display:flex; flex:none; align-items:flex-end; gap:1.125rem; margin:0; padding:0; white-space:nowrap; }
+.boardHead .marketFacts > div { display:block; padding:0; border-radius:0; background:transparent; }
+.boardHead .marketFacts dt { margin:0; color:var(--muted); font-size:0.75rem; line-height:1.125rem; font-weight:400; }
+.boardHead .marketFacts dd { display:flex; align-items:center; gap:0.25rem; margin:0; font-size:0.875rem; line-height:1.25rem; font-weight:600; white-space:nowrap; }
+.boardHead .marketFacts dd :global(button) { font:inherit; }
+.boardHead .factRefreshButton { margin-block:-0.3125rem; color:var(--muted); }
+/* Budget for pending prices/facts and the panel controls, not only the shorter resolved values. */
+@container focus-chart (max-width:50rem) {
+ .boardHead { flex-wrap:wrap; row-gap:0.75rem; }
+ .headSpacer { display:none; }
+ .boardHead .marketFacts { flex:1 1 100%; flex-wrap:wrap; row-gap:0.5rem; }
+}
+/* The holders card (BlastMode.dc.html): one segmented row with Following only at its end, then the table. */
+.contextHead { display:flex; flex:none; flex-wrap:wrap; align-items:center; gap:0.625rem; padding:0 0 0.625rem; min-width:0; }
+.contextHead > .contextTabs { margin:0; }
+.contextSpacer { flex:1; }
+.contextFilter { display:flex; align-items:center; gap:0.4375rem; color:var(--muted); font-size:0.75rem; line-height:1rem; cursor:pointer; }
+/* With no holder list (unavailable or failed), there is nothing to filter: the filters hide. */
+.noRows { display:contents; }
+.activity:has([data-no-rows]) .contextFilter { display:none; }
+.contextFilter > input { width:0.9375rem; height:0.9375rem; }
+.tabCount { color:var(--muted); font-weight:600; }
+.holderTable { display:flex; flex-direction:column; min-width:0; }
+.holderHead,.holderRow { display:grid; grid-template-columns:minmax(0,1.6fr) repeat(3,minmax(0,1fr)); align-items:center; gap:0.625rem; padding:0 0.75rem; }
+.holderHead { height:1.75rem; color:var(--muted); font-size:0.6875rem; line-height:1rem; }
+.holderHead > :not(:first-child) { text-align:right; }
+.holderRow { height:2.875rem; border-radius:0.625rem; font-size:0.875rem; font-variant-numeric:tabular-nums; }
+.holderWho { display:flex; align-items:center; gap:0.5rem; min-width:0; }
+.holderWho > b { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.relation { flex:none; display:inline-flex; align-items:center; height:1.125rem; padding:0 0.375rem; border-radius:62.4375rem; background:var(--info-soft); color:var(--info); font-size:0.625rem; font-weight:600; white-space:nowrap; }
+.holderPosition { display:flex; flex-direction:column; align-items:flex-end; line-height:1.25; min-width:0; }
+.holderPosition > b { font-weight:600; }
+.holderPosition > span { color:var(--muted); font-size:0.6875rem; }
+.holderPosition :global(button) { min-height:0; padding:0; font:inherit; color:inherit; }
+.holderPnl { text-align:right; font-weight:600; }
+.holderPnl[data-direction="up"] { color:var(--up); }
+.holderPnl[data-direction="down"] { color:var(--down); }
+.holderEntry { text-align:right; color:var(--muted); }
+@media (hover:hover) and (pointer:fine) { .holderRow:hover { background:var(--control-field); } }
+@media (pointer:coarse) { .contextFilter { min-height:44px; } }

@@ -1,0 +1,7 @@
+.plot { position: relative; height: 100%; width: 100%; color: var(--pink-ink); }
+.overlay { position: absolute; width: 0; border-left: 0.125rem solid var(--pink-ink); pointer-events: none; }
+.overlay[data-kind="projection"] { border-left-style: dashed; opacity: .65; }
+.overlay[data-kind="current"], .overlay[data-kind="next"] { width: 0.5rem; min-height: 0.5rem; border: 0.125rem solid var(--pink-ink); border-radius: 50%; background: var(--pink-ink); transform: translate(-50%, -50%); }
+.overlay[data-kind="next"] { background: var(--card); }
+
+.overlay[data-kind="now"] { border-left: 1px dashed var(--muted); }

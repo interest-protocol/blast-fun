@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/watchlist-ids-response.schema.json",
+  "title": "Watchlist ids",
+  "description": "GET /api/social/me/watchlist/ids 200: every presale id the caller starred, newest first (private, never cached).",
+  "type": "object",
+  "properties": {
+    "presale_ids": {
+      "type": "array",
+      "maxItems": 500,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^0x[0-9a-f]{64}$"
+      }
+    }
+  },
+  "required": [
+    "presale_ids"
+  ],
+  "additionalProperties": false
+}

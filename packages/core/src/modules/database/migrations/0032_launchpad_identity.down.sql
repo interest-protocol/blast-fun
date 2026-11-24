@@ -1,0 +1,1 @@
+DROP TABLE IF EXISTS mission_control_launchpad_wallet_challenges;

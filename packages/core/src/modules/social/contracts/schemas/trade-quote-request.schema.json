@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/trade-quote-request.schema.json",
+  "title": "Quote a trade",
+  "description": "POST /api/social/trades/quote: the coins, the side and exactly one amount in atoms (amount_in: sell exactly this; amount_out: get about this, quoted as the exact input that buys it), and an optional slippage (default 50 bps).",
+  "type": "object",
+  "properties": {
+    "in_coin": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 512,
+      "pattern": "^0x[0-9a-f]{64}::[A-Za-z_][A-Za-z0-9_]{0,127}::[A-Za-z_][A-Za-z0-9_]{0,127}(<.+>)?$"
+    },
+    "out_coin": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 512,
+      "pattern": "^0x[0-9a-f]{64}::[A-Za-z_][A-Za-z0-9_]{0,127}::[A-Za-z_][A-Za-z0-9_]{0,127}(<.+>)?$"
+    },
+    "side": {
+      "enum": [
+        "buy",
+        "sell"
+      ]
+    },
+    "amount_in": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]{0,19}$"
+    },
+    "amount_out": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]{0,19}$"
+    },
+    "slippage_bps": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 500
+    }
+  },
+  "required": [
+    "in_coin",
+    "out_coin",
+    "side"
+  ],
+  "oneOf": [
+    {
+      "properties": {
+        "amount_in": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]{0,19}$"
+        }
+      },
+      "required": [
+        "amount_in"
+      ]
+    },
+    {
+      "properties": {
+        "amount_out": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]{0,19}$"
+        }
+      },
+      "required": [
+        "amount_out"
+      ]
+    }
+  ],
+  "additionalProperties": false
+}

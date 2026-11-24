@@ -1,0 +1,8 @@
+Contact: mailto:jose@blast.fun
+Expires: 2027-10-01T00:00:00Z
+Preferred-Languages: en
+Canonical: https://blast.fun/.well-known/security.txt
+Canonical: https://www.blast.fun/.well-known/security.txt
+Canonical: https://blast.fun/security.txt
+Canonical: https://www.blast.fun/security.txt
+Policy: https://docs.blast.fun/security/reporting/

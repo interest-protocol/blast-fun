@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/presale/contracts/execute-request.schema.json",
+  "title": "Execute request",
+  "description": "POST /api/presale/sponsor/{reservation_id}/execute.",
+  "type": "object",
+  "properties": {
+    "user_signature": {
+      "$ref": "defs.schema.json#/$defs/base64"
+    }
+  },
+  "required": [
+    "user_signature"
+  ],
+  "additionalProperties": false
+}

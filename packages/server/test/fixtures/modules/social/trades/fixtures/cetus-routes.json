@@ -1,0 +1,134 @@
+{
+  "source": "Cetus aggregator API (api-sui.cetus.zone/router_v3), Sui mainnet, through @cetusprotocol/aggregator-sdk 1.7.3 findRouters",
+  "recorded_at": "2026-10-05T15:40:21.632Z",
+  "recordings": [
+    {
+      "name": "sui-usdc",
+      "request": {
+        "from": "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI",
+        "target": "0xdba34672e30cb065b1f93e3ab55318768fd6fef66c15942c9f7cb846e2f900e7::usdc::USDC",
+        "amount": "1000000000",
+        "by_amount_in": true,
+        "providers": [
+          "CETUS",
+          "BLUEFIN"
+        ]
+      },
+      "url": "https://api-sui.cetus.zone/router_v3/find_routes?from=0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI&target=0xdba34672e30cb065b1f93e3ab55318768fd6fef66c15942c9f7cb846e2f900e7::usdc::USDC&amount=1000000000&by_amount_in=true&providers=CETUS,BLUEFIN",
+      "status": 200,
+      "body": "{\"code\":200,\"msg\":\"Success\",\"data\":{\"request_id\":\"940586af-588b-4935-9652-28481f7e8dfe\",\"amount_in\":1000000000,\"amount_out\":1189790,\"deviation_ratio\":\"0.00048494\",\"paths\":[{\"id\":\"0xa63347f0a3d79e36c629866d72d148403907088cca219d80bdd5461d79d34d46\",\"provider\":\"BLUEFIN\",\"from\":\"0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI\",\"target\":\"0xbde4ba4c2e274a60ce15c1cfff9e5c42e41654ac8b6d906a57efa4bd3c29f47d::hasui::HASUI\",\"direction\":false,\"fee_rate\":\"0.0001\",\"lot_size\":1,\"amount_in\":400000000,\"amount_out\":369589680,\"published_at\":\"0x4e7c4ba436f8fd5b3c6bb514880ccd11c5109c83c45b5e037394b94204dbbb80\",\"extended_details\":{\"aux_shared_versions\":{\"0xa63347f0a3d79e36c629866d72d148403907088cca219d80bdd5461d79d34d46\":420903158}}},{\"id\":\"0xbce4869d39b5247bbd25653a0b8f2143ed08ae963f1e9634abd3ef6b8f487a9e\",\"provider\":\"BLUEFIN\",\"from\":\"0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI\",\"target\":\"0x549e8b69270defbfafd4f94e17ec44cdbdd99820b33bda2278dea3b9a32d3f55::cert::CERT\",\"direction\":false,\"fee_rate\":\"0.0001\",\"lot_size\":1,\"amount_in\":200000000,\"amount_out\":187171912,\"published_at\":\"0x4e7c4ba436f8fd5b3c6bb514880ccd11c5109c83c45b5e037394b94204dbbb80\",\"extended_details\":{\"aux_shared_versions\":{\"0xbce4869d39b5247bbd25653a0b8f2143ed08ae963f1e9634abd3ef6b8f487a9e\":437661035}}},{\"id\":\"0x6c545e78638c8c1db7a48b282bb8ca79da107993fcb185f75cedc1f5adb2f535\",\"provider\":\"CETUS\",\"from\":\"0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI\",\"target\":\"0x549e8b69270defbfafd4f94e17ec44cdbdd99820b33bda2278dea3b9a32d3f55::cert::CERT\",\"direction\":false,\"fee_rate\":\"0.0001\",\"lot_size\":1,\"amount_in\":200000000,\"amount_out\":187171701,\"published_at\":\"0x87b17d7f0b448b83ab934a13eb64b05b60e17d0a371e2a721c241bcf3f5ec9e7\",\"extended_details\":{\"after_sqrt_price\":19067462993626011110,\"aux_shared_versions\":{\"0x6c545e78638c8c1db7a48b282bb8ca79da107993fcb185f75cedc1f5adb2f535\":34395748}}},{\"id\":\"0x9661cca01a5b9b3536883568fa967a2943e237de11a97976795f5adb293892e9\",\"provider\":\"CETUS\",\"from\":\"0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI\",\"target\":\"0x7016aae72cfc67f2fadf55769c0a7dd54291a583b63051a5ed71081cce836ac6::sca::SCA\",\"direction\":false,\"fee_rate\":\"0.0001\",\"lot_size\":1,\"amount_in\":200000000,\"amount_out\":30176847903,\"published_at\":\"0x87b17d7f0b448b83ab934a13eb64b05b60e17d0a371e2a721c241bcf3f5ec9e7\",\"extended_details\":{\"after_sqrt_price\":1501684804411821120,\"aux_shared_versions\":{\"0x9661cca01a5b9b3536883568fa967a2943e237de11a97976795f5adb293892e9\":503647865}}},{\"id\":\"0xaa020ad81e1621d98d4fb82c4acb80dc064722f24ef828ab633bef50fc28268b\",\"provider\":\"CETUS\",\"from\":\"0xbde4ba4c2e274a60ce15c1cfff9e5c42e41654ac8b6d906a57efa4bd3c29f47d::hasui::HASUI\",\"target\":\"0xdba34672e30cb065b1f93e3ab55318768fd6fef66c15942c9f7cb846e2f900e7::usdc::USDC\",\"direction\":false,\"fee_rate\":\"0.0005\",\"lot_size\":1,\"amount_in\":369589680,\"amount_out\":476034,\"published_at\":\"0x87b17d7f0b448b83ab934a13eb64b05b60e17d0a371e2a721c241bcf3f5ec9e7\",\"extended_details\":{\"after_sqrt_price\":514093217771012316127,\"aux_shared_versions\":{\"0xaa020ad81e1621d98d4fb82c4acb80dc064722f24ef828ab633bef50fc28268b\":473354935}}},{\"id\":\"0x7e610a7466f0b7dbf8cda4ba0fa0a652b87c53a1d1d0578ce808bc2cfd139fb6\",\"provider\":\"CETUS\",\"from\":\"0x549e8b69270defbfafd4f94e17ec44cdbdd99820b33bda2278dea3b9a32d3f55::cert::CERT\",\"target\":\"0xce7ff77a83ea0cb6fd39bd8748e2ec89a3f41e8efdc3f4eb123e0ca37b184db2::buck::BUCK\",\"direction\":false,\"fee_rate\":\"0.0005\",\"lot_size\":1,\"amount_in\":374343613,\"amount_out\":476626187,\"published_at\":\"0x87b17d7f0b448b83ab934a13eb64b05b60e17d0a371e2a721c241bcf3f5ec9e7\",\"extended_details\":{\"after_sqrt_price\":16344318285666282034,\"aux_shared_versions\":{\"0x7e610a7466f0b7dbf8cda4ba0fa0a652b87c53a1d1d0578ce808bc2cfd139fb6\":417166632}}},{\"id\":\"0xb62e60fa7dc5b32f069532ff8182a6aee264dd7ae658c863db186e68b4e06229\",\"provider\":\"BLUEFIN\",\"from\":\"0x7016aae72cfc67f2fadf55769c0a7dd54291a583b63051a5ed71081cce836ac6::sca::SCA\",\"target\":\"0xdba34672e30cb065b1f93e3ab55318768fd6fef66c15942c9f7cb846e2f900e7::usdc::USDC\",\"direction\":true,\"fee_rate\":\"0.00001\",\"lot_size\":1,\"amount_in\":30176847903,\"amount_out\":237918,\"published_at\":\"0x4e7c4ba436f8fd5b3c6bb514880ccd11c5109c83c45b5e037394b94204dbbb80\",\"extended_details\":{\"aux_shared_versions\":{\"0xb62e60fa7dc5b32f069532ff8182a6aee264dd7ae658c863db186e68b4e06229\":571197023}}},{\"id\":\"0x4c50ba9d1e60d229800293a4222851c9c3f797aa5ba8a8d32cc67ec7e79fec60\",\"provider\":\"CETUS\",\"from\":\"0xce7ff77a83ea0cb6fd39bd8748e2ec89a3f41e8efdc3f4eb123e0ca37b184db2::buck::BUCK\",\"target\":\"0xdba34672e30cb065b1f93e3ab55318768fd6fef66c15942c9f7cb846e2f900e7::usdc::USDC\",\"direction\":false,\"fee_rate\":\"0.0001\",\"lot_size\":1,\"amount_in\":476626187,\"amount_out\":475838,\"published_at\":\"0x87b17d7f0b448b83ab934a13eb64b05b60e17d0a371e2a721c241bcf3f5ec9e7\",\"extended_details\":{\"after_sqrt_price\":583790643075877968052,\"aux_shared_versions\":{\"0x4c50ba9d1e60d229800293a4222851c9c3f797aa5ba8a8d32cc67ec7e79fec60\":373908232}}}],\"packages\":{\"aggregator_v3\":\"0xffd4058af7d6f6d66c335930cced8c91e38ec943e2392232aee27e8127e684e9\"},\"gas\":35000}}"
+    },
+    {
+      "name": "sui-sale-b",
+      "request": {
+        "from": "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI",
+        "target": "0x5650d58030f361f60f81913b54bf026e93e957bfbf506234f8f2e83bd3bfbd85::sale_tokens::SALE_B",
+        "amount": "100000000",
+        "by_amount_in": true,
+        "providers": [
+          "CETUS",
+          "BLUEFIN"
+        ]
+      },
+      "url": "https://api-sui.cetus.zone/router_v3/find_routes?from=0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI&target=0x5650d58030f361f60f81913b54bf026e93e957bfbf506234f8f2e83bd3bfbd85::sale_tokens::SALE_B&amount=100000000&by_amount_in=true&providers=CETUS,BLUEFIN",
+      "status": 200,
+      "body": "{\"code\":200,\"msg\":\"Success\",\"data\":{\"request_id\":\"70824359-7581-4b06-bb07-e357798eff87\",\"amount_in\":100000000,\"amount_out\":332001975262684891,\"deviation_ratio\":\"\",\"paths\":[{\"id\":\"0xb56610d84d29a899f1657f4d44185c0a58ebe9b7212a3a623ca3e4d1c2db1326\",\"provider\":\"CETUS\",\"from\":\"0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI\",\"target\":\"0x5650d58030f361f60f81913b54bf026e93e957bfbf506234f8f2e83bd3bfbd85::sale_tokens::SALE_B\",\"direction\":false,\"fee_rate\":\"0.01\",\"lot_size\":1,\"amount_in\":100000000,\"amount_out\":332001975262684891,\"published_at\":\"0x87b17d7f0b448b83ab934a13eb64b05b60e17d0a371e2a721c241bcf3f5ec9e7\",\"extended_details\":{\"after_sqrt_price\":776366460212714,\"aux_shared_versions\":{\"0xb56610d84d29a899f1657f4d44185c0a58ebe9b7212a3a623ca3e4d1c2db1326\":1035214611}}}],\"packages\":{\"aggregator_v3\":\"0xffd4058af7d6f6d66c335930cced8c91e38ec943e2392232aee27e8127e684e9\"},\"gas\":35000}}"
+    },
+    {
+      "name": "sui-sale-b-double",
+      "request": {
+        "from": "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI",
+        "target": "0x5650d58030f361f60f81913b54bf026e93e957bfbf506234f8f2e83bd3bfbd85::sale_tokens::SALE_B",
+        "amount": "200000000",
+        "by_amount_in": true,
+        "providers": [
+          "CETUS",
+          "BLUEFIN"
+        ]
+      },
+      "url": "https://api-sui.cetus.zone/router_v3/find_routes?from=0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI&target=0x5650d58030f361f60f81913b54bf026e93e957bfbf506234f8f2e83bd3bfbd85::sale_tokens::SALE_B&amount=200000000&by_amount_in=true&providers=CETUS,BLUEFIN",
+      "status": 200,
+      "body": "{\"code\":200,\"msg\":\"Success\",\"data\":{\"request_id\":\"74b85398-298c-4281-b93d-7483a4136263\",\"amount_in\":200000000,\"amount_out\":362515856641490657,\"deviation_ratio\":\"\",\"paths\":[{\"id\":\"0xb56610d84d29a899f1657f4d44185c0a58ebe9b7212a3a623ca3e4d1c2db1326\",\"provider\":\"CETUS\",\"from\":\"0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI\",\"target\":\"0x5650d58030f361f60f81913b54bf026e93e957bfbf506234f8f2e83bd3bfbd85::sale_tokens::SALE_B\",\"direction\":false,\"fee_rate\":\"0.01\",\"lot_size\":1,\"amount_in\":200000000,\"amount_out\":362515856641490657,\"published_at\":\"0x87b17d7f0b448b83ab934a13eb64b05b60e17d0a371e2a721c241bcf3f5ec9e7\",\"extended_details\":{\"after_sqrt_price\":1422035442566730,\"aux_shared_versions\":{\"0xb56610d84d29a899f1657f4d44185c0a58ebe9b7212a3a623ca3e4d1c2db1326\":1035214611}}}],\"packages\":{\"aggregator_v3\":\"0xffd4058af7d6f6d66c335930cced8c91e38ec943e2392232aee27e8127e684e9\"},\"gas\":35000}}"
+    },
+    {
+      "name": "usdc-sale-b",
+      "request": {
+        "from": "0xdba34672e30cb065b1f93e3ab55318768fd6fef66c15942c9f7cb846e2f900e7::usdc::USDC",
+        "target": "0x5650d58030f361f60f81913b54bf026e93e957bfbf506234f8f2e83bd3bfbd85::sale_tokens::SALE_B",
+        "amount": "1000000",
+        "by_amount_in": true,
+        "providers": [
+          "CETUS",
+          "BLUEFIN"
+        ]
+      },
+      "url": "https://api-sui.cetus.zone/router_v3/find_routes?from=0xdba34672e30cb065b1f93e3ab55318768fd6fef66c15942c9f7cb846e2f900e7::usdc::USDC&target=0x5650d58030f361f60f81913b54bf026e93e957bfbf506234f8f2e83bd3bfbd85::sale_tokens::SALE_B&amount=1000000&by_amount_in=true&providers=CETUS,BLUEFIN",
+      "status": 200,
+      "body": "{\"code\":200,\"msg\":\"Success\",\"data\":{\"request_id\":\"71a3b20d-1c1b-43d3-8caa-9119abe14ea4\",\"amount_in\":1000000,\"amount_out\":389820224645925583,\"deviation_ratio\":\"\",\"paths\":[{\"id\":\"0x11dbeb991fea4b2c7efcba4b6b21cbecd3f94be99ec8c9205839eaf03356d358\",\"provider\":\"BLUEFIN\",\"from\":\"0xdba34672e30cb065b1f93e3ab55318768fd6fef66c15942c9f7cb846e2f900e7::usdc::USDC\",\"target\":\"0xd1b72982e40348d069bb1ff701e634c117bb5f741f44dff91e472d3b01461e55::stsui::STSUI\",\"direction\":false,\"fee_rate\":\"0.0001\",\"lot_size\":1,\"amount_in\":1000000,\"amount_out\":809347998,\"published_at\":\"0x4e7c4ba436f8fd5b3c6bb514880ccd11c5109c83c45b5e037394b94204dbbb80\",\"extended_details\":{\"aux_shared_versions\":{\"0x11dbeb991fea4b2c7efcba4b6b21cbecd3f94be99ec8c9205839eaf03356d358\":485602758}}},{\"id\":\"0x4746414e445cebdc19666b6e4de9b79a46ca7bcaa894bf10ec230e649376356e\",\"provider\":\"BLUEFIN\",\"from\":\"0xd1b72982e40348d069bb1ff701e634c117bb5f741f44dff91e472d3b01461e55::stsui::STSUI\",\"target\":\"0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI\",\"direction\":true,\"fee_rate\":\"0.00001\",\"lot_size\":1,\"amount_in\":809347998,\"amount_out\":840683249,\"published_at\":\"0x4e7c4ba436f8fd5b3c6bb514880ccd11c5109c83c45b5e037394b94204dbbb80\",\"extended_details\":{\"aux_shared_versions\":{\"0x4746414e445cebdc19666b6e4de9b79a46ca7bcaa894bf10ec230e649376356e\":537039746}}},{\"id\":\"0xb56610d84d29a899f1657f4d44185c0a58ebe9b7212a3a623ca3e4d1c2db1326\",\"provider\":\"CETUS\",\"from\":\"0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI\",\"target\":\"0x5650d58030f361f60f81913b54bf026e93e957bfbf506234f8f2e83bd3bfbd85::sale_tokens::SALE_B\",\"direction\":false,\"fee_rate\":\"0.01\",\"lot_size\":1,\"amount_in\":840683249,\"amount_out\":389820224645925583,\"published_at\":\"0x87b17d7f0b448b83ab934a13eb64b05b60e17d0a371e2a721c241bcf3f5ec9e7\",\"extended_details\":{\"after_sqrt_price\":5558728453171503,\"aux_shared_versions\":{\"0xb56610d84d29a899f1657f4d44185c0a58ebe9b7212a3a623ca3e4d1c2db1326\":1035214611}}}],\"packages\":{\"aggregator_v3\":\"0xffd4058af7d6f6d66c335930cced8c91e38ec943e2392232aee27e8127e684e9\"},\"gas\":35000}}"
+    },
+    {
+      "name": "sale-b-sui",
+      "request": {
+        "from": "0x5650d58030f361f60f81913b54bf026e93e957bfbf506234f8f2e83bd3bfbd85::sale_tokens::SALE_B",
+        "target": "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI",
+        "amount": "100000000000000000",
+        "by_amount_in": true,
+        "providers": [
+          "CETUS",
+          "BLUEFIN"
+        ]
+      },
+      "url": "https://api-sui.cetus.zone/router_v3/find_routes?from=0x5650d58030f361f60f81913b54bf026e93e957bfbf506234f8f2e83bd3bfbd85::sale_tokens::SALE_B&target=0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI&amount=100000000000000000&by_amount_in=true&providers=CETUS,BLUEFIN",
+      "status": 200,
+      "body": "{\"code\":200,\"msg\":\"Success\",\"data\":{\"request_id\":\"59081115-10a9-4099-8900-6be73c17448d\",\"amount_in\":100000000000000000,\"amount_out\":3982156,\"deviation_ratio\":\"\",\"paths\":[{\"id\":\"0xb56610d84d29a899f1657f4d44185c0a58ebe9b7212a3a623ca3e4d1c2db1326\",\"provider\":\"CETUS\",\"from\":\"0x5650d58030f361f60f81913b54bf026e93e957bfbf506234f8f2e83bd3bfbd85::sale_tokens::SALE_B\",\"target\":\"0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI\",\"direction\":true,\"fee_rate\":\"0.01\",\"lot_size\":1,\"amount_in\":100000000000000000,\"amount_out\":3982156,\"published_at\":\"0x87b17d7f0b448b83ab934a13eb64b05b60e17d0a371e2a721c241bcf3f5ec9e7\",\"extended_details\":{\"after_sqrt_price\":104726213790406,\"aux_shared_versions\":{\"0xb56610d84d29a899f1657f4d44185c0a58ebe9b7212a3a623ca3e4d1c2db1326\":1035214611}}}],\"packages\":{\"aggregator_v3\":\"0xffd4058af7d6f6d66c335930cced8c91e38ec943e2392232aee27e8127e684e9\"},\"gas\":35000}}"
+    },
+    {
+      "name": "sui-sale-b-exact-out",
+      "request": {
+        "from": "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI",
+        "target": "0x5650d58030f361f60f81913b54bf026e93e957bfbf506234f8f2e83bd3bfbd85::sale_tokens::SALE_B",
+        "amount": "100000000000000000",
+        "by_amount_in": false,
+        "providers": [
+          "CETUS",
+          "BLUEFIN"
+        ]
+      },
+      "url": "https://api-sui.cetus.zone/router_v3/find_routes?from=0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI&target=0x5650d58030f361f60f81913b54bf026e93e957bfbf506234f8f2e83bd3bfbd85::sale_tokens::SALE_B&amount=100000000000000000&by_amount_in=false&providers=CETUS,BLUEFIN",
+      "status": 200,
+      "body": "{\"code\":200,\"msg\":\"Success\",\"data\":{\"request_id\":\"e0446a4b-9e33-4bf4-9288-403d6e53496f\",\"amount_in\":6765290,\"amount_out\":100000000000000000,\"deviation_ratio\":\"\",\"paths\":[{\"id\":\"0xb56610d84d29a899f1657f4d44185c0a58ebe9b7212a3a623ca3e4d1c2db1326\",\"provider\":\"CETUS\",\"from\":\"0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI\",\"target\":\"0x5650d58030f361f60f81913b54bf026e93e957bfbf506234f8f2e83bd3bfbd85::sale_tokens::SALE_B\",\"direction\":false,\"fee_rate\":\"0.01\",\"lot_size\":1,\"amount_in\":6765290,\"amount_out\":100000000000000000,\"published_at\":\"0x87b17d7f0b448b83ab934a13eb64b05b60e17d0a371e2a721c241bcf3f5ec9e7\",\"extended_details\":{\"after_sqrt_price\":174378853743802,\"aux_shared_versions\":{\"0xb56610d84d29a899f1657f4d44185c0a58ebe9b7212a3a623ca3e4d1c2db1326\":1035214611}}}],\"packages\":{\"aggregator_v3\":\"0xffd4058af7d6f6d66c335930cced8c91e38ec943e2392232aee27e8127e684e9\"},\"gas\":35000}}"
+    },
+    {
+      "name": "sui-sale-b-exact-out-in",
+      "request": {
+        "from": "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI",
+        "target": "0x5650d58030f361f60f81913b54bf026e93e957bfbf506234f8f2e83bd3bfbd85::sale_tokens::SALE_B",
+        "amount": "6765290",
+        "by_amount_in": true,
+        "providers": [
+          "CETUS",
+          "BLUEFIN"
+        ]
+      },
+      "url": "https://api-sui.cetus.zone/router_v3/find_routes?from=0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI&target=0x5650d58030f361f60f81913b54bf026e93e957bfbf506234f8f2e83bd3bfbd85::sale_tokens::SALE_B&amount=6765290&by_amount_in=true&providers=CETUS,BLUEFIN",
+      "status": 200,
+      "body": "{\"code\":200,\"msg\":\"Success\",\"data\":{\"request_id\":\"8f7e1d92-cb61-4ac9-8a2b-7e52bb0128a7\",\"amount_in\":6765290,\"amount_out\":100000004390842642,\"deviation_ratio\":\"\",\"paths\":[{\"id\":\"0xb56610d84d29a899f1657f4d44185c0a58ebe9b7212a3a623ca3e4d1c2db1326\",\"provider\":\"CETUS\",\"from\":\"0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI\",\"target\":\"0x5650d58030f361f60f81913b54bf026e93e957bfbf506234f8f2e83bd3bfbd85::sale_tokens::SALE_B\",\"direction\":false,\"fee_rate\":\"0.01\",\"lot_size\":1,\"amount_in\":6765290,\"amount_out\":100000004390842642,\"published_at\":\"0x87b17d7f0b448b83ab934a13eb64b05b60e17d0a371e2a721c241bcf3f5ec9e7\",\"extended_details\":{\"after_sqrt_price\":174378856302805,\"aux_shared_versions\":{\"0xb56610d84d29a899f1657f4d44185c0a58ebe9b7212a3a623ca3e4d1c2db1326\":1035214611}}}],\"packages\":{\"aggregator_v3\":\"0xffd4058af7d6f6d66c335930cced8c91e38ec943e2392232aee27e8127e684e9\"},\"gas\":35000}}"
+    },
+    {
+      "name": "sui-sale-a",
+      "request": {
+        "from": "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI",
+        "target": "0x5650d58030f361f60f81913b54bf026e93e957bfbf506234f8f2e83bd3bfbd85::sale_tokens::SALE_A",
+        "amount": "100000000",
+        "by_amount_in": true,
+        "providers": [
+          "CETUS",
+          "BLUEFIN"
+        ]
+      },
+      "url": "https://api-sui.cetus.zone/router_v3/find_routes?from=0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI&target=0x5650d58030f361f60f81913b54bf026e93e957bfbf506234f8f2e83bd3bfbd85::sale_tokens::SALE_A&amount=100000000&by_amount_in=true&providers=CETUS,BLUEFIN",
+      "status": 200,
+      "body": "{\"code\":5010,\"msg\":\"liquidity is not enough, no sub_graph found.\"}"
+    }
+  ]
+}

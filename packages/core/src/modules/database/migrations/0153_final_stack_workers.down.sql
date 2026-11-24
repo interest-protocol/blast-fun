@@ -1,0 +1,1 @@
+-- Manual rollback only: reconcile fresh signed custody before retiring any worker table.

@@ -1,0 +1,4 @@
+.personal { display: grid; gap: 1rem; margin: 1.125rem 0; }
+.personal div { min-width: 0; }
+.personal dt { color: var(--ink-2); font-size: 0.75rem; margin-bottom: 0.3125rem; }
+.personal dd { margin: 0; font-size: 1.25rem; font-weight: 650; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }

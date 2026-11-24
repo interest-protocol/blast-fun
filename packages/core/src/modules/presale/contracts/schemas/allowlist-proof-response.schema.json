@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/presale/contracts/allowlist-proof-response.schema.json",
+  "title": "Allowlist proof",
+  "description": "GET /api/presale/presales/{presale_id}/proof 200; proof entries without 0x (CL-15).",
+  "type": "object",
+  "properties": {
+    "index": {
+      "$ref": "defs.schema.json#/$defs/uint"
+    },
+    "wallet_cap": {
+      "$ref": "defs.schema.json#/$defs/uint"
+    },
+    "proof": {
+      "$ref": "defs.schema.json#/$defs/proof"
+    }
+  },
+  "required": [
+    "index",
+    "wallet_cap",
+    "proof"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,7 @@
+:global([data-blast-ui]) .refusal {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--down);
+  text-align: center;
+}

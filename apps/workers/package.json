@@ -1,0 +1,51 @@
+{
+  "name": "@blast/workers",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "worker": "./start.sh",
+    "worker:release-gate": "node --no-warnings --import ../../scripts/register-runtime-types.mjs --experimental-strip-types scripts/worker-release-gate.ts",
+    "vault:auto-lp": "node --no-warnings --import ../../scripts/register-runtime-types.mjs --experimental-strip-types scripts/auto-lp.ts",
+    "test": "node --no-warnings --import ../../scripts/register-runtime-types.mjs --test --test-concurrency=1 --experimental-strip-types 'src/**/!(*.integration).test.ts' 'test/**/!(*.integration).test.ts'",
+    "pretest:integration": "node ../web/analytics/scripts/prepare.mjs --contract-only",
+    "test:integration": "node ../../scripts/test-integration.mjs",
+    "pretypecheck": "node ../web/analytics/scripts/prepare.mjs --contract-only",
+    "typecheck": "tsc --noEmit",
+    "analytics:api": "node --no-warnings --import ../../scripts/register-runtime-types.mjs --experimental-strip-types scripts/analytics-api.ts",
+    "analytics:refresh": "node --max-old-space-size=640 --no-warnings --import ../../scripts/register-runtime-types.mjs --experimental-strip-types scripts/analytics-refresh.ts",
+    "analytics:test-collector": "bash test/analytics-collector.sh",
+    "analytics:access-code": "node --no-warnings --import ../../scripts/register-runtime-types.mjs --experimental-strip-types scripts/analytics-access-code.ts"
+  },
+  "dependencies": {
+    "zod": "4.6.7",
+    "@blast/core": "*",
+    "@mysten/sui": "^3.0.1",
+    "@vercel/blob": "^2.8.1",
+    "drizzle-orm": "^0.45.4",
+    "effect": "4.1.4",
+    "pg": "^8.23.1",
+    "@interest-protocol/blast-core": "0.3.0",
+    "@interest-protocol/blast-admin-sdk": "0.3.0",
+    "@interest-protocol/blast-partners-sdk": "0.3.0",
+    "@interest-protocol/blast-deployments-sdk": "0.3.0",
+    "@interest-protocol/blast-launchpad-sdk": "0.3.0",
+    "@interest-protocol/blast-presale-sdk": "0.3.0",
+    "@interest-protocol/blast-migrators-sdk": "0.3.0",
+    "@interest-protocol/blast-vault-sdk": "0.3.0",
+    "@interest-protocol/blast-sui-sdk": "0.3.0",
+    "@interest-protocol/blast-cctp-sdk": "0.3.0",
+    "@interest-protocol/blast-boosts-sdk": "0.3.0",
+    "@interest-protocol/blast-coin-sdk": "0.3.0",
+    "@interest-protocol/blast-holder-rewards-sdk": "0.3.0",
+    "@interest-protocol/blast-sdk": "0.3.0"
+  },
+  "devDependencies": {
+    "@noble/hashes": "^2.4.0",
+    "@types/pg": "^8.23.1",
+    "@blast/server": "*"
+  },
+  "imports": {
+    "#workers/*": "./src/*"
+  },
+  "type": "module"
+}

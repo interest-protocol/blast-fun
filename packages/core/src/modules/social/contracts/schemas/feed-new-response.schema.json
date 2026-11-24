@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/feed-new-response.schema.json",
+  "title": "Social feed new-items count",
+  "description": "GET /api/social/feed/new?since=<ms> 200: how many For You items are newer than since, capped, with the newest named actors' faces. The same for every caller.",
+  "type": "object",
+  "properties": {
+    "count": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 50
+    },
+    "more": {
+      "type": "boolean",
+      "description": "True when more than count items are newer."
+    },
+    "actors": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "properties": {
+          "callsign": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_]{1,18}[a-z0-9]$"
+          },
+          "display_name": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "minLength": 1
+              }
+            ]
+          },
+          "avatar_url": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "minLength": 1
+              }
+            ]
+          }
+        },
+        "required": [
+          "callsign",
+          "display_name",
+          "avatar_url"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "as_of": {
+      "$ref": "https://blast-v2.invalid/social/contracts/as-of.schema.json"
+    }
+  },
+  "required": [
+    "count",
+    "more",
+    "actors",
+    "as_of"
+  ],
+  "additionalProperties": false
+}

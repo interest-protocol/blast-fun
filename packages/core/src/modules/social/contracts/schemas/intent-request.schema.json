@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/intent-request.schema.json",
+  "title": "Social intent registration",
+  "description": "POST /api/social/intents body (T-024). Closed: the action, the presale, the signed transaction's digest, and optionally the item the viewer acted through and their why. Only action \"commit\" is accepted; \"buy\" and \"sell\" belong to the swap feature and are refused with invalid_request until it exists. The why's text rules (NFC, trimmed, 1 to 280 code points, one line, no link, no blocked term) are not enforced here: a failed why is reported in the answer and the intent is still recorded, because the transaction is already signed. The three amount fields are the commit's transaction-log facts (R3-27): the coin it is counted in, its atoms in that coin, and its dollar value at submission; quote_amount requires quote_type.",
+  "type": "object",
+  "properties": {
+    "action": {
+      "enum": [
+        "commit"
+      ]
+    },
+    "presale_id": {
+      "type": "string",
+      "pattern": "^0x[0-9a-f]{64}$"
+    },
+    "tx_digest": {
+      "type": "string",
+      "pattern": "^[1-9A-HJ-NP-Za-km-z]{32,44}$"
+    },
+    "source_entry_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "why": {
+      "type": "string",
+      "maxLength": 1120
+    },
+    "quote_type": {
+      "type": "string",
+      "pattern": "^0x[0-9a-f]{64}::[A-Za-z_][A-Za-z0-9_]{0,127}::[A-Za-z_][A-Za-z0-9_]{0,127}$",
+      "maxLength": 512
+    },
+    "quote_amount": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]{0,19})$"
+    },
+    "usd_value": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]{0,17})(\\.[0-9]{1,2})?$"
+    },
+    "transaction_bytes": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 180000,
+      "pattern": "^[A-Za-z0-9+/]+={0,2}$",
+      "description": "Canonical base64 full Sui TransactionData bytes. Required before execution; digest and sender must match the caller\u2019s server-proven Blast wallet."
+    }
+  },
+  "required": [
+    "action",
+    "presale_id",
+    "tx_digest"
+  ],
+  "additionalProperties": false,
+  "dependentRequired": {
+    "quote_amount": [
+      "quote_type"
+    ]
+  }
+}

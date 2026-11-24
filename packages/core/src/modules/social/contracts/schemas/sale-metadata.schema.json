@@ -1,0 +1,160 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/sale-metadata.schema.json",
+  "title": "Sale metadata",
+  "description": "R3-24 (contracts/sales.ts SocialSaleMetadata): a sale's public details. A tagline is one plain line, never auto-linked; links are https URLs with no userinfo or port; handles are bare. An audit link never implies an Audited badge.",
+  "type": "object",
+  "properties": {
+    "tagline": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        }
+      ]
+    },
+    "site": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "maxLength": 512,
+          "pattern": "^https://[^\\s/?#@:]+(/[^\\s#]*)?$"
+        }
+      ]
+    },
+    "x_handle": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_]{1,15}$"
+        }
+      ]
+    },
+    "telegram": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_]{5,32}$"
+        }
+      ]
+    },
+    "docs_url": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "maxLength": 512,
+          "pattern": "^https://[^\\s/?#@:]+(/[^\\s#]*)?$"
+        }
+      ]
+    },
+    "audit_url": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "maxLength": 512,
+          "pattern": "^https://[^\\s/?#@:]+(/[^\\s#]*)?$"
+        }
+      ]
+    },
+    "cover": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "url": {
+              "type": "string",
+              "pattern": "^https://[^\\s]+$",
+              "maxLength": 2048
+            },
+            "width": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "height": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "source": {
+              "description": "The size, in pixels after its EXIF orientation, of the image the cover was made from; null for a cover stored before uploads were measured.",
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "width": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 8192
+                    },
+                    "height": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 8192
+                    }
+                  },
+                  "required": [
+                    "width",
+                    "height"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "required": [
+            "url",
+            "width",
+            "height"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "launch_at_ms": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "integer",
+          "minimum": 1
+        }
+      ]
+    }
+  },
+  "required": [
+    "tagline",
+    "site",
+    "x_handle",
+    "telegram",
+    "docs_url",
+    "audit_url",
+    "cover",
+    "launch_at_ms"
+  ],
+  "additionalProperties": false
+}

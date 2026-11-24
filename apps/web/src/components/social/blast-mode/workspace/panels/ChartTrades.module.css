@@ -1,0 +1,61 @@
+.trigger { display:inline-flex; flex:none; align-items:center; gap:0.3125rem; height:1.75rem; padding:0 0.5rem; border-radius:var(--r-inner); color:var(--muted); font:500 0.75rem/1.4 var(--font); white-space:nowrap; }
+.trigger[data-ui-button][data-active="true"] { --control-hover:var(--thumb); background:var(--thumb); box-shadow:var(--thumb-sh); color:var(--ink); }
+.trigger:focus-visible,.marker:focus-visible { outline:0.125rem solid var(--focus-color,var(--ink)); outline-offset:0; }
+:global([data-blast-ui]) .popup :is(button,a,input,[tabindex]):focus-visible { outline:0.125rem solid var(--focus-color,var(--ink)); outline-offset:0; box-shadow:none; }
+.layer { z-index:1100; max-width:calc(100vw - 1.5rem); }
+.popup { composes:theme from "../WorkspaceTheme.module.css"; box-sizing:border-box; width:18.75rem; max-width:calc(100vw - 1.5rem); min-height:min(12rem,75dvh); max-height:min(40.625rem,75dvh,max(12rem,var(--available-height,75dvh))); overflow:auto; overscroll-behavior:contain; transform-origin:var(--transform-origin); padding:var(--s4); border:1px solid var(--hair); border-radius:var(--r-sm); background:var(--card); color:var(--ink); box-shadow:var(--sh-pop); font:400 0.75rem/1.5 var(--font); }
+.title { margin:0 0 0.625rem; font:600 0.9375rem/1.4 var(--font); }
+.options { min-width:0; margin:0.625rem 0 0; padding:0; border:0; }
+.options legend { padding:0; color:var(--muted); font-size:0.6875rem; }
+.option { display:flex; align-items:center; gap:0.625rem; min-height:2.5rem; padding:0.375rem 0; cursor:pointer; }
+.option small { display:block; color:var(--muted); font-size:0.6875rem; }
+.option:has(input:disabled) { cursor:default; }
+.sides { display:flex; gap:1.5rem; }
+.note { margin:0.5rem 0; color:var(--muted); font-size:0.6875rem; line-height:1.5; }
+.note button { text-decoration:underline; text-underline-offset:0.125rem; color:var(--ink); font:inherit; }
+.popup > :global(button.btn) { margin-top:0.375rem; }
+.overlay { position:absolute; inset:0; pointer-events:none; }
+.coverage { flex:none; min-width:0; max-width:100%; margin-top:0.25rem; color:var(--muted); font-size:0.6875rem; }
+.legend { display:block; width:fit-content; padding:0 0.25rem; background:var(--card); font-size:0.625rem; line-height:1rem; }
+.markerPosition { position:absolute; transform:translate(-50%,-50%); pointer-events:auto; }
+.marker { min-width:max(44px, 2.75rem); color:var(--ink); }
+.directionBadge { position:absolute; right:1px; bottom:0; display:flex; align-items:center; gap:1px; padding:0 0.125rem; border-radius:var(--r-inner); background:var(--card); font:700 0.75rem/0.875rem var(--font); }
+.markerCount { position:absolute; right:1px; top:-0.25rem; min-width:0.875rem; padding:0 0.125rem; border-radius:var(--r-inner); background:var(--ink); color:var(--card); font:600 0.625rem/0.875rem var(--font); }
+.postBadge { color:var(--ink-2); font-size:0.625rem; }
+.markerPosition[data-time-only] .marker { border:1px dashed var(--muted); }
+.buy { color:var(--up); }
+.sell { color:var(--down); }
+.noMatches { display:block; padding:0.25rem; background:var(--card); font-size:0.6875rem; }
+.status { max-height:6.25rem; overflow:auto; background:var(--card); pointer-events:auto; }
+.status:empty { display:none; }
+.trades { display:grid; gap:1rem; margin:1rem 0; padding:0; list-style:none; }
+.trades li { min-width:0; overflow-wrap:anywhere; }
+.trades p { margin:0.25rem 0; }
+.tags,.trades time { display:block; color:var(--muted); font-size:0.6875rem; }
+.tradeAmount { display:flex; flex-wrap:wrap; gap:0.5rem; align-items:center; }
+.authoredPost { margin:0.5rem 0; padding:0.625rem; border-radius:var(--r-button); background:var(--workspace-inset); }
+.postType { color:var(--muted); font-size:0.6875rem; font-weight:600; }
+.postLink { font-weight:600; }
+.trades .thesis { margin:0.375rem 0; color:var(--ink); font-size:0.8125rem; line-height:1.55; white-space:pre-wrap; }
+.trades a { display:inline-block; margin-top:0.3125rem; color:var(--ink); text-decoration:underline; text-underline-offset:0.125rem; }
+@media (hover:hover) and (pointer:fine) { .trigger:not([data-active="true"]):hover,.marker:hover { color:var(--ink); background:var(--workspace-inset); } }
+@media (pointer:coarse) { .trigger,.option { min-height:44px; } .trigger { height:44px; } .trades a { padding-block:12px; } }
+@media (prefers-contrast:more) { .trigger,.marker { border:1px solid currentColor; } }
+
+/* Overlays (audit 11/15) keeps Show people's board size: 32px, a 12px 600 label, 10px before, 8px after and 4px to the chevron. */
+.trigger[data-ui-button][data-ui-disclosure]:not([data-ui-icon])[data-ui-size] { --control-pad-start:0.625rem; --control-pad-end:0.5rem; --control-gap:0.25rem; gap:0.25rem; font-size:0.75rem; font-weight:600; }
+/* The Overlays menu: each layer keeps its marker key (the dots echo the chart's markers); the trigger counts the layers that are on. */
+.layerName { display:inline-flex; flex-wrap:wrap; align-items:center; gap:0.375rem; }
+.layerName small { flex-basis:100%; }
+.count { display:inline-grid; place-items:center; min-width:1rem; height:1rem; margin-left:0.25rem; padding:0 0.25rem; border-radius:0.5rem; background:var(--ink); color:var(--card); font:600 0.625rem/1rem var(--font); }
+.dot { width:0.5rem; height:0.5rem; border-radius:50%; background:var(--ink); }
+.dots { display:flex; }
+.dots > span { width:0.75rem; height:0.75rem; border-radius:50%; background:var(--info); }
+.dots > span + span { margin-left:-0.25rem; background:var(--pink-text); }
+/* Done is the one shared secondary button, in a footer that stays in reach when the popover scrolls on a short screen (Blast mode audit 27, 2026-10-28). */
+.footer { position:sticky; bottom:calc(-1 * var(--s4)); display:flex; justify-content:flex-end; margin:var(--s5) calc(-1 * var(--s4)) calc(-1 * var(--s4)); padding:var(--s3) var(--s4) var(--s4); border-top:1px solid var(--hair); background:var(--card); }
+@media (pointer:coarse) { .footer > button { min-height:44px; min-width:44px; } }
+/* More below: a fade above the sticky footer says the list goes on instead of cutting a row mid-word (audit F38).
+   It sits in the footer's top margin, so at the end of the list it covers only space. */
+.footer::before { content:""; position:absolute; inset-inline:0; bottom:calc(100% + 1px); height:var(--s5); background:linear-gradient(transparent,var(--card)); pointer-events:none; }
+.option:has(input:disabled) > :not(input,[data-ui-checkbox]) { color:var(--muted); }

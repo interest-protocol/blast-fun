@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/presale/contracts/ws-presale-committed.schema.json",
+  "title": "presale committed message",
+  "description": "presale:<presale_id>: one commitment and the new totals (CL-4); a log message has no topic and reaches each connection once (CL-20); a replayed message carries replayed: true (CL-26).",
+  "type": "object",
+  "properties": {
+    "type": {
+      "const": "committed"
+    },
+    "cursor": {
+      "$ref": "defs.schema.json#/$defs/event_cursor"
+    },
+    "checkpoint": {
+      "$ref": "defs.schema.json#/$defs/checkpoint"
+    },
+    "timestamp_ms": {
+      "$ref": "defs.schema.json#/$defs/timestamp_ms"
+    },
+    "replayed": {
+      "description": "Present, and true, only on a message replayed on resume (CL-26).",
+      "const": true
+    },
+    "presale_id": {
+      "$ref": "defs.schema.json#/$defs/address"
+    },
+    "commitment": {
+      "$ref": "defs.schema.json#/$defs/commitment_entry"
+    },
+    "totals": {
+      "$ref": "defs.schema.json#/$defs/totals"
+    }
+  },
+  "required": [
+    "type",
+    "cursor",
+    "checkpoint",
+    "timestamp_ms",
+    "presale_id",
+    "commitment",
+    "totals"
+  ],
+  "additionalProperties": false
+}

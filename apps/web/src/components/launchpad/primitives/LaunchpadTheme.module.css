@@ -1,0 +1,49 @@
+.theme {
+  color-scheme: light dark;
+
+  background: var(--lp-canvas);
+  color: var(--lp-ink);
+  font-family: var(--lp-font);
+  font-variant-numeric: tabular-nums;
+}
+
+.theme[data-theme="light"] {
+  color-scheme: light;
+}
+
+.theme[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+/* Outranks the site-wide Mission Control ring in globals.css, whose pink is too light here. */
+.theme :focus-visible,
+.theme :is(button, input, textarea, select, a[href], [role="button"]):focus-visible {
+  outline: 2px solid var(--lp-focus);
+  outline-offset: 2px;
+}
+
+.theme :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="color"]), textarea, select):focus-visible {
+  outline: 2px solid var(--lp-ink);
+  outline-offset: -2px;
+  box-shadow: none;
+}
+
+.theme :is(input[aria-invalid="true"], [data-invalid] input, [data-invalid] textarea, [data-invalid] select):focus-visible {
+  outline-color: var(--lp-down);
+}
+
+.theme ::selection {
+  background: var(--lp-accent);
+  color: var(--lp-accent-ink);
+}
+
+/* Reduced motion removes movement only; every state keeps its text and shape. */
+@media (prefers-reduced-motion: reduce) {
+  .theme *,
+  .theme *::before,
+  .theme *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}

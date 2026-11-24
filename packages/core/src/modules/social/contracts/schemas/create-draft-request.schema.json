@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/create-draft-request.schema.json",
+  "title": "Save a presale draft",
+  "description": "PUT /api/social/me/drafts/{id}: version 0 creates, the stored version replaces.",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647
+    },
+    "draft": {
+      "$ref": "create-draft.schema.json"
+    }
+  },
+  "required": [
+    "version",
+    "draft"
+  ],
+  "additionalProperties": false
+}

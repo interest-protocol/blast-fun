@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/onboarding-complete-request.schema.json",
+  "title": "Onboarding completion",
+  "description": "POST /api/social/onboarding/complete body. Closed. private: false starts sharing at the server's time; private: true shares nothing.",
+  "type": "object",
+  "properties": {
+    "private": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "private"
+  ],
+  "additionalProperties": false
+}

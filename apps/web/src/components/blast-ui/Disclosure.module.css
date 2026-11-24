@@ -1,0 +1,23 @@
+.trigger { width:100%; justify-content:space-between; text-align:left; touch-action:manipulation; }
+.panel {
+  height: var(--collapsible-panel-height);
+  overflow: hidden;
+  opacity: 1;
+  transition:
+    height var(--t2) var(--ease),
+    opacity var(--t2) var(--ease);
+}
+.panel[data-starting-style],
+.panel[data-ending-style] {
+  height: 0;
+  opacity: 0;
+}
+.content {
+  padding: 0.1875rem 0.1875rem var(--s4);
+}
+/* Reduced motion: the height lands at once and the contents fade in. */
+@media (prefers-reduced-motion: reduce) {
+  .panel {
+    transition: opacity var(--t1) var(--ease-std);
+  }
+}

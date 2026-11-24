@@ -1,0 +1,83 @@
+/*
+ * The Feel layer's two painted things: the ball, and the charging Blast button
+ * (FEEL-LAYER.md §2). Both come from the gate's `src/lab/feel.css`, with two
+ * deliberate changes recorded in §6:
+ *
+ *  - the charge glow is not scoped to Blast mode, so every Blast button shows
+ *    it (the gate's `#bm .btn.feel-charging` is invisible anywhere else);
+ *  - under `prefers-reduced-motion: reduce` the layer is switched off rather
+ *    than shortened: no ball is ever created, and the glow has no transition.
+ */
+
+/* The ball: your money, a small pink sphere that springs out of the button when
+   you let go and lands in the sale's bar. It is `position: fixed` and appended
+   outside the React tree, so no surface's overflow can clip it and no layout
+   moves when it appears. */
+.ball {
+  --feel-ball-scale: 1;
+  position: fixed;
+  /* R3-13: in the shell's overlay layer, above Blast mode (60) and its
+     popovers (70), below any open sheet or dialog (80) and the toasts (90).
+     The gate's 95 sits over a modal. */
+  z-index: 75;
+  width: 1.625rem;
+  height: 1.625rem;
+  transform: translate(-50%, -50%) scale(var(--feel-ball-scale));
+  border-radius: 62.4375rem;
+  pointer-events: none;
+  background: radial-gradient(circle at 34% 30%, #ffb3d2 0, var(--pink) 48%, var(--pink-ink) 100%);
+  box-shadow: 0 0.375rem 1rem rgba(255, 76, 152, 0.38);
+  transition: transform 0.22s cubic-bezier(0.34, 1.4, 0.64, 1);
+  animation: feelIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes feelIn {
+  from {
+    transform: translate(-50%, -50%) scale(0.3);
+    opacity: 0;
+  }
+}
+
+/* Keep the charge glow painted at a fixed size; rungs change its opacity. */
+.charging.charging { position: relative; }
+.charging.charging::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: 0 0 0 0.625rem color-mix(in srgb, var(--pink) 22%, transparent), 0 0.25rem 1.875rem color-mix(in srgb, var(--pink) 40%, transparent);
+  opacity: calc(.3 + var(--feel-level, 0) * .175);
+  transition: opacity 0.22s cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+/* The sound button: 34px with a mouse, 44px under a finger. */
+.soundButton {
+  width: 2.125rem;
+  height: 2.125rem;
+}
+
+.soundButton svg {
+  width: 1.0625rem;
+  height: 1.0625rem;
+}
+
+@media (pointer: coarse) {
+  .soundButton {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* The ball is never created under reduced motion; this is belt and braces
+     for a reader who turns it on mid-flight. */
+  .ball {
+    transition: none;
+    animation: none;
+  }
+
+  .charging.charging::after {
+    transition: none;
+  }
+}

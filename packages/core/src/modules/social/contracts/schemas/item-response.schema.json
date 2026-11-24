@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/item-response.schema.json",
+  "title": "Social public item",
+  "description": "GET /api/social/items/{entry_id} 200: one visible item (a post permalink), the same for every caller.",
+  "type": "object",
+  "properties": {
+    "item": {
+      "$ref": "https://blast-v2.invalid/social/contracts/feed-item.schema.json"
+    },
+    "as_of": {
+      "$ref": "https://blast-v2.invalid/social/contracts/as-of.schema.json"
+    }
+  },
+  "required": [
+    "item",
+    "as_of"
+  ],
+  "additionalProperties": false
+}

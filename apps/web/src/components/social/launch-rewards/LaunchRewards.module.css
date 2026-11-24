@@ -1,0 +1,24 @@
+/* A ledger's three figures, in the creator earnings rows' type and color roles. */
+.ledger {
+  display: grid;
+  gap: 0.375rem;
+  margin: 0;
+}
+
+.ledger > div {
+  display: grid;
+  grid-template-columns: minmax(4rem, auto) minmax(0, 1fr);
+  gap: 0.5rem;
+  align-items: baseline;
+}
+
+.ledger dt,
+.figure {
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+.ledger dd {
+  margin: 0;
+  min-width: 0;
+}

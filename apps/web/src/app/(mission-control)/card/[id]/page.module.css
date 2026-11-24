@@ -1,0 +1,28 @@
+.page {
+  display: grid;
+  min-height: 100dvh;
+  place-items: center;
+  align-content: center;
+  gap: 1.25rem;
+  padding: clamp(0.5rem, 2.5vw, 2rem);
+  background: #05030c;
+}
+
+.card {
+  display: block;
+  width: min(100%, 58rem, calc((100svh - 8rem) * 1.4));
+  height: auto;
+  filter: drop-shadow(0 1.5rem 4rem rgb(0 0 0 / 55%));
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}

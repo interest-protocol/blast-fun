@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/wallet-sign-in-challenge-response.schema.json",
+  "title": "Wallet sign-in challenge",
+  "description": "POST /api/social/sign-in/challenge 200: the one-time message the wallet signs as a Sui personal message, bound to the address, the site origin, an attempt and a nonce; it expires five minutes after issue.",
+  "type": "object",
+  "properties": {
+    "challenge_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "message": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048
+    },
+    "expires_at_ms": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "challenge_id",
+    "message",
+    "expires_at_ms"
+  ],
+  "additionalProperties": false
+}

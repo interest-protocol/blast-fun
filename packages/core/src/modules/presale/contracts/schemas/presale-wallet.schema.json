@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/presale/contracts/presale-wallet.schema.json",
+  "title": "Presale wallet view",
+  "description": "GET /v1/presales/{presale_id}/wallets/{address}: the section 2.2 view and the read path's freshness.",
+  "$ref": "defs.schema.json#/$defs/wallet_view",
+  "type": "object",
+  "properties": {
+    "freshness": {
+      "$ref": "defs.schema.json#/$defs/freshness"
+    }
+  },
+  "required": [
+    "freshness"
+  ],
+  "unevaluatedProperties": false
+}

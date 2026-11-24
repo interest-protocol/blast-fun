@@ -1,0 +1,239 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/portfolio-response.schema.json",
+  "title": "Owner-only portfolio",
+  "description": "GET /api/social/me/portfolio 200 (private, no-store): the caller's own balances, presale positions, sale coins held, vesting link and attribution totals, each position and coin with its cost basis and P&L (R3-32), and the gold card's 30-day trend (OA-25 Q16). A part is null exactly when it is listed in unavailable.",
+  "type": "object",
+  "$defs": {
+    "atoms": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)$"
+    },
+    "usd": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.[0-9]{2}$"
+    },
+    "basis_usd": {
+      "description": "R3-32: USD paid for the sale coin held now (average cost, at each acquisition's event time); the known part when basis_complete is false; null when nothing was acquired or nothing of it is known.",
+      "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/usd" }]
+    },
+    "basis_complete": {
+      "description": "R3-32: false when part of what is held came with no priced acquisition (a transfer in, an airdrop, a reward, a vesting claim, an unpriced commit or trade), or the basis could not be read.",
+      "type": "boolean"
+    },
+    "pnl_usd": {
+      "description": "R3-32: value - basis at the coin's fresh price, signed; null when the basis is zero or unknown, or without a price.",
+      "oneOf": [{ "type": "null" }, { "type": "string", "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$" }]
+    },
+    "pnl_multiple": {
+      "description": "R3-32: value / basis, four places; null with pnl_usd.",
+      "oneOf": [{ "type": "null" }, { "type": "string", "pattern": "^(0|[1-9][0-9]*)\\.[0-9]{4}$" }]
+    },
+    "amount": {
+      "type": "object",
+      "properties": {
+        "atoms": { "$ref": "#/$defs/atoms" },
+        "usd_subcent": { "type": "number", "exclusiveMinimum": 0 },
+        "usd": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/usd" }] }
+      },
+      "required": ["atoms", "usd"],
+      "additionalProperties": false
+    },
+    "position": {
+      "type": "object",
+      "properties": {
+        "presale_id": { "type": "string", "pattern": "^0x[0-9a-f]{64}$" },
+        "symbol": { "type": "string" },
+        "commitment": { "$ref": "#/$defs/atoms" },
+        "status": { "enum": ["open", "closed", "claimable", "delivered"] },
+        "claimed_tokens": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/atoms" }] },
+        "claimed_quote_refund": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/atoms" }] },
+        "quote_symbol": { "type": "string" },
+        "quote_decimals": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "sale_decimals": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "basis_usd": { "$ref": "#/$defs/basis_usd" },
+        "basis_complete": { "$ref": "#/$defs/basis_complete" },
+        "pnl_usd": { "$ref": "#/$defs/pnl_usd" },
+        "pnl_multiple": { "$ref": "#/$defs/pnl_multiple" }
+      },
+      "required": [
+        "presale_id",
+        "symbol",
+        "commitment",
+        "status",
+        "claimed_tokens",
+        "claimed_quote_refund",
+        "quote_symbol",
+        "quote_decimals",
+        "sale_decimals",
+        "basis_usd",
+        "basis_complete",
+        "pnl_usd",
+        "pnl_multiple"
+      ],
+      "additionalProperties": false
+    },
+    "coin": {
+      "type": "object",
+      "properties": {
+        "coin_type": { "type": "string", "pattern": "^0x[0-9a-f]+::[^:]+::[^:]+" },
+        "symbol": { "type": "string" },
+        "name": { "type": ["string", "null"] },
+        "decimals": { "type": ["integer", "null"], "minimum": 0, "maximum": 255 },
+        "icon_url": { "type": ["string", "null"] },
+        "presale_id": { "type": ["string", "null"] },
+        "balance": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "value_usd": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/usd" }] },
+        "value_usd_exact": { "type": ["string", "null"], "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$" },
+        "basis_usd": { "$ref": "#/$defs/basis_usd" },
+        "basis_complete": { "$ref": "#/$defs/basis_complete" },
+        "pnl_usd": { "$ref": "#/$defs/pnl_usd" },
+        "pnl_multiple": { "$ref": "#/$defs/pnl_multiple" },
+        "verified_team": {
+          "type": "boolean",
+          "description": "R3-23: Blast checked who is behind the coin (social_sale_trust for a sale, social_coin_trust for a bonding-curve coin); sent only when true."
+        }
+      },
+      "required": ["coin_type", "symbol", "balance", "value_usd", "basis_usd", "basis_complete", "pnl_usd", "pnl_multiple"],
+      "additionalProperties": false
+    }
+  },
+  "properties": {
+    "coin_summary": {
+      "type": "object",
+      "properties": {
+        "value_usd": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/usd" }] },
+        "has_priced_holdings": { "type": "boolean" },
+        "known_value_usd": { "$ref": "#/$defs/usd" },
+        "known_value_usd_exact": { "type": "number", "exclusiveMinimum": 0 },
+        "today": {
+          "oneOf": [{ "type": "null" }, {
+            "type": "object",
+            "properties": { "usd": { "type": "number" }, "pct": { "type": "number" } },
+            "required": ["usd", "pct"],
+            "additionalProperties": false
+          }]
+        }
+      },
+      "required": ["value_usd", "known_value_usd", "today"],
+      "additionalProperties": false
+    },
+    "wallet_sync": {
+      "type": "object", "additionalProperties": false,
+      "required": ["status", "checkpoint", "as_of_ms"],
+      "properties": {
+        "status": { "enum": ["ready", "syncing", "stale"] },
+        "checkpoint": { "type": ["string", "null"], "pattern": "^(0|[1-9][0-9]*)$" },
+        "as_of_ms": { "type": ["integer", "null"], "minimum": 0 }
+      }
+    },
+    "balances": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "properties": {
+            "sui": { "$ref": "#/$defs/amount" },
+            "usdc": { "$ref": "#/$defs/amount" }
+          },
+          "required": ["sui", "usdc"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "positions": {
+      "oneOf": [{ "type": "null" }, { "type": "array", "items": { "$ref": "#/$defs/position" } }]
+    },
+    "commitments": {
+      "description": "R3-40: the gold card's Committed and Claimable in dollars over every quote's positions (USDC at face value, SUI at its price at most 120 s old), summed exactly and rounded once to cents; a part null when a position in it cannot be valued. Null with positions.",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "properties": {
+            "has_priced_holdings": { "type": "boolean" },
+            "committed_usd_subcent": { "type": "number", "exclusiveMinimum": 0 },
+            "claimable_usd_subcent": { "type": "number", "exclusiveMinimum": 0 },
+            "committed_usd": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/usd" }] },
+            "claimable_usd": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/usd" }] },
+            "known_committed_usd": { "$ref": "#/$defs/usd", "description": "Priced components when the committed category is incomplete; never a complete total." },
+            "known_claimable_usd": { "$ref": "#/$defs/usd", "description": "Priced components when the claimable category is incomplete, including independently priced refunds or tokens." }
+          },
+          "required": ["committed_usd", "claimable_usd"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "coins": {
+      "description": "Presale sale coins with a positive balance in any of the account's wallets, summed, largest value first; value_usd null without a price at most 120 s old. Null (and listed) when it cannot be read.",
+      "oneOf": [{ "type": "null" }, { "type": "array", "items": { "$ref": "#/$defs/coin" } }]
+    },
+    "vesting": {
+      "description": "The vesting entry includes presale allocations across linked wallets and utility schedules receiving or created by the authenticated active wallet. Owner href is /portfolio/vestings; public portfolios retain the paying sale website or null. Null (and listed) when the schedules cannot be read.",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "properties": {
+            "has_schedule": { "type": "boolean" },
+            "href": { "oneOf": [{ "type": "null" }, { "type": "string", "maxLength": 512, "pattern": "^(/portfolio/vestings|https://[^\\s/?#@:]+(/[^\\s#]*)?)$" }] }
+          },
+          "required": ["has_schedule", "href"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "totals": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "properties": {
+            "people": { "type": "integer", "minimum": 0 },
+            "volume_usd": { "$ref": "#/$defs/usd" }
+          },
+          "required": ["people", "volume_usd"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "trend": {
+      "description": "OA-25 Q16: the gold card's 30-day line from the account's daily portfolio-value snapshots. points: the valued days from the newest back 30 days, oldest first (a skipped day left out); empty until the newest valued day is today or yesterday (UTC) and the day 30 days before it is valued too. change_bps: newest / 30 days before - 1, in basis points, signed; null without points or when the earlier value is zero. On the public read (OA-10) the window starts at the UTC day the portfolio last became public. Null (and listed) when the snapshots cannot be read.",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "properties": {
+            "days": { "const": 30 },
+            "points": {
+              "type": "array",
+              "maxItems": 31,
+              "items": {
+                "type": "object",
+                "properties": {
+                  "day": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+                  "value_usd": { "$ref": "#/$defs/usd" }
+                },
+                "required": ["day", "value_usd"],
+                "additionalProperties": false
+              }
+            },
+            "change_bps": { "oneOf": [{ "type": "null" }, { "type": "string", "pattern": "^(0|-?[1-9][0-9]*)$" }] }
+          },
+          "required": ["days", "points", "change_bps"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "prices_as_of_ms": {
+      "oneOf": [{ "type": "null" }, { "type": "integer", "minimum": 0 }]
+    },
+    "unavailable": {
+      "type": "array",
+      "items": { "enum": ["balances", "positions", "coins", "vesting", "totals", "trend"] },
+      "uniqueItems": true
+    }
+  },
+  "required": ["balances", "positions", "commitments", "coins", "vesting", "totals", "trend", "prices_as_of_ms", "unavailable"],
+  "additionalProperties": false
+}

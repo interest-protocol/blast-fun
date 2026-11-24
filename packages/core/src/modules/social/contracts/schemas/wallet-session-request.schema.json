@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/wallet-session-request.schema.json",
+  "title": "Wallet sign-in proof",
+  "description": "POST /api/social/sign-in/session body. Closed, at most 12 KiB. The challenge's id and exact message, the address it was issued for, and the wallet's serialized signature.",
+  "type": "object",
+  "properties": {
+    "challenge_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "address": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 66
+    },
+    "message": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048
+    },
+    "signature": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 8192
+    }
+  },
+  "required": [
+    "challenge_id",
+    "address",
+    "message",
+    "signature"
+  ],
+  "additionalProperties": false
+}

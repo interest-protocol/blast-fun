@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/sale-metadata-response.schema.json",
+  "title": "Sale metadata response",
+  "description": "GET/PUT /api/social/sales/{presale_id}/metadata and POST \u2026/cover (R3-24), private, no-store: the stored details (all null without a row) and whether the caller may change them.",
+  "type": "object",
+  "properties": {
+    "presale_id": {
+      "type": "string",
+      "pattern": "^0x[0-9a-f]{64}$"
+    },
+    "metadata": {
+      "$ref": "https://blast-v2.invalid/social/contracts/sale-metadata.schema.json"
+    },
+    "editable": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "presale_id",
+    "metadata",
+    "editable"
+  ],
+  "additionalProperties": false
+}

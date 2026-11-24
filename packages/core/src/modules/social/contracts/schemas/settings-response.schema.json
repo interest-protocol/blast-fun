@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/settings-response.schema.json",
+  "title": "Social settings of the caller",
+  "description": "GET and PUT /api/social/me/settings 200: every stored setting (privacy, sharing start, hold pay coin (null: the sale's own coin), public portfolio, explorer, the Feel layer's sound switch (null until the account chooses), the seven notification switches).",
+  "type": "object",
+  "properties": {
+    "privacy": {
+      "enum": [
+        "public",
+        "private"
+      ]
+    },
+    "sharing_since_ms": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "integer",
+          "minimum": 0
+        }
+      ]
+    },
+    "public_portfolio": {
+      "type": "boolean"
+    },
+    "explorer": {
+      "enum": [
+        "suiscan",
+        "suivision"
+      ]
+    },
+    "sound": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        }
+      ]
+    },
+    "blast_mode_confirm_actions": {
+      "type": "boolean"
+    },
+    "notifications": {
+      "type": "object",
+      "properties": {
+        "opens_soon": {
+          "type": "boolean"
+        },
+        "almost_full": {
+          "type": "boolean"
+        },
+        "last_hour": {
+          "type": "boolean"
+        },
+        "funded": {
+          "type": "boolean"
+        },
+        "claims_open": {
+          "type": "boolean"
+        },
+        "unlocks": {
+          "type": "boolean"
+        },
+        "people_you_follow": {
+          "type": "boolean"
+        },
+        "call_moves": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "opens_soon",
+        "almost_full",
+        "last_hour",
+        "funded",
+        "claims_open",
+        "unlocks",
+        "people_you_follow",
+        "call_moves"
+      ],
+      "additionalProperties": false
+    },
+    "commit_too_coin_type": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "pattern": "^0x[0-9a-f]{64}::[A-Za-z_][A-Za-z0-9_]{0,127}::[A-Za-z_][A-Za-z0-9_]{0,127}(<.+>)?$",
+          "minLength": 8,
+          "maxLength": 512
+        }
+      ]
+    }
+  },
+  "required": [
+    "privacy",
+    "sharing_since_ms",
+    "commit_too_coin_type",
+    "public_portfolio",
+    "explorer",
+    "sound",
+    "blast_mode_confirm_actions",
+    "notifications"
+  ],
+  "additionalProperties": false
+}

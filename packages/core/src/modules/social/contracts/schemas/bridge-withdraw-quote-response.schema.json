@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/bridge-withdraw-quote-response.schema.json",
+  "title": "Withdraw to another chain: the offer",
+  "description": "GET /api/social/me/bridge-withdrawals/quote: per destination (Base, Arbitrum, Ethereum, Solana, in that order) whether a withdrawal can go there now and Circle's fees for it, and who pays the Sui network fee (private, no-store).",
+  "type": "object",
+  "properties": {
+    "destinations": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": {
+        "type": "object",
+        "properties": {
+          "destination": { "enum": ["base", "arbitrum", "ethereum", "solana"] },
+          "available": { "type": "boolean" },
+          "unavailable_reason": { "enum": ["not_live", "not_forwarded", "circle_unavailable", null] },
+          "fee_bps": { "type": ["string", "null"], "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$" },
+          "forward_fee": { "type": ["string", "null"], "pattern": "^(0|[1-9][0-9]{0,19})$" }
+        },
+        "required": ["destination", "available", "unavailable_reason", "fee_bps", "forward_fee"],
+        "additionalProperties": false
+      }
+    },
+    "network_fee": {
+      "type": "object",
+      "properties": {
+        "payer": { "enum": ["blast", "wallet"] },
+        "label": { "enum": ["Paid by Blast", "Paid from your SUI"] }
+      },
+      "required": ["payer", "label"],
+      "additionalProperties": false
+    },
+    "as_of_ms": { "type": "integer", "minimum": 0 }
+  },
+  "required": ["destinations", "network_fee", "as_of_ms"],
+  "additionalProperties": false
+}

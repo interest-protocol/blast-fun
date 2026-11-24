@@ -1,0 +1,14 @@
+{
+  "apps/web/src/components/launchpad/LaunchpadTerminal.tsx": {
+    "tablist": 1
+  },
+  "apps/web/src/components/launchpad/trade/CurveTradeRail.tsx": {
+    "tablist": 1
+  },
+  "apps/web/src/components/launchpad/trade/VenueTradeRail.tsx": {
+    "tablist": 1
+  },
+  "apps/web/src/components/social/blast-mode/workspace/panels/PanelChrome.tsx": {
+    "tablist": 1
+  }
+}

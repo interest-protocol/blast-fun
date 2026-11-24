@@ -1,0 +1,23 @@
+/* The board's flex gap spaces the bar from what follows; the carousel's own bottom margin (for its pages) is not added to it. */
+.bar.bar { margin-bottom: 0; }
+/* A pinned curve sits on the presale slide's surface (the shared card, the Presales board's corner), so one carousel reads as one. */
+:global([data-blast-ui]) .curve { border-radius: 1.625rem; }
+@container (max-width: 640px) { :global([data-blast-ui]) .curve { border-radius: var(--r-md); } }
+
+/* Keep a mixed carousel on one compact grid when the tablet rail narrows Home. */
+@media (min-width: 761px) {
+  @container (max-width: 46rem) {
+    .bar .sale,
+    .bar .curve[data-has-cover] {
+      grid-template-columns: minmax(0, 28%) minmax(0, 1fr);
+      grid-template-rows: auto;
+      align-items: start;
+      gap: 1rem;
+      padding: 1rem;
+    }
+    .bar .sale > :nth-child(2),
+    .bar .curve[data-has-cover] > :nth-child(2) {
+      padding: 0;
+    }
+  }
+}

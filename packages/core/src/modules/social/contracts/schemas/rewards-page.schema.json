@@ -1,0 +1,303 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/rewards-page.schema.json",
+  "title": "Holder rewards page",
+  "description": "GET /api/social/me/rewards 200: a private keyset page of the caller's holder rewards, with a source summary on the first unfiltered page. Sources are presales or standalone vaults.",
+  "type": "object",
+  "$defs": {
+    "atoms": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]{0,39})$"
+    },
+    "object_id": {
+      "type": "string",
+      "pattern": "^0x[0-9a-f]{64}$"
+    },
+    "amounts": {
+      "type": "object",
+      "properties": {
+        "meme": {
+          "$ref": "#/$defs/atoms"
+        },
+        "quote": {
+          "$ref": "#/$defs/atoms"
+        }
+      },
+      "required": [
+        "meme",
+        "quote"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "properties": {
+    "coins": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "presale_id": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/object_id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "name": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "symbol": {
+                "type": "string",
+                "maxLength": 64
+              },
+              "icon_url": {
+                "type": "string",
+                "maxLength": 2048
+              },
+              "sale_decimals": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 255
+              },
+              "quote_type": {
+                "type": "string",
+                "minLength": 8,
+                "maxLength": 512
+              },
+              "quote_symbol": {
+                "type": "string",
+                "maxLength": 64
+              },
+              "quote_decimals": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 255
+              },
+              "rounds": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 1
+              },
+              "payouts": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "received": {
+                "$ref": "#/$defs/amounts"
+              },
+              "last_payout_ms": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0
+              },
+              "waiting": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "next": {
+                        "oneOf": [
+                          {
+                            "type": "null"
+                          },
+                          {
+                            "$ref": "#/$defs/amounts"
+                          }
+                        ]
+                      },
+                      "unpayable": {
+                        "oneOf": [
+                          {
+                            "type": "null"
+                          },
+                          {
+                            "$ref": "#/$defs/amounts"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "next",
+                      "unpayable"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "source_id": {
+                "$ref": "#/$defs/object_id"
+              },
+              "vault_id": {
+                "$ref": "#/$defs/object_id"
+              }
+            },
+            "required": [
+              "presale_id",
+              "name",
+              "symbol",
+              "icon_url",
+              "sale_decimals",
+              "quote_type",
+              "quote_symbol",
+              "quote_decimals",
+              "rounds",
+              "payouts",
+              "received",
+              "last_payout_ms",
+              "waiting"
+            ],
+            "additionalProperties": false,
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "presale_id": {
+                      "type": "null"
+                    }
+                  }
+                },
+                "then": {
+                  "required": [
+                    "vault_id",
+                    "source_id"
+                  ],
+                  "properties": {
+                    "vault_id": {
+                      "$ref": "#/$defs/object_id"
+                    },
+                    "source_id": {
+                      "$ref": "#/$defs/object_id"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "payouts": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "type": "object",
+        "properties": {
+          "presale_id": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/object_id"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "round_id": {
+            "$ref": "#/$defs/object_id"
+          },
+          "round_number": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]{0,19})$"
+          },
+          "meme_amount": {
+            "$ref": "#/$defs/atoms"
+          },
+          "quote_amount": {
+            "$ref": "#/$defs/atoms"
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^[1-9A-HJ-NP-Za-km-z]{32,44}$"
+          },
+          "timestamp_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "relayed_by": {
+            "$ref": "#/$defs/object_id"
+          },
+          "self_claimed": {
+            "type": "boolean"
+          },
+          "source_id": {
+            "$ref": "#/$defs/object_id"
+          },
+          "vault_id": {
+            "$ref": "#/$defs/object_id"
+          }
+        },
+        "required": [
+          "presale_id",
+          "round_id",
+          "round_number",
+          "meme_amount",
+          "quote_amount",
+          "digest",
+          "timestamp_ms",
+          "relayed_by",
+          "self_claimed"
+        ],
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "presale_id": {
+                  "type": "null"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "vault_id",
+                "source_id"
+              ],
+              "properties": {
+                "vault_id": {
+                  "$ref": "#/$defs/object_id"
+                },
+                "source_id": {
+                  "$ref": "#/$defs/object_id"
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "next_cursor": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        }
+      ]
+    }
+  },
+  "required": [
+    "coins",
+    "payouts",
+    "next_cursor"
+  ],
+  "additionalProperties": false
+}

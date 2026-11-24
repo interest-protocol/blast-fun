@@ -1,0 +1,747 @@
+/*
+ * The app shell (FEATURE-MAP §1, tokens.md §7–8), ported from the canonical
+ * prototype's final effective CSS. The page root carries the device's
+ * preferences (`data-rail`, `data-aside`, see prefs.ts), so collapsed states
+ * are right on the first paint.
+ */
+
+/* ---------- frame ---------- */
+/*
+ * The boards' frame: the 248px rail, then a column with the 64px top bar over
+ * the page. The page is at most 1180px (`--page-max`) with 40px gutters
+ * (`--page-gutter`), left-aligned, so the content edge is the rail plus 40px
+ * on every route. A right column (`--aside`) sits 20px (`--gap`) from the
+ * view, inside the same 1180px.
+ */
+.shell {
+  --t4: 240ms;
+  --shell-header-height: 4rem;
+  --stick-top: calc(env(safe-area-inset-top, 0px) + var(--shell-header-height) + 0.8125rem);
+  display: grid;
+  grid-template-columns: var(--rail) minmax(0, calc(var(--page-max) - var(--page-gutter) - var(--aside))) var(--aside) minmax(var(--page-gutter), 1fr);
+  grid-template-rows: var(--shell-header-height) 1fr;
+  justify-content: stretch;
+  align-items: start;
+  margin: 0;
+  transition: grid-template-columns var(--t4) var(--ease-io);
+}
+
+.shell[data-home] { --aside: 13.75rem; }
+/* Boards with a wider right column (the coin and sale pages draw 380px; Settings 336px; Create 320px) name it on their page root. */
+.shell:has(:global([data-shell-aside="wide"])) { --aside: 23.75rem; }
+.shell:has(:global([data-shell-aside="settings"])) { --aside: 21rem; }
+.shell:has(:global([data-shell-aside="medium"])) { --aside: 20rem; }
+
+:global([data-rail="mini"]) .shell { --rail: 5.5rem; }
+:global([data-aside="collapsed"]) .shell[data-home] { grid-template-columns: var(--rail) minmax(0, 1fr) 2.75rem var(--page-gutter); }
+/* Home and the presale catalog use two columns without the right rail: the page takes the whole 1180px. */
+.shell[data-no-aside], :global([data-aside="collapsed"]) .shell[data-no-aside] { grid-template-columns: var(--rail) minmax(0, var(--page-max)) minmax(0, 1fr); }
+
+.main {
+  grid-column: 2;
+  grid-row: 2;
+  min-width: 0;
+  min-height: 100dvh;
+  padding: 0 var(--gap) 4rem var(--page-gutter);
+}
+.shell[data-no-aside] .main { padding-right: var(--page-gutter); }
+
+/* One content edge on every route: the view fills the page column from its left gutter. */
+.view { min-width: 0; margin: 0; }
+
+/* Presale navigation owns a row above both cards; other routes keep their alignment. */
+@media (min-width: 1220px) {
+  .shell:has(:global([data-sale-page])) { grid-template-rows: var(--shell-header-height) auto auto 1fr; }
+  .shell:has(:global([data-sale-page])) .rail { grid-row: 1 / -1; }
+  .shell:has(:global([data-sale-page])) .main { grid-row: 2 / 5; display: grid; grid-template-rows: subgrid; }
+  .shell:has(:global([data-sale-page])) .main :is(:has(:global([data-sale-page])), :global([data-sale-page])) {
+    display: grid;
+    grid-template-rows: subgrid;
+    grid-row: 1 / -1;
+    min-width: 0;
+  }
+  .shell:has(:global([data-sale-page])) .main .view { width: 100%; grid-row: 2 / 4; }
+  .shell:has(:global([data-sale-page])) .aside { grid-row: 4; }
+  .shell:has(:global([data-sale-page])) .asideFull { padding-top: 0; }
+  .shell:has(:global([data-sale-page])) .asideFull :global(.sale-transition-content) > :global(.card):first-child { margin-top: 0; }
+}
+
+/*
+ * Owner, 2026-10-27: with the rail collapsed the page keeps its width and sits centred in
+ * the space beside the rail. The rail's column grows by half the free space (`--lead`)
+ * while the rail keeps its own width, and the top bar reaches back over that space.
+ * (Home with its right column folded already fills the width.)
+ */
+@media (min-width: 761px) {
+  :global([data-rail="mini"]) .shell { --lead: max(0px, (100vw - var(--rail) - var(--page-max)) / 2); }
+  :global([data-rail="mini"]) .shell:is([data-no-aside], :has(:global([data-presale-browse]))) { grid-template-columns: calc(var(--rail) + var(--lead)) minmax(0, var(--page-max)) minmax(0, 1fr); }
+  :global([data-rail="mini"]) .rail { width: var(--rail); }
+  :global([data-rail="mini"]) .topbar { margin-left: calc(-1 * var(--lead)); }
+}
+@media (min-width: 1220px) {
+  :global([data-rail="mini"]:not([data-aside="collapsed"])) .shell:not([data-no-aside], :has(:global([data-presale-browse]))),
+  :global([data-rail="mini"]) .shell:not([data-home], [data-no-aside], :has(:global([data-presale-browse]))) {
+    grid-template-columns: calc(var(--rail) + var(--lead)) minmax(0, calc(var(--page-max) - var(--page-gutter) - var(--aside))) var(--aside) minmax(var(--page-gutter), 1fr);
+  }
+}
+@media (min-width: 761px) and (max-width: 1219px) {
+  :global([data-rail="mini"]) .shell { grid-template-columns: calc(var(--rail) + var(--lead)) minmax(0, var(--page-max)) minmax(0, 1fr); }
+}
+
+/*
+ * The Portfolio and Notifications boards: the title row spans the right column
+ * too, so its actions end at the page's right edge; the column's first card
+ * starts under it (AppShell places it). A sale page's column starts beside its title.
+ */
+@media (min-width: 1220px) {
+  .shell:not([data-no-aside]):has(.asideFull > *):not(:has(:global(:is([data-sale-page], [data-presale-browse])))) .view :global([data-page-head]) {
+    margin-right: calc(-1 * (var(--gap) + var(--aside)));
+  }
+}
+
+@media (min-width: 761px) {
+  .shell:has(:global([data-presale-browse])) { grid-template-columns: var(--rail) minmax(0, var(--page-max)) minmax(0, 1fr); }
+  .shell:has(:global([data-presale-browse])) .main { padding-right: var(--page-gutter); }
+  .shell:has(:global([data-presale-browse])) .aside { display: none; }
+}
+
+/* ---------- left rail ---------- */
+/* Navigation above, account menu anchored to the footer. */
+.rail {
+  grid-column: 1;
+  grid-row: 1 / 3;
+  position: sticky;
+  top: env(safe-area-inset-top, 0px);
+  height: 100dvh;
+  padding: 1.25rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  overflow-x: clip;
+  overflow-clip-margin: 0.5rem;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.rail::-webkit-scrollbar { display: none; }
+.rail > * { flex-shrink: 0; }
+
+.railTop {
+  position: relative;
+  height: max(44px, 2.75rem);
+  margin-bottom: 1.125rem;
+  flex: none;
+  transition: height var(--t4) var(--ease-io);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.625rem;
+  height: max(44px, 2.75rem);
+  padding: 0 0.625rem;
+  width: max-content;
+  border-radius: var(--r-sm);
+  transition: padding var(--t4) var(--ease-io), opacity var(--t2) var(--ease-std), background var(--t2) var(--ease-std);
+}
+
+/* The brand mark: the helmet artwork at its 3:2 proportion, 24px tall. */
+.mark {
+  display: block;
+  flex: none;
+  width: 2.25rem;
+  height: 1.5rem;
+}
+
+/* The wordmark is the display face at 23/700, -.04em (Rail board). */
+.brand b {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 1.4375rem;
+  letter-spacing: -.04em;
+  white-space: nowrap;
+  transition: opacity var(--t2) var(--ease-std);
+}
+
+/* The collapse button (the chip icon button) sits flush with the rail's right edge; the rail scope outranks the control's own position. */
+.rail .railToggle {
+  position: absolute;
+  top: 0.25rem;
+  right: 0;
+}
+
+.rail .railToggle.railToggle {
+  transition: right var(--t4) var(--ease-io), top var(--t4) var(--ease-io), background var(--t2) var(--ease-std), color var(--t2) var(--ease-std);
+}
+
+.railToggle svg { transition: transform var(--t4) var(--ease-io); }
+
+.navItem {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  height: max(48px, 3rem);
+  padding: 0 0.75rem;
+  border-radius: var(--r-sm);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--ink-2);
+  text-align: left;
+  transition: background var(--t2) var(--ease-std), color var(--t2) var(--ease-std);
+}
+
+/*
+ * Rail rows (Rail board): 42px, 12px padding and gap, 11px corners, 15px
+ * text at 500, 20px icons. Every row's icon and label share one x, More's
+ * disclosure included (the shared nav-row Button, `variant="nav"`).
+ */
+.rail .navItem { height: 2.625rem; gap: 0.75rem; border-radius: 0.6875rem; font-size: 0.9375rem; font-weight: 500; line-height: 1.25rem; color: var(--muted); }
+/* Create is an action, not a place: a neutral secondary control (2026-11-14: persistent chrome stays neutral, each page owns the one pink action). */
+.rail .railCreate { margin-top: 1.125rem; height: 2.75rem; justify-content: center; gap: 0.5rem; border-radius: 0.75rem; background: var(--control-surface); box-shadow: var(--control-shadow); color: var(--ink); font-weight: 600; touch-action: manipulation; user-select: none; }
+.rail .railCreate:is(:active, [aria-expanded="true"]) { background: var(--control-hover); color: var(--ink); }
+.navItem svg { width: 1.25rem; height: 1.25rem; flex: none; transition: color var(--t2) var(--ease-std), transform var(--t1) var(--ease-std); }
+.rail .railCreate svg { width: 1.125rem; height: 1.125rem; stroke-width: 2; }
+.navItem span { white-space: nowrap; transition: opacity var(--t2) var(--ease-std); }
+.railCreate span { transition-delay: var(--t4); }
+/* Selection is a neutral fill with the lit edge; the brand colour lives only in the selected icon. */
+.navItem[aria-current="page"] { background: var(--chip); box-shadow: inset 0 1px 0 var(--card-lit); color: var(--ink); font-weight: 600; }
+.navItem[aria-current="page"] svg { color: var(--pink); }
+/* Create's icon follows its label. */
+.rail .navItem.railCreate svg { color: inherit; }
+
+/* Pending (`NavPending`): a pressed item reads as current while its page loads, and the item it leaves lets go. */
+.rail:has([data-pending]) .navItem[aria-current="page"]:not(:has([data-pending])) { color: var(--muted); font-weight: 500; }
+.rail:has([data-pending]) .navItem[aria-current="page"]:not(:has([data-pending])) svg { color: inherit; }
+/* A not-found page marks itself in the DOM, so the server's first paint already shows no rail item selected (the client effect only fixes aria-current later). */
+.shell:has([data-missing-page]) .navItem[aria-current="page"] { background: none; box-shadow: none; color: var(--muted); font-weight: 500; }
+.shell:has([data-missing-page]) .navItem[aria-current="page"] svg { color: inherit; }
+.rail .navItem:has([data-pending]) { color: var(--ink); font-weight: 600; }
+.rail .navItem:has([data-pending]) svg { color: var(--pink); }
+.navItem:active svg { transform: scale(.94); transition-duration: 0s; }
+
+.railSpacer { flex: 1 0 2.125rem; }
+.railFooter { --rail-footer-control-gap: 0.625rem; display: grid; gap: inherit; }
+.railFooter:empty { display: none; }
+/*
+ * Blast links (owner, 2026-11-20): X, Telegram, the map and the docs as quiet icon links above the status line,
+ * the rail's one icon-only group. Muted at rest; hover takes the rail row's fill and ink and the glyph rises a hair;
+ * the name shows in a tooltip.
+ */
+.railLinks { display: flex; gap: 0.25rem; }
+.railLink svg { transition: transform var(--t2) var(--ease-std); }
+@media (hover: hover) and (pointer: fine) {
+  .railLink:hover svg { transform: translateY(-0.0625rem); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .railLink svg { transition: none; }
+  .railLink:hover svg { transform: none; }
+}
+.railLinkLayer { z-index: 1100; pointer-events: none; }
+.railLinkTip {
+  padding: 0.375rem 0.625rem;
+  border-radius: var(--r-inner);
+  background: var(--tip-bg);
+  color: var(--tip-fg);
+  font: 500 0.75rem/1rem var(--font);
+  box-shadow: var(--sh-pop);
+  pointer-events: none;
+  transition: opacity var(--t1) var(--ease-std);
+}
+.railLinkTip:is([data-starting-style], [data-ending-style]) { opacity: 0; }
+/* The next link's name in the group is already there: no entrance. */
+.railLinkTip[data-instant] { transition: none; }
+/* The collapsed rail's 60px column holds the four as a 2 x 2 grid of 28px links; touch keeps 44px targets in one column. */
+:global([data-rail="mini"]) .rail .railLinks { display: grid; grid-template-columns: repeat(2, 1.75rem); justify-content: center; }
+:global([data-rail="mini"]) .rail .railLinks .railLink { --control-height: 1.75rem; --control-icon: 1rem; --control-radius: var(--r-inner); }
+@media (pointer: coarse) {
+  :global([data-rail="mini"]) .rail .railLinks { grid-template-columns: max(44px, 2.75rem); }
+  :global([data-rail="mini"]) .rail .railLinks .railLink { --control-height: max(44px, 2.75rem); --control-icon: 1.25rem; --control-radius: 0.6875rem; }
+}
+
+/* Collapsed rail (`--rail: 88px`): 14px sides; each row keeps its name under its icon (below). */
+:global([data-rail="mini"]) .rail {
+  --rail-footer-target: max(44px, 2.75rem);
+  --rail-footer-glyph-inset: 0px;
+  --rail-footer-padding: 0;
+  --rail-footer-justify: center;
+  padding-inline: 0.875rem;
+}
+:global([data-rail="mini"]) .railTop { height: 6rem; }
+:global([data-rail="mini"]) .railToggle { top: 3.25rem; right: 0.75rem; }
+:global([data-rail="mini"]) .brand { padding-left: 0.75rem; }
+:global([data-rail="mini"]) .rail .brand b { opacity: 0; pointer-events: none; transition-delay: 0s; }
+/*
+ * KA-5 (2026-11-14): the collapsed rail names every row, as the phone tab bar
+ * does: the 20px icon over a 12px label in an 80px-wide, 56px-tall cell, 4px
+ * from each rail edge. A two-word name may wrap to a second line.
+ */
+:global([data-rail="mini"]) .rail .navItem {
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.25rem;
+  height: auto;
+  min-height: 3.5rem;
+  margin-inline: -0.625rem;
+  padding: 0.375rem 0.125rem;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  text-align: center;
+}
+:global([data-rail="mini"]) .rail .navItem span { white-space: normal; }
+:global([data-rail="mini"]) .railToggle svg { transform: scaleX(-1); }
+
+/* OA-36: a short window tightens the rail's rhythm once; below that it scrolls. */
+@media (max-height: 760px) {
+  .rail { padding-block: 0.8125rem; }
+  .railTop { margin-bottom: 0.8125rem; }
+  .rail .navItem { height: 2.5rem; }
+  .railSpacer { flex-basis: 1.3125rem; }
+}
+
+/* ---------- account menu (§1.4): the box base-ui's positioner places (`BlastMenu`) ---------- */
+.menu {
+  width: 18.75rem;
+  padding: 0.5rem;
+  border-radius: var(--r-md);
+  background: var(--card);
+  box-shadow: var(--sh-pop);
+}
+
+.mitem {
+  width: 100%;
+  min-height: max(44px, 2.75rem);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.625rem;
+  border-radius: var(--r-sm);
+  text-align: left;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: background var(--t1) var(--ease-std);
+}
+
+.mitem:focus-visible { background: var(--chip); box-shadow: none !important; }
+.mtext { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.3; }
+.mtext b { font-weight: 600; display: flex; align-items: center; gap: 0.25rem; min-width: 0; }
+.mtext > span { font-size: 0.8125rem; color: var(--muted); font-weight: 400; }
+.acctMe .mtext > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.danger { color: var(--down); }
+/* OA-41: the viewer's row ends in a faint chevron (oa41 8140). */
+.mitem.acctMe > svg:last-child { width: 1.125rem; height: 1.125rem; color: var(--faint); flex: none; }
+
+/* ---------- right column (§1.6) ---------- */
+.aside {
+  grid-column: 3;
+  grid-row: 2;
+  position: sticky;
+  top: 0;
+  align-self: start;
+  min-width: 0;
+  overflow-x: clip;
+  overflow-y: visible;
+  overflow-clip-margin: 1.3125rem;
+}
+
+/* A full trading form must remain reachable in short windows. */
+.aside:has(:global(.sale-trade-panel)) { position: static; }
+
+.asideLayer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  padding: 1.3125rem 0 2.125rem;
+  transition: opacity var(--t4) var(--ease-io), transform var(--t4) var(--ease-io), visibility 0s linear, position 0s linear;
+}
+
+/* The column's cards sit 16px apart (the Portfolio and Profile boards); pages hand the shell their cards, not a wrapper. */
+.asideFull {
+  position: relative;
+  width: var(--aside);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  transition-behavior: allow-discrete;
+}
+
+.asideMini {
+  width: max(44px, 2.75rem);
+  max-height: calc(100dvh - var(--shell-header-height) - 1.5rem);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.8125rem;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateX(-0.5rem);
+  transition: opacity var(--t4) var(--ease-io), transform var(--t4) var(--ease-io), visibility 0s linear var(--t4);
+}
+
+.asideExpand { flex: none; width: max(44px, 2.75rem) !important; height: max(44px, 2.75rem) !important; }
+.asideMini > :not(.asideExpand) { min-height: 0; overflow-y: auto; scrollbar-width: none; }
+.asideMini > :not(.asideExpand) > * { flex-shrink: 0; }
+
+/*
+ * The columns move only while the viewer folds one (`data-shell-moving`, set
+ * by `setShellPref`). Arriving on Home or leaving it, where a folded right
+ * column changes the grid, snaps: animating the grid on a route change
+ * reflows the page every frame and fades the column in late.
+ */
+:global([data-blast-ui]:not([data-shell-moving])) .shell,
+:global([data-blast-ui]:not([data-shell-moving])) .asideLayer { transition: none !important; }
+
+:global(html[data-blast-input="keyboard"]) .shell,
+:global(html[data-blast-input="keyboard"]) .asideLayer { transition: none !important; }
+
+:global([data-aside="collapsed"]) .shell[data-home] .asideFull {
+  position: absolute;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateX(1rem);
+  transition-delay: 0s, 0s, var(--t4), var(--t4);
+}
+
+:global([data-aside="collapsed"]) .shell[data-home] .asideMini {
+  position: relative;
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition-delay: 0s;
+}
+
+.asideHead { display: flex; align-items: center; justify-content: space-between; height: max(44px, 2.75rem); }
+.asideHead h2 { margin: 0; font-size: 1.0625rem; font-weight: 600; letter-spacing: -.02em; }
+/* The header's buttons (OA-41 `.ah-acts`): "Choose cards", then collapse, with the last one's ring flush to the column's edge. */
+.asideActs { display: flex; gap: 0.125rem; margin-right: -0.5rem; }
+
+/* ---------- top bar (Topbar board) ---------- */
+/*
+ * 64px, 28px sides, controls right-aligned 8px apart: Search, the balance,
+ * Deposit, the bell. A translucent material with a hairline, so
+ * content scrolls beneath it instead of under a solid strip. Portfolio and
+ * Settings carry their own wallet actions, so there the bar has no balance
+ * or Deposit (the shell leaves them out).
+ */
+.topbar {
+  grid-column: 2 / -1;
+  grid-row: 1;
+  position: sticky;
+  top: env(safe-area-inset-top, 0px);
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  height: var(--shell-header-height);
+  padding: 0 1.75rem;
+  background: var(--glass);
+  -webkit-backdrop-filter: saturate(180%) blur(1.25rem);
+  backdrop-filter: saturate(180%) blur(1.25rem);
+  box-shadow: 0 1px 0 var(--card-lit);
+}
+.topbar .brand,
+.tabbar,
+.pageWallet { display: none; }
+/* Search lives in the top bar at every width ("/" opens it too). */
+.topbarTools { display: flex; align-items: center; }
+.search { flex: none; }
+/* Keep the balance anchored while the Deposit label's font loads. */
+.topbar .deposit { width: 5rem; flex: 0 0 5rem; }
+.accountBalance { width: 14rem; flex: 0 0 14rem; justify-content: space-between; }
+.balanceCompact { display: none; }
+@media (max-width: 1200px) {
+  .accountBalance { width: 10.5rem; flex-basis: 10.5rem; }
+  .balanceExact { display: none; }
+  .balanceCompact { display: inline; }
+}
+.accountBalance b { font-weight: 600; white-space: nowrap; }
+.accountBalance[data-popup-open] { background: var(--chip); }
+.accountPlaceholder {
+  width: 4rem;
+  height: 0.75rem;
+  border-radius: 0.25rem;
+  background: var(--hair);
+}
+.balancePlaceholder { display: inline-block; width: 7rem; height: 0.875rem; border-radius: 0.25rem; vertical-align: middle; background: color-mix(in srgb, var(--hair-2), var(--hair)); }
+.accountMessage { margin: 0; font-size: 0.8125rem; color: var(--muted); }
+.balancePositioner { z-index: 70; }
+.balancePopup {
+  width: min(20rem, calc(100vw - 1.625rem));
+  padding: 1.3125rem;
+  border-radius: var(--r-lg);
+  background: var(--card);
+  box-shadow: var(--sh-pop);
+  transform-origin: var(--transform-origin);
+  transition: opacity 160ms var(--ease), transform 160ms var(--ease);
+}
+.balancePopup[data-starting-style],
+.balancePopup[data-ending-style] { opacity: 0; transform: translateY(-0.25rem) scale(.98); }
+.balanceTitle { margin: 0; font-size: 0.9375rem; font-weight: 600; }
+.balanceDescription { margin: 0.3125rem 0 0; font-size: 0.75rem; color: var(--muted); }
+.balanceTotal { margin: 0.8125rem 0; font-size: 1.75rem; font-weight: 600; letter-spacing: -.035em; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.balanceBreakdown { margin: 0 0 0.8125rem; padding-block: 0.8125rem; border-block: 1px solid var(--hair); }
+.balanceBreakdown > div { display: flex; justify-content: space-between; gap: 0.8125rem; padding-block: 0.375rem; font-size: 0.8125rem; }
+.balanceBreakdown dt { color: var(--muted); }
+.balanceBreakdown dd { margin: 0; font-weight: 500; font-variant-numeric: tabular-nums; }
+.balanceAction { width: 100%; min-height: max(44px, 2.75rem); }
+.balanceAction + .balanceAction { margin-top: 0.5rem; }
+.balanceDescription + .balanceAction { margin-top: 1rem; }
+/* On a phone the popover spans the screen with even 16px sides instead of hanging off the chip's right edge. */
+@media (max-width: 760px) { .balancePopup { width: calc(100vw - 2rem); } }
+.topbar .topbarSignin:global(.btn) { height: 2.25rem; padding-inline: 1rem; font-size: 0.8125rem; letter-spacing: 0; }
+/* The top bar's chip height beside the bell; 44px on phones and touch screens. */
+.topbarAvatar {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 62.4375rem;
+  transition: transform var(--t1) var(--ease-std), background var(--t1) var(--ease-std);
+}
+@media (max-width: 760px), (pointer: coarse) {
+  .topbarAvatar { width: 44px; height: 44px; }
+}
+.topbarAvatar[data-current],
+.topbarAvatar[aria-expanded="true"] { background: var(--chip); }
+.accountBalance:active { opacity: .7; }
+.nb { position: relative; }
+.topbar .createAction:global(.icon-btn) { display: none; }
+.topbar .createAction svg { width: 1.375rem; height: 1.375rem; }
+.notificationHalo {
+  position: absolute;
+  inset: -0.1875rem;
+  border: 0.125rem solid var(--notification-dot);
+  border-radius: inherit;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.badgeDot {
+  position: absolute;
+  top: 0.125rem;
+  right: 0.125rem;
+  min-width: 1rem;
+  height: 1rem;
+  padding: 0 0.25rem;
+  display: grid;
+  place-items: center;
+  border-radius: 62.4375rem;
+  background: var(--pink-ink);
+  color: var(--on-pink);
+  font-size: var(--text-2xs);
+  line-height: 1;
+  font-weight: 700;
+  font-style: normal;
+  box-shadow: 0 0 0 0.125rem var(--bg);
+  transition: opacity var(--t2) var(--ease), visibility 0s;
+}
+.badgeDot[data-empty] { opacity: 0; visibility: hidden; transition-delay: 0s, var(--t2); }
+@media (prefers-reduced-motion: reduce) {
+  .badgeDot { transition: none; }
+  .badgeDot[data-empty] { transition-delay: 0s; }
+  .notificationHalo { display: none; }
+}
+
+/* ---------- hover (fine pointers only) ---------- */
+@media (hover: hover) {
+  .navItem:hover { background: var(--chip); color: var(--ink); }
+  .rail .railCreate:hover { background: var(--control-hover); color: var(--ink); }
+  .accountBalance:not([role="status"]):hover,
+  .topbarAvatar:not([role="status"]):hover { background: var(--chip); }
+  .mitem:hover { background: var(--chip); }
+}
+
+/*
+ * Press response (OA-31, the gate's version 5): everything answers on the way
+ * down. The wordmark dips; the top bar's avatar shrinks like the
+ * gate's small icon buttons; rows that sit flush take `--hair`, and a row
+ * that is already grey (keyboard focus, or a mouse's hover) a step deeper.
+ * Only real controls press: the Create menu's "Bonding curve" row is a
+ * disabled `div`, and stays still.
+ */
+.brand:active { opacity: .6; }
+.topbarAvatar:not([role="status"]):active { transform: scale(.97); transition-duration: 0s; }
+:is(a, button).mitem:not([aria-disabled="true"]):active { background: var(--hair); }
+:is(a, button).mitem:not([aria-disabled="true"]):focus-visible:active { background: var(--hair-2); }
+@media (hover: hover) {
+  :is(a, button).mitem:not([aria-disabled="true"]):active { background: var(--hair-2); }
+}
+
+/* ---------- first paint (tokens.md §6) ---------- */
+@keyframes blast-shell-rail-in { from { opacity: 0; } }
+@keyframes blast-shell-aside-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes blast-shell-account-in { from { opacity: 0; } to { opacity: 1; } }
+
+.topbarAvatar:not([role="status"]), .topbarSignin, .topbar .deposit:not([role="status"]), .accountBalance:not([aria-busy], [role="status"]) { animation: blast-shell-account-in var(--t2) var(--ease); }
+
+.rail > * { animation: blast-shell-rail-in .14s var(--ease); }
+.asideFull > * { animation: blast-shell-aside-in .14s var(--ease); }
+.shell[data-navigated] :is(.rail, .asideFull) > * { animation: none; }
+
+/* ---------- breakpoints (tokens.md §8) ---------- */
+@media (max-width: 1219px) {
+  .shell,
+  :global([data-aside="collapsed"]) .shell[data-home] { grid-template-columns: var(--rail) minmax(0, var(--page-max)) minmax(0, 1fr); }
+  .main { padding-right: var(--page-gutter); }
+
+  .aside { display: none; }
+}
+
+/*
+ * Phones (Mobile board): an 18px gutter, one 52px header row (brand, search,
+ * notifications, account), wallet controls on the coin page and a tab bar docked to
+ * the bottom edge.
+ */
+@media (max-width: 760px) {
+  .shell,
+  :global([data-aside="collapsed"]) .shell[data-home] {
+    --shell-phone-nav-height: calc(3.75rem + max(1.5rem, env(safe-area-inset-bottom, 0px) - 0.625rem));
+    display: block;
+    padding-inline: max(var(--page-gutter), env(safe-area-inset-left, 0px)) max(var(--page-gutter), env(safe-area-inset-right, 0px));
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  .rail { display: none; }
+  /* Reserve the docked tab bar's height. */
+  .main, .shell[data-no-aside] .main { padding: 0 0 calc(var(--shell-phone-nav-height) + 1rem); }
+
+  /* Keep discovery content in a scrollport above the navigation, at every scroll position. */
+  .shell:has(:global(.presale-discovery)) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    height: 100dvh;
+  }
+  .shell:has(:global(.presale-discovery)) .topbar { grid-column: 1; grid-row: 1; position: static; }
+  .shell:has(:global(.presale-discovery)) .main { grid-column: 1; grid-row: 2; align-self: stretch; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; padding-bottom: 0.8125rem; }
+  .shell:has(:global(.presale-discovery)) .tabbar { grid-column: 1; grid-row: 3; position: relative; inset: auto; margin: 0 calc(-1 * max(var(--page-gutter), env(safe-area-inset-right, 0px))) 0 calc(-1 * max(var(--page-gutter), env(safe-area-inset-left, 0px))); }
+
+  .shell { --shell-header-height: 3.25rem; }
+  .topbar {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 0;
+    height: auto;
+    min-height: var(--shell-header-height);
+    margin: 0 calc(-1 * max(var(--page-gutter), env(safe-area-inset-right, 0px))) 0 calc(-1 * max(var(--page-gutter), env(safe-area-inset-left, 0px)));
+    padding: 0.25rem max(0.5rem, env(safe-area-inset-right, 0px)) 0.25rem max(1rem, env(safe-area-inset-left, 0px));
+    box-shadow: none;
+  }
+  .topbar .brand { display: inline-flex; flex-shrink: 0; gap: 0.5rem; margin: 0; padding: 0; height: max(44px, 2.75rem); }
+  .topbar .brand b { display: inline; font-size: 1.3125rem; }
+  .topbarTools { margin-inline-start: auto; }
+  .topbarTools .search { --control-height: max(44px, 2.75rem); width: max(44px, 2.75rem); height: max(44px, 2.75rem); }
+  .topbar .createAction:global(.icon-btn) { display: none; }
+  .topbar .accountBalance, .topbar .deposit { display: none; }
+  .topbar .topbarSignin { margin-left: 0.25rem; }
+  .topbar .topbarSignin:global(.btn) { min-height: max(44px, 2.75rem); }
+  .accountMessage { order: 1; flex-basis: 100%; padding-bottom: 0.25rem; }
+
+  .pageWallet { display: flex; align-items: center; gap: 0.5rem; margin-inline-start: auto; max-width: 100%; }
+  .pageWallet[inert] { visibility: hidden; }
+  .pageWallet .accountBalance { width: 8.5rem; flex: none; }
+  .pageWallet .balancePlaceholder { width: 5.5rem; }
+  .pageWallet .accountBalance b { white-space: normal; overflow-wrap: anywhere; }
+  .pageWallet > button { min-height: max(44px, 2.75rem); }
+
+  /* OA-24: the collapsed-rail preference (on by default under 1400px) folds the rail only; the top bar keeps its wordmark. */
+
+  /* The tab bar uses equal-width cells, including when Bonding is unavailable. */
+  .tabbar {
+    display: grid;
+    position: fixed;
+    z-index: 50;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: 0.375rem max(0.75rem, env(safe-area-inset-right, 0px)) max(1.5rem, env(safe-area-inset-bottom, 0px) - 0.625rem) max(0.75rem, env(safe-area-inset-left, 0px));
+    background: var(--glass);
+    -webkit-backdrop-filter: saturate(180%) blur(1.5rem);
+    backdrop-filter: saturate(180%) blur(1.5rem); /* after the prefixed one: Lightning CSS keeps the last of the pair */
+    box-shadow: 0 -1px 0 var(--control-edge);
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    grid-auto-rows: minmax(3.375rem, auto);
+    align-items: stretch;
+    gap: 0.25rem;
+  }
+
+  /* Each cell centres a 22px icon over its 12px label (the 12px text floor), so every label shares one baseline (More's too). */
+  .tabbar .tabSwap,
+  .tabbar a {
+    position: relative;
+    min-width: 0;
+    padding-block: 0.25rem;
+    border-radius: var(--r-sm);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.1875rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1rem;
+    text-align: center;
+    overflow-wrap: anywhere;
+    color: var(--muted);
+    transition: background var(--t2) var(--ease-std), color var(--t2) var(--ease-std);
+  }
+
+  .tabbar .tabSwap svg,
+  .tabbar a svg { width: 1.375rem; height: 1.375rem; transition: transform var(--t1) var(--ease-std); }
+  .tabbar .tabSwap:active svg,
+  .tabbar a:active svg { transform: scale(.94); transition-duration: 0s; }
+  /* Selection is neutral, as in the rail: a tonal fill with the lit edge and ink text; the icon carries the brand. */
+  .tabbar a[aria-current="page"] { background: var(--chip); box-shadow: inset 0 1px 0 var(--card-lit); color: var(--ink); }
+  .tabbar a[aria-current="page"] svg { color: var(--pink); }
+  .tabbar:has([data-pending]) a[aria-current="page"]:not(:has([data-pending])) { background: none; box-shadow: none; color: var(--muted); }
+  .tabbar a:has([data-pending]) { background: var(--chip); color: var(--ink); }
+  .shell:has([data-missing-page]) .tabbar a[aria-current="page"] { background: none; box-shadow: none; color: var(--muted); }
+  .shell:has([data-missing-page]) .tabbar a[aria-current="page"] svg { color: inherit; }
+
+  /* Docked to the bottom edge as an action sheet (`BlastMenu.module.css` places it). */
+  .menu {
+    width: auto;
+    border-radius: var(--r-lg);
+    padding: 0.8125rem;
+  }
+}
+
+/* Reduced motion: a press is `transform: none; opacity: .7` (OA-31), never a scale. */
+@media (prefers-reduced-motion: reduce) {
+  .asideLayer { transition-delay: 0s !important; transform: none !important; }
+  .balancePopup { transition: opacity var(--t1) linear; }
+  .balancePopup[data-starting-style],
+  .balancePopup[data-ending-style] { transform: none; }
+  .navItem:active svg,
+  .tabbar .tabSwap:active svg,
+  .tabbar a:active svg,
+  .topbarAvatar:not([role="status"]):active { transform: none; opacity: .7; }
+}
+
+@media (pointer: coarse) {
+  .topbar .createAction:global(.icon-btn) { width: 44px; height: 44px; }
+  .rail .navItem { min-height: 44px; }
+}
+
+@media (max-width: 360px) {
+  .shell .topbar .brand { gap: 0.375rem; }
+  /* A visitor's row fits one line at 320px: Sign in takes the chip's 12px sides, flush after the bell. */
+  .shell .topbar .topbarSignin:global(.btn) { margin-left: 0; padding-inline: 0.75rem; }
+  /* With the service-status icon showing, the wordmark gives way to the mark alone ("Blast home" stays the link's name). */
+  .shell .topbar:has([aria-label^="Service status"]) .brand b { display: none; }
+}
+
+/* Increase Contrast (OA-31): the menus and the tab bar get a defined edge (their glass is solid, blast-ui.css). */
+@media (prefers-contrast: more) { .balancePopup, .menu, .tabbar { outline: 1px solid var(--hair-2); outline-offset: -1px; } }
+
+/* Native snapshots animate pixels while the new rail layout is computed once. */
+:global(html.blast-shell-changing) :is(.shell, .railTop, .brand, .railToggle, .navItem span, .asideLayer) { transition: none !important; }
+:global(html[data-blast-input="keyboard"]) :is(.railTop, .brand, .railToggle, .railToggle svg, .navItem span, .balancePopup) { transition: none !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  .accountBalance > svg { transition: none; }
+}
+:global(html[data-blast-input="keyboard"]) .accountBalance > svg { transition: none; }

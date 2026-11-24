@@ -1,0 +1,30 @@
+/*
+ * The post's More menu (FEATURE-MAP §3.7): the `#menu` component of §1.4, opened below the dots, right-aligned.
+ * base-ui's positioner places this box (`BlastMenu`); its motion is `menu-motion.ts`.
+ */
+.menu {
+  width: 18.75rem; padding: 0.5rem; border-radius: var(--r-md);
+  background: var(--card); box-shadow: var(--sh-pop); color: var(--ink);
+}
+.item {
+  width: 100%; min-height: max(44px, 2.75rem); display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0.625rem;
+  border-radius: var(--r-sm); text-align: left; font-size: 0.875rem; font-weight: 500; color: inherit;
+  transition: background var(--t1) var(--ease-std);
+}
+.item > svg { flex: none; width: 1.125rem; height: 1.125rem; }
+/* The destructive item ("Report post", "Delete this why"): the design's `.mitem.danger`. */
+.danger { color: var(--down); }
+/* Keyboard focus is the chip background, not the ring (outranks the shell's focus ring). */
+.menu .item:focus-visible { background: var(--chip); box-shadow: none; outline: none; }
+@media (hover: hover) { .item:hover { background: var(--chip); } }
+/* OA-31 press response (the gate's `button.mitem`): a row takes `--hair`, a step deeper when it is already grey (keyboard focus, a mouse's hover). */
+.item:active { background: var(--hair); }
+.menu .item:focus-visible:active { background: var(--hair-2); }
+@media (hover: hover) { .item:active { background: var(--hair-2); } }
+/* Phones: docked to the bottom edge as an action sheet (`BlastMenu.module.css` places it). */
+@media (max-width: 760px) {
+  .menu { width: auto; border-radius: var(--r-lg); padding: 0.8125rem; }
+}
+
+/* Increase Contrast (OA-31): the menu gets a defined edge. */
+@media (prefers-contrast: more) { .menu { outline: 1px solid var(--hair-2); outline-offset: -1px; } }

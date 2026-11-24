@@ -1,0 +1,45 @@
+/*
+ * R3-28: the creator's "Edit details" sheet (FEATURE-MAP-R3 §10), ported from
+ * the gate's `.es-sheet`, `.es-cover`, `.field`, `.input` and `.msg` rules
+ * (design pass 25: a message takes room only when it says something).
+ */
+.sheet { gap: 0.9375rem; }
+
+.cover {
+  position: relative;
+  height: 6rem;
+  border-radius: var(--r-sm);
+  background: var(--raised);
+  box-shadow: inset 0 0 0 1px var(--hair);
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  padding: 0.625rem;
+  overflow: hidden;
+}
+/* The cover is an image, not a background: the site's CSP allows no inline style, and an image keeps its size. */
+.cover img { position: absolute; inset: 0; width: 100%; height: 100%; max-width: 100%; object-fit: cover; }
+.cover button { position: relative; z-index: 1; }
+.cover button svg { width: 1rem; height: 1rem; }
+.file { display: none; }
+
+.field { display: flex; flex-direction: column; gap: 0.375rem; }
+.field label { font-size: 0.8125rem; font-weight: 600; }
+.input { height: 3.4375rem; display: flex; align-items: center; gap: 0.375rem; padding: 0 0.9375rem; border-radius: var(--r-sm); background: var(--field); box-shadow: inset 0 0 0 1px var(--hair-2); transition: box-shadow var(--t2) var(--ease-std); }
+.input:focus-within { box-shadow: var(--field-focus); }
+.input[data-invalid] { box-shadow: inset 0 0 0 1px var(--down); }
+.input[data-invalid]:focus-within { box-shadow: inset 0 0 0 0.125rem var(--down); }
+.pre { color: var(--muted); font-weight: 600; }
+.input input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font-size: 1.0625rem; }
+.input input:focus-visible { box-shadow: none; }
+.count { font-size: 0.75rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.count[data-over] { color: var(--down); }
+.msg { font-size: 0.75rem; min-height: 1.0625rem; color: var(--muted); display: flex; align-items: center; gap: 0.375rem; }
+.msg[data-tone="bad"] { color: var(--down); }
+.msg:empty { display: none; }
+/* OA-44: the gate's `.msg { margin-top: 3px }` on a field's hint (the save error below the fields is not one). */
+.field .msg { margin-top: 0.1875rem; }
+.spin { width: 1.0625rem; height: 1.0625rem; border-radius: 62.4375rem; border: 0.125rem solid currentColor; border-right-color: transparent; opacity: .9; animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin { animation-duration: 1.6s; } }
+.label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

@@ -1,0 +1,856 @@
+/*
+ * Workspace materials: the app's tokens (blast-ui.css) inherited as they are, except two text tones
+ * darkened so muted and faint text keep 4.5:1 on Blast mode's cards. Blast pink
+ * identifies actions; neutral rings identify keyboard focus, and financial gains and losses keep their semantic colors.
+ */
+.frame { composes:theme from "./WorkspaceTheme.module.css"; }
+.tradeSheet { composes:theme from "./WorkspaceTheme.module.css"; }
+.marketPicker { composes:theme from "./WorkspaceTheme.module.css"; }
+
+.frame { position:fixed; inset:0; z-index:60; display:flex; flex-direction:column; overflow:hidden; background:radial-gradient(ellipse 70% 11.25rem at 40% -6.25rem,var(--workspace-accent-soft),transparent),var(--bg); color:var(--ink); font:0.9375rem/1.5 var(--font); }
+.frame [data-pending-edge][hidden],.frame [data-pending-discover][hidden] { display:none; }
+/* The frame covers the page: the page under it does not scroll, and its scrollbar does not narrow the board. */
+:global(html):has(.frame:is([data-workspace-host],[data-workspace-boot])) { overflow:hidden; scrollbar-gutter:auto; }
+.header { display:flex; align-items:center; justify-content:space-between; gap:1.3125rem; min-height:3.5rem; padding:0.5rem 1.75rem; background:transparent; }
+.brand { display:flex; align-items:center; gap:0.8125rem; min-width:0; }
+.brand strong { font:700 1.125rem/1 var(--display); letter-spacing:-.04em; }
+.mode { color:var(--muted); font-size:0.8125rem; font-weight:500; white-space:nowrap; }
+.header kbd { font:inherit; font-size:0.6875rem; opacity:.55; padding-left:0.375rem; }
+.durability { margin:0; padding:0.5rem 1.75rem 0; color:var(--muted); font-size:0.8125rem; }
+.content { display:flex; flex:1; flex-direction:column; gap:0.5rem; min-height:0; min-width:0; padding:0 1.75rem 0.5rem; overflow-y:auto; overflow-x:hidden; scrollbar-width:thin; }
+.headerToolbar { flex:1; min-width:0; padding-left:1.5rem; }
+.toolbar { position:relative; display:flex; justify-content:space-between; align-items:center; flex:0 0 auto; flex-wrap:wrap; gap:0.5rem; }
+.panelTools,.dataTools { display:flex; align-items:center; flex-wrap:wrap; gap:0.5rem; }
+.dataTools { margin-left:auto; }
+.panelPicker { display:flex; align-items:center; gap:0.5rem; min-width:0; font-size:0.75rem; font-weight:550; }
+.panelPicker select { width:auto; min-width:4rem; max-width:100%; min-height:2rem; border:1px solid transparent; border-radius:var(--r-button); background:var(--workspace-inset); color:var(--ink); padding:0.25rem 0.5rem; font:inherit; }
+.layout { display:grid; grid-template-columns:minmax(0,1fr) 2.75rem; flex:1; align-items:stretch; gap:1rem; min-height:0; min-width:0; }
+.layout[data-data-open="true"] { grid-template-columns:minmax(0,1fr) 18.3125rem; }
+.panels { display:grid; order:1; grid-template-columns:repeat(2,minmax(0,1fr)); grid-template-rows:repeat(2,minmax(0,1fr)); flex:1; min-height:0; min-width:0; gap:1rem; overflow:visible; }
+.panels[data-count="1"] { grid-template-columns:minmax(0,1fr); }
+.panels:is([data-count="1"],[data-count="2"]) { grid-template-rows:minmax(0,1fr); }
+.panels[data-count="3"] > .panel:first-child { grid-row:auto; }
+.panels[data-count="0"] { display:none; }
+.panel { position:relative; container:workspace-panel / inline-size; display:flex; flex-direction:column; min-height:0; min-width:0; overflow:visible; padding:0.75rem 1rem 1rem; background:var(--card); border-radius:var(--r-md); box-shadow:var(--workspace-surface-edge); }
+.panelContent { flex:1; min-height:0; min-width:0; }
+.panelControls { position:relative; align-self:stretch; justify-content:space-between; flex:0 0 auto; z-index:2; margin-bottom:0.25rem; display:flex; align-items:center; gap:0.25rem; color:var(--muted); font-size:0.75rem; }
+.frame .panelControls :global(button.btn.btn-sm) { width:1.75rem; min-width:1.75rem; min-height:1.75rem; padding:0.125rem; background:transparent; box-shadow:none; font-size:0.9375rem; }
+.panelControls select { max-width:100%; min-height:2rem; border:0; background:var(--raised); border-radius:var(--r-button); padding:0.3125rem; font:inherit; color:var(--ink); }
+.empty { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; gap:0.75rem; padding:2rem; background:var(--card); border-radius:var(--r-md); }
+.empty p { max-width:20rem; }
+.empty svg { width:1.125rem; height:1.125rem; }
+.emptyMark { display:none; }
+.empty h1 { margin:0; font-size:1.0625rem; line-height:1.3; letter-spacing:-.02em; }
+.empty p { margin:0; color:var(--muted); font-size:0.875rem; }
+.vacancy { display:grid; place-items:center; min-height:7.5rem; border-radius:var(--r-md); background:color-mix(in srgb,var(--card) 45%,transparent); }
+.vacancy button { color:var(--muted); }
+.data { order:2; position:relative; top:0; display:flex; flex-direction:column; min-width:0; min-height:0; height:100%; max-height:100%; overflow:hidden; }
+.data[hidden] { display:none; }
+.dataHeader { display:flex; align-items:center; justify-content:space-between; gap:0.25rem; min-height:2.25rem; padding:0 0 0.5rem; }
+.dataHeading { display:flex; align-items:center; flex:1; gap:0.5rem; min-width:0; }
+.dataHeader h2,.dataViewPicker > span,.coverage { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+.dataViewPicker { display:flex; align-items:center; flex:1; min-width:0; color:var(--muted); font-size:0.8125rem; }
+.dataViewPicker select { width:auto; max-width:100%; min-width:0; height:2rem; padding:0.125rem 0.25rem; border:0; border-radius:var(--r-button); background:transparent; color:var(--ink); font:550 1rem var(--display); }
+.frame .dataHeading > :global(button.btn) { min-height:1.75rem; padding:0.25rem; font-size:0.6875rem; }
+.dataHeader > :global(.icon-btn) { width:max(44px, 2.75rem); height:max(44px, 2.75rem); flex-shrink:0; }
+/* The insets are variables so Discover's sticky controls can cover them edge to edge (audit BM-01). */
+.dataBody { --data-body-top:0.25rem; --data-body-inline:0rem; --data-body-bottom:0rem; flex:1; min-height:0; overflow-y:auto; padding:var(--data-body-top) var(--data-body-inline) var(--data-body-bottom); color:var(--muted); font-size:0.875rem; scrollbar-width:thin; scrollbar-color:transparent transparent; }
+.dataBody:focus-within { scrollbar-color:var(--hair-2) transparent; }
+@media (hover:hover) and (pointer:fine) { .dataBody:hover { scrollbar-color:var(--hair-2) transparent; } }
+.dataBody p { margin:0; }
+.dataBody :is(strong,dd) { color:var(--ink); }
+.dataEdge { order:2; display:flex; justify-content:center; align-items:flex-start; }
+.dataEdge :global(.icon-btn) { width:max(44px, 2.75rem); height:max(44px, 2.75rem); flex-shrink:0; }
+.addingNotice { display:flex; align-items:center; justify-content:space-between; gap:0.5rem; font-size:0.8125rem; color:var(--muted); }
+.replacementChoices { display:grid; gap:0.5rem; }
+.problem,.pending { margin:1.5rem; padding:1.5rem; background:var(--card); box-shadow:var(--sh-1); border-radius:var(--r-md); font-size:0.875rem; line-height:1.5; }
+.pending { display:flex; align-items:center; gap:1.3125rem; }
+:is(.frame,.tradeSheet,.marketPicker) :global(.btn-sm) { min-height:2rem; font-size:0.75rem; }
+/* One attached ring replaces the shell shadow; composite fields keep their own inset ring. */
+:global([data-blast-ui]) :is(.frame,.tradeSheet,.marketPicker) :is(button,select,textarea,[tabindex],a):focus-visible,
+:global([data-blast-ui]) :is(.frame,.tradeSheet,.marketPicker) input:is([type="checkbox"],[type="radio"]):focus-visible,
+:global([data-blast-ui]) :is(.frame,.tradeSheet,.marketPicker) :where(input):focus-visible { outline:0.125rem solid var(--workspace-focus); outline-offset:0; box-shadow:none; }
+@media (min-width:1100px) {
+ .layout { min-height:0; }
+ .workspaceMain { height:100%; min-height:0; }
+ .panelContent { overflow:hidden; }
+}
+@media (max-width:1099px) {
+ .header { padding:0.5rem 1rem; flex-wrap:wrap; }
+ .headerToolbar { order:3; flex:1 1 100%; padding-left:0; }
+ .header > button { margin-left:auto; }
+ .durability { padding:0.5rem 1rem 0; }
+ .content { padding:0 1rem 1rem; }
+ .layout[data-data-open] { position:relative; grid-template-columns:minmax(0,1fr); gap:0.8125rem; flex:1 0 auto; }
+ .layout[data-data-open="true"] .workspaceMain { display:none; }
+ .data { height:auto; max-height:none; }
+ .dataHeader > :global(.icon-btn) { width:auto; gap:0.375rem; padding-inline:0.5rem; font-size:0.75rem; }
+ .dataHeader > :global(.icon-btn) svg { width:1.125rem; flex:none; }
+ .dataBody { overflow:visible; }
+ .panels { grid-template-columns:minmax(0,1fr); grid-template-rows:auto; }
+ .panels[data-covered="true"],.layout[data-data-open="true"] .panels[data-count="0"] { display:none; }
+ .layout[data-data-open="false"] .panels { padding-top:2.75rem; }
+ .dataEdge { position:absolute; right:0; top:0; }
+ .dataBody { --data-body-inline:0rem; }
+ .panelTools { flex:1 1 100%; }
+ .panelPicker { flex:1 1 100%; }
+ .panelPicker select { width:100%; font-size:1rem; }
+ .dataTools { flex:0 0 auto; }
+ .vacancy { min-height:11.25rem; }
+ .empty h1 { font-size:1.25rem; }
+}
+@media (max-width:360px) { .brand { gap:0.5rem; } .mode { font-size:0.75rem; } .header { gap:0.5rem; } }
+/* Touch: inline inspect values (prices, changes, amounts, addresses) stay at text height so rows and figures keep their drawn size; ::after keeps a larger tap area. */
+@media (pointer:coarse) {
+ :is(.frame,.tradeSheet,.marketPicker) [data-inspect-value] { position:relative; min-height:0; }
+ :is(.frame,.tradeSheet,.marketPicker) [data-inspect-value]::after { content:""; position:absolute; inset:-8px -2px; }
+ .frame .dataHeading > :global(button.btn),:is(.frame,.tradeSheet,.marketPicker) :global(.btn-sm),.dataViewPicker select,.dataHeader > :global(.icon-btn),.panelControls summary,.frame .panelControls :global(button.btn.btn-sm) { min-height:44px; }
+ .frame .panelControls :global(button.btn.btn-sm) { width:44px; min-width:44px; }
+}
+/* Reduced motion: the global rule drops movement and keeps fades. */
+@media (prefers-reduced-motion:reduce) { .frame *,.frame *::before,.frame *::after { scroll-behavior:auto; } }
+
+.workspaceMain { container-type:inline-size; display:flex; flex-direction:column; order:1; gap:0.875rem; min-width:0; }
+.tradeSheet { color:var(--ink); background:var(--card); font:0.875rem/1.5 var(--font); }
+
+.panel:focus-visible { outline:0.125rem solid var(--workspace-focus); outline-offset:0.1875rem; }
+/* Presale selection stays quiet; keyboard focus on the panel uses a neutral ring. */
+.frame .panel[data-namespace="presale"]:focus-visible { outline-color:var(--muted); }
+@media (max-width:1099px) { .workspaceMain { order:1; } }
+
+
+
+@media (max-width:1099px) {
+ .header { row-gap:0.5rem; }
+ .toolbar { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)) 2.75rem; gap:0.25rem; }
+ .panelTools,.dataTools { display:contents; }
+ .panelPicker { grid-column:1 / -1; }
+ .panelTools > :global(button),.dataTools > :global(button) { padding-inline:0.25rem; white-space:nowrap; }
+ .dataTools > :global(button) { grid-column:3; }
+ .layout[data-data-open="false"] .panels { padding-top:0; }
+ .dataTools > .mobileDataToggle { grid-column:4; width:max(44px, 2.75rem); height:max(44px, 2.75rem); }
+}
+@media (max-width:1099px) and (pointer:coarse) { .panelPicker select { min-height:44px; } }
+
+
+
+@media (max-width:1099px) {
+ .panel,.panel[data-namespace="presale"] { padding:0.75rem 1rem 1rem; }
+ .panelControls { top:auto; bottom:auto; }
+}
+@media (pointer:coarse) { .frame .panelControls summary { min-width:44px; min-height:44px; } }
+
+@media (max-width:360px) {
+ .toolbar { grid-template-columns:repeat(2,minmax(0,1fr)) 2.75rem; }
+ .dataTools > :global(button) { grid-column:1 / 3; grid-row:3; justify-self:start; }
+ .dataTools > .mobileDataToggle { grid-column:3; grid-row:3; justify-self:end; }
+}
+
+@media (prefers-color-scheme:dark) {
+ :global([data-blast-ui]:not([data-theme="light"])) :is(.frame,.tradeSheet,.marketPicker) {
+ --muted:#9a99a6; --faint:#85848f;
+ --workspace-inset:var(--raised); --workspace-selected:#26252d;
+ --workspace-focus:var(--ink);
+ }
+}
+:global([data-blast-ui][data-theme="dark"]) :is(.frame,.tradeSheet,.marketPicker) {
+ --muted:#9a99a6; --faint:#85848f;
+ --workspace-inset:var(--raised); --workspace-selected:#26252d;
+ --workspace-focus:var(--ink);
+}
+
+/* Controls share tonal states without changing their existing hit regions. */
+:is(.frame,.tradeSheet,.marketPicker) :global(.btn),:is(.frame,.tradeSheet,.marketPicker) :global(.icon-btn),.frame select { transition:background var(--t1) ease-out,color var(--t1) ease-out,box-shadow var(--t1) ease-out; }
+:is(.frame,.tradeSheet,.marketPicker) :global(.btn-quiet),:is(.frame,.tradeSheet,.marketPicker) :global(.btn-soft),:is(.frame,.tradeSheet,.marketPicker) :global(.btn-line),:is(.frame,.tradeSheet,.marketPicker) :global(.icon-btn) { background:var(--workspace-inset); color:var(--ink); box-shadow:none; }
+:is(.frame,.tradeSheet,.marketPicker) :global(.btn-primary):not(:disabled) { background:var(--workspace-accent); color:var(--workspace-on-accent); box-shadow:none; }
+:is(.frame,.tradeSheet,.marketPicker) :is(button,summary,select,input) { accent-color:var(--ink); }
+:is(.frame,.tradeSheet,.marketPicker) :global(.btn):disabled { color:var(--faint); background:var(--track); box-shadow:none; }
+.frame .panelControls :global(button.btn.btn-sm) { border-radius:var(--r-button); }
+@media (hover:hover) and (pointer:fine) {
+ :is(.frame,.tradeSheet,.marketPicker) :is(:global(.btn-quiet),:global(.btn-soft),:global(.btn-line),:global(.icon-btn)):not(:disabled,[aria-disabled="true"],[aria-busy="true"]):hover { background:var(--workspace-press); box-shadow:none; }
+ :is(.frame,.tradeSheet,.marketPicker) :global(.btn-primary):not(:disabled,[aria-disabled="true"],[aria-busy="true"]):hover { background:var(--workspace-accent-press); box-shadow:none; }
+ .frame .panelControls :global(button.btn.btn-sm):not(:disabled,[aria-disabled="true"],[aria-busy="true"]):hover { background:var(--workspace-press); }
+}
+:is(.frame,.tradeSheet,.marketPicker) :is(button,summary):not(:disabled,[aria-disabled="true"],[aria-busy="true"]):active { transition-duration:0s; }
+:is(.frame,.tradeSheet,.marketPicker) :global(.btn-primary):not(:disabled,[aria-disabled="true"],[aria-busy="true"]):active { background:var(--workspace-accent-press); }
+@media (prefers-reduced-motion:reduce) { :is(.frame,.tradeSheet,.marketPicker) :is(button,summary,select,input) { transition:none; } }
+
+/* A busy/unavailable action keeps its resting presentation, including shared primitives. */
+:is(.frame,.tradeSheet,.marketPicker) :global(button.btn):is([aria-disabled="true"],[aria-busy="true"]):is(:hover,:active) { transform:none; opacity:1; transition:none; box-shadow:none; }
+:is(.frame,.tradeSheet,.marketPicker) :is(:global(button.btn-quiet),:global(button.btn-soft),:global(button.btn-line),:global(button.icon-btn)):is([aria-disabled="true"],[aria-busy="true"]):not(:disabled):is(:hover,:active) { background:var(--workspace-inset); color:var(--ink); }
+:is(.frame,.tradeSheet,.marketPicker) :global(button.btn.btn-primary):is([aria-disabled="true"],[aria-busy="true"]):not(:disabled):is(:hover,:active) { background:var(--workspace-accent); color:var(--workspace-on-accent); }
+
+/* Local materials must also honor increased contrast instead of masking root tokens. */
+@media (prefers-contrast:more) {
+ :is(.frame,.tradeSheet,.marketPicker) { --muted:#3a3942; --faint:#4b4a55; --hair:#6c6b76; --hair-2:#4b4a55; --workspace-focus:var(--ink); --workspace-surface-edge:inset 0 0 0 1px var(--hair); }
+}
+@media (prefers-contrast:more) and (prefers-color-scheme:dark) {
+ :global([data-blast-ui]:not([data-theme="light"])) :is(.frame,.tradeSheet,.marketPicker) { --muted:#d2d7e0; --faint:#b8c0cd; --hair:#8b95a5; --hair-2:#b8c0cd; --workspace-focus:var(--ink); --workspace-surface-edge:inset 0 0 0 1px var(--hair); }
+}
+@media (prefers-contrast:more) {
+ :global([data-blast-ui][data-theme="dark"]) :is(.frame,.tradeSheet,.marketPicker) { --muted:#d2d7e0; --faint:#b8c0cd; --hair:#8b95a5; --hair-2:#b8c0cd; --workspace-focus:var(--ink); --workspace-surface-edge:inset 0 0 0 1px var(--hair); }
+}
+
+/* Blast mode never freezes into a page snapshot (route and theme transitions), and a transition overlay never takes a click. */
+:global(html):has(.frame:is([data-workspace-host],[data-workspace-boot])) { view-transition-name:none; }
+:global(html):has(.frame:is([data-workspace-host],[data-workspace-boot]))::view-transition { pointer-events:none; }
+
+/*
+ * Discover opens and collapses on its own column, with no snapshot: the grid gives or takes the column in one frame
+ * (the panels and their live charts resize once), and the column slides 0.75rem from its edge and fades. A transition,
+ * so a second toggle reverses from where the column is. Leaving, it floats at its open width over the board and lets
+ * clicks through until it is gone. Keyboard toggles are instant; reduced motion keeps the fade alone.
+ */
+@media (min-width:1100px) {
+ .layout { position:relative; }
+ .layout > .data { --discover-from:0.75rem; transition:opacity var(--t2) var(--ease-std),transform var(--t2) var(--ease-std),display var(--t2) allow-discrete; }
+ .layout[data-presentation="focus"] > .data { --discover-from:-0.75rem; }
+ .layout[data-presentation] > .data[hidden] { position:absolute; inset-block:0; inset-inline:auto 0; z-index:1; width:var(--discover-width,auto); opacity:0; transform:translateX(var(--discover-from)); pointer-events:none; }
+ .layout[data-presentation="focus"] > .data[hidden] { inset-inline:0 auto; }
+ @starting-style { .layout > .data:not([hidden]) { opacity:0; transform:translateX(var(--discover-from)); } }
+}
+@media (min-width:1100px) and (prefers-reduced-motion:reduce) {
+ .layout > .data { --discover-from:0rem; transition:opacity var(--t1) var(--ease-std),display var(--t1) allow-discrete; }
+ .layout[data-presentation="focus"] > .data { --discover-from:0rem; }
+}
+:global(html[data-blast-input="keyboard"]) .layout > .data { transition:none; }
+.dataHeader > button svg { transition:transform 160ms var(--ease); }
+.dataHeader > button[aria-expanded="true"] svg { transform:scaleX(-1); }
+@media (hover:hover) and (pointer:fine) { .vacancy button:hover { color:var(--ink); background:var(--workspace-inset); } }
+
+
+/* One bounded content region per card and one scroll owner in the contextual rail. */
+.dataContents { display:flex; flex-direction:column; flex:1; min-height:0; }
+.dataContents[hidden],.presaleTarget[hidden] { display:none; }
+.presaleTarget { flex:1; min-height:0; overflow:auto; padding:0.75rem 0.125rem 1.25rem; scrollbar-width:thin; }
+.dataHeader h3 { margin:0; font-size:1rem; }
+.panelPicker > button { max-width:100%; justify-content:space-between; }
+.panelPicker > button svg,.empty button svg,.toolbar button svg { flex-shrink:0; width:1rem; height:1rem; }
+.dataViewPicker button { max-width:100%; }
+@media (min-width:1100px) {
+ .content { padding-top:0.25rem; }
+ .panelContent { display:flex; flex-direction:column; }
+ .panelContent > * { flex:1; min-height:0; }
+ .layout[data-presale-context="true"] { grid-template-columns:minmax(0,1fr) 20rem; }
+}
+@media (max-width:1099px) {
+ .panels[data-count] { grid-template-columns:minmax(0,1fr); grid-template-rows:minmax(0,1fr); }
+ .panels[data-count="3"] > .panel:first-child { grid-row:auto; }
+ .layout[data-data-open] { min-height:0; flex:1; }
+ .workspaceMain { height:100%; }
+ .panelContent { min-height:0; overflow:hidden; }
+ .data { height:100%; }
+ .dataBody { overflow:auto; }
+ .panelPicker > button { width:100%; font-size:0.875rem; }
+ .empty { padding:1.5rem 1rem; }
+}
+
+/* Four persistent, equal cards on the grey canvas. Views scroll independently above their action trays. */
+.content { overflow:hidden; }
+.panel { padding:0.75rem 1rem 0.875rem; border:0; border-radius:var(--r-md); background:var(--card); box-shadow:var(--workspace-surface-edge); }
+.panelControls { position:relative; display:flex; align-items:center; gap:0.25rem; min-height:max(44px, 2.75rem); margin:0 0 0.625rem; color:var(--muted); font-size:0.75rem; }
+.panelIdentity { flex:1; min-width:0; }
+.panel[data-expanded="true"] { position:fixed; inset:var(--expanded-top,4.5rem) 1.5rem 1.25rem; z-index:30; box-shadow:var(--sh-pop); }
+.panels:has(.panel[data-expanded="true"]) > .panel:not([data-expanded="true"]) { visibility:hidden; }
+@media (min-width:1100px) { .panels { gap:0.8125rem; } .layout { gap:0.8125rem; } }
+@media (max-width:1099px) { .panel[data-expanded="true"] { position:relative; inset:auto; } .panel { padding:0.75rem 0.875rem 0.875rem; } }
+/*
+ * The focus board (owner, 2026-10-27, as Hyperliquid): expanding shows the chart card alone over
+ * the whole page, above the header and the activity strip. The panel keeps its place, so nothing
+ * under the card reflows; only the chart's section leaves the board, fixed to the viewport.
+ */
+@media (min-width:1100px) {
+ .panel[data-expanded="true"][data-expand="chart"] { position:relative; inset:auto; z-index:60; box-shadow:var(--workspace-surface-edge); }
+ .panel[data-expanded="true"][data-expand="chart"] [data-workspace-section="chart"] { position:fixed; inset:0; z-index:10; isolation:isolate; padding:0.75rem; background:var(--bg); }
+}
+@media (min-width:1100px) and (max-height:720px) {
+ .panel { padding:0.5rem 0.75rem 0.625rem; }
+ .panelControls { min-height:2.5rem; margin-bottom:0.375rem; }
+}
+
+/* Header: brand, the workspace bar, the signed-in person, Exit. */
+.header { gap:1rem; min-height:4rem; padding:0.5rem 1.3125rem; }
+.brand { gap:0.5rem; }
+.mode { display:inline-flex; align-items:center; height:1.5rem; padding:0 0.5625rem; border-radius:62.4375rem; background:var(--workspace-accent-soft); color:var(--workspace-accent-text); font-size:0.75rem; font-weight:600; }
+.headerToolbar { padding-left:0.5rem; }
+.viewer { text-decoration:none; display:inline-flex; align-items:center; gap:0.5rem; height:2.5rem; padding:0 0.8125rem 0 0.3125rem; border-radius:var(--r-button); background:var(--card); box-shadow:var(--workspace-surface-edge); color:var(--ink); font-size:0.8125rem; font-weight:600; white-space:nowrap; }
+.viewer > span:last-child { max-width:7.5rem; overflow:hidden; text-overflow:ellipsis; }
+/* Exit and the viewer wear the shared secondary outline, as Portfolio and Layout do (live audit F2). */
+.exit { gap:0.5rem; flex:none; height:2.5rem; padding:0 0.625rem 0 0.875rem; font-size:0.8125rem; }
+.exit kbd { padding:0.125rem 0.375rem; border-radius:var(--r-inner); background:var(--card); box-shadow:inset 0 0 0 1px var(--hair-2); color:var(--ink-2); font:600 0.75rem/1.2 var(--mono); opacity:1; }
+.viewer { transition:background var(--t2) var(--ease-std), transform var(--t1) var(--ease-std); }
+.viewer:active { transform:scale(0.97); }
+.viewer:focus-visible { outline:0.125rem solid var(--workspace-focus); outline-offset:0.125rem; }
+@media (hover:hover) and (pointer:fine) { .viewer:hover { background:var(--workspace-press); } }
+@media (prefers-reduced-motion:reduce) { .viewer { transition:none; } .viewer:active { transform:none; opacity:.75; } }
+.content { padding:0 1.3125rem 1.3125rem; }
+.toolbar { flex-wrap:nowrap; gap:0.75rem; }
+.panelTools { flex-wrap:nowrap; min-width:0; }
+@media (max-width:1099px) {
+ .header { padding:0.5rem 1rem; gap:0.5rem; }
+ .content { padding:0 1rem 0; }
+ .viewer > span:last-child { display:none; }
+ .viewer { padding:0 0.3125rem; }
+ .exit kbd { display:none; }
+}
+
+/* Data rail: a card with its views as icon tabs. */
+.data { padding:0.5rem 0.5rem 0; border-radius:var(--r-md); background:var(--card); box-shadow:var(--workspace-surface-edge); }
+@media (min-width:1100px) { .layout[data-data-open="true"] { grid-template-columns:minmax(0,1fr) 22.5rem; } }
+@media (min-width:1100px) { .layout[data-presale-context="true"] { grid-template-columns:minmax(0,1fr) 22.5rem; } }
+@media (min-width:1100px) and (max-width:1279px) { .layout[data-data-open="true"],.layout[data-presale-context="true"] { grid-template-columns:minmax(0,1fr) 19.5rem; } }
+.dataHeader { align-items:flex-start; gap:0.25rem; min-height:0; padding:0 0 0.375rem; }
+.dataHeading { flex-direction:column; align-items:stretch; gap:0.375rem; }
+.dataActions { display:flex; flex-direction:column; gap:0.125rem; flex:none; }
+.dataActions > button { display:inline-flex; align-items:center; justify-content:center; gap:0.375rem; width:1.75rem; height:1.5625rem; padding:0; border:0; border-radius:var(--r-button); background:transparent; color:var(--muted); font:inherit; font-size:0.75rem; font-weight:600; cursor:pointer; }
+.dataActions > button svg { width:1.0625rem; height:1.0625rem; flex:none; }
+@media (hover:hover) and (pointer:fine) { .dataActions > button:hover { background:var(--workspace-inset); color:var(--ink); } }
+.dataBody { --data-body-top:0.125rem; --data-body-inline:0.25rem; --data-body-bottom:0.5rem; }
+.dataEdge :global(.icon-btn) { border-radius:var(--r-button); background:var(--card); box-shadow:var(--workspace-surface-edge); }
+@media (max-width:1099px) {
+ .data { padding:0.5rem 0.5rem 0; }
+ .dataActions { flex-direction:row; }
+ .dataActions > button { width:auto; min-width:max(44px, 2.75rem); height:max(44px, 2.75rem); padding:0 0.625rem; }
+}
+@media (pointer:coarse) { .dataActions > button { min-width:44px; min-height:44px; } }
+
+/* Phone: one card at a time, chosen from the coin chips; Data views from the bottom bar. */
+.phoneNav { display:none; }
+@media (max-width:1099px) {
+ .toolbar { display:flex; flex-wrap:nowrap; }
+ .panelTools { flex:1; min-width:0; }
+ .phoneNav { position:relative; z-index:2; display:grid; grid-template-columns:repeat(var(--nav-count,5),minmax(0,1fr)); gap:0.125rem; flex:none; margin:0 -1rem; padding:0.375rem 0.625rem calc(0.5rem + env(safe-area-inset-bottom)); border-top:1px solid var(--hair); background:var(--card); }
+ .phoneNav button { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:0.25rem; min-width:0; height:3.25rem; border:0; border-radius:var(--r-sm); background:transparent; color:var(--muted); font:inherit; font-size:0.6875rem; font-weight:600; cursor:pointer; }
+ .phoneNav button svg { width:1.25rem; height:1.25rem; flex:none; }
+ .phoneNav button span { max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+ .phoneNav button[aria-current="page"] { background:var(--chip); color:var(--ink); }
+ .layout[data-data-open] { margin-bottom:0.5rem; }
+}
+.viewerAvatar { display:block; flex:none; width:1.875rem; height:1.875rem; overflow:hidden; border-radius:50%; }
+.viewerAvatar > * { display:block; width:100%; height:100%; }
+.toolbarIcon { display:inline-flex; align-items:center; justify-content:center; width:2.5rem; height:2.5rem; padding:0; border:0; border-radius:var(--r-button); background:var(--chip); color:var(--ink-2); cursor:pointer; }
+.toolbarIcon svg { width:1.125rem; height:1.125rem; }
+@media (hover:hover) and (pointer:fine) { .toolbarIcon:hover { background:var(--workspace-press); color:var(--ink); } }
+.dataTools { flex-wrap:nowrap; }
+@media (max-width:1099px) {
+ .panelTools { display:flex; }
+ .headerToolbar { order:3; flex:1 1 100%; padding-left:0; }
+}
+
+.exit,.toolbarIcon,.dataActions > button,.phoneNav button { transition:transform 140ms var(--ease-std),background var(--t1) ease-out,color var(--t1) ease-out; }
+.exit:active,.toolbarIcon:active,.dataActions > button:active,.phoneNav button:active { transform:scale(.97); }
+@media (prefers-reduced-motion:reduce) { .exit,.toolbarIcon,.dataActions > button,.phoneNav button { transition:none; } .exit:active,.toolbarIcon:active,.dataActions > button:active,.phoneNav button:active { transform:none; opacity:.75; } }
+
+/* The app-wide 2.8rem button minimum is for touch; fine pointers keep these compact controls at their drawn size. */
+@media (pointer:fine), (pointer:none) {
+ .dataActions > button,.toolbarIcon,.exit,.phoneNav button { min-width:0; min-height:0; }
+}
+.dataActions { justify-content:center; height:3.25rem; }
+.dataActions > button { height:1.5rem; }
+
+/* Scale and rhythm pass (4/8/12/16/24): smaller chrome, more space between cards and sections. */
+.header { min-height:3.5rem; gap:1.25rem; padding:0.625rem 1.5rem; }
+.mode { height:1.375rem; padding:0 0.5rem; font-size:0.6875rem; }
+.viewer { height:2rem; gap:0.4375rem; padding:0 0.6875rem 0 0.1875rem; font-size:0.7813rem; }
+.viewerAvatar { width:1.625rem; height:1.625rem; }
+.exit { height:2rem; gap:0.4375rem; padding:0 0.4375rem 0 0.75rem; border-radius:var(--r-button); font-size:0.7813rem; }
+.exit kbd { padding:1px 0.3125rem; font-size:0.75rem; }
+.toolbarIcon { width:2rem; height:2rem; border-radius:var(--r-button); }
+.toolbarIcon svg { width:1rem; height:1rem; }
+.toolbar { gap:1rem; }
+.content { padding:0.25rem 1.5rem 1.5rem; }
+@media (min-width:1100px) { .panels { gap:1.25rem; } .layout { gap:1.25rem; } }
+.panel { padding:1.25rem; border-radius:var(--r-md); }
+.panelControls { min-height:2.25rem; margin:0 0 1rem; }
+@media (min-width:1100px) and (max-height:720px) { .panel { padding:0.875rem 1rem; } .panelControls { margin-bottom:0.625rem; } }
+.data { padding:0.75rem 0.75rem 0; border-radius:var(--r-md); }
+.dataActions { height:max(44px, 2.75rem); }
+.dataActions > button { width:1.625rem; height:1.25rem; border-radius:var(--r-inner); }
+.dataActions > button svg { width:0.9375rem; height:0.9375rem; }
+.dataHeader { padding-bottom:0.75rem; }
+@media (max-width:1099px) {
+ .header { padding:0.5rem 1rem; }
+ .content { padding:0.25rem 1rem 0; }
+ .panel { padding:1rem; }
+ .phoneNav button { height:2.875rem; font-size:0.6563rem; }
+ .phoneNav button svg { width:1.1875rem; height:1.1875rem; }
+ .dataActions > button { min-width:max(44px, 2.75rem); height:max(44px, 2.75rem); }
+}
+@media (pointer:coarse) { .exit,.toolbarIcon { min-height:44px; } }
+
+/* Phone: a vertical swipe feed of full-height cards. */
+@media (max-width:1099px) {
+ .panels[data-phone-feed] { display:flex; flex-direction:column; gap:1rem; overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; scroll-snap-type:y mandatory; scrollbar-width:none; }
+ .panels[data-phone-feed]::-webkit-scrollbar { display:none; }
+ .panels[data-phone-feed] > .panel { flex:0 0 100%; height:100%; min-height:0; scroll-snap-align:start; scroll-snap-stop:always; }
+ .panels[data-phone-feed][data-covered="true"] { display:none; }
+}
+@media (max-width:1099px) and (prefers-reduced-motion:reduce) { .panels[data-phone-feed] { scroll-behavior:auto; } }
+
+/* Phone feed: every level down to the feed has a definite height, so each card is exactly one screen. */
+@media (max-width:1099px) {
+ .content { display:flex; flex-direction:column; min-height:0; }
+ .layout[data-data-open] { flex:1 1 0; min-height:0; grid-template-rows:minmax(0,1fr); }
+ .workspaceMain { min-height:0; height:100%; }
+ .panels[data-phone-feed] { flex:1 1 0; min-height:0; height:100%; }
+}
+
+/* The app-wide 2.8rem button minimum is a touch-target rule: inside Blast mode, fine pointers use each control's drawn size (inspect values, chips, icon buttons); coarse pointers keep it. */
+@media (pointer:fine), (pointer:none) {
+ :is(.frame,.tradeSheet,.marketPicker) button { min-width:0; min-height:0; }
+}
+
+/* Review fixes: a wider rail on large screens; the compact rail keeps its actions level. */
+@media (min-width:1280px) { .layout[data-data-open="true"],.layout[data-presale-context="true"] { grid-template-columns:minmax(0,1fr) 23rem; } }
+@media (min-width:1100px) and (max-width:1279px) {
+ .dataActions { height:2.5rem; }
+}
+
+/* Minimal pass: more air at every level; fewer surfaces. */
+@media (min-width:1100px) {
+ .content { padding:0.5rem 1.75rem 1.75rem; }
+ .panels,.layout { gap:1.5rem; }
+ .panel { padding:1.5rem; border-radius:var(--r-md); }
+ .panelControls { margin-bottom:1.25rem; }
+ .data { padding:1rem 1rem 0; border-radius:var(--r-md); }
+ .header { padding:0.75rem 1.75rem; }
+}
+@media (min-width:1100px) and (max-height:840px) {
+ .content { padding:0.25rem 1.5rem 1.5rem; }
+ .panels,.layout { gap:1.25rem; }
+ .panel { padding:1.125rem 1.25rem; }
+ .panelControls { margin-bottom:0.75rem; }
+}
+
+/* Rail header, minimal: the view tabs, an "Edit" text control and one collapse icon. */
+.dataHeader { align-items:center; gap:0.5rem; padding-bottom:1rem; }
+.dataHeading { flex-direction:row; align-items:center; min-width:0; }
+.dataActions { flex-direction:row; align-items:center; height:auto; gap:0.125rem; }
+.dataActions > button { width:auto; min-width:1.75rem; height:1.75rem; padding:0 0.375rem; border-radius:var(--r-button); }
+@media (pointer:coarse) { .dataActions > button { min-height:44px; } }
+
+/* Element audit: the frame already says where you are; "Blast mode" stays for assistive technology only. */
+.mode { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; padding:0; }
+
+/* No clipping: names show in full rather than fading out. */
+.dataHeader { align-items:flex-start; }
+.viewer > span:last-child { max-width:none; overflow:visible; text-overflow:clip; }
+.phoneNav button span { max-width:none; overflow:visible; text-overflow:clip; white-space:nowrap; }
+
+/* Scroll edges: a scrolling list fades its last 24px while more rows wait below, so a row at the edge reads as "more", not as cut; at the end the fade is gone. Browsers without scroll-driven animations keep the plain edge. */
+@property --workspace-fade-end { syntax:"<length>"; inherits:false; initial-value:0px; }
+@keyframes scroll-fade { from, 96% { --workspace-fade-end:1.5rem; } to { --workspace-fade-end:0px; } }
+@supports (animation-timeline:scroll()) {
+ :is(.frame,.tradeSheet,.marketPicker) [data-scroll-fade] { scroll-padding-bottom:1.5rem; -webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - var(--workspace-fade-end)),transparent); mask-image:linear-gradient(to bottom,#000 calc(100% - var(--workspace-fade-end)),transparent); animation:scroll-fade linear both; animation-timeline:scroll(self block); }
+}
+
+/* Card content clips at its padding box: 4px of padding (offset by margin) lets large figures' glyph boxes and focus rings paint at the edges without moving anything. */
+.panelContent { margin-block:-0.25rem; padding-block:0.25rem; }
+
+/* The phone feed shows one card at a time, so the active ring has nothing to distinguish (and the feed's scroll edge would cut it). */
+@media (max-width:1099px) { .panels[data-phone-feed] > .panel[data-active="true"] { box-shadow:var(--workspace-surface-edge); } }
+
+/* A narrow phone card puts its tabs on their own row; the card's options stay level with the coin. */
+@container workspace-panel (max-width:280px) { .panels[data-phone-feed] .panelControls { align-items:flex-start; } }
+
+
+/* Desktop Data is a persistent rail. Content reflows and scrolls within its own column. */
+@media (min-width:1100px) {
+ .layout[data-data-open="true"],.layout[data-presale-context="true"] { grid-template-columns:minmax(0,1fr) 18.75rem; }
+ .workspaceMain { min-height:0; overflow:auto; padding:0.1875rem; margin:-0.1875rem; scrollbar-width:thin; }
+ .panels { grid-template-columns:repeat(2,minmax(0,1fr)); grid-template-rows:none; grid-auto-rows:minmax(29.375rem,1fr); align-content:start; flex:1 0 auto; }
+ .panels[data-count="1"] { grid-template-columns:minmax(0,1fr); }
+ .panels:is([data-count="1"],[data-count="2"]) { grid-template-rows:none; }
+ .panels[data-count="3"] > .panel:last-child { grid-column:1 / -1; }
+ .panel { min-height:29.375rem; }
+}
+@media (min-width:1280px) { .layout[data-data-open="true"],.layout[data-presale-context="true"] { grid-template-columns:minmax(0,1fr) 20rem; } }
+@container (max-width:760px) { .panels[data-presentation="compare"] { grid-template-columns:minmax(0,1fr); } }
+.panels[data-presentation="focus"] { display:block; height:auto; overflow:visible; }
+.panels[data-presentation="focus"] > .panel { background:transparent; box-shadow:none; padding:0; min-height:0; height:auto; }
+.panel[data-focus-hidden="true"] { display:none; }
+.saveStatus { display:flex; flex:0 0 4.5rem; align-items:center; justify-content:center; height:2rem; color:var(--muted); font-size:0.75rem; }
+.saveStatus button { width:4.5rem; padding:0.25rem; }
+.viewSwitch { display:flex; flex:none; gap:0.125rem; padding:0.1875rem; background:var(--chip); border-radius:var(--r-button); }
+.viewSwitch button { border:0; border-radius:var(--r-inner); background:transparent; color:var(--muted); font:600 0.75rem var(--font); padding:0.375rem 0.5rem; cursor:pointer; }
+.viewSwitch button[aria-pressed="true"] { background:var(--card); color:var(--ink); box-shadow:var(--sh-1); }
+.mode { position:static; width:auto; height:auto; overflow:visible; clip-path:none; padding:0; background:transparent; color:var(--muted); font-size:0.75rem; }
+.undo { position:absolute; bottom:1.5rem; left:50%; transform:translateX(-50%); display:flex; align-items:center; gap:0.5rem; padding:0.5rem 0.75rem; border-radius:var(--r-md); background:var(--card); box-shadow:var(--sh-pop); z-index:40; white-space:nowrap; font-size:0.8125rem; }
+@media (max-width:1099px) {
+ .header { flex-wrap:wrap; }
+ .headerToolbar { flex-basis:100%; }
+ .viewer { text-decoration:none; display:none; }
+ .saveStatus { margin-left:auto; }
+ .header > .exit { margin-left:0; }
+ .toolbar { flex-wrap:wrap; gap:0.5rem; }
+ .panelTools { flex-basis:100%; }
+ .workspaceMain:has(.panels[data-presentation="focus"]) { overflow:auto; height:100%; padding:0.125rem; scrollbar-width:thin; }
+ .panels[data-presentation="focus"] .panelContent { overflow:visible; }
+ .panels[data-phone-feed] > .panel { height:auto; min-height:31.25rem; flex-basis:auto; }
+ .undo { bottom:5rem; }
+}
+@media (pointer:coarse) { .viewSwitch button { min-height:44px; } }
+.pendingPanel { min-height:26.25rem; display:flex; flex-direction:column; gap:1.5rem; padding:1.5rem; background:var(--card); border-radius:var(--r-md); }
+.pendingPlot { flex:1; min-height:13.75rem; border-radius:var(--r-inner); background:var(--chip); }
+
+.saveProblem { position: relative; font-size: 0.6875rem; }
+.saveProblem summary { cursor: pointer; white-space: nowrap; }
+.saveProblem > div { position: absolute; z-index: 20; top: 1.75rem; right: 0; width: min(18.75rem, calc(100vw - 2rem)); border: 1px solid var(--hair-2); border-radius: var(--r-sm); padding: 0.75rem; background: var(--card); box-shadow: var(--sh-pop); }
+.saveProblem p { margin: 0 0 0.5rem; font-size: 0.8125rem; line-height: 1.5; }
+
+@media (min-width:1100px) { .exit kbd { display:inline-block !important; } }
+
+@media (max-width:1099px) { .saveProblem > div { position:fixed; top:3.25rem; right:1rem; } }
+
+@media (prefers-color-scheme:dark) {
+ :global([data-blast-ui]:not([data-theme="light"])) :is(.frame,.tradeSheet,.marketPicker) { --workspace-accent:var(--pink); --workspace-on-accent:#0f0e13; }
+}
+:global([data-blast-ui][data-theme="dark"]) :is(.frame,.tradeSheet,.marketPicker) { --workspace-accent:var(--pink); --workspace-on-accent:#0f0e13; }
+:is(.frame,.tradeSheet,.marketPicker) :global(.btn-primary) { background:var(--workspace-accent); color:var(--workspace-on-accent); }
+@media (hover:hover) and (pointer:fine) { :is(.frame,.tradeSheet,.marketPicker) :global(.btn-primary:not([disabled],[aria-disabled="true"]):hover) { background:var(--workspace-accent-press); } }
+
+/* Discovery stays named when open and when collapsed. */
+.layout[data-data-open="false"] { grid-template-columns:minmax(0,1fr) auto; }
+.discoverButton { display:flex; align-items:center; gap:0.375rem; min-height:2.25rem; padding:0.5rem 0.625rem; background:var(--card); color:var(--ink); border-radius:var(--r-button); font-size:0.75rem; font-weight:600; }
+.discoverButton svg { width:1rem; height:1rem; }
+.dataHeader { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:0.5rem; }
+.dataHeading { display:contents; }
+.dataHeader h2 { position:static; width:auto; height:auto; overflow:visible; clip-path:none; margin:0; font-size:0.875rem; line-height:1.25rem; }
+.dataActions { grid-column:2; grid-row:1; }
+.dataNavigation { display:flex; align-items:center; gap:0.25rem; grid-column:1 / -1; grid-row:2; min-width:0; }
+.moreViews { flex:none; max-width:8rem; }
+/* The More menu (live audit F33): the shared menu box and rows, as in Layout. */
+.moreMenu { composes:layoutMenu from "./PanelDock.module.css"; }
+.moreItem { composes:layoutItem from "./PanelDock.module.css"; }
+.moreCheck { composes:layoutCheck from "./PanelDock.module.css"; }
+.replacementChoices > button { justify-content:flex-start; min-width:0; max-width:100%; text-align:left; white-space:normal; }
+.assetChoice { display:flex; align-items:center; gap:0.5rem; min-width:0; max-width:100%; }
+.assetChoice > :first-child { flex:none; }
+.assetChoice > span:last-child { display:flex; flex-direction:column; min-width:0; }
+.assetChoice strong { font-weight:600; }
+.assetChoice small { min-width:0; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--muted); font-size:0.75rem; }
+@media (max-width:1099px) { .layout[data-data-open="false"] { grid-template-columns:minmax(0,1fr); } }
+@media (pointer:coarse) { .discoverButton,.moreViews { min-height:44px; } }
+
+/* Page the mounted cards when the viewport cannot fit their full trade controls. */
+.pageNav { display:flex; flex:none; align-items:center; gap:0.5rem; padding:0 0.125rem 0.75rem; color:var(--ink-2); font-size:0.75rem; }
+.pageNav button { padding:0.375rem 0.625rem; border-radius:var(--r-button); background:var(--chip); color:var(--ink); }
+.pageNav button:disabled { opacity:.45; }
+.pageHint { flex:1; color:var(--muted); }
+.panel[data-page-hidden="true"] { display:none; }
+@media (min-width:1100px) {
+ .panels[data-presentation="compare"] { flex:1 1 0; min-height:0; grid-template-columns:repeat(2,minmax(0,1fr)); grid-template-rows:minmax(0,1fr); grid-auto-rows:minmax(0,1fr); }
+ .panels[data-presentation="compare"][data-count="1"] { grid-template-columns:minmax(0,1fr); }
+ .panels[data-presentation="compare"]:is([data-count="3"],[data-count="4"]) { grid-template-rows:repeat(2,minmax(0,1fr)); }
+ .panels[data-presentation="compare"] > .panel { min-height:0; padding:0.875rem 1rem; }
+ .panels[data-presentation="compare"] .panelControls { margin-bottom:0.5rem; }
+}
+@media (pointer:coarse) { .pageNav button { min-height:44px; } }
+@media (max-width:1180px) { .pageHint { visibility:hidden; } }
+
+@media (min-width:1100px) {
+ .layout[data-data-open="false"] { grid-template-columns:minmax(0,1fr) 2rem; gap:0.75rem; }
+ .discoverButton { width:2rem; height:2.25rem; padding:0.5rem; }
+ .panels[data-presentation="compare"] { grid-template-rows:minmax(27.875rem,1fr); }
+ .panels[data-presentation="compare"]:is([data-count="3"],[data-count="4"]) { grid-template-rows:repeat(2,minmax(27.875rem,1fr)); }
+}
+
+/* The visible view names also name discovery; keep its heading for assistive navigation. */
+.dataHeader h2 { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+.dataHeader { padding-bottom:0.5rem; gap:0.25rem; }
+.dataNavigation { grid-column:1; grid-row:1; gap:0; }
+
+
+/* Focus uses a left discovery rail on desktop and a market sheet on phones. */
+.content:has(.layout[data-presentation="focus"]) { padding:0.625rem 0.75rem 1.125rem; }
+.layout[data-presentation="focus"],.layout[data-presentation="focus"][data-data-open="true"] { display:block; grid-template-columns:minmax(0,1fr); }
+.layout[data-presentation="focus"] .workspaceMain { display:block; margin:0; padding:0; overflow:visible; height:auto; }
+@media (min-width:1100px) {
+ .layout[data-presentation="focus"] { display:grid; grid-template-columns:2.75rem minmax(0,1fr); align-items:start; gap:1rem; }
+ .layout[data-presentation="focus"][data-data-open="true"] { display:grid; grid-template-columns:18.75rem minmax(0,1fr); }
+ .layout[data-presentation="focus"] .workspaceMain { grid-column:2; grid-row:1; }
+ .layout[data-presentation="focus"] > :is(.data,.dataEdge) { position:sticky; top:0; grid-column:1; grid-row:1; order:0; align-self:start; }
+ .layout[data-presentation="focus"] > .data { position:relative; align-self:stretch; contain:size; min-height:min(40rem,calc(100dvh - 6.25rem)); height:auto; max-height:none; padding:0.75rem 0.625rem; }
+ .layout[data-presentation="focus"] > .dataEdge { padding-top:0.5rem; }
+ .layout[data-presentation="focus"] .discoverButton { width:2.5rem; height:2.5rem; }
+ .layout[data-presentation="focus"] > .data .dataHeader h2 { position:static; width:auto; height:auto; overflow:visible; clip-path:none; }
+ .layout[data-presentation="focus"] > .data .dataNavigation { grid-column:1 / -1; grid-row:2; gap:0.5rem; }
+ .layout[data-presentation="focus"] > .data .dataHeader { row-gap:0.75rem; padding-bottom:1rem; }
+
+}
+
+.marketPicker { width:min(47.5rem,calc(100vw - 2rem)); }
+/* The sheet's section clips its scroller; 4px of slack each side keeps the title's first glyph and focus rings unclipped while the content stays on the sheet's inset. */
+.marketPicker .data { position:relative; width:calc(100% + 0.5rem); min-width:0; height:min(38.75rem,70dvh); max-height:70dvh; margin-inline:-0.25rem; box-shadow:none; border:0; padding:0 0.25rem; }
+.marketPicker .dataBody { --data-body-inline:0rem; overflow:auto; min-height:0; }
+.marketPicker .dataHeader h2 { position:static; width:auto; height:auto; overflow:visible; clip-path:none; }
+.marketPicker .dataNavigation { grid-column:1 / -1; grid-row:2; gap:0.5rem; }
+.marketPicker .dataHeader { row-gap:0.75rem; padding-bottom:1rem; }
+
+@media (max-width:1099px) {
+ .content:has(.layout[data-presentation="focus"]) { padding:0.5rem; }
+ .layout[data-presentation="focus"][data-data-open="true"] .workspaceMain { display:block; }
+ .marketPicker { width:100%; }
+}
+.content:has(.layout[data-presentation="focus"]) { padding:0.25rem 0.625rem 0.625rem; }
+
+
+/* Reflow the terminal bar by available space, including enlarged text/zoom. */
+.frame { container:workspace-frame / inline-size; }
+@container workspace-frame (max-width:1099px) {
+ .header { flex-wrap:wrap; gap:0.5rem; padding:0.5rem 1rem; }
+ .headerToolbar { order:3; flex:1 1 100%; padding-left:0; }
+ .saveStatus { margin-left:auto; }
+ .header > .exit { margin-left:0; }
+ .toolbar { flex-wrap:wrap; gap:0.5rem; }
+ .panelTools { display:flex; flex:1 1 100%; min-width:0; }
+}
+
+/* Market navigation stays in one row; infrequent tools share Workspace. */
+.headerToolbar .toolbar { flex-wrap:nowrap; gap:0.5rem; }
+.headerToolbar .panelTools { display:flex; flex:1 1 0; min-width:0; }
+.saveStatus { flex-basis:5.25rem; }
+@container workspace-frame (max-width:1099px) {
+ .header { position:relative; display:grid; grid-template-columns:minmax(0,1fr) auto auto; }
+ .headerToolbar,.headerToolbar .toolbar { display:contents; }
+ .brand { grid-column:1; grid-row:1; min-height:max(44px, 2.75rem); }
+ .brand .mode { align-self:flex-start; padding-top:0.25rem; }
+ .header > .exit { grid-column:3; grid-row:1; }
+ .header .saveStatus { position:absolute; top:1.875rem; left:3.125rem; width:5.625rem; height:1rem; justify-content:flex-start; font-size:0.625rem; }
+ .workspaceTools { grid-column:2; grid-row:1; }
+ .headerToolbar .panelTools { grid-column:1 / -1; grid-row:2; width:100%; }
+ .header:has([data-workspace-escape="layout"]) .workspaceTools { grid-column:1 / -1; grid-row:3; justify-content:flex-end; }
+}
+
+
+/* The header is a distinct navigation surface; market facts use the canvas. */
+.content:has(.layout[data-presentation="focus"]) { padding:0.5rem max(1rem,env(safe-area-inset-left)) 0 max(1rem,env(safe-area-inset-right)); }
+
+/* Chips occupy one row; Saved, Discover and Portfolio share the next at phone widths. */
+@container workspace-frame (max-width:600px) {
+ .headerToolbar .panelTools nav[aria-label="Workspace panels"] { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:0.25rem 0.5rem; width:100%; margin:0; padding:0; }
+ .headerToolbar .panelTools nav[aria-label="Workspace panels"]:not(:has([data-more-panels-trigger])) { grid-template-columns:repeat(2,minmax(0,1fr)); }
+ .headerToolbar .panelTools nav[aria-label="Workspace panels"] > ul { grid-column:1 / -1; width:100%; max-width:none; padding:0; }
+ .headerToolbar .panelTools nav[aria-label="Workspace panels"] > button,
+ .headerToolbar .panelTools [data-more-panels-trigger] { width:100%; min-width:max(44px, 2.75rem); min-height:max(44px, 2.75rem); padding-inline:0.5rem; justify-content:center; }
+ .headerToolbar .panelTools [data-panel-chip] { min-height:max(44px, 2.75rem); }
+}
+
+/* Focus content scrolls beneath the fixed toolbar, including stacked terminals. */
+.content:has(.layout[data-presentation="focus"]) { overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; scroll-padding-block:0.75rem; }
+.content .layout[data-presentation="focus"] { flex:0 0 auto; height:auto; }
+.content .layout[data-presentation="focus"] .workspaceMain { height:auto; min-height:0; overflow:visible; }
+.panels[data-presentation="focus"] .panelContent { overflow:visible; }
+
+/* The collapsed rail keeps the last visible list within reach. Controls own their geometry. */
+.dataEdge { flex-direction:column; align-items:center; gap:0.5rem; }
+.discoveryIcons { display:flex; flex-direction:column; gap:0.25rem; max-height:calc(100dvh - 13rem); overflow-y:auto; scrollbar-width:none; padding:0.25rem; }
+.discoveryIcons [aria-current="true"] { background:var(--thumb); box-shadow:var(--thumb-sh); }
+@media (hover:hover) and (pointer:fine) {
+  .discoveryIcons button:not([aria-current="true"]):hover { background:var(--workspace-press); }
+}
+.railMonogram { display:grid; place-items:center; width:1.75rem; height:1.75rem; border-radius:50%; background:var(--chip); color:var(--ink-2); font-size:0.75rem; font-weight:600; letter-spacing:0.02em; }
+.railTipLayer { z-index:1100; }
+.railTip {
+  padding:0.375rem 0.625rem; font-size:0.75rem; font-weight:600; line-height:1.4; background:var(--ink); color:var(--bg); border-radius:var(--r-button);
+  transform-origin:var(--transform-origin); transition:opacity var(--t1) var(--ease-std), transform var(--t1) var(--ease-std);
+}
+.railTip[data-starting-style], .railTip[data-ending-style] { opacity:0; transform:scale(.97); }
+.railTip[data-instant] { transition:none; }
+.railTip :global(.coinVerified) { margin-inline-start:0.25rem; }
+@media (prefers-reduced-motion:reduce) {
+  .railTip { transition:opacity var(--t1) linear; }
+  .railTip[data-starting-style], .railTip[data-ending-style] { transform:none; }
+}
+
+/* Preserve the name for assistive technology while the mark leaves room for touch controls. */
+@container workspace-frame (max-width:360px) {
+  .brand strong {
+    display:block;
+    position:absolute;
+    width:1px;
+    height:1px;
+    overflow:hidden;
+    clip-path:inset(50%);
+    white-space:nowrap;
+  }
+}
+
+/* Redesign (2026-10-27): cards share the lit top edge; the rail's views are one segmented track. */
+.panel,.data { background:linear-gradient(180deg,var(--card-lit),transparent 10rem),var(--card); }
+/* The rail's Data views are the shared `Segmented` tablist (track, thumb and keyboard live there); here it only takes the row's free width, and a long name truncates instead of overflowing its segment. */
+.viewTabs { flex:1; min-width:0; }
+.viewTabs span { min-width:0; overflow:hidden; text-overflow:ellipsis; }
+
+
+/*
+ * The approved board (BlastMode.dc.html, 2026-10-27). A 60px header: the Blast mode brand, the
+ * current coin and Saved, search, then Portfolio, the balance, Layout, settings, the account and
+ * Exit. Below it, 12px from every edge, Discover (300px card) beside the coin's board.
+ */
+.frame { background:var(--bg); }
+.frame > .header { display:flex; flex:none; align-items:center; justify-content:flex-start; gap:0.625rem; height:3.75rem; min-height:3.75rem; padding:0 1rem; background:transparent; box-shadow:0 1px 0 var(--hair); }
+.frame .brand { display:flex; flex:none; align-items:center; gap:0.5rem; margin-right:0.375rem; }
+/* The brand mark is always the helmet (owner, 2026-10-29), at its 3:2 proportion. */
+.brandMark { display:block; flex:none; width:2.25rem; height:1.5rem; }
+.frame .headerToolbar { display:flex; flex:1; align-items:center; gap:0.5rem; min-width:0; padding:0; }
+.frame .headerToolbar > .toolbar { display:contents; }
+.frame .headerToolbar .panelTools { display:flex; flex:1 1 auto; min-width:0; }
+/* Keep the chip scroller inside its share of the bar beside Search and Portfolio. */
+.frame .headerToolbar .panelTools > nav { flex:1; }
+.toolbarSpacer { flex:1; min-width:0; }
+/* The save status takes no width: it is announced, not drawn, and a failure overlays the spacer (owner, 2026-10-29). */
+.frame .headerToolbar .saveStatus { flex:0 0 0; width:0; height:auto; color:var(--muted); font-size:0.75rem; }
+.frame .headerToolbar .workspaceTools { flex:none; }
+/* One secondary style across the bar (live audit F2): the viewer and Exit carry the same outline as Portfolio and Layout. */
+.frame .viewer { height:2.25rem; gap:0.5rem; padding:0 0.625rem 0 0.375rem; border-radius:var(--r-button); background:var(--control-surface, var(--card)); box-shadow:inset 0 0 0 1px var(--hair-2),inset 0 1px 0 var(--control-highlight); font-size:0.8125rem; font-weight:600; }
+.frame .viewerAvatar { width:1.5rem; height:1.5rem; }
+.frame > .header > .exit { font-size:0.8125rem; }
+.frame > .header > .exit kbd { padding:0 0.3125rem; border-radius:0.25rem; background:transparent; box-shadow:inset 0 0 0 1px var(--hair-2); color:var(--muted); font:inherit; font-size:0.75rem; line-height:1.125rem; opacity:1; }
+
+/* Content: the board's 12px gutter on every side and between the activity strip and the cards; one scroll owner below the header. The strip (44px and its 12px gap) is taken from the cards' viewport height when it is shown. */
+.content:has(.layout[data-presentation="focus"]) { gap:0.75rem; padding:0.75rem; }
+.content:has(> [data-workspace-strip]) { --workspace-strip:3.5rem; }
+@media (min-width:1100px) {
+ .layout[data-presentation="focus"] { gap:0.75rem; }
+ .layout[data-presentation="focus"][data-data-open="true"] { grid-template-columns:18.75rem minmax(0,1fr); }
+ /* Discover shares the board's bottom edge: the same 56rem cap as `.board` in WorkspaceLayout.module.css (live audit F23). */
+ .layout[data-presentation="focus"] > .data { min-height:min(56rem, calc(100dvh - 5.25rem - var(--workspace-strip, 0rem))); padding:0; border-radius:1.25rem; background:var(--card); box-shadow:var(--sh-1); }
+ .layout[data-presentation="focus"] > .data .dataHeader { display:flex; flex-direction:column; align-items:stretch; gap:0.625rem; padding:0.875rem 0.875rem 0; }
+}
+.panels[data-presentation="focus"] > .panel { padding:0; background:transparent; box-shadow:none; border-radius:0; }
+
+/* Discover's title row: the title, More, Edit and collapse; the view tabs below it. */
+.dataTitleRow { display:flex; align-items:center; gap:0.125rem; min-width:0; }
+.frame .dataTitleRow h2,.marketPicker .dataTitleRow h2 { position:static; flex:1; width:auto; height:auto; overflow:visible; clip-path:none; margin:0; font-size:0.9375rem; line-height:1.25rem; font-weight:650; white-space:nowrap; }
+.dataTitleRow .moreViews { flex:none; max-width:8rem; height:2rem; margin-right:0.25rem; font-size:0.75rem; }
+.dataTitleRow .dataActions { flex-direction:row; align-items:center; gap:0.125rem; height:auto; }
+.dataTitleRow .dataActions > button { width:auto; min-width:2rem; height:2rem; padding:0 0.5rem; border-radius:0.5625rem; color:var(--muted); font-size:0.75rem; font-weight:600; }
+.dataTitleRow .dataActions > button[data-ui-icon] { padding:0; }
+.dataHeader > .viewTabs { width:100%; }
+/* Where the header is a grid (phones' Discover sheet), each row spans it, so a stretched track never squeezes the title, More, Edit or Back. */
+.dataHeader > :is(.dataTitleRow,.viewTabs) { grid-column:1 / -1; }
+/* Title-row More (live audit F33): 32px like the collapse button, 12px text; muted while closed views hide,
+ * and a tab's selected thumb while it holds the open view, so the open view always shows. */
+.dataTitleRow .moreViews:not([data-current]) { color:var(--muted); }
+.dataTitleRow .moreViews[data-current] { background:var(--thumb); color:var(--ink); box-shadow:var(--thumb-sh),inset 0 0 0 1px var(--hair-2); }
+
+/* The panel header lives in the chart card's first row (see FocusPanel.module.css). */
+:global([data-panel-header-slot]) > .panelControls { display:flex; flex:1; align-items:center; gap:0.125rem; min-width:0; min-height:0; margin:0; padding:0; background:transparent; border:0; border-radius:0; color:var(--muted); }
+:global([data-panel-header-slot]) > .panelControls > [data-panel-drag-handle] { display:none; }
+:global([data-panel-header-slot]) > .panelControls > .panelIdentity { flex:1; min-width:0; margin-right:0.75rem; }
+@media (min-width:1100px) {
+ /* One inset for every Discover view: the header's 14px sides carry down to every view's controls, rows and states. */
+ .layout[data-presentation="focus"] > .data .dataBody { --data-body-top:0.625rem; --data-body-inline:0.875rem; --data-body-bottom:0.875rem; }
+ .layout[data-presentation="focus"] > .data .addingNotice { padding:0.625rem 0.875rem 0; }
+}
+.balance { display:flex; flex:none; }
+
+/*
+ * Tablets and phones (Mobile.dc.html, Blast mode): the brand, account and Exit on the first
+ * row; the coin, Saved, search, Portfolio, Layout and settings scroll sideways on the second.
+ * Discover opens as a sheet and the board stacks (see WorkspaceLayout.module.css).
+ */
+@container workspace-frame (max-width:1099px) {
+ .frame > .header { flex-wrap:wrap; height:auto; min-height:0; row-gap:0.375rem; padding:0.25rem 0.5rem 0.5rem 1rem; }
+ .frame .brand { flex:1 1 auto; min-height:max(44px, 2.75rem); margin:0; }
+ .frame .headerToolbar { order:3; flex:1 1 100%; overflow-x:auto; overscroll-behavior-x:contain; scrollbar-width:none; padding:0.125rem 0; }
+ .frame .headerToolbar::-webkit-scrollbar { display:none; }
+ .frame .headerToolbar > * { flex:none; }
+ .frame .headerToolbar [data-add-chart] { order:-1; flex:none; width:auto; }
+ .frame .headerToolbar [data-add-chart] > :is(span,kbd) { display:none; }
+ .toolbarSpacer { display:none; }
+ .frame .viewer > span:last-child { display:none; }
+}
+@container workspace-frame (max-width:760px) {
+ .frame .brand strong { font-size:1.25rem; }
+ .balance { display:none; }
+}
+
+/*
+ * The header's space budget (Blast mode audit 01, 2026-10-28): one row at every desktop width,
+ * each control in its place. At the board's width everything is drawn as the board draws it; as
+ * the header narrows, controls compact instead of overlapping or squeezing the search: the
+ * account shows its avatar, Exit its label alone, then Saved, Portfolio and Layout show their
+ * marks and icons, and last the search becomes its icon button (it opens Discover's search).
+ * The save status keeps a fixed 24px slot: persisting is quiet (audit 03).
+ */
+.header { container:blast-header / inline-size; }
+.toolbar { flex:1 1 auto; min-width:0; }
+.saveStatus { position:relative; flex:0 0 1.5rem; justify-content:flex-end; }
+.saveStatus .saveProblem { position:absolute; top:50%; right:0; transform:translateY(-50%); }
+@container blast-header (max-width:76rem) {
+ .viewer { padding:0 0.3125rem; }
+ .viewer > span:last-child { display:none; }
+ /* Overrides the desktop rule that forces the key visible from 1100px. */
+ .exit kbd { display:none !important; }
+}
+
+/* The collapsed rail's placeholders keep each shortcut's 40px slot and 28px mark until the marks arrive (audit 04). */
+.railPlaceholder { display:grid; place-items:center; flex:none; width:2.5rem; height:2.5rem; }
+.railPlaceholder::before { content:""; width:1.75rem; height:1.75rem; border-radius:50%; background:var(--chip); }
+
+/*
+ * Compact composition (Blast mode audit, 2026-10-28). Below the desktop width the header stays one
+ * row down to 768px: the toolbar sits inline and the header's own tiers compact its controls
+ * (no three-row header). Phones get a compact app bar: the brand, the search, the test-pricing
+ * mark when it applies, Layout and Exit on the first row; the coin context (coin chips and Saved)
+ * with Portfolio and settings on the second. The save status keeps its quiet slot.
+ */
+@container workspace-frame (min-width:768px) and (max-width:1099px) {
+ .frame > .header { display:flex; flex-wrap:nowrap; align-items:center; gap:0.75rem; height:3.75rem; min-height:3.75rem; padding:0 1rem; }
+ .frame .brand { flex:none; }
+ .frame .headerToolbar { display:flex; align-items:center; gap:0.5rem; order:0; flex:1 1 auto; min-width:0; overflow:visible; padding:0; }
+ .frame .headerToolbar > .toolbar { flex:1 1 auto; }
+ .frame .headerToolbar > .toolbar { display:flex; flex-wrap:nowrap; align-items:center; gap:0.5rem; min-width:0; }
+ .frame .headerToolbar .panelTools { display:flex; flex:1 1 0; min-width:0; width:auto; }
+ .frame .headerToolbar :global([data-add-chart]) { order:0; }
+ .frame .header .saveStatus { position:relative; top:auto; left:auto; width:auto; height:auto; margin-left:0; }
+ .frame > .header > .exit { margin-left:0; }
+ /* The account keeps its avatar while the row has room for it (1024 and wider); narrower, the row keeps the coin context. */
+ .frame > .header > .viewer { display:inline-flex; }
+}
+@container blast-header (max-width:56rem) { .frame > .header > .viewer { display:none; } }
+@container workspace-frame (max-width:767px) {
+ .frame > .header { display:grid; grid-template-columns:auto minmax(0,1fr) auto auto auto auto; align-items:center; column-gap:0.5rem; row-gap:0.375rem; height:auto; min-height:0; padding:0.25rem 1rem 0.5rem; }
+ .frame .headerToolbar,.frame .headerToolbar > .toolbar { display:contents; }
+ .frame .brand { grid-area:1 / 1 / 2 / 3; min-height:max(44px, 2.75rem); }
+ .frame .headerToolbar :global([data-add-chart]) { grid-area:1 / 3; order:0; }
+ .frame .headerToolbar :global(aside) { grid-area:1 / 4; }
+ .frame > .header > .viewer { display:none; }
+ .frame > .header > .exit { grid-area:1 / 6; margin-left:0; }
+ .frame .headerToolbar .panelTools { grid-area:2 / 1 / 3 / 5; display:flex; width:auto; min-width:0; }
+ .frame .headerToolbar :global([data-header-portfolio]) { grid-area:2 / 5; }
+ .frame .headerToolbar .workspaceTools { grid-area:1 / 5; justify-self:end; }
+ .frame .headerToolbar .toolbarSpacer { display:none; }
+ /* The coin chips and Saved share one row and scroll sideways rather than wrapping. */
+ .frame .headerToolbar .panelTools nav[aria-label="Workspace panels"] { display:flex; flex-wrap:nowrap; align-items:center; gap:0.375rem; width:100%; min-width:0; }
+ .frame .headerToolbar .panelTools nav[aria-label="Workspace panels"] > ul { flex:1 1 auto; min-width:0; width:auto; max-width:none; overflow-x:auto; scrollbar-width:none; }
+ /* A chip cut at the row's end fades out, the cue that the row scrolls; the end padding lets the last chip scroll clear of the fade. */
+ /* Browsers with scroll-driven animations get PanelDock's two-edge fade instead. */
+ @supports not (animation-timeline:scroll()) { .frame .headerToolbar .panelTools nav[aria-label="Workspace panels"] > ul { padding-inline-end:1.5rem; -webkit-mask-image:linear-gradient(to right, #000 calc(100% - 1.5rem), transparent); mask-image:linear-gradient(to right, #000 calc(100% - 1.5rem), transparent); } }
+ .frame .headerToolbar .panelTools nav[aria-label="Workspace panels"] > button,
+ .frame .headerToolbar .panelTools [data-more-panels-trigger] { flex:none; width:auto; }
+ /* With the test-pricing mark in the first row, the brand keeps its mark and its name for assistive technology. */
+ .frame > .header:has(aside) .brand strong { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+}
+
+/*
+ * Opening Blast mode (owner, 2026-10-29): the header's controls and the board are drawn where they
+ * land, at the 36px chip height, so the first frame is already the final arrangement. Phones and
+ * tablets rearrange the header, so their bar fills in once.
+ */
+.pendingTool { flex:none; height:2.25rem; border-radius:var(--r-button); }
+.pendingCoin { width:5.75rem; }
+.pendingSaved { width:9.875rem; }
+.pendingSearch { flex:0 1 23.75rem; min-width:10rem; }
+.pendingPortfolio { width:6.375rem; }
+.pendingLayout { width:5.375rem; }
+.pendingIcon { width:2.25rem; }
+/* The settings control's own skeleton (its box mirrors WorkspaceSignals' toolbarControl). */
+.pendingSettings { display:block; }
+.pendingEdge { width:2rem; height:2.5rem; border-radius:var(--r-button); }
+@container blast-header (max-width:72rem) { .pendingSaved { width:5.5rem; } .pendingPortfolio,.pendingLayout { width:2.25rem; } }
+@container blast-header (max-width:64rem) { .pendingSearch { flex:none; width:2.25rem; min-width:0; } }
+@container workspace-frame (max-width:1099px) { .frame .headerToolbar > .toolbar[data-pending-toolbar],.frame .headerToolbar > .pendingSettings { display:none; } }
+@media (max-width:1099px) { .layout[data-presentation="focus"] > .dataEdge:has(> .pendingEdge) { display:none; } }

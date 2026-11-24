@@ -1,0 +1,12 @@
+.trigger { position: relative; }
+.trigger[data-active]::after { content: ""; position: absolute; inset: .375rem .375rem auto auto; width: .4375rem; height: .4375rem; border-radius: 50%; background: var(--ink); }
+.layer { z-index: 100; }
+.popup { width: min(18rem, calc(100vw - 1.5rem)); max-height: var(--available-height); overflow-y: auto; padding: 1rem; border-radius: var(--r-md); background: var(--card); color: var(--ink); box-shadow: var(--sh-pop); transform-origin: var(--transform-origin); transition: opacity var(--t2) var(--ease-std), transform var(--t2) var(--ease-std); }
+.popup[data-starting-style], .popup[data-ending-style] { opacity: 0; transform: scale(.98); }
+.title { margin: 0; font-size: 1rem; font-weight: 650; }
+.fields { display: grid; gap: .875rem; margin-top: 1rem; }
+.fields > label { display: grid; gap: .375rem; font-size: .875rem; font-weight: 550; }
+.fields > label:has(input[type="checkbox"]) { display: flex; align-items: center; min-height: 2.75rem; gap: .625rem; }
+.fields > button { justify-self: start; }
+@media (prefers-reduced-motion: reduce) { .popup { transition: none; } }
+:global(html[data-blast-input="keyboard"]) .popup { transition: none; }

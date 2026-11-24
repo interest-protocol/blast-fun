@@ -1,0 +1,89 @@
+{
+  "name": "blast-v2",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "lint": "eslint . --max-warnings=0 --cache --cache-location node_modules/.cache/eslint/",
+    "typecheck": "npm run typecheck --workspaces",
+    "test": "node --test 'scripts/*.test.mjs' 'scripts/**/*.test.ts' && npm test --workspaces --if-present",
+    "test:partner-live": "npm run test:partner-live --workspaces --if-present",
+    "test:integration": "BLAST_INTEGRATION_OWNED_ONLY=1 npm run test:integration --workspaces --if-present",
+    "gate": "npm run lint && npm run typecheck && npm test && npm run test:partner-live && npm run test:integration",
+    "db:migrate": "npm run db:migrate -w @blast/web",
+    "test:architecture-auth": "node scripts/test-integration.mjs packages/core/src/modules/database/runtime-roles.integration.test.ts apps/backend-api/test/partner-verifier-role.integration.test.ts packages/core/src/lib/web-security/redis-rate-limits.integration.test.ts packages/core/src/lib/web-security/gateway-admission.integration.test.ts apps/backend-api/test/gateway-admission.integration.test.ts apps/backend-api/test/physical.integration.test.ts",
+    "social:operator": "npm run social:operator -w @blast/server --"
+  },
+  "devDependencies": {
+    "@stryker-mutator/core": "10.1.1",
+    "@stryker-mutator/tap-runner": "10.1.1",
+    "@types/node": "^24.19.1",
+    "@typescript/native": "npm:typescript@7.0.2",
+    "eslint": "9.39.5",
+    "eslint-config-next": "16.4.6",
+    "eslint-plugin-sonarjs": "4.2.2",
+    "typescript": "npm:@typescript/typescript6@6.0.2",
+    "fast-glob": "file:vendor/next-eslint-glob"
+  },
+  "engines": {
+    "node": ">=24.18.0 <25",
+    "npm": ">=12.0.2 <13"
+  },
+  "type": "module",
+  "overrides": {
+    "ws@>=8 <8.21.0": "^8.21.3",
+    "uuid@>=8 <11.1.1": "11.1.1",
+    "@walletconnect/utils@<=2.21.8": "2.21.9",
+    "@next/eslint-plugin-next": {
+      "fast-glob": "$fast-glob"
+    },
+    "undici@>=6 <6.29.1": "6.29.1",
+    "undici@>=8 <8.12.2": "8.12.3",
+    "follow-redirects@<1.16.1": "1.16.2",
+    "@reown/appkit-wallet": {
+      "zod": "$zod"
+    },
+    "@vercel/cli-config": {
+      "zod": "4.6.7"
+    },
+    "fast-uri@>=3 <3.1.9": "3.1.9"
+  },
+  "packageExtensions": {
+    "@privy-io/node@0.35.0": {
+      "optionalDependencies": {
+        "@solana/kit": "5.5.1",
+        "typescript": "5.9.3"
+      }
+    },
+    "abitype@1.0.8": {
+      "optionalDependencies": {
+        "zod": "3.25.76"
+      }
+    },
+    "@coinbase/cdp-sdk@1.58.0": {
+      "optionalDependencies": {
+        "typescript": "5.9.3"
+      }
+    }
+  },
+  "dependencies": {
+    "zod": "file:vendor/zod-v3/blast-zod-v3-3.25.76.tgz",
+    "@interest-protocol/blast-partners-sdk": "0.3.0",
+    "@interest-protocol/blast-sui-sdk": "0.3.0",
+    "@interest-protocol/blast-cctp-sdk": "0.3.0",
+    "@interest-protocol/blast-presale-sdk": "0.3.0",
+    "@interest-protocol/blast-boosts-sdk": "0.3.0",
+    "@interest-protocol/blast-migrators-sdk": "0.3.0",
+    "@interest-protocol/blast-deployments-sdk": "0.3.0",
+    "@interest-protocol/blast-coin-sdk": "0.3.0",
+    "@interest-protocol/blast-core": "0.3.0",
+    "@interest-protocol/blast-vault-sdk": "0.3.0",
+    "@interest-protocol/blast-launchpad-sdk": "0.3.0",
+    "@interest-protocol/blast-holder-rewards-sdk": "0.3.0",
+    "@interest-protocol/blast-admin-sdk": "0.3.0",
+    "@mysten/sui": "^3.0.1"
+  }
+}

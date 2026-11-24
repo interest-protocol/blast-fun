@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS mission_control_x_verification_jobs_claim_order;

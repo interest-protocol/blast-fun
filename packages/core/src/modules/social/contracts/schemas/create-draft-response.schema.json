@@ -1,0 +1,285 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/create-draft-response.schema.json",
+  "title": "A presale draft as saved",
+  "description": "GET or PUT /api/social/me/drafts/{id} (and the logo upload): the draft, its server-owned logo and allowlist summary, what is left to fix, and Blast's rates the issues were checked with. Cache-Control: private, no-store.",
+  "type": "object",
+  "properties": {
+    "draft_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "created_at_ms": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "updated_at_ms": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "draft": {
+      "$ref": "create-draft.schema.json"
+    },
+    "logo_url": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "pattern": "^https://\\S{1,2040}$"
+        }
+      ]
+    },
+    "cover": {
+      "description": "R3-25: the sale's cover, re-encoded to 1536 x 512 (POST …/cover), or null.",
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "url": { "type": "string", "pattern": "^https://\\S{1,2040}$" },
+            "width": { "type": "integer", "minimum": 1 },
+            "height": { "type": "integer", "minimum": 1 },
+            "source": {
+              "$ref": "https://blast-v2.invalid/social/contracts/sale-metadata.schema.json#/properties/cover/oneOf/1/properties/source"
+            }
+          },
+          "required": ["url", "width", "height"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "published_presale_id": {
+      "description": "R3-25: the sale this draft was published as (POST …/published), or null.",
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "pattern": "^0x[0-9a-f]{64}$"
+        }
+      ]
+    },
+    "allowlist": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "allowlist_id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+            },
+            "root": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "leaf_count": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65536
+            },
+            "min_cap": {
+              "type": "number",
+              "minimum": 0
+            },
+            "max_cap": {
+              "type": "number",
+              "minimum": 0
+            },
+            "quote_type": {
+              "description": "R3-42: the coin the list's caps are in (min_cap and max_cap are whole coins of it).",
+              "type": "string"
+            }
+          },
+          "required": [
+            "allowlist_id",
+            "root",
+            "leaf_count",
+            "min_cap",
+            "max_cap",
+            "quote_type"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "issues": {
+      "type": "array",
+      "maxItems": 400,
+      "items": {
+        "type": "object",
+        "properties": {
+          "section": {
+            "enum": [
+              "token",
+              "links",
+              "raise",
+              "join",
+              "split",
+              "rsplit",
+              "launch",
+              "fees"
+            ]
+          },
+          "path": {
+            "type": "string",
+            "pattern": "^[a-z_]+(\\.[0-9]+\\.[a-z_]+)?$"
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "section",
+          "path",
+          "message"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "fee_policy": {
+      "type": "object",
+      "properties": {
+        "raise_bps": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9999
+        },
+        "token_bps": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9998
+        },
+        "lp_fee_meme_bps": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        },
+        "lp_fee_quote_bps": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        },
+        "source": {
+          "enum": [
+            "chain",
+            "config"
+          ]
+        }
+      },
+      "required": [
+        "raise_bps",
+        "token_bps",
+        "lp_fee_meme_bps",
+        "lp_fee_quote_bps",
+        "source"
+      ],
+      "additionalProperties": false
+    },
+    "quotes": {
+      "description": "Known quote types admitted by the deployed CreationPolicy. SUI also requires a conversion price; TEST_SUI requires the development opt-in. Empty when the live policy cannot be read or no quote is available.",
+      "type": "array",
+      "items": {
+        "enum": [
+          "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI",
+          "0xdba34672e30cb065b1f93e3ab55318768fd6fef66c15942c9f7cb846e2f900e7::usdc::USDC",
+          "0x44f838219cf67b058f3b37907b655f226153c18e33dfcd0da559a844fea9b1c1::usdsui::USDSUI",
+          "0x356a26eb9e012a68958082340d4c4116e7f55615cf27affcff209cf0ae544f59::wal::WAL",
+          "0xdeeb7a4662eec9f2f3def03fb937a663dddaa2e215b8078a284d026b7946c270::deep::DEEP",
+          "0xd30fb3f8914efdbeb7b8e85fae1d65dc584b44a1281f66737b92bb9f03a59d06::btc::BTC",
+          "0x963331df9a26c8674c33eb97655fe44807d5ff1aa4092bcbe2bdbe044b17b03d::test_sui::TEST_SUI"
+        ]
+      },
+      "minItems": 0,
+      "uniqueItems": true
+    },
+    "cetus_tiers": {
+      "description": "Live permissioned Cetus tiers keyed by quote type, or null when verification failed.",
+      "type": ["object", "null"],
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "array",
+          "prefixItems": [{ "type": "integer", "minimum": 1 }, { "type": "integer", "minimum": 1 }],
+          "minItems": 2,
+          "maxItems": 2
+        }
+      }
+    },
+    "bluefin_options": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": { "status": { "const": "unavailable" } },
+          "required": ["status"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "status": { "const": "ready" },
+            "min_tick": { "type": "integer" },
+            "max_tick": { "type": "integer" }
+          },
+          "required": ["status", "min_tick", "max_tick"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "sui_price": {
+      "description": "R3-42: SUI's chain_read_v1.prices row the picker converts at; null without one.",
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "usd_price": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+            },
+            "as_of_ms": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "usd_price",
+            "as_of_ms"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    }
+  },
+  "required": [
+    "draft_id",
+    "version",
+    "created_at_ms",
+    "updated_at_ms",
+    "draft",
+    "logo_url",
+    "cover",
+    "published_presale_id",
+    "allowlist",
+    "issues",
+    "fee_policy",
+    "quotes",
+    "sui_price"
+  ],
+  "additionalProperties": false
+}

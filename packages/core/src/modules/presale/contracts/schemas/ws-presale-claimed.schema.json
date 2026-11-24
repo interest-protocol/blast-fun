@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/presale/contracts/ws-presale-claimed.schema.json",
+  "title": "presale claimed message",
+  "description": "presale:<presale_id>: one wallet's delivery and the sale's totals after it (CL-4, CL-29); a log message has no topic and reaches each connection once (CL-20); a replayed message carries replayed: true (CL-26).",
+  "type": "object",
+  "properties": {
+    "type": {
+      "const": "claimed"
+    },
+    "cursor": {
+      "$ref": "defs.schema.json#/$defs/event_cursor"
+    },
+    "checkpoint": {
+      "$ref": "defs.schema.json#/$defs/checkpoint"
+    },
+    "timestamp_ms": {
+      "$ref": "defs.schema.json#/$defs/timestamp_ms"
+    },
+    "replayed": {
+      "description": "Present, and true, only on a message replayed on resume (CL-26).",
+      "const": true
+    },
+    "presale_id": {
+      "$ref": "defs.schema.json#/$defs/address"
+    },
+    "wallet": {
+      "$ref": "defs.schema.json#/$defs/address"
+    },
+    "tokens": {
+      "$ref": "defs.schema.json#/$defs/uint"
+    },
+    "quote_refund": {
+      "$ref": "defs.schema.json#/$defs/uint"
+    },
+    "remaining_wallets": {
+      "$ref": "defs.schema.json#/$defs/count"
+    },
+    "totals": {
+      "$ref": "defs.schema.json#/$defs/totals"
+    }
+  },
+  "required": [
+    "type",
+    "cursor",
+    "checkpoint",
+    "timestamp_ms",
+    "presale_id",
+    "wallet",
+    "tokens",
+    "quote_refund",
+    "remaining_wallets",
+    "totals"
+  ],
+  "additionalProperties": false
+}

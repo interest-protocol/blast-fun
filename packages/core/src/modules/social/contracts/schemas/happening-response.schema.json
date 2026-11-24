@@ -1,0 +1,341 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/happening-response.schema.json",
+  "title": "Home's live public reads",
+  "description": "GET /api/social/happening 200 (Cache-Control: public, s-maxage=10, stale-while-revalidate=20): the last hour's commit totals, the live activity tape, the fastest filling and opening-soon presales and the Today on Blast recap, bounded by the watermark. The same for every caller; no viewer field.",
+  "type": "object",
+  "properties": {
+    "clock_ms": {
+      "$ref": "https://blast-v2.invalid/social/contracts/feed-item.schema.json#/$defs/millis",
+      "description": "The chain clock the windows end at: the earlier of the presale pipeline's committed time and the server's clock."
+    },
+    "last_hour": {
+      "type": "object",
+      "properties": {
+        "wallets": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "usd": {
+          "$ref": "https://blast-v2.invalid/social/contracts/feed-item.schema.json#/$defs/usd"
+        },
+        "usd_complete": {
+          "type": "boolean",
+          "description": "False when any commitment in the window lacks a USD value; usd is then only the priced portion."
+        }
+      },
+      "required": [
+        "wallets",
+        "usd"
+      ],
+      "additionalProperties": false
+    },
+    "tape": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "$ref": "#/$defs/tapeEvent"
+      }
+    },
+    "fastest": {
+      "type": "array",
+      "maxItems": 5,
+      "items": {
+        "$ref": "#/$defs/presale"
+      }
+    },
+    "opening_soon": {
+      "type": "array",
+      "maxItems": 5,
+      "items": {
+        "$ref": "#/$defs/presale"
+      }
+    },
+    "today": {
+      "description": "Admin-pinned shown presales, newest pin first; empty without pins.",
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "$ref": "#/$defs/presale"
+      }
+    },
+    "as_of": {
+      "$ref": "https://blast-v2.invalid/social/contracts/as-of.schema.json"
+    },
+    "top_coins": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "trending": {
+              "type": "array",
+              "maxItems": 50,
+              "items": {
+                "$ref": "#/$defs/topCoin"
+              }
+            },
+            "gainers": {
+              "type": "array",
+              "maxItems": 50,
+              "items": {
+                "$ref": "#/$defs/topCoin"
+              }
+            }
+          },
+          "required": [
+            "trending",
+            "gainers"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    }
+  },
+  "required": [
+    "clock_ms",
+    "last_hour",
+    "tape",
+    "fastest",
+    "opening_soon",
+    "today",
+    "as_of"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "presale": {
+      "type": "object",
+      "properties": {
+        "presale": {
+          "$ref": "https://blast-v2.invalid/social/contracts/feed-item.schema.json#/$defs/presale"
+        },
+        "interested": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Accounts following the presale."
+        },
+        "window_raised": {
+          "$ref": "https://blast-v2.invalid/social/contracts/feed-item.schema.json#/$defs/atoms",
+          "description": "Quote atoms committed in the velocity window before clock_ms."
+        },
+        "launched_ms": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "https://blast-v2.invalid/social/contracts/feed-item.schema.json#/$defs/millis"
+            }
+          ],
+          "description": "When the presale migrated, or null."
+        },
+        "cover": {
+          "$ref": "https://blast-v2.invalid/social/contracts/sale-metadata.schema.json#/properties/cover",
+          "description": "Public creator cover for admin pins; optional for older responses."
+        }
+      },
+      "required": [
+        "presale",
+        "interested",
+        "window_raised",
+        "launched_ms"
+      ],
+      "additionalProperties": false
+    },
+    "tapeEvent": {
+      "type": "object",
+      "properties": {
+        "activity_id": {
+          "type": "string",
+          "pattern": "^[0-9]+:[0-9]+:[0-9]+:[0-9]+$"
+        },
+        "kind": {
+          "enum": [
+            "presale_commit",
+            "presale_claim",
+            "trade_buy",
+            "trade_sell"
+          ]
+        },
+        "occurred_at_ms": {
+          "$ref": "https://blast-v2.invalid/social/contracts/feed-item.schema.json#/$defs/millis"
+        },
+        "actor": {
+          "oneOf": [
+            {
+              "$ref": "https://blast-v2.invalid/social/contracts/feed-item.schema.json#/$defs/accountActor"
+            },
+            {
+              "$ref": "https://blast-v2.invalid/social/contracts/feed-item.schema.json#/$defs/addressActor"
+            }
+          ],
+          "description": "Named by the naming rule at the event, else the wallet only."
+        },
+        "presale_id": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "pattern": "^0x[0-9a-f]{64}$"
+            }
+          ]
+        },
+        "symbol": {
+          "type": "string"
+        },
+        "usd": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "https://blast-v2.invalid/social/contracts/feed-item.schema.json#/$defs/usd"
+            }
+          ]
+        },
+        "tokens": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]{1,18})?$",
+              "description": "A non-negative plain decimal."
+            }
+          ],
+          "description": "A claim's sale tokens in whole tokens."
+        },
+        "refund": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]{1,18})?$",
+              "description": "A non-negative plain decimal."
+            }
+          ],
+          "description": "A claim's refund in whole Quote units."
+        },
+        "quote_symbol": {
+          "description": "R3-40: the sale's quote symbol, so a SUI sale's refund reads in SUI; null for a row of no sale.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "minLength": 1
+            }
+          ]
+        }
+      },
+      "required": [
+        "activity_id",
+        "kind",
+        "occurred_at_ms",
+        "actor",
+        "presale_id",
+        "symbol",
+        "usd",
+        "tokens",
+        "refund",
+        "quote_symbol"
+      ],
+      "additionalProperties": false
+    },
+    "topCoin": {
+      "type": "object",
+      "properties": {
+        "coin_type": {
+          "type": "string"
+        },
+        "presale_id": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "pattern": "^0x[0-9a-f]{64}$"
+            }
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "symbol": {
+          "type": "string"
+        },
+        "icon_url": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "price_usd": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+        },
+        "change_24h_bps": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "integer"
+            }
+          ]
+        },
+        "buyers_24h": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "integer",
+              "minimum": 0
+            }
+          ]
+        },
+        "holders": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "integer",
+              "minimum": 0
+            }
+          ]
+        },
+        "verified_team": {
+          "type": "boolean",
+          "description": "R3-23: Blast checked who is behind the sale (social_sale_trust); sent only when true."
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "coin_type",
+        "presale_id",
+        "name",
+        "symbol",
+        "icon_url",
+        "price_usd",
+        "change_24h_bps",
+        "buyers_24h",
+        "holders"
+      ]
+    }
+  }
+}

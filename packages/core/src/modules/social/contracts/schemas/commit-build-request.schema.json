@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/commit-build-request.schema.json",
+  "title": "Build a presale commit for the Blast wallet",
+  "description": "POST /api/social/me/commits: the sale, its exact on-chain quote coin selected by QUOTE, the commitment in the sale's quote-coin atoms, and for an allowlisted sale the Blast wallet's leaf as the presale proof route answers it.",
+  "type": "object",
+  "properties": {
+    "presale_id": {
+      "type": "string",
+      "pattern": "^0x[0-9a-f]{64}$"
+    },
+    "pay_with": {
+      "enum": [
+        "QUOTE"
+      ]
+    },
+    "amount": {
+      "description": "A u64 of quote-coin atoms, at least 1.",
+      "type": "string",
+      "pattern": "^[1-9][0-9]{0,19}$"
+    },
+    "allowlist": {
+      "type": "object",
+      "properties": {
+        "index": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]{0,19})$"
+        },
+        "wallet_cap": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]{0,19})$"
+        },
+        "proof": {
+          "description": "A Merkle proof, leaf to root; at most 16 entries (65,536 leaves); 32 bytes as 64 lowercase hex characters without 0x.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "maxItems": 16
+        }
+      },
+      "required": [
+        "index",
+        "wallet_cap",
+        "proof"
+      ],
+      "additionalProperties": false
+    },
+    "swap_quote_id": {
+      "description": "An offered, sealed swap into the presale's exact quote type. amount is its guaranteed min_out.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 3000
+    }
+  },
+  "required": [
+    "presale_id",
+    "pay_with",
+    "amount"
+  ],
+  "additionalProperties": false
+}

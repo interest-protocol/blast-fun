@@ -1,0 +1,168 @@
+--- a/package.json
++++ b/package.json
+@@ -2 +2 @@
+-  "name": "zod",
++  "name": "@blast/zod-v3",
+@@ -117 +117,2 @@
+-  }
++  },
++  "private": true
+--- a/src/v3/types.ts
++++ b/src/v3/types.ts
+@@ -2297,0 +2298,7 @@ ZodArray._parse
++    if (
++      (def.exactLength !== null && ctx.data.length > def.exactLength.value) ||
++      (def.maxLength !== null && ctx.data.length > def.maxLength.value)
++    ) {
++      return INVALID;
++    }
++
+@@ -3729,0 +3737,4 @@ ZodSet._parse
++    if (def.maxSize !== null && ctx.data.size > def.maxSize.value) {
++      return INVALID;
++    }
++
+--- a/v3/types.js
++++ b/v3/types.js
+@@ -1800,0 +1801,7 @@ ZodArray._parse
++        if (
++          (def.exactLength !== null && ctx.data.length > def.exactLength.value) ||
++          (def.maxLength !== null && ctx.data.length > def.maxLength.value)
++        ) {
++          return INVALID;
++        }
++
+@@ -2819,0 +2827,4 @@ ZodSet._parse
++        if (def.maxSize !== null && ctx.data.size > def.maxSize.value) {
++          return INVALID;
++        }
++
+--- a/v3/types.cjs
++++ b/v3/types.cjs
+@@ -1821,0 +1822,7 @@ ZodArray._parse
++        if (
++          (def.exactLength !== null && ctx.data.length > def.exactLength.value) ||
++          (def.maxLength !== null && ctx.data.length > def.maxLength.value)
++        ) {
++          return parseUtil_js_1.INVALID;
++        }
++
+@@ -2848,0 +2856,4 @@ ZodSet._parse
++        if (def.maxSize !== null && ctx.data.size > def.maxSize.value) {
++          return parseUtil_js_1.INVALID;
++        }
++
+--- a/src/v4/core/schemas.ts
++++ b/src/v4/core/schemas.ts
+@@ -244,0 +245,35 @@ $ZodType._zod.run
++      // Check collection bounds before allocating output or parsing elements.
++      if (def.type === "array" || def.type === "set" || def.type === "map") {
++        const value = payload.value;
++        const size = def.type === "array" && Array.isArray(value)
++          ? value.length
++          : (def.type === "set" && value instanceof Set) ||
++            (def.type === "map" && value instanceof Map)
++            ? value.size
++            : undefined;
++
++        if (size !== undefined) {
++          for (const check of checks) {
++            const bound = check._zod.def;
++            if (!/_(length|size)$|_equals$/.test(bound.check)) {
++              break;
++            }
++            const maximum = "maximum" in bound ? bound.maximum
++              : "length" in bound ? bound.length
++              : "size" in bound ? bound.size : undefined;
++            if (
++              ["max_length", "length_equals", "max_size", "size_equals"].includes(bound.check) &&
++              typeof maximum === "number" && size > maximum &&
++              (!bound.when || bound.when(payload))
++            ) {
++              const initialIssues = payload.issues.length;
++              check._zod.check(payload as never);
++              if (payload.issues.length > initialIssues) {
++                payload.issues[initialIssues].continue = false;
++                return payload;
++              }
++            }
++          }
++        }
++      }
++
+--- a/v4/core/schemas.js
++++ b/v4/core/schemas.js
+@@ -76,0 +77,35 @@ $ZodType._zod.run
++            // Check collection bounds before allocating output or parsing elements.
++            if (def.type === "array" || def.type === "set" || def.type === "map") {
++              const value = payload.value;
++              const size = def.type === "array" && Array.isArray(value)
++                ? value.length
++                : (def.type === "set" && value instanceof Set) ||
++                  (def.type === "map" && value instanceof Map)
++                  ? value.size
++                  : undefined;
++
++              if (size !== undefined) {
++                for (const check of checks) {
++                  const bound = check._zod.def;
++                  if (!/_(length|size)$|_equals$/.test(bound.check)) {
++                    break;
++                  }
++                  const maximum = "maximum" in bound ? bound.maximum
++                    : "length" in bound ? bound.length
++                    : "size" in bound ? bound.size : undefined;
++                  if (
++                    ["max_length", "length_equals", "max_size", "size_equals"].includes(bound.check) &&
++                    typeof maximum === "number" && size > maximum &&
++                    (!bound.when || bound.when(payload))
++                  ) {
++                    const initialIssues = payload.issues.length;
++                    check._zod.check(payload);
++                    if (payload.issues.length > initialIssues) {
++                      payload.issues[initialIssues].continue = false;
++                      return payload;
++                    }
++                  }
++                }
++              }
++            }
++
+--- a/v4/core/schemas.cjs
++++ b/v4/core/schemas.cjs
+@@ -106,0 +107,35 @@ $ZodType._zod.run
++            // Check collection bounds before allocating output or parsing elements.
++            if (def.type === "array" || def.type === "set" || def.type === "map") {
++              const value = payload.value;
++              const size = def.type === "array" && Array.isArray(value)
++                ? value.length
++                : (def.type === "set" && value instanceof Set) ||
++                  (def.type === "map" && value instanceof Map)
++                  ? value.size
++                  : undefined;
++
++              if (size !== undefined) {
++                for (const check of checks) {
++                  const bound = check._zod.def;
++                  if (!/_(length|size)$|_equals$/.test(bound.check)) {
++                    break;
++                  }
++                  const maximum = "maximum" in bound ? bound.maximum
++                    : "length" in bound ? bound.length
++                    : "size" in bound ? bound.size : undefined;
++                  if (
++                    ["max_length", "length_equals", "max_size", "size_equals"].includes(bound.check) &&
++                    typeof maximum === "number" && size > maximum &&
++                    (!bound.when || bound.when(payload))
++                  ) {
++                    const initialIssues = payload.issues.length;
++                    check._zod.check(payload);
++                    if (payload.issues.length > initialIssues) {
++                      payload.issues[initialIssues].continue = false;
++                      return payload;
++                    }
++                  }
++                }
++              }
++            }
++

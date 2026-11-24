@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/presale/contracts/ws-presale-snapshot.schema.json",
+  "title": "presale snapshot message",
+  "description": "presale:<presale_id>: the section 2.1 projection and the last 50 commitments (CL-4); only snapshot carries topic (CL-20).",
+  "type": "object",
+  "properties": {
+    "type": {
+      "const": "snapshot"
+    },
+    "topic": {
+      "type": "string",
+      "pattern": "^presale:0x[0-9a-f]{64}$"
+    },
+    "cursor": {
+      "$ref": "defs.schema.json#/$defs/event_cursor"
+    },
+    "checkpoint": {
+      "$ref": "defs.schema.json#/$defs/checkpoint"
+    },
+    "timestamp_ms": {
+      "$ref": "defs.schema.json#/$defs/timestamp_ms"
+    },
+    "projection": {
+      "$ref": "presale-projection.schema.json"
+    },
+    "commitments": {
+      "type": "array",
+      "items": {
+        "$ref": "defs.schema.json#/$defs/commitment_entry"
+      },
+      "maxItems": 50
+    }
+  },
+  "required": [
+    "type",
+    "topic",
+    "cursor",
+    "checkpoint",
+    "timestamp_ms",
+    "projection",
+    "commitments"
+  ],
+  "additionalProperties": false
+}

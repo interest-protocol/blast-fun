@@ -1,0 +1,27 @@
+/* The holders table's Thesis column (BlastMode.dc.html): a fifth column after Avg entry, the holder's why on one muted 12px line. */
+.table > :is(thead,tbody) > tr { grid-template-columns:minmax(0,1.3fr) 0.9fr 0.8fr 0.8fr minmax(0,1.5fr); }
+.table > :is(thead,tbody) > tr > .thesis { min-width:0; text-align:left; }
+.table > :is(thead,tbody) > tr > td.thesis { color:var(--muted); font-size:0.75rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+/* A narrow panel keeps the four figures where they were and moves the thesis under its row, full width, so the trader keeps its room; the header stays for assistive technology. */
+@container workspace-panel (max-width:760px) {
+  .table > :is(thead,tbody) > tr { grid-template-columns:minmax(0,1.6fr) repeat(3,minmax(0,1fr)); row-gap:0.125rem; }
+  .table > :is(thead,tbody) > tr:has(> td.thesis:not(:empty)) { height:auto; min-height:2.875rem; padding-block:0.375rem; }
+  .table > :is(thead,tbody) > tr > td.thesis { grid-column:1 / -1; }
+  .table > :is(thead,tbody) > tr > td.thesis:empty { display:none; }
+  .table > :is(thead,tbody) > tr > th.thesis { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+}
+/*
+ * On a phone-width panel a row is two lines: the trader across the top, then its three figures in equal columns (the
+ * thesis under them), so no figure is cut and the name keeps its room; the Trader header stays for assistive technology.
+ */
+@container workspace-panel (max-width:400px) {
+  .table > :is(thead,tbody) > tr { grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .table > tbody > tr { height:auto; min-height:2.875rem; padding-block:0.5rem; row-gap:0.25rem; }
+  .table > :is(thead,tbody) > tr > :first-child { grid-column:1 / -1; }
+  .table > thead > tr > :first-child { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+}
+
+.table { width:100%; border-collapse:collapse; border-spacing:0; }
+.table > :is(thead,tbody) { display:contents; }
+.table :is(th,td) { padding:0; }
+.table th { font:inherit; text-align:left; }

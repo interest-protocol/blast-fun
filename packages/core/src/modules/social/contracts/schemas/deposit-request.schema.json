@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/deposit-request.schema.json",
+  "title": "Record, then settle, a deposit from another chain",
+  "description": "PUT /api/social/me/deposits/{request_id} (OA-25): the source chain and the USDC atoms to burn there; then the same body with the burn's hash, or with why nothing was burned. Never both.",
+  "type": "object",
+  "properties": {
+    "source": {
+      "enum": [
+        "base",
+        "arbitrum",
+        "ethereum",
+        "solana"
+      ]
+    },
+    "amount": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]{0,19}$"
+    },
+    "tx_hash": {
+      "type": "string",
+      "pattern": "^(0x[0-9a-fA-F]{64}|[1-9A-HJ-NP-Za-km-z]{64,88})$"
+    },
+    "failure": {
+      "enum": [
+        "rejected",
+        "dry_run_failed",
+        "expired"
+      ]
+    }
+  },
+  "required": [
+    "source",
+    "amount"
+  ],
+  "not": {
+    "properties": {
+      "tx_hash": true,
+      "failure": true
+    },
+    "required": [
+      "tx_hash",
+      "failure"
+    ]
+  },
+  "additionalProperties": false
+}

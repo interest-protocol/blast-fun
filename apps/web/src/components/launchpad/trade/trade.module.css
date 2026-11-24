@@ -1,0 +1,273 @@
+/*
+ * The curve trade rail. Colors come from the launchpad theme tokens (`--lp-*`);
+ * every size resolves to whole pixels.
+ */
+
+.rail {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border-radius: var(--lp-radius);
+  background: var(--lp-raised);
+}
+
+.tab {
+  min-height: 40px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--lp-muted);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tab[aria-selected="true"] {
+  background: var(--lp-surface);
+  color: var(--lp-ink);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 12%);
+}
+
+.panel {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.panel[hidden] {
+  display: none;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.label {
+  padding: 0;
+  color: var(--lp-muted);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.unit {
+  color: var(--lp-ink);
+}
+
+.input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 56px;
+  padding: 12px 14px;
+  border: 1px solid var(--lp-line);
+  border-radius: var(--lp-radius);
+  background: var(--lp-surface);
+  color: var(--lp-ink);
+  font: inherit;
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 30px;
+  font-variant-numeric: tabular-nums;
+}
+
+.input[aria-invalid="true"] {
+  border-color: var(--lp-down);
+  box-shadow: inset 0 0 0 1px var(--lp-down);
+}
+
+.input:disabled {
+  background: var(--lp-raised);
+  color: var(--lp-muted);
+}
+
+.choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--lp-line);
+  border-radius: 10px;
+  background: var(--lp-surface);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.choice:has(input:checked) {
+  border-color: var(--lp-accent);
+  background: var(--lp-selected);
+  font-weight: 600;
+}
+
+.choice input {
+  accent-color: var(--lp-accent);
+}
+
+.note,
+.observation {
+  margin: 0;
+  color: var(--lp-muted);
+  font-size: 12px;
+  line-height: 16px;
+  overflow-wrap: anywhere;
+}
+
+.observation[data-stale] {
+  color: var(--lp-caution);
+}
+
+.error {
+  margin: 0;
+  color: var(--lp-down);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.preview,
+.review {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.reviewTitle {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 20px;
+}
+
+.facts {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.factRow {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 2px 12px;
+  min-width: 0;
+}
+
+.factRow dt {
+  color: var(--lp-muted);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.factRow dd {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.action {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.notice {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.notice p {
+  margin: 0;
+}
+
+.success {
+  margin: 0;
+  font-size: 15px;
+  line-height: 22px;
+}
+
+.changes {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.primary,
+.secondary,
+.quiet {
+  min-height: 44px;
+  border-radius: var(--lp-radius);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.primary {
+  width: 100%;
+  padding: 10px 16px;
+  border: 0;
+  background: var(--lp-accent);
+  color: var(--lp-accent-ink);
+}
+
+.secondary {
+  padding: 8px 16px;
+  border: 1px solid var(--lp-line);
+  background: var(--lp-surface);
+  color: var(--lp-ink);
+  font-size: 14px;
+}
+
+.quiet {
+  padding: 8px 4px;
+  border: 0;
+  background: none;
+  color: var(--lp-accent-text);
+  font-size: 13px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.primary:disabled,
+.secondary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.link {
+  color: var(--lp-accent-text);
+  font-weight: 600;
+}

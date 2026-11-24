@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/presale/contracts/errors/origin_invalid.schema.json",
+  "title": "origin_invalid error",
+  "description": "HTTP 403; route-specific fields sit inside error (CL-10), and the body never carries retryAfterSeconds (CL-23).",
+  "type": "object",
+  "properties": {
+    "error": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "const": "origin_invalid"
+        },
+        "message": {
+          "$ref": "../defs.schema.json#/$defs/message"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "error"
+  ],
+  "additionalProperties": false
+}

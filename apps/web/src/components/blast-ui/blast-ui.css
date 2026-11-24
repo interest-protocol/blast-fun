@@ -1,0 +1,819 @@
+/*
+ * The canonical UI's tokens and shared primitives (design/tokens.md), scoped
+ * to the page root `[data-blast-ui]` so pages outside the Blast UI (Mission
+ * Control, the launchpad) keep their own look. Values are the prototype's
+ * final effective CSS. The dark set is declared twice and must stay
+ * identical: once for `system` under `prefers-color-scheme: dark`, once for
+ * an explicit `data-theme="dark"`.
+ *
+ * Layout (the Rail, Topbar and page boards, 2026-10-27): a 248px rail, then a
+ * column holding the 64px top bar and the page, at most 1180px with 40px
+ * gutters (18px on phones); a right column sits 20px from the view. Page
+ * titles start 26px under the top bar and keep 20px above the first card.
+ * One brand hue.
+ */
+
+[data-blast-ui] {
+  color-scheme: light;
+  --bg: #f5f5f7; --card: #ffffff; --raised: #f9f9fb; --track: #ececf0; --hair: var(--blast-light-hair); --hair-2: #d9d9df;
+  --ink: #1d1d1f; --ink-2: #3a3a3e; --muted: var(--blast-light-muted); --faint: var(--blast-light-faint);
+  /* A card's lit top edge (dark mode) and its hairline. */
+  --card-lit: rgba(255, 255, 255, 0);
+  --pink: var(--blast-light-pink); --pink-ink: var(--blast-light-pink-ink); --pink-press: #b8125c; --pink-soft: #fff0f6; --pink-soft-2: #ffe2ef; --pink-text: #c0125e; --pink-line: #f6bcd6;
+  --notification-unread: color-mix(in srgb, var(--pink) 4%, var(--card));
+  --notification-dot: var(--pink-ink);
+  /* The Known deployer helmet uses the deeper pink on light and the bright one on dark. */
+  --coin-verified: var(--pink-ink);
+  --positive-action:#0f7f48; --on-positive-action:#ffffff; --positive-action-hover:#0b6539;
+  --coin-chart-up: #086039; --coin-chart-down: #a81f38;
+  --up: var(--blast-light-up); --up-soft: #e7f6ee; --down: var(--blast-light-down); --down-soft: #fdecee; --warn: #8f5400; --warn-soft: #fff4dd; --info: #2456c9; --info-soft: #edf2ff;
+  /*
+   * Data series (the boards' allocation bars, splits and their keys): 1 violet
+   * (coins, the pool), 2 pink (presales, buyers), 3 cyan (to claim, recipients),
+   * 4 amber. Dark is the boards' values; light keeps each hue at 3:1 or more on
+   * the card and on raised tiles.
+   */
+  --series-1: #9280e5; --series-2: #fa4794; --series-3: #019cb6; --series-4: #b7851e;
+  /*
+   * Split shades (allocation bars, fee splits and their keys), by place in the
+   * bar: ink, tint 2, tint 1, tint 3, repeating (splitShades). Tint 1 sits on
+   * ink's side and tints 2 and 3 on the light side, so neighbours alternate
+   * dark and light at 3:1 or more in both themes. Neutral on purpose: a split
+   * reads by order and label, never by hue.
+   */
+  --ink-tint-1: #48484d; --ink-tint-2: #9a9aa0; --ink-tint-3: #c2c2c8;
+  --on-pink: #ffffff; --field: #ffffff; --chip: #f0f0f3;
+  --thumb: #ffffff; --thumb-sh: 0 1px 0.1875rem rgba(15, 14, 19, .12), 0 0 0 .5px rgba(15, 14, 19, .16);
+  --scrim: rgba(15, 14, 19, .34); --glass: rgba(244, 243, 247, .8); --glass-card: rgba(255, 255, 255, .82);
+  --tip-bg: #0f0e13; --tip-fg: #ffffff; --tip-link: #ff80b8;
+  --toast-bg: var(--card); --toast-fg: var(--ink); --toast-link: var(--pink-text);
+  --toast-shadow: inset 0 0 0 1px var(--hair-2), var(--sh-pop);
+  --sh-1: 0 1px 0.125rem rgba(0, 0, 0, .04);
+  --sh-2: 0 1px 0.125rem rgba(15, 14, 19, .04), 0 0.625rem 1.75rem -1rem rgba(15, 14, 19, .18);
+  --sh-hover: 0 1px 0.125rem rgba(15, 14, 19, .04), 0 0 0 1px rgba(15, 14, 19, .07);
+  --sh-primary-hover: 0 0.125rem 0.1875rem -1px rgba(0, 0, 0, .1), 0 1px 0 rgba(25, 28, 33, .02), 0 0 0 1px rgba(25, 28, 33, .08);
+  --sh-pop: 0 0.125rem 0.375rem rgba(15, 14, 19, .06), 0 1.5rem 3.5rem -1.125rem rgba(15, 14, 19, .32);
+  --focus: 0 0 0 0.125rem var(--ink);
+  --glow: rgba(255, 76, 152, .12);
+  --card-shadow: 0 1.875rem 3.75rem -1.875rem rgba(214, 27, 112, .55);
+  /* next/font sets --font-geist, --font-geist-mono and --font-bricolage on the root. */
+  --font: var(--font-geist, "Geist"), -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  --mono: var(--font-geist-mono, "Geist Mono"), ui-monospace, "SF Mono", Menlo, monospace;
+  /* OA-32: the display face, only on the wordmark, page and entity titles and hero figures; falls back to Geist. */
+  --display: var(--font-bricolage, "Bricolage Grotesque"), var(--font);
+  --s1: 0.1875rem; --s2: 0.3125rem; --s3: 0.5rem; --s4: 0.8125rem; --s5: 1.3125rem; --s6: 2.125rem; --s7: 3.4375rem;
+  /* Corner roles (2026-10-27 redesign): 7 inner, 10 control, 14 tile and large action, 22 card. */
+  --r-xs: 0.5rem; --r-sm: 0.875rem; --r-md: 1.375rem; --r-lg: 2.125rem;
+  --r-button: 0.625rem; --r-button-lg: 0.875rem;
+  /* A thumb or chip inside a 3px-padded track or field: the button radius minus the padding. */
+  --r-inner: 0.4375rem;
+  /* Motion: the strong ease-out for entering and leaving, ease-in-out for on-screen movement, the drawer curve for sidebars and sheets
+     (motion-tokens.ts carries the same values for script). `--ease` is an alias kept for older modules. */
+  --ease-std: cubic-bezier(.23, 1, .32, 1); --ease-io: cubic-bezier(.77, 0, .175, 1); --ease-drawer: cubic-bezier(.32, .72, 0, 1); --ease: var(--ease-std);
+  --t1: .12s; --t2: .2s; --t3: .28s; --t4: .3s;
+  /* Shell geometry (Rail and Topbar boards): rail, right column, view-to-column gap, page gutter and width. */
+  --rail: 15.5rem; --aside: 18.75rem; --gap: 1.25rem; --page-gutter: 2.5rem; --page-max: 73.75rem;
+  /* The page title block (PageHeader): space above the title and between it and the first card. */
+  --page-title-top: 1.625rem; --page-title-gap: 1.25rem;
+  --stick-top: 0.8125rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  [data-blast-ui]:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0a0a0d; --card: #121217; --raised: #18181e; --track: #1d1d23; --hair: #222228; --hair-2: #2e2e35;
+    --ink: #f5f5f7; --ink-2: #d1d1d6; --muted: #98989f; --faint: #636369;
+    --card-lit: rgba(255, 255, 255, .028);
+    --pink-press: #e8317f; --pink-soft: rgba(255, 76, 152, .12); --pink-soft-2: rgba(255, 76, 152, .2); --pink-text: #ff80b8; --pink-line: rgba(255, 76, 152, .38);
+    --notification-unread: color-mix(in srgb, var(--pink) 5%, var(--card));
+    --notification-dot: var(--pink);
+    --coin-verified: var(--pink);
+    --positive-action:#3fd38b; --on-positive-action:#0f0e13; --positive-action-hover:#33bd7a;
+  --coin-chart-up: var(--up); --coin-chart-down: var(--down);
+  --up: #3fd38b; --up-soft: rgba(63, 211, 139, .12); --down: #ff6b7e; --down-soft: rgba(255, 107, 126, .12); --warn: #f4c063; --warn-soft: rgba(244, 192, 99, .12); --info: #93b4ff; --info-soft: rgba(147, 180, 255, .12);
+    --series-1: #a998ff; --series-2: #ff4c98; --series-3: #5fd6f2; --series-4: #f4c063;
+    --ink-tint-1: #c8c8ce; --ink-tint-2: #6e6e74; --ink-tint-3: #4a4a50;
+    --field: #16161b; --chip: #1d1d23;
+    --thumb: #36363e; --thumb-sh: 0 1px 0.125rem rgba(0, 0, 0, .5), inset 0 0 0 .5px rgba(255, 255, 255, .18);
+    --scrim: rgba(0, 0, 0, .6); --glass: rgba(10, 10, 13, .72); --glass-card: rgba(18, 18, 23, .8);
+    --tip-bg: #f5f4f8; --tip-fg: #0b0a0f; --tip-link: #c0125e;
+    --toast-bg: var(--raised); --toast-fg: var(--ink); --toast-link: var(--pink-text);
+    --toast-shadow: inset 0 0 0 1px rgba(255, 255, 255, .14), 0 0.25rem 0.75rem rgba(0, 0, 0, .32), 0 1.125rem 2.5rem -0.5rem rgba(0, 0, 0, .65);
+    --sh-1: inset 0 1px 0 rgba(255, 255, 255, .04);
+    --sh-2: 0 0 0 1px rgba(255, 255, 255, .05), 0 0.875rem 2.125rem -1.125rem rgba(0, 0, 0, .85);
+    --sh-hover: 0 0 0 1px rgba(255, 255, 255, .11);
+    --sh-primary-hover: 0 0.125rem 0.1875rem -1px rgba(0, 0, 0, .24), 0 1px 0 rgba(0, 0, 0, .04), 0 0 0 1px rgba(255, 255, 255, .04);
+    --sh-pop: 0 0 0 1px rgba(255, 255, 255, .07), 0 1.75rem 4rem -1.125rem rgba(0, 0, 0, .9);
+    --focus: 0 0 0 0.125rem var(--ink);
+    --glow: rgba(255, 76, 152, .15);
+    --card-shadow: 0 1.875rem 4.375rem -1.75rem rgba(255, 76, 152, .5);
+  }
+}
+
+[data-blast-ui][data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0a0a0d; --card: #121217; --raised: #18181e; --track: #1d1d23; --hair: #222228; --hair-2: #2e2e35;
+  --ink: #f5f5f7; --ink-2: #d1d1d6; --muted: #98989f; --faint: #636369;
+  --card-lit: rgba(255, 255, 255, .028);
+  --pink-press: #e8317f; --pink-soft: rgba(255, 76, 152, .12); --pink-soft-2: rgba(255, 76, 152, .2); --pink-text: #ff80b8; --pink-line: rgba(255, 76, 152, .38);
+  --notification-unread: color-mix(in srgb, var(--pink) 5%, var(--card));
+  --notification-dot: var(--pink);
+  --coin-verified: var(--pink);
+  --positive-action:#3fd38b; --on-positive-action:#0f0e13; --positive-action-hover:#33bd7a;
+  --coin-chart-up: var(--up); --coin-chart-down: var(--down);
+  --up: #3fd38b; --up-soft: rgba(63, 211, 139, .12); --down: #ff6b7e; --down-soft: rgba(255, 107, 126, .12); --warn: #f4c063; --warn-soft: rgba(244, 192, 99, .12); --info: #93b4ff; --info-soft: rgba(147, 180, 255, .12);
+  --series-1: #a998ff; --series-2: #ff4c98; --series-3: #5fd6f2; --series-4: #f4c063;
+  --ink-tint-1: #c8c8ce; --ink-tint-2: #6e6e74; --ink-tint-3: #4a4a50;
+  --field: #16161b; --chip: #1d1d23;
+  --thumb: #36363e; --thumb-sh: 0 1px 0.125rem rgba(0, 0, 0, .5), inset 0 0 0 .5px rgba(255, 255, 255, .18);
+  --scrim: rgba(0, 0, 0, .6); --glass: rgba(10, 10, 13, .72); --glass-card: rgba(18, 18, 23, .8);
+  --tip-bg: #f5f4f8; --tip-fg: #0b0a0f; --tip-link: #c0125e;
+  --toast-bg: var(--raised); --toast-fg: var(--ink); --toast-link: var(--pink-text);
+  --toast-shadow: inset 0 0 0 1px rgba(255, 255, 255, .14), 0 0.25rem 0.75rem rgba(0, 0, 0, .32), 0 1.125rem 2.5rem -0.5rem rgba(0, 0, 0, .65);
+  --sh-1: inset 0 1px 0 rgba(255, 255, 255, .04);
+  --sh-2: 0 0 0 1px rgba(255, 255, 255, .05), 0 0.875rem 2.125rem -1.125rem rgba(0, 0, 0, .85);
+  --sh-hover: 0 0 0 1px rgba(255, 255, 255, .11);
+  --sh-primary-hover: 0 0.125rem 0.1875rem -1px rgba(0, 0, 0, .24), 0 1px 0 rgba(0, 0, 0, .04), 0 0 0 1px rgba(255, 255, 255, .04);
+  --sh-pop: 0 0 0 1px rgba(255, 255, 255, .07), 0 1.75rem 4rem -1.125rem rgba(0, 0, 0, .9);
+  --focus: 0 0 0 0.125rem var(--ink);
+  --glow: rgba(255, 76, 152, .15);
+  --card-shadow: 0 1.875rem 4.375rem -1.75rem rgba(255, 76, 152, .5);
+}
+
+/*
+ * Reduce Transparency and Increase Contrast (OA-31, the gate's version 5).
+ * Glass turns solid, so text never sits over moving content; with more
+ * contrast, secondary text is a step darker (lighter in dark mode) and the
+ * hairlines firmer. The gate writes these on `html:root:root:root`; the
+ * tokens live on the page root here, so each set targets the same root as
+ * the theme it amends, doubled to outweigh it (`[data-blast-ui]:not(…)` and
+ * `[data-blast-ui][data-theme="dark"]` are two attributes heavy). The dark
+ * set is declared twice and must stay identical, as above.
+ */
+@media (prefers-reduced-transparency: reduce) {
+  [data-blast-ui][data-blast-ui] { --glass: var(--bg); --glass-card: var(--card); }
+}
+
+@media (prefers-contrast: more) {
+  [data-blast-ui][data-blast-ui] { --glass: var(--bg); --glass-card: var(--card); --muted: #4d4c57; --faint: #6c6b76; --hair: #cfced8; --hair-2: #a9a8b4; }
+}
+
+@media (prefers-contrast: more) and (prefers-color-scheme: dark) {
+  [data-blast-ui][data-blast-ui]:not([data-theme="light"]) { --muted: #b4b3c0; --faint: #8f8e9b; --hair: #3a3944; --hair-2: #5a5967; }
+}
+
+@media (prefers-contrast: more) {
+  [data-blast-ui][data-blast-ui][data-theme="dark"] { --muted: #b4b3c0; --faint: #8f8e9b; --hair: #3a3944; --hair-2: #5a5967; }
+}
+
+@media (max-width: 760px) {
+  /* Mobile board: 18px gutters; the title sits 6px under the header and 12px above the content. */
+  [data-blast-ui] { --stick-top: calc(env(safe-area-inset-top, 0px) + 3.9375rem); --page-gutter: 1.125rem; --page-title-top: 0.375rem; --page-title-gap: 0.75rem; }
+}
+
+/*
+ * The document behind the Blast UI: its background and scrollbars follow the
+ * theme. The page's own scrollbar is the document's, so the root needs the
+ * gate's `* { scrollbar-width: thin; scrollbar-color: var(--hair-2)
+ * transparent }` too: `:where([data-blast-ui]) *` below never reaches `html`,
+ * and a classic 15px scrollbar (and its reserved gutter) made every page 5px
+ * narrower than the gate's 10px one. The tokens live on the page root, below
+ * `html`, so the values are its `--bg` and `--hair-2`, written out.
+ */
+/*
+ * Bounded scale (2026-10-31): rem lengths follow the reader's text size.
+ * Extra desktop width grows the available canvas without enlarging controls.
+ * Desktop: bounded at the user’s 1rem; wide screens gain usable content room.
+ * Phones: 16px up to the 390px phone board, then 4.1026vw, up to 18px.
+ * Built on rem, so a person's own text-size setting still scales everything.
+ */
+html:has(> body > [data-blast-ui]) { font-size: 1rem; }
+@media (max-width: 760px) {
+  html:has(> body > [data-blast-ui]) { font-size: clamp(1rem, 4.1026vw, 1.125rem); }
+}
+
+html:has(> body > [data-blast-ui]),
+html:has(> body > [data-blast-ui]) > body {
+  min-width: 0;
+  background: #f5f5f7;
+  color-scheme: light;
+  scroll-behavior: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #d9d9df transparent;
+}
+
+@media (prefers-color-scheme: dark) {
+  html:has(> body > [data-blast-ui]:not([data-theme="light"])),
+  html:has(> body > [data-blast-ui]:not([data-theme="light"])) > body {
+    background: #0a0a0d;
+    color-scheme: dark;
+    scrollbar-color: #2e2e35 transparent;
+  }
+}
+
+html:has(> body > [data-blast-ui][data-theme="dark"]),
+html:has(> body > [data-blast-ui][data-theme="dark"]) > body {
+  background: #0a0a0d;
+  color-scheme: dark;
+  scrollbar-color: #2e2e35 transparent;
+}
+
+/*
+ * On desktop, the scrollbar's space stays reserved, so locking scroll for a modal or
+ * Blast mode does not shift the page (FEATURE-MAP-R3 §1, §21.1 point 8). The
+ * reference sets this on `html`; here it is conditioned on a Blast UI page,
+ * so Mission Control and the launchpad keep their own scrolling. `:where()`
+ * keeps the gate's specificity (a bare `html`), so a layer that gives the
+ * strip back, as Blast mode's `html:has(.region)` does like the gate's
+ * `html.bx-on`, still wins; without it this rule outranked that one and the
+ * mode stopped 15px short of the right edge.
+ */
+@media (min-width: 761px) {
+  html:where(:has(> body > [data-blast-ui])) { scrollbar-gutter: stable; }
+}
+
+/* Increase Contrast: the document's scrollbar takes that mode's --hair-2 too (written out, as above). */
+@media (prefers-contrast: more) {
+  html:has(> body > [data-blast-ui]) { scrollbar-color: #a9a8b4 transparent; }
+}
+@media (prefers-contrast: more) and (prefers-color-scheme: dark) {
+  html:has(> body > [data-blast-ui]:not([data-theme="light"])) { scrollbar-color: #5a5967 transparent; }
+}
+@media (prefers-contrast: more) {
+  html:has(> body > [data-blast-ui][data-theme="dark"]) { scrollbar-color: #5a5967 transparent; }
+}
+
+/*
+ * Reduce Transparency and Increase Contrast: nothing blurs (the top and tab
+ * bars, the sheets' scrims, the pinned recap, the commit bars, Blast mode's
+ * dock, the profile's glass chips), and with more contrast every surface
+ * gets a defined edge — `.card` here, and in their modules the sheet, the
+ * menus, the tab bar, the toast, the post and Blast mode's card face. The
+ * prefixed declaration comes first and both carry the same value: Lightning
+ * CSS keeps only the last of a pair whose values differ.
+ */
+@media (prefers-reduced-transparency: reduce) {
+  [data-blast-ui] *, [data-blast-ui] *::before, [data-blast-ui] *::after { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+}
+@media (prefers-contrast: more) {
+  [data-blast-ui] *, [data-blast-ui] *::before, [data-blast-ui] *::after { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+  [data-blast-ui] .card { outline: 1px solid var(--hair-2); outline-offset: -1px; }
+}
+
+/* ---------- base ---------- */
+[data-blast-ui] {
+  min-height: 100dvh;
+  background-color: var(--bg);
+  color: var(--ink);
+  font: 400 0.9375rem/1.47 var(--font);
+  /* OA-31 (the gate's version 5): tracking follows size — body text sits at 0, headings keep their own tightening. */
+  letter-spacing: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+:where([data-blast-ui]) * { box-sizing: border-box; scrollbar-width: thin; scrollbar-color: var(--hair-2) transparent; }
+:where([data-blast-ui]) :where(button, input, textarea, select) { font: inherit; color: inherit; letter-spacing: inherit; }
+:where([data-blast-ui]) button {
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+:where([data-blast-ui]) a { color: inherit; text-decoration: none; -webkit-tap-highlight-color: transparent; }
+[data-blast-ui] :is(button, a, [tabindex]):not(input, textarea, select):focus-visible,
+[data-blast-ui] input:is([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="color"], [type="button"], [type="submit"], [type="reset"]):focus-visible { outline: none; box-shadow: var(--focus); }
+/* The page's main takes focus from script (leaving Blast mode with B then Esc); it is a landmark, not a control, so it draws no ring. */
+[data-blast-ui] main[tabindex="-1"]:focus-visible { box-shadow: none; }
+/* A heading the page focuses itself (a sheet's title, a new state) takes focus for screen readers but draws no ring: it is not a control. */
+[data-blast-ui] :is(h1, h2, h3)[tabindex="-1"]:focus-visible { box-shadow: none; }
+/* One inset treatment for standalone fields and their composite wrappers. */
+[data-blast-ui] { --field-focus: inset 0 0 0 0.125rem var(--ink); }
+[data-blast-ui] :where(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="color"], [type="button"], [type="submit"], [type="reset"]), textarea, select):focus-visible {
+  outline: none;
+  border-color: var(--ink);
+  box-shadow: var(--field-focus);
+}
+@media (forced-colors: active) {
+  [data-blast-ui] :where(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="color"], [type="button"], [type="submit"], [type="reset"]), textarea, select):focus-visible {
+    outline: 0.125rem solid Highlight !important;
+    outline-offset: -0.125rem;
+  }
+}
+:where([data-blast-ui]) ::selection { background: var(--pink-soft-2); color: var(--ink); }
+
+/*
+ * Native feel (FEATURE-MAP-R3 §0.4, §21.1 point 9): taps answer at once with
+ * no double-tap-zoom wait, a long press neither selects a button's words nor
+ * opens the iOS callout, and no field is under 16px, so iOS never zooms into
+ * one on focus.
+ */
+:where([data-blast-ui]) :where(button, a, [role="button"], input, select, textarea, label, summary) { touch-action: manipulation; }
+:where([data-blast-ui]) :where(button, [role="button"], .btn, .chip, .seg) {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/*
+ * An image never overflows its column. The reference lost this rule with its
+ * critical-CSS block and never replaced it (`FEATURE-MAP-R3.md` §22.1 item
+ * 19, a known defect); R3-02 says keep it, so it is kept here.
+ */
+:where([data-blast-ui]) img { max-width: 100%; }
+
+/*
+ * The `hidden` attribute wins over a component's own `display`, except for
+ * `hidden="until-found"`, which the browser must be able to reveal when it
+ * finds text inside. The reference simplified this to a blanket
+ * `[hidden] { display: none !important }` and so force-hides `until-found`
+ * too (`FEATURE-MAP-R3.md` §22.1 item 20, a known defect); R3-02 says keep
+ * the carve-out.
+ */
+[data-blast-ui] [hidden]:not([hidden="until-found" i]) { display: none !important; }
+
+/* ---------- shared primitives (tokens.md §9) ---------- */
+[data-blast-ui] .num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+/* A ticker ($PIP), the one shared class: whole when it fits its line, broken anywhere only when it cannot,
+   so it is never clipped, cut to an ellipsis or pushed past its card. */
+[data-blast-ui] .ticker { min-width: 0; overflow-wrap: anywhere; }
+[data-blast-ui] .mono { font-family: var(--mono); font-size: max(.92em, var(--text-2xs)); letter-spacing: -.01em; }
+/* An error's code, on its own quieter line under the sentence (DiagnosticText): muted, 5.62:1 on the card, 5.15:1 on the warning tint. */
+[data-blast-ui] .err-code { display: block; margin-top: 0.125rem; font-size: 0.75rem; font-weight: 400; color: var(--muted); }
+[data-blast-ui] .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+[data-blast-ui] .up { color: var(--up); }
+[data-blast-ui] .down { color: var(--down); }
+/* Cards (System board): one flat surface everywhere, 22px corners, a hairline and a lit top edge instead of a flat slab. */
+[data-blast-ui] .card { background: var(--card); border-radius: var(--r-md); box-shadow: var(--sh-1); }
+[data-blast-ui] .verified { width: 0.9375rem; height: 0.9375rem; flex: none; display: inline-block; vertical-align: -0.125rem; }
+/* A person's badge is neutral: an ink seal with a background-coloured check. Classes, not inline styles, so the CSP allows them.
+   The pink Known deployer helmet sits after the ticker or name so it stays distinct from the person's seal and the coin artwork. */
+[data-blast-ui] .verifiedSeal { fill: var(--ink); }
+[data-blast-ui] .verifiedCheck { stroke: var(--bg); }
+/* The helmet is 12px in tables and chips, 15px in cards and 20px in featured and presale headings. */
+[data-blast-ui] .coinVerified { width: 0.9375rem; height: 0.9375rem; flex: none; display: inline-block; vertical-align: -0.125rem; fill: var(--coin-verified); }
+[data-blast-ui] .coinVerified.sm { width: 0.75rem; height: 0.75rem; vertical-align: -0.0625rem; }
+[data-blast-ui] .coinVerified.lg { width: 1.25rem; height: 1.25rem; vertical-align: -0.25rem; }
+/* A coin's name or ticker with the mark after it: the text ellipsises, the mark never shrinks. */
+[data-blast-ui] .coinNamed { display: inline-flex; align-items: center; gap: 0.3125rem; min-width: 0; max-width: 100%; }
+[data-blast-ui] .coinNamed.sm { gap: 0.25rem; }
+[data-blast-ui] .coinLegacy { display: inline-flex; align-items: center; flex: none; color: var(--muted); font-size: 0.75rem; font-weight: 600; letter-spacing: normal; }
+/* The coin page's words beside the name: a pink tint with a pink ring, as approved on the board. */
+[data-blast-ui] .coinVerifiedPill { display: inline-flex; align-items: center; gap: 0.4375rem; flex: none; padding: 0.3125rem 0.75rem 0.3125rem 0.375rem; border-radius: 62.4375rem; background: var(--pink-soft); box-shadow: inset 0 0 0 1px var(--pink-line); color: var(--pink-text); font-size: 0.875rem; font-weight: 600; letter-spacing: 0; white-space: nowrap; }
+/* A name beside a `.verified` badge: the name ellipsises, the badge never shrinks, at any name length. Its flex parent needs `min-width: 0`. */
+[data-blast-ui] .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+[data-blast-ui] .btn {
+  position: relative; flex-shrink: 0; height: 2.5rem; padding: 0 1.125rem; border-radius: var(--r-button);
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+  font-size: 0.875rem; font-weight: 600; white-space: nowrap; letter-spacing: -.01em;
+  transition: background var(--t2) var(--ease-std), color var(--t2) var(--ease-std), box-shadow var(--t2) var(--ease-std), transform var(--t1) var(--ease-std), opacity var(--t2) var(--ease-std);
+}
+/* A busy or done control (a claim's `aria-disabled`) does not press either (OA-31). */
+[data-blast-ui] .btn:active:not([disabled], [aria-disabled="true"]) { transform: scale(.97); }
+[data-blast-ui] .btn svg { width: 1.0625rem; height: 1.0625rem; }
+/* One primary action colour: `.btn-primary` and the shared `Button variant="primary"` read the same `--action` pair. */
+[data-blast-ui] .btn-primary { background: var(--action-fill); color: var(--on-action); box-shadow: var(--control-action-shadow); }
+/* A disabled button's words are often the only reason it is off ("Not enough SUI"): muted on the track, 4.77:1 light, 5.85:1 dark. */
+[data-blast-ui] .btn-primary[disabled] { background: var(--track); color: var(--muted); box-shadow: none; cursor: not-allowed; }
+[data-blast-ui] .btn-quiet { background: var(--control-surface); color: var(--ink); box-shadow: var(--control-shadow); }
+[data-blast-ui] .btn-soft { background: var(--control-surface); color: var(--ink); box-shadow: var(--control-shadow); }
+[data-blast-ui] .btn-ink { background: var(--ink); color: var(--card); }
+[data-blast-ui] .btn-line { background: var(--control-surface); color: var(--ink); box-shadow: var(--control-shadow); }
+[data-blast-ui] .btn-lg { border-radius: var(--r-button-lg); height: 3.4375rem; padding: 0 1.625rem; font-size: 1.0625rem; }
+[data-blast-ui] .btn-sm { height: 2.125rem; padding: 0 0.875rem; font-size: 0.8125rem; }
+[data-blast-ui] .btn-block { width: 100%; }
+[data-blast-ui] .btn kbd { margin: 0 -0.3125rem 0 1px; padding: 0 0.375rem; border-radius: var(--r-inner); box-shadow: inset 0 0 0 1px var(--hair-2); font: 600 var(--text-2xs)/1.125rem var(--mono); color: var(--muted); }
+@media (hover: hover) {
+  [data-blast-ui] .btn-primary:not([disabled], [aria-disabled="true"]):hover { background: var(--action-press); }
+  [data-blast-ui] .btn-primary:not([disabled], [aria-disabled="true"], :focus-visible, :active):hover { box-shadow: var(--sh-primary-hover); }
+  [data-blast-ui] .btn-quiet:hover,
+  [data-blast-ui] .btn-soft:hover { background: var(--control-hover); }
+  [data-blast-ui] .btn-ink:hover { opacity: .86; }
+  [data-blast-ui] .btn-line:hover { background: var(--control-hover); }
+}
+
+[data-blast-ui] .icon-btn {
+  width: 2.25rem; height: 2.25rem; border-radius: 62.4375rem; display: grid; place-items: center; color: var(--muted); flex: none;
+  transition: background var(--t2) var(--ease-std), color var(--t2) var(--ease-std), transform var(--t1) var(--ease-std);
+}
+[data-blast-ui] .icon-btn svg { width: 1.1875rem; height: 1.1875rem; }
+[data-blast-ui] .icon-btn:active:not([disabled], [aria-disabled="true"]) { transform: scale(.97); }
+/* A press snaps in; the release eases back on the control's own transition (Controls' Button does the same). */
+[data-blast-ui] :is(.btn, .icon-btn):active:not([disabled], [aria-disabled="true"]) { transition-duration: 0s; }
+@media (hover: hover) { [data-blast-ui] .icon-btn:hover { background: var(--chip); color: var(--ink); } }
+
+[data-blast-ui] .av { width: max(44px, 2.75rem); height: max(44px, 2.75rem); border-radius: 62.4375rem; flex: none; overflow: hidden; display: block; background: var(--chip); }
+[data-blast-ui] .av :is(img, svg) { width: 100%; height: 100%; display: block; object-fit: cover; border: 0; background: none; }
+[data-blast-ui] .av svg[data-avatar="generated"] { fill: var(--ink-2); }
+[data-blast-ui] .av [data-card-edition] { width: 100% !important; height: 100% !important; }
+[data-blast-ui] .av.s18 { width: 1.125rem; height: 1.125rem; }
+[data-blast-ui] .av.s26 { width: 1.625rem; height: 1.625rem; }
+[data-blast-ui] .av.s30 { width: 1.875rem; height: 1.875rem; }
+[data-blast-ui] .av.s32 { width: 2rem; height: 2rem; }
+[data-blast-ui] .av.s34 { width: 2.125rem; height: 2.125rem; }
+[data-blast-ui] .av.s40 { width: 2.5rem; height: 2.5rem; }
+[data-blast-ui] .av.s89 { width: 5.5625rem; height: 5.5625rem; }
+
+[data-blast-ui] .wico { width: 2.5rem; height: 2.5rem; border-radius: var(--r-sm); background: var(--chip); display: grid; place-items: center; color: var(--ink-2); flex: none; }
+[data-blast-ui] .wico svg { width: 1.1875rem; height: 1.1875rem; }
+
+/*
+ * Segmented control (System board), rendered by `Segmented`/`SegmentedLinks`: a 3px
+ * track with 10px corners and a hairline, 32px segments sized to their labels with
+ * 16px sides and 13/600 text, and one neutral thumb with 7px corners. `stretch`
+ * shares the width equally instead. Sizes: `sm` 28px segments, `chip` 30px (36 total).
+ */
+[data-blast-ui] .seg { position: relative; display: inline-grid; grid-auto-flow: column; grid-auto-columns: auto; padding: 0.1875rem; border-radius: var(--r-button); background: var(--track); box-shadow: inset 0 0 0 1px var(--hair); }
+[data-blast-ui] .seg :is(button, a) { position: relative; z-index: 1; display: inline-flex; align-items: center; justify-content: center; height: 2rem; padding: 0 1rem; border-radius: var(--r-inner); font-size: 0.8125rem; font-weight: 600; color: var(--muted); white-space: nowrap; transition: color var(--t2) var(--ease-std), opacity var(--t1) ease-out, transform var(--t1) var(--ease-std); }
+[data-blast-ui] .seg :is(button[aria-pressed="true"], button[role="tab"][aria-selected="true"], a[aria-current="page"]) { color: var(--ink); }
+@media (hover: hover) and (pointer: fine) { [data-blast-ui] .seg :is(button, a):hover { color: var(--ink); } }
+/* OA-31 press response (the gate's `.seg button:active`): a segment dips; its thumb is the selection. */
+[data-blast-ui] .seg :is(button:not([disabled], [aria-disabled="true"]), a):active { opacity: .6; transform: scale(.97); }
+@media (prefers-reduced-motion: reduce) { [data-blast-ui] .seg :is(button:not([disabled], [aria-disabled="true"]), a):active { transform: none; opacity: .7; } }
+/* An icon segment keeps its 16px glyph: inside the flex segment it must never shrink (the presale layout toggle drew 4px slivers). */
+[data-blast-ui] .seg :is(button, a) > svg { flex: none; width: 1rem; height: 1rem; }
+[data-blast-ui] .seg[data-size="sm"] :is(button, a) { height: 1.75rem; padding: 0 0.75rem; font-size: 0.75rem; }
+[data-blast-ui] .seg[data-size="toolbar"] { padding: 0; border-radius: var(--r-inner); }
+[data-blast-ui] .seg[data-size="toolbar"] :is(button, a) { height: 1.75rem; padding-inline: 0.625rem; }
+[data-blast-ui] .seg[data-size="toolbar"] .seg-ind { inset-block: 0; }
+@media (pointer: coarse) {
+  [data-blast-ui] .seg[data-size="toolbar"] :is(button, a) { font-size: 16px; }
+}
+/* Chip (Main board's coin sources): 30px segments with 14px sides, so the track is 36px like the chips beside it. */
+[data-blast-ui] .seg[data-size="chip"] :is(button, a) { height: 1.875rem; padding: 0 0.875rem; }
+[data-blast-ui] .seg[data-size="touch"] { gap: 0.5rem; }
+[data-blast-ui] .seg[data-size="touch"] :is(button, a) { min-width: 44px; min-height: max(44px, 2.75rem); padding-inline: 0.625rem; }
+/* Stretched rows share the width equally while it fits; a tight row sizes to its labels, then scrolls rather than overlap. */
+[data-blast-ui] .seg[data-stretch] { display: grid; width: 100%; grid-auto-columns: minmax(max-content, 1fr); overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
+[data-blast-ui] .seg[data-stretch]::-webkit-scrollbar { display: none; }
+[data-blast-ui] .seg[data-stretch] :is(button, a) { min-width: 0; padding-inline: 0.5rem; }
+[data-blast-ui] .seg[data-stretch][data-wrap] { grid-auto-columns: minmax(min-content, 1fr); }
+[data-blast-ui] .seg[data-stretch][data-wrap] button { height: auto; padding: 0.3125rem 0.25rem; white-space: normal; }
+@media (pointer: coarse) {
+  [data-blast-ui] .seg :is(button, a) { min-height: 44px; height: auto; }
+  [data-blast-ui] .seg[data-stretch][data-wrap] button { min-width: 44px; }
+}
+[data-blast-ui] .seg-ind { position: absolute; top: 0.1875rem; bottom: 0.1875rem; left: 0; border-radius: var(--r-inner); background: var(--thumb); box-shadow: var(--thumb-sh); transition: transform 180ms var(--ease-std); }
+/* Unplaced (server render, before the first layout pass) the thumb is hidden rather than a sliver at the left edge. */
+[data-blast-ui] .seg-ind:not([style]) { visibility: hidden; }
+[data-blast-ui] .seg[data-variant="outline"] { background: transparent; box-shadow: none; }
+[data-blast-ui] .seg[data-variant="outline"] .seg-ind { background: transparent; box-shadow: inset 0 0 0 1px var(--muted); }
+@media (forced-colors: active) {
+  [data-blast-ui] .seg[data-variant="outline"] .seg-ind { outline: 1px solid ButtonText; outline-offset: -1px; }
+}
+
+/*
+ * Status chip (`.status`), the one definition for every surface.
+ *
+ * `FEATURE-MAP-R3.md` §21.1 point 2 corrects `tokens.md` §9: the stages read
+ * Upcoming amber, **Open pink**, Funded blue, **Trading neutral**; green and
+ * red are reserved for a price move or P&L, so neither may colour a stage.
+ * The old reference carried `.status.open, .status.trading { up }` as a late
+ * override (`canonical-ui.html:862`) and the new one replaced it with
+ * `.status.trading { chip / ink-2 }` alone, leaving Open pink.
+ *
+ * Two hooks, because the reference writes the stage as a class (`status open`)
+ * while this app's components write it as `data-tone`; `upcoming` is this
+ * app's name for the reference's `pending`. Written at a specificity that
+ * outranks a CSS module's own single-class rule, so one definition settles
+ * the colour app-wide.
+ */
+/* System board: a 24px pill, 10px sides, 12/600. */
+[data-blast-ui] .status {
+  height: 1.5rem; padding: 0 0.625rem; border-radius: 62.4375rem;
+  font-size: 0.75rem; font-weight: 600;
+  display: inline-flex; align-items: center; gap: 0.3125rem; white-space: nowrap;
+}
+[data-blast-ui] .status:is(.open, [data-tone="open"]) { background: var(--pink-soft); color: var(--pink-text); }
+[data-blast-ui] .status:is(.pending, .upcoming, [data-tone="pending"], [data-tone="upcoming"]) { background: var(--warn-soft); color: var(--warn); }
+[data-blast-ui] .status:is(.funded, .closed, [data-tone="funded"], [data-tone="closed"]) { background: var(--info-soft); color: var(--info); }
+[data-blast-ui] .status:is(.trading, [data-tone="trading"], [data-tone="neutral"]) { background: var(--hair); color: var(--ink-2); }
+[data-blast-ui] .status:is(.public, .delivered, .migrated, [data-tone="public"], [data-tone="delivered"], [data-tone="migrated"]) { background: var(--up-soft); color: var(--up); }
+[data-blast-ui] .status:is(.cancelled, [data-tone="cancelled"]) { background: var(--chip); color: var(--muted); }
+[data-blast-ui] .status:is(.claimable, [data-tone="claimable"]) { background: var(--ink); color: var(--card); }
+
+/* Empty and not-found states (FEATURE-MAP §0.3). */
+[data-blast-ui] .empty { padding: 3.4375rem 1.3125rem; display: flex; flex-direction: column; align-items: center; gap: 0.5rem; text-align: center; color: var(--muted); font-size: 0.875rem; }
+[data-blast-ui] .empty b { color: var(--ink); font-size: 1.0625rem; font-weight: 600; }
+
+@media (hover: none) { [data-blast-ui] kbd { display: none !important; } }
+@media (pointer: coarse) {
+  [data-blast-ui] .icon-btn { width: 44px; height: 44px; }
+  [data-blast-ui] .btn { height: 44px; }
+  [data-blast-ui] .btn-sm { height: 44px; } /* one touch height, as the shared Button */
+  /*
+   * The fields the design draws below 16px (FEATURE-MAP-R3 §0.4, §21.1 point
+   * 9): the settings amount, Create's text, address and select fields and a
+   * post's why box. Enumerated as the reference enumerates them, because a
+   * blanket rule would shrink the fields already above 16px (search,
+   * onboarding, the coin amount) instead of lifting the small ones.
+   */
+  [data-blast-ui] :is(.inline-amt input, .cr-in input, .cr-in.addr input, .cr-sel select) { font-size: 16px; }
+  [data-blast-ui] [data-why-box] textarea { font-size: 16px; }
+}
+@media (max-width: 760px) { [data-blast-ui] .btn kbd { display: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  /*
+   * Reduced motion keeps fades and drops movement. A transition keeps its own timing, but only opacity and colour
+   * change gradually: transforms, translates and sizes land at once. Keyframe animations jump to their end; an
+   * opacity-only fade opts back in with its own `!important` duration, which wins because `:where` gives this rule
+   * no weight. Menus and sheets fade on the Web Animations API (menu-motion.ts, sheet-motion.ts).
+   */
+  :where([data-blast-ui]) *, :where([data-blast-ui]) *::before, :where([data-blast-ui]) *::after {
+    animation-duration: .01ms !important; animation-iteration-count: 1 !important;
+    transition-property: opacity, color, background-color, border-color, box-shadow !important; transition-delay: 0s !important;
+    scroll-behavior: auto !important;
+  }
+  /*
+   * A press under reduced motion is `transform: none; opacity: .7` (OA-31,
+   * the gate's version 5; FEATURE-MAP-R3 §0.3 said .75, which the gate keeps
+   * only for Blast mode's own controls). Zeroing the transition above does
+   * not help: the scale is a transform, so it applies instantly rather than
+   * not at all. Every module with a scaled press carries the same fallback.
+   */
+  [data-blast-ui] .btn:active:not([disabled], [aria-disabled="true"]),
+  [data-blast-ui] .icon-btn:active:not([disabled], [aria-disabled="true"]) { transform: none; opacity: .7; }
+}
+
+/* ---------- native page and theme transitions (OA-41); snapshots keep fixed/sticky children anchored ---------- */
+/* These pseudo-elements inherit from html, outside the scoped motion tokens. */
+html[data-blast-traversing] [data-blast-ui] #view { view-transition-name: blast-page; view-transition-class: blast-route; }
+/* Both use `--ease-std`'s curve, written out because these pseudo-elements sit outside `[data-blast-ui]`. */
+::view-transition-old(.blast-route) { animation: blast-page-out .12s cubic-bezier(.23, 1, .32, 1) both; }
+::view-transition-new(.blast-route) { animation: blast-page-in .12s cubic-bezier(.23, 1, .32, 1) both; }
+@keyframes blast-page-out { to { opacity: 0; } }
+@keyframes blast-page-in { from { opacity: 0; } }
+html:has([data-blast-ui])::view-transition-old(root),
+html:has([data-blast-ui])::view-transition-new(root),
+html.blast-theming::view-transition-old(root),
+html.blast-theming::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+
+@media (prefers-reduced-motion: reduce) {
+  html:has([data-blast-ui])::view-transition-group(root),
+  ::view-transition-group(.blast-route),
+  ::view-transition-old(.blast-route), ::view-transition-new(.blast-route) { animation: none; }
+}
+
+/* The charts' required attribution sits at the end of the page on the content edge, never under the rail or the phone tab bar. */
+[data-blast-ui] > [data-chart-attribution] { padding: 0 var(--page-gutter) 1.5rem calc(var(--rail) + var(--page-gutter)); }
+@media (max-width: 760px) { [data-blast-ui] > [data-chart-attribution] { padding: 0 var(--page-gutter) calc(env(safe-area-inset-bottom, 0px) + 6.25rem); } }
+/* The attribution link keeps a full touch target without moving the line. */
+@media (pointer: coarse) { [data-blast-ui] > [data-chart-attribution] a { display: inline-block; padding-block: 16px; margin-block: -16px; } }
+
+/* Keyboard selection is immediate, including CSS feedback in shared controls. */
+html[data-blast-input="keyboard"] [data-blast-ui] :is(.seg-ind, [data-tab-indicator], button, button *, summary, summary::before) { transition: none !important; }
+html[data-blast-input="keyboard"] [data-blast-ui] button:active { transform: none; }
+
+html[data-blast-input="keyboard"]::view-transition-group(.blast-route),
+html[data-blast-input="keyboard"]::view-transition-old(.blast-route),
+html[data-blast-input="keyboard"]::view-transition-new(.blast-route) { animation: none; }
+html[data-blast-input="keyboard"] { scroll-behavior: auto; }
+
+/*
+ * A column preference (the rail, the right column) moves as one sidebar, from snapshots rather than an animated grid.
+ * The rail, top bar, main column and right column (when there is one) are their own groups, and each group's box
+ * slides and resizes from where it was to where it lands. Their images are never scaled: pinned top-left and
+ * clipped by the moving box, so the rail's icons stay put while its labels are clipped away and text never
+ * stretches. Only the rail crossfades; elsewhere the moving box carries the change. The page itself is not
+ * snapshotted, so its background never fades and the overlay passes clicks to whatever is not moving. Keyboard
+ * toggles skip the transition (use-shell-prefs.ts); reduced motion has no movement, only a 120ms crossfade of the
+ * page.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  html.blast-shell-changing { view-transition-name: none; }
+  html.blast-shell-changing [data-shell-rail] { view-transition-name: blast-rail; }
+  html.blast-shell-changing [data-shell-topbar] { view-transition-name: blast-topbar; }
+  html.blast-shell-changing #main[data-shell-column] { view-transition-name: blast-main; }
+  html.blast-shell-changing #aside[data-shell-column] { view-transition-name: blast-aside; }
+}
+html.blast-shell-changing::view-transition { pointer-events: none; }
+/* View-transition pseudo-elements sit outside `[data-blast-ui]`, so the curves below are `--ease-drawer` and `--ease-std` written out. */
+html.blast-shell-changing::view-transition-group(blast-rail), html.blast-shell-changing::view-transition-group(blast-topbar),
+html.blast-shell-changing::view-transition-group(blast-main), html.blast-shell-changing::view-transition-group(blast-aside) { animation-duration: 280ms; animation-timing-function: cubic-bezier(.32,.72,0,1); overflow: clip; }
+html.blast-shell-changing::view-transition-old(blast-rail), html.blast-shell-changing::view-transition-new(blast-rail),
+html.blast-shell-changing::view-transition-old(blast-topbar), html.blast-shell-changing::view-transition-new(blast-topbar),
+html.blast-shell-changing::view-transition-old(blast-main), html.blast-shell-changing::view-transition-new(blast-main),
+html.blast-shell-changing::view-transition-old(blast-aside), html.blast-shell-changing::view-transition-new(blast-aside) { width: auto; height: 100%; object-fit: none; object-position: left top; }
+/* The top bar's controls sit at its right end, which never moves; pinned there, they stay put while the bar's left edge travels. */
+html.blast-shell-changing::view-transition-old(blast-topbar), html.blast-shell-changing::view-transition-new(blast-topbar) { position: absolute; inset-inline: auto 0; object-position: right top; }
+html.blast-shell-changing::view-transition-old(blast-rail) { animation: blast-snapshot-out 140ms cubic-bezier(.23,1,.32,1) both; }
+html.blast-shell-changing::view-transition-new(blast-rail) { animation: blast-snapshot-in 140ms cubic-bezier(.23,1,.32,1) both; }
+html.blast-shell-changing::view-transition-old(blast-topbar), html.blast-shell-changing::view-transition-old(blast-main), html.blast-shell-changing::view-transition-old(blast-aside) { animation: none; opacity: 0; }
+html.blast-shell-changing::view-transition-new(blast-topbar), html.blast-shell-changing::view-transition-new(blast-main), html.blast-shell-changing::view-transition-new(blast-aside) { animation: none; }
+@keyframes blast-snapshot-out { to { opacity: 0; } }
+@keyframes blast-snapshot-in { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  html.blast-shell-changing::view-transition-old(root) { animation: blast-snapshot-out 120ms cubic-bezier(.23,1,.32,1) both; }
+  html.blast-shell-changing::view-transition-new(root) { animation: blast-snapshot-in 120ms cubic-bezier(.23,1,.32,1) both; }
+}
+html[data-blast-input="keyboard"].blast-shell-changing::view-transition-old(root), html[data-blast-input="keyboard"].blast-shell-changing::view-transition-new(root) { animation: none; }
+
+/*
+ * Shared controls consume semantic app tokens; features may scope their approved accent.
+ * The action is the same Blast pink in both themes with white text: the light fill runs
+ * #dc2275 → #d61b70 (4.6:1 → 4.9:1); the dark fill is the System board's #e3307f → #d1196b,
+ * at least 4.6:1 behind the label's middle band (4.2:1 only at the very top edge). Dark
+ * mode presses to a deeper pink (#bf1463, 6.0:1) rather than the brighter `--pink-press`,
+ * which would drop white text below 4.5:1. The action's shadow is its lit top edge
+ * (`--control-action-inset`) plus a glow (`--control-action-glow`) that the Button sizes
+ * scale; `--control-action-shadow` is the 40px control's (System board: 0 10px 24px -12px).
+ */
+[data-blast-ui] {
+  --action:var(--pink-ink);
+  --action-fill:linear-gradient(180deg,#dc2275,var(--pink-ink));
+  --action-press:var(--pink-press);
+  --on-action:var(--on-pink);
+  --focus-color:var(--ink);
+  --control-surface:var(--card);
+  --control-hover:var(--raised);
+  --control-edge:rgba(15,14,19,.1);
+  --control-highlight:rgba(255,255,255,.7);
+  --control-shadow:inset 0 0 0 1px var(--control-edge),inset 0 1px 0 var(--control-highlight),0 1px 0.125rem rgba(15,14,19,.05);
+  --control-action-inset:inset 0 1px 0 rgba(255,255,255,.22),inset 0 0 0 1px rgba(15,14,19,.06);
+  --control-action-glow:rgba(214,27,112,.55);
+  --control-action-shadow:var(--control-action-inset),0 0.625rem 1.5rem -0.75rem var(--control-action-glow);
+  --control-field:var(--raised);
+  --control-field-boundary:#8e8e93;
+  --control-field-edge:inset 0 0 0 1px var(--control-field-boundary);
+}
+
+@media (prefers-color-scheme:dark) {
+ [data-blast-ui]:not([data-theme="light"]) { --action:var(--pink-ink); --action-fill:linear-gradient(180deg,#e3307f,#d1196b); --control-action-inset:inset 0 1px 0 rgba(255,255,255,.22); --control-action-glow:rgba(230,40,120,.8); --action-press:#bf1463; --on-action:#ffffff; --control-surface:rgba(255,255,255,.06); --control-hover:rgba(255,255,255,.1); --control-edge:rgba(255,255,255,.07); --control-highlight:rgba(255,255,255,.045); --control-field:rgba(255,255,255,.035); --control-field-boundary:#6e6e76; }
+}
+[data-blast-ui][data-theme="dark"] { --action:var(--pink-ink); --action-fill:linear-gradient(180deg,#e3307f,#d1196b); --control-action-inset:inset 0 1px 0 rgba(255,255,255,.22); --control-action-glow:rgba(230,40,120,.8); --action-press:#bf1463; --on-action:#ffffff; --control-surface:rgba(255,255,255,.06); --control-hover:rgba(255,255,255,.1); --control-edge:rgba(255,255,255,.07); --control-highlight:rgba(255,255,255,.045); --control-field:rgba(255,255,255,.035); --control-field-boundary:#6e6e76; }
+@media (prefers-contrast:more) {
+ [data-blast-ui][data-blast-ui] { --control-edge:var(--muted); --control-field-edge:inset 0 0 0 1px var(--muted); }
+}
+
+/* Site and Mission Control tokens. */
+:root {
+  --brand-mission-canvas: #03080a;
+  --brand-landing-canvas: #10171e;
+  --brand-installed-canvas: #fbfaf7;
+  --brand-status-light: #f4f3f7;
+  --brand-status-dark: #0b0a0f;
+  --blast-light-up: #0f7f48;
+  --blast-light-down: #c62a40;
+  --blast-light-pink: #ff4c98;
+  --terminal-phosphor: #e6a4bf;
+  --terminal-glass: #0d070a;
+  --terminal-glass-lit: #1c0f16;
+  --terminal-highlight: #ffd4e5;
+  --allocation-color-1: #14b8a6;
+  --allocation-color-2: #a855f7;
+  --allocation-color-3: #3b82f6;
+  --allocation-color-4: #84cc16;
+  --allocation-color-5: #f97316;
+  --allocation-color-6: #64748b;
+  --blast-light-pink-ink: #d61b70;
+  --blast-light-muted: #67676c;
+  --blast-light-faint: #a1a1a6;
+  --blast-light-hair: #e8e8ed;
+  --blast-color-canvas: #fffaf0;
+  --blast-color-surface: #f3ecdc;
+  --blast-color-surface-raised: #fffef9;
+  --blast-color-ink: #171216;
+  --blast-color-ink-muted: #5f555c;
+  --blast-color-primary: #d30b5d;
+  --blast-color-primary-strong: #8f093f;
+  --blast-color-accent: #ffd739;
+  --blast-color-border-subtle: rgb(23 18 22 / 24%);
+  --blast-font-interface: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --blast-space-2: 0.5rem;
+  --blast-space-3: 0.75rem;
+  --blast-space-4: 1rem;
+  --blast-space-6: 1.5rem;
+  --blast-space-8: 2rem;
+  --blast-space-12: 3rem;
+  --blast-space-16: 4rem;
+  --blast-gutter: var(--blast-space-6);
+  --blast-control-height: 44px;
+  --blast-border-thin: 0.125rem;
+  --blast-border-strong: 0.125rem;
+  --blast-shadow-sm: 0.25rem 0.25rem 0 var(--blast-color-ink);
+  --text-2xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-md: 1rem;
+  --text-lg: 1.125rem;
+  --display-sm: 1rem;
+  --display-xl: 2.5rem;
+  --display-fluid-sm: var(--display-sm);
+  --display-fluid-xl: clamp(2rem, 5vw, var(--display-xl));
+  --display-tracking-sm: 0.03em;
+  --display-tracking-xl: -0.035em;
+  --leading-snug: 1.3;
+  --leading-normal: 1.5;
+  --leading-loose: 1.65;
+  --weight-bold: 700;
+}
+
+@media (max-width: 40rem) {
+  :root {
+    --blast-gutter: var(--blast-space-3);
+  }
+}
+
+/* Launchpad palette and typography. The page component sets its color scheme. */
+[data-launchpad-theme] {
+  --lp-canvas: light-dark(#fffafd, #101721);
+  --lp-surface: light-dark(#ffffff, #151d28);
+  --lp-raised: light-dark(#f7edf2, #23283a);
+  --lp-ink: light-dark(#171218, #f7f5f6);
+  --lp-muted: light-dark(#655860, #aaa8b5);
+  --lp-accent: light-dark(#fe4c98, #fe4c98);
+  --lp-accent-ink: light-dark(#171218, #101721);
+  --lp-accent-text: light-dark(#b8135f, #ff8cbf);
+  --lp-focus: light-dark(#b8135f, #fe4c98);
+  --lp-up: light-dark(#1f6e45, #72c89a);
+  --lp-down: light-dark(#b0284a, #f7a08a);
+  --lp-caution: light-dark(#8a4b00, #e8b25a);
+  --lp-selected: light-dark(#f7edf2, #1b4352);
+  --lp-badge: light-dark(#f7edf2, #312e4d);
+  /* Hairlines inside tables and inputs only; regions are separated by space. */
+  --lp-line: light-dark(rgb(40 20 30 / 14%), rgb(255 255 255 / 12%));
+
+  --lp-font: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --lp-font-mono: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --lp-radius: 0.75rem;
+}
+
+/* Allocation bars and their legend swatches. */
+[data-blast-ui] [data-cr-split] { flex: 1; min-width: 0; display: flex; gap: 0.125rem; height: 0.625rem; }
+[data-blast-ui] [data-cr-split] i { display: block; height: 100%; min-width: 0.5rem; border-radius: 62.4375rem; }
+[data-blast-ui] .cr-color[data-cr-color="var(--ink)"] { background: var(--ink); }
+[data-blast-ui] .cr-color[data-cr-color="var(--ink-tint-1)"] { background: var(--ink-tint-1); }
+[data-blast-ui] .cr-color[data-cr-color="var(--ink-tint-2)"] { background: var(--ink-tint-2); }
+[data-blast-ui] .cr-color[data-cr-color="var(--ink-tint-3)"] { background: var(--ink-tint-3); }
+[data-blast-ui] .cr-color[data-cr-color="var(--series-1)"] { background: var(--series-1); }
+[data-blast-ui] .cr-color[data-cr-color="var(--series-2)"] { background: var(--series-2); }
+[data-blast-ui] .cr-color[data-cr-color="var(--series-3)"] { background: var(--series-3); }
+[data-blast-ui] .cr-color[data-cr-color="var(--series-4)"] { background: var(--series-4); }
+[data-blast-ui] .cr-color[data-cr-color="var(--faint)"] { background: var(--faint); }
+[data-blast-ui] .cr-color[data-cr-color="var(--allocation-color-1)"] { background: var(--allocation-color-1); }
+[data-blast-ui] .cr-color[data-cr-color="var(--allocation-color-2)"] { background: var(--allocation-color-2); }
+[data-blast-ui] .cr-color[data-cr-color="var(--allocation-color-3)"] { background: var(--allocation-color-3); }
+[data-blast-ui] .cr-color[data-cr-color="var(--allocation-color-4)"] { background: var(--allocation-color-4); }
+[data-blast-ui] .cr-color[data-cr-color="var(--allocation-color-5)"] { background: var(--allocation-color-5); }
+[data-blast-ui] .cr-color[data-cr-color="var(--allocation-color-6)"] { background: var(--allocation-color-6); }
+
+/* Coin marks. */
+.coin-amount { display: inline-flex; align-items: center; gap: .25rem; white-space: nowrap; }
+[data-coin-mark] { position: relative; width: 2.125rem; height: 2.125rem; border-radius: var(--r-button); flex: none; display: block; }
+[data-coin-mark] > svg, [data-coin-mark] > img { width: 100%; height: 100%; display: block; border-radius: inherit; object-fit: cover; }
+/* A coin image shows once decoded (CoinArtwork), so a failed load never draws the broken-image glyph; without scripts it shows as served. */
+@media (scripting: enabled) { img[data-coin-img]:not([data-ready]) { opacity: 0; } }
+/* Until then a coin mark shows its generated gradient (CoinMark), the same fallback a coin without a logo gets. No `scripting` query: Safari 16 lacks it, and a served image covers the gradient anyway. */
+[data-coin-mark]:has(> img[data-coin-img]:not([data-ready])) { background: var(--coin-fallback, none); }
+[data-coin-mark][data-coin-size="16"] { width: 1rem; height: 1rem; border-radius: var(--r-inner); }
+[data-coin-mark][data-coin-size="18"] { width: 1.125rem; height: 1.125rem; border-radius: var(--r-inner); }
+[data-coin-mark][data-coin-size="22"] { width: 1.375rem; height: 1.375rem; border-radius: var(--r-inner); }
+[data-coin-mark][data-coin-size="32"] { width: 2rem; height: 2rem; border-radius: 0.5625rem; }
+[data-coin-mark][data-coin-size="44"] { width: max(44px, 2.75rem); height: max(44px, 2.75rem); border-radius: var(--r-sm); }
+[data-coin-mark][data-coin-size="55"] { width: 3.4375rem; height: 3.4375rem; border-radius: var(--r-sm); }
+[data-coin-mark][data-coin-round][data-coin-size="18"] { border-radius: 62.4375rem; }
+[data-coin-mark][data-coin-round] { border-radius: 62.4375rem; }
+/* The owner kept the 40 px core coin marks round for Portfolio. */
+[data-coin-mark][data-coin-size="40"] { width: 2.5rem; height: 2.5rem; border-radius: 0.75rem; /* owner, 2026-10-07: coin marks keep 12px */ }
+[data-coin-mark][data-coin-round][data-coin-size="40"] { border-radius: 62.4375rem; }
+/* SUI's mark is a white disc: a hairline keeps its edge on white surfaces. R3-07's
+   per-key class scopes it to SUI, as the reference does (`.mk-sui[data-coin-round]::after`);
+   USDC's blue disc takes no ring. The colour is the reference's literal, not
+   `var(--hair)`: the disc is white in both themes, and dark's hairline would ring it
+   in near-black (FEATURE-MAP-R3 §21.1 point 3). */
+[data-coin-mark][data-coin-round].mk-sui::after { content: ""; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 1px rgba(15, 14, 19, .1); pointer-events: none; }
+
+[data-coin-mark][data-coin-size="28"] { width: 1.75rem; height: 1.75rem; border-radius: var(--r-button); }
+[data-coin-mark][data-coin-size="30"] { width: 1.875rem; height: 1.875rem; border-radius: var(--r-button); }
+[data-coin-mark][data-coin-round][data-coin-size="30"] { border-radius: 62.4375rem; }
+[data-coin-monogram] { display: grid; place-items: center; width: 100%; height: 100%; border-radius: inherit; background: var(--chip); box-shadow: inset 0 0 0 1px var(--hair-2); color: var(--ink-2); font-size: 1rem; font-weight: 600; }
+
+/* Presale artwork and funding progress. */
+[data-blast-ui] [data-progress-bar] { display: block; height: 0.3125rem; border-radius: var(--r-inner); background: var(--track); overflow: hidden; }
+[data-blast-ui] [data-progress-bar] i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--pink-ink), var(--pink)); transform-origin: left center; }
+[data-blast-ui] [data-artwork-size] { width: max(44px, 2.75rem); height: max(44px, 2.75rem); border-radius: var(--r-sm); flex: 0 0 auto; position: relative; display: block; }
+[data-blast-ui] [data-artwork-size] > svg { width: 100%; height: 100%; display: block; border-radius: inherit; }
+[data-blast-ui] [data-artwork-size="18"] { width: 1.125rem; height: 1.125rem; border-radius: var(--r-inner); }
+[data-blast-ui] [data-artwork-size="34"] { width: 2.125rem; height: 2.125rem; border-radius: var(--r-button); }
+[data-blast-ui] [data-artwork-size="40"] { width: 2.5rem; height: 2.5rem; border-radius: 0.75rem; /* owner, 2026-10-07: coin marks keep 12px */ }
+[data-blast-ui] [data-artwork-size="72"] { width: 4.5rem; height: 4.5rem; border-radius: var(--r-md); }
+[data-blast-ui] [data-artwork-size="48"] { width: 3rem; height: 3rem; border-radius: 0.9375rem; }
+[data-blast-ui] [data-artwork-size="50"] { width: 3.125rem; height: 3.125rem; border-radius: 0.9375rem; }
+[data-blast-ui] [data-artwork-size="56"] { width: 3.5rem; height: 3.5rem; border-radius: 1.0625rem; }
+[data-blast-ui] [data-artwork-size="60"] { width: 3.75rem; height: 3.75rem; border-radius: 1.125rem; }
+[data-blast-ui] [data-artwork-size="84"] { width: 5.25rem; height: 5.25rem; border-radius: 1.5rem; }
+[data-blast-ui] [data-progress-bar="small"] { height: 0.25rem; }
+[data-blast-ui] [data-artwork-size] > img { width: 100%; height: 100%; display: block; border-radius: inherit; object-fit: cover; }
+[data-blast-ui] [data-progress-bar] i[data-csp-style] { width: 0; }
+[data-blast-ui] [data-progress-bar][data-progress-smooth] i[data-csp-style] { width: 100%; transform: scaleX(0); }
+@media (prefers-reduced-motion: no-preference) {
+  [data-blast-ui] [data-progress-bar][data-progress-smooth] i { transition: transform var(--t3) var(--ease-std); }
+}
+[data-blast-ui] [data-progress-bar][data-stage="funded"] i { background: var(--info); }
+[data-blast-ui] [data-progress-bar][data-stage="trading"] i { background: var(--ink-2); }
+[data-blast-ui] [data-progress-bar][data-stage="cancelled"] i { background: var(--muted); }

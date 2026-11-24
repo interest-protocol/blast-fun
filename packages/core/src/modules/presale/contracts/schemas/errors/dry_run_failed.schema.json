@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/presale/contracts/errors/dry_run_failed.schema.json",
+  "title": "dry_run_failed error",
+  "description": "HTTP 400; route-specific fields sit inside error (CL-10), and the body never carries retryAfterSeconds (CL-23).",
+  "type": "object",
+  "properties": {
+    "error": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "const": "dry_run_failed"
+        },
+        "message": {
+          "$ref": "../defs.schema.json#/$defs/message"
+        },
+        "move_abort": {
+          "anyOf": [
+            {
+              "$ref": "../defs.schema.json#/$defs/presale_abort_name"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reason": {
+          "enum": [
+            "gas_cap_exceeded",
+            "external_abort"
+          ]
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "move_abort"
+      ],
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "move_abort": {
+              "$ref": "../defs.schema.json#/$defs/presale_abort_name"
+            },
+            "reason": false
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "move_abort": {
+              "type": "null"
+            },
+            "reason": {
+              "enum": [
+                "gas_cap_exceeded",
+                "external_abort"
+              ]
+            }
+          },
+          "required": [
+            "reason"
+          ]
+        }
+      ]
+    }
+  },
+  "required": [
+    "error"
+  ],
+  "additionalProperties": false
+}

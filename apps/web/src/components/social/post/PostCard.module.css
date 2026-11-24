@@ -1,0 +1,246 @@
+/*
+ * The post card (FEATURE-MAP §3, `article.post`), from the canonical UI's
+ * final effective CSS. Every value is a token from tokens.md or the design's
+ * own number; hover styles only exist where the pointer can hover.
+ */
+
+/* The surface (lit top edge, hairline, 22 corner) is the shared `.card` the article also carries. */
+.post {
+  --ring: var(--card);
+  container-type: inline-size;
+  display: grid;
+  grid-template-columns: 2.75rem minmax(0, 1fr);
+  column-gap: 0.8125rem;
+  padding: 1.3125rem 1.3125rem 0.8125rem;
+  transition: box-shadow var(--t2) var(--ease-std);
+}
+@media (hover: hover) { :global([data-blast-ui]) .post:not(.detail):hover { box-shadow: var(--sh-hover); } }
+
+.lead { display: block; width: max(44px, 2.75rem); height: max(44px, 2.75rem); border-radius: 62.4375rem; }
+/* OA-31 press response (the gate's `.post > a`): the lead link dips. A wallet's lead is a plain span and stays still. */
+a.lead:active { opacity: .6; }
+.leadMark { border-radius: var(--r-sm); }
+
+.pbody { min-width: 0; display: flex; flex-direction: column; gap: 0.375rem; }
+
+/* Avatars, marks and wallets. */
+.av { width: max(44px, 2.75rem); height: max(44px, 2.75rem); border-radius: 62.4375rem; flex: none; overflow: hidden; display: block; background: var(--chip); }
+.av > [data-card-edition] { width: 100% !important; height: 100% !important; }
+.av :is(img, svg) { width: 100%; height: 100%; display: block; object-fit: cover; }
+.av svg { fill: var(--ink-2); }
+.s30 { width: 1.875rem; height: 1.875rem; }
+.s26 { width: 1.625rem; height: 1.625rem; }
+.mk { width: max(44px, 2.75rem); height: max(44px, 2.75rem); border-radius: var(--r-sm); flex: none; position: relative; display: block; }
+.mk > :is(img, svg) { width: 100%; height: 100%; display: block; border-radius: inherit; object-fit: cover; }
+.mk > svg { fill: var(--ink-2); background: var(--chip); }
+.mk.s18 { width: 1.125rem; height: 1.125rem; border-radius: var(--r-inner); }
+.mk.s20 { width: 1.25rem; height: 1.25rem; border-radius: var(--r-inner); }
+.mk.s34 { width: 2.125rem; height: 2.125rem; border-radius: var(--r-button); }
+.mk.s72 { width: 4.5rem; height: 4.5rem; border-radius: var(--r-md); }
+/* Center the helmet in the "Posted by Blast" badge. */
+.badge {
+  position: absolute; right: -0.25rem; bottom: -0.25rem; width: 1.1875rem; height: 1.1875rem; padding: 0;
+  border-radius: 62.4375rem; background: var(--card); box-shadow: 0 0 0 0.125rem var(--card); display: grid; place-items: center;
+}
+.badge svg { width: 0.8125rem; height: 0.5625rem; }
+.wav { width: max(44px, 2.75rem); height: max(44px, 2.75rem); display: block; flex: none; overflow: hidden; border-radius: 62.4375rem; }
+.wav svg { width: 100%; height: 100%; display: block; }
+
+/* Context line ("Big blast"). */
+.context { display: flex; align-items: center; gap: 0.375rem; font-size: 0.8125rem; font-weight: 500; color: var(--muted); }
+.context svg { width: 0.875rem; height: 0.875rem; color: var(--muted); }
+
+/* Header row. */
+.prow { display: flex; align-items: center; gap: 0.3125rem; min-height: 1.375rem; font-size: 0.9375rem; }
+.name { font-weight: 600; display: inline-flex; align-items: center; gap: 0.25rem; min-width: 0; }
+@media (hover: hover) { a.name:hover { text-decoration: underline 1px; text-underline-offset: 0.1875rem; } }
+a.name:active { opacity: .6; } /* the gate's `.prow a.n` */
+.verified { width: 0.9375rem; height: 0.9375rem; flex: none; display: inline-block; vertical-align: -0.125rem; }
+.meta { color: var(--muted); white-space: nowrap; }
+/* R3-07 (`.prow .meta.h`): the `@handle` has its own ellipsising span, so the timestamp beside it can never be pushed out. */
+.metaH { min-width: 0; overflow: hidden; text-overflow: ellipsis; flex-shrink: 9999; }
+.meta a { border-radius: var(--r-inner); }
+@media (hover: hover) { .meta a:hover { color: var(--ink); } }
+.meta a:active { opacity: .6; }
+.addr { font-family: var(--mono); font-size: 0.875rem; font-weight: 600; }
+.you {
+  display: inline-flex; align-items: center; height: 1.3125rem; padding: 0 0.5rem; margin-left: 0.25rem; border-radius: 62.4375rem;
+  background: var(--chip); color: var(--ink-2); font-size: 0.75rem; font-weight: 600;
+  vertical-align: 0.125rem;
+}
+.end { margin-left: auto; display: flex; align-items: center; gap: 0.1875rem; }
+
+/* Action line. */
+.actLine { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; min-height: 1.875rem; }
+.actSummary { display: contents; }
+.act {
+  height: 1.75rem; padding: 0 0.625rem 0 0.5rem; border-radius: 62.4375rem; display: inline-flex; align-items: center; gap: 0.3125rem;
+  background: var(--chip); color: var(--ink); font-size: 0.8125rem; font-weight: 600;
+}
+.act svg { width: 0.875rem; height: 0.875rem; }
+.actAmt { font-size: 1.3125rem; font-weight: 700; letter-spacing: -.035em; font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; line-height: 1.47; }
+.tchip {
+  height: 1.75rem; padding: 0 0.6875rem 0 0.25rem; border-radius: var(--r-button); display: inline-flex; align-items: center; gap: 0.375rem;
+  background: var(--card); box-shadow: inset 0 0 0 1px var(--hair-2); font-size: 0.875rem; font-weight: 600;
+  transition: background var(--t2) var(--ease-std), transform var(--t1) var(--ease-std);
+}
+@media (hover: hover) { .tchip:hover { background: var(--chip); } }
+.tchip:active { transform: scale(.97); } /* the gate's `a.tchip` */
+.actAt { font-size: 0.875rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+/* oa41 (R3-83): a buy's move since, `· now +10.5%`, and the `Big buy` tag of a large unnamed buy (neutral: pink is for the one primary action). */
+.actNow { font-size: 0.875rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.tag {
+  display: inline-flex; align-items: center; height: 1.75rem; padding: 0 0.625rem; border-radius: 62.4375rem;
+  background: var(--chip); color: var(--ink-2); font-size: 0.8125rem; font-weight: 600;
+}
+
+/* Presale posts. */
+.headline { margin: 0; font-size: 1.3125rem; line-height: 1.24; font-weight: 600; letter-spacing: -.03em; text-wrap: balance; }
+.sub { margin: 0; font-size: 0.9375rem; color: var(--ink-2); }
+
+/* The why: body text, never a link, no quote marks. */
+.why { margin: 0.125rem 0 0; font-size: 1rem; line-height: 1.5; color: var(--ink); text-wrap: pretty; overflow-wrap: anywhere; }
+
+/* Call card (§3.4). */
+.callc {
+  margin-top: 0.375rem; padding: 0.8125rem 0.9375rem; border-radius: var(--r-sm); background: var(--raised);
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; column-gap: 0.8125rem; align-items: center;
+}
+.callT { min-width: 0; display: flex; flex-direction: column; line-height: 1.35; }
+.callT b { font-size: 0.875rem; font-weight: 600; }
+.callT span { font-size: 0.8125rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.callR { display: flex; flex-direction: column; align-items: flex-end; gap: 0.125rem; }
+.pnl { font-size: 1.3125rem; font-weight: 700; letter-spacing: -.035em; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.up { color: var(--up); }
+.down { color: var(--down); }
+/* The sparkline's place (89×28): the coin since launch (R3-20), empty without a history. */
+.spark { width: 5.5625rem; height: 1.75rem; display: block; }
+
+/* Facepile (§3.5). */
+.pileRow { display: flex; align-items: center; gap: 0.625rem; flex-wrap: wrap; margin-top: 0.25rem; }
+.pile { display: flex; padding-left: 0.125rem; }
+.face { position: relative; margin-right: -0.125rem; border-radius: 62.4375rem; transform: translateX(calc(var(--face-index, 0) * -0.4375rem)); transition: transform var(--t2) var(--ease); }
+.face .av { box-shadow: 0 0 0 0.1563rem var(--ring); }
+.pile:focus-within .face { transform: translateX(0); }
+@media (hover: hover) and (pointer: fine) { .pile:hover .face { transform: translateX(0); } }
+.face:nth-child(2) { --face-index: 1; }
+.face:nth-child(3) { --face-index: 2; }
+.face:nth-child(4) { --face-index: 3; }
+.face:nth-child(5) { --face-index: 4; }
+.face:nth-child(6) { --face-index: 5; }
+.pile .face:focus-visible { transform: translateY(-0.125rem); z-index: 3; }
+@media (hover: hover) and (pointer: fine) { .pile .face:hover { transform: translateY(-0.125rem); z-index: 3; } }
+.face:active { opacity: .6; }
+.tip {
+  position: absolute; bottom: calc(100% + 0.625rem); left: 50%; transform: translate(-50%, 0.25rem); z-index: 40;
+  display: flex; flex-direction: column; gap: 1px; padding: 0.5rem 0.75rem; border-radius: var(--r-sm); white-space: nowrap;
+  background: var(--tip-bg); color: var(--tip-fg); font-size: 0.8125rem; line-height: 1.3; box-shadow: var(--sh-pop);
+  opacity: 0; pointer-events: none; transition: opacity var(--t2) var(--ease-std), transform var(--t3) var(--ease);
+}
+.tip::after {
+  content: ""; position: absolute; top: 100%; left: 50%; margin-left: -0.375rem;
+  border: 0.375rem solid transparent; border-top-color: var(--tip-bg);
+}
+.tip b { font-weight: 600; }
+.tip span { opacity: .72; font-variant-numeric: tabular-nums; }
+.face:focus-visible .tip { opacity: 1; transform: translate(-50%, 0); }
+@media (hover: hover) and (pointer: fine) { .face:hover .tip { opacity: 1; transform: translate(-50%, 0); } }
+.pileTxt { margin-left: 0.25rem; font-size: 0.875rem; color: var(--muted); }
+/* As rendered: the "people you follow" part is bold in the line's own muted colour. */
+.pileTxt b { font-weight: 700; }
+
+/* Footer. */
+.pfoot { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin: 0.25rem 0 0 -0.5rem; min-height: max(44px, 2.75rem); }
+.footL { display: flex; align-items: center; gap: 0.8125rem; min-width: 0; }
+.thru { display: inline-flex; align-items: center; gap: 0.3125rem; white-space: nowrap; font-size: 0.8125rem; color: var(--muted); }
+.thru svg { width: 0.9375rem; height: 0.9375rem; }
+.thru b { color: var(--ink-2); font-weight: 600; }
+@container (max-width: 400px) { .thruAmt { display: none; } }
+/* OA-24: the phone's own "N blasted too through this post" line, under the footer (shown ≤760 only). */
+.mThru { display: none; font-size: 0.8125rem; color: var(--muted); gap: 0.3125rem; align-items: center; padding: 0 0 0.375rem; }
+.mThru svg { width: 0.9375rem; height: 0.9375rem; }
+
+/*
+ * The footer's call to action ("Blast", "View presale", "Buy too", "View coin"): one neutral shared
+ * Button (a `.btn-line` link before its dialog is mounted); pink stays for a context's one primary action.
+ * `.charge` carries the hold-to-blast level to the button's glow and draws no box of its own.
+ */
+.cta { white-space: nowrap; }
+.charge { display: contents; }
+
+.num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+.srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* A press under reduced motion dips instead of scaling (OA-31). */
+@media (prefers-reduced-motion: reduce) {
+  .tchip:active { transform: none; opacity: .7; }
+}
+
+@media (max-width: 1054px) {
+  .post { padding: 1.0625rem 0.9375rem 0.625rem; grid-template-columns: 2.5rem minmax(0, 1fr); column-gap: 0.6875rem; }
+  /* As drawn: people's avatars and wallets go to 40; a presale's mark (inside its link) stays 44. */
+  .lead:not(.leadMark), .lead > .av, .lead > .wav { width: 2.5rem; height: 2.5rem; }
+  .thru { display: none; }
+  .mThru { display: flex; }
+  .callc { grid-template-columns: auto minmax(0, 1fr); row-gap: 0.625rem; }
+  .callR { grid-column: 1 / -1; flex-direction: row; align-items: center; justify-content: space-between; }
+}
+
+/* Increase Contrast (OA-31): the post gets a defined edge. */
+@media (prefers-contrast: more) { .post { outline: 1px solid var(--hair-2); outline-offset: -1px; } }
+
+/* Cards can be narrow beside a rail even on a wide viewport. */
+@container (max-width: 600px) {
+  .prow { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 0.125rem 0.25rem; }
+  .name { grid-column: 1 / 4; grid-row: 1; overflow-wrap: anywhere; }
+  .name:has(~ .you) { grid-column: 1 / 3; }
+  .name :global(.nm) { min-width: 0; }
+  .metaH { grid-column: 1; grid-row: 2; }
+  .meta:not(.metaH) { grid-column: 2 / 4; grid-row: 2; font-size: 0.8125rem; }
+  .meta:not(.metaH):first-of-type { grid-column: 1 / 4; }
+  .you { grid-column: 3; grid-row: 1; margin-left: 0; padding-inline: 0.3125rem; }
+  .end { grid-column: 4; grid-row: 1 / 3; align-self: start; }
+  .end > :global([data-feel-follow]) { display: none; }
+  .pbody :global(.btn) { min-height: max(44px, 2.75rem); }
+  .pfoot :is(button, a) { min-width: max(44px, 2.75rem); min-height: max(44px, 2.75rem); }
+  .actLine { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.25rem; }
+  .actSummary { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.5rem; }
+  .act { margin-left: auto; background: none; color: var(--muted); padding: 0; font-size: 0.6875rem; font-weight: 500; }
+  .actAmt { order: -1; max-width: 100%; white-space: nowrap; overflow-x: auto; }
+  .tchip { grid-column: 1 / -1; justify-self: start; min-height: max(44px, 2.75rem); height: auto; max-width: 100%; white-space: nowrap; }
+  .actAt, .tag { grid-column: 1 / -1; justify-self: start; }
+  .thru { display: none; }
+  .mThru { display: flex; }
+  .callc { grid-template-columns: auto minmax(0, 1fr); row-gap: 0.625rem; }
+  .callR { grid-column: 1 / -1; flex-direction: row; align-items: center; justify-content: space-between; }
+}
+
+/* Permalinks keep the feed's behavior and card surface, without the hover lift. */
+.post.detail {
+  padding: 1.25rem;
+  column-gap: 0.75rem;
+  transition: none;
+}
+.detail .pbody { gap: 0.5rem; }
+.detail .name { min-width: 0; overflow: hidden; }
+.detail .name :global(.nm) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.detail .name:not(:has(:global(.nm))) { display: block; white-space: nowrap; text-overflow: ellipsis; }
+.detail .actLine { margin-top: 0.25rem; }
+.detail .actAmt { min-width: 0; max-width: 100%; white-space: nowrap; overflow-x: auto; }
+.detail .tchip { max-width: 100%; min-width: 0; height: auto; min-height: 2rem; padding-block: 0.3125rem; }
+.detail .symbol { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.detail :is(.headline, .sub, .actAt, .callT, .pnl, .pileTxt, .mThru) { min-width: 0; overflow-wrap: anywhere; }
+.detail .pfoot { margin-top: 0.25rem; padding-top: 0.5rem; flex-wrap: wrap; }
+.detail .footL { flex-wrap: wrap; gap: 0.5rem; }
+.detail .pfoot .cta { margin-left: auto; }
+.detail .thru { white-space: normal; }
+.detail .mThru svg, .detail .thru svg { flex: none; }
+@media (max-width: 760px) {
+  .post.detail { padding: 1rem; column-gap: 0.75rem; }
+}
+@media (pointer: coarse) {
+  .detail .tchip { min-height: 44px; }
+}
+
+:global(html[data-blast-input="keyboard"]) :is(.face, .tip) { transition: none; }
+@media (prefers-reduced-motion: reduce) { .face, .tip { transition: opacity var(--t1) linear; } }

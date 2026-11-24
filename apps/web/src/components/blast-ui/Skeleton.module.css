@@ -1,0 +1,26 @@
+.text {
+  display: inline-block;
+  max-width: 100%;
+  border-radius: 0.25rem;
+  background: var(--chip);
+  color: transparent !important;
+  font-size: inherit !important;
+  line-height: inherit;
+  vertical-align: bottom;
+  user-select: none;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* A block of the final content's size; the caller's class gives width and height. */
+.box {
+  display: block;
+  max-width: 100%;
+  border-radius: var(--r-inner);
+  background: var(--chip);
+}
+
+
+.round {
+  border-radius: 50%;
+}

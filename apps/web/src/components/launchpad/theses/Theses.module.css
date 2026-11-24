@@ -1,0 +1,286 @@
+/*
+ * The Theses destination: a launch's posts, then the post form. Hierarchy is
+ * type and space, as on the rest of the coin page; colors come from the
+ * launchpad theme tokens, and every state, stance and label is a word, never
+ * color alone. Whole-pixel geometry only.
+ */
+
+.theses,
+.composer {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.composer {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--lp-line);
+}
+
+.note,
+.hint,
+.meta,
+.attribution {
+  margin: 0;
+  color: var(--lp-muted);
+  font-size: 13px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+.meta,
+.hint {
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.list,
+.links {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.post {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--lp-line);
+  border-radius: var(--lp-radius);
+  background: var(--lp-surface);
+}
+
+.postHeading,
+.composerHeading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin: 0;
+  color: var(--lp-ink);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 20px;
+}
+
+.stance {
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--lp-badge);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.author {
+  color: var(--lp-muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.author code,
+.facts code,
+.meta code {
+  font-family: var(--lp-font-mono);
+  font-size: 12px;
+}
+
+/* The author's words as plain text: line breaks kept, long words wrapped, never markup. */
+.body {
+  margin: 0;
+  color: var(--lp-ink);
+  font-size: 14px;
+  line-height: 20px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.evidence {
+  display: grid;
+  gap: 4px;
+}
+
+.links a {
+  color: var(--lp-accent-text);
+  font-size: 13px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+.facts {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+}
+
+.fact {
+  display: grid;
+  grid-template-columns: minmax(0, 9rem) minmax(0, 1fr);
+  gap: 8px;
+}
+
+/* Narrow screens read each fact's term above its detail. */
+@media (max-width: 30rem) {
+  .fact {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+}
+
+.term {
+  margin: 0;
+  color: var(--lp-muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.detail {
+  margin: 0;
+  color: var(--lp-ink);
+  font-size: 13px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+.field {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.labelRow {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+
+.label {
+  color: var(--lp-ink);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.counter {
+  color: var(--lp-muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.input,
+.textarea {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--lp-line);
+  border-radius: 8px;
+  background: var(--lp-canvas);
+  color: var(--lp-ink);
+  font: inherit;
+  /* 16px keeps mobile browsers from zooming into the field. */
+  font-size: 16px;
+  line-height: 22px;
+}
+
+.textarea {
+  resize: vertical;
+}
+
+.stances {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.stances legend {
+  margin-bottom: 4px;
+  padding: 0;
+}
+
+.choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  color: var(--lp-ink);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.choice input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--lp-accent);
+}
+
+.problems,
+.problem {
+  margin: 0;
+  color: var(--lp-down);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.problems ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.button {
+  justify-self: start;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--lp-line);
+  border-radius: 8px;
+  background: var(--lp-surface);
+  color: var(--lp-ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.button[aria-disabled="true"] {
+  color: var(--lp-muted);
+  cursor: default;
+}
+
+.textButton {
+  min-height: 24px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--lp-accent-text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.status {
+  min-height: 18px;
+  margin: 0;
+  color: var(--lp-ink);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.status[data-tone="problem"] {
+  color: var(--lp-down);
+}

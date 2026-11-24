@@ -1,0 +1,11 @@
+# Trade candles and quote volume
+
+The workspace first requests `/api/social/prices?format=ohlcv&coin=<type>&presale=<id>&window=7d&interval=1s`. This uses the existing signed first-party price relay and rate/cache boundary, independently of the optional native launchpad contracts. The existing sampled-price response is unchanged when `format` is omitted.
+
+For a single shown, migrated mainnet presale, the read replica aggregates `chain_read_v1.activity` trade buy/sell records in epoch-aligned buckets. PostgreSQL scales exact atomic amounts using canonical sale/quote decimals; API amounts stay decimal strings. Open and close follow the source checkpoint/transaction/event/part cursor. Volume is in the original quote currency, such as SUI, and price is quote tokens per whole sale token. No USD conversion, interpolated ticks, zero-volume bars, or invented candles are added to fill gaps.
+
+These records are **transaction balance-derived**, not individual venue swap fills. The indexer selects a counterasset from the sender's net balance changes. Transactions involving multiple tracked trade coins, other quote currencies, missing amounts, or zero amounts are excluded and counted in the coverage notice. Untracked multi-asset effects cannot be ruled out. `price_basis: transaction_balance_change` and the chart details preserve that distinction; venue fill-level OHLCV remains separate future work.
+
+Reads stop at the slower market/presale watermark; tied timestamps choose the lower checkpoint. A request scans at most 100,001 matching records. Above 100,000, it returns `too_many_trades` and no partial candles. The newest 2,000 complete candles are returned with a truncation notice when necessary. Unsupported/ambiguous markets fall back to native history, then the existing sampled line. Successfully empty transaction ranges also retain that line fallback. Unavailable metadata displays the shared error/retry state. Delayed coverage is disclosed.
+
+The TradingView plot remains shared: line/candle style, quote-volume toggle, interval/range controls, exact keyboard inspection, activity overlays and privacy use the existing chart component. The last candle's UTC date/time stays visible separately from indexer freshness. Candle controls require validated OHLCV; sampled lines cannot masquerade as candles.

@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/trade-coin-page.schema.json",
+  "title": "Trading coin metadata",
+  "description": "GET /api/social/trades/coins 200 (public, CDN-cached): one keyset page of Blast sale coins, with optional curve matches, or an exact canonical coin lookup including base and indexed wallet coins. A price is optional; liquidity is resolved by quoting.",
+  "type": "object",
+  "properties": {
+    "coins": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "type": "object",
+        "properties": {
+          "coin_type": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 512,
+            "pattern": "^0x[0-9a-f]{64}::[A-Za-z_][A-Za-z0-9_]{0,127}::[A-Za-z_][A-Za-z0-9_]{0,127}(<.+>)?$"
+          },
+          "symbol": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "decimals": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 255
+          },
+          "icon_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 2048
+          },
+          "usd_price": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+          },
+          "presale_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^0x[0-9a-f]{64}$"
+          },
+          "in_presale": {
+            "type": "boolean",
+            "description": "An open presale, purchased through the commit flow."
+          },
+          "quote_symbol": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "quote_type": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 512,
+            "pattern": "^0x[0-9a-f]{64}::[A-Za-z_][A-Za-z0-9_]{0,127}::[A-Za-z_][A-Za-z0-9_]{0,127}(<.+>)?$"
+          },
+          "verified_team": {
+            "type": "boolean",
+            "description": "R3-23: Blast checked who is behind the coin (social_sale_trust for a sale, social_coin_trust for a curve coin); sent only when true."
+          },
+          "launch_id": {
+            "type": "string",
+            "pattern": "^0x[0-9a-f]{64}$",
+            "description": "Original Blast launch ID, when requested."
+          }
+        },
+        "required": [
+          "coin_type",
+          "symbol",
+          "name",
+          "decimals",
+          "icon_url",
+          "usd_price",
+          "presale_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "next_cursor": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 600
+    }
+  },
+  "required": [
+    "coins",
+    "next_cursor"
+  ],
+  "additionalProperties": false
+}

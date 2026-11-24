@@ -1,0 +1,624 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/home-traders-page.schema.json",
+  "title": "Home traders page",
+  "description": "All public accounts with complete all-time USD P&L, globally ranked before identity/wallet search and pagination. Activity only scopes row details.",
+  "type": "object",
+  "properties": {
+    "window": {
+      "enum": [
+        "1h",
+        "24h"
+      ]
+    },
+    "clock_ms": {
+      "$ref": "https://blast-v2.invalid/social/contracts/feed-item.schema.json#/$defs/millis"
+    },
+    "traders": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "$ref": "#/$defs/trader"
+      }
+    },
+    "as_of": {
+      "$ref": "https://blast-v2.invalid/social/contracts/as-of.schema.json"
+    },
+    "search": {
+      "type": "string",
+      "maxLength": 128
+    },
+    "page": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 50
+    },
+    "total": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "global_total": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "window",
+    "clock_ms",
+    "traders",
+    "as_of",
+    "search",
+    "page",
+    "limit",
+    "total",
+    "global_total"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "amount": {
+      "type": "object",
+      "properties": {
+        "quote_type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "quote_symbol": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "minLength": 1
+            }
+          ]
+        },
+        "quote_decimals": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 18
+            }
+          ]
+        },
+        "atoms": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$",
+          "description": "Atoms as a decimal string, exact."
+        },
+        "usd": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+            }
+          ]
+        },
+        "usd_complete": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "quote_type",
+        "quote_symbol",
+        "quote_decimals",
+        "atoms",
+        "usd",
+        "usd_complete"
+      ],
+      "additionalProperties": false
+    },
+    "side": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "count": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "amounts": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/amount"
+              }
+            },
+            "tokens": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)$",
+                  "description": "Atoms as a decimal string, exact."
+                }
+              ]
+            },
+            "latest_ms": {
+              "$ref": "https://blast-v2.invalid/social/contracts/feed-item.schema.json#/$defs/millis"
+            }
+          },
+          "required": [
+            "count",
+            "amounts",
+            "tokens",
+            "latest_ms"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "event": {
+      "type": "object",
+      "properties": {
+        "activity_id": {
+          "type": "string",
+          "pattern": "^[0-9]+:[0-9]+:[0-9]+:[0-9]+$"
+        },
+        "entry_id": {
+          "type": "string",
+          "pattern": "^a:[0-9]+:[0-9]+:[0-9]+:[0-9]+$"
+        },
+        "kind": {
+          "enum": [
+            "trade_buy",
+            "trade_sell",
+            "presale_commit",
+            "presale_claim"
+          ]
+        },
+        "occurred_at_ms": {
+          "$ref": "https://blast-v2.invalid/social/contracts/feed-item.schema.json#/$defs/millis"
+        },
+        "digest": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "minLength": 1
+            }
+          ]
+        },
+        "quote": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/amount"
+            }
+          ]
+        },
+        "tokens": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)$",
+              "description": "Atoms as a decimal string, exact."
+            }
+          ]
+        },
+        "refund": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)$",
+              "description": "Atoms as a decimal string, exact."
+            }
+          ]
+        },
+        "has_why": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "activity_id",
+        "entry_id",
+        "kind",
+        "occurred_at_ms",
+        "digest",
+        "quote",
+        "tokens",
+        "refund",
+        "has_why"
+      ],
+      "additionalProperties": false
+    },
+    "participant": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string",
+          "pattern": "^(c:[a-z0-9_]{3,20}|w:0x[0-9a-f]{64})$"
+        },
+        "actor": {
+          "oneOf": [
+            {
+              "$ref": "https://blast-v2.invalid/social/contracts/feed-item.schema.json#/$defs/accountActor"
+            },
+            {
+              "$ref": "https://blast-v2.invalid/social/contracts/feed-item.schema.json#/$defs/addressActor"
+            }
+          ]
+        },
+        "followers": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "integer",
+              "minimum": 0
+            }
+          ]
+        },
+        "buys": {
+          "$ref": "#/$defs/side"
+        },
+        "sells": {
+          "$ref": "#/$defs/side"
+        },
+        "commits": {
+          "$ref": "#/$defs/side"
+        },
+        "claims": {
+          "$ref": "#/$defs/side"
+        },
+        "latest_ms": {
+          "$ref": "https://blast-v2.invalid/social/contracts/feed-item.schema.json#/$defs/millis"
+        },
+        "latest_kind": {
+          "enum": [
+            "trade_buy",
+            "trade_sell",
+            "presale_commit",
+            "presale_claim"
+          ]
+        },
+        "events_total": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "events": {
+          "type": "array",
+          "maxItems": 10,
+          "items": {
+            "$ref": "#/$defs/event"
+          }
+        },
+        "events_more": {
+          "type": "boolean"
+        },
+        "relation": {
+          "enum": [
+            "followed"
+          ]
+        }
+      },
+      "required": [
+        "key",
+        "actor",
+        "followers",
+        "buys",
+        "sells",
+        "commits",
+        "claims",
+        "latest_ms",
+        "latest_kind",
+        "events_total"
+      ],
+      "additionalProperties": false
+    },
+    "trader": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string",
+          "pattern": "^(c:[a-z0-9_]{3,20}|w:0x[0-9a-f]{64})$"
+        },
+        "actor": {
+          "oneOf": [
+            {
+              "$ref": "https://blast-v2.invalid/social/contracts/feed-item.schema.json#/$defs/accountActor"
+            },
+            {
+              "$ref": "https://blast-v2.invalid/social/contracts/feed-item.schema.json#/$defs/addressActor"
+            }
+          ]
+        },
+        "followers": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "integer",
+              "minimum": 0
+            }
+          ]
+        },
+        "buys": {
+          "$ref": "#/$defs/side"
+        },
+        "sells": {
+          "$ref": "#/$defs/side"
+        },
+        "commits": {
+          "$ref": "#/$defs/side"
+        },
+        "claims": {
+          "$ref": "#/$defs/side"
+        },
+        "latest_ms": {
+          "$ref": "https://blast-v2.invalid/social/contracts/feed-item.schema.json#/$defs/millis"
+        },
+        "latest_kind": {
+          "enum": [
+            "trade_buy",
+            "trade_sell",
+            "presale_commit",
+            "presale_claim"
+          ]
+        },
+        "events_total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "events": {
+          "type": "array",
+          "maxItems": 10,
+          "items": {
+            "$ref": "#/$defs/event"
+          }
+        },
+        "events_more": {
+          "type": "boolean"
+        },
+        "relation": {
+          "enum": [
+            "followed"
+          ]
+        },
+        "coins": {
+          "type": "array",
+          "maxItems": 12,
+          "items": {
+            "$ref": "#/$defs/traderCoin"
+          }
+        },
+        "coins_total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "portfolio": {
+          "type": "object",
+          "properties": {
+            "public": {
+              "type": "boolean"
+            },
+            "value_usd": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[0-9]+\\.[0-9]{2}$"
+            },
+            "pnl_usd": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^-?[0-9]+\\.[0-9]{2}$"
+            }
+          },
+          "required": [
+            "public",
+            "value_usd",
+            "pnl_usd"
+          ],
+          "additionalProperties": false
+        },
+        "holdings_public": {
+          "type": "boolean"
+        },
+        "performance_public": {
+          "type": "boolean"
+        },
+        "holdings_total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "rank": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "holdings": {
+          "type": "array",
+          "maxItems": 10,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "presale_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "symbol": {
+                "type": "string"
+              },
+              "icon_url": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "decimals": {
+                "type": "integer"
+              },
+              "balance": {
+                "type": "string"
+              },
+              "value_usd": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "share_bps": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0,
+                "maximum": 10000
+              },
+              "pnl_usd": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "launch_id": {
+                "type": "string",
+                "pattern": "^0x[0-9a-f]{64}$"
+              },
+              "coin_type": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Canonical launch coin type; optional for older cached responses."
+              },
+              "verified_team": {
+                "type": "boolean",
+                "description": "R3-23: Blast checked who is behind the coin (social_sale_trust for a sale, social_coin_trust for a bonding-curve coin); sent only when true."
+              }
+            },
+            "required": [
+              "presale_id",
+              "symbol",
+              "icon_url",
+              "decimals",
+              "balance",
+              "value_usd",
+              "share_bps",
+              "pnl_usd"
+            ],
+            "anyOf": [
+              {
+                "properties": {
+                  "presale_id": {
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "required": [
+                  "launch_id"
+                ],
+                "properties": {
+                  "launch_id": {
+                    "type": "string"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "required": [
+        "key",
+        "actor",
+        "followers",
+        "buys",
+        "sells",
+        "commits",
+        "claims",
+        "latest_ms",
+        "latest_kind",
+        "events_total",
+        "coins",
+        "coins_total",
+        "portfolio"
+      ],
+      "additionalProperties": false
+    },
+    "traderCoin": {
+      "type": "object",
+      "properties": {
+        "presale_id": {
+          "type": "string",
+          "pattern": "^0x[0-9a-f]{64}$"
+        },
+        "symbol": {
+          "type": "string",
+          "minLength": 1
+        },
+        "icon_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "decimals": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 38
+        },
+        "buys": {
+          "$ref": "#/$defs/side"
+        },
+        "sells": {
+          "$ref": "#/$defs/side"
+        },
+        "commits": {
+          "$ref": "#/$defs/side"
+        },
+        "claims": {
+          "$ref": "#/$defs/side"
+        },
+        "latest_ms": {
+          "$ref": "https://blast-v2.invalid/social/contracts/feed-item.schema.json#/$defs/millis"
+        }
+      },
+      "required": [
+        "presale_id",
+        "symbol",
+        "icon_url",
+        "decimals",
+        "buys",
+        "sells",
+        "commits",
+        "claims",
+        "latest_ms"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

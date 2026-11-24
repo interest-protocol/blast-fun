@@ -1,0 +1,411 @@
+@font-face {
+  font-family: Geist;
+  src: url("/fonts/geist.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Geist Mono";
+  src: url("/fonts/geist-mono.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Bricolage Grotesque";
+  src: url("/fonts/bricolage.woff2") format("woff2");
+  font-weight: 200 800;
+  font-display: swap;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 400 0.875rem/1.5 var(--font);
+  -webkit-font-smoothing: antialiased;
+}
+a {
+  color: inherit;
+}
+a:focus-visible,
+[tabindex]:focus-visible {
+  outline: 0.125rem solid var(--focus-color);
+  outline-offset: 0.125rem;
+}
+button,
+input,
+select,
+a {
+  touch-action: manipulation;
+}
+[hidden] {
+  display: none !important;
+}
+h1,
+h2,
+p {
+  margin: 0;
+}
+h2 {
+  font: 650 1.0625rem/1.3 var(--font);
+  margin-bottom: 0.75rem;
+}
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem max(var(--page-gutter), calc((100vw - var(--page-max)) / 2));
+  background: var(--card);
+}
+.brand {
+  display: flex;
+  gap: 0.75rem;
+  align-items: baseline;
+  font: 750 2rem/1.2 var(--display);
+  text-decoration: none;
+  letter-spacing: -0.04em;
+}
+.brand small {
+  color: var(--muted);
+  font: 500 0.8125rem var(--font);
+  letter-spacing: 0;
+}
+.header-actions,
+.section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+.tag {
+  background: var(--chip);
+  padding: 0.3125rem 0.8125rem;
+  border-radius: var(--r-inner);
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+main {
+  max-width: var(--page-max);
+  margin: auto;
+  padding: 0 var(--page-gutter);
+}
+.phead .sub {
+  margin-top: 0.5rem;
+}
+.freshness {
+  color: var(--muted);
+  font-size: 0.75rem;
+  min-height: 1.25rem;
+  margin-bottom: 1.25rem;
+  overflow-wrap: anywhere;
+}
+#error {
+  margin-bottom: 1.25rem;
+}
+.card {
+  background: var(--card);
+  border-radius: var(--r-md);
+  padding: 1.3125rem;
+  box-shadow: var(--sh-1);
+  min-width: 0;
+}
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1.25rem;
+  margin-bottom: 2rem;
+}
+.label,
+.caption,
+.kpi p {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.kpi .amount {
+  display: block;
+  font: 650 2.125rem/1.2 var(--display);
+  letter-spacing: -0.04em;
+  margin: 0.75rem 0 0.5rem;
+}
+.amount .button {
+  font: inherit;
+  letter-spacing: inherit;
+}
+.amount,
+.amount .button {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.analysis-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2.2fr) minmax(15rem, 1fr);
+  gap: 1.25rem;
+  margin-bottom: 2rem;
+}
+.period-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.period-label .input {
+  max-width: 100%;
+}
+.volume-value {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 0.8125rem 0;
+}
+.volume-value .amount {
+  font: 650 2.5rem/1.2 var(--display);
+  letter-spacing: -0.04em;
+}
+.volume-value > span {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.chart-wrap {
+  height: 14rem;
+  margin-top: 1.3125rem;
+}
+#chart {
+  width: 100%;
+  height: 100%;
+}
+#chart-note {
+  margin-top: 0.75rem;
+}
+.coverage dl {
+  margin: 1rem 0 0;
+  display: grid;
+  gap: 1.3125rem;
+}
+dt {
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+dd {
+  margin: 0.25rem 0 0;
+  overflow-wrap: anywhere;
+}
+dd small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.secondary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.25rem;
+  margin-bottom: 2rem;
+}
+.metrics {
+  margin: 1.3125rem 0;
+  display: grid;
+  gap: 0.5rem;
+}
+.metrics > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.metrics dd {
+  max-width: 50%;
+  margin: 0;
+  text-align: right;
+}
+.metrics .button {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.unavailable {
+  color: var(--muted);
+  margin-top: 1.3125rem;
+  font-size: 0.8125rem;
+}
+.daily,
+.native {
+  margin-bottom: 2rem;
+}
+.table-scroll {
+  overflow: auto;
+  margin-top: 1.3125rem;
+}
+.daily table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+.daily th {
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-weight: 550;
+}
+.daily th,
+.daily td {
+  text-align: right;
+  padding: 0.8125rem;
+  overflow-wrap: anywhere;
+  min-width: 6rem;
+}
+.daily th:first-child,
+.daily td:first-child {
+  text-align: left;
+}
+.quote-list {
+  display: grid;
+  gap: 0.8125rem;
+  margin-top: 1.3125rem;
+}
+.quote-row {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 1rem;
+  align-items: center;
+}
+.quote-row > span {
+  overflow-wrap: anywhere;
+  font: 0.75rem var(--mono);
+}
+.quote-row > span:last-child {
+  text-align: right;
+}
+.quote-row .button {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+footer {
+  padding: 0 0 1.3125rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.skip {
+  position: fixed;
+  top: -10rem;
+  left: 1rem;
+  padding: 0.8125rem;
+  background: var(--card);
+  z-index: 5;
+}
+.skip:focus {
+  top: 1rem;
+}
+dialog {
+  background: var(--card);
+  color: var(--ink);
+  border: 0;
+  border-radius: var(--r-md);
+  padding: 2rem;
+  width: min(90vw, 37.5rem);
+  box-shadow: var(--sh-pop);
+}
+dialog:modal {
+  overscroll-behavior: contain;
+}
+dialog::backdrop {
+  background: var(--scrim);
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+.exact-value {
+  font-family: var(--mono);
+  overflow-wrap: anywhere;
+  max-height: 40vh;
+  overflow: auto;
+  margin: 1.3125rem 0;
+}
+dialog .caption {
+  min-height: 1.3125rem;
+  margin-top: 0.8125rem;
+}
+.sign-in {
+  max-width: 38rem;
+  margin: 8vh auto;
+}
+.sign-in .card {
+  padding: 2rem;
+}
+.sign-in form {
+  display: grid;
+  gap: 0.8125rem;
+  margin: 2rem 0 1.3125rem;
+}
+.sign-in .input {
+  width: 100%;
+}
+.pending-card {
+  height: 10rem;
+}
+@media (max-width: 1054px) {
+  .section-head {
+    flex-wrap: wrap;
+  }
+  .kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 768px) {
+  .analysis-grid {
+    grid-template-columns: 1fr;
+  }
+  .coverage dl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 480px) {
+  .private-tag {
+    display: none;
+  }
+  .secondary-grid,
+  .coverage dl {
+    grid-template-columns: 1fr;
+  }
+  .kpis {
+    gap: 0.8125rem;
+  }
+  .kpi .amount {
+    font-size: 1.75rem;
+  }
+  .card {
+    padding: 1.125rem;
+  }
+  .sign-in .card,
+  dialog {
+    padding: 1.3125rem;
+  }
+  .period-label {
+    flex-wrap: wrap;
+  }
+  .volume-value .amount {
+    font-size: 2rem;
+  }
+  .quote-row {
+    grid-template-columns: 1fr;
+    gap: 0.25rem;
+  }
+  .quote-row > span:last-child {
+    text-align: left;
+  }
+}
+@media (pointer: coarse) {
+  .input {
+    font-size: 16px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}

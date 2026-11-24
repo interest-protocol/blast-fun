@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/presale/contracts/ws-presale-created.schema.json",
+  "title": "presale created message",
+  "description": "presale_feed: a new presale's summary (CL-4); a log message has no topic and reaches each connection once (CL-20); a replayed message carries replayed: true (CL-26).",
+  "type": "object",
+  "properties": {
+    "type": {
+      "const": "presale_created"
+    },
+    "cursor": {
+      "$ref": "defs.schema.json#/$defs/event_cursor"
+    },
+    "checkpoint": {
+      "$ref": "defs.schema.json#/$defs/checkpoint"
+    },
+    "timestamp_ms": {
+      "$ref": "defs.schema.json#/$defs/timestamp_ms"
+    },
+    "replayed": {
+      "description": "Present, and true, only on a message replayed on resume (CL-26).",
+      "const": true
+    },
+    "presale": {
+      "$ref": "defs.schema.json#/$defs/presale_summary"
+    }
+  },
+  "required": [
+    "type",
+    "cursor",
+    "checkpoint",
+    "timestamp_ms",
+    "presale"
+  ],
+  "additionalProperties": false
+}

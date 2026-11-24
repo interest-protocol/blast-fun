@@ -1,0 +1,10 @@
+.control {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  overflow-wrap: anywhere;
+  text-align: start;
+}
+
+.value {
+  font: inherit;
+}

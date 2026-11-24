@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/presale/contracts/sponsor-request.schema.json",
+  "title": "Sponsor request",
+  "description": "POST /api/presale/sponsor. A presale intent names its presale; withdraw (the embedded wallet sends its own coins to one address, social UI-14) names none.",
+  "type": "object",
+  "properties": {
+    "presale_id": {
+      "$ref": "defs.schema.json#/$defs/address"
+    },
+    "sender": {
+      "$ref": "defs.schema.json#/$defs/address"
+    },
+    "transaction_kind_bytes": {
+      "$ref": "defs.schema.json#/$defs/base64"
+    },
+    "intent": {
+      "enum": [
+        "commit",
+        "claim",
+        "settle",
+        "cancel",
+        "reward_claim",
+        "withdraw"
+      ]
+    }
+  },
+  "required": [
+    "sender",
+    "transaction_kind_bytes",
+    "intent"
+  ],
+  "if": {
+    "properties": {
+      "intent": {
+        "const": "withdraw"
+      }
+    }
+  },
+  "then": {
+    "properties": {
+      "presale_id": false
+    }
+  },
+  "else": {
+    "properties": {
+      "presale_id": {
+        "$ref": "defs.schema.json#/$defs/address"
+      }
+    },
+    "required": [
+      "presale_id"
+    ]
+  },
+  "additionalProperties": false
+}

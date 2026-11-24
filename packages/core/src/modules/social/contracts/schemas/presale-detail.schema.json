@@ -1,0 +1,1624 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/presale-detail.schema.json",
+  "title": "Presale detail",
+  "description": "GET /api/social/presales/{presale_id} 200: one sale, the same for every caller.",
+  "type": "object",
+  "properties": {
+    "presale": {
+      "type": "object",
+      "properties": {
+        "presale_id": {
+          "type": "string",
+          "pattern": "^0x[0-9a-f]{64}$"
+        },
+        "name": {
+          "type": "string"
+        },
+        "symbol": {
+          "type": "string"
+        },
+        "icon_url": {
+          "type": "string"
+        },
+        "phase": {
+          "enum": [
+            "pending",
+            "open",
+            "closed",
+            "funded",
+            "trading",
+            "cancelled"
+          ]
+        },
+        "venue": {
+          "type": "string"
+        },
+        "start_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "end_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "ended_ms": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "integer",
+              "minimum": 0
+            }
+          ]
+        },
+        "launched_ms": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "integer",
+              "minimum": 0
+            }
+          ]
+        },
+        "target_usd": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+            }
+          ]
+        },
+        "raised_usd": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+            }
+          ]
+        },
+        "quote_symbol": {
+          "description": "R3-40: the sale's quote coin (USDC or SUI). A USDC sale reads in dollars (the *_usd fields); any other quote reads in its own coin from the *_atoms figures and quote_decimals.",
+          "type": "string",
+          "minLength": 1
+        },
+        "quote_decimals": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "target_atoms": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$",
+          "description": "R3-40: the target in quote atoms (raise_target)."
+        },
+        "raised_atoms": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$",
+          "description": "R3-40: the amount raised in quote atoms (total_commitments)."
+        },
+        "fill_bps": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "participants": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "interested": {
+          "description": "R3-29: the sale's current presale follows, one per account; an unfollow decrements it and a deleted account never counts. The same for every caller; names nobody.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "presale_price_usd": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+            }
+          ]
+        },
+        "presale_price_quote": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+            }
+          ],
+          "description": "R3-40: the presale price in the quote coin per whole token; null with no claim yet."
+        },
+        "price_usd": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+            }
+          ]
+        },
+        "multiple": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+            }
+          ]
+        },
+        "sale_token": {
+          "type": "string"
+        },
+        "sale_decimals": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "allowlisted": {
+          "description": "An allowlisted sale: any positive commitment up to each wallet's own allowlist cap (min_commitment_usd and wallet_cap_usd are then null).",
+          "type": "boolean"
+        },
+        "min_commitment_usd": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+            }
+          ]
+        },
+        "wallet_cap_usd": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+            }
+          ]
+        },
+        "min_commitment_atoms": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)$"
+            }
+          ],
+          "description": "R3-40: min_commitment_usd's limit in quote atoms."
+        },
+        "wallet_cap_atoms": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)$"
+            }
+          ],
+          "description": "R3-40: wallet_cap_usd's limit in quote atoms."
+        },
+        "opened_ms": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "integer",
+              "minimum": 0
+            }
+          ]
+        },
+        "verified_team": {
+          "description": "R3-23: Blast checked who is behind the project. Set only by an operator (social_sale_trust); false without a row. Never derived from creator input.",
+          "type": "boolean"
+        },
+        "audited": {
+          "description": "R3-23: Blast read the audit report. Set only by an operator; an audit link in the sale's metadata never sets it. False without a row.",
+          "type": "boolean"
+        },
+        "metadata": {
+          "description": "R3-24: the sale's public details (cover, tagline, links, published launch date); null when it has none. Never names who wrote them.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "https://blast-v2.invalid/social/contracts/sale-metadata.schema.json"
+            }
+          ]
+        },
+        "quote_type": {
+          "description": "The exact on-chain coin type accepted by this presale.",
+          "type": "string",
+          "minLength": 1
+        },
+        "hard_cap": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "coin_type": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Canonical sale coin type; optional for older cached responses."
+        }
+      },
+      "required": [
+        "presale_id",
+        "name",
+        "symbol",
+        "icon_url",
+        "phase",
+        "venue",
+        "start_ms",
+        "end_ms",
+        "ended_ms",
+        "launched_ms",
+        "target_usd",
+        "raised_usd",
+        "quote_symbol",
+        "quote_decimals",
+        "target_atoms",
+        "raised_atoms",
+        "fill_bps",
+        "participants",
+        "interested",
+        "presale_price_usd",
+        "presale_price_quote",
+        "price_usd",
+        "multiple",
+        "sale_token",
+        "sale_decimals",
+        "allowlisted",
+        "min_commitment_usd",
+        "wallet_cap_usd",
+        "min_commitment_atoms",
+        "wallet_cap_atoms",
+        "opened_ms",
+        "verified_team",
+        "audited",
+        "metadata",
+        "quote_type"
+      ],
+      "additionalProperties": false
+    },
+    "quote_price": {
+      "description": "R3-40: a SUI sale's quote price row (chain_read_v1.prices): USD a whole coin and when it was taken, for a display-only dollar equivalent; null for a USDC sale or without a row.",
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "usd_price": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+            },
+            "as_of_ms": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "usd_price",
+            "as_of_ms"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "momentum": {
+      "type": "object",
+      "properties": {
+        "5m": {
+          "type": "object",
+          "properties": {
+            "commits": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "total_usd": {
+              "type": "string",
+              "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+            },
+            "total_atoms": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)$"
+            },
+            "backers": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "average_usd": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+                }
+              ]
+            },
+            "median_usd": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+                }
+              ]
+            },
+            "average_atoms": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)$"
+                }
+              ]
+            },
+            "median_atoms": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)$"
+                }
+              ]
+            },
+            "big_bps": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "commits",
+            "total_usd",
+            "total_atoms",
+            "backers",
+            "average_usd",
+            "median_usd",
+            "average_atoms",
+            "median_atoms",
+            "big_bps"
+          ],
+          "additionalProperties": false
+        },
+        "1h": {
+          "type": "object",
+          "properties": {
+            "commits": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "total_usd": {
+              "type": "string",
+              "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+            },
+            "total_atoms": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)$"
+            },
+            "backers": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "average_usd": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+                }
+              ]
+            },
+            "median_usd": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+                }
+              ]
+            },
+            "average_atoms": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)$"
+                }
+              ]
+            },
+            "median_atoms": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)$"
+                }
+              ]
+            },
+            "big_bps": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "commits",
+            "total_usd",
+            "total_atoms",
+            "backers",
+            "average_usd",
+            "median_usd",
+            "average_atoms",
+            "median_atoms",
+            "big_bps"
+          ],
+          "additionalProperties": false
+        },
+        "4h": {
+          "type": "object",
+          "properties": {
+            "commits": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "total_usd": {
+              "type": "string",
+              "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+            },
+            "total_atoms": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)$"
+            },
+            "backers": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "average_usd": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+                }
+              ]
+            },
+            "median_usd": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+                }
+              ]
+            },
+            "average_atoms": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)$"
+                }
+              ]
+            },
+            "median_atoms": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)$"
+                }
+              ]
+            },
+            "big_bps": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "commits",
+            "total_usd",
+            "total_atoms",
+            "backers",
+            "average_usd",
+            "median_usd",
+            "average_atoms",
+            "median_atoms",
+            "big_bps"
+          ],
+          "additionalProperties": false
+        },
+        "1d": {
+          "type": "object",
+          "properties": {
+            "commits": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "total_usd": {
+              "type": "string",
+              "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+            },
+            "total_atoms": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)$"
+            },
+            "backers": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "average_usd": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+                }
+              ]
+            },
+            "median_usd": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+                }
+              ]
+            },
+            "average_atoms": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)$"
+                }
+              ]
+            },
+            "median_atoms": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)$"
+                }
+              ]
+            },
+            "big_bps": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "commits",
+            "total_usd",
+            "total_atoms",
+            "backers",
+            "average_usd",
+            "median_usd",
+            "average_atoms",
+            "median_atoms",
+            "big_bps"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "5m",
+        "1h",
+        "4h",
+        "1d"
+      ],
+      "additionalProperties": false
+    },
+    "backers": {
+      "type": "object",
+      "properties": {
+        "top": {
+          "type": "array",
+          "maxItems": 25,
+          "items": {
+            "type": "object",
+            "properties": {
+              "wallet": {
+                "type": "string",
+                "pattern": "^0x[0-9a-f]{64}$"
+              },
+              "account": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "callsign": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9][a-z0-9_]{1,18}[a-z0-9]$"
+                      },
+                      "display_name": {
+                        "oneOf": [
+                          {
+                            "type": "null"
+                          },
+                          {
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "avatar_url": {
+                        "oneOf": [
+                          {
+                            "type": "null"
+                          },
+                          {
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "verified": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "callsign",
+                      "display_name",
+                      "avatar_url",
+                      "verified"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "commitment_usd": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+                  }
+                ]
+              },
+              "commitment_atoms": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$"
+              },
+              "share_bps": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "last_commit_ms": {
+                "description": "Null for a wallet blast-infra knows only from its claim.",
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                ]
+              },
+              "why": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "wallet",
+              "account",
+              "commitment_usd",
+              "commitment_atoms",
+              "share_bps",
+              "last_commit_ms",
+              "why"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "top10_bps": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "top",
+        "top10_bps"
+      ],
+      "additionalProperties": false
+    },
+    "theses": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "type": "object",
+        "properties": {
+          "why_id": {
+            "type": "string"
+          },
+          "entry_id": {
+            "type": "string"
+          },
+          "account": {
+            "type": "object",
+            "properties": {
+              "callsign": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9_]{1,18}[a-z0-9]$"
+              },
+              "display_name": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
+              "avatar_url": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
+              "verified": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "callsign",
+              "display_name",
+              "avatar_url",
+              "verified"
+            ],
+            "additionalProperties": false
+          },
+          "text": {
+            "type": "string"
+          },
+          "commit_usd": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+              }
+            ]
+          },
+          "commit_atoms": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)$"
+          },
+          "rockets": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "occurred_at_ms": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "why_id",
+          "entry_id",
+          "account",
+          "text",
+          "commit_usd",
+          "commit_atoms",
+          "rockets",
+          "occurred_at_ms"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "activity": {
+      "type": "array",
+      "maxItems": 30,
+      "items": {
+        "$ref": "https://blast-v2.invalid/social/contracts/feed-item.schema.json"
+      }
+    },
+    "raise": {
+      "type": "object",
+      "properties": {
+        "points": {
+          "type": "array",
+          "maxItems": 160,
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "integer",
+                "minimum": 0
+              },
+              {
+                "type": "string",
+                "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+              },
+              {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$"
+              }
+            ],
+            "minItems": 3,
+            "maxItems": 3,
+            "items": false
+          }
+        },
+        "markers": {
+          "type": "array",
+          "maxItems": 60,
+          "items": {
+            "type": "object",
+            "properties": {
+              "t": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "raised_usd": {
+                "type": "string",
+                "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+              },
+              "commit_usd": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+                  }
+                ]
+              },
+              "raised_atoms": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$"
+              },
+              "commit_atoms": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$"
+              },
+              "wallet": {
+                "type": "string",
+                "pattern": "^0x[0-9a-f]{64}$"
+              },
+              "account": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "callsign": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9][a-z0-9_]{1,18}[a-z0-9]$"
+                      },
+                      "display_name": {
+                        "oneOf": [
+                          {
+                            "type": "null"
+                          },
+                          {
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "avatar_url": {
+                        "oneOf": [
+                          {
+                            "type": "null"
+                          },
+                          {
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "verified": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "callsign",
+                      "display_name",
+                      "avatar_url",
+                      "verified"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "why": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "t",
+              "raised_usd",
+              "commit_usd",
+              "raised_atoms",
+              "commit_atoms",
+              "wallet",
+              "account",
+              "why"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "points",
+        "markers"
+      ],
+      "additionalProperties": false
+    },
+    "vesting": {
+      "description": "The span of every schedule of the sale (token and raise recipients', and any other the view holds): the earliest start and cliff end, the latest end. Not the team's; a team unlock reads team_vesting.",
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "start_ms": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "cliff_end_ms": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "end_ms": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "start_ms",
+            "cliff_end_ms",
+            "end_ms"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "team_vesting": {
+      "description": "The team's vesting: the span of the sale's token recipients' schedules, or null when the sale has none or the read cannot tell which schedules are the team's (no terms, a token recipient that is also a raise recipient, or token recipients that unlock differently). Null never means nothing vests.",
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "start_ms": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "cliff_end_ms": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "end_ms": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "start_ms",
+            "cliff_end_ms",
+            "end_ms"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "terms": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "supply": {
+              "type": "object",
+              "properties": {
+                "total": {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)$"
+                },
+                "participants": {
+                  "type": "object",
+                  "properties": {
+                    "bps": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "amount": {
+                      "type": "string",
+                      "pattern": "^(0|[1-9][0-9]*)$"
+                    }
+                  },
+                  "required": [
+                    "bps",
+                    "amount"
+                  ],
+                  "additionalProperties": false
+                },
+                "liquidity": {
+                  "type": "object",
+                  "properties": {
+                    "bps": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "amount": {
+                      "type": "string",
+                      "pattern": "^(0|[1-9][0-9]*)$"
+                    }
+                  },
+                  "required": [
+                    "bps",
+                    "amount"
+                  ],
+                  "additionalProperties": false
+                },
+                "recipients": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "address": {
+                        "type": "string",
+                        "pattern": "^0x[0-9a-f]{64}$"
+                      },
+                      "bps": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "amount": {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]*)$"
+                      },
+                      "vesting": {
+                        "oneOf": [
+                          {
+                            "type": "null"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "start_ms": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "cliff_end_ms": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "end_ms": {
+                                "type": "integer",
+                                "minimum": 0
+                              }
+                            },
+                            "required": [
+                              "start_ms",
+                              "cliff_end_ms",
+                              "end_ms"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "address",
+                      "bps",
+                      "amount",
+                      "vesting"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "protocol": {
+                  "type": "object",
+                  "properties": {
+                    "bps": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "amount": {
+                      "type": "string",
+                      "pattern": "^(0|[1-9][0-9]*)$"
+                    }
+                  },
+                  "required": [
+                    "bps",
+                    "amount"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "total",
+                "participants",
+                "liquidity",
+                "recipients",
+                "protocol"
+              ],
+              "additionalProperties": false
+            },
+            "raise": {
+              "type": "object",
+              "properties": {
+                "pool_bps": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "recipients": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "address": {
+                        "type": "string",
+                        "pattern": "^0x[0-9a-f]{64}$"
+                      },
+                      "bps": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "amount": {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]*)$"
+                      },
+                      "vesting": {
+                        "oneOf": [
+                          {
+                            "type": "null"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "start_ms": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "cliff_end_ms": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "end_ms": {
+                                "type": "integer",
+                                "minimum": 0
+                              }
+                            },
+                            "required": [
+                              "start_ms",
+                              "cliff_end_ms",
+                              "end_ms"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "address",
+                      "bps",
+                      "amount",
+                      "vesting"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "protocol": {
+                  "type": "object",
+                  "properties": {
+                    "bps": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "amount": {
+                      "type": "string",
+                      "pattern": "^(0|[1-9][0-9]*)$"
+                    }
+                  },
+                  "required": [
+                    "bps",
+                    "amount"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "pool_bps",
+                "recipients",
+                "protocol"
+              ],
+              "additionalProperties": false
+            },
+            "eligibility": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "open"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "allowlisted"
+                    },
+                    "wallets": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "wallets"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "presale_price_usd": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+                }
+              ]
+            },
+            "launch_price_usd": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+                }
+              ]
+            },
+            "presale_price_quote": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+                }
+              ]
+            },
+            "launch_price_quote": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+                }
+              ]
+            },
+            "launch_fdv_quote": {
+              "description": "The coin's value at the pool's opening price when the sale raises its target, in whole quote coins: launch_price_quote times supply.total, from the atoms (twelve significant digits).",
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+                }
+              ]
+            },
+            "trading_fee_ppm": {
+              "description": "The migration pool's swap fee in millionths of each trade (2500 is 0.25%); null for an Aftermath sale or a tier not indexed yet. The server always sends it; partner v1 does not publish it, so it is not required.",
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000
+                }
+              ]
+            },
+            "burnable": {
+              "description": "R3-90: whether holders can burn the coin (blast-infra supply.burnable); null when the terms read does not carry it.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "hard_cap": {
+              "description": "R3-90: whether the sale stops at its target (the uncapped phase's hard_cap; the hard cap is then the target); false when it can go over the target; null when the terms read does not carry it.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "buyer_vesting": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "cliff_ms": {
+                      "type": "string",
+                      "pattern": "^(0|[1-9][0-9]*)$"
+                    },
+                    "duration_ms": {
+                      "type": "string",
+                      "pattern": "^(0|[1-9][0-9]*)$"
+                    }
+                  },
+                  "required": [
+                    "cliff_ms",
+                    "duration_ms"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "public_buy": {
+              "type": "object",
+              "properties": {
+                "from_ms": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "min_atoms": {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)$"
+                },
+                "hard_cap_from_ms": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "from_ms",
+                "min_atoms",
+                "hard_cap_from_ms"
+              ],
+              "additionalProperties": false
+            },
+            "eligible_uncapped_from_ms": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "supply",
+            "raise",
+            "eligibility",
+            "presale_price_usd",
+            "launch_price_usd",
+            "presale_price_quote",
+            "launch_price_quote",
+            "burnable",
+            "hard_cap"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "as_of": {
+      "$ref": "https://blast-v2.invalid/social/contracts/as-of.schema.json"
+    },
+    "creator": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "Original creating wallet; account respects privacy and sharing at creation.",
+      "properties": {
+        "wallet": {
+          "type": "string",
+          "pattern": "^0x[0-9a-f]{64}$"
+        },
+        "account": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "callsign": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9][a-z0-9_]{1,18}[a-z0-9]$"
+                },
+                "display_name": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                },
+                "avatar_url": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                },
+                "verified": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "callsign",
+                "display_name",
+                "avatar_url",
+                "verified"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "required": [
+        "wallet",
+        "account"
+      ],
+      "additionalProperties": false
+    },
+    "buyer_vesting": {
+      "type": "object",
+      "properties": {
+        "schedules": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "total": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "claimed": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "remaining": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        }
+      },
+      "required": [
+        "schedules",
+        "total",
+        "claimed",
+        "remaining"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "presale",
+    "quote_price",
+    "momentum",
+    "backers",
+    "theses",
+    "activity",
+    "raise",
+    "vesting",
+    "team_vesting",
+    "terms",
+    "as_of",
+    "creator"
+  ],
+  "additionalProperties": false
+}

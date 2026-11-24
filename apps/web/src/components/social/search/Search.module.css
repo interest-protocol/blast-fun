@@ -1,0 +1,68 @@
+/* Search (FEATURE-MAP §12; the live design's `.search-sheet`, `.search-box`, `.search-res`, `.sr-h`, `.mitem`, `.sr-ico`). */
+
+/* Doubled to win over the generic sheet's box (Sheet.module.css), at every width. */
+.sheet.sheet { width: min(35rem, 100%); padding: 0; gap: 0; align-self: start; margin-top: 12vh; border-radius: var(--r-md); }
+
+/* The field is the shared `FieldGroup`: its inset edge and focus ring are drawn inside it; this only places it and keeps the sheet's 16px type. */
+.box { cursor: var(--blast-cursor-text, text); margin: 0.75rem 0.75rem 0.375rem; }
+.icon { display: grid; place-items: center; flex: none; color: var(--muted); }
+.icon svg { width: 1rem; height: 1rem; display: block; }
+.box .field { font-size: 1rem; }
+.box .field::-webkit-search-cancel-button { display: none; }
+
+.res { min-height: min(13.75rem, 40dvh); max-height: 60vh; overflow: auto; padding: 0 0.5rem 0.625rem; }
+.res:empty { display: none; }
+/* The one line that says a typed term found no coin, above the presales or people it did find. */
+.noCoins { margin: 0; padding: 0.625rem 0.625rem 0.25rem; font-size: 0.875rem; color: var(--muted); }
+.h { padding: 0.625rem 0.625rem 0.3125rem; font-size: 0.8125rem; font-weight: 500; color: var(--muted); }
+.results > [role="group"] + [role="group"] { margin-top: 0.375rem; }
+
+.item {
+  width: 100%;
+  min-height: max(48px, 3rem);
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.375rem 0.625rem;
+  border-radius: var(--r-button);
+  text-align: left;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: inherit;
+  text-decoration: none;
+  transition: background var(--t1) var(--ease-std);
+}
+/* Size Search marks locally without changing shared coin or profile avatars. */
+.sheet .item > :first-child { width: 2rem; height: 2rem; flex: none; }
+.item .t { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.3; }
+.item .t b { font-weight: 600; display: flex; align-items: center; gap: 0.25rem; min-width: 0; }
+.item .t > span { font-size: 0.8125rem; color: var(--muted); font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+[data-blast-ui] .item:focus-visible, .item.kb { background: var(--chip); box-shadow: none; }
+@media (hover: hover) { .item:where(:not([aria-disabled="true"])):hover { background: var(--chip); } }
+/* OA-31 press response (the gate's `.mitem`): a result takes `--hair`; the keyboard's row, or a mouse's hovered one, is already grey and goes a step deeper. */
+.item:where(:not([aria-disabled="true"])):active { background: var(--hair); }
+[data-blast-ui] .item:focus-visible:active, .item.kb:active { background: var(--hair-2); }
+@media (hover: hover) { .item:where(:not([aria-disabled="true"])):active { background: var(--hair-2); } }
+/* The gate's touch rule: the keyboard highlight is a pointer-and-keyboard affordance, so on touch screens nothing looks pre-selected (a press still shows). */
+@media (hover: none) { .item.kb:not(:focus-visible):not(:active) { background: none; } }
+
+/* OA-41 (R3-82): a coin row's 24-hour move at the row's end (the gate's `.sr-chg`; `up`/`down` colour it). */
+.chg { margin-left: auto; font-size: 0.8125rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.ico { flex: none; width: 2.125rem; height: 2.125rem; border-radius: 62.4375rem; background: var(--chip); color: var(--muted); display: grid; place-items: center; }
+.ico svg { width: 1rem; height: 1rem; }
+
+/* The official account's avatar: the helmet on pink, as the design draws it (and onboarding does). */
+[data-blast-ui] .official { background: var(--pink-soft); display: grid; place-items: center; }
+[data-blast-ui] .official svg { width: 62%; height: auto; }
+
+@media (max-width: 760px) {
+  .sheet.sheet { margin-top: 0; align-self: end; border-radius: var(--r-md) var(--r-md) 0 0; }
+  .box { margin-top: 1.25rem; }
+  .res { height: min(22.5rem, 50dvh); padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px)); }
+}
+
+.results { transition: opacity var(--t1) ease; }
+.results[aria-busy="true"] { opacity: .5; }
+.status { min-height: 1.25rem; margin: 0.375rem 0.625rem; font-size: 0.75rem; color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { .results { transition: none; } }

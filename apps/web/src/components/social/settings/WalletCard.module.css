@@ -1,0 +1,29 @@
+/*
+ * "Your wallet" (the Settings board's right column): one card, 18px in, 12px
+ * between the title, the total, the rows and the actions. The rows are the
+ * shared coin rows (`CoinRow.module.css`), 6px apart.
+ */
+.card { display: flex; flex-direction: column; gap: 0.75rem; padding: 1.125rem; }
+.title { margin: 0; font-size: 0.9375rem; font-weight: 650; line-height: 1.45; color: var(--ink); }
+/* The board's total: the display face at 30/650, -.03em, tabular. */
+.total { font-family: var(--display); font-size: 1.875rem; font-weight: 650; line-height: 1.45; letter-spacing: -.03em; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+
+.rows { display: flex; flex-direction: column; gap: 0.375rem; }
+
+/* Loading: two rows' height (56px) with a pulse, until the wallet read answers. */
+.pulse {
+  display: block;
+  height: 3.5rem;
+  border-radius: 0.75rem;
+  background: var(--control-field);
+  animation: wallet-card-pulse 1.2s var(--ease-std) infinite alternate;
+}
+
+@keyframes wallet-card-pulse { to { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .pulse { animation: none; } }
+
+.empty { margin: 0; font-size: 0.8125rem; line-height: 1.45; color: var(--muted); }
+.failed { display: flex; flex-direction: column; align-items: flex-start; gap: 0.5rem; }
+
+/* Deposit and Withdraw: two equal 40px columns, 8px apart. */
+.actions { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0.5rem; }

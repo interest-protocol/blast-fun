@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/presale/contracts/account-settings-response.schema.json",
+  "title": "Account settings",
+  "description": "GET and PUT /api/account/settings 200; saved is false for the configured defaults (CL-8).",
+  "type": "object",
+  "properties": {
+    "explorer": {
+      "enum": [
+        "suivision",
+        "suiscan"
+      ]
+    },
+    "theme": {
+      "enum": [
+        "system",
+        "dark",
+        "light"
+      ]
+    },
+    "saved": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "explorer",
+    "theme",
+    "saved"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,441 @@
+/* Profile (FEATURE-MAP §6, §5.5; the live canonical UI's final effective CSS). */
+
+.page { display: flex; flex-direction: column; }
+
+/* ---------- back bar (§10.1) ---------- */
+.backbar { display: flex; align-items: center; gap: 0.5rem; height: max(44px, 2.75rem); margin: 1.3125rem 0 0.8125rem; }
+.backbar a { height: 2.25rem; padding: 0 0.8125rem 0 0.5rem; border-radius: var(--r-button); display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.875rem; font-weight: 500; color: var(--ink-2); transition: background var(--t2) var(--ease-std), transform var(--t1) var(--ease-std); }
+.backbar a svg { width: 1.125rem; height: 1.125rem; }
+@media (hover: hover) and (pointer: fine) { .backbar a:hover { background: var(--chip); } }
+.backbar a:active { transform: scale(.97); } /* OA-31: the gate's `.backbar a:active` */
+@media (pointer: coarse) { .backbar a { height: 44px; } }
+/* Above a page title (Invites board): a 28px link 26px under the top bar, 8px over the title. */
+.backbar.overTitle { height: auto; margin: var(--page-title-top, 1.625rem) 0 0.5rem; }
+.backbar.overTitle a { height: 1.75rem; margin-left: -0.25rem; padding: 0 0.375rem 0 0; border-radius: var(--r-inner); font-size: 0.8125rem; font-weight: 600; color: var(--muted); }
+.backbar.overTitle a svg { width: 1rem; height: 1rem; }
+@media (pointer: coarse) { .backbar.overTitle a { height: 44px; } }
+
+/* ---------- identity card (Profile board: 24px card padded 24, 18px between its rows) ---------- */
+.page .prof { padding: 1.5rem; border-radius: 1.5rem; display: flex; flex-direction: column; gap: 1.125rem; container: profile / inline-size; }
+/* The crew card row: "Quasar card" over its season and number, View card at the end. */
+.crewCard { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 0.5rem 1rem; }
+.crewCardDetails { display: flex; flex-direction: column; flex: 1 1 10rem; min-width: 0; line-height: 1.35; }
+.crewCardTitle { font-size: 0.9375rem; font-weight: 600; color: var(--ink); overflow-wrap: anywhere; }
+.crewCardNumber { font-size: 0.8125rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.crewCardAction { flex: none; margin-inline-start: auto; }
+/* While loading, the action slot is a neutral skeleton of the button's size, never a filled primary. */
+.actionSkeleton { display: inline-flex; align-items: center; }
+.crewCardImage { display: block; width: 100%; height: auto; border-radius: var(--r-sm); }
+.crewCardPreviewLoading { display: flex; flex-direction: column; gap: 0.8125rem; width: 100%; aspect-ratio: 2100 / 1500; padding: 1.3125rem; border: 1px solid var(--hair); border-radius: var(--r-sm); }
+.crewCardPreviewArtwork { flex: 1; min-height: 0; border-radius: var(--r-sm); background: var(--chip); }
+.crewCardPreviewDetails { display: flex; flex-direction: column; align-items: flex-start; gap: 0.5rem; font-size: 0.875rem; line-height: 1.4; }
+/* The Invites page's summary (Invites board): a 24px card padded 24; the count and Invite, then the 56/650 volume. */
+.invites { padding: 1.5rem; border-radius: 1.5rem; display: flex; flex-direction: column; gap: 1.125rem; }
+.inviteHead { min-height: 2.5rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+@media (pointer: coarse) { .inviteHead { min-height: 44px; } }
+.inviteCount { font-size: 0.8125rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.inviteCount > b { color: var(--ink); font-weight: 600; }
+.inviteVolume { display: flex; flex-direction: column; gap: 0.375rem; min-width: 0; }
+.inviteVolume > strong { font-family: var(--display); font-size: 3.5rem; line-height: 1; font-weight: 650; letter-spacing: -.045em; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.inviteVolume > strong > span { font-size: .55em; color: var(--muted); letter-spacing: -.02em; }
+.inviteNotes { display: flex; flex-direction: column; gap: 0.125rem; }
+.inviteTotals { min-height: 11rem; }
+.inviteNotes:empty { display: none; }
+.invites input { width: 100%; min-width: 0; }
+/*
+ * The head: the 88px avatar (ringed in the card's colour) over three rows, the
+ * 32/650 name with its mark and the actions on the first, the handle row and
+ * the counts beneath, 18px from the avatar and 6px apart.
+ */
+.profTop { display: grid; grid-template-columns: 5.5rem minmax(0, 1fr) auto; column-gap: 1.125rem; row-gap: 0.375rem; align-items: center; }
+.profTop > :first-child { grid-column: 1; grid-row: 1 / span 3; align-self: center; }
+.prof .profTop > :global(.av.s89), .loadingAvatar { width: 5.5rem; height: 5.5rem; box-shadow: 0 0 0 0.25rem var(--card), 0 0 0 0.3125rem var(--hair-2); }
+/* Own profile actions share the neutral outlined button treatment. */
+.editSkeleton { width: max(44px, 2.75rem); height: max(44px, 2.75rem); border-radius: var(--r-button); }
+.profActs { grid-column: 3; grid-row: 1; display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: flex-end; }
+/* Someone else's profile: Follow in the actions' place. */
+.profFollow { grid-column: 3; grid-row: 1; justify-self: end; }
+.prof h2 { grid-column: 2; grid-row: 1; margin: 0; font-family: var(--display); font-size: 2rem; line-height: 1; font-weight: 650; letter-spacing: -.04em; display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
+.prof h2 > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.prof h2 :global(.verified) { flex: none; width: 1.25rem; height: 1.25rem; }
+.handle { grid-column: 2 / -1; grid-row: 2; display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; color: var(--muted); font-size: 0.875rem; }
+.profCounts { grid-column: 2 / -1; grid-row: 3; }
+.bio { margin: 0; color: var(--ink); font-size: 0.875rem; line-height: 1.5; overflow-wrap: anywhere; }
+.xchip { height: 1.5rem; padding: 0 0.5625rem; border-radius: var(--r-inner); background: var(--chip); color: var(--muted); font-size: 0.75rem; font-weight: 600; display: inline-flex; align-items: center; gap: 0.3125rem; transition: background var(--t2) var(--ease-std), transform var(--t1) var(--ease-std); }
+.xchip svg { width: 0.6875rem; height: 0.6875rem; }
+@media (hover: hover) and (pointer: fine) { .xchip:hover { background: var(--hair-2); color: var(--ink-2); } }
+.xchip:active { transform: scale(.97); }
+.mutuals { grid-column: 2 / -1; grid-row: 4; display: flex; align-items: center; gap: 0.5rem; font-size: 0.8125rem; color: var(--muted); }
+.miniPile { display: flex; padding-left: 0.375rem; flex: none; }
+.miniPile > :global(.av) { margin-left: -0.375rem; box-shadow: 0 0 0 0.125rem var(--card); }
+
+/* A narrow card needs a separate action row even when the viewport still has a sidebar. */
+@container profile (max-width: 40rem) {
+  .profTop { grid-template-columns: 5.5rem minmax(0, 1fr); }
+  .profActs, .profFollow { grid-column: 1 / -1; grid-row: 5; justify-content: flex-end; justify-self: end; margin-top: 0.5rem; }
+}
+
+/* Follow on a profile: 40 high, ink; "Following" and hover "Unfollow" (§3.3). */
+.follow { min-width: 7.25rem; transition: transform 140ms ease-out, opacity 140ms ease-out; }
+.follow:active:not([aria-disabled="true"]) { transform: scale(.97); }
+.follow[aria-disabled="true"] { opacity: .7; cursor: wait; }
+@media (prefers-reduced-motion: reduce) { .follow { transition: none; } .follow:active:not([aria-disabled="true"]) { transform: none; opacity: .7; } }
+.follow[data-state="following"] { background: var(--card); color: var(--ink); box-shadow: inset 0 0 0 1px var(--hair-2); }
+.follow .lHover { display: none; }
+@media (hover: hover) and (pointer: fine) {
+  .follow[data-state="following"]:not([aria-disabled="true"]):hover { background: var(--down-soft); color: var(--down); box-shadow: none; opacity: 1; }
+  .follow[data-state="following"]:not([aria-disabled="true"]):hover .lOn { display: none; }
+  .follow[data-state="following"]:not([aria-disabled="true"]):hover .lHover { display: inline; }
+}
+.followRetry { min-height: max(44px, 2.75rem); background: none; border: 0; color: inherit; font: inherit; cursor: pointer; text-decoration: underline; padding: 0.5rem 0 0.5rem 0.5rem; }
+.followError { font-size: 0.75rem; color: var(--down); margin: 0.375rem 0 0; text-align: right; overflow-wrap: anywhere; }
+
+/* The `.status` chip is defined once, in `blast-ui.css` (R3-04): Open is pink,
+   Trading neutral. The profile's chips use that class directly, so nothing is
+   re-declared here — a module class would be hashed and miss it. Beside the
+   handle it is the X chip's size (the gate's `.prof .handle .status`). */
+[data-blast-ui] .handle :global(.status) { height: 1.5rem; padding: 0 0.5625rem; border-radius: var(--r-inner); font-size: 0.75rem; font-weight: 600; }
+
+/* ---------- track record (three 16px tiles, 8px apart: the label over the 26/650 figure) ---------- */
+.tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.5rem; }
+.tiles > div { min-width: 0; padding: 0.875rem 1rem; border-radius: 1rem; background: var(--raised); display: flex; flex-direction: column; gap: 0.125rem; }
+.tiles span { font-size: 0.75rem; color: var(--muted); }
+.tiles b { font-family: var(--display); font-size: 1.625rem; line-height: 1.2; font-weight: 650; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+.tiles:empty { display: none; }
+
+/*
+ * PnL since launch: the tile is the disclosure. The shared ghost control fills the
+ * tile (its own inset cancelled by the margin), its label a column of the
+ * label row, with "View details" and the control's chevron at its end, over
+ * the figure.
+ */
+.pnlTile { position: relative; }
+.tiles > .pnlTile > .pnlToggle { width: calc(100% + 1.5rem); margin: -0.375rem -0.75rem; align-items: flex-start; color: var(--ink); font-weight: 400; text-align: left; }
+.pnlToggle > :global([data-ui-label]) { flex-direction: column; align-items: stretch; gap: 0.125rem; }
+.pnlHead { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; min-width: 0; line-height: 1.45; }
+.tiles .pnlAction { font-weight: 600; color: var(--muted); white-space: nowrap; }
+@media (hover: hover) and (pointer: fine) { .tiles > .pnlTile > .pnlToggle:hover .pnlAction { color: var(--ink); } }
+.tiles .pnlValue { display: flex; align-items: baseline; gap: 0.375rem; min-width: 0; color: var(--ink); }
+.pnlValue b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@container profile (max-width: 400px) {
+  .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pnlTile { grid-column: 1 / -1; }
+}
+.pnlFigures .pnlUnavailable { font-size: 0.75rem; font-weight: 500; letter-spacing: normal; }
+.pnlCard { padding: 1.3125rem; display: flex; flex-direction: column; gap: 1.0625rem; }
+.pnlHeading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.375rem 0.8125rem; }
+.pnlHeading h3 { margin: 0; font-size: 1.0625rem; font-weight: 650; letter-spacing: -.02em; }
+.pnlHeading > span, .pnlNote { font-size: 0.75rem; line-height: 1.5; color: var(--muted); }
+.pnlFigures { margin: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.5rem 0.8125rem; }
+.pnlFigures > div { min-width: 0; }
+.pnlFigures dt { color: var(--muted); font-size: 0.75rem; }
+.pnlFigures dd { margin: 0.1875rem 0 0; font-size: 0.9375rem; font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.pnlAssets { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s4); }
+.pnlAssets > li { padding: 1rem; background: var(--raised); border-radius: var(--r-button-lg); display: flex; flex-direction: column; gap: 0.625rem; }
+.pnlCoin { display: flex; align-items: center; justify-content: space-between; gap: 0.8125rem; }
+.pnlCoin a { color: var(--ink); font-weight: 600; overflow-wrap: anywhere; min-width: 0; }
+.pnlNote { margin: 0; }
+.pnlCoinCardAction { align-self: flex-start; }
+.pnlCardCanvas { display: grid; place-items: center; width: 100%; aspect-ratio: 16 / 9; border-radius: var(--r-button); background: var(--track); overflow: hidden; }
+.pnlCardPreview { display: block; width: 100%; height: auto; border-radius: var(--r-button); }
+.pnlCardSkeleton { align-self: stretch; justify-self: stretch; width: 100%; height: 100%; border-radius: var(--r-button); }
+.pnlCardActions { display: flex; flex-direction: row; flex-wrap: wrap; gap: 0.5rem; }
+.pnlCardLabel { overflow-wrap: anywhere; }
+.pnlCardEditor { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.8125rem; }
+.pnlCardTemplates { margin: 0; padding: 0; border: 0; min-width: 0; }
+.pnlCardTemplates legend { padding: 0; margin-bottom: 0.5rem; font-size: 0.8125rem; font-weight: 600; }
+.pnlCardTemplateGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.5rem; }
+.pnlCardTemplate { display: flex; flex-direction: column; gap: 0.3125rem; position: relative; cursor: pointer; min-width: 0; border: 0.125rem solid var(--hair-2); border-radius: var(--r-button); padding: 0.3125rem; font-size: 0.75rem; }
+.pnlCardTemplate:has(input:checked) { border-color: var(--ink); background: var(--raised); }
+.pnlCardTemplate:has(input:focus-visible) { outline: 0.125rem solid var(--ink); outline-offset: 0.1875rem; }
+[data-blast-ui] .pnlCardTemplate input:focus-visible { box-shadow: none; }
+.pnlCardTemplate:active { background: var(--hair); }
+@media (hover: hover) and (pointer: fine) { .pnlCardTemplate:not(:has(input:checked)):hover { border-color: var(--ink-2); } }
+.pnlCardTemplate input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.pnlCardTemplateArt { display: grid; place-items: center; width: 100%; aspect-ratio: 16 / 9; border-radius: 0.25rem; overflow: hidden; background: #ffe5ef; color: #a63869; }
+.pnlCardTemplateArt img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.pnlCardTemplates:disabled { opacity: .5; }
+.pnlCardEditor .field { flex: 1; min-width: 8.75rem; }
+.pnlCardEditor select { width: 100%; min-height: max(44px, 2.75rem); border: 1px solid var(--hair-2); border-radius: var(--r-sm); padding: 0.5rem 0.75rem; background: var(--field); color: var(--ink); font: inherit; font-size: 1rem; }
+
+@media (max-width: 407px) {
+  .pnlCard { padding: 0.8125rem; }
+  .pnlFigures { grid-template-columns: minmax(0, 1fr); }
+  .pnlFigures > div { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; }
+  .pnlFigures dd { margin-top: 0; text-align: right; }
+}
+
+/* ---------- private ---------- */
+.privateNote { margin-top: 0.8125rem; padding: 2.125rem 1.3125rem; display: flex; flex-direction: column; align-items: center; gap: 0.5rem; text-align: center; color: var(--muted); }
+.privateNote .ico { width: 3.4375rem; height: 3.4375rem; border-radius: 62.4375rem; background: var(--chip); display: grid; place-items: center; color: var(--ink-2); }
+.privateNote .ico svg { width: 1.375rem; height: 1.375rem; }
+.privateNote b { color: var(--ink); font-size: 1.0625rem; font-weight: 600; }
+
+/* ---------- sections ---------- */
+.sec { margin-top: 1.125rem; display: flex; flex-direction: column; gap: 0.75rem; }
+.secH { display: flex; align-items: center; justify-content: space-between; gap: 0.8125rem; }
+
+/* ---------- the own profile's Invites card (Profile board: padded 18, 12px apart, washed pink) ---------- */
+.invitesCard { padding: 1.125rem; display: flex; flex-direction: column; gap: 0.75rem; }
+:global([data-blast-ui]) .invitesCard:global(.card) { background: linear-gradient(180deg, color-mix(in srgb, var(--pink) 8%, transparent), transparent 60%), var(--card); }
+.invitesCardHead { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.invitesCardHead h3 { margin: 0; font-size: 0.9375rem; font-weight: 650; color: var(--ink); }
+.invitesCardLink { font-size: 0.8125rem; font-weight: 600; color: var(--muted); }
+@media (hover: hover) and (pointer: fine) { .invitesCardLink:hover { color: var(--ink); } }
+@media (pointer: coarse) { .invitesCardLink { display: inline-flex; align-items: center; min-height: 44px; } }
+.inviteTiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; }
+.inviteTiles > div { min-width: 0; padding: 0.75rem 0.875rem; border-radius: var(--r-sm); background: var(--raised); display: flex; flex-direction: column; }
+.inviteTiles span { font-size: 0.75rem; color: var(--muted); }
+.inviteTiles b { font-size: 1.25rem; font-weight: 650; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.inviteLink input { color: var(--muted); text-overflow: ellipsis; }
+
+/* ---------- gold card (§6.3, rebuilt as `gold gold2` for R3-08) ---------- */
+.gold {
+  position: relative; width: 100%; border-radius: var(--r-md); color: #fff; overflow: hidden; isolation: isolate;
+  display: flex; flex-direction: column; box-shadow: var(--card-shadow);
+  background: radial-gradient(70% 90% at 100% 0%, rgba(255, 150, 200, .9) 0%, rgba(255, 150, 200, 0) 60%), radial-gradient(80% 110% at 0% 100%, rgba(98, 30, 190, .95) 0%, rgba(98, 30, 190, 0) 62%), linear-gradient(135deg, #d01a70 0%, #a52bc6 100%);
+}
+.gold::before { content: ""; position: absolute; inset: 0; z-index: -1; background-image: url("/blast-ui/noise-140.png"); opacity: .22; mix-blend-mode: overlay; }
+/* `.gold.gold2`: content height, not the old fixed aspect ratio. The 1.618/2.618 ratios
+   and the 55/40 px value of the first `.gold` are gone — nothing emits a bare `.gold`. */
+.gold2 { padding: 1.0625rem 1.3125rem 1.1875rem; justify-content: flex-start; gap: 0.8125rem; }
+.goldTop { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.goldTop .l { display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; font-weight: 600; }
+.glassChip { height: 1.625rem; padding: 0 0.625rem; border-radius: 62.4375rem; background: rgba(255, 255, 255, .18); -webkit-backdrop-filter: blur(0.75rem); backdrop-filter: blur(0.75rem); font-size: 0.75rem; font-weight: 600; display: inline-flex; align-items: center; gap: 0.375rem; color: #fff; }
+.glassChip svg { width: 0.75rem; height: 0.75rem; }
+.goldVal { font-family: var(--display); font-size: 2.75rem; line-height: 1; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; text-shadow: 0 1px 0.75rem rgba(80, 0, 60, .18); }
+.goldVal .c { font-size: .5em; color: rgba(255, 255, 255, .72); letter-spacing: -.03em; }
+
+/* The total and the 30-day line on one row (`.g2-mid`). */
+.g2Mid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 40%); align-items: end; gap: 1.3125rem; }
+.g2Val { min-width: 0; }
+.g2Chart { position: relative; height: 4.625rem; display: flex; flex-direction: column; justify-content: flex-end; }
+.g2Spark { position: absolute; inset: 0 0 1.25rem; }
+.g2Spark svg { width: 100%; height: 100%; display: block; overflow: visible; }
+.g2Cap { align-self: flex-end; font-size: 0.75rem; color: rgba(255, 255, 255, .78); font-variant-numeric: tabular-nums; }
+.g2Cap b { color: #fff; font-weight: 700; }
+
+.goldNote { display: block; margin: 0; font-size: 0.8125rem; line-height: 1.4; font-weight: 500; letter-spacing: -.006em; color: rgba(255, 255, 255, .85); text-shadow: none; }
+
+/* ---------- holdings (Coins, Vestings, Presales) ---------- */
+.pfList { padding: 0 0.5rem; }
+.pfEmpty { padding: 2.125rem 1.3125rem; }
+.posRow { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 0.5rem 0.8125rem; padding: 0.75rem 0.8125rem 0.875rem; border-bottom: 1px solid var(--hair); }
+.posRow:last-child { border-bottom: 0; }
+.posTop { display: flex; align-items: center; gap: 0.75rem; min-width: 0; }
+a.posTop:active { opacity: .6; } /* OA-31: a link inside a row, not the row, dips */
+.posV { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.3; font-variant-numeric: tabular-nums; }
+.posV b { font-size: 0.875rem; font-weight: 600; }
+.posV span { font-size: 0.75rem; color: var(--muted); }
+.posV span.up { color: var(--up); font-weight: 600; }
+.posV span.down { color: var(--down); font-weight: 600; }
+
+/* Compact stepper under a position (§10.3 compact; R3-85, OA-41 `.stepper.compact`, design/blast-trading-home-oa41.html
+   8243–8280): each step centred in an equal column, 14px dots, the connector dot to dot with 4px of air at each end, done
+   steps ink with a check, the current one pink with a soft halo and the line after it filled as far as it has come. No
+   entrance (the gate animates only the sale page's stepper). */
+.stepper { grid-column: 1 / -1; list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.stepper li { position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 0.125rem; padding: 1.375rem 0.125rem 0; font-size: 0.75rem; color: var(--muted); min-width: 0; }
+.stepper li::before { content: ""; position: absolute; top: 0.375rem; left: calc(50% + 0.6875rem); right: calc(-50% + 0.6875rem); height: 0.125rem; border-radius: 0.125rem; background: var(--track); }
+.stepper li.done::before { background: var(--ink); }
+.stepper li:last-child::before { display: none; }
+.stBar { position: absolute; top: 0.375rem; left: calc(50% + 0.6875rem); right: calc(-50% + 0.6875rem); height: 0.125rem; border-radius: 0.125rem; background: var(--pink-ink); transform-origin: left center; transform: scaleX(var(--p, 0)); }
+.stDot { position: absolute; top: 0; left: 50%; width: 0.875rem; height: 0.875rem; margin-left: -0.4375rem; border-radius: 62.4375rem; background: var(--card); box-shadow: inset 0 0 0 0.125rem var(--hair-2); display: grid; place-items: center; color: var(--card); z-index: 1; }
+.stDot svg { width: 0.5625rem; height: 0.5625rem; stroke-width: 2.4; }
+.done .stDot { background: var(--ink); color: var(--card); box-shadow: none; }
+.now .stDot { background: var(--pink-ink); box-shadow: 0 0 0 0.1875rem var(--pink-soft); }
+.now .stDot::after { content: ""; width: 0.25rem; height: 0.25rem; border-radius: var(--r-button); background: var(--on-pink); }
+/* Only the current step is named, so it may run past its column (the gate's `overflow: visible; text-overflow: clip`). */
+.stL { max-width: 100%; font-size: 0.75rem; font-weight: 600; letter-spacing: -.01em; color: var(--ink); white-space: nowrap; overflow: visible; text-overflow: clip; }
+.stepper li:not(.done):not(.now) .stL { color: var(--muted); font-weight: 500; }
+/* OA-24: each compact stepper names the step it is on, not all stages on every row (the list's aria-label names it too). */
+.stepper li:not(.now) .stL { visibility: hidden; }
+.stepperCancelled { display: flex; align-items: center; gap: 0.375rem; font-size: 0.75rem; color: var(--muted); }
+.stepperCancelled svg { flex: none; width: 0.75rem; height: 0.75rem; }
+
+/* Vesting rows: the unlocked share (`.vz-row`, `.bar.sm`). */
+.nw { white-space: nowrap; }
+.vzRow span { min-width: 0; overflow-wrap: anywhere; }
+.vzRow .bar { flex: 0 0 3.75rem; }
+.posRow button[data-claim="claim_vesting"] { white-space: normal; overflow-wrap: anywhere; height: auto; max-width: min(13.125rem, 45vw); padding: 0.5rem 0.625rem; }
+.vzRow { grid-column: 1 / -1; display: flex; align-items: center; gap: 0.625rem; font-size: 0.75rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.bar { flex: 1; min-width: 0; height: 0.25rem; border-radius: var(--r-inner); background: var(--track); overflow: hidden; }
+.bar i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--pink-ink), var(--pink)); transform-origin: left; animation: profile-grow .9s var(--ease) both; }
+@keyframes profile-grow { from { transform: scaleX(0); } }
+.posTop .t { display: flex; flex-direction: column; line-height: 1.3; min-width: 0; }
+.posTop .t b { font-size: 0.875rem; font-weight: 600; }
+.posTop .t span { font-size: 0.75rem; color: var(--muted); }
+
+/* ---------- list cards and rows (§5.1): the right column's cards (Portfolio, Profile and Invites boards) ---------- */
+/* A 22px card padded 16/8/8; the 15/650 title 10px in; 52px rows of a 30px mark, the name over its line, and the figure. */
+.listCard { padding: 1rem 0.5rem 0.5rem; }
+.lcH { margin: 0; padding: 0 0.625rem 0.5rem; font-size: 0.9375rem; font-weight: 650; color: var(--ink); display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; }
+.lcH .num { font-size: 0.8125rem; font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; }
+.lcEmpty { margin: 0; padding: 0.125rem 0.625rem 0.75rem; font-size: 0.8125rem; color: var(--muted); }
+/* A list card's own empty or failed state: the shared EmptyState, compact. */
+/* The System board's empty box at the list's 8px inset, its words centred both ways: equal padding above and below. */
+.listCard .compactEmpty { padding: 1rem 0.625rem; }
+.lrow { display: flex; align-items: center; gap: 0.625rem; min-height: 3.25rem; padding: 0 0.625rem; border-radius: 0.75rem; transition: background var(--t1) var(--ease-std); }
+.listCard .lrow > .mk { width: 1.875rem; height: 1.875rem; border-radius: 0.625rem; }
+.listCard .lrow > .mk.round { border-radius: 62.4375rem; }
+@media (hover: hover) and (pointer: fine) { a.lrow:hover, a.t:hover { background: var(--raised); } }
+/* OA-31 press response (the gate's `.lrow`, `.lrow > a.t`): a row that is a link or button takes `--hair`;
+   a pending row is a `div` with its own link and bell, so only that link dips. */
+:is(a, button).lrow:active { background: var(--hair); }
+.lrow > a.t:active { opacity: .6; }
+.lrow .t { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+.lrow .t b { font-size: 0.875rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lrow .t span { font-size: 0.75rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lrow .v { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.25; font-variant-numeric: tabular-nums; }
+.lrow .v b { font-size: 0.875rem; font-weight: 600; }
+.lrow .v span { font-size: 0.75rem; font-weight: 600; }
+.lrow .v .muted { color: var(--muted); font-weight: 500; }
+.lrow .v b.up, .lrow .v span.up { color: var(--up); }
+.lrow .v b.down, .lrow .v span.down { color: var(--down); }
+.lrow .t span b { font-size: inherit; }
+.lrow .t b.up { color: var(--up); }
+.lrow .t b.down { color: var(--down); }
+/* A watched coin (a presale now trading): its ticker alone on the left, the price over the move on the right. */
+.lrow .tick { flex: 1; min-width: 0; font-size: 0.875rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chev { flex: none; width: 1rem; height: 1rem; color: var(--faint); }
+.lrow > .chev { margin-inline: 0.375rem; }
+.coin { flex: none; width: 2.125rem; height: 2.125rem; border-radius: 62.4375rem; display: block; }
+
+/*
+ * The sections card (Profile board): a 24px card padded 16/10/10, the switch
+ * 10px in, then 68px rows of a 38px mark, the name over its line, and the
+ * figure over its note, 14px apart.
+ */
+.page .secCard { margin-top: 1.125rem; padding: 1rem 0.625rem 0.625rem; border-radius: 1.5rem; }
+.secCard > .secH { padding: 0 0.625rem 0.625rem; }
+.rows { display: flex; flex-direction: column; }
+.prow { display: grid; grid-template-columns: 2.5rem minmax(0, 1fr) auto; align-items: center; gap: 0.875rem; min-height: 4.25rem; padding: 0.5rem 0.75rem; border-radius: var(--r-sm); color: var(--ink); transition: background var(--t1) var(--ease-std); }
+.prow:has(> .spark) { grid-template-columns: 2.5rem minmax(0, 1fr) auto auto; }
+@media (hover: hover) and (pointer: fine) { a.prow:hover { background: var(--raised); } }
+a.prow:active { background: var(--hair); }
+.prow > .mk { width: 2.375rem; height: 2.375rem; border-radius: 0.75rem; }
+.prow > .mk.round { border-radius: 62.4375rem; }
+.prow .t { min-width: 0; display: flex; flex-direction: column; line-height: 1.35; }
+.prow .t b { font-size: 0.9375rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.prow .t > span { font-size: 0.8125rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+/* A backed row's thesis: one line under its figures, ellipsised; the full text is its title. */
+.prow .t > .why { color: var(--ink-2); font-variant-numeric: normal; }
+/* A verified sale's name with the coin mark after it (positions, aside and profile rows): the name ellipsises, the mark never shrinks or clips. */
+.posTop .t .named, .lrow .t .named, .prow .t > .named { display: flex; align-items: center; gap: 0.3125rem; min-width: 0; overflow: visible; color: inherit; font-size: inherit; }
+.named b { min-width: 0; }
+.lrow .t .named b { font-size: 0.875rem; }
+/* The watchlist's trading coin: its ticker, then the mark; the pair fills the row's free space so the price stays right. */
+.lrow .tickNamed { flex: 1; min-width: 0; display: flex; align-items: center; gap: 0.3125rem; }
+.lrow .tickNamed > .tick { flex: 0 1 auto; }
+.prow .v { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.3; font-variant-numeric: tabular-nums; }
+.prow .v b { font-size: 0.9375rem; font-weight: 600; }
+.prow .v > span:not(:global(.status)) { font-size: 0.75rem; color: var(--muted); }
+.prow .v b.up { color: var(--up); }
+.prow .v b.down { color: var(--down); }
+/* A backed coin's line since launch (89×28), between the name and the multiple. */
+.prow .spark { flex: none; display: block; width: 5.5625rem; height: 1.75rem; line-height: 0; }
+
+/* Presale marks (`.mk`, 34). */
+.mk { position: relative; width: 2.125rem; height: 2.125rem; border-radius: var(--r-button); flex: none; display: block; overflow: hidden; background: var(--chip); }
+.mk img { width: 100%; height: 100%; display: block; object-fit: cover; border-radius: inherit; }
+.mk.round { border-radius: 62.4375rem; overflow: visible; background: none; }
+.mk > svg { width: 100%; height: 100%; display: block; border-radius: inherit; }
+/* SUI's mark is a white disc: a hairline keeps its edge on white surfaces. R3-07's
+   per-key class scopes it to SUI, as the reference does (`.mk-sui.round::after`);
+   USDC's blue disc takes no ring. The colour is the reference's literal, not
+   `var(--hair)`: the disc is white in both themes, and dark's hairline would ring it
+   in near-black (FEATURE-MAP-R3 §21.1 point 3). */
+.mk.round:global(.mk-sui)::after { content: ""; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 1px rgba(15, 14, 19, .1); pointer-events: none; }
+.chev { transition: transform var(--t2) var(--ease), color var(--t2) var(--ease-std); }
+
+/* One region reveals after selection or loading completes. */
+.tabBody { display: flex; flex-direction: column; gap: 0.8125rem; min-height: 9.5rem; }
+
+.skeleton { background: var(--track); border-radius: var(--r-button); animation: profile-pulse 1.4s var(--ease-std) infinite; }
+@keyframes profile-pulse { 50% { opacity: .55; } }
+
+
+
+/* ---------- edit sheet (OA-14; OA-44: the gate's `openEditProfile`, blast-trading-home-oa43.html) ---------- */
+/* The gate's `.sheet.trade`; doubled class: it outranks the shared sheet's width and gap. */
+.epSheet.epSheet { width: min(28.75rem, 100%); gap: 1.0625rem; }
+/* The picture row (`.ep-photo`): the 89px avatar, its upload badge (`.cr-logo-btn`, at `.ep-av`'s 1px inset) and the text block. */
+.epPhoto { display: flex; align-items: center; gap: 1.0625rem; }
+.epAv { position: relative; flex: none; border-radius: 62.4375rem; }
+label.epAv { cursor: pointer; }
+.epBadge { position: absolute; right: 1px; bottom: 1px; width: 1.75rem; height: 1.75rem; border-radius: 62.4375rem; background: var(--card); color: var(--ink); box-shadow: 0 0 0 1px var(--hair-2), 0 0.125rem 0.375rem rgba(15, 14, 19, .12); display: grid; place-items: center; transition: transform var(--t2) var(--ease); }
+.epBadge svg { width: 0.9375rem; height: 0.9375rem; }
+@media (hover: hover) and (pointer: fine) { label.epAv:hover .epBadge { transform: scale(1.08); } }
+.epT { min-width: 0; display: flex; flex-direction: column; gap: 0.1875rem; line-height: 1.35; }
+.epT b { font-size: 0.9375rem; font-weight: 600; }
+.epT > span { font-size: 0.8125rem; color: var(--muted); text-wrap: pretty; }
+/* OA-13's other two picture choices (OA-44 keeps them): the gate's quiet small buttons, as its Create sheet's "Cover image" row has "Remove". */
+.epActs { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.3125rem; }
+/* Saving (the gate's `<span class="spin"></span>Saving`). */
+.spin { width: 1.0625rem; height: 1.0625rem; flex: none; border-radius: 62.4375rem; border: 0.125rem solid currentColor; border-right-color: transparent; opacity: .9; animation: profile-spin .7s linear infinite; }
+@keyframes profile-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin { animation-duration: 1.4s; } }
+.field { display: flex; flex-direction: column; gap: 0.375rem; }
+.field label { font-size: 0.8125rem; font-weight: 600; }
+.input { height: 3.4375rem; display: flex; align-items: center; gap: 0.375rem; padding: 0 0.9375rem; border-radius: var(--r-sm); background: var(--field); box-shadow: inset 0 0 0 1px var(--hair-2); transition: box-shadow var(--t2) var(--ease-std); }
+.input:focus-within { box-shadow: var(--field-focus); }
+.input input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font-size: 1.0625rem; padding: 1px 0.125rem; } /* the gate keeps the browser's 1px 2px */
+[data-blast-ui] .input input:focus-visible { box-shadow: none; }
+.msg { font-size: 0.75rem; min-height: 1.0625rem; color: var(--muted); display: flex; align-items: center; gap: 0.375rem; margin: 0; }
+.msg[data-tone="bad"] { color: var(--down); }
+/* oa43's `.msg { margin-top: 3px }` (OA-44): a field's hint sits 9 px below its input, as the gate's `#epMsg`. */
+.field .msg { margin-top: 0.1875rem; }
+
+@media (max-width: 760px) {
+  /* Phones: the avatar beside the name, handle and counts; the actions take their own row beneath. */
+  .profTop { grid-template-columns: 4.5rem minmax(0, 1fr); column-gap: 0.875rem; }
+  .prof .profTop > :global(.av.s89), .loadingAvatar { width: 4.5rem; height: 4.5rem; }
+  .handle, .profCounts { grid-column: 2; }
+  .profActs, .profFollow { grid-column: 1 / -1; grid-row: 5; justify-content: flex-end; justify-self: end; margin-top: 0.5rem; }
+  .prof h2 { font-size: 1.75rem; }
+  .prow:has(> .spark) { grid-template-columns: 2.5rem minmax(0, 1fr) auto; }
+  .gold2 { padding: 0.9375rem 1.0625rem 1.0625rem; gap: 0.75rem; }
+  .goldVal { font-size: 2.25rem; }
+  .g2Mid { grid-template-columns: minmax(0, 1fr) 36%; gap: 0.8125rem; }
+  .g2Chart { height: 3.625rem; }
+  .prow .spark { display: none; }
+}
+
+/* The watchlist's bell (§5.3): on = following the presale. */
+.listCard .lrow > .notify { color: var(--muted); }
+.listCard .lrow > .notify[data-on] { color: var(--ink); background: var(--chip); }
+.notify[data-on] svg path:first-child { fill: currentColor; fill-opacity: .14; }
+
+/*
+ * Press feedback under reduced motion (OA-31, the gate's version 5):
+ * `opacity: .7` instead of a scale. The base layer wires this for `.btn` and
+ * `.icon-btn`; these are plain buttons and links, so they carve it out for
+ * themselves. Zeroing the transition does not help — a transform applies at
+ * once rather than not at all. Last in the file: it has the presses'
+ * specificity, so it must come after them.
+ */
+@media (prefers-reduced-motion: reduce) { .backbar a:active, .xchip:active { transform: none; opacity: .7; } }
+
+/* Reduce Transparency and Increase Contrast (OA-31): the gold card's glass chips turn solid, with nothing blurred behind them. */
+@media (prefers-reduced-transparency: reduce) { .glassChip { background: rgba(15, 14, 19, .86); } }
+@media (prefers-contrast: more) { .glassChip { background: rgba(15, 14, 19, .86); } }
+.loadingAvatar { flex: none; display: block; border-radius: 62.4375rem; background: var(--chip); }
+
+@media (max-width: 760px) {
+  /* The section tabs take the row's full width, each an equal share. */
+  :global([data-blast-ui]) .secH :global(.seg) { display: grid; width: 100%; grid-auto-columns: minmax(0, 1fr); }
+  :global([data-blast-ui]) .secH :global(.seg) button { min-width: 0; padding-inline: 0.5rem; }
+}
+
+@media (max-width: 600px) {
+  .page .prof { padding: 1rem; gap: 0.875rem; }
+  .page .follow, .page .secH :global(.seg) { min-height: max(44px, 2.75rem); }
+  .tiles > div { padding: 0.75rem; }
+  .tiles b { font-size: 1.1875rem; line-height: 1.5rem; }
+}
+
+@media (max-width: 760px) {
+  .invites { padding: 1.125rem; gap: 0.75rem; }
+  .inviteTotals { min-height: 0; }
+  .inviteVolume > strong { font-size: 2.5rem; }
+}

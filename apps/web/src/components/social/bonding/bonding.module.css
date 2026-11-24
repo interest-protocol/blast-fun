@@ -1,0 +1,297 @@
+/* Bonding curves: the Presales page's frame, cards on the shared surfaces. Tokens only. */
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  container-type: inline-size;
+}
+.grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.875rem;
+}
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+  min-height: 100%;
+  box-sizing: border-box;
+  padding: 1.125rem;
+  border-radius: var(--r-md);
+  background: var(--card);
+  box-shadow: inset 0 0 0 1px var(--hair);
+  color: var(--ink);
+  text-decoration: none;
+  transition: background-color var(--t1) var(--ease-std);
+}
+.card:focus-visible {
+  outline: 0.125rem solid var(--focus-color);
+  outline-offset: 0.125rem;
+}
+@media (hover: hover) and (pointer: fine) {
+  .card:hover {
+    background: var(--raised);
+  }
+}
+.head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+.mark {
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: var(--r-sm);
+  flex: none;
+}
+.title {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.3;
+}
+.title b {
+  font-size: 1rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.title > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+.meter {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: auto;
+}
+.figures {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+.figures > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.figures b {
+  color: var(--ink);
+  font-weight: 600;
+}
+.bar {
+  appearance: none;
+  width: 100%;
+  height: 0.375rem;
+  border: 0;
+  border-radius: var(--r-inner);
+  background: var(--track);
+  overflow: hidden;
+}
+.bar::-webkit-progress-bar {
+  background: var(--track);
+}
+.bar::-webkit-progress-value {
+  background: var(--ink);
+  border-radius: var(--r-inner);
+}
+.bar::-moz-progress-bar {
+  background: var(--ink);
+  border-radius: var(--r-inner);
+}
+.note {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+.change {
+  margin-left: auto;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: none;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+.featured {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 1.75rem;
+  padding: 0.875rem;
+  border-radius: var(--r-md);
+  background: var(--card);
+  color: var(--ink);
+  text-decoration: none;
+  box-shadow: inset 0 0 0 1px var(--hair);
+}
+:global([data-blast-ui]) .featured:focus-visible {
+  outline: 0.125rem solid var(--focus-color);
+  outline-offset: -0.1875rem;
+  box-shadow: none;
+}
+.cover {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 3 / 1;
+  overflow: hidden;
+  background: var(--raised);
+  border-radius: var(--r-sm);
+}
+.cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+/* Slides share the tallest one's height: a shorter card keeps its content at the top. */
+.featured:not([data-has-cover]) { grid-template-columns: minmax(0, 1fr); align-items: start; }
+.featuredBody {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+  min-width: 0;
+  padding: 0.5rem;
+}
+.featuredTitle {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  min-width: 0;
+}
+.featuredTitle > span {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+.featuredTitle b {
+  font-family: var(--display);
+  font-size: 1.875rem;
+  font-weight: 650;
+  line-height: 1.1;
+  letter-spacing: -0.035em;
+  overflow-wrap: anywhere;
+}
+.markTail {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  max-width: 100%;
+}
+.markTail > span {
+  min-width: 0;
+}
+.tagline {
+  font-size: 0.9375rem;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+@container (max-width: 56rem) {
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@container (max-width: 34rem) {
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .featured {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.75rem;
+  }
+  .featured[data-has-cover] {
+    grid-template-rows: auto 1fr;
+    align-items: start;
+  }
+  .cover {
+    aspect-ratio: 2 / 1;
+  }
+  .figures {
+    flex-wrap: wrap;
+  }
+}
+
+.featuredRaise {
+  font-family: var(--display);
+  font-size: 2rem;
+  font-weight: 650;
+  letter-spacing: -0.04em;
+}
+.featuredRaise small {
+  font-family: var(--font);
+  font-size: 0.8125rem;
+  font-weight: 400;
+  color: var(--muted);
+  letter-spacing: 0;
+}
+.featuredBody > .figures {
+  justify-content: flex-start;
+}
+.featuredBody > .figures > span {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  flex: 1;
+  padding: 0.875rem;
+  border-radius: var(--r-sm);
+  background: var(--raised);
+}
+.featuredBody > .figures b {
+  font-size: 1.0625rem;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.625rem;
+}
+.search {
+  flex: 1;
+  min-width: 12.5rem;
+}
+.search > svg {
+  width: 0.9375rem;
+  height: 0.9375rem;
+  flex: none;
+  color: var(--muted);
+}
+@media (max-width: 760px) {
+  .controls > :first-child {
+    width: 100%;
+  }
+  .search {
+    min-width: 0;
+  }
+}
+
+.filterLayer { z-index: 60; }
+.sortPopup { display: grid; gap: 0.5rem; padding: 0.75rem; border-radius: var(--r-sm); background: var(--card); box-shadow: var(--sh-pop); }
+.sortPopup :is(h2, h3) { font-size: 0.875rem; margin: 0; }
+
+@media (max-width: 760px) {
+  .page { gap: 0.875rem; }
+  .controls > :first-child :global([data-ui-size]) { min-height: 44px; padding-inline: 0.5rem; }
+  .featured[data-has-cover] { grid-template-columns: 5rem minmax(0, 1fr); grid-template-rows: auto; align-items: center; }
+  .featured .cover { aspect-ratio: 1; }
+  .featuredBody { gap: 0.5rem; padding: 0; }
+  .featured .head { gap: 0.5rem; }
+  .featured .head > :first-child { width: 2rem; height: 2rem; }
+  .featuredTitle { gap: 0.25rem; }
+  .featuredTitle b { font-size: 1.0625rem; }
+  .tagline, .featuredRaise, .featuredBody > .figures, .cardMetrics { display: none; }
+  .card:has(.change) .meter .figures > :last-child:not(:first-child) { display: none; }
+  .card { gap: 0.5rem; padding: 0.75rem; }
+  .grid { gap: 0.625rem; }
+  .title > span { white-space: normal; overflow-wrap: anywhere; }
+}

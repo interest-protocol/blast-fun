@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/onboarding-shown-response.schema.json",
+  "title": "Onboarding follows of the caller",
+  "description": "POST /api/social/onboarding/shown 200: the caller's current follows whose source is launch_code or default, the launch-code follow first, then the defaults in their configured order. Each follow carries the target's linked X handle (null without X): OA-8, a linked X account is verified.",
+  "type": "object",
+  "properties": {
+    "follows": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/follow"
+      }
+    }
+  },
+  "required": [
+    "follows"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "nullableText": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "minLength": 1
+        }
+      ]
+    },
+    "follow": {
+      "type": "object",
+      "properties": {
+        "account_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "callsign": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_]{1,18}[a-z0-9]$"
+        },
+        "display_name": {
+          "$ref": "#/$defs/nullableText"
+        },
+        "avatar_url": {
+          "$ref": "#/$defs/nullableText"
+        },
+        "x_handle": {
+          "$ref": "#/$defs/nullableText"
+        },
+        "source": {
+          "enum": [
+            "launch_code",
+            "default"
+          ]
+        }
+      },
+      "required": [
+        "account_id",
+        "callsign",
+        "display_name",
+        "avatar_url",
+        "x_handle",
+        "source"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

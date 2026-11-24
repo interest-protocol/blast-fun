@@ -1,0 +1,29 @@
+.proof { display: flex; align-items: center; gap: 0.5rem; height: 100%; }
+.avatars { display: flex; align-items: center; }
+.trigger { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 1.75rem; height: 2rem; padding: 0; border: 0; border-radius: var(--r-inner); background: transparent; color: var(--muted); font: inherit; cursor: pointer; }
+:global([data-blast-ui]) .trigger:focus-visible { box-shadow: none; outline: 0.125rem solid var(--focus-color, var(--ink)); outline-offset: 1px; }
+.trigger[data-popup-open] { background: var(--track); }
+@media (hover:hover) and (pointer:fine) { .trigger:hover { background: var(--track); } }
+.avatar { display: block; flex: none; width: 1.5rem; height: 1.5rem; overflow: hidden; border-radius: 50%; }
+.label { color: var(--muted); font-size: 0.6875rem; white-space: nowrap; }
+.overflow { width: auto; min-width: 2rem; padding-inline: 0.25rem; font-size: 0.6875rem; font-variant-numeric: tabular-nums; }
+.positioner { z-index: 50; }
+.popup { box-sizing: border-box; max-width: min(17.5rem, calc(100vw - 1.5rem)); padding: 0.625rem 0.75rem; border: 1px solid var(--hair-2); border-radius: var(--r-button); background: var(--card); color: var(--ink); box-shadow: 0 0.25rem 1rem rgb(0 0 0 / .1); font-size: 0.75rem; line-height: 1.4; }
+.name { display: block; margin: 0; font-size: 0.75rem; font-weight: 600; overflow-wrap: anywhere; }
+.description { display: block; margin: 0.125rem 0 0; color: var(--muted); font-size: 0.6875rem; }
+.heading { margin: 0 0 0.5rem; font-size: 0.75rem; font-weight: 600; }
+.list { display: flex; flex-direction: column; gap: 0.625rem; max-height: min(15rem, var(--available-height)); overflow-y: auto; margin: 0; padding: 0; list-style: none; }
+.person { display: flex; align-items: center; gap: 0.5rem; }
+.person > span:last-child { min-width: 0; }
+@media (pointer: coarse) {
+  .trigger { min-width: 44px; height: 44px; }
+  .proof { gap: 4px; }
+}
+
+.popup { transform-origin: var(--transform-origin); transition: opacity 160ms var(--ease-std), transform 160ms var(--ease-std); }
+.popup[data-starting-style], .popup[data-ending-style] { opacity: 0; transform: scale(.97); }
+.popup[data-instant], :global(html[data-blast-input="keyboard"]) .popup { transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  .popup { transition: opacity var(--t1) linear; }
+  .popup[data-starting-style], .popup[data-ending-style] { transform: none; }
+}

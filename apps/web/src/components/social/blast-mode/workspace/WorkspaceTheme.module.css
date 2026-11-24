@@ -1,0 +1,16 @@
+/* A portable theme scope: portals compose this same token owner as the workspace. */
+.theme {
+ --muted:#686772; --faint:#76757f;
+ --workspace-inset:var(--bg); --workspace-selected:var(--card); --workspace-press:var(--hair-2);
+ --workspace-accent:var(--pink-ink); --workspace-accent-press:var(--pink-press);
+ --workspace-accent-text:var(--pink-text); --workspace-accent-soft:var(--pink-soft); --workspace-focus:var(--ink);
+ --workspace-accent-line:var(--pink-line); --workspace-on-accent:var(--on-pink);
+ --workspace-surface-edge:var(--sh-1);
+ --focus:0 0 0 0.125rem var(--workspace-focus); --field-focus:inset 0 0 0 0.125rem var(--workspace-focus);
+ --action:var(--workspace-accent); --action-press:var(--workspace-accent-press); --on-action:var(--workspace-on-accent);
+ --focus-color:var(--workspace-focus);
+}
+@media (prefers-color-scheme:dark) {
+ :global([data-blast-ui]:not([data-theme="light"])) .theme { --muted:#9a99a6; --faint:#85848f; --workspace-inset:var(--raised); --workspace-selected:#26252d; --workspace-accent:var(--pink); --workspace-on-accent:#0f0e13; }
+}
+:global([data-blast-ui][data-theme="dark"]) .theme { --muted:#9a99a6; --faint:#85848f; --workspace-inset:var(--raised); --workspace-selected:#26252d; --workspace-accent:var(--pink); --workspace-on-accent:#0f0e13; }

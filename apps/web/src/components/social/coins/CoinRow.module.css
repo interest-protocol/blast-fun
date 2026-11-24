@@ -1,0 +1,34 @@
+/*
+ * The coin row (`CoinRow`: Settings' "Your wallet"), as the Settings
+ * board draws it: 56px, a 12px-cornered tonal fill
+ * and no border; the 30px mark, the name (14/600) over its category (12,
+ * muted), the value (14/600) over the amount (12, muted), and the shared
+ * 16px chevron, 10px apart. The shared ghost disclosure owns the press,
+ * focus and chevron; its padding (6px 12px) is the control's own.
+ */
+button.row[data-ui-button] {
+  --control-radius: 0.75rem;
+  display: flex;
+  width: 100%;
+  gap: 0.625rem;
+  justify-content: flex-start;
+  background: var(--control-field);
+  color: var(--ink);
+  font-weight: 400;
+  text-align: left;
+}
+/* 44px of content plus the control's 6px block padding: the board's 56px row, on touch screens too. */
+.row > [data-ui-label] {
+  display: grid;
+  grid-template-columns: 1.875rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.625rem;
+  min-height: 2.75rem;
+}
+.row > [data-ui-chevron] { color: var(--muted); }
+
+.name, .value { display: flex; flex-direction: column; min-width: 0; line-height: 1.3; }
+.value { align-items: flex-end; font-variant-numeric: tabular-nums; }
+.name b, .value b { font-size: 0.875rem; font-weight: 600; }
+.name b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.name span, .value span { font-size: 0.75rem; color: var(--muted); }

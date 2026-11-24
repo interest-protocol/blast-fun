@@ -1,0 +1,192 @@
+{
+  "source": "Sui mainnet fullnode (SUI_MAINNET_GRPC_URL, SimulateTransaction without gas selection: the fullnode's mocked gas), through @mysten/sui 2.31 and the quote service's own swap builder",
+  "recorded_at": "2026-10-06T07:38:16.490Z",
+  "gas_price": "100",
+  "dry_runs": [
+    {
+      "name": "sui-sale-b",
+      "route": "sui-sale-b",
+      "run": "trade",
+      "sender": "0xff6821c23e073a778f7db530c1f71cc30437ad784c0b431b624ed664e9468861",
+      "amount_in": "100000000",
+      "pools": [
+        "0xb56610d84d29a899f1657f4d44185c0a58ebe9b7212a3a623ca3e4d1c2db1326"
+      ],
+      "result": {
+        "$kind": "Transaction",
+        "effects": {
+          "status": {
+            "success": true,
+            "error": null
+          },
+          "gasUsed": {
+            "computationCost": "100000",
+            "storageCost": "11012400",
+            "storageRebate": "8547264",
+            "nonRefundableStorageFee": "86336"
+          }
+        },
+        "balanceChanges": [
+          {
+            "coinType": "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI",
+            "address": "0xff6821c23e073a778f7db530c1f71cc30437ad784c0b431b624ed664e9468861",
+            "amount": "-102565136"
+          },
+          {
+            "coinType": "0x5650d58030f361f60f81913b54bf026e93e957bfbf506234f8f2e83bd3bfbd85::sale_tokens::SALE_B",
+            "address": "0xff6821c23e073a778f7db530c1f71cc30437ad784c0b431b624ed664e9468861",
+            "amount": "332001975262684891"
+          }
+        ]
+      }
+    },
+    {
+      "name": "sui-sale-b-reference",
+      "route": "sui-sale-b",
+      "run": "reference",
+      "sender": "0xff6821c23e073a778f7db530c1f71cc30437ad784c0b431b624ed664e9468861",
+      "amount_in": "1000000",
+      "pools": [
+        "0xb56610d84d29a899f1657f4d44185c0a58ebe9b7212a3a623ca3e4d1c2db1326"
+      ],
+      "result": {
+        "$kind": "Transaction",
+        "effects": {
+          "status": {
+            "success": true,
+            "error": null
+          },
+          "gasUsed": {
+            "computationCost": "100000",
+            "storageCost": "11012400",
+            "storageRebate": "8547264",
+            "nonRefundableStorageFee": "86336"
+          }
+        },
+        "balanceChanges": [
+          {
+            "coinType": "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI",
+            "address": "0xff6821c23e073a778f7db530c1f71cc30437ad784c0b431b624ed664e9468861",
+            "amount": "-3565136"
+          },
+          {
+            "coinType": "0x5650d58030f361f60f81913b54bf026e93e957bfbf506234f8f2e83bd3bfbd85::sale_tokens::SALE_B",
+            "address": "0xff6821c23e073a778f7db530c1f71cc30437ad784c0b431b624ed664e9468861",
+            "amount": "18793099960001698"
+          }
+        ]
+      }
+    },
+    {
+      "name": "sui-sale-b-double",
+      "route": "sui-sale-b-double",
+      "run": "trade",
+      "sender": "0xff6821c23e073a778f7db530c1f71cc30437ad784c0b431b624ed664e9468861",
+      "amount_in": "200000000",
+      "pools": [
+        "0xb56610d84d29a899f1657f4d44185c0a58ebe9b7212a3a623ca3e4d1c2db1326"
+      ],
+      "result": {
+        "$kind": "Transaction",
+        "effects": {
+          "status": {
+            "success": true,
+            "error": null
+          },
+          "gasUsed": {
+            "computationCost": "100000",
+            "storageCost": "11012400",
+            "storageRebate": "8547264",
+            "nonRefundableStorageFee": "86336"
+          }
+        },
+        "balanceChanges": [
+          {
+            "coinType": "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI",
+            "address": "0xff6821c23e073a778f7db530c1f71cc30437ad784c0b431b624ed664e9468861",
+            "amount": "-202565136"
+          },
+          {
+            "coinType": "0x5650d58030f361f60f81913b54bf026e93e957bfbf506234f8f2e83bd3bfbd85::sale_tokens::SALE_B",
+            "address": "0xff6821c23e073a778f7db530c1f71cc30437ad784c0b431b624ed664e9468861",
+            "amount": "362515856641490657"
+          }
+        ]
+      }
+    },
+    {
+      "name": "sui-sale-b-double-reference",
+      "route": "sui-sale-b-double",
+      "run": "reference",
+      "sender": "0xff6821c23e073a778f7db530c1f71cc30437ad784c0b431b624ed664e9468861",
+      "amount_in": "2000000",
+      "pools": [
+        "0xb56610d84d29a899f1657f4d44185c0a58ebe9b7212a3a623ca3e4d1c2db1326"
+      ],
+      "result": {
+        "$kind": "Transaction",
+        "effects": {
+          "status": {
+            "success": true,
+            "error": null
+          },
+          "gasUsed": {
+            "computationCost": "100000",
+            "storageCost": "11012400",
+            "storageRebate": "8547264",
+            "nonRefundableStorageFee": "86336"
+          }
+        },
+        "balanceChanges": [
+          {
+            "coinType": "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI",
+            "address": "0xff6821c23e073a778f7db530c1f71cc30437ad784c0b431b624ed664e9468861",
+            "amount": "-4565136"
+          },
+          {
+            "coinType": "0x5650d58030f361f60f81913b54bf026e93e957bfbf506234f8f2e83bd3bfbd85::sale_tokens::SALE_B",
+            "address": "0xff6821c23e073a778f7db530c1f71cc30437ad784c0b431b624ed664e9468861",
+            "amount": "35896338590965222"
+          }
+        ]
+      }
+    },
+    {
+      "name": "sale-b-sui-small",
+      "route": "sale-b-sui",
+      "run": "trade",
+      "sender": "0x0c75db1d69fde2b4cb1d1f70139b6eb9033f8f28fa10de11a7f62f7144d0a75c",
+      "amount_in": "300000000000000",
+      "pools": [
+        "0xb56610d84d29a899f1657f4d44185c0a58ebe9b7212a3a623ca3e4d1c2db1326"
+      ],
+      "result": {
+        "$kind": "Transaction",
+        "effects": {
+          "status": {
+            "success": true,
+            "error": null
+          },
+          "gasUsed": {
+            "computationCost": "100000",
+            "storageCost": "11012400",
+            "storageRebate": "10322928",
+            "nonRefundableStorageFee": "104272"
+          }
+        },
+        "balanceChanges": [
+          {
+            "coinType": "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI",
+            "address": "0x0c75db1d69fde2b4cb1d1f70139b6eb9033f8f28fa10de11a7f62f7144d0a75c",
+            "amount": "-774574"
+          },
+          {
+            "coinType": "0x5650d58030f361f60f81913b54bf026e93e957bfbf506234f8f2e83bd3bfbd85::sale_tokens::SALE_B",
+            "address": "0x0c75db1d69fde2b4cb1d1f70139b6eb9033f8f28fa10de11a7f62f7144d0a75c",
+            "amount": "-300000000000000"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/create-publish-plan.schema.json",
+  "title": "One step of a draft's publish plan",
+  "description": "POST /api/social/me/drafts/{id}/publish 200: the step's transaction as Transaction.toJSON(), sender set to the publishing wallet. Embedded wallets also receive a sponsorship reservation and full transaction bytes. 409 publish_unavailable carries error.reasons instead. Each step identifies the presale package so wallet execution errors can be decoded safely. A policy refusal carries error.contract_error (EQuoteNotAllowed or EMigrationWitnessNotAllowed); an unreadable policy has no contract_error. Sponsored simulation refusals carry error.move_abort.",
+  "type": "object",
+  "properties": {
+    "draft_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "enum": [
+              "publish_coin",
+              "register_currency",
+              "create_presale"
+            ]
+          },
+          "sponsorship": {
+            "type": "object",
+            "properties": {
+              "reservation_id": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+              "transaction_bytes": { "type": "string", "minLength": 1 }
+            },
+            "required": ["reservation_id", "transaction_bytes"],
+            "additionalProperties": false
+          },
+          "transaction": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "minLength": 2
+              }
+            ]
+          },
+          "presale_package": {
+            "type": "object",
+            "properties": {
+              "package_id": {
+                "type": "string",
+                "pattern": "^0x[0-9a-fA-F]{64}$"
+              },
+              "original_package_id": {
+                "type": "string",
+                "pattern": "^0x[0-9a-fA-F]{64}$"
+              },
+              "core_original_package_id": {
+                "type": "string",
+                "pattern": "^0x[0-9a-fA-F]{64}$"
+              },
+              "deployment_fingerprint": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "venue": {
+                "enum": ["cetus", "bluefin"]
+              }
+            },
+            "required": [
+              "package_id",
+              "original_package_id",
+              "core_original_package_id",
+              "venue"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "kind",
+          "transaction"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "draft_id",
+    "version",
+    "steps"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,7 @@
+body { margin: 0; font-family: Inter, system-ui, sans-serif; }
+[data-blast-ui] { min-height: 100vh; background: var(--bg); color: var(--ink); }
+.fixture-controls { display:flex; flex-wrap:wrap; gap:12px; padding:12px; border-bottom:1px solid var(--hair); font-size:12px; }
+.fixture-controls label { display:flex; gap:8px; align-items:center; }
+.fixture-controls select, .fixture-controls button { min-height:44px; max-width:220px; font:inherit; }
+.fixture-main { max-width:1100px; margin:0 auto; padding:24px; }
+@media (max-width:600px) { .fixture-main { padding:12px; } }

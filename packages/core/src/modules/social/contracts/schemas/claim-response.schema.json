@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blast-v2.invalid/social/contracts/claim-response.schema.json",
+  "title": "A presale claim attempt",
+  "description": "PUT /api/social/me/claims/{request_id} (R3-63): the attempt as the account's transaction log holds it, the claim's transaction kind to sign while it is submitted with no digest, and the presale abort the answer saw.",
+  "type": "object",
+  "properties": {
+    "request_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "presale_id": {
+      "type": "string",
+      "pattern": "^0x[0-9a-f]{64}$"
+    },
+    "kind": {
+      "enum": [
+        "claim_refund",
+        "claim_tokens",
+        "claim_vesting",
+        "collect_fees",
+        "claim_residuals"
+      ]
+    },
+    "state": {
+      "enum": [
+        "submitted",
+        "confirmed",
+        "failed"
+      ]
+    },
+    "digest": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[1-9A-HJ-NP-Za-km-z]{32,44}$"
+    },
+    "failure_code": {
+      "enum": [
+        "execution_failed",
+        "mismatch",
+        "dry_run_failed",
+        "rejected",
+        "expired",
+        null
+      ]
+    },
+    "move_abort": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^E[A-Za-z]{1,63}$"
+    },
+    "fee": {
+      "enum": [
+        "sponsored",
+        "wallet"
+      ]
+    },
+    "transaction_kind_bytes": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 21848,
+      "pattern": "^[A-Za-z0-9+/]+={0,2}$"
+    },
+    "created_at_ms": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "settled_at_ms": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    }
+  },
+  "required": [
+    "request_id",
+    "presale_id",
+    "kind",
+    "state",
+    "digest",
+    "failure_code",
+    "move_abort",
+    "fee",
+    "transaction_kind_bytes",
+    "created_at_ms",
+    "settled_at_ms"
+  ],
+  "additionalProperties": false
+}
