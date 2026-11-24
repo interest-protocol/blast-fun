@@ -35,7 +35,7 @@ const paths = [
   ["market/launchpad/policy", "launchpad/market/launchpad/policy"],
 ];
 const headers = { cookie: "private", authorization: "Bearer private", "x-blast-partner-key": "private", "x-blast-api-key": "private" };
-const handlers = (read: PartnerV1Handlers["presales"]): PartnerV1Handlers => ({ defillama: read, daily_stats: read, presales: read, featured: read, presale: read, presale_proof: read, prices: read, discovery: read, wallet_launches: read, search: read, market: read, coin_metadata: read });
+const handlers = (read: PartnerV1Handlers["presales"]): PartnerV1Handlers => ({ defillama: read, daily_stats: read, presales: read, featured: read, presale: read, presale_proof: read, presale_allowlist_csv: read, prices: read, discovery: read, wallet_launches: read, search: read, market: read, coin_metadata: read });
 
 test("v1 routes all operations without redirects, losing repeated parameters, or forwarding user credentials", async () => {
   for (const [path, source] of paths) {

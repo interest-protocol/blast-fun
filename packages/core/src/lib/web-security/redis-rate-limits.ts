@@ -48,6 +48,7 @@ const REDIS_RATE_BUCKETS: ReadonlySet<RateBucket> = new Set([
   "partner_auth_global",
   // Partner keys count proofs here; first-party proofs stay in the presale kit's PostgreSQL table.
   "presale_proof",
+  "presale_allowlist_csv",
   ...FIRST_PARTY_READ_BUCKETS,
 ]);
 

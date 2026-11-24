@@ -38,6 +38,12 @@ Only GET and HEAD are authorized:
   `service_unavailable` with `Retry-After`. A served proof stays the same for that sale, so cache 200 answers per
   presale and wallet
 
+- `/api/v1/presales/{presaleId}/allowlist.csv` downloads the finalized `wallet,cap` rows in
+  leaf order with any valid partner key. Caps are decimal quote-coin atoms. A bound sale reads
+  its saved manifest. An unbound sale can use a manifest with the on-chain root and leaf count.
+  The download returns 404 `allowlist_not_found` when Blast has no matching list. Download once
+  per sale and rebuild proofs on the partner server.
+
 Object IDs use the full lowercase `0x` + 64 hex form. Pool venues are
 `blast_curve`, `cetus`, and `bluefin`. Query parameters, pagination, validation,
 and response bodies are the same as the existing endpoints. Private account
@@ -208,7 +214,7 @@ requests may finish.
 Additional per-endpoint cost budgets can reject a request after its commercial
 key budget is charged. Search is capped at 60/minute, discovery and market
 status at 120/minute, public presales and prices at 300/minute, allowlist proofs at
-120/minute **per verified key**, including internal keys. Custom commercial caps do not raise these cost
+120/minute and allowlist CSV downloads at 10/minute **per verified key**, including internal keys. Custom commercial caps do not raise these cost
 budgets. Partners sharing NAT egress have independent endpoint allowances;
 changing IP cannot reset a key's endpoint usage. Key identity is passed as private
 server context from fresh authentication; no request header selects it.

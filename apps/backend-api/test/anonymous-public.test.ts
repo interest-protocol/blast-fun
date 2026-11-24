@@ -76,6 +76,7 @@ test("stale wallet and Privy credentials cause no session work or Set-Cookie on 
     daily_stats: read,
     wallet_launches: read,
     presale_proof: read,
+    presale_allowlist_csv: read,
     coin_metadata: read,
   };
   const api = createBackendApi({
