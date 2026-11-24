@@ -19,7 +19,7 @@ function fixture() {
         rows = [{ market_checkpoint: "10", market_timestamp_ms: "1000", presale_checkpoint: "11", presale_timestamp_ms: "1000", observed_ms: "1000" }];
       } else if (sql.startsWith("SELECT market.*")) {
         await top.promise;
-      } else if (sql.startsWith("SELECT * FROM ((SELECT")) {
+      } else if (sql.includes("'open' AS role")) {
         rows = [{ presale_id: "sale", role: "open", launched_ms: null, sort_ms: "2000" }];
       } else if (sql.startsWith("SELECT a.presale_id, sum") && dependentFailure) {
         throw dependentFailure;

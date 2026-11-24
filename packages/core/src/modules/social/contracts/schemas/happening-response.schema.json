@@ -94,7 +94,7 @@
       ]
     },
     "recent_presales": {
-      "maxItems": 5,
+      "maxItems": 10,
       "type": "array",
       "items": {
         "type": "object",
@@ -104,6 +104,14 @@
           },
           "last_commit_ms": {
             "$ref": "https://blast-v2.invalid/social/contracts/feed-item.schema.json#/$defs/millis"
+          },
+          "backers_1h": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "committed_1h": {
+            "type": "string",
+            "pattern": "^[0-9]+$"
           }
         },
         "required": [
@@ -113,6 +121,63 @@
         "additionalProperties": false
       },
       "description": "Open presales with a confirmed commit in the last hour, newest commit first."
+    },
+    "active_curves": {
+      "maxItems": 20,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "coin_type": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "symbol": {
+            "type": "string",
+            "minLength": 1
+          },
+          "icon_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "verified_team": {
+            "type": "boolean"
+          },
+          "created_ms": {
+            "$ref": "https://blast-v2.invalid/social/contracts/feed-item.schema.json#/$defs/millis"
+          },
+          "last_action_ms": {
+            "$ref": "https://blast-v2.invalid/social/contracts/feed-item.schema.json#/$defs/millis"
+          },
+          "participants": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "volume_usd": {
+            "type": "string",
+            "pattern": "^[0-9]+(?:\\.[0-9]+)?$"
+          }
+        },
+        "required": [
+          "coin_type",
+          "name",
+          "symbol",
+          "icon_url",
+          "verified_team",
+          "created_ms",
+          "last_action_ms",
+          "participants",
+          "volume_usd"
+        ],
+        "additionalProperties": false
+      },
+      "description": "Live curves with confirmed economic activity in the last hour, shared Home Discover candidates."
     }
   },
   "required": [
