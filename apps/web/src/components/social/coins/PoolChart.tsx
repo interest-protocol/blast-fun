@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { SUI_POOL_QUOTE, type PoolQuote } from "@blast/core/modules/social/portfolio/core-coins.ts";
+import { SUI_POOL_QUOTE } from "@blast/core/modules/social/portfolio/core-coins.ts";
 import { indexedPoolPolling, readIndexedPool } from "./indexed-pool-query.ts";
 import { atCheckpoint } from "#web/components/launchpad/blast-infra-browser.ts";
 import { useChartPrice } from "#web/components/launchpad/chart/chart-live-price.ts";
-import { ChartStream } from "#web/components/launchpad/chart/chart-stream.ts";
+import { ChartStream, type ChartStreamStatus } from "#web/components/launchpad/chart/chart-stream.ts";
 import { chartTailRequest, readChartPool } from "#web/components/launchpad/chart/chart-client.ts";
 import { afterChartSourceRead, chartKey, chartRequest, initialChart, type ChartControls } from "#web/components/launchpad/chart/chart-model.ts";
 import { useCoinChartControls } from "#web/components/launchpad/chart/chart-preferences.ts";
@@ -17,7 +17,7 @@ import { useAppQueryClient } from "#web/lib/query/provider.tsx";
 
 const REFRESH_MS = 15_000;
 
-async function readLegacyChart(poolKey: string, controls: ChartControls, signal: AbortSignal, checkpoint: number | null) {
+async function readPoolChart(poolKey: string, controls: ChartControls, signal: AbortSignal, checkpoint: number | null) {
   // Align the read clock so viewers with the same controls share relay URLs.
   const readAt = Math.floor(Date.now() / REFRESH_MS) * REFRESH_MS;
   const read = await readIndexedPool(PRICE_HISTORY_UNAVAILABLE, signal, (market) => readChartPool(poolKey, controls, atCheckpoint(market, checkpoint), readAt));
@@ -25,8 +25,26 @@ async function readLegacyChart(poolKey: string, controls: ChartControls, signal:
   return { ...read, readAt };
 }
 
-export function LegacyCoinChart({ poolKey, symbol, decimals, quote = SUI_POOL_QUOTE, initialControls }: Readonly<{
-  poolKey: string; symbol: string; decimals: number; quote?: PoolQuote; initialControls: ChartControls;
+/** What the chart says about its stream. A chart that streams nothing stays silent. */
+const STREAM_TEXT: Readonly<Partial<Record<ChartStreamStatus, string>>> = {
+  recovering: "Updating price history…",
+  reconnecting: "Trade updates delayed.",
+  unavailable: "Trade updates delayed.",
+};
+
+/**
+ * One venue pool's candles: HTTP history from the pool-keyed market read, then the tab's market stream.
+ * `market` is a pool the stream serves live: its open is `launchAt`, and history the page lacks is named.
+ */
+export function PoolChart({ poolKey, coinType, symbol, decimals, quote = SUI_POOL_QUOTE, initialControls, market, checkpoint, uncovered }: Readonly<{
+  poolKey: string; coinType?: string; symbol: string; decimals: number;
+  quote?: Readonly<{ symbol: string; decimals: number }>;
+  initialControls: ChartControls;
+  market?: Readonly<{ launchAt?: number }>;
+  /** The checkpoint the page's own price figures reflect; an older chart price is not shown beside them. */
+  checkpoint?: number | null;
+  /** Shown instead while the market read does not know this pool. */
+  uncovered?: ReactNode;
 }>) {
   const { controls, ready, commit } = useCoinChartControls(true, initialControls, false);
   const currency = useCoinPriceCurrency();
@@ -34,13 +52,15 @@ export function LegacyCoinChart({ poolKey, symbol, decimals, quote = SUI_POOL_QU
   const stream = useRef<ChartStream | null>(null);
   const recoveryCheckpoint = useRef<number | null>(null);
   const [state, setState] = useState(() => initialChart(key, true));
-  const latest = useChartPrice(poolKey);
+  const latest = useChartPrice(poolKey, checkpoint);
+  const [status, setStatus] = useState<ChartStreamStatus>("connecting");
+  const streams = market !== undefined;
   const client = useAppQueryClient();
-  const queryKey = ["legacy-pool-candles", poolKey, key] as const;
+  const queryKey = ["pool-candles", poolKey, key] as const;
   const polling = indexedPoolPolling(REFRESH_MS);
   const query = useQuery({
     queryKey,
-    queryFn: ({ signal }) => readLegacyChart(poolKey, controls, signal, recoveryCheckpoint.current),
+    queryFn: ({ signal }) => readPoolChart(poolKey, controls, signal, recoveryCheckpoint.current),
     ...polling,
     enabled: false,
   }, client);
@@ -59,14 +79,15 @@ export function LegacyCoinChart({ poolKey, symbol, decimals, quote = SUI_POOL_QU
     if (document.hidden) return delay;
     return Math.max(0, Math.max(state.dataUpdatedAt, state.errorUpdatedAt) + delay - Date.now());
   });
+  const unknown = uncovered !== undefined && query.error instanceof PublicError && query.error.httpStatus === 404;
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || unknown) return;
     const client = new ChartStream({
-      pools: [poolKey], expected: null, migration: () => null,
+      pools: [poolKey], ...(coinType ? { coin: coinType } : {}), expected: null, migration: () => null,
       request: () => chartTailRequest(controls, Date.now()),
       load: (_, checkpoint) => load(checkpoint),
       pollMs: () => pollMs(), retryReadErrors: false,
-      onStatus: () => {},
+      onStatus: (next) => { if (streams && stream.current === client) setStatus(next); },
       onSection: (_, section) => setState((previous) =>
         afterChartSourceRead(previous.key === key ? previous : initialChart(key, true), key, "venue", section, null)),
     });
@@ -76,11 +97,13 @@ export function LegacyCoinChart({ poolKey, symbol, decimals, quote = SUI_POOL_QU
       client.stop();
       if (stream.current === client) stream.current = null;
     };
-  }, [poolKey, controls, key, ready]);
+  }, [poolKey, coinType, controls, key, ready, streams, unknown]);
 
+  if (unknown) return uncovered;
   return <ChartView
     compact
-    source={{ curvePoolKey: null, venuePoolKey: poolKey, migration: null, expected: null, symbol, memeDecimals: decimals, quoteDecimals: quote.decimals, quoteSymbol: quote.symbol }}
+    marketChart={streams}
+    source={{ curvePoolKey: null, venuePoolKey: poolKey, migration: null, expected: null, symbol, memeDecimals: decimals, quoteDecimals: quote.decimals, quoteSymbol: quote.symbol, launchAt: market?.launchAt }}
     state={state.key === key ? state : initialChart(key, true)}
     currentPrice={latest?.price ?? null}
     controls={controls}
@@ -88,7 +111,7 @@ export function LegacyCoinChart({ poolKey, symbol, decimals, quote = SUI_POOL_QU
     quoteUsd={currency?.quoteUsd}
     hidden={[]}
     pending={query.isFetching}
-    updates={null}
+    updates={streams ? STREAM_TEXT[status] ?? null : null}
     diagnostic={query.error ? publicErrorMessage(query.error, PRICE_HISTORY_UNAVAILABLE) : undefined}
     onControls={commit}
     onToggle={() => {}}

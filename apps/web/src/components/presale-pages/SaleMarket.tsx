@@ -40,6 +40,7 @@ import type { PriceWindow } from "@blast/core/web/contracts/prices.ts";
 import { SalePriceChart, type MarketExtras } from "./SalePriceChart";
 import { formatMove, presaleHolderShare, priceDirection, type PriceMove } from "./sale-market-format";
 import { PresalePoolChart, usePresalePoolPrice } from "./PresalePoolChart";
+import { PoolChart } from "#web/components/social/coins/PoolChart.tsx";
 import { PresaleHolderSummary } from "./PresaleHolderSummary";
 import { ChartCard, CoinPriceFigure, MarketOverview, MarketPriceRow } from "#web/components/social/bonding/CoinPageParts.tsx";
 import coinStyles from "#web/components/social/bonding/bonding-coin.module.css";
@@ -433,7 +434,7 @@ export function SaleMarket({
         <CoinPriceCurrencyProvider quoteType={market.quote.type} quoteSymbol={market.quote.symbol}>
           <div className={coinStyles.market} data-sale-market="">
             <PresaleMarketPrice market={market} move={extras.move} />
-            <ChartCard><PresalePoolChart sale={sale} market={market} pool={market.pool} /></ChartCard>
+            <ChartCard><SalePoolChart sale={sale} market={market} pool={market.pool} /></ChartCard>
           </div>
           {extras.note}
         </CoinPriceCurrencyProvider>
@@ -442,6 +443,32 @@ export function SaleMarket({
       {children}
     </SaleMarketView>
   );
+}
+
+const POOL_CHART_CONTROLS = { range: "24h", interval: "5m" } as const;
+
+/**
+ * A graduated sale's pool on the chart and market feed every coin uses. Only swaps of the verified pool are
+ * candles: contributions, claims and refunds stay in the sale's own record. A pool the market read does not
+ * know yet keeps the sale's earlier swap chart.
+ */
+function SalePoolChart({ sale, market, pool }: Readonly<{
+  sale: SocialPresaleDetail["presale"];
+  market: HomeCoinMarket;
+  pool: NonNullable<HomeCoinMarket["pool"]>;
+}>) {
+  return <PoolChart
+    key={pool.id}
+    poolKey={`${pool.venue}:${pool.id}`}
+    coinType={sale.sale_token}
+    symbol={sale.symbol}
+    decimals={market.decimals}
+    quote={market.quote}
+    initialControls={POOL_CHART_CONTROLS}
+    market={{ launchAt: sale.launched_ms ?? undefined }}
+    checkpoint={market.as_of.checkpoint}
+    uncovered={<PresalePoolChart sale={sale} market={market} pool={pool} />}
+  />;
 }
 
 function PresaleMarketPrice({ market, move }: Readonly<{ market: HomeCoinMarket; move?: PriceMove | null }>) {

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { HomeCoinMarket } from "@blast/core/modules/social/contracts/coin-market.ts";
 import type { HomeAmount } from "@blast/core/modules/social/contracts/home.ts";
-import { installTestDom } from "../../../test/fixtures/social/test-dom.ts";
+import { installTestDom, waitFor } from "../../../test/fixtures/social/test-dom.ts";
 import type { MarketExtras } from "./SalePriceChart.tsx";
 
 const { document } = installTestDom();
@@ -339,4 +339,37 @@ test("a graduated pool shows a dash until its current close is confirmed", () =>
   assert.match(html, /<span>Price<\/span><strong>—<\/strong>/);
   assert.doesNotMatch(html, /\+\$0\.0137/);
   client.clear();
+});
+
+test("a graduated sale charts its verified pool on the shared market read, and keeps its earlier chart only when that read does not know the pool", async (t) => {
+  class QuietStream { close() {} addEventListener() {} }
+  const source = Object.getOwnPropertyDescriptor(globalThis, "EventSource");
+  Object.defineProperty(globalThis, "EventSource", { configurable: true, value: QuietStream });
+  const client = createTestQueryClient();
+  const detail = fixtureDetail("kstl");
+  const pool = { id: `0x${"9".repeat(64)}`, venue: "bluefin", coin_atoms: "1", quote_atoms: "1", as_of_ms: FIXTURE_NOW };
+  client.setQueryData([...queryKeys.home.all, "market", detail.presale.sale_token], fixtureCoinMarket({ pool }));
+  const asked: string[] = [];
+  t.mock.method(globalThis, "fetch", async (input: RequestInfo | URL) => {
+    const url = new URL(String(input), "https://blast.test");
+    asked.push(url.pathname + (url.searchParams.get("source") ? `?source=${url.searchParams.get("source")}` : ""));
+    return Response.json({ error: { code: "not_found" } }, { status: 404 });
+  });
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  t.after(async () => {
+    await act(async () => root.unmount());
+    client.clear();
+    container.remove();
+    if (source) Object.defineProperty(globalThis, "EventSource", source);
+    else Reflect.deleteProperty(globalThis, "EventSource");
+  });
+  await act(async () => root.render(withQueryClient(client, <SaleMarket nowMs={FIXTURE_NOW} sale={detail.presale} terms={detail.terms} />)));
+  const shared = `/api/launchpad/market/pools/bluefin/${pool.id}/candles`;
+  const earlier = "/api/social/prices?source=pool_swaps";
+  await waitFor(() => asked.includes(earlier), "the earlier chart to read after the shared read answers not found", 5_000);
+  assert.ok(asked.includes(shared), "the verified venue and pool id select the candles");
+  assert.ok(asked.indexOf(shared) < asked.indexOf(earlier), "the earlier chart reads only after the shared read answered not found");
+  assert.equal(asked.filter((path) => path === shared).length, 1);
 });
