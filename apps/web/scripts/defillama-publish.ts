@@ -190,7 +190,7 @@ async function ensureDailySummary(publisher: Publisher, date: string) {
       }
       throw error;
     });
-  if (!previous?.summary.daily_fees) {
+  if (!previous?.summary.daily_fees || !previous.summary.daily_launch_stats) {
     await publishDay(publisher, date);
   }
 }

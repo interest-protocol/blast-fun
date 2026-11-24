@@ -25,6 +25,8 @@ Only GET and HEAD are authorized:
 - `/api/v1/market/partners`, `/api/v1/market/partners/{partnerId}` and its `/launches`: the
   launchpad's partners, what each has been paid, and the launches naming it
 - `/api/v1/market/launchpad/policy`: the launchpad's settings as its admin events left them
+- `/api/v1/market/launchpad/daily-stats?date=YYYY-MM-DD`: completed UTC day
+  counts and volume for the canonical Sui mainnet bonding curves
 - `/api/v1/prices`
 - `/api/v1/presales`, `/api/v1/presales/featured`, and
   `/api/v1/presales/{presaleId}`
@@ -46,6 +48,27 @@ Verified keys authorize these allowlisted reads independently of frontend launch
 flags. They do not grant access to pages, private APIs or writes. Cookies and
 bearer credentials are removed before forwarding a partner read. Existing first-party requests are unchanged. The presale
 agent key (`X-Blast-Api-Key`) is separate and grants no partner access.
+
+### Daily launchpad stats
+
+Send `GET /api/v1/market/launchpad/daily-stats?date=2026-11-23` with your usual
+`X-Blast-Partner-Key` header. The date covers midnight UTC through the next
+midnight, exclusive. The response is one object with `date`, `launches`,
+`graduations`, and `volume`.
+
+Launches count created bonding curves. Graduations count on-chain migrations,
+including curves created on an earlier date. Volume counts the quote side of
+executed curve buys and sells once per trade. The result lists each quote
+currency separately as `{ quote_coin_type, amount_atomic }`. Amounts are integer
+strings in the quote currency's smallest unit. The scope is the canonical Sui
+mainnet bonding-curve deployment. Presales, legacy curves, and trades on DEXs
+after graduation are outside that scope.
+
+A published day can return zero counts and an empty volume list. A date still
+in progress or in the future returns 409 `day_not_complete`. A day with no
+published stats returns 404 `daily_stats_not_published`. The hourly reporting
+job normally publishes yesterday after midnight UTC. Fetch each date once
+from your server and retry later if its publication is still pending.
 
 ## Admin website
 

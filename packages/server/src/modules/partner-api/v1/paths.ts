@@ -26,9 +26,11 @@ export { PRESALE_READ, PRESALE_PROOF_READ, WALLET_LAUNCHES_READ } from "@blast/c
 
 const COIN_METADATA_READ = { name: "coin_metadata", path: "/api/v1/market/coins/:coinType/metadata", params: { coinType: COIN_TYPE }, prefix: "/api/v1", bucket: "launchpad_market_coin" } as const satisfies ReadRoute;
 export const PARTNER_COIN_METADATA_PATH = COIN_METADATA_READ.path;
+export const DAILY_STATS_READ = { name: "daily_stats", path: "/api/v1/market/launchpad/daily-stats", prefix: "/api/v1", bucket: "defillama_read" } as const satisfies ReadRoute;
 
 const ROUTES = [
   ...NON_MARKET_READ_ROUTES,
+  DAILY_STATS_READ,
   { name: "market", path: "/api/v1/market/status", prefix: "/api/launchpad", bucket: "launchpad_market_status" },
   { name: "market", path: "/api/v1/market/coins/:coinType", params: { coinType: COIN_TYPE }, prefix: "/api/launchpad", bucket: "launchpad_market_coin" },
   COIN_METADATA_READ,
@@ -85,7 +87,7 @@ export function canonicalFirstPartyAlias(path: string): string {
 const PARTNER_MATCHERS = ROUTES.map(withPattern);
 const FIRST_PARTY_MATCHERS = [
   ...FIRST_PARTY_ROUTES,
-  ...ROUTES.filter((route) => route !== PRESALE_PROOF_READ && route !== COIN_METADATA_READ),
+  ...ROUTES.filter((route) => route !== PRESALE_PROOF_READ && route !== COIN_METADATA_READ && route !== DAILY_STATS_READ),
 ].map(withPattern);
 
 const MARKET_SOURCE_MATCHERS = FIRST_PARTY_MATCHERS.filter((route) => route.name === "market")

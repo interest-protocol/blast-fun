@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { PRESALE_PROOF_PATH } from "@blast/core/modules/backend-api/private/presale-contracts.ts";
-import { FIRST_PARTY_WEB_PATHS, firstPartyReadRoute, partnerEndpointBucket, partnerV1Route, PRESALE_PROOF_READ, webPath } from "@blast/server/modules/partner-api/v1/paths.ts";
+import { DAILY_STATS_READ, FIRST_PARTY_WEB_PATHS, firstPartyReadRoute, partnerEndpointBucket, partnerV1Route, PRESALE_PROOF_READ, webPath } from "@blast/server/modules/partner-api/v1/paths.ts";
 
 const PATH = "/api/v1/presales";
 const ID = `0x${"a".repeat(64)}`;
@@ -38,6 +38,10 @@ test("the proof read reaches the private gateway's handler path and is partner-o
   assert.equal(FIRST_PARTY_WEB_PATHS.includes(PRESALE_PROOF_PATH), false);
   assert.equal(firstPartyReadRoute(`${PATH}/${ID}/proof`), null);
   assert.notEqual(firstPartyReadRoute(`${PATH}/${ID}`), null);
+});
+
+test("daily stats have no first-party route", () => {
+  assert.equal(firstPartyReadRoute(DAILY_STATS_READ.path), null);
 });
 
 test("coin metadata is partner-only and uses the coin summary quota", () => {

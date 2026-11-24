@@ -41,6 +41,11 @@ export type Contract = {
   created_timestamp_ms: number;
   tvl: "read_user_quote_custody" | "requires_attribution_review";
 };
+export type DailyLaunchStats = {
+  launches: number;
+  graduations: number;
+  volume: { quote_coin_type: string; amount_atomic: string }[];
+};
 export type FrontendFeePolicy = {
   first_checkpoint: number;
   end_checkpoint_exclusive: number;
@@ -80,6 +85,7 @@ export type Snapshot = {
   frontend_fee_policy: FrontendFeePolicy[];
   items: Item[];
   contracts: Contract[];
+  daily_launch_stats?: DailyLaunchStats;
   native_replay?: NativeReplayState;
 };
 
@@ -98,6 +104,7 @@ export function dayInterval(date: string, now = Date.now()): { start: number; en
   const start = Date.parse(`${date}T00:00:00Z`);
   if (
     !z.string().regex(/^\d{4}-\d{2}-\d{2}$/).safeParse(date).success ||
+    date.startsWith("0000-") ||
     !Number.isFinite(start) ||
     new Date(start).toISOString().slice(0, 10) !== date
   ) {

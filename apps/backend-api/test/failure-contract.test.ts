@@ -131,8 +131,9 @@ test("every published route consumes exactly its pre-admitted endpoint bucket", 
     `market/partners/${id}`,
     `market/partners/${id}/launches`,
     "market/launchpad/policy",
+    "market/launchpad/daily-stats",
   ];
-  assert.equal(paths.length, 31);
+  assert.equal(paths.length, 32);
   for (const suffix of paths) {
     const path = "/api/v1/" + suffix;
     const route = partnerV1Route(path)!;
@@ -220,6 +221,7 @@ test("one API instance reuses handlers per admitted bucket without sharing autho
         discovery: read,
         search: read,
         defillama: read,
+        daily_stats: read,
         wallet_launches: read,
         presale_proof: read,
         coin_metadata: read,

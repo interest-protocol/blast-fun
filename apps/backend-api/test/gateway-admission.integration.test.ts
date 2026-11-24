@@ -51,6 +51,7 @@ test(
       discovery: read,
       search: read,
       defillama: read,
+      daily_stats: read,
       wallet_launches: read,
       presale_proof: read,
       coin_metadata: read,

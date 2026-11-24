@@ -256,6 +256,7 @@ async function productionPartnerApi(backendPrimary: Pool) {
     subjectPepper: PEPPER,
     handlers: () => ({
       defillama: unexpected,
+      daily_stats: unexpected,
       presales: (request, client) => read.presales(request, client),
       featured: (request, client) => read.featured(request, client),
       presale: unexpected,

@@ -60,6 +60,7 @@ function partnerLane(classify: RecognitionDecision, read: PartnerV1Handlers["pre
     discovery: read,
     search: read,
     defillama: read,
+    daily_stats: read,
     wallet_launches: read,
     presale_proof: read,
     coin_metadata: read,
@@ -207,4 +208,22 @@ test("the partner lane strips credentials and caller context before the public h
   }
   assert.equal(reads, 2);
   assert.deepEqual(lane.lookups, ["verify", "verify"], "Every read takes one fresh primary grant.");
+});
+
+test("daily stats require a partner key before serving a published date", async () => {
+  const lane = partnerLane(
+    { kind: "known", identity: { tenant: GRANT.id, keyId: GRANT.keyId } },
+    async () => Response.json({ date: "2026-11-23", launches: 0, graduations: 0, volume: [] }),
+  );
+  const url = "https://backend.test/api/v1/market/launchpad/daily-stats?date=2026-11-23";
+
+  const refused = await lane.send(new Request(url));
+  assert.equal(refused.status, 401);
+  assert.equal((await refused.json()).error.code, "partner_key_invalid");
+  assert.deepEqual(lane.lookups, []);
+
+  const response = await lane.send(new Request(url, { headers: { [PARTNER_KEY_HEADER]: KEY } }));
+  assert.equal(response.status, 200);
+  assertNoStore(response);
+  assert.deepEqual(lane.lookups, ["verify"]);
 });

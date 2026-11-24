@@ -212,6 +212,7 @@ test(
           keys: reader,
           handlers: () => ({
             defillama: read,
+            daily_stats: read,
             presales: read,
             featured: read,
             presale: read,

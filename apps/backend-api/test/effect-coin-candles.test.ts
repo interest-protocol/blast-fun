@@ -561,6 +561,7 @@ async function exercise(effect: boolean, examples: readonly CandleCase[]) {
         discovery: unused,
         search: unused,
         defillama: unused,
+        daily_stats: unused,
         wallet_launches: unused,
         presale_proof: unused,
         coin_metadata: unused,

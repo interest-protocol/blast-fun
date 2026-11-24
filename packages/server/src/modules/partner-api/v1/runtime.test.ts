@@ -56,6 +56,7 @@ const cases: ReadonlyArray<readonly [string, RateBucket]> = [
   ["defillama/metadata", "defillama_read"],
   ["defillama/metrics", "defillama_read"],
   ["defillama/contracts", "defillama_read"],
+  ["market/launchpad/daily-stats", "defillama_read"],
 ];
 
 test("endpoint budgets follow verified keys across IPs and isolate partners sharing a NAT", async () => {
