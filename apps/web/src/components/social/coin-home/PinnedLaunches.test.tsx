@@ -33,7 +33,7 @@ async function rankedCurves() {
   return parseDiscoveryResponse(await response.json());
 }
 
-async function mount(t: TestContext, seed: Readonly<{ presales?: typeof presales; curves?: Awaited<ReturnType<typeof curves>>; ranking?: Awaited<ReturnType<typeof rankedCurves>>; now?: number; fetch?: typeof fetch; seeded?: Readonly<{ presales?: typeof presales; curves?: BondingHeroSeed }> }>) {
+async function mount(t: TestContext, seed: Readonly<{ presales?: typeof presales; curves?: Awaited<ReturnType<typeof curves>>; ranking?: Awaited<ReturnType<typeof rankedCurves>>; now?: number; pinSeed?: string; fetch?: typeof fetch; seeded?: Readonly<{ presales?: typeof presales; curves?: BondingHeroSeed }> }>) {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = seed.fetch ?? (async () => Response.json({ details: { tagline: null, cover: null, links: [] } }));
   const container = document.createElement("div");
@@ -50,7 +50,7 @@ async function mount(t: TestContext, seed: Readonly<{ presales?: typeof presales
     globalThis.fetch = originalFetch;
   });
   const now = seed.now ?? FIXTURE_NOW;
-  await act(async () => root.render(<QueryProvider client={client}><PinnedLaunches curves={seed.seeded?.curves} now={now} nowMs={seed.seeded ? Date.now() : FIXTURE_NOW} initialPinSeed="page-b" presales={seed.seeded?.presales} /></QueryProvider>));
+  await act(async () => root.render(<QueryProvider client={client}><PinnedLaunches curves={seed.seeded?.curves} now={now} nowMs={seed.seeded ? Date.now() : FIXTURE_NOW} initialPinSeed={seed.pinSeed ?? "page-b"} presales={seed.seeded?.presales} /></QueryProvider>));
   return container;
 }
 
@@ -59,13 +59,14 @@ test("Home draws nothing when the only ranked curve has reached its target", asy
   assert.equal(none.querySelector("section"), null);
 });
 
-test("Home appends the highest ranked live curve after the two pinned presales", async (t) => {
-  const container = await mount(t, { presales, curves: await curves(false), ranking: await rankedCurves() });
+test("Home can open on the highest ranked live curve with two pinned presales", async (t) => {
+  const container = await mount(t, { presales, curves: await curves(false), ranking: await rankedCurves(), pinSeed: "page-a" });
   const slides = [...container.querySelectorAll(".slide:not([data-visual-copy])")];
   assert.equal(slides.length, 3);
-  assert.match(slides[2]?.textContent ?? "", /Closest to graduation · 83\.33%/);
-  assert.match(slides[2]?.textContent ?? "", /Pixel 7/);
-  assert.equal(slides[2]?.querySelector("a")?.getAttribute("href"), `/coin/${encodeURIComponent(`0x${"12".repeat(31)}ff::meme::MEME`)}`);
+  const first = container.querySelector(".slide:not([inert])");
+  assert.match(first?.textContent ?? "", /Closest to graduation · 83\.33%/);
+  assert.match(first?.textContent ?? "", /Pixel 7/);
+  assert.equal(first?.querySelector("a")?.getAttribute("href"), `/coin/${encodeURIComponent(`0x${"12".repeat(31)}ff::meme::MEME`)}`);
 });
 
 test("Home shows the closest coin once when Blast has already pinned it", async (t) => {
@@ -81,6 +82,7 @@ test("Home continues past a ranked page containing only curves that reached thei
   const container = await mount(t, {
     presales,
     curves: await curves(false),
+    pinSeed: "page-a",
     ranking: {
       ...ranked,
       section: { ...section, data: { rows: section.data.rows.slice(0, 1), nextCursor: "next-page" } },
@@ -92,18 +94,17 @@ test("Home continues past a ranked page containing only curves that reached thei
       return Response.json({ details: null });
     },
   });
-  await waitFor(() => container.textContent?.includes("Closest to graduation"), "the live curve");
-  assert.match(container.textContent ?? "", /Pixel 7/);
+  await waitFor(() => container.querySelector(".slide:not([inert])")?.textContent?.includes("Pixel 7"), "the live curve in the opening slide");
 });
 
-test("shuffled presales come first, then pinned curves in their original order", async (t) => {
+test("Home shuffles pinned curves together with presales", async (t) => {
   const pinned = await curves(true);
   const rows = pinned.section.state === "available" || pinned.section.state === "stale" ? pinned.section.data.rows : [];
   assert.ok(rows.length > 0, "the fixture engine has a curve to pin");
-  const container = await mount(t, { presales, curves: pinned });
+  const container = await mount(t, { presales, curves: pinned, pinSeed: "page-c" });
   assert.equal(container.querySelectorAll('[aria-roledescription="carousel"]').length, 1);
   const hrefs = [...container.querySelectorAll(".slide:not([data-visual-copy]) a")].map((link) => link.getAttribute("href"));
-  assert.deepEqual(hrefs, [...[...presales].reverse().map((sale) => `/presale/${sale.presale_id}`), ...rows.map((row) => `/coin/${encodeURIComponent(row.coinType)}`)]);
+  assert.deepEqual(hrefs, [...rows.map((row) => `/coin/${encodeURIComponent(row.coinType)}`), ...presales.map((sale) => `/presale/${sale.presale_id}`)]);
   assert.equal(container.querySelectorAll(".segment").length, hrefs.length, "one segment per slide");
 });
 

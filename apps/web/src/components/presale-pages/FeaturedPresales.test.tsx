@@ -43,6 +43,46 @@ test("carousel position follows scrolling and disappears for a single presale", 
   assert.equal(container.querySelector('[class*="arrows"]')?.hasAttribute("hidden"), true);
 });
 
+test("launches entering and leaving ahead of the focused card keep it selected", async (t) => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  t.after(async () => {
+    await act(async () => root.unmount());
+    container.remove();
+  });
+  const firstPresale = <a href="#first" key="first">First presale</a>;
+  const secondPresale = <a href="#second" key="second">Second presale</a>;
+  const render = (...cards: (typeof firstPresale)[]) => act(async () => root.render(
+    <FeaturedCarousel count={cards.length} kind="launches">{cards}</FeaturedCarousel>,
+  ));
+  await render(firstPresale, secondPresale);
+  const track = container.querySelector<HTMLElement>('[aria-roledescription="carousel"]')!;
+  Object.defineProperties(track, { clientWidth: { value: 300 }, scrollWidth: { value: 1236, configurable: true } });
+  track.scrollLeft = 312;
+  t.mock.method(track, "scrollTo", (options: ScrollToOptions) => {
+    track.scrollLeft = options.left ?? 0;
+  });
+  const first = track.querySelector<HTMLAnchorElement>(".slide:not([inert]) a")!;
+  await act(async () => first.focus());
+  assert.ok(document.activeElement === first);
+
+  Object.defineProperty(track, "scrollWidth", { value: 1548 });
+  await render(<a href="#curve" key="curve">Curve</a>, firstPresale, secondPresale);
+
+  assert.equal(track.querySelector(".slide:not([inert]) a")?.getAttribute("href"), "#first");
+  assert.ok(document.activeElement === first);
+  assert.equal(track.scrollLeft, 624);
+  assert.equal(container.querySelector(".position")?.getAttribute("aria-label"), "Launch 2 of 3");
+
+  await render(firstPresale, secondPresale, <a href="#next" key="next">Next curve</a>);
+
+  assert.equal(track.querySelector(".slide:not([inert]) a")?.getAttribute("href"), "#first");
+  assert.ok(document.activeElement === first);
+  assert.equal(track.scrollLeft, 312);
+  assert.equal(container.querySelector(".position")?.getAttribute("aria-label"), "Launch 1 of 3");
+});
+
 test("a completed carousel fill advances and wraps; pause, focus and pointer-down prevent rotation", async (t) => {
   const container = document.createElement("div"); document.body.append(container);
   const root = createRoot(container);
