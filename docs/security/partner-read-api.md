@@ -406,6 +406,10 @@ existing query and window-plan regression tests pin the old defaults and launch
 behavior. The v1 fingerprint update was independently reviewed as additive.
 Clients opting into new windows must accept those values in response validators.
 
+The presale detail `quote_price` description now reflects the existing lookup
+by exact quote type. Only the JSON Schema description changed. V1 keeps the
+same response fields, USD units, observation time, and null handling.
+
 ## Automated release gate
 
 Vercel's build command runs `test:partner-live`, builds the candidate, then runs
