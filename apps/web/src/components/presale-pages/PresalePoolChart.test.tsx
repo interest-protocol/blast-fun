@@ -146,6 +146,18 @@ test("a matching trade hint updates the migration pool's candles in the open cha
     }, "presale"));
   await act(async () => streams[0]!.receive({ type: "pong", presale_checkpoint: 105 }));
   assert.equal(prices.at(-1), "0.001", "the fenced history supplies the current close");
+  const readout = () => container.querySelector("[data-chart-latest-price]")?.textContent;
+  const confirmed = readout();
+  assert.ok(confirmed && confirmed !== "—", "the confirmed price is visible");
+  const advanced = { ...market, as_of: { checkpoint: 106, timestamp_ms: clock + 6, lag_ms: 0 } };
+  const showMarket = (latest: HomeCoinMarket, observedPool: typeof pool) =>
+    act(async () => root.render(withQueryClient(client, <PresalePoolChart sale={sale} market={latest} pool={observedPool} />)));
+  await showMarket(advanced, pool);
+  assert.equal(readout(), confirmed, "unrelated indexer progress cannot blank a confirmed close");
+  const changedPool = { ...pool, as_of_ms: clock + 5 };
+  await showMarket({ ...advanced, pool: changedPool }, changedPool);
+  assert.equal(readout(), "—", "a pool mutation at the same chain time may be newer than the proof");
+  await showMarket(market, pool);
   prices.length = 0;
   const beforeSwaps = reads.length;
   await swap(106, `cetus:${pool.id}`, "264");

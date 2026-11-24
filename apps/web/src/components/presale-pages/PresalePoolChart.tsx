@@ -127,6 +127,13 @@ function presaleVenueState(section: SourceState | null, pending: boolean, error:
   return section ?? (pending ? { state: "loading" } : { state: "unavailable", reason: "unavailable" });
 }
 
+export function usePresalePoolPrice(pool: HomeCoinMarket["pool"]) {
+  const price = useChartPrice(pool ? `${pool.venue}:${pool.id}` : null);
+  const confirmedAt = price?.provenance.timestampMs;
+  // Consecutive checkpoints can share a timestamp. Require proof past the last pool mutation.
+  return pool && confirmedAt != null && confirmedAt > pool.as_of_ms ? price : null;
+}
+
 export function PresalePoolChart({ sale, market, pool }: Readonly<{
   sale: SocialPresaleDetail["presale"];
   market: HomeCoinMarket;
@@ -294,7 +301,7 @@ export function PresalePoolChart({ sale, market, pool }: Readonly<{
   } : null, [latest, poolKey, width]);
   const venue = presaleVenueState(section, isPending, isRefetchError);
   const close = confirmedClose(poolKey, venue, page, live, quote.decimals - decimals);
-  const currentPrice = useChartPrice(poolKey, market.as_of.checkpoint);
+  const currentPrice = usePresalePoolPrice(pool);
   usePublishPresaleClose(poolKey, close, venue.state === "available" ? venue.provenance : null, latest?.cursor ?? null);
   const diagnostic = venue.state === "unavailable" && venue.reason !== "unavailable" ? venue.reason : undefined;
   return <PoolCandleTradeContext value={poolTrade}><ChartView
