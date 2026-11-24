@@ -8,7 +8,7 @@ import { PageHeader } from "#web/components/blast-ui/PageHeader.tsx";
 import { LiveFigureCue } from "#web/components/blast-ui/LiveFigureCue.tsx";
 import { DexIdentity } from "#web/components/blast-ui/DexIdentity.tsx";
 import { Segmented } from "#web/components/blast-ui/Segmented.tsx";
-import { useShellPrefs } from "#web/components/blast-ui/use-shell-prefs.ts";
+import { usePhoneLayout, useShellPrefs } from "#web/components/blast-ui/use-shell-prefs.ts";
 import { FeelSoundButton } from "#web/components/blast-feel/FeelSoundSwitch.tsx";
 import { useSoundSwitch } from "#web/components/social/settings/use-sound-switch.ts";
 import { SectionBoundary } from "#web/components/launchpad/primitives/SectionBoundary.tsx";
@@ -122,7 +122,7 @@ export function MarketOverview({
       {fdvValue == null ? null : <Fact label="FDV">{fdvValue}</Fact>}
       {holdersValue == null ? null : <Fact label="Holders">{holdersValue}</Fact>}
       {volumeValue == null ? null : <Fact label="Volume 24h">{volumeValue}</Fact>}
-      {venue ? <Fact label="DEX"><DexIdentity venue={venue} size={18} /></Fact> : null}
+      {venue ? <Fact label="DEX"><DexIdentity venue={venue} iconOnly size={18} /></Fact> : null}
     </dl>
   </section>;
 }
@@ -137,12 +137,13 @@ const ACTIVITY_TABS = [["trades", "Trades"], ["holders", "Holders"], ["posts", "
 export function CoinTradingActivity({ trades, holders, posts, lazy = false }: Readonly<{
   trades: ReactNode; holders: ReactNode; posts?: ReactNode; lazy?: boolean;
 }>) {
+  const phone = usePhoneLayout();
   const [tab, setTab] = useState<ActivityTab>("trades");
   const id = useId();
   const panels = { trades, holders, posts };
   const tabs = posts == null ? ACTIVITY_TABS.slice(0, 2) : ACTIVITY_TABS;
   return <section className={styles.card} aria-label="Trading activity">
-    <Segmented label="Trading activity" options={tabs} value={tab} onChange={setTab} tabs tabId={(key) => `${id}-${key}`} panelId={(key) => `${id}-${key}-panel`} />
+    <Segmented label="Trading activity" options={tabs} value={tab} onChange={setTab} stretch={phone} tabs tabId={(key) => `${id}-${key}`} panelId={(key) => `${id}-${key}-panel`} />
     {tabs.map(([key]) => <div className={styles.activityPanel} key={key} hidden={tab !== key} id={`${id}-${key}-panel`} role="tabpanel" aria-labelledby={`${id}-${key}`}>
       {(!lazy || tab === key) && <SectionBoundary subject={key}>{panels[key]}</SectionBoundary>}
     </div>)}
