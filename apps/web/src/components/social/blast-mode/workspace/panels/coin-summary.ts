@@ -6,7 +6,6 @@ import { useQuery } from "@tanstack/react-query";
 import { readCoinMarketSummary, type CoinSummary, type TradeWindow } from "@blast/core/modules/launchpad-contract/coin.ts";
 import { coreCoin } from "@blast/core/modules/social/portfolio/core-coins.ts";
 import { SUI_COIN_TYPE } from "@blast/core/lib/sui/coin-types.ts";
-import { useLaunchpadEnabled } from "#web/components/blast-ui/launchpad-flag.tsx";
 import { browserMarketDependencies } from "#web/components/launchpad/blast-infra-browser.ts";
 import { coinDay, newerThanRead, useTradeFigures, type TradeFigures } from "#web/components/launchpad/trade-figures.ts";
 import { gatedFetch } from "#web/lib/api-gate-client.ts";
@@ -56,9 +55,8 @@ export type CoinSummaryRead = ReturnType<typeof useCoinSummaryFacts>;
  * while the feed has both figures, before the first answer, or when the coin has no summary.
  */
 export function useCoinSummaryFacts(asset: CoinAsset, coin: CoinRecord | null, visible: boolean) {
-  const launchpad = useLaunchpadEnabled();
   const client = useAppQueryClient();
-  const wanted = launchpad && coin !== null && summaryCandidate(asset, coin);
+  const wanted = coin !== null && summaryCandidate(asset, coin);
   const read = useQuery(
     {
       ...coinSummaryQuery(asset),

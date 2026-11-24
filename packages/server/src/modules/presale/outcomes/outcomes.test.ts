@@ -651,28 +651,21 @@ function visitorRequest(headers: Record<string, string> = {}): Request {
   });
 }
 
-test("AC-132: the visitor route mints __Host-blast_vid exactly as the launchpad telemetry route does, with the launchpad off", async () => {
-  const launchpadFlag = process.env.BLAST_LAUNCHPAD_ENABLED;
-  delete process.env.BLAST_LAUNCHPAD_ENABLED;
-  try {
-    const limiter = new MemoryLimiter();
-    const response = await visitorRoute(limiter)(visitorRequest(), testClient());
-    assert.equal(response.status, 204);
-    assert.equal(await response.text(), "");
-    assert.equal(response.headers.get("cache-control"), "no-store");
-    const cookie = response.headers.get("set-cookie");
-    assert.equal(cookie, await launchpadCookie(MINTED));
-    assert.match(
-      cookie ?? "",
-      /^__Host-blast_vid=33333333-3333-4333-8333-333333333333; Path=\/; Max-Age=\d+; HttpOnly; Secure; SameSite=Lax$/,
-    );
-    assert.deepEqual(limiter.calls, [
-      { bucket: "presale_outcome_commit", subject: { ip: "203.0.113.7" } },
-    ]);
-  } finally {
-    if (launchpadFlag !== undefined)
-      process.env.BLAST_LAUNCHPAD_ENABLED = launchpadFlag;
-  }
+test("AC-132: the visitor route mints __Host-blast_vid exactly as the launchpad telemetry route does", async () => {
+  const limiter = new MemoryLimiter();
+  const response = await visitorRoute(limiter)(visitorRequest(), testClient());
+  assert.equal(response.status, 204);
+  assert.equal(await response.text(), "");
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  const cookie = response.headers.get("set-cookie");
+  assert.equal(cookie, await launchpadCookie(MINTED));
+  assert.match(
+    cookie ?? "",
+    /^__Host-blast_vid=33333333-3333-4333-8333-333333333333; Path=\/; Max-Age=\d+; HttpOnly; Secure; SameSite=Lax$/,
+  );
+  assert.deepEqual(limiter.calls, [
+    { bucket: "presale_outcome_commit", subject: { ip: "203.0.113.7" } },
+  ]);
 });
 
 test("the visitor route keeps a valid cookie without counting it, and replaces an invalid one", async () => {

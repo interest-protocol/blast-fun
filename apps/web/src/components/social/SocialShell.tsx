@@ -32,7 +32,6 @@ import { UnreadNotificationsProvider, useUnreadNotificationsState } from "./noti
 import { useNotificationArrivals } from "./notifications/use-notification-arrivals";
 import { SearchSheet } from "./search/SearchSheet";
 import { WatchlistProvider } from "./watchlist/Watchlist";
-import { LaunchpadFlagProvider } from "#web/components/blast-ui/launchpad-flag.tsx";
 import { useShellPortfolio } from "./use-shell-portfolio";
 
 const renderAccountAvatar: RenderAvatar = (props) => <AccountAvatar {...props} />;
@@ -57,7 +56,7 @@ const renderAccountAvatar: RenderAvatar = (props) => <AccountAvatar {...props} /
  * `rail` fills the right column on every page but the coin Home, whose ledger takes the width; it
  * column and `banner` sits above the page; both may be empty.
  */
-type SocialShellProps = Readonly<{ banner?: ReactNode; initialSession?: HeaderSession | null; rail?: ReactNode; presaleDeployed?: boolean; launchpad?: boolean; children: ReactNode }>;
+type SocialShellProps = Readonly<{ banner?: ReactNode; initialSession?: HeaderSession | null; rail?: ReactNode; presaleDeployed?: boolean; children: ReactNode }>;
 
 export function SocialShell(props: SocialShellProps) {
   return <ToastProvider><SocialShellContent {...props} /></ToastProvider>;
@@ -68,7 +67,6 @@ function SocialShellContent({
   initialSession = null,
   rail,
   presaleDeployed = false,
-  launchpad = false,
   children,
 }: SocialShellProps) {
   const pathname = usePathname();
@@ -108,7 +106,6 @@ function SocialShellContent({
     [claim.claimPath, commit.overlays, trade.tradeKit],
   );
   return (
-    <LaunchpadFlagProvider value={launchpad}>
     <BalancesProvider value={balances}>
     <ShellPortfolioProvider value={shared}>
     <UnreadNotificationsProvider value={unread}>
@@ -147,6 +144,5 @@ function SocialShellContent({
     </UnreadNotificationsProvider>
     </ShellPortfolioProvider>
     </BalancesProvider>
-    </LaunchpadFlagProvider>
   );
 }

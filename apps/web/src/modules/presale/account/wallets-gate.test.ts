@@ -8,16 +8,6 @@ import { PRESALE_ERRORS } from "@blast/core/modules/presale/contracts/errors.ts"
 import { createPresaleValidator } from "@blast/core/modules/presale/contracts/validate.ts";
 import { RUNTIME_TEST_ENVIRONMENT } from "../../../../../../packages/server/test/fixtures/config/runtime-config.ts";
 
-/**
- * T-011-AC-2 (AC-137): `BLAST_PRESALE_ENABLED` gates `/api/account/wallets`
- * in the proxy (`src/proxy.ts` over the presale frontend's route-policy
- * entry, which this ticket does not edit). The proxy reads the flag once per
- * process, so each setting runs in its own Node process: it sends one request
- * through `proxy`, and only when the proxy lets it through, to the canonical backend
- * owner. Actual Next-to-Bun transport is covered by the disposable two-process
- * private-identity integration gate. No database or Privy call is made here: the token is invalid.
- */
-
 const WEB_ROOT = new URL("../../../../", import.meta.url);
 const HOOKS = new URL("../../scripts/test-tsx-hooks.mjs", WEB_ROOT);
 const PROXY = new URL("src/proxy.ts", WEB_ROOT);
@@ -61,7 +51,7 @@ if (next) {
 process.stdout.write(JSON.stringify({ proxy: { ...(await answer(gate)), next }, route }));
 `;
 
-async function throughProxy(flag: string | undefined): Promise<Outcome> {
+async function throughProxy(): Promise<Outcome> {
   const environment: NodeJS.ProcessEnv = {
     // The backend route boots from runtime config.
     ...RUNTIME_TEST_ENVIRONMENT,
@@ -71,7 +61,6 @@ async function throughProxy(flag: string | undefined): Promise<Outcome> {
     PRIVY_APP_ID: "presale-wallets-gate-app",
     PRIVY_JWT_VERIFICATION_KEY: verificationKey,
   };
-  if (flag !== undefined) environment.BLAST_PRESALE_ENABLED = flag;
   const { stdout } = await promisify(execFile)(
     process.execPath,
     ["--no-warnings", "--import", HOOKS.href, "--experimental-strip-types", "--input-type=module", "--eval", CHILD],
@@ -80,22 +69,8 @@ async function throughProxy(flag: string | undefined): Promise<Outcome> {
   return JSON.parse(stdout) as Outcome;
 }
 
-for (const flag of [undefined, "false", "1", "TRUE"]) {
-  test(`with BLAST_PRESALE_ENABLED${flag === undefined ? " unset" : `=${flag}`} the proxy answers 404 and the route is not reached`, async () => {
-    const outcome = await throughProxy(flag);
-    assert.equal(outcome.proxy.next, false);
-    assert.equal(outcome.proxy.status, 404);
-    assert.equal(outcome.proxy.cacheControl, "no-store");
-    // The proxy's 404 carries no body today; if it ever carries one, it must be the published not_found.
-    if (outcome.proxy.body) {
-      assert.deepEqual(validator.validate("errors/not_found", JSON.parse(outcome.proxy.body)).errors, []);
-    }
-    assert.equal(outcome.route, null);
-  });
-}
-
-test("with BLAST_PRESALE_ENABLED=true the proxy lets the request through and the route answers 401 unauthorized", async () => {
-  const outcome = await throughProxy("true");
+test("wallet reads reach the route and require valid account credentials", async () => {
+  const outcome = await throughProxy();
   assert.equal(outcome.proxy.next, true);
   assert.ok(outcome.route);
   assert.equal(outcome.route.status, PRESALE_ERRORS.unauthorized.status);

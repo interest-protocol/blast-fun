@@ -29,7 +29,7 @@ function emptied(result, id, { emptyPresales, emptyLaunches }) {
   if (emptyLaunches && id === 'discovery') Object.assign(result.body, { section: { state: 'empty', provenance: fixtures.discovery.section.provenance }, metrics: {} });
   return result;
 }
-function harness({ broken, badIssue, failRevoke, delayedRevocation, loseIssue, failCleanup, emptyPresales, emptyLaunches = emptyPresales, missingResponse, aliasAccepted, losePartner } = {}) {
+function harness({ broken, badIssue, failRevoke, delayedRevocation, loseIssue, failCleanup, emptyPresales, emptyLaunches = emptyPresales, aliasAccepted, losePartner } = {}) {
   let revoked = false; let issued = false; let label; let partnerId; let revokedReads = 0;
   const cleaned = []; const routes = [];
   return {
@@ -65,7 +65,6 @@ function harness({ broken, badIssue, failRevoke, delayedRevocation, loseIssue, f
         if (method === 'HEAD') return response(null);
         const id = operationFor(path);
         if (broken === id) return response({}, 503);
-        if (emptyPresales && id === 'presale') return missingResponse ?? response({ error: { code: 'not_found' } }, 404);
         return emptied(response(fixtures[id]), id, { emptyPresales, emptyLaunches });
       },
     },
@@ -157,55 +156,7 @@ test('empty presale inventory is an explicit failure, never a silently skipped d
   const h = harness({ emptyPresales: true }); const result = await runCheck(h);
   assert.equal(result.passed, false); assert.match(result.failure.message, /No real presale/); assert.equal(h.cleaned.length, 1);
 });
-test('explicit empty bootstrap verifies a missing detail and revocation', async () => {
-  const h = harness({ emptyPresales: true });
-  const result = await runCheck({ ...h, allowEmptyPresales: true });
-  assert.equal(result.passed, true);
-  assert.equal(result.presaleDetail, 'empty-bootstrap');
-  assert.equal(result.poolDetail, 'empty-bootstrap');
-  // A random pool is never read with the live key, only checked as refused after revocation.
-  assert.equal(h.routes.filter(path => path.startsWith('/api/v1/market/pools/')).length, 2);
-  assert.ok(result.checks.some(c => /^revoked \/api\/v1\/market\/pools\/blast_curve\/0x[0-9a-f]{64}\/candles$/.test(c.operation) && c.status === 401));
-  assert.equal(result.cleanupConfirmed, true);
-  assert.ok(result.checks.some(c => c.operation === 'presale-missing' && c.status === 404));
-  assert.ok(result.checks.some(c => /^revoked \/api\/v1\/presales\/0x[0-9a-f]{64}$/.test(c.operation) && c.status === 401));
-  assert.ok(h.routes.some(path => path.startsWith('/api/v1/prices?') && !new URL(path, 'https://fixture.test').searchParams.has('presale')));
-});
-for (const [operation, makeInconsistent] of [
-  ['presales', body => { body.next_cursor = 'remaining'; }],
-  ['featured', body => { body.presales = fixtures.presales.presales; }],
-]) {
-  test(`empty bootstrap rejects inconsistent ${operation} evidence`, async () => {
-    const h = harness({ emptyPresales: true });
-    const read = h.http.read;
-    h.http.read = async (...args) => {
-      const result = await read(...args);
-      if (result.status === 200 && result.body && operationFor(args[0]) === operation)
-        makeInconsistent(result.body);
-      return result;
-    };
-    const result = await runCheck({ ...h, allowEmptyPresales: true });
-    assert.equal(result.passed, false);
-    assert.equal(result.failure.stage, operation);
-    assert.equal(result.cleanupConfirmed, true);
-  });
-}
-test('bootstrap approval retains the positive detail check for populated lists', async () => {
-  const result = await runCheck({ ...harness(), allowEmptyPresales: true });
-  assert.equal(result.passed, true);
-  assert.equal(result.presaleDetail, 'populated');
-  assert.ok(result.checks.some(c => c.operation === 'presale' && c.status === 200));
-});
-for (const [status, code] of [[503, 'not_found'], [404, 'other'], [401, 'partner_key_invalid']]) {
-  test(`empty bootstrap rejects unexpected detail HTTP ${status} ${code}`, async () => {
-    const h = harness({ emptyPresales: true, missingResponse: response({ error: { code } }, status) });
-    const result = await runCheck({ ...h, allowEmptyPresales: true });
-    assert.equal(result.passed, false);
-    assert.equal(result.failure.stage, 'presale-missing');
-    assert.equal(result.cleanupConfirmed, true);
-  });
-}
-test('no bonding-curve launch fails without bootstrap approval', async () => {
+test('no bonding-curve launch fails the release check', async () => {
   const h = harness({ emptyLaunches: true }); const result = await runCheck(h);
   assert.equal(result.passed, false); assert.match(result.failure.message, /No bonding-curve launch/);
   assert.equal(result.cleanupConfirmed, true);

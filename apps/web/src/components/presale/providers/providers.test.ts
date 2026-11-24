@@ -63,7 +63,6 @@ const PROVIDER_SLOTS = [
   "SettingsSyncProvider",
 ];
 const BROKEN = readPresaleConfig({
-  BLAST_PRESALE_ENABLED: "true",
   BLAST_NETWORK: "moonnet",
   NEXT_PUBLIC_PRESALE_EVM_RPC_URLS: "{",
   NEXT_PUBLIC_PRESALE_SWAP_SLIPPAGE_BPS: "-5",

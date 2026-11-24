@@ -50,10 +50,10 @@ test("image cache hits retain the original data admission and outer failure resp
   assert.equal((await owner(request, detail.presale.presale_id, testClient())).status, 404); assert.equal(renders, 1);
 });
 
-test("launch flags are checked before every cached image or data read", async () => {
+test("social visibility is checked before every cached image or data read", async () => {
   let enabled = false; let reads = 0;
   const handler = createPresaleShareHandler({
-    flags: () => ({ presale: enabled, social: enabled }),
+    socialEnabled: () => enabled,
     image: async (_request, id) => { reads++; assert.equal(id, detail.presale.presale_id); return new Response("png"); },
   });
   const request = new Request("https://frontend.test" + path);

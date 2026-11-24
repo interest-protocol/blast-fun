@@ -25,7 +25,6 @@ const { act } = await import("react");
 const { createRoot } = await import("react-dom/client");
 const { createTestQueryClient } = await import("#web/lib/query/test-client.ts");
 const { QueryProvider } = await import("#web/lib/query/provider.tsx");
-const { LaunchpadFlagProvider } = await import("#web/components/blast-ui/launchpad-flag.tsx");
 const { CurveHolders, CurveTheses, CurveTrades, useCurveListLaunch, useCurveQuotePrice } = await import("./CurveLaunchLists");
 type CoinAsset = import("./coin-reads").CoinAsset;
 type CoinRecord = import("./coin-reads").CoinRecord;
@@ -33,13 +32,13 @@ type CoinRecord = import("./coin-reads").CoinRecord;
 const asset = (coin_type: string, presale_id: string | null = null): CoinAsset => ({ chain: "sui", network: "mainnet", coin_type, presale_id });
 const coin = (coin_type: string, lifecycle?: string) => ({ coin_type, symbol: "FROG", name: "Frog", decimals: 6, price_usd: null, lifecycle }) as CoinRecord;
 
-async function rendered(node: React.ReactNode, launchpad = true, client = createTestQueryClient()): Promise<HTMLElement> {
+async function rendered(node: React.ReactNode, client = createTestQueryClient()): Promise<HTMLElement> {
   const container = dom.document.createElement("div");
   dom.document.body.appendChild(container);
   const root = createRoot(container);
   await act(async () => root.render(
     <QueryProvider client={client}>
-      <LaunchpadFlagProvider value={launchpad}>{node}</LaunchpadFlagProvider>
+      {node}
     </QueryProvider>,
   ));
   test.after(async () => { await act(async () => root.unmount()); container.remove(); });
@@ -50,18 +49,17 @@ function Launch({ asset, coin }: Readonly<{ asset: CoinAsset; coin: CoinRecord |
   return <>{`launch:${useCurveListLaunch(asset, coin, true) ?? "none"}`}</>;
 }
 
-test("a coin on its bonding curve names its launch; presale, migrated, other and flag-off coins name none", async () => {
+test("a coin on its bonding curve names its launch; presale, migrated and other coins name none", async () => {
   // One client: the curve's answer is already cached when the others render, so only their own rules keep it out.
   const client = createTestQueryClient();
-  const curve = await rendered(<Launch asset={asset("0x1::curve::CURVE")} coin={coin("0x1::curve::CURVE")} />, true, client);
+  const curve = await rendered(<Launch asset={asset("0x1::curve::CURVE")} coin={coin("0x1::curve::CURVE")} />, client);
   await waitFor(() => curve.textContent === "launch:0xlaunch", "curve launch");
-  const other = await rendered(<Launch asset={asset("0x1::other::OTHER")} coin={coin("0x1::other::OTHER")} />, true, client);
+  const other = await rendered(<Launch asset={asset("0x1::other::OTHER")} coin={coin("0x1::other::OTHER")} />, client);
   await waitFor(() => client.getQueryState(["blast", "public", "workspace-curve-launch", "mainnet", "0x1::other::OTHER"])?.status === "success", "other read");
   const others = [
     other,
-    await rendered(<Launch asset={asset("0x1::curve::CURVE", "0xpresale")} coin={coin("0x1::curve::CURVE")} />, true, client),
-    await rendered(<Launch asset={asset("0x1::curve::CURVE")} coin={coin("0x1::curve::CURVE", "migrated")} />, true, client),
-    await rendered(<Launch asset={asset("0x1::curve::CURVE")} coin={coin("0x1::curve::CURVE")} />, false, client),
+    await rendered(<Launch asset={asset("0x1::curve::CURVE", "0xpresale")} coin={coin("0x1::curve::CURVE")} />, client),
+    await rendered(<Launch asset={asset("0x1::curve::CURVE")} coin={coin("0x1::curve::CURVE", "migrated")} />, client),
   ];
   for (const container of others) assert.equal(container.textContent, "launch:none");
 });
@@ -102,7 +100,7 @@ test("hidden curve lists mount nothing, so nothing polls", async () => {
     <CurveTrades launchId="0xlaunch" asset={a} coin={c} visible={false} />
     <CurveHolders launchId="0xlaunch" asset={a} coin={c} visible={false} />
     <CurveTheses launchId="0xlaunch" coin={c} visible={false} />
-  </>, true, client);
+  </>, client);
   assert.equal(container.textContent, "");
   assert.equal(client.getQueryCache().getAll().length, 0);
 });
@@ -125,7 +123,7 @@ test("a failed price re-read keeps the Trades list and the last price", async ()
     <CurveTrades launchId="0xflaky" asset={asset("0x1::curve::CURVE")} coin={coin("0x1::curve::CURVE")} visible />
     {" | "}
     <QuotePrice launchId="0xflaky" enabled />
-  </>, true, client);
+  </>, client);
   await waitFor(() => container.textContent === "trades:0xflaky:FROG:6:SUI:9 | 0.123 SUI", "loaded");
   units["0xflaky"] = new Error("down");
   await act(async () => { await client.refetchQueries({ queryKey: ["blast", "public", "workspace-curve-pool", "0xflaky"] }); });
@@ -152,7 +150,7 @@ test("the quote price falls back to none on a failed read or a curve with no pri
   const empty = await rendered(<QuotePrice launchId="0xempty" enabled />);
   await waitFor(() => empty.textContent === "none", "no price");
   const client = createTestQueryClient();
-  const off = await rendered(<><QuotePrice launchId="0xlaunch" enabled={false} /><QuotePrice launchId={null} enabled /></>, true, client);
+  const off = await rendered(<><QuotePrice launchId="0xlaunch" enabled={false} /><QuotePrice launchId={null} enabled /></>, client);
   assert.equal(off.textContent, "nonenone");
   assert.equal(client.getQueryCache().getAll().filter((query) => query.state.fetchStatus !== "idle" || query.state.dataUpdatedAt > 0).length, 0);
 });

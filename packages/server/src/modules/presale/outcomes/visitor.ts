@@ -32,8 +32,8 @@ const CODES = new Set([
 
 /**
  * `POST /api/presale/outcomes/visitor` (no body): the presale page's source of
- * the first-party visitor cookie while the launchpad, whose telemetry route
- * otherwise mints it, is switched off. The page calls it once per tab per page
+ * the first-party visitor cookie for visitors who land directly on a presale.
+ * The page calls it once per tab per page
  * load, before it registers a commitment, and ignores the answer. In order:
  *
  * 1. Another site or `Origin`: `origin_invalid` (403).

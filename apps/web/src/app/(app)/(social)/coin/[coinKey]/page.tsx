@@ -136,7 +136,7 @@ async function renderLaunchCoin(
   // They need a released, connected deployment; until then each says why
   // nothing can be signed.
   const [flags, requestHeaders, requestCookies, query] = await Promise.all([requestLaunchFlags(), headers(), cookies(), searchParams]);
-  const tradeAvailability = serverTradeAvailability(webConfig(), flags.trading && flags.launchpad);
+  const tradeAvailability = serverTradeAvailability(webConfig(), flags.trading);
   const connection = {
     privyAppId: webConfig().privyAppId,
     nonce: requestHeaders.get("x-nonce") ?? "",

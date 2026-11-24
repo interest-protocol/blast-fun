@@ -2,7 +2,7 @@ import type { ClientAddress } from "@blast/core/lib/web-security/client-address.
 import { routeParams } from "@blast/core/modules/backend-api/route-path.ts";
 import { PRESALE_SHARE_IMAGE_PATH } from "@blast/core/modules/backend-api/private/share-images-contracts.ts";
 import { processSingleton } from "@blast/core/lib/process-singleton.ts";
-import { launchFlagsFor, type LaunchFlags } from "@blast/core/lib/launch-flags.ts";
+import { isSocialEnabled } from "@blast/core/lib/social-flag.ts";
 import { socialPresalePath, type SocialPresaleDetail } from "@blast/core/modules/social/contracts/presales.ts";
 import { anonymousPartnerHeaders } from "@blast/server/modules/partner-api/v1/response.ts";
 import { socialPresaleRoutes } from "@blast/server/modules/social/presales/shared-runtime.ts";
@@ -26,11 +26,10 @@ export async function readSharePresale(request: Request, id: string, read: (requ
 
 export function createPresaleShareHandler(dependencies: Readonly<{
   image: (request: Request, id: string, client: ClientAddress) => Promise<Response>;
-  flags: () => Pick<LaunchFlags, "presale" | "social">;
+  socialEnabled: () => boolean;
 }>) {
   return async (request: Request, client: ClientAddress): Promise<Response> => {
-    const flags = dependencies.flags();
-    if (!flags.presale || !flags.social) return new Response(null, { status: 404, headers: { "Cache-Control": "private, no-store" } });
+    if (!dependencies.socialEnabled()) return new Response(null, { status: 404, headers: { "Cache-Control": "private, no-store" } });
     // An undecodable path is "" and the image owner answers it.
     const id = routeParams(PRESALE_SHARE_IMAGE_PATH, new URL(request.url).pathname)?.presaleId ?? "";
     return dependencies.image(request, id, client);
@@ -45,6 +44,6 @@ export function presaleShareRoute(): (request: Request, client: ClientAddress) =
       cover: cachedCoinLogo((url) => fetchCoinLogo(url, { fit: "inside", trackWork: trackRequestWork }), { maxBytes: 4 * 1024 * 1024 }),
       render: (sale, artwork) => renderShareImage({ kind: "presale", sale, artwork }),
     });
-    return createPresaleShareHandler({ image, flags: launchFlagsFor });
+    return createPresaleShareHandler({ image, socialEnabled: isSocialEnabled });
   });
 }

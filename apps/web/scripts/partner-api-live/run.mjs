@@ -75,9 +75,7 @@ try {
     stage = 'checks';
     docs = createDocsCheck(requestSignal);
     const report = await runCheck({ http: createHttp({ origin, adminOrigin: config.adminOrigin, token: config.token,
-      readFetcher: transport, signal: requestSignal }), cleanup, signal: requestSignal, docs, fixtureId,
-      allowEmptyPresales: process.env.BLAST_PARTNER_EMPTY_PRESALE_BOOTSTRAP === 'true' &&
-        process.env.BLAST_PRESALE_ENABLED === 'team' });
+      readFetcher: transport, signal: requestSignal }), cleanup, signal: requestSignal, docs, fixtureId });
     console.log(JSON.stringify({ gate: 'partner-api-live', target: build ? 'compiled-release-candidate' : 'hosted-release-candidate',
       candidateIngress: build ? 'verifier-local-platform-simulation' : 'actual-hosted-ingress', docs: 'actual-docs.blast.fun',
       commit: process.env.VERCEL_GIT_COMMIT_SHA ?? null, ...report }));

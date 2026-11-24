@@ -99,9 +99,7 @@ For the production rebuild and complete historical coverage, follow this sequenc
    `blast_pipeline_lag_checkpoints` for `pipeline="vesting"`.
 4. Apply web migration `0118_utility_vesting` using the migration login.
    It adds immutable transaction attempts and four social transaction kinds.
-5. Deploy the web code with the existing presale/social release settings.
-   `BLAST_PRESALE_ENABLED=true` makes public schedule links accessible to
-   everyone; team mode continues to restrict the whole unreleased surface.
+5. Deploy the web code. Public schedule links open for signed-out visitors.
    Social availability and configured wallet authentication enable actions.
 6. Verify a non-presale coin, both schedule kinds, capability transfer,
    cancellation/close history, and a signed-out shared link on the deployed

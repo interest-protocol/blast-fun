@@ -125,6 +125,6 @@ client chunks that import it; splitting it out is an SDK follow-up.
 
 ## Development harness
 
-`/dev/launchpad/transactions` (development only, on a dev server started with `BLAST_LAUNCHPAD_ENABLED=true`; `?network=testnet` for a
+`/dev/launchpad/transactions` (development only; `?network=testnet` for a
 testnet deployment identity) drives a fixture purchase through the boundary
 with a fixture node, fixture signers, and controls for every failure mode.

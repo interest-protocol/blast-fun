@@ -29,7 +29,7 @@ const coinsPending = Symbol("coins pending");
 const failed = (read: string) => () => { recordMetric("social.home", { outcome: "error", read }); return null; };
 
 /** Load the other sections alongside Discover so a slow Coins read only suspends its own panel. */
-async function loadHome(state: HomeViewState, sections: HomeSectionPrefs, rows: number, launchpad: boolean) {
+async function loadHome(state: HomeViewState, sections: HomeSectionPrefs, rows: number) {
   await connection();
   const shown = (key: Parameters<typeof isHomeSectionShown>[1]) => isHomeSectionShown(sections, key);
   const coins = shown("coins") && state.source === "discover"
@@ -43,7 +43,7 @@ async function loadHome(state: HomeViewState, sections: HomeSectionPrefs, rows: 
     shown("posts") ? readFeedPageFromBackend().catch(failed("posts")) : null,
     // Blast's pins lead the page, so they are in the first paint: both lists and the curves' details come from the backend's 10 s shared caches.
     readFeaturedPresalesFromBackend().catch(failed("pinned-presales")),
-    launchpad ? readBondingHeroFromBackend().then((seed) => seed ?? failed("pinned-curves")()) : null,
+    readBondingHeroFromBackend().then((seed) => seed ?? failed("pinned-curves")()),
   ]).then(async ([{ read }, presales, traders, posts, pinnedPresales, pinnedCurves]) => {
     // A ready result can paint directly. An unfinished read streams into the card.
     const initial = await Promise.race([coins, coinsPending] as const);
@@ -62,7 +62,7 @@ async function loadHome(state: HomeViewState, sections: HomeSectionPrefs, rows: 
  * the browser.
  */
 export default async function SocialHomePage({ searchParams }: Readonly<{ searchParams: Promise<Record<string, string | string[] | undefined>> }>) {
-  const { launchpad, trading } = await requestLaunchFlags();
+  const { trading } = await requestLaunchFlags();
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(await searchParams)) {
     if (typeof value === "string") params.set(key, value);
@@ -71,14 +71,13 @@ export default async function SocialHomePage({ searchParams }: Readonly<{ search
   const jar = await cookies();
   const sections = parseHomeSections(jar.get(HOME_SECTIONS_COOKIE)?.value);
   const rows = parseHomeRows(jar.get(HOME_ROWS_COOKIE)?.value);
-  const loaded = await loadHome(state, sections, rows, launchpad);
+  const loaded = await loadHome(state, sections, rows);
   return (
     <CoinHome
       happening={loaded.happening}
       initial={loaded.coins}
       initialRows={rows}
       initialState={state}
-      launchpad={launchpad}
       nowMs={requestNow()}
       pinned={loaded.pinned}
       presales={loaded.presales}

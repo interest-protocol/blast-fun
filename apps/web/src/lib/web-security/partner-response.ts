@@ -1,5 +1,4 @@
-import { launchFlagsFor } from "@blast/core/lib/launch-flags.ts";
-import { presaleConfigFor, presaleConnectSources } from "#web/components/presale/config.ts";
+import { presaleConnectSources } from "#web/components/presale/config.ts";
 import { webConfig } from "../server-config.ts";
 import { securityHeaders } from "./browser-policy.ts";
 
@@ -10,11 +9,10 @@ export function applyPartnerBrowserHeaders<T extends Response>(
   accessHeaders: Headers,
   refused: boolean,
 ): T {
-  const flags = launchFlagsFor();
   const browserHeaders = securityHeaders({
     nonce: refused ? crypto.randomUUID().replaceAll("-", "") : null,
     development: webConfig().development,
-    presaleConnectSources: presaleConnectSources(presaleConfigFor(webConfig().presale, flags.presale)),
+    presaleConnectSources: presaleConnectSources(webConfig().presale),
   });
   for (const [name, value] of Object.entries(browserHeaders)) response.headers.set(name, value);
   for (const [name, value] of accessHeaders) {

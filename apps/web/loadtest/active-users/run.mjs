@@ -80,8 +80,8 @@ try {
     assert.equal(env.LOADTEST_EGRESS_MODE, 'block');
     assert(!env.LOADTEST_EGRESS_ALLOW);
   }
-  env = { ...env, BLAST_SOCIAL_ENABLED: 'true', BLAST_PRESALE_ENABLED: 'true', BLAST_TRADING_ENABLED: 'true',
-    BLAST_LAUNCHPAD_ENABLED: 'false', DATABASE_URL: urlAs(target.href, 'blast_web'),
+  env = { ...env, BLAST_SOCIAL_ENABLED: 'true', BLAST_TRADING_ENABLED: 'true',
+    DATABASE_URL: urlAs(target.href, 'blast_web'),
     DATABASE_REPLICA_URL: urlAs(target.href, 'blast_replica'), DATABASE_POOL_MAX: '10', DATABASE_REPLICA_POOL_MAX: '10',
     SOCIAL_ROUTE_METRIC_SAMPLE_RATE: '0', NEXT_TELEMETRY_DISABLED: '1',
     LOADTEST_EGRESS_MODE: 'block', LOADTEST_EGRESS_ALLOW: '', LOADTEST_EGRESS_LOG: path.join(dir, 'egress.jsonl'),

@@ -1,9 +1,8 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { use, useCallback, useState, type ReactNode } from "react";
 
-import { useLaunchpadEnabled } from "#web/components/blast-ui/launchpad-flag.tsx";
 import { StandaloneCurveTrade } from "#web/components/launchpad/trade/CoinTrade.tsx";
 import { CurveTradeUnavailable } from "#web/components/launchpad/trade/CurveTradeRail.tsx";
 import { queryKeys } from "#web/lib/query/keys.ts";
@@ -11,6 +10,13 @@ import { useAppQueryClient } from "#web/lib/query/provider.tsx";
 import { CurveTradeSetupContext } from "../curve-trade-context";
 import type { CoinAsset, CoinRecord } from "./coin-reads";
 import { curveLaunchQuery, mayTradeOnCurve } from "./curve-launch";
+
+function activeCurveLaunch(candidate: boolean, read: UseQueryResult<string | null>, retained: string | null): string | null {
+  if (!candidate) return null;
+  // A confirmed migration clears the rail even when it previously held a launch.
+  if (read.data !== undefined && !read.isPlaceholderData) return read.data;
+  return read.isError ? retained : (read.data ?? null);
+}
 
 /**
  * The panel's trade section for a coin still on its bonding curve: the coin
@@ -33,15 +39,11 @@ export function CurveLaunchTrade({
   children: ReactNode;
 }>) {
   const setup = use(CurveTradeSetupContext);
-  const launchpad = useLaunchpadEnabled();
   const client = useAppQueryClient();
-  const candidate = setup !== null && launchpad && mayTradeOnCurve(asset, coin);
+  const candidate = setup !== null && mayTradeOnCurve(asset, coin);
   const read = useQuery({ ...curveLaunchQuery(client, asset), enabled: candidate && visible }, client);
   const [retained, setRetained] = useState<string | null>(null);
-  // A real answer wins, including "no curve" after a migration; only a read that never answered falls back to the
-  // rail it found (the rail reads the launch from the node itself).
-  const answered = read.data !== undefined && !read.isPlaceholderData;
-  const launchId = !candidate ? null : answered ? read.data : read.isError ? retained : (read.data ?? null);
+  const launchId = activeCurveLaunch(candidate, read, retained);
   if (launchId !== null && launchId !== retained) setRetained(launchId);
   const { network, coin_type: coinType } = asset;
   // The rail refreshes its own curve read and the wallet reads after a trade; the panel's coin, chart and

@@ -1122,8 +1122,8 @@ test("the public image URL carries the renderer version and still passes the rou
   assert.equal(fullCard.searchParams.get("v"), CARD_RENDERER_VERSION);
   const uuid = "4cd44a35-f169-4a44-8ed7-255de22102bb";
   const imagePath = new URL(publicCardImagePath(uuid), url).pathname;
-  assert.equal(decideMissionControlRoute(imagePath, true, false, false), "allow");
-  assert.equal(decideMissionControlRoute(imagePath, false, false, false), "allow");
+  assert.equal(decideMissionControlRoute(imagePath, true), "allow");
+  assert.equal(decideMissionControlRoute(imagePath, false), "allow");
   const sharePage = new URL(publicCardSharePath(RECORD.cardId), url);
   assert.equal(sharePage.pathname, `/card/${RECORD.cardId}`);
   assert.equal(sharePage.searchParams.get("v"), CARD_RENDERER_VERSION);

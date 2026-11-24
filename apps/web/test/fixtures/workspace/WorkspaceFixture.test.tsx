@@ -20,7 +20,7 @@ const { WorkspaceFixture } = await import("./WorkspaceFixture");
 const { tabsProbe } = await import("./tabs-probe");
 const router = { push() {}, replace() {}, refresh() {}, back() {}, forward() {}, prefetch() {} };
 
-test("root workspace producer enters its real host and the six default adapters with production query composition", async () => {
+test("root workspace producer enters its real host and the discovery adapters with production query composition", async () => {
   const container = dom.document.createElement("div"); dom.document.body.append(container);
   const root = createRoot(container);
   try {
@@ -30,10 +30,9 @@ test("root workspace producer enters its real host and the six default adapters 
       await act(async () => new Promise((resolve) => setTimeout(resolve, 10)));
     }
     assert.ok(container.querySelector('[data-workspace-host]'));
-    // Coins, Presales and Posts stay on the rail; More exposes the remaining default adapters.
-    const views = ["Coins", "Presales", "Traders", "Activity", "Portfolio"] as const;
+    const views = ["Coins", "Presales", "Bonding", "Feed", "Traders", "Activity", "Portfolio"] as const;
     const tabs = [...container.querySelectorAll<HTMLButtonElement>('[role="tablist"][aria-label="What to discover"] [role="tab"]')];
-    assert.deepEqual(tabs.map(tab => tab.textContent), ["Coins", "Presales", "Posts"]);
+    assert.deepEqual(tabs.map(tab => tab.textContent), ["Coins", "Presales", "Bonding", "Posts"]);
     const more = () => container.querySelector<HTMLButtonElement>('[aria-label^="More views:"]')!;
     const moreItems = () => [...dom.document.querySelectorAll<HTMLElement>('[role="menuitemradio"]')];
     await act(async () => more().click());

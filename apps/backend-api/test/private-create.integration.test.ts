@@ -643,7 +643,6 @@ test(
       PATH: process.env.PATH,
       NODE_ENV: "test",
       TZ: "UTC",
-      BLAST_PRESALE_ENABLED: "team",
       BLAST_SOCIAL_ENABLED: "team",
       DATABASE_URL: database,
       PARTNER_VERIFIER_DATABASE_URL: await partnerVerifierFixture(database, t),

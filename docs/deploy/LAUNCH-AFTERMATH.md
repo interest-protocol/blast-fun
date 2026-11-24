@@ -61,7 +61,6 @@ Post-deploy configuration as recorded: Quote `0x2::sui::SUI` allowed; migration 
    - **TODO: launchpad package ID (upgraded): _unknown, fill after the upgrade_.**
    - **TODO: migrators package ID (upgraded): _unknown, fill after the upgrade_.**
    - **TODO: contracts commit and ABI hashes of the upgrade, the SDK registry entry, and the new `BLAST_DEPLOYMENT_FINGERPRINT`: _unknown_.**
-   - The launchpad itself stays **off** at launch (`BLAST_LAUNCHPAD_ENABLED` unset, LAUNCH-DEPLOY "What stays OFF"), so this gates the launchpad and the operational worker, not the presale.
 4. **Web migrations through `0104`** (LAUNCH-DEPLOY step 4): `0104_presale_lifecycle_aftermath` widens the lifecycle records' venue check and adds `aftermath_pool_creation_id`; its down refuses while an Aftermath record exists.
 5. **blast-infra on generation 2** (below) before the web deploy, so `chain_read_v1` and `/v1/presales` decode generation-2 sales.
 6. **Aftermath migration: proven on mainnet.** Contracts E2E-040 (`deployments/sui/mainnet/2026-10-09-blast-presale-e2e.json`, scenario `e040`, pass) created, filled, settled and migrated two real Aftermath vendor sales on mainnet, one per coin order. Their executed settle and migrate transactions are stored in `apps/workers/src/modules/presale/lifecycle/fixtures/e2e-040-aftermath-mainnet.json` (read from mainnet GraphQL), and `lifecycle.test.ts` ("E2E-040 mainnet") checks against the published identity:

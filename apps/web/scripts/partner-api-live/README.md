@@ -96,25 +96,7 @@ these assertions. Establish an authorized compatible backend/registry setup
 before executing a live fixture run; the check fails closed if real recognition
 or revocation does not work.
 
-## Fresh presale bootstrap
-
-For an authorized fresh-lineage candidate in `BLAST_PRESALE_ENABLED=team`
-mode, set `BLAST_PARTNER_EMPTY_PRESALE_BOOTSTRAP=true` on that candidate only. With three
-successful, complete empty status lists, the gate checks the featured list is
-empty and uses the issued partner key to request a randomly chosen missing
-presale. It requires the v1 JSON `404 not_found` response with `no-store`, then
-checks that revocation immediately blocks the same detail route. The price check
-uses SUI without presale context. An empty discovery list skips the curve pool
-and candle reads under the same flag (`poolDetail: empty-bootstrap`), but a
-random pool and its candles are still checked as refused after revocation. The
-docs, admission, HEAD, audit and cleanup checks still run.
-
-An `empty-bootstrap` report authorizes the private bootstrap stage only. After
-the first separately authorized real sale is indexed, remove the flag and rerun
-the full gate against the same canonical lineage. Require `presaleDetail` and
-`poolDetail` both `populated`, with a matching authenticated detail and
-presale-scoped prices, before public promotion. `candles: empty` means the
-newest launch has no trades yet; the pool and its candles still validated. No sale creation or chain transaction is part of this gate.
+The release check requires a real presale and bonding-curve pool. It also checks the candles response for pools with no trades yet.
 
 ## Safe failure diagnostics
 

@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import Ajv2020 from 'ajv/dist/2020.js';
 
@@ -93,13 +93,6 @@ export function createHttp({ origin, adminOrigin, token, fetcher = fetch, readFe
 }
 
 export function validateRead(id, response) {
-  if (id === 'presale-missing') {
-    requireCondition(response.status === 404 && response.body?.error?.code === 'not_found',
-      'Missing presale did not return the v1 not_found response.');
-    requireCondition(response.headers.get('x-blast-api-version') === '1' &&
-      response.headers.get('cache-control')?.includes('no-store'), 'Missing presale response lacked v1 headers.');
-    return;
-  }
   if (response.status !== 200) {
     // Fixed labels distinguish dependencies without logging response values.
     const reasons = new Map([
@@ -171,54 +164,41 @@ async function sequentially(items, operation) {
 
 /**
  * The versioned presale reads: three list pages, then detail, prices, search and status.
- * An empty market is accepted only as an explicitly approved bootstrap. Returns every path read.
  */
-async function presaleReads({ readBatch, allowEmptyPresales, report, setStage }) {
+async function presaleReads({ readBatch, report, setStage }) {
   const lists = ['live', 'upcoming', 'ended'].map(status =>
     ['presales', `/api/v1/presales?status=${status}&limit=2`]);
   const pages = await readBatch(lists);
   const presaleId = pages.flatMap(page => page.presales)[0]?.presale_id;
-  const bootstrap = !presaleId;
-  requireCondition(!bootstrap || (allowEmptyPresales && pages.every(page => page.next_cursor === null)),
-    'No real presale exists for the detail check. An empty bootstrap requires explicit approval and complete empty lists.');
-  report.presaleDetail = bootstrap ? 'empty-bootstrap' : 'populated';
-  const detailId = presaleId ?? `0x${randomBytes(32).toString('hex')}`;
-  const priceScope = presaleId ? `&presale=${presaleId}` : '';
+  requireCondition(presaleId, 'No real presale exists for the detail check.');
+  report.presaleDetail = 'populated';
   const cases = [
     ['featured', '/api/v1/presales/featured'],
-    [bootstrap ? 'presale-missing' : 'presale', `/api/v1/presales/${detailId}`],
-    ['prices', `/api/v1/prices?coin=${encodeURIComponent(SUI)}${priceScope}&window=24h&points=2`],
+    ['presale', `/api/v1/presales/${presaleId}`],
+    ['prices', `/api/v1/prices?coin=${encodeURIComponent(SUI)}&presale=${presaleId}&window=24h&points=2`],
     ['search', '/api/v1/search?q=SUI&group=coins&limit=2'],
     ['status', '/api/v1/market/status'],
   ];
   const bodies = await readBatch(cases);
-  if (bootstrap) {
-    setStage('featured');
-    requireCondition(bodies[0].presales.length === 0, 'Featured returned a presale during empty bootstrap.');
-  } else {
-    setStage('presale');
-    requireCondition(bodies[1].presale.presale_id === presaleId, 'Detail returned a different presale.');
-  }
+  setStage('presale');
+  requireCondition(bodies[1].presale.presale_id === presaleId, 'Detail returned a different presale.');
   return [...lists, ...cases].map(([, path]) => path);
 }
 
 /**
  * One real bonding-curve pool and its candles. Discovery's newest launch names it: a curve's pool
- * ID is its launch ID. Only the approved empty bootstrap may skip the reads; it still returns a
- * random pool's paths so revocation is checked on both routes. Returns the paths to revoke.
+ * ID is its launch ID. Returns the paths to revoke.
  */
-async function poolReads({ readBatch, allowEmptyPresales, report }) {
+async function poolReads({ readBatch, report }) {
   const discovery = ['discovery', '/api/v1/discovery?view=new&limit=1'];
   const [listed] = await readBatch([discovery]);
   const launchId = listed.section.data?.rows[0]?.launchId;
-  requireCondition(launchId || allowEmptyPresales,
-    'No bonding-curve launch exists for the pool check. An empty bootstrap requires explicit approval.');
-  requireCondition(!launchId || listed.metrics?.[launchId], 'Discovery sent no metrics for its launch.');
-  report.poolDetail = launchId ? 'populated' : 'empty-bootstrap';
-  const pool = ['pool', `/api/v1/market/pools/blast_curve/${launchId ?? `0x${randomBytes(32).toString('hex')}`}`];
+  requireCondition(launchId, 'No bonding-curve launch exists for the pool check.');
+  requireCondition(listed.metrics?.[launchId], 'Discovery sent no metrics for its launch.');
+  report.poolDetail = 'populated';
+  const pool = ['pool', `/api/v1/market/pools/blast_curve/${launchId}`];
   const candles = ['candles', `${pool[1]}/candles?interval=1m&limit=2`];
   const paths = [discovery, pool, candles].map(([, path]) => path);
-  if (!launchId) return paths;
   const [detail] = await readBatch([pool]);
   requireCondition(detail.pool.pool_key === `blast_curve:${launchId}`, 'Pool read returned a different pool.');
   const [bars] = await readBatch([candles]);
@@ -228,7 +208,7 @@ async function poolReads({ readBatch, allowEmptyPresales, report }) {
 }
 
 /** Issue/revoke use the same authenticated HTTP route as the admin console. */
-export async function runCheck({ http, cleanup, signal, validate = validateRead, docs, fixtureId = randomUUID(), allowEmptyPresales = false }) {
+export async function runCheck({ http, cleanup, signal, validate = validateRead, docs, fixtureId = randomUUID() }) {
   if (cleanup.signal) signal = signal ? AbortSignal.any([signal, cleanup.signal]) : cleanup.signal;
   const runId = fixtureId;
   const label = `release-gate:${runId}`;
@@ -313,8 +293,8 @@ export async function runCheck({ http, cleanup, signal, validate = validateRead,
       return sequentially(cases, ([id, path]) => { stage = id; return read(id, path); });
     }
     const routes = [
-      ...await presaleReads({ readBatch, allowEmptyPresales, report, setStage: (next) => { stage = next; } }),
-      ...await poolReads({ readBatch, allowEmptyPresales, report }),
+      ...await presaleReads({ readBatch, report, setStage: (next) => { stage = next; } }),
+      ...await poolReads({ readBatch, report }),
     ];
     stage = 'HEAD';
     const head = await http.read(routes[0], key, 'HEAD');

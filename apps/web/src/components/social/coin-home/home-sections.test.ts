@@ -56,14 +56,11 @@ test("hiding and showing: the same object when nothing changes; every section ma
   assert.equal(serializeHomeSections(none), "-coins.-bonding.-presales.-posts.-traders");
 });
 
-test("Bonding Curves skips disabled moves, and its saved position and visibility survive", () => {
+test("Bonding Curves keeps its saved position and visibility", () => {
   const prefs = parseHomeSections("coins.presales.bonding.posts.traders");
-  assert.deepEqual(shownHomeSections(prefs, true), ["coins", "presales", "bonding", "posts", "traders"]);
-  assert.deepEqual(shownHomeSections(prefs, false), ["coins", "presales", "posts", "traders"]);
-  assert.equal(moveHomeSection(prefs, "bonding", 1, false), prefs);
-  assert.equal(moveHomeSection(prefs, "presales", 1, false).order[2], "bonding");
+  assert.deepEqual(shownHomeSections(prefs), ["coins", "presales", "bonding", "posts", "traders"]);
   const hidden = setHomeSectionShown(prefs, "bonding", false);
-  const saved = parseHomeSections(serializeHomeSections(moveHomeSection(hidden, "posts", -1, false)));
+  const saved = parseHomeSections(serializeHomeSections(moveHomeSection(hidden, "posts", -1)));
   assert.equal(saved.order[2], "bonding");
   assert.deepEqual(saved.hidden, ["bonding"]);
 });

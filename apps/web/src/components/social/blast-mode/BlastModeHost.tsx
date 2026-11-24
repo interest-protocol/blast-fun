@@ -163,15 +163,12 @@ export function BlastModeHost({
   slots,
   onRetryOwner,
   getAccessToken,
-  launchpad = false,
   curveTrade = null,
 }: Readonly<{
   accountState?: AccountSession;
   resolveOwner?: WorkspaceOwnerResolver;
   ownerKey?: string;
   slots?: WorkspaceSlots;
-  /** The launchpad is on for this request (`BLAST_LAUNCHPAD_ENABLED`): Discover offers Bonding, its curves. */
-  launchpad?: boolean;
   /** The request's curve trading setup: a coin panel buys a live bonding-curve coin with the coin page's rail. */
   curveTrade?: CurveTradeSetup | null;
   onRetryOwner?: () => void;
@@ -260,7 +257,6 @@ export function BlastModeHost({
         sessionDurable={state.durable}
         slots={{
           ...defaultSlots,
-          unavailable: launchpad ? [] : ["Bonding"],
           ...slots,
           data: { ...defaultSlots.data, ...slots?.data },
         }}

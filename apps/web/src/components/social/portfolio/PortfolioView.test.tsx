@@ -13,7 +13,6 @@ import type { SocialMePresales } from "@blast/core/modules/social/contracts/prof
 
 import type { ClaimPath } from "../claim/claims";
 import { FeedOverlaysProvider } from "../feed-ui/shell-bridge";
-import { LaunchpadFlagProvider } from "#web/components/blast-ui/launchpad-flag.tsx";
 import type { HoldingCoin } from "../profile/profile-model";
 import type { PortfolioViewData } from "./PortfolioView";
 const { AppRouterContext } = await import("next/dist/shared/lib/app-router-context.shared-runtime");
@@ -51,8 +50,6 @@ const DATA: PortfolioViewData = {
   rewards: { status: "loading", coins: [], latest: [], retry: () => undefined },
 };
 let close: (() => Promise<void>) | undefined;
-/** The request's launchpad flag the shell would provide. */
-let launchpadOn = true;
 let rerender: ((data: Partial<PortfolioViewData>) => Promise<void>) | undefined;
 afterEach(async () => { await close?.(); close = undefined; });
 const render = async (data: Partial<PortfolioViewData> = {}, tab: "coins" | "presales" | "claims" = "coins", path?: ClaimPath) => {
@@ -64,9 +61,9 @@ const render = async (data: Partial<PortfolioViewData> = {}, tab: "coins" | "pre
   document.body.append(container);
   const root = createRoot(container);
   close = async () => { await act(async () => root.unmount()); container.remove(); };
-  rerender = async (next) => { await act(async () => root.render(<AppRouterContext value={router}><LaunchpadFlagProvider value={launchpadOn}><FeedOverlaysProvider value={{ claimPath: path }}>
+  rerender = async (next) => { await act(async () => root.render(<AppRouterContext value={router}><FeedOverlaysProvider value={{ claimPath: path }}>
     <PortfolioView data={{ ...DATA, ...data, ...next }} nowMs={0} signIn={<a href="/sign-in">Sign in</a>} />
-  </FeedOverlaysProvider></LaunchpadFlagProvider></AppRouterContext>)); };
+  </FeedOverlaysProvider></AppRouterContext>)); };
   await rerender({});
   await act(async () => tabButton(container, tab)?.click());
   return container.innerHTML;
@@ -302,22 +299,12 @@ test("LP-13: Launches lists the launches each linked wallet created, read in the
   assert.match(text(await render({ mode: "visitor", launchWallets: [] }, "claims")), /Sign in to see your vestings/);
 });
 
-test("#602: while the launchpad is off Claims has no launchpad lists, and an old Launches link opens Claims", async () => {
-  launchpadOn = false;
-  try {
-    await render({ launchWallets: [`0x${"a1".repeat(32)}`] });
-    assert.deepEqual([...document.querySelectorAll("#pfTabs [role=tab]")].map((tab) => tab.textContent), ["Coins", "Presales", "Claims"]);
-    const claims = await render({ mode: "loading", launchWallets: undefined }, "claims");
-    assert.doesNotMatch(claims, /launchpad creator fees|launchpad holder rewards|launchpad creator rights|Your launches/i);
-    // A client navigation to the old /portfolio/launches selects Claims and never reads /api/launchpad.
-    window.history.replaceState(null, "", "/portfolio/launches");
-    window.dispatchEvent(new window.PopStateEvent("popstate"));
-    await rerender!({ launchWallets: [`0x${"a1".repeat(32)}`] });
-    assert.equal(document.querySelector('#pfTabs [aria-selected="true"]')?.textContent, "Claims");
-    assert.doesNotMatch(document.querySelector("#pfBody2")?.textContent ?? "", /Launches couldn’t load/);
-  } finally {
-    launchpadOn = true;
-  }
+test("an old Launches link opens Claims", async () => {
+  await render({ launchWallets: [] });
+  window.history.replaceState(null, "", "/portfolio/launches");
+  window.dispatchEvent(new window.PopStateEvent("popstate"));
+  await rerender!({ launchWallets: [] });
+  assert.equal(document.querySelector('#pfTabs [aria-selected="true"]')?.textContent, "Claims");
 });
 
 test("A-03, A-04, P-13: with a claim path a Presales or Claims row claims in place; without one its Claim links to the sale", async () => {

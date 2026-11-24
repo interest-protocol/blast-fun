@@ -102,7 +102,7 @@ export function RedesignFixture() {
   return (
     <div className={`${geist.variable} ${geistMono.variable} ${bricolage.variable}`} data-blast-ui="" data-theme={theme}>
       <QueryProvider>
-        <AppShell signedIn={false} viewer={null} portfolio={{ status: "unavailable" }} signInHref="/sign-in" overlays={<BlastModeHost resolveOwner={resolve} ownerKey="redesign-guest" slots={slots} launchpad />}>
+        <AppShell signedIn={false} viewer={null} portfolio={{ status: "unavailable" }} signInHref="/sign-in" overlays={<BlastModeHost resolveOwner={resolve} ownerKey="redesign-guest" slots={slots} />}>
           <Entry seed={() => {
             const encoded = encodeWorkspace(store.getSnapshot());
             if (!encoded.ok) throw new Error(encoded.reason);

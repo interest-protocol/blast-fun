@@ -61,7 +61,7 @@ export function privateBackendRelay(
       if (source.origin !== config.siteOrigin) return unavailable();
       // The signed stream follows the same launch gates as the presale activity read.
       if (contract.id === MARKET_STREAM_ROUTE_ID && source.searchParams.has("presale") &&
-          !(isLaunchEnabled("presale") && isLaunchEnabled("social") && isLaunchEnabled("trading"))) {
+          !(isLaunchEnabled("social") && isLaunchEnabled("trading"))) {
         source.searchParams.delete("presale");
       }
       const body = await readBody(request, contract.maxBodyBytes);

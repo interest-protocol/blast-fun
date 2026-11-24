@@ -20,12 +20,12 @@ const image = createPresaleShareImageRoute({
   },
   logo: noArtwork, cover: noArtwork, render: renderPresaleSharePng,
 });
-const canonical = createPresaleShareHandler({ image, flags: () => ({ presale: state.enabled, social: state.enabled }) });
+const canonical = createPresaleShareHandler({ image, socialEnabled: () => state.enabled });
 const bridge = { state, async relay(request: Request) { state.relays++; return canonical(request, testClient()); } };
 (globalThis as Record<symbol, unknown>)[Symbol.for(key)] = bridge;
 const source = `const bridge = globalThis[Symbol.for(${JSON.stringify(key)})];
 const state = bridge.state;
-export async function requestLaunchFlags() { return { presale: state.enabled, social: state.enabled }; }
+export async function requestLaunchFlags() { return { social: state.enabled }; }
 export async function saleOf() { state.reads++; return state.status === "ok" ? { status: "ok", detail: state.detail } : { status: state.status }; }
 export const backendPrivateRequest = (request) => bridge.relay(request);`;
 registerHooks({ resolve(specifier, context, next) {
@@ -39,7 +39,7 @@ const { GET, HEAD } = await import("../../../app/presale/(tools)/[presaleId]/sha
 const params = Promise.resolve({ presaleId: state.detail.presale.presale_id });
 const request = (id = state.detail.presale.presale_id) => new Request(`https://www.blast.fun/presale/${id}/share-image`);
 
-test("page metadata and thin image transport reach the canonical PNG owner and preserve launch visibility", async (t) => {
+test("page metadata and thin image transport reach the canonical PNG owner and respect social visibility", async (t) => {
   assert.deepEqual(await generateMetadata({ params }), presaleShareMetadata(state.detail.presale));
   assert.equal(GET, HEAD);
   const response = await GET(request());

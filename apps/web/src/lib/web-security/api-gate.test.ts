@@ -587,13 +587,11 @@ test("review M4: a dot, escape or case spelling of /api never reaches an API rou
       `${path} stays a page path`,
     );
     // Under every flag, the route policy never lets such a path through as itself.
-    for (let flags = 0; flags < 16; flags += 1) {
+    for (let flags = 0; flags < 4; flags += 1) {
       const decision = decideMissionControlRoute(
         request.nextUrl.pathname,
         Boolean(flags & 1),
         Boolean(flags & 2),
-        Boolean(flags & 4),
-        Boolean(flags & 8),
       );
       assert.notEqual(decision, "allow", `${path} with flags ${flags}`);
     }

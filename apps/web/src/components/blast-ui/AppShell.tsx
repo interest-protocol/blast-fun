@@ -33,7 +33,6 @@ import {
 import type { CreateMenuPayload } from "./menu-placement.ts";
 import { MissingPageProvider } from "./shell-missing-page";
 import { BONDING_PATH, HOME_PATH, INVITES_PATH, isHomePath, PORTFOLIO_PATH, PRESALES_PATH, profilePath, SETTINGS_PATH, shellNavKeyFor, shortcutFor, type ShellActionName, type ShellNavKey } from "./nav";
-import { useLaunchpadEnabled } from "./launchpad-flag";
 import { portfolioTabAt } from "#web/components/blast-ui/portfolio-navigation.ts";
 import { PrimaryLink as Link } from "./NavigationLink";
 import { CoinPageWalletContext } from "./CoinPageWallet";
@@ -399,11 +398,10 @@ function ShellFrame({
 }
 
 function LaunchDestinations({ current, mobile = false }: Readonly<{ current: ShellNavKey | null; mobile?: boolean }>) {
-  const launchpadEnabled = useLaunchpadEnabled();
   const Item = mobile ? TabItem : RailItem;
   return (
     <>
-      {launchpadEnabled ? <Item current={current} href={BONDING_PATH} icon={<CurveIcon />} item="bonding" label="Bonding" prefetch={false} /> : null}
+      <Item current={current} href={BONDING_PATH} icon={<CurveIcon />} item="bonding" label="Bonding" prefetch={false} />
       <Item current={current} href={PRESALES_PATH} icon={<TicketIcon />} item="presales" label="Presales" />
     </>
   );
