@@ -305,8 +305,8 @@ export function SaleMarketView({
   return (
     <>
       {chart ? chart({ note, move: dayMove(market) }) : note}
-      {activity?.(holders)}
       {overview}
+      {activity?.(holders)}
       {children}
       {!activity && (
         <section className={cx("card sale-sec")} aria-label="Token holders">

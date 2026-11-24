@@ -176,12 +176,12 @@ test("only a migrated sale mounts market data, with a separate query key from Ho
       />,
     ),
   );
-  // The chart and trades lead the market figures and claims, all before the history.
+  // The market figures follow the chart and precede trades and claim details.
   assert.ok(html.indexOf("Volume 24h") < html.indexOf('id="presaleHistory"'));
   assert.match(html, /<dt>Holders<\/dt><dd>/);
-  assert.ok(html.indexOf("data-sale-market") < html.indexOf('aria-label="Trading activity"'));
-  assert.ok(html.indexOf('aria-label="Trading activity"') < html.indexOf("Volume 24h"));
-  assert.ok(html.indexOf("Volume 24h") < html.indexOf("Claim my allocation"));
+  assert.ok(html.indexOf("data-sale-market") < html.indexOf("Volume 24h"));
+  assert.ok(html.indexOf("Volume 24h") < html.indexOf('aria-label="Trading activity"'));
+  assert.ok(html.indexOf('aria-label="Trading activity"') < html.indexOf("Claim my allocation"));
   assert.ok(html.indexOf("Claim my allocation") < html.indexOf('id="presaleHistory"'));
   assert.deepEqual([...html.matchAll(/<button[^>]*role="tab"[^>]*>([^<]+)<\/button>/g)].map((match) => match[1]).slice(0, 3), ["Trades", "Holders", "Posts"]);
   // The Holders tab holds the top holders with the pool's allocation at launch.
@@ -229,11 +229,11 @@ function fixtureCoinMarket(overrides: Partial<HomeCoinMarket> = {}): HomeCoinMar
   };
 }
 
-test("Coin board: the chart and trades lead the FDV tile and the price card gets the day's move", () => {
+test("Coin board: FDV is between the chart and trades, and the price card gets the day's move", () => {
   let extras: MarketExtras | null = null;
   const chart = (value: MarketExtras) => { extras = value; return <section>Chart fixture</section>; };
   const html = renderToStaticMarkup(view(fixtureMarket(), { market: fixtureCoinMarket(), chart, activity: () => <section>Recent trades fixture</section> }));
-  assert.match(html, /Chart fixture.*Recent trades fixture.*<dt>FDV<\/dt>/);
+  assert.match(html, /Chart fixture.*<dt>FDV<\/dt>.*Recent trades fixture/);
   // Without a pool read the liquidity tile is left out: FDV, Volume 24h, Holders.
   assert.deepEqual([...html.matchAll(/<dt>([^<]+)<\/dt><dd>/g)].map((match) => match[1]), ["FDV", "Holders", "Volume 24h"]);
   assert.match(html, /<dt>FDV<\/dt><dd>.*\$412\.7M/);
