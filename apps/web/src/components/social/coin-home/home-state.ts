@@ -34,6 +34,8 @@ export type HomeViewState = Readonly<{
   page: number;
 }>;
 
+export type HomeFeedState = Omit<HomeViewState, "sort"> & Readonly<{ sort: HomeSort | "mixed" }>;
+
 export const HOME_DEFAULT_VIEW: HomeViewState = Object.freeze({
   source: "discover",
   sort: "held",
@@ -43,6 +45,8 @@ export const HOME_DEFAULT_VIEW: HomeViewState = Object.freeze({
   tradable: false,
   page: 1,
 });
+
+export const HOME_DEFAULT_FEED: HomeFeedState = Object.freeze({ ...HOME_DEFAULT_VIEW, sort: "mixed" });
 
 /** The minimum-participants choices the filter offers. */
 export const MIN_PARTICIPANT_CHOICES = [0, 2, 5, 10] as const;
@@ -61,29 +65,35 @@ function pageOf(raw: string | null): number {
   return value <= HOME_PAGE_LAST ? value : 1;
 }
 
-export function viewStateOf(params: URLSearchParams): HomeViewState {
+export function viewStateOf(params: URLSearchParams): HomeFeedState {
   const source = params.get(KEYS.source);
   const sort = params.get(KEYS.sort);
   const window = params.get(KEYS.window);
   const age = params.get(KEYS.age);
   const min = params.get(KEYS.minParticipants);
   const minParticipants = min !== null && /^[0-9]{1,4}$/.test(min) && (MIN_PARTICIPANT_CHOICES as readonly number[]).includes(Number(min)) ? Number(min) : 0;
-  return {
-    source: isHomeSource(source) ? source : HOME_DEFAULT_VIEW.source,
-    sort: isHomeSort(sort) ? sort : HOME_DEFAULT_VIEW.sort,
+  const filters = {
     window: isHomeWindow(window) ? window : HOME_DEFAULT_VIEW.window,
     minParticipants,
     age: isHomeAge(age) ? age : HOME_DEFAULT_VIEW.age,
     tradable: params.get(KEYS.tradable) === "1",
-    page: pageOf(params.get(KEYS.page)),
+  };
+  const page = pageOf(params.get(KEYS.page));
+  // Older ranked links omitted `sort=held`, including links to later pages.
+  const ranked = sort !== "mixed" && hasRankedQueryFields({ ...filters, page });
+  return {
+    source: isHomeSource(source) ? source : HOME_DEFAULT_VIEW.source,
+    sort: isHomeSort(sort) ? sort : ranked ? HOME_DEFAULT_VIEW.sort : HOME_DEFAULT_FEED.sort,
+    ...filters,
+    page,
   };
 }
 
 /** The query string of a view state, `""` for the default view. */
-export function viewSearchOf(state: HomeViewState): string {
+export function viewSearchOf(state: HomeFeedState): string {
   const params = new URLSearchParams();
   if (state.source !== HOME_DEFAULT_VIEW.source) params.set(KEYS.source, state.source);
-  if (state.sort !== HOME_DEFAULT_VIEW.sort) params.set(KEYS.sort, state.sort);
+  if (state.sort !== HOME_DEFAULT_FEED.sort || hasRankedQueryFields(state)) params.set(KEYS.sort, state.sort);
   if (state.window !== HOME_DEFAULT_VIEW.window) params.set(KEYS.window, state.window);
   if (state.minParticipants !== 0) params.set(KEYS.minParticipants, String(state.minParticipants));
   if (state.age !== "all") params.set(KEYS.age, state.age);
@@ -93,23 +103,30 @@ export function viewSearchOf(state: HomeViewState): string {
   return text ? `?${text}` : "";
 }
 
+function hasRankedQueryFields(state: Pick<HomeViewState, "age" | "minParticipants" | "tradable" | "page" | "window">): boolean {
+  return state.page > 1 || activeFilterCount(state) > 0 || state.window !== HOME_DEFAULT_VIEW.window;
+}
+
 /** Whether two states show the same list apart from its page (a new list starts on page 1; see `withView`). */
-export function sameListView(a: HomeViewState, b: HomeViewState): boolean {
+export function sameListView(a: HomeFeedState, b: HomeFeedState): boolean {
   return a.source === b.source && a.sort === b.sort && a.window === b.window && a.minParticipants === b.minParticipants && a.age === b.age && a.tradable === b.tradable;
 }
 
 /** The next state for a change: any change but the page itself starts the list on page 1. */
-export function withView(current: HomeViewState, next: HomeViewState): HomeViewState {
+export function withView(current: HomeFeedState, next: HomeFeedState): HomeFeedState {
   return sameListView(current, next) ? next : { ...next, page: 1 };
 }
 
 /** The Discover read a view state asks for, at the device's rows per page. */
-export function discoverQueryOf(state: HomeViewState, rows: number = HOME_PAGE_DEFAULT): HomeQuery {
+export function discoverQueryOf(state: HomeFeedState, rows: number = HOME_PAGE_DEFAULT): HomeQuery {
+  if (state.sort === "mixed") {
+    return { ...HOME_DEFAULT_QUERY, sort: "trending", window: "1h", limit: HOME_PAGE_DEFAULT };
+  }
   return { ...HOME_DEFAULT_QUERY, sort: state.sort, window: state.window, minParticipants: state.minParticipants, age: state.age, tradable: state.tradable, limit: rows, page: state.page };
 }
 
 /** How many filters are away from their default (the Filters button's badge). */
-export function activeFilterCount(state: HomeViewState): number {
+export function activeFilterCount(state: Pick<HomeViewState, "age" | "minParticipants" | "tradable">): number {
   return (state.minParticipants !== 0 ? 1 : 0) + (state.age !== "all" ? 1 : 0) + (state.tradable ? 1 : 0);
 }
 
@@ -118,7 +135,7 @@ export function controlsApply(source: HomeSource): boolean {
   return source === "discover";
 }
 
-export const SORT_LABELS: Readonly<Record<HomeSort, string>> = { relevant: "Relevant", trending: "Volume", newest: "Newest", held: "Most held" };
+export const SORT_LABELS: Readonly<Record<HomeFeedState["sort"], string>> = { mixed: "Discover", relevant: "Relevant", trending: "Volume", newest: "Newest", held: "Most held" };
 export const SORT_HINTS: Readonly<Partial<Record<HomeSort, string>>> = {
   relevant: "Unique participants, then activity (up to three trades per person), then recency",
   trending: "Trade and presale dollar volume, then unique participants",

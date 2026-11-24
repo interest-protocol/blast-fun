@@ -155,7 +155,7 @@ test("R3-26-AC-1/AC-2: a hint makes the store read at once; what is shown is tha
     tape: [{ activity_id: "666:6:6:6", usd: "5555555.00", symbol: "EVIL" }],
   });
   assert.deepEqual(h.fetched.map((read) => read.at - hintAt), [-10_000, 0], "read at once: no floor or gap was in the way");
-  assert.ok(h.fetched.every((read) => read.url === "/api/social/happening" && read.credentials === "same-origin"), "the public read, signed in or out");
+  assert.ok(h.fetched.every((read) => read.url === "/api/social/happening?recent_presales=1" && read.credentials === "same-origin"), "the public read, signed in or out");
   assert.deepEqual(h.painted.map((paint) => ({ cause: paint.hint.cause, ms: paint.at - paint.hint.atMs })), [
     { cause: "connect", ms: 5_000 },
     { cause: "hint", ms: 0 },

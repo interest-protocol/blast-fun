@@ -39,7 +39,8 @@ import { saleMetadataJoinSql } from "@blast/server/modules/social/sales/store.ts
  * 3. the tape: the newest rows of that index whose sale is shown, then the
  *    naming rule once per row (at most `HAPPENING_TAPE_MAX` owner lookups by
  *    address);
- * 4. the open/pending presales and the admin's Home pins, joined to shown sales;
+ * 4. the open, pending and recently backed presales, plus the admin's Home
+ *    pins, joined to shown sales;
  * 5. their chips (the post mapper's presale read, prices included);
  * 6. their commits in the velocity window, by blast-infra's
  *    `(presale_id, timestamp_ms DESC)` index;
@@ -109,8 +110,10 @@ ORDER BY l.timestamp_ms DESC, l.checkpoint DESC, l.tx_slot DESC, l.event_slot DE
 
 /**
  * The presales Home can show, with the role each plays: open ones still taking
- * commits by closing time and pending ones by opening time. $1 clock, $2 limit per
- * role. "Open" and "pending" are the presales list's own Live and Upcoming
+ * commits by closing time, pending ones by opening time, and the most recently
+ * backed live presales in the last hour. $1 chain clock, $2 open/pending limit,
+ * $3 presale checkpoint, $4 server clock, $5 include recent presales.
+ * "Open" and "pending" are the list's Live and Upcoming
  * tabs (`statusFilterSql`), so Home and the list agree on what is live; it
  * stays one statement (one round trip; reading the list's tab keys as two
  * more statements measured no faster and needs two more replica connections
@@ -120,7 +123,16 @@ const CANDIDATES_SQL = `SELECT * FROM ((SELECT p.presale_id, 'open' AS role, NUL
   FROM ${PUBLIC_PRESALES} p WHERE ${statusFilterSql("live", () => "$1::bigint")} ORDER BY p.end_ms, p.presale_id LIMIT $2::int)
 UNION ALL
 (SELECT p.presale_id, 'pending', NULL::bigint, p.start_ms
-  FROM ${PUBLIC_PRESALES} p WHERE ${statusFilterSql("upcoming", () => "$1::bigint")} ORDER BY p.start_ms, p.presale_id LIMIT $2::int)) AS candidates`;
+  FROM ${PUBLIC_PRESALES} p WHERE ${statusFilterSql("upcoming", () => "$1::bigint")} ORDER BY p.start_ms, p.presale_id LIMIT $2::int)
+UNION ALL
+(SELECT p.presale_id, 'recent', NULL::bigint, max(a.timestamp_ms) AS last_commit_ms
+  FROM chain_read_v1.activity a JOIN ${PUBLIC_PRESALES} p ON p.presale_id = a.presale_id
+  WHERE $5::boolean AND a.kind = 'presale_commit' AND a.timestamp_ms >= $4::bigint - ${HAPPENING_LAST_HOUR_MS}
+    AND a.timestamp_ms <= $1::bigint AND a.checkpoint <= $3::bigint
+    AND ${statusFilterSql("live", () => "$4::bigint")}
+  GROUP BY p.presale_id
+  ORDER BY last_commit_ms DESC, p.presale_id
+  LIMIT ${HAPPENING_LIST_MAX})) AS candidates`;
 
 /** The same saved pins that lead Home's posts; no automatic recap fallback. */
 const PINNED_SQL = `SELECT p.presale_id, l.launched_ms::text, m.cover_key, m.cover_url, m.cover_width, m.cover_height,
@@ -180,13 +192,14 @@ type PinnedRow = {
   cover_source_width?: number | null;
   cover_source_height?: number | null;
 };
-type CandidateRow = PinnedRow & { role: "open" | "pending"; sort_ms: string };
+type CandidateRow = PinnedRow & { role: "open" | "pending" | "recent"; sort_ms: string };
 
 export type HappeningRequest = Readonly<{
   config: SocialConfig;
   nowMs: number;
   /** Activity kinds left out (the trade kinds while trading is hidden, OA-7). */
   hiddenKinds: readonly string[];
+  includeRecentPresales?: boolean;
 }>;
 
 /** `atoms ÷ 10^decimals` as a plain decimal string (exact; trailing zeros trimmed). */
@@ -259,7 +272,7 @@ function velocityOf(windowRaised: string, presale: FeedItemPresale): number {
 
 /** The whole `GET /api/social/happening` body. */
 export async function readHappening(db: ReadableDatabase, request: HappeningRequest): Promise<SocialHappeningResponse> {
-  const { config, nowMs } = request;
+  const { config, nowMs, includeRecentPresales = false } = request;
   const [bounds, asOf] = await settledAll([readBounds(db), readAsOf(db)]);
   if (!asOf) throw new SocialRouteError("service_unavailable");
   const clockMs = Math.min(nowMs, bounds.presaleMs);
@@ -269,7 +282,7 @@ export async function readHappening(db: ReadableDatabase, request: HappeningRequ
   // Dependent sale reads start as soon as candidates/pins settle, alongside Top coins.
   const presales = async () => {
     const [candidates, pins] = await settledAll([
-      Promise.resolve().then(() => db.read<CandidateRow>(CANDIDATES_SQL, [clockMs, HAPPENING_TODAY_MAX])),
+      Promise.resolve().then(() => db.read<CandidateRow>(CANDIDATES_SQL, [clockMs, HAPPENING_TODAY_MAX, bounds.presaleCheckpoint, nowMs, includeRecentPresales])),
       Promise.resolve().then(() => db.read<PinnedRow>(PINNED_SQL, [HAPPENING_TODAY_MAX, nowMs])),
     ]);
     const ids = [...new Set([...candidates.rows, ...pins.rows].map((row) => row.presale_id))];
@@ -302,14 +315,18 @@ export async function readHappening(db: ReadableDatabase, request: HappeningRequ
         launched_ms: row.launched_ms === null ? null : Number(row.launched_ms),
       }];
     };
-    const byRole = (role: CandidateRow["role"]) => candidates.rows.filter((row) => row.role === role).flatMap(saleOf);
+    const byRole = (role: "open" | "pending") => candidates.rows.filter((row) => row.role === role).flatMap(saleOf);
     const open = byRole("open");
     const pending = byRole("pending");
     const fastest = [...open]
       .sort((a, b) => velocityOf(b.window_raised, b.presale) - velocityOf(a.window_raised, a.presale) || a.presale.end_ms - b.presale.end_ms)
       .slice(0, HAPPENING_LIST_MAX);
     const today = pins.rows.flatMap(saleOf);
-    return { fastest, opening_soon: pending.slice(0, HAPPENING_LIST_MAX), today };
+    const recent_presales = candidates.rows.flatMap((row) => {
+      const presale = chips.get(row.presale_id);
+      return row.role === "recent" && presale ? [{ presale, last_commit_ms: Number(row.sort_ms) }] : [];
+    }).sort((a, b) => b.last_commit_ms - a.last_commit_ms || a.presale.presale_id.localeCompare(b.presale.presale_id));
+    return { fastest, opening_soon: pending.slice(0, HAPPENING_LIST_MAX), today, ...(includeRecentPresales && { recent_presales }) };
   };
   const [[lastHour, tape, topCoins], lists] = await settledAll([
     settledAll([
@@ -337,11 +354,12 @@ export async function readHappening(db: ReadableDatabase, request: HappeningRequ
  */
 export function createHappeningReader(database: () => ReadableDatabase, now = Date.now) {
   const share = createPublicPresaleReader(Date.now, "happening");
-  return async (request: Readonly<{ config: SocialConfig; hiddenKinds: readonly string[] }>): Promise<SocialHappeningResponse> => {
+  return async (request: Omit<HappeningRequest, "nowMs">): Promise<SocialHappeningResponse> => {
     const config = { ...request.config };
     const hiddenKinds = [...new Set(request.hiddenKinds)].sort();
-    const key = JSON.stringify([config.fastest_window_ms, hiddenKinds]);
-    const response = await share(key, () => readHappening(database(), { config, hiddenKinds, nowMs: now() }), 0);
+    const includeRecentPresales = request.includeRecentPresales ?? false;
+    const key = JSON.stringify([config.fastest_window_ms, hiddenKinds, includeRecentPresales]);
+    const response = await share(key, () => readHappening(database(), { config, hiddenKinds, includeRecentPresales, nowMs: now() }), 0);
     return structuredClone(response);
   };
 }

@@ -9,7 +9,7 @@ import { CoinHome } from "#web/components/social/coin-home/CoinHome.tsx";
 import { HOME_ROWS_COOKIE, parseHomeRows } from "#web/components/social/coin-home/home-rows.ts";
 import { HOME_SECTIONS_COOKIE, isHomeSectionShown, parseHomeSections, type HomeSectionPrefs } from "#web/components/social/coin-home/home-sections.ts";
 import { presaleIdsOf } from "#web/components/social/coin-home/presale-ids.ts";
-import { discoverQueryOf, viewStateOf, type HomeViewState } from "#web/components/social/coin-home/home-state.ts";
+import { discoverQueryOf, viewStateOf, type HomeFeedState } from "#web/components/social/coin-home/home-state.ts";
 import { recordMetric } from "@blast/core/lib/metrics.ts";
 import { requestLaunchFlags } from "#web/lib/launch-flags.server.ts";
 import { readBondingHeroFromBackend } from "#web/lib/backend-api/bonding.ts";
@@ -29,7 +29,7 @@ const coinsPending = Symbol("coins pending");
 const failed = (read: string) => () => { recordMetric("social.home", { outcome: "error", read }); return null; };
 
 /** Load the other sections alongside Discover so a slow Coins read only suspends its own panel. */
-async function loadHome(state: HomeViewState, sections: HomeSectionPrefs, rows: number) {
+async function loadHome(state: HomeFeedState, sections: HomeSectionPrefs, rows: number) {
   await connection();
   const shown = (key: Parameters<typeof isHomeSectionShown>[1]) => isHomeSectionShown(sections, key);
   const coins = shown("coins") && state.source === "discover"

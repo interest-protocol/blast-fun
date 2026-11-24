@@ -11,7 +11,9 @@ import type { z } from "zod";
  * `GET /api/social/happening`: Home's live public reads (FEATURE-MAP §5,
  * §16, §17; T-011): the last hour's totals, the live activity tape, the
  * fastest filling open presales, the presales opening soon and the "Today on
- * Blast" recap. JSON Schema: `schemas/happening-response.schema.json`.
+ * Blast" recap. With `recent_presales=1`, it also returns open presales ranked
+ * by their latest commit in the last hour for Discover.
+ * JSON Schema: `schemas/happening-response.schema.json`.
  *
  * - No authentication; the Authorization header and the wallet cookie are
  *   never read. Every answer is the same for every caller, so a 200 is
@@ -37,10 +39,12 @@ import type { z } from "zod";
  */
 export const SOCIAL_HAPPENING_ROUTE = "GET /api/social/happening";
 export const SOCIAL_HAPPENING_PATH = "/api/social/happening";
+export const HAPPENING_RECENT_PRESALES_PARAM = "recent_presales";
+export const SOCIAL_HAPPENING_DISCOVER_PATH = `${SOCIAL_HAPPENING_PATH}?${HAPPENING_RECENT_PRESALES_PARAM}=1`;
 
 /** The tape's newest events (four show; the rest let a refresh slide in what it missed). */
 export const HAPPENING_TAPE_MAX = 8;
-/** At most this many rows in "Fastest filling" and in "Opening soon". */
+/** At most this many rows in "Fastest filling", "Opening soon" and "recent_presales". */
 export const HAPPENING_LIST_MAX = 5;
 /** At most this many slides in "Today on Blast". */
 export const HAPPENING_TODAY_MAX = 8;
