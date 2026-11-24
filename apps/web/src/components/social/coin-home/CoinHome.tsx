@@ -122,8 +122,8 @@ function scrollToCoins(): void {
 }
 
 /**
- * Home (the Main board): the page header with Customize Home, what Blast
- * has pinned (a carousel, absent with no pin), the tape of followed trades, then the sections in
+ * Home (the Main board): the page header with Customize Home, the featured
+ * carousel, the tape of followed trades, then the sections in
  * the device's order (by default the board's: Coins, Bonding Curves, Presales, Posts, Top
  * traders). Each section is a title line over its own surface: Coins
  * (Discover, Following and the Watchlist as the title line's sources; one

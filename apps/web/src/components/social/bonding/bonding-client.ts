@@ -17,6 +17,10 @@ export function pageOf(answer: DiscoveryResponse | undefined) {
     : null;
 }
 
+export function closestLiveCurve(answer: DiscoveryResponse | undefined) {
+  return pageOf(answer)?.rows.find((row) => row.lifecycle === "live" && row.progressBps !== null);
+}
+
 async function fetchBondingCatalog(path: string, signal?: AbortSignal) {
   const response = await gatedFetch(path, {
     signal,
@@ -30,6 +34,19 @@ async function fetchBondingCatalog(path: string, signal?: AbortSignal) {
   return answer;
 }
 
+function fetchBondingPage(
+  stage: "bonding" | "graduated",
+  sort: BondingSort,
+  search: string,
+  cursor: string | null,
+  limit: number,
+  signal?: AbortSignal,
+) {
+  const query = new URLSearchParams({ catalog: stage, sort, q: search, limit: String(limit) });
+  if (cursor) query.set("cursor", cursor);
+  return fetchBondingCatalog(`${DISCOVERY_PATH}?${query}`, signal);
+}
+
 export async function readBondingCatalog(
   stage: "bonding" | "graduated",
   sort: BondingSort,
@@ -38,17 +55,25 @@ export async function readBondingCatalog(
   limit = 12,
   signal?: AbortSignal,
 ) {
-  const read = async (cursor: string | null) => {
-    const query = new URLSearchParams({
-      catalog: stage,
-      sort,
-      q: search,
-      limit: String(limit),
-    });
-    if (cursor) query.set("cursor", cursor);
-    return fetchBondingCatalog(`${DISCOVERY_PATH}?${query}`, signal);
-  };
+  const read = (next: string | null) => fetchBondingPage(stage, sort, search, next, limit, signal);
   return readVisiblePage(cursor, read, withoutTestLaunches, discoveryRows, discoveryNext);
+}
+
+/** Continue past a page of migration-ready launches only when Home needs a live curve. */
+export function closestLiveCurveQuery(cursor: string | null) {
+  return queryOptions({
+    queryKey: ["blast", "public", "bonding-catalog", "closest-live", cursor],
+    queryFn: ({ signal }) => readVisiblePage(
+      cursor,
+      (next) => fetchBondingPage("bonding", "progress", "", next, 100, signal),
+      withoutTestLaunches,
+      (page) => Number(closestLiveCurve(page) !== undefined),
+      discoveryNext,
+    ),
+    enabled: cursor !== null,
+    retry: false,
+    staleTime: 15_000,
+  });
 }
 
 /** Every legacy pool is in the first Graduated answer, even when its launch rows are filtered out. */
