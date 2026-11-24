@@ -24,12 +24,14 @@ export function createSocialHappeningRoute(dependencies: SocialHappeningRouteDep
   return Object.freeze({
     GET: kit.route(
       { name: SOCIAL_HAPPENING_ROUTE, auth: "none", bucket: "social_read", cache: "public" },
-      async (context) =>
-        context.json(await read({
+      async (context) => {
+        const recentPresales = new URL(context.request.url).searchParams.get(HAPPENING_RECENT_PRESALES_PARAM);
+        return context.json(await read({
           config: await config(),
           hiddenKinds: context.hiddenKinds,
-          includeRecentPresales: new URL(context.request.url).searchParams.get(HAPPENING_RECENT_PRESALES_PARAM) === "1",
-        })),
+          recentPresales: recentPresales === "1" || recentPresales === "2" ? recentPresales : undefined,
+        }));
+      },
     ),
   });
 }

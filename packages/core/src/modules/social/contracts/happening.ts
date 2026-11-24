@@ -12,7 +12,9 @@ import type { z } from "zod";
  * §16, §17; T-011): the last hour's totals, the live activity tape, the
  * fastest filling open presales, the presales opening soon and the "Today on
  * Blast" recap. With `recent_presales=1`, it also returns open presales ranked
- * by their latest commit in the last hour for Discover.
+ * by their latest commit in the last hour for Discover. Version 2 also returns
+ * the number of distinct backing wallets and the committed quote atoms in that hour,
+ * plus a shortlist of live bonding curves with confirmed activity in that hour.
  * JSON Schema: `schemas/happening-response.schema.json`.
  *
  * - No authentication; the Authorization header and the wallet cookie are
@@ -40,12 +42,14 @@ import type { z } from "zod";
 export const SOCIAL_HAPPENING_ROUTE = "GET /api/social/happening";
 export const SOCIAL_HAPPENING_PATH = "/api/social/happening";
 export const HAPPENING_RECENT_PRESALES_PARAM = "recent_presales";
-export const SOCIAL_HAPPENING_DISCOVER_PATH = `${SOCIAL_HAPPENING_PATH}?${HAPPENING_RECENT_PRESALES_PARAM}=1`;
+export const SOCIAL_HAPPENING_DISCOVER_PATH = `${SOCIAL_HAPPENING_PATH}?${HAPPENING_RECENT_PRESALES_PARAM}=2`;
 
 /** The tape's newest events (four show; the rest let a refresh slide in what it missed). */
 export const HAPPENING_TAPE_MAX = 8;
-/** At most this many rows in "Fastest filling", "Opening soon" and "recent_presales". */
+/** At most this many rows in "Fastest filling", "Opening soon" and the original recent-presale read. */
 export const HAPPENING_LIST_MAX = 5;
+export const HAPPENING_DISCOVER_SALE_MAX = 10;
+export const HAPPENING_CURVE_MAX = 20;
 /** At most this many slides in "Today on Blast". */
 export const HAPPENING_TODAY_MAX = 8;
 /** "In the last hour". */
@@ -70,6 +74,7 @@ export type HappeningTapeEvent = HomeWire<
 >;
 
 export type HappeningCoin = HomeWire<z.infer<typeof happeningTopCoinSchema>>;
+export type HappeningCurve = NonNullable<SocialHappeningResponse["active_curves"]>[number];
 
 export type TopCoins = NonNullable<SocialHappeningResponse["top_coins"]>;
 

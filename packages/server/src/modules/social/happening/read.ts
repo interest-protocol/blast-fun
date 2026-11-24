@@ -2,12 +2,15 @@ import { assertChainReadThroughViews } from "@blast/core/modules/database/module
 import type { ReadableDatabase } from "@blast/core/modules/database/transaction.ts";
 import type { SocialConfig } from "@blast/core/modules/social/contracts/config.ts";
 import {
+  HAPPENING_CURVE_MAX,
+  HAPPENING_DISCOVER_SALE_MAX,
   HAPPENING_LAST_HOUR_MS,
   HAPPENING_LIST_MAX,
   HAPPENING_TAPE_KINDS,
   HAPPENING_TAPE_MAX,
   HAPPENING_TODAY_MAX,
   type HappeningPresale,
+  type HappeningCurve,
   type HappeningTapeEvent,
   type HappeningTapeKind,
   type SocialHappeningResponse,
@@ -26,6 +29,9 @@ import { SocialRouteError } from "@blast/core/modules/social/route-kit/errors.ts
 import { PUBLIC_PRESALES, PUBLIC_ACTIVITY, pinnablePresaleSql } from "@blast/core/modules/social/read-model/chain-presales.ts";
 import { readTopCoins } from "@blast/server/modules/social/happening/top-coins.ts";
 import { saleMetadataJoinSql } from "@blast/server/modules/social/sales/store.ts";
+import { TEST_SUI_COIN_TYPES_SQL } from "@blast/server/modules/social/read-model/blast-launch-coins.ts";
+import { verifiedTeamSql } from "@blast/server/modules/social/read-model/verified-team.ts";
+import { DISCOVERY_PARTICIPANT_CAP, DISCOVERY_PRESALE_GOAL_FRACTION, DISCOVERY_VOLUME_CAP, DISCOVERY_WEIGHTS } from "@blast/core/modules/social/discovery/relevance.ts";
 
 /**
  * Home's live public reads (contract in `contracts/happening.ts`), every one
@@ -112,27 +118,43 @@ ORDER BY l.timestamp_ms DESC, l.checkpoint DESC, l.tx_slot DESC, l.event_slot DE
  * The presales Home can show, with the role each plays: open ones still taking
  * commits by closing time, pending ones by opening time, and the most recently
  * backed live presales in the last hour. $1 chain clock, $2 open/pending limit,
- * $3 presale checkpoint, $4 server clock, $5 include recent presales.
+ * $3 presale checkpoint, $4 server clock, $5 recent-presale version.
  * "Open" and "pending" are the list's Live and Upcoming
  * tabs (`statusFilterSql`), so Home and the list agree on what is live; it
  * stays one statement (one round trip; reading the list's tab keys as two
  * more statements measured no faster and needs two more replica connections
  * per read).
  */
-const CANDIDATES_SQL = `SELECT * FROM ((SELECT p.presale_id, 'open' AS role, NULL::bigint AS launched_ms, p.end_ms AS sort_ms
+const unitSql = (value: string) => `least(1, greatest(0, ${value}))`;
+const logSql = (value: string, cap: number) => `ln(1 + least(${cap}, greatest(0, ${value}))) / ln(${cap + 1}::numeric)`;
+const breadthSql = (value: string) => `${DISCOVERY_WEIGHTS.participants} * ${logSql(value, DISCOVERY_PARTICIPANT_CAP)}`;
+const freshnessSql = (elapsed: string) => `${DISCOVERY_WEIGHTS.freshness} * ${unitSql(`1 - (${elapsed}) / ${HAPPENING_LAST_HOUR_MS}.0`)}`;
+
+const CANDIDATES_SQL = `SELECT * FROM (WITH happening_backed AS (
+  SELECT p.presale_id, max(a.timestamp_ms) AS last_commit_ms, count(DISTINCT a.actor)::int AS backers,
+    sum(a.quote_amount) AS committed, p.raise_target, p.total_commitments,
+    row_number() OVER (ORDER BY max(a.timestamp_ms) DESC, p.presale_id) AS recent_order
+  FROM chain_read_v1.activity a JOIN ${PUBLIC_PRESALES} p ON p.presale_id = a.presale_id
+  WHERE $5::text IS NOT NULL AND a.kind = 'presale_commit' AND a.actor IS NOT NULL AND a.quote_amount > 0
+    AND a.timestamp_ms > $4::bigint - ${HAPPENING_LAST_HOUR_MS} AND a.timestamp_ms <= $1::bigint AND a.checkpoint <= $3::bigint
+    AND ${statusFilterSql("live", () => "$4::bigint")}
+  GROUP BY p.presale_id, p.raise_target, p.total_commitments
+)
+(SELECT p.presale_id, 'open' AS role, NULL::bigint AS launched_ms, p.end_ms AS sort_ms,
+    NULL::int AS backers, NULL::text AS committed
   FROM ${PUBLIC_PRESALES} p WHERE ${statusFilterSql("live", () => "$1::bigint")} ORDER BY p.end_ms, p.presale_id LIMIT $2::int)
 UNION ALL
-(SELECT p.presale_id, 'pending', NULL::bigint, p.start_ms
+(SELECT p.presale_id, 'pending', NULL::bigint, p.start_ms, NULL::int, NULL::text
   FROM ${PUBLIC_PRESALES} p WHERE ${statusFilterSql("upcoming", () => "$1::bigint")} ORDER BY p.start_ms, p.presale_id LIMIT $2::int)
 UNION ALL
-(SELECT p.presale_id, 'recent', NULL::bigint, max(a.timestamp_ms) AS last_commit_ms
-  FROM chain_read_v1.activity a JOIN ${PUBLIC_PRESALES} p ON p.presale_id = a.presale_id
-  WHERE $5::boolean AND a.kind = 'presale_commit' AND a.timestamp_ms >= $4::bigint - ${HAPPENING_LAST_HOUR_MS}
-    AND a.timestamp_ms <= $1::bigint AND a.checkpoint <= $3::bigint
-    AND ${statusFilterSql("live", () => "$4::bigint")}
-  GROUP BY p.presale_id
-  ORDER BY last_commit_ms DESC, p.presale_id
-  LIMIT ${HAPPENING_LIST_MAX})) AS candidates`;
+(SELECT presale_id, 'recent', NULL::bigint, last_commit_ms, backers, committed::text
+  FROM happening_backed
+  ORDER BY CASE WHEN $5 = '1' THEN -recent_order WHEN recent_order = 1 THEN 101 ELSE
+    ${breadthSql("backers")} + ${freshnessSql("$4::bigint - last_commit_ms")}
+    + ${DISCOVERY_WEIGHTS.activity} * ${unitSql(`committed / nullif(raise_target * ${DISCOVERY_PRESALE_GOAL_FRACTION}, 0)`)}
+    + ${DISCOVERY_WEIGHTS.context} * ${unitSql("total_commitments / nullif(raise_target, 0)")} END DESC,
+    last_commit_ms DESC, presale_id
+  LIMIT CASE WHEN $5 = '2' THEN ${HAPPENING_DISCOVER_SALE_MAX} ELSE ${HAPPENING_LIST_MAX} END)) AS candidates`;
 
 /** The same saved pins that lead Home's posts; no automatic recap fallback. */
 const PINNED_SQL = `SELECT p.presale_id, l.launched_ms::text, m.cover_key, m.cover_url, m.cover_width, m.cover_height,
@@ -160,7 +182,38 @@ FROM social_follows f
 WHERE f.target_kind = 'presale' AND f.target_id = ANY($1::text[])
 GROUP BY f.target_id`;
 
-for (const text of [BOUNDS_SQL, LAST_HOUR_SQL, TAPE_SQL, CANDIDATES_SQL, PINNED_SQL, WINDOW_SQL]) assertChainReadThroughViews(text);
+/** One bounded activity scan, then display facts for the weighted shortlist. $1 floor, $2 clock, $3 market checkpoint, $4 visible trade kinds, $5 wall clock. */
+const ACTIVE_CURVES_SQL = `SELECT activity.*, coalesce(nullif(c.name, ''), nullif(c.symbol, ''), split_part(p.coin_type, '::', 3)) AS name,
+  coalesce(nullif(c.symbol, ''), split_part(p.coin_type, '::', 3)) AS symbol, nullif(c.icon_url, '') AS icon_url,
+  p.created_at_ms::text AS created_ms, ${verifiedTeamSql("NULL::text", "p.coin_type")} AS verified_team
+FROM (
+  SELECT a.coin_type, count(DISTINCT a.actor)::int AS participants, max(a.timestamp_ms)::text AS last_action_ms,
+    coalesce(sum(a.usd_value), 0)::text AS volume_usd
+  FROM chain_read_v1.activity a
+  JOIN chain_read_v1.pools p ON p.coin_type = a.coin_type AND p.venue = 'blast_curve' AND p.lifecycle = 'live'
+    AND p.quote_type = a.quote_type
+  WHERE a.venue = 'blast_curve' AND a.kind = ANY($4::text[]) AND a.actor IS NOT NULL AND a.quote_amount > 0
+    AND a.timestamp_ms > $1::bigint AND a.timestamp_ms <= $2::bigint AND a.checkpoint <= $3::bigint
+    AND p.quote_type NOT IN (${TEST_SUI_COIN_TYPES_SQL}) AND p.coin_type NOT IN (${TEST_SUI_COIN_TYPES_SQL})
+  GROUP BY a.coin_type
+  ORDER BY ${breadthSql("count(DISTINCT a.actor)")}
+    + ${DISCOVERY_WEIGHTS.activity} * ${logSql("sum(a.usd_value)", DISCOVERY_VOLUME_CAP)}
+    + ${freshnessSql("$5::bigint - max(a.timestamp_ms)")} DESC, max(a.timestamp_ms) DESC, a.coin_type
+  LIMIT ${HAPPENING_CURVE_MAX}
+) activity
+JOIN chain_read_v1.pools p ON p.coin_type = activity.coin_type AND p.venue = 'blast_curve' AND p.lifecycle = 'live'
+JOIN chain_read_v1.coins c ON c.coin_type = p.coin_type`;
+
+for (const text of [BOUNDS_SQL, LAST_HOUR_SQL, TAPE_SQL, CANDIDATES_SQL, PINNED_SQL, WINDOW_SQL, ACTIVE_CURVES_SQL]) assertChainReadThroughViews(text);
+
+type ActiveCurveRow = Omit<HappeningCurve, "created_ms" | "last_action_ms"> & Readonly<{ created_ms: string; last_action_ms: string }>;
+
+async function readActiveCurves(db: ReadableDatabase, now: number, through: number, checkpoint: number, kinds: readonly string[]): Promise<readonly HappeningCurve[]> {
+  const tradeKinds = kinds.filter(kind => kind === "trade_buy" || kind === "trade_sell");
+  if (tradeKinds.length === 0 || through <= now - HAPPENING_LAST_HOUR_MS) return [];
+  const { rows } = await db.read<ActiveCurveRow>(ACTIVE_CURVES_SQL, [now - HAPPENING_LAST_HOUR_MS, through, checkpoint, tradeKinds, now]);
+  return rows.map(row => ({ ...row, created_ms: Number(row.created_ms), last_action_ms: Number(row.last_action_ms) }));
+}
 
 type TapeRow = {
   activity_id: string;
@@ -192,14 +245,14 @@ type PinnedRow = {
   cover_source_width?: number | null;
   cover_source_height?: number | null;
 };
-type CandidateRow = PinnedRow & { role: "open" | "pending" | "recent"; sort_ms: string };
+type CandidateRow = PinnedRow & { role: "open" | "pending" | "recent"; sort_ms: string; backers: number | null; committed: string | null };
 
 export type HappeningRequest = Readonly<{
   config: SocialConfig;
   nowMs: number;
   /** Activity kinds left out (the trade kinds while trading is hidden, OA-7). */
   hiddenKinds: readonly string[];
-  includeRecentPresales?: boolean;
+  recentPresales?: "1" | "2";
 }>;
 
 /** `atoms ÷ 10^decimals` as a plain decimal string (exact; trailing zeros trimmed). */
@@ -272,7 +325,7 @@ function velocityOf(windowRaised: string, presale: FeedItemPresale): number {
 
 /** The whole `GET /api/social/happening` body. */
 export async function readHappening(db: ReadableDatabase, request: HappeningRequest): Promise<SocialHappeningResponse> {
-  const { config, nowMs, includeRecentPresales = false } = request;
+  const { config, nowMs, recentPresales } = request;
   const [bounds, asOf] = await settledAll([readBounds(db), readAsOf(db)]);
   if (!asOf) throw new SocialRouteError("service_unavailable");
   const clockMs = Math.min(nowMs, bounds.presaleMs);
@@ -282,7 +335,7 @@ export async function readHappening(db: ReadableDatabase, request: HappeningRequ
   // Dependent sale reads start as soon as candidates/pins settle, alongside Top coins.
   const presales = async () => {
     const [candidates, pins] = await settledAll([
-      Promise.resolve().then(() => db.read<CandidateRow>(CANDIDATES_SQL, [clockMs, HAPPENING_TODAY_MAX, bounds.presaleCheckpoint, nowMs, includeRecentPresales])),
+      Promise.resolve().then(() => db.read<CandidateRow>(CANDIDATES_SQL, [clockMs, HAPPENING_TODAY_MAX, bounds.presaleCheckpoint, nowMs, recentPresales ?? null])),
       Promise.resolve().then(() => db.read<PinnedRow>(PINNED_SQL, [HAPPENING_TODAY_MAX, nowMs])),
     ]);
     const ids = [...new Set([...candidates.rows, ...pins.rows].map((row) => row.presale_id))];
@@ -324,15 +377,19 @@ export async function readHappening(db: ReadableDatabase, request: HappeningRequ
     const today = pins.rows.flatMap(saleOf);
     const recent_presales = candidates.rows.flatMap((row) => {
       const presale = chips.get(row.presale_id);
-      return row.role === "recent" && presale ? [{ presale, last_commit_ms: Number(row.sort_ms) }] : [];
+      if (row.role !== "recent" || !presale) return [];
+      return [{ presale, last_commit_ms: Number(row.sort_ms), ...(recentPresales === "2" && row.backers !== null && row.committed !== null && {
+        backers_1h: row.backers, committed_1h: row.committed,
+      }) }];
     }).sort((a, b) => b.last_commit_ms - a.last_commit_ms || a.presale.presale_id.localeCompare(b.presale.presale_id));
-    return { fastest, opening_soon: pending.slice(0, HAPPENING_LIST_MAX), today, ...(includeRecentPresales && { recent_presales }) };
+    return { fastest, opening_soon: pending.slice(0, HAPPENING_LIST_MAX), today, ...(recentPresales && { recent_presales }) };
   };
-  const [[lastHour, tape, topCoins], lists] = await settledAll([
+  const [[lastHour, tape, topCoins, activeCurves], lists] = await settledAll([
     settledAll([
       Promise.resolve().then(() => db.read<{ wallets: number; usd: string; unpriced: number }>(LAST_HOUR_SQL, [clockMs, bounds.presaleCheckpoint])),
       Promise.resolve().then(() => db.read<TapeRow>(TAPE_SQL, [clockMs, kinds, bounds.presaleCheckpoint, bounds.marketCheckpoint, HAPPENING_TAPE_MAX])),
       hidden.has("trade_buy") ? Promise.resolve(null) : readTopCoins(db, Math.min(nowMs, bounds.marketMs), nowMs, bounds.marketCheckpoint),
+      recentPresales === "2" ? readActiveCurves(db, nowMs, Math.min(nowMs, bounds.marketMs), bounds.marketCheckpoint, kinds) : null,
     ]),
     presales(),
   ]);
@@ -343,6 +400,7 @@ export async function readHappening(db: ReadableDatabase, request: HappeningRequ
     last_hour: { wallets: lastHour.rows[0]?.wallets ?? 0, usd: toUsd(lastHour.rows[0]?.usd ?? "0"), usd_complete: (lastHour.rows[0]?.unpriced ?? 0) === 0 },
     tape: tape.rows.map(tapeEvent),
     ...lists,
+    ...(activeCurves && { active_curves: activeCurves }),
     as_of: asOf,
   };
 }
@@ -357,9 +415,9 @@ export function createHappeningReader(database: () => ReadableDatabase, now = Da
   return async (request: Omit<HappeningRequest, "nowMs">): Promise<SocialHappeningResponse> => {
     const config = { ...request.config };
     const hiddenKinds = [...new Set(request.hiddenKinds)].sort();
-    const includeRecentPresales = request.includeRecentPresales ?? false;
-    const key = JSON.stringify([config.fastest_window_ms, hiddenKinds, includeRecentPresales]);
-    const response = await share(key, () => readHappening(database(), { config, hiddenKinds, includeRecentPresales, nowMs: now() }), 0);
+    const { recentPresales } = request;
+    const key = JSON.stringify([config.fastest_window_ms, hiddenKinds, recentPresales]);
+    const response = await share(key, () => readHappening(database(), { config, hiddenKinds, recentPresales, nowMs: now() }), 0);
     return structuredClone(response);
   };
 }

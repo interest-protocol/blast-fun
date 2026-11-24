@@ -133,9 +133,10 @@ test("a sale opens its presale page, a curve coin its coin page, and a coin with
 test("the view state round-trips through the URL, with defaults left out and unknown values read as defaults", () => {
   assert.deepEqual(viewStateOf(new URLSearchParams("")), HOME_DEFAULT_FEED);
   const defaultQuery = discoverQueryOf(viewStateOf(new URLSearchParams("")));
-  assert.equal(defaultQuery.sort, "trending");
+  assert.equal(defaultQuery.sort, "relevant");
   assert.equal(defaultQuery.window, "1h");
-  assert.equal(discoverQueryOf(HOME_DEFAULT_FEED, 20).limit, 10);
+  assert.equal(defaultQuery.traction, true);
+  assert.equal(discoverQueryOf(HOME_DEFAULT_FEED, 5).limit, 20);
   assert.equal(viewStateOf(new URLSearchParams("w=24h")).window, "24h");
   assert.equal(viewSearchOf(viewStateOf(new URLSearchParams("w=1h"))), "");
   assert.equal(viewSearchOf(viewStateOf(new URLSearchParams("sort=relevant"))), "?sort=relevant");

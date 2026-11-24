@@ -106,7 +106,7 @@ const commit = (actor: string, presaleId: string, dollars: number | null, at: nu
 type Fixture = Readonly<{
   admin: Pool;
   now: number;
-  happening(options?: Readonly<{ trades?: boolean; recent?: boolean; headers?: Record<string, string> }>): Promise<Response>;
+  happening(options?: Readonly<{ trades?: boolean; recent?: boolean | "legacy"; headers?: Record<string, string> }>): Promise<Response>;
   viewerState(callsign: string, body: unknown): Promise<Response>;
 }>;
 
@@ -206,7 +206,7 @@ async function withFixture(run: (fixture: Fixture) => Promise<void>, hidden: (no
       admin,
       now,
       happening: (options = {}) =>
-        (options.trades ? all : hidden).GET(new Request(`${ORIGIN}${options.recent ? SOCIAL_HAPPENING_DISCOVER_PATH : SOCIAL_HAPPENING_PATH}`, { headers: { "x-forwarded-for": "203.0.113.7", ...options.headers } }), testClient("203.0.113.7")),
+        (options.trades ? all : hidden).GET(new Request(`${ORIGIN}${options.recent === "legacy" ? `${SOCIAL_HAPPENING_PATH}?recent_presales=1` : options.recent ? SOCIAL_HAPPENING_DISCOVER_PATH : SOCIAL_HAPPENING_PATH}`, { headers: { "x-forwarded-for": "203.0.113.7", ...options.headers } }), testClient("203.0.113.7")),
       viewerState: (callsign, body) =>
         viewerState.POST(new Request(`${ORIGIN}/api/social/viewer-state`, {
           method: "POST",
@@ -295,8 +295,59 @@ test("Discover ranks live presales by the newest confirmed commit per sale, even
       [P.openSoon, now - MINUTE],
       [P.openLater, now - 5 * MINUTE],
     ]);
+    assert.deepEqual(body.recent_presales?.map(({ backers_1h, committed_1h }) => [backers_1h, committed_1h]), [[3, "308000000"], [2, "52000000"]]);
+    const legacy = await happeningOf(await happening({ recent: "legacy" }));
+    assert.equal("active_curves" in legacy, false);
+    assert.deepEqual(legacy.recent_presales?.map(Object.keys), [["presale", "last_commit_ms"], ["presale", "last_commit_ms"]]);
     assert.ok(body.tape.every((event) => event.presale_id !== P.openLater));
   }, (now) => Array.from({ length: HAPPENING_TAPE_MAX }, (_, i) => commit(W.anon, P.openSoon, 1, now - MINUTE - i * 1_000))));
+
+test("Discover keeps both a heavily backed sale and the newest commit beyond the old recency cap", { skip }, () =>
+  withFixture(async ({ admin, happening, now }) => {
+    const dust = Array.from({ length: 10 }, (_, index) => hex(`c2${index}`));
+    const popular = hex("c3ff");
+    const rows = [
+      ...dust.map((id, index) => commit(W.ana, id, 0.01, now - 1_000 - index)),
+      ...Object.values(W).map((wallet) => commit(wallet, popular, 1_000, now - 10 * MINUTE)),
+    ];
+    await seedChainRead(admin, {
+      presales: [...dust, popular].map(id => presale(id, "SALE", "open", { start_ms: now - HOUR, end_ms: now + HOUR })),
+      activity: rows,
+    });
+    await admin.query(advanceWatermark(rows.at(-1)!.checkpoint, 0, "presale"));
+    const weighted = (await happeningOf(await happening({ recent: true }))).recent_presales ?? [];
+    assert.equal(weighted.length, 10);
+    assert.equal(weighted[0]?.presale.presale_id, dust[0]);
+    assert.ok(weighted.some(row => row.presale.presale_id === popular && row.backers_1h === Object.keys(W).length));
+    const legacy = (await happeningOf(await happening({ recent: "legacy" }))).recent_presales ?? [];
+    assert.deepEqual(legacy.map(row => row.presale.presale_id), dust.slice(0, 5));
+  }));
+
+test("Discover finds confirmed activity on an old live curve beyond the catalog, once per wallet", { skip }, () =>
+  withFixture(async ({ admin, happening, now }) => {
+    const coin = `${hex("dce1")}::curve::CURVE`;
+    const pool = `blast_curve:${hex("dce2")}`;
+    const created = now - 10 * DAY;
+    await admin.query(`INSERT INTO coins (coin_type, decimals, launcher, pool_key, created_checkpoint, created_at_ms, metadata)
+      VALUES ($1, 9, $2, $3, 900, $4, '{"name":"The Curve","symbol":"CURVE"}')`, [coin, W.ana, pool, created]);
+    await admin.query(`INSERT INTO pools (pool_key, venue, coin_type, quote_type, lifecycle, created_checkpoint, created_at_ms)
+      VALUES ($1, 'blast_curve', $2, $3, 'live', 900, $4)`, [pool, coin, QUOTE, created]);
+    const trade = (kind: string, wallet: string, age: number, usd: string | null) =>
+      activity(kind, wallet, null, now - age, { coin_type: coin, venue: "blast_curve", quote_amount: "4000000", usd_value: usd });
+    const first = trade("trade_buy", W.ana, 10 * MINUTE, "4.00");
+    const repeat = trade("trade_sell", W.ana, 8 * MINUTE, "3.00");
+    const second = trade("trade_buy", W.ben, 5 * MINUTE, null);
+    const old = trade("trade_buy", W.anon, 61 * MINUTE, "100.00");
+    const uncommitted = trade("trade_buy", W.cy, MINUTE, "99.00");
+    await seedChainRead(admin, { activity: [first, repeat, second, old, uncommitted] });
+    await admin.query(advanceWatermark(old.checkpoint, 0, "market"));
+    const body = await happeningOf(await happening({ trades: true, recent: true }));
+    assert.deepEqual(body.active_curves, [{
+      coin_type: coin, symbol: "CURVE", name: "The Curve", icon_url: null, verified_team: false,
+      created_ms: created, participants: 2, last_action_ms: now - 5 * MINUTE, volume_usd: "7.00",
+    }]);
+    assert.deepEqual((await happeningOf(await happening({ recent: true }))).active_curves, []);
+  }));
 
 test("T-011-AC-3 (AC-124, AC-165, AC-042): public cache, no viewer field, replica, as_of; a token changes nothing", { skip }, () =>
   withFixture(async ({ happening, now }) => {
