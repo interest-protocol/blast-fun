@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import { createHash, generateKeyPairSync, randomBytes, randomUUID, sign } from "node:crypto";
 import test from "node:test";
 
-import { allowlistedEligibility, openEligibility, verifyAllowlistProof } from "@interest-protocol/blast-sdk/presale";
+import { allowlistedEligibility, buildAllowlist, openEligibility, verifyAllowlistProof } from "@interest-protocol/blast-sdk/presale";
 import type { Pool } from "pg";
 
 import { createPrivyTokenVerifier } from "@blast/core/lib/privy-adapter/token-verifier.ts";
@@ -21,6 +21,7 @@ import { createPresaleRouteKit } from "@blast/core/modules/presale/route-kit/rou
 import { presaleChainFixture, type PresaleChainFixture } from "../../../../../core/test/fixtures/modules/presale/allowlists/fixtures.ts";
 import { createPartnerV1Read } from "../../partner-api/v1/route.ts";
 import { createAllowlistBindingRoutes } from "./binding-routes.ts";
+import { createAllowlistCsvRead } from "./csv.ts";
 import { presaleEligibilityReader } from "./eligibility.ts";
 import { createAllowlistRoutes } from "./routes.ts";
 
@@ -312,6 +313,56 @@ test("T-014-AC-2: a bound sale serves proofs that verify against the on-chain ro
   }
 });
 
+test("the CSV reproduces the bound and unbound sale's root using exact caps and leaf order", { skip }, async () => {
+  const pool = await database();
+  const { node, allowlists, bindings } = routes(pool);
+  const did = newDid();
+  const first = `0x${"f".repeat(64)}`;
+  const second = `0x${"a".repeat(64)}`;
+  const listed = await manifest(allowlists, 2, { did }, [
+    { wallet: first, cap: "18446744073709551615" },
+    { wallet: second, cap: "1" },
+  ]);
+  const eligibility = allowlistedEligibility(listed.root, listed.leafCount);
+  const bound = node.createPresale("csv-bound", eligibility);
+  const unbound = node.createPresale("csv-unbound", eligibility);
+  const open = node.createPresale("csv-open", openEligibility(10n, 5n, 1n));
+  const unknown = node.createPresale("csv-unknown", allowlistedEligibility(listed.root, 3n));
+  await ok(await bindings.bind(...bindRequest(listed.id, { presale_id: bound }, { did })), "allowlist-bind-response");
+
+  const deployment = createPresaleDeploymentGate({ state: IDENTITY, node: async () => node });
+  const readEligibility = presaleEligibilityReader({ client: () => node });
+  const download = createAllowlistCsvRead({
+    pool: () => pool,
+    async eligibility(id, signal) {
+      assert.notEqual(id, bound, "Bound downloads should not need a chain read");
+      return readEligibility(await deployment.authorize({ signal }), id);
+    },
+  });
+  const request = (id: string) => new Request(`${ORIGIN}/api/v1/presales/${id}/allowlist.csv`);
+
+  const answer = await download(request(bound));
+  assert.equal(answer.status, 200);
+  assert.equal(answer.headers.get("content-type"), "text/csv; charset=utf-8");
+  assert.equal(answer.headers.get("content-disposition"), `attachment; filename="allowlist-${bound}.csv"`);
+  assert.equal(answer.headers.get("cache-control"), "private, no-store");
+  const csv = await answer.text();
+  assert.equal(csv, `wallet,cap\r\n${first},18446744073709551615\r\n${second},1\r\n`);
+  const rebuilt = buildAllowlist(csv.trimEnd().split("\r\n").slice(1).map((row) => {
+    const [wallet, cap] = row.split(",");
+    return { wallet, walletCap: BigInt(cap) };
+  }));
+  assert.equal(rebuilt.root, listed.root);
+  assert.equal(rebuilt.leafCount, listed.leafCount);
+
+  assert.equal(await (await download(request(unbound))).text(), csv);
+  assert.deepEqual(await bindingRows(pool, unbound), []);
+  assert.equal((await download(request(open))).status, 404);
+  const unknownAnswer = await download(request(unknown));
+  assert.equal(unknownAnswer.status, 404);
+  assert.equal((await unknownAnswer.json()).error.code, "allowlist_not_found");
+});
+
 test("partner v1: a key's proof read serves the bound proof; an unlisted wallet is not_eligible", { skip }, async () => {
   const pool = await database();
   const { node, allowlists, bindings } = routes(pool);
@@ -326,6 +377,7 @@ test("partner v1: a key's proof read serves the bound proof; an unlisted wallet 
     defillama: unexpected, daily_stats: unexpected, presales: unexpected, featured: unexpected, presale: unexpected, prices: unexpected,
     discovery: unexpected, wallet_launches: unexpected, search: unexpected, market: unexpected, coin_metadata: unexpected,
     presale_proof: bindings.proof,
+    presale_allowlist_csv: unexpected,
   });
   const v1 = (wallet: string) => {
     const ip = randomIp();

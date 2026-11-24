@@ -26,6 +26,14 @@ export const PRESALE_PROOF_READ = {
   bucket: "presale_proof",
 } as const satisfies ReadRoute;
 
+export const PRESALE_ALLOWLIST_CSV_READ = {
+  name: "presale_allowlist_csv",
+  path: "/api/v1/presales/:presale_id/allowlist.csv",
+  params: { presale_id: SUI_OBJECT_ID_SOURCE },
+  prefix: "/api/v1",
+  bucket: "presale_allowlist_csv",
+} as const satisfies ReadRoute;
+
 export const WALLET_LAUNCHES_READ = {
   name: "wallet_launches",
   path: "/api/v1/wallets/:address/launches",
@@ -56,6 +64,7 @@ export const NON_MARKET_READ_ROUTES = [
   },
   PRESALE_READ,
   PRESALE_PROOF_READ,
+  PRESALE_ALLOWLIST_CSV_READ,
   {
     name: "prices",
     path: "/api/v1/prices",

@@ -1,6 +1,7 @@
 import { readLegacyMarket } from "@blast/server/modules/launchpad-market/legacy-fdv.ts";
 import { routeSegments } from "@blast/core/modules/backend-api/route-path.ts";
 import { DAILY_STATS_READ, marketSourceBucket, WALLET_LAUNCHES_READ, webPath } from "@blast/server/modules/partner-api/v1/paths.ts";
+import { PRESALE_ALLOWLIST_CSV_READ } from "@blast/core/modules/backend-api/public-read-routes.ts";
 import { withRouteLimits } from "@blast/core/modules/web-security/route-limits.ts";
 import { runtimeConfig } from "@blast/server/config/runtime-config.ts";
 import type { RateLimitPort } from "@blast/core/lib/web-security/rate-limits.ts";
@@ -10,7 +11,7 @@ import { handleWalletLaunchesRequest } from "@blast/server/modules/launchpad-dis
 import { databaseSearchSources, handleSearchRequest } from "@blast/server/modules/launchpad-search/resource.ts";
 import { marketUpstream } from "@blast/server/modules/launchpad-market/shared-runtime.ts";
 import { createAdmittedMarketRead, createMarketRoutes } from "@blast/server/modules/launchpad-market/routes.ts";
-import { presaleAllowlistProofRoute } from "@blast/server/modules/presale/allowlists/runtime.ts";
+import { presaleAllowlistCsvRoute, presaleAllowlistProofRoute } from "@blast/server/modules/presale/allowlists/runtime.ts";
 import { createSocialPresaleRuntimeRoutes } from "@blast/server/modules/social/presales/shared-runtime.ts";
 import { createSocialPricesRuntimeRoute } from "@blast/server/modules/social/prices/shared-runtime.ts";
 import { socialRouteKit } from "@blast/server/modules/social/route-kit/shared-runtime.ts";
@@ -51,6 +52,10 @@ export function createPartnerV1Handlers(
     featured: (request, client) => presales.featured.GET(request, client),
     presale: (request, client) => presales.presale.GET(request, client),
     presale_proof: (request, client) => (proof ??= presaleAllowlistProofRoute(limiter))(request, client),
+    presale_allowlist_csv: (request, client) =>
+      withRouteLimits(client, [PRESALE_ALLOWLIST_CSV_READ.bucket], () => presaleAllowlistCsvRoute()(request), {
+        rateLimited: "partner_rate_limited", unavailable: "partner_api_unavailable", limiter,
+      }),
     prices: (request, client) => prices.GET(request, client),
     market,
     coin_metadata: (request, client) => withRouteLimits(

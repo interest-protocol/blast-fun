@@ -10,6 +10,7 @@ import { presaleNodeUrl } from "@blast/core/modules/presale/deployment/node.ts";
 import { presaleDeploymentGate } from "@blast/server/modules/presale/deployment/runtime.ts";
 import { presaleRouteKit } from "@blast/server/modules/presale/route-kit/runtime.ts";
 import { createAllowlistBindingRoutes, type AllowlistBindingRoutes } from "./binding-routes.ts";
+import { createAllowlistCsvRead } from "./csv.ts";
 import { presaleEligibilityReader } from "./eligibility.ts";
 import { creationPolicyQuotes, CREATION_POLICY_TIMEOUT_MS } from "./policy.ts";
 import { createAllowlistRoutes, type AllowlistRoutes } from "./routes.ts";
@@ -71,4 +72,18 @@ export function presaleAllowlistProofRoute(limiter: RateLimitPort): AllowlistBin
     pool: () => databaseFor("write"),
     eligibility: presaleEligibilityReader({ client: presaleAllowlistNode }),
   }).proof;
+}
+
+/** Bulk downloads are exposed only through authenticated partner admission. */
+export function presaleAllowlistCsvRoute() {
+  return processSingleton("presale.allowlist-csv", () => {
+    const readEligibility = presaleEligibilityReader({ client: presaleAllowlistNode });
+    return createAllowlistCsvRead({
+      pool: () => databaseFor("write"),
+      async eligibility(presaleId, signal) {
+        const identity = await presaleDeploymentGate().authorize({ signal });
+        return readEligibility(identity, presaleId);
+      },
+    });
+  });
 }

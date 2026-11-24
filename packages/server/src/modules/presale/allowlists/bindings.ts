@@ -71,3 +71,24 @@ export async function findBoundProof(
   if (row.index === null || row.wallet_cap === null || row.proof === null) return null;
   return { index: `${BigInt(row.index)}`, wallet_cap: row.wallet_cap as `${bigint}`, proof: row.proof };
 }
+
+/** Canonical rows for a bound sale, or a manifest matching its verified eligibility. */
+export async function findAllowlistCsv(
+  pool: Pool,
+  presaleId: string,
+  eligibility?: Readonly<{ root: string; leafCount: bigint }>,
+): Promise<string | null> {
+  const result = await autocommitRead<{ csv: string | null }>(
+    pool,
+    "presale-allowlist-bindings",
+    `SELECT string_agg(wallet || ',' || wallet_cap::text, E'\\r\\n' ORDER BY index) AS csv
+     FROM presale_allowlist_entries
+     WHERE allowlist_id = COALESCE(
+       (SELECT allowlist_id FROM presale_allowlist_bindings WHERE presale_id = $1),
+       (SELECT id FROM presale_allowlists WHERE root = $2 AND leaf_count = $3 ORDER BY created_at, id LIMIT 1)
+     )`,
+    [presaleId, eligibility?.root ?? null, eligibility?.leafCount.toString() ?? null],
+    { label: "presale.allowlist_csv" },
+  );
+  return result.rows[0]?.csv ?? null;
+}

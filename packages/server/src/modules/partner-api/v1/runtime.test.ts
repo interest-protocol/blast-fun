@@ -35,6 +35,7 @@ const cases: ReadonlyArray<readonly [string, RateBucket]> = [
   ["presales/featured", "social_read_presales"],
   [`presales/${id}`, "social_read_presales"],
   [`presales/${id}/proof?wallet=${id}`, "presale_proof"],
+  [`presales/${id}/allowlist.csv`, "presale_allowlist_csv"],
   ["prices", "social_read_prices"],
   ["market/status", "launchpad_market_status"],
   ["market/coins/0x2%3A%3Asui%3A%3ASUI/candles", "launchpad_market_candles"],
