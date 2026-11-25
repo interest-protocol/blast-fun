@@ -54,8 +54,8 @@ test("the rail holds its six destinations and the shared Create trigger; Search 
   assert.equal(audio[0]!.previousElementSibling?.getAttribute("aria-label"), "Search");
   assert.equal(audio[0]!.getAttribute("aria-haspopup"), "menu");
   assert.equal(audio[0]!.querySelector("svg")?.getAttribute("aria-hidden"), "true");
-  assert.equal(document.querySelector("audio")?.getAttribute("preload"), "none");
-  assert.equal(document.querySelector("audio")?.getAttribute("src"), null, "never requests the track on page load");
+  assert.equal(document.querySelector("audio"), null, "the player is created only after opt-in");
+  assert.doesNotMatch(html, /cozy-vinyl-groove\.mp3/, "never requests the track on page load");
   const bar = html.slice(html.indexOf("<header"), html.indexOf("</header>"));
   assert.match(bar, /<button(?=[^>]*aria-keyshortcuts="\/")(?=[^>]*aria-label="Search")(?=[^>]*title="Search \(\/\)")[^>]*>/);
   assert.match(rail, /<button(?=[^>]*aria-label="Create")(?=[^>]*aria-haspopup="menu")(?=[^>]*class="navItem railCreate")[^>]*><svg[^>]*>.*?<\/svg><span>Create<\/span><\/button>/s);
