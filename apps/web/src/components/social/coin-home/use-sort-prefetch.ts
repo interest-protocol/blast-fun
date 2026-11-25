@@ -15,9 +15,9 @@ import { HOME_TAB_KEYS, HOME_TABS } from "./home-state";
  * browser is idle, so the switch paints from the cache. A cached view older
  * than the public freshness limit is shown at once and refreshed behind it.
  * Each prefetch is the same public URL for every reader, so the CDN answers
- * most of them (`s-maxage=10`), and the server builds every tab of a window
- * from one shared read. A header sort is not prefetched: it is one request
- * when pressed.
+ * most of them (`s-maxage=10`), and the server builds a window's tabs from
+ * two shared reads (the whole list, and Almost graduated's few curves). A
+ * header sort is not prefetched: it is one request when pressed.
  */
 export function useSortPrefetch(query: HomeQuery, loaded: boolean): void {
   const client = useAppQueryClient();

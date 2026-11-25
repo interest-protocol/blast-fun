@@ -75,7 +75,7 @@
 /* A sortable column's label: a 24px target, the arrow beside the order in force. */
 .sortHead { display: inline-flex; align-items: center; gap: 0.25rem; min-height: 1.5rem; padding: 0; border: 0; background: none; font: inherit; color: var(--muted); cursor: pointer; border-radius: var(--r-inner); transition: color var(--t2) var(--ease-std); }
 .sortHead:focus-visible { outline: 0.125rem solid var(--focus-color, var(--ink)); outline-offset: 0.125rem; }
-[aria-sort] > .sortHead { color: var(--ink); font-weight: 600; }
+.sortHead[data-on] { color: var(--ink); font-weight: 600; }
 @media (hover: hover) and (pointer: fine) { .sortHead:hover { color: var(--ink); } }
 .list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; }
 .rankedList { position: relative; overflow-anchor: none; transition: opacity 150ms var(--ease); }
@@ -432,6 +432,8 @@ a.saleCard:focus-visible { outline: 0.125rem solid var(--focus-color, var(--ink)
   .ident { grid-column: 1 / 3; grid-row: 1 / 3; align-self: start; align-items: flex-start; }
   .ident > span:first-child { width: 2.5rem; height: 2.5rem; }
   .identText > .coinName { display: none; }
+  /* One line for the ticker: the status sits under it. */
+  .identText .symbol { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; overflow-wrap: normal; }
   .status { grid-column: 2; grid-row: 2; padding-inline-start: 0; flex-direction: row-reverse; justify-content: flex-end; align-items: center; gap: 0.5rem; font-size: 0.75rem; line-height: 1.3; }
   .fill { width: 2.5rem; flex: none; }
   .mcap, .vol, .holders { grid-column: 3; grid-row: 1; line-height: 1.3; }
@@ -448,7 +450,7 @@ a.saleCard:focus-visible { outline: 0.125rem solid var(--focus-color, var(--ink)
   /* The header keeps only its sorts, at the row's right edge. */
   .listHead.cols { display: flex; justify-content: flex-end; align-items: center; gap: 1rem; min-height: 2.75rem; padding: 0; }
   /* The change window names the second line of each figure, at the row's left. */
-  .listHead.cols > .hChange { margin-inline-end: auto; }
+  .listHead.cols > .hChange { order: -1; margin-inline-end: auto; }
   .listHead.cols > :not([aria-sort], :has(> .sortHead), .hChange) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .listHead.cols .sortHead { min-height: 2.75rem; min-width: 2.75rem; justify-content: flex-end; }
   .listHead.cols:not(:has(.sortHead)) { min-height: 2rem; }
@@ -505,6 +507,7 @@ a.saleCard:focus-visible { outline: 0.125rem solid var(--focus-color, var(--ink)
 }
 @media (max-width: 360px) {
   .row.cols { column-gap: 0.5rem; }
+  .ident { gap: 0.5rem; }
   .ident > span:first-child { width: 2rem; height: 2rem; }
   .cols { grid-template-columns: 2rem minmax(0, 1fr) auto auto; }
   .holdingHead { display: none; }

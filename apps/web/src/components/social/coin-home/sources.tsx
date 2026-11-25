@@ -85,7 +85,7 @@ function SortHead({ label, by, className, sort, defaultSort = "relevant", onSort
   const on = sort === by;
   return (
     <span aria-sort={on && table ? "descending" : undefined} className={className} role={role}>
-      <button className={styles.sortHead} onClick={() => onSort(on ? defaultSort : by)} title={on && defaultSort !== by ? `Back to ${SORT_LABELS[defaultSort]}` : undefined} type="button">
+      <button className={styles.sortHead} data-on={on || undefined} onClick={() => onSort(on ? defaultSort : by)} title={on && defaultSort !== by ? `Back to ${SORT_LABELS[defaultSort]}` : undefined} type="button">
         {label}{on ? <span aria-hidden="true">↓</span> : null}
       </button>
     </span>
