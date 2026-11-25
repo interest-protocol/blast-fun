@@ -71,41 +71,14 @@ test("changing the interval leaves an untouched range at its coin default", asyn
   try {
     saveChartControls({ interval: "5m", range: "all" }, { interval: "15m", range: "all" });
     const saved = dom.window.localStorage.getItem(key) ?? "";
-    assert.equal(saved, "interval=15m");
+    assert.equal(saved, "interval.all=15m");
     assert.deepEqual(preferredChartControls(saved, "", { interval: "5m", range: "24h" }), {
-      interval: "15m",
+      interval: "5m",
       range: "24h",
     });
   } finally {
     dom.window.localStorage.removeItem(key);
   }
-});
-
-test("reopening a Live link preserves the saved history interval when leaving Live", async (t) => {
-  const { useCoinChartControls } = await import("./chart-preferences.ts");
-  const key = "blast.coin-chart.controls";
-  const original = window.location.href;
-  const node = dom.document.createElement("div");
-  dom.document.body.append(node);
-  const root = createRoot(node);
-  t.after(async () => {
-    await act(async () => root.unmount());
-    node.remove();
-    window.localStorage.removeItem(key);
-    window.history.replaceState(null, "", original);
-  });
-  window.localStorage.setItem(key, "interval=15m&range=7d");
-  window.history.replaceState(null, "", "?range=live&interval=1s");
-  function Probe() {
-    const { controls, commit } = useCoinChartControls(true, { range: "live", interval: "1s" });
-    return <button onClick={() => commit({ ...controls, range: "1h" })}>{controls.range} / {controls.interval}</button>;
-  }
-  await act(async () => root.render(<Probe />));
-  assert.equal(node.textContent, "live / 1s");
-  await act(async () => node.querySelector("button")?.click());
-  assert.equal(node.textContent, "1h / 15m");
-  assert.equal(window.location.search, "?range=1h&interval=15m");
-  assert.equal(window.localStorage.getItem(key), "interval=15m&range=1h");
 });
 
 test("compact style controls keep one chart and the trade cue above it", async () => {
@@ -274,4 +247,27 @@ test("Live is a line chart on desktop and mobile and keeps the newest trade cue"
 
   await render(null, null, null, "traded");
   assert.equal(container.querySelectorAll("[data-kline-plot]").length, 1, "a graduated coin is one chart");
+});
+
+test("panning the live candle out of the price pane hides its amount", async () => {
+  const { projectCandleTrade } = await import("../../charts/candle-trade.ts");
+  type Handle = Parameters<typeof projectCandleTrade>[0];
+  const time = 1 as import("lightweight-charts").UTCTimestamp;
+  const specs = [{ type: "Candlestick", data: [{ time, open: 12, high: 14, low: 9, close: 10 }] }] as const;
+  let x = 99;
+  let y = 49;
+  const handle = {
+    chart: { timeScale: () => ({ options: () => ({ barSpacing: 8 }), timeToCoordinate: () => x }), paneSize: () => ({ width: 100, height: 50 }) },
+    series: [{ priceToCoordinate: () => y }],
+  } as unknown as Handle;
+  assert.deepEqual(projectCandleTrade(handle, specs, 0), { x: 95, y, width: 95, left: true, below: false });
+  x = 8;
+  assert.deepEqual(projectCandleTrade(handle, specs, 0), { x: 12, y, width: 88, left: false, below: false });
+  x = 101;
+  assert.equal(projectCandleTrade(handle, specs, 0), "offscreen");
+  x = -1;
+  assert.equal(projectCandleTrade(handle, specs, 0), "offscreen");
+  x = 20;
+  y = 51;
+  assert.equal(projectCandleTrade(handle, specs, 0), "offscreen", "a label never spills into volume");
 });

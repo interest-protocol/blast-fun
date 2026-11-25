@@ -3,16 +3,19 @@
 import { shortUtcDate } from "#web/components/blast-ui/date-label.ts";
 import { Button } from "#web/components/blast-ui/Button.tsx";
 
-import { useEffectEvent, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type Ref } from "react";
+import { useEffectEvent, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode, type Ref } from "react";
 import clsx from "clsx";
 import type {
   IChartApi,
+  IPriceLine,
   IRange,
   Logical,
+  LineStyle,
   ISeriesApi,
   SeriesDataItemTypeMap,
   SeriesDefinition,
   SeriesPartialOptionsMap,
+  TickMarkType,
   Time,
 } from "lightweight-charts";
 import {
@@ -48,8 +51,20 @@ import { seriesChange } from "./series-change.ts";
 import styles from "./TradingViewChart.module.css";
 import { useZoomHint } from "./zoom-hint";
 
+const dayTick = new Intl.DateTimeFormat("en-GB", { month: "short", day: "numeric", timeZone: "UTC" });
 const DEFAULT_MARGINS = { top: 0.12, bottom: 0.12 };
 const loadTradingView = () => import("lightweight-charts");
+function coinTimeScale({ TickMarkType: ticks }: Awaited<ReturnType<typeof loadTradingView>>, intervalMs: number) {
+  return {
+    tickMarkMaxCharacterLength: intervalMs < 60_000 ? 8 : 6,
+    tickMarkFormatter: (time: Time, type: TickMarkType) => {
+      const date = new Date(Number(time) * 1000);
+      if (type === ticks.Year) return String(date.getUTCFullYear());
+      if (type === ticks.Month || type === ticks.DayOfMonth) return dayTick.format(date);
+      return date.toISOString().slice(11, type === ticks.TimeWithSeconds ? 19 : 16);
+    },
+  };
+}
 type Kind = "Line" | "Area" | "Candlestick" | "Histogram";
 type CoinChartView = Readonly<{ logical: IRange<number>; times: readonly number[]; width: number }>;
 /** A volume pane's overlay scale: bars keep their height, the axis column stays the price's alone. */
@@ -77,11 +92,15 @@ type Props = Readonly<{
   series: readonly ChartSeries[];
   /** Keep the pool chart mounted as trades amend its candle, volume and time axis. */
   livePool?: boolean;
+  /** The selected coin history's last close, even when the reader pans into older bars. */
+  latestPrice?: Readonly<{ seriesIndex: number; price: number; label: string }>;
   timeline?: readonly number[];
   /** The Live preset's timeline ends at the clock even when the last trade was earlier. */
   rollingWindow?: boolean;
   compact?: boolean;
   interactive?: boolean;
+  /** Readable axes and separate credit for the full-width coin board. */
+  coinAxes?: boolean;
   /** Keep the latest bar within reach while the reader moves or zooms the chart. */
   liveViewport?: boolean;
   intervalMs?: number;
@@ -91,6 +110,7 @@ type Props = Readonly<{
   hidden?: boolean;
   className?: string;
   label?: string;
+  preview?: ReactNode;
   onReady?: (handle: ChartHandle) => void | (() => void);
   onProject?: ChartProjection;
   projectionKey?: unknown;
@@ -111,22 +131,25 @@ type Props = Readonly<{
 export function TradingViewChart({
   className,
   label,
+  preview,
   compact = false,
   interactive = !compact,
-  liveViewport = false,
+  coinAxes = false,
+  liveViewport = coinAxes,
   ...plot
 }: Props) {
   const coinViewport = liveViewport && interactive;
-  const { host, returnLive, failed, browsing, showZoomHint } = useTradingViewPlot({
-    ...plot, compact, interactive, liveViewport,
+  const { host, returnLive, failed, browsing, firstFramePainted, showZoomHint } = useTradingViewPlot({
+    ...plot, preview, compact, interactive, coinAxes, liveViewport,
   });
   return <ChartSurface
     host={host}
     className={className}
     compact={compact}
     label={label}
+    preview={firstFramePainted ? null : preview}
     coinViewport={coinViewport}
-    showFooter={coinViewport}
+    showFooter={coinAxes || coinViewport}
     showLiveButton={coinViewport && browsing && !failed}
     onReturnLive={() => returnLive.current?.()}
     interactive={interactive}
@@ -138,15 +161,18 @@ export function TradingViewChart({
 function useTradingViewPlot({
   series,
   livePool = false,
+  latestPrice,
   timeline,
   rollingWindow = false,
   compact = false,
   interactive = !compact,
-  liveViewport = false,
+  coinAxes = false,
+  liveViewport = coinAxes,
   intervalMs = 60_000,
   scaleMargins = DEFAULT_MARGINS,
   priceFormatter,
   hidden: hidePrices,
+  preview,
   onReady,
   onProject,
   projectionKey,
@@ -158,18 +184,23 @@ function useTradingViewPlot({
   const savedView = useRef<Readonly<{ rollingWindow: boolean; view: SavedChartView | CoinChartView }> | null>(null);
   const [failed, setFailed] = useState(false);
   const [browsing, setBrowsing] = useState(false);
+  const [firstFramePainted, setFirstFramePainted] = useState(false);
   const zoomHint = useZoomHint();
   const preferences = useShellPrefs();
   const dark = useIsDark();
   const hidden = hidePrices ?? preferences.amountsHidden;
+  const showCoinTag = coinAxes && !hidden;
   const coinViewport = liveViewport && interactive;
   const ready = useEffectEvent((handle: ChartHandle) => onReady?.(handle));
+  const handoffPreview = useEffectEvent(() => preview && !firstFramePainted
+    ? requestAnimationFrame(() => setFirstFramePainted(true))
+    : 0);
   const project = useEffectEvent((handle: ChartHandle, settled: boolean) => onProject?.(handle, settled));
   const select = useEffectEvent((at: number) => onSelect?.(at));
   const showHint = useEffectEvent(() => zoomHint.show());
   const hideHint = useEffectEvent(() => zoomHint.hide());
 
-  const model = useMemo(() => ({ series, timeline, priceFormatter }), [series, timeline, priceFormatter]);
+  const model = useMemo(() => ({ series, timeline, priceFormatter, latestPrice }), [series, timeline, priceFormatter, latestPrice]);
   const mountKey = livePool || coinViewport ? series.map((s) => `${s.type}:${s.pane ?? 0}`).join("|") : model;
   const readModel = useEffectEvent(() => model);
   const writeModel = useRef<((next: typeof model) => void) | null>(null);
@@ -186,7 +217,9 @@ function useTradingViewPlot({
     const previousView = !compact && savedView.current?.rollingWindow === rollingWindow ? savedView.current.view : null;
     let cleanupReady: void | (() => void);
     let times: number[] = [];
-        const liveOptions = coinViewport ? { rightOffsetPixels: LIVE_GUTTER_PX } : {};
+    const crosshairTone = coinAxes ? "--muted" : "--faint";
+    // A pinned left edge is the library's only switch that slides the first time label inside the plot instead of clipping it.
+    const liveOptions = coinViewport ? { rightOffsetPixels: LIVE_GUTTER_PX, fixLeftEdge: true } : {};
     let previousBrowsing: boolean | undefined;
     let previousWidth = 0;
     const { schedule, afterChartWrite, cancel } = chartProjectionQueue(() => {
@@ -229,15 +262,17 @@ function useTradingViewPlot({
       let series = current.series;
       times = chartTimes(current);
       const css = getComputedStyle(node!);
-      const axisInk = readChartColor(css, "--muted");
+      const axisInk = readChartColor(css, coinAxes ? "--ink-2" : "--muted");
       const hair = readChartColor(css, "--hair");
-      const neutral = readChartColor(css, "--faint");
+      const neutral = readChartColor(css, crosshairTone);
       const tones = {
         up: readChartColor(css, "--up"),
         down: readChartColor(css, "--down"),
       };
       const format = (value: number, significant?: number) =>
         hidden ? "••••" : (current.priceFormatter?.(value, significant) ?? chartNumber(value, significant));
+      const labelFormat = (value: number) =>
+        showCoinTag && current.latestPrice?.price === value ? current.latestPrice.label : format(value);
       const crosshairLine = {
         visible: interactive,
         color: neutral,
@@ -251,7 +286,7 @@ function useTradingViewPlot({
         layout: {
           background: { type: library.ColorType.Solid, color: "transparent" },
           textColor: axisInk,
-          fontSize: 11,
+          fontSize: coinAxes ? 12 : 11,
           fontFamily: css.fontFamily,
           attributionLogo: false,
           panes: { separatorColor: hair },
@@ -267,13 +302,13 @@ function useTradingViewPlot({
         crosshair: {
           mode: library.CrosshairMode.Magnet,
           vertLine: crosshairLine,
-          horzLine: crosshairLine,
+          horzLine: coinAxes ? { visible: false, labelVisible: false } : crosshairLine,
         },
         rightPriceScale: {
           visible: !compact,
           borderVisible: false,
           // Wide enough for the TradingView credit in the empty corner under it (audit F40).
-          minimumWidth: priceAxisWidth(),
+          minimumWidth: coinAxes ? 0 : priceAxisWidth(),
           // A tick the plot's top or bottom edge would cut in half is left out (audit acceptance: labels stay whole).
           entireTextOnly: true,
           scaleMargins,
@@ -286,6 +321,7 @@ function useTradingViewPlot({
           rightOffset: compact ? 0 : 2,
           minBarSpacing: 0.001,
           lockVisibleTimeRangeOnResize: true,
+          ...(coinAxes ? coinTimeScale(library, intervalMs) : {}),
           ...liveOptions,
         },
         localization: {
@@ -325,10 +361,13 @@ function useTradingViewPlot({
       // A scale takes its tick labels from its first series, while the last-price tag may belong to a later one (the
       // board draws one series per price source), so each series checks every tag in its pane.
       const drawn: ISeriesApi<Kind>[] = [];
+      const syncLatestPrice = coinPriceMarker(css, library.LineStyle.Dashed, showCoinTag, !rollingWindow);
       const clearOfTags = (pane: number | undefined) => (price: number) =>
-        drawn.every((other, index) => (series[index]!.pane ?? 0) !== (pane ?? 0) || clearOfTag(other, price));
+        drawn.every((other, index) => (series[index]!.pane ?? 0) !== (pane ?? 0) || clearOfTag(other, price,
+          showCoinTag && index === current.latestPrice?.seriesIndex ? current.latestPrice.price : undefined));
       for (const [index, spec] of series.entries())
-        drawn.push(configureSeries(chart!, spec, library, css, format, compact, hidden, tonedIndices.has(index) ? tones[tone] : null, clearOfTags(spec.pane)));
+        drawn.push(configureSeries(chart!, spec, library, css, format, compact, hidden, tonedIndices.has(index) ? tones[tone] : null, clearOfTags(spec.pane), labelFormat));
+      syncLatestPrice?.(drawn, current.latestPrice);
       const retone = (range: { from: Time; to: Time } | null) => {
         if (!range || !toned.length) return;
         const move = visibleMove(tonedData, {
@@ -357,8 +396,9 @@ function useTradingViewPlot({
         tonedData = toned.map((index) => series[index]!.data);
         for (const [index, spec] of series.entries()) {
           configureSeries(chart!, spec, library, css, format, compact, hidden, tonedIndices.has(index) ? tones[tone] : null,
-            clearOfTags(spec.pane), drawn[index], previousSeries[index]);
+            clearOfTags(spec.pane), labelFormat, drawn[index], previousSeries[index]);
         }
+        syncLatestPrice?.(drawn, current.latestPrice);
         // Let the native first fit run before interpreting the viewport as a reader's zoom.
         if (viewReady && timelineChanged && previousTimes.length && times.length) {
           if (coinViewport && logical) viewport.write(rebaseCoinChartRange(logical, previousTimes, times, scale.width()));
@@ -403,6 +443,8 @@ function useTradingViewPlot({
         viewReady = true;
         cleanupReady = ready(handle);
         afterChartWrite();
+        // Pane configuration schedules a canvas draw. Let it paint before exposing it.
+        readyFrame = handoffPreview();
       });
     }
     const resize = new ResizeObserver(() => {
@@ -513,7 +555,9 @@ function useTradingViewPlot({
     rollingWindow,
     compact,
     interactive,
+    coinAxes,
     coinViewport,
+    showCoinTag,
     intervalMs,
     scaleMargins,
     hidden,
@@ -530,14 +574,15 @@ function useTradingViewPlot({
     if (active.current) project(active.current, false);
   }, [projectionKey]);
 
-  return { host, returnLive, failed, browsing, showZoomHint: zoomHint.visible };
+  return { host, returnLive, failed, browsing, firstFramePainted, showZoomHint: zoomHint.visible };
 }
 
-function ChartSurface({ host, className, compact, label, coinViewport, showFooter, showLiveButton, onReturnLive, interactive, showZoomHint, failed }: Readonly<{
+function ChartSurface({ host, className, compact, label, preview, coinViewport, showFooter, showLiveButton, onReturnLive, interactive, showZoomHint, failed }: Readonly<{
   host: Ref<HTMLDivElement>;
   className?: string;
   compact: boolean;
   label?: string;
+  preview?: ReactNode;
   coinViewport: boolean;
   showFooter: boolean;
   showLiveButton: boolean;
@@ -547,7 +592,7 @@ function ChartSurface({ host, className, compact, label, coinViewport, showFoote
   failed: boolean;
 }>) {
   const zoomKey = useSyncExternalStore(noSubscribe, platformZoomKey, () => "Ctrl");
-  const accessibility = chartSurfaceAccessibility(label, coinViewport);
+  const accessibility = chartSurfaceAccessibility(label, coinViewport, Boolean(preview));
   const credit = !compact && (
     <a
       className={styles.credit}
@@ -567,6 +612,7 @@ function ChartSurface({ host, className, compact, label, coinViewport, showFoote
         ref={host}
         {...accessibility}
       />
+      {preview && <div className={styles.preview} aria-hidden="true">{preview}</div>}
       {showFooter ? <div className={styles.footer}>
         {showLiveButton && <Button variant="secondary" size="sm" className={styles.backToLive} onClick={onReturnLive}>Back to live</Button>}
         {credit}
@@ -585,14 +631,38 @@ function ChartSurface({ host, className, compact, label, coinViewport, showFoote
   );
 }
 
-function chartSurfaceAccessibility(label: string | undefined, coinViewport: boolean) {
+function chartSurfaceAccessibility(label: string | undefined, coinViewport: boolean, hasPreview: boolean) {
   const accessibleLabel = label ?? (coinViewport ? "Price chart" : undefined);
-  const keyboard = coinViewport;
+  const keyboard = coinViewport && !hasPreview;
   return {
     role: accessibleLabel ? "img" as const : undefined,
     "aria-label": accessibleLabel,
     tabIndex: keyboard ? 0 : undefined,
     "aria-description": keyboard ? "Arrow keys pan. Plus/minus zoom." : undefined,
+  };
+}
+
+/** Keep the latest close label on the scale. In Live, the guide would paint over the held close. */
+function coinPriceMarker(css: CSSStyleDeclaration, lineStyle: LineStyle, enabled: boolean, lineVisible: boolean) {
+  if (!enabled) return;
+  const color = readChartColor(css, "--muted");
+  const axisLabelColor = readChartColor(css, "--ink-2");
+  const axisLabelTextColor = readChartColor(css, "--card");
+  let marker: { owner: ISeriesApi<Kind>; line: IPriceLine } | undefined;
+
+  return (series: readonly ISeriesApi<Kind>[], latest: Props["latestPrice"]) => {
+    const owner = latest && series[latest.seriesIndex];
+    if (marker && marker.owner !== owner) {
+      marker.owner.removePriceLine(marker.line);
+      marker = undefined;
+    }
+    if (!owner || !latest) return;
+    if (!marker) {
+      const line = owner.createPriceLine({ price: latest.price, lineStyle, color, axisLabelColor, axisLabelTextColor, lineWidth: 1, lineVisible });
+      marker = { owner, line };
+    } else if (marker.line.options().price !== latest.price) {
+      marker.line.applyOptions({ price: latest.price });
+    }
   };
 }
 
@@ -669,6 +739,7 @@ function configureSeries(
   hidden: boolean,
   tone: string | null,
   clear: (price: number) => boolean,
+  labelFormat: (price: number) => string,
   existing?: ISeriesApi<Kind>,
   previous?: ChartSeries,
 ): ISeriesApi<Kind> {
@@ -687,7 +758,7 @@ function configureSeries(
   const priceFormat = {
     type: "custom" as const,
     minMove: 0.000001,
-    formatter: (price: number) => format(price),
+    formatter: labelFormat,
     // Distinct labels first; then a tick the last-price tag would half cover is left blank so neither reads clipped.
     tickmarksFormatter: (prices: number[]) => distinctTicks(prices, format).map((label, index) => (clear(prices[index]) ? label : "")),
   };
@@ -801,11 +872,14 @@ function priceAxisWidth(): number {
 const TAG_CLEARANCE_PX = 16;
 
 /** Whether a scale tick at `price` sits clear of the series' last-price tag (or the series shows none). */
-function clearOfTag(series: ISeriesApi<Kind>, price: number): boolean {
-  if (!series.options().lastValueVisible) return true;
-  const last = series.lastValueData(false);
-  if (last.noData) return true;
-  const tag = series.priceToCoordinate(last.price);
+function clearOfTag(series: ISeriesApi<Kind>, price: number, latestPrice?: number): boolean {
+  if (latestPrice === undefined) {
+    if (!series.options().lastValueVisible) return true;
+    const last = series.lastValueData(false);
+    if (last.noData) return true;
+    latestPrice = last.price;
+  }
+  const tag = series.priceToCoordinate(latestPrice);
   const tick = series.priceToCoordinate(price);
   return tag === null || tick === null || Math.abs(tick - tag) >= TAG_CLEARANCE_PX;
 }

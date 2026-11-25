@@ -8,7 +8,7 @@ import { CoinTypeTag } from "#web/components/blast-ui/CoinTypeTag.tsx";
 
 import { BondingCoinScreen, LegacyCoinScreen } from "#web/components/social/bonding/BondingCoinScreen.tsx";
 import { LegacyCoinChart } from "#web/components/social/coins/LegacyCoinChart.tsx";
-import { CHART_CONTROLS_COOKIE, DEFAULT_CHART_CONTROLS, parseChartControls, parseLiveChartControls, preferredChartControls } from "#web/components/launchpad/chart/chart-model.ts";
+import { allChartInterval, CHART_CONTROLS_COOKIE, LIVE_CHART_INTERVALS, DEFAULT_CHART_CONTROLS, parseChartControls, parseLiveChartControls, preferredChartControls } from "#web/components/launchpad/chart/chart-model.ts";
 import { CoinLive } from "#web/components/launchpad/coin/CoinLive.tsx";
 import { LiveScreen } from "#web/components/launchpad/coin/LiveScreen.tsx";
 import { coinIdentity, pageLifecycle, venueRoute } from "#web/components/launchpad/coin/coin-view.ts";
@@ -83,6 +83,15 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
 }
 
 // Resolve status before streaming. A segment loading.tsx would commit an HTTP 200 early.
+function chartWithAllInterval(chart: ReturnType<typeof coinChartOptions>, query: URLSearchParams, saved: string) {
+  if (typeof chart === "string" || chart.initialControls.range !== "all") return chart;
+  const preferences = new URLSearchParams(saved);
+  const explicit = query.getAll("interval").length === 1 ? query.get("interval") : null;
+  const stored = preferences.get("interval.all") ?? (preferences.get("range") === "all" ? preferences.get("interval") : null);
+  if (LIVE_CHART_INTERVALS.some(interval => interval === explicit || interval === stored)) return chart;
+  return { ...chart, initialControls: { ...chart.initialControls, interval: allChartInterval(chart.source.launchAt, Date.now()) } };
+}
+
 export default async function CoinPage({ params, searchParams }: { params: Params; searchParams?: SearchParams }) {
   const resolved = await resolveCoinPage(params);
   if (resolved.kind === "not-found") notFound();
@@ -156,7 +165,7 @@ async function renderLaunchCoin(
   };
   const search = query ?? {};
   const identity = coinIdentity(page);
-  const defaults = pageLifecycle(page) === "migrated" ? { ...DEFAULT_CHART_CONTROLS, range: "24h" } as const : DEFAULT_CHART_CONTROLS;
+  const defaults = pageLifecycle(page) === "migrated" ? { interval: "15m", range: "24h" } as const : DEFAULT_CHART_CONTROLS;
   const urlControls = parseLiveChartControls(search, defaults);
   const savedControls = requestCookies.get(CHART_CONTROLS_COOKIE)?.value ?? "";
   const chartQuery = new URLSearchParams();
@@ -164,18 +173,18 @@ async function renderLaunchCoin(
     const value = search[name];
     for (const field of typeof value === "string" ? [value] : value ?? []) chartQuery.append(name, field);
   }
-  const chartControls = preferredChartControls(savedControls, chartQuery.toString(), urlControls);
+  const requestedControls = preferredChartControls(savedControls, chartQuery.toString(), urlControls);
   const anchor = activityLink(launchId, search.activity);
   const market = browserMarket && page.confirmed && wantsInitialMarket(new Headers(requestHeaders), `/coin/${coinKey}`)
     ? initialMarketDependencies(browserMarket.expected, new Headers(requestHeaders))
     : null;
-  const chart = coinChartOptions(page, browserMarket, chartControls);
+  const chart = chartWithAllInterval(coinChartOptions(page, browserMarket, requestedControls), chartQuery, savedControls);
   const [initialChart, initialActivity] = await Promise.all([
     market && typeof chart !== "string" ? readChartSnapshot(chart.source, chart.initialControls, market, Date.now()) : undefined,
     market ? readActivityPage(launchId, listStart(launchId, anchor), market) : undefined,
   ]);
   const slots = coinTerminalSlots(page, actions, browserMarket, {
-    chartControls, initialChart, initialActivity, activity: { explorer, anchor }, theses: THESES, quoteLabel: "", compact: true,
+    chartControls: typeof chart === "string" ? requestedControls : chart.initialControls, initialChart, initialActivity, activity: { explorer, anchor }, theses: THESES, quoteLabel: "", compact: true,
   });
   const execution = <CoinTradeExecution key={launchId} page={page} availability={tradeAvailability} connection={connection}>{slots.execution}</CoinTradeExecution>;
   const refreshMs = refreshIntervalMs(page);

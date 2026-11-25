@@ -184,6 +184,8 @@ projects:
                 sync: false
               - key: BLAST_BACKEND_MAX_INFLIGHT
                 sync: false
+              - key: BLAST_BACKEND_TRUSTED_PROXY_CIDRS
+                sync: false
               - key: BLAST_DEPLOYMENT_FINGERPRINT
                 sync: false
               - key: BLAST_INFRA_API_KEY
@@ -193,6 +195,8 @@ projects:
               - key: BLAST_INFRA_READ_MODE
                 sync: false
               - key: BLAST_INFRA_READ_ORIGIN
+                sync: false
+              - key: BLAST_LIVE_SOCKET_HOST
                 sync: false
               - key: BLAST_NETWORK
                 sync: false

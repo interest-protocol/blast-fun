@@ -15,7 +15,7 @@ import { ChartCandlesIcon, ChartLineIcon } from "#web/components/blast-ui/Icons.
 import { Popover, PopoverSurface } from "#web/components/blast-ui/Popover.tsx";
 import { useLaunchWallet, useWalletTrades } from "../activity/wallet-trades";
 import { tradeWalletLabels } from "../activity/wallet-labels";
-import type { WalletChartTrade } from "#web/components/charts/wallet-markers.ts";
+import { walletMarkerKey, type WalletChartTrade, type WalletRipple } from "#web/components/charts/wallet-markers.ts";
 import { useMemo, useState } from "react";
 import { useShellPrefs } from "#web/components/blast-ui/use-shell-prefs.ts";
 import { useMobileChartLayout } from "#web/components/charts/use-mobile-chart-layout.ts";
@@ -452,6 +452,7 @@ function ChartFigure({ drawn, migrationAt, venuePoolKey, geometry, latest, lates
 }>) {
   const deployer = useLaunchWallet();
   const activity = useWalletTrades();
+  const liveTrade = useCandleTrade();
   const walletTrades = useMemo(() => activity.flatMap((row): WalletChartTrade[] => {
     const labels = tradeWalletLabels(row, deployer);
     if (!row.actor || !labels.length) return [];
@@ -483,10 +484,21 @@ function ChartFigure({ drawn, migrationAt, venuePoolKey, geometry, latest, lates
       <div className={compact ? styles.compactCanvas : styles.canvas}>
         {compact
           ? <KLineCoinChart sources={drawn} interval={controls.interval} memeDecimals={source.memeDecimals} quoteDecimals={source.quoteDecimals} quoteUsd={quoteUsd ?? null} latestAvailable={latestAvailable} label={label} style={line ? "line" : "candles"} trade={candleTrade} walletTrades={walletTrades} migrationAt={migrationAt} />
-          : <PoolCandleChart latestAvailable={latestAvailable} walletTrades={walletTrades} label={label} rollingWindow={controls.range === "live"} presentation={presentation} memeDecimals={source.memeDecimals} quoteDecimals={source.quoteDecimals} quoteUsd={quoteUsd} sources={drawn} migrationAt={migrationAt} migrationLabel={venue ? <>Graduated to <DexIdentity venue={venue} /></> : graduation} from={geometry.start} to={geometry.end} />}
+          : <PoolCandleChart latestAvailable={latestAvailable} walletTrades={walletTrades} ripple={walletRipple(walletTrades, liveTrade, controls.interval)} trade={candleTrade} label={label} compact={compact} rollingWindow={controls.range === "live"} presentation={presentation} memeDecimals={source.memeDecimals} quoteDecimals={source.quoteDecimals} quoteUsd={quoteUsd} sources={drawn} migrationAt={migrationAt} migrationLabel={venue ? <>Graduated to <DexIdentity venue={venue} /></> : graduation} quoteSymbol={source.quoteSymbol} from={geometry.start} to={geometry.end} />}
       </div>
     </figure>
   );
+}
+
+function walletRipple(trades: readonly WalletChartTrade[], live: ReturnType<typeof useCandleTrade>, interval: ChartControls["interval"]): WalletRipple | null {
+  if (!live) return null;
+  const tagged = trades.find(row => row.cursor === live.trade.cursor && row.poolKey === live.poolKey && row.side === live.trade.side);
+  if (!tagged) return null;
+  return {
+    cursor: tagged.cursor,
+    receivedAt: live.receivedAt,
+    markerKey: walletMarkerKey(tagged.poolKey, tagged.side, candleBucketStart(interval, tagged.timestampMs)),
+  };
 }
 
 function ChartLegend({ view, inFilters = false }: Readonly<{ view: ReturnType<typeof useChartViewControls>; inFilters?: boolean }>) {
