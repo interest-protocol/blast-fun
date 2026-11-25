@@ -112,11 +112,19 @@ export function withHomeMarketDetails(path: string): string {
 }
 
 export const HOME_RECENT_BUYS_PARAM = "recent_buys";
+/**
+ * The opt-in value that adds each buy's dollar value. `1` keeps answering
+ * without it: a tab opened before dollars shipped rejects a field it does not
+ * know. Drop `1` once no such tab can still be open.
+ */
+export const HOME_RECENT_BUYS_WITH_USD = "2";
 export const HOME_RECENT_BUY_MS = 30_000;
+/** A priced buy under this many dollars is too small to show on Home. */
+export const HOME_RECENT_BUY_MIN_USD = "0.1";
 
 /** Opt into confirmed buy details on the same Discover read. */
 export function withHomeDiscoverDetails(path: string): string {
-  return `${withHomeMarketDetails(path)}&${HOME_RECENT_BUYS_PARAM}=1`;
+  return `${withHomeMarketDetails(path)}&${HOME_RECENT_BUYS_PARAM}=${HOME_RECENT_BUYS_WITH_USD}`;
 }
 
 /** The activity window every count, total and preview is scoped to. */

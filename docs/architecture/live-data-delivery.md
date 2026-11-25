@@ -119,7 +119,7 @@ After 3 failures in a row, the tab uses SSE for 10 minutes.
 | Long-lived sockets | Each socket closes 1000 after a random 30–60 minutes and reconnects with a fresh ticket. So turning the flag off, rotating the secret, or changing a limit reaches every socket within an hour. |
 | Reconnect storms after a deploy | Drain closes with 1012, spread over 5 s. Clients wait a random 1–30 s before reconnecting. Prices may clear (9 s watchdog), and the screens' 15 s CDN poll covers the gap. A resume from the ring avoids a history refetch per tab. |
 | Data integrity | Frames are the reader's frames after the same checks: an explicit type allowlist with a validator per type, `parseInfraProvenance`, cursor and deployment fingerprint. New frame types (for example `coin_stats`) are added to the allowlist with a validator. The socket adds no data source. |
-| Spoofed client IP | The hints service runs `trusted-proxy` ingress, so `render.yaml` declares `BLAST_BACKEND_TRUSTED_PROXY_CIDRS`. `ingressAddress` accepts exactly one `X-Forwarded-For` address. Null means refuse; it never falls back to the peer address. Sign-off test: send `X-Forwarded-For: 1.2.3.4` from outside, to both `live.blast.fun` and the onrender.com host, and record what arrives. |
+| Spoofed client IP | The hints service runs `trusted-proxy` ingress, so `render.yaml` declares `BLAST_BACKEND_TRUSTED_PROXY_CIDRS`. `ingressAddress` keys on the last `X-Forwarded-For` entry, the one Render appended; client-sent entries before it are ignored. Measured 2026-11-25: Render's proxies sit in 10.24.0.0/13 and append to a forged header (2 entries arrive). Null means refuse; it never falls back to the peer address. |
 | Transport | TLS ends at Render's proxy (managed certificate). `wss` only. CSP `connect-src` adds the live origin from configuration per environment, checked by `assertPlainSources`. `/v1/socket` is served only on the live host. |
 
 ### Residual risks
@@ -139,7 +139,7 @@ After 3 failures in a row, the tab uses SSE for 10 minutes.
 ### Sign-off
 
 - [ ] Jose: controls accepted, flag may go on.
-- [ ] Render `X-Forwarded-For` test recorded (see above).
+- [ ] Render `X-Forwarded-For` test recorded: two client IPs get separate keys, and neither a forged leading entry nor a second `X-Forwarded-For` line changes the key, on `live.blast.fun` and the onrender.com host.
 - [ ] No first-party cookie uses `Domain=blast.fun`.
 - [ ] Load test: memory per socket, the chosen cap and the instance count recorded here.
 

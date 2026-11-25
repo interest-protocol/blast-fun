@@ -21,10 +21,9 @@ import { CoinCard } from "./CoinCard";
 import styles from "./CoinHome.module.css";
 import { coinsByIdsQuery, discoverQuery, followingCoinsQuery } from "./home-client";
 import { resultsAnnouncement, SORT_LABELS } from "./home-state";
-import { homeCoinKey } from "./home-model";
+import { biggestBuy, buyCueOf, homeCoinKey, type HomeBuyCue } from "./home-model";
 import { TableFooter } from "./TableFooter";
 import { countWords } from "@blast/core/web/format.ts";
-import { amtExact, atLeastPow10, exactAtoms, qtyExact } from "@blast/core/web/exact-amount.ts";
 import type { FeedFreshnessSource } from "../home/feed-freshness";
 import { useHomeLive } from "./use-home-live";
 import { useSortPrefetch } from "./use-sort-prefetch";
@@ -119,7 +118,7 @@ function motionKeys(props: ListProps, viewKey: string | undefined, motionVersion
  * With no rows (a `result` in their place) the pager, count go;
  * a settled `empty` result drops the column header and its sorts too.
  */
-export function CoinList({ coins, props, result, empty = false, end, viewKey, rankings, checkpoint = 0, buy, swapping = false }: Readonly<{ coins: readonly RankedCoin[]; props: ListProps; result?: ReactNode; empty?: boolean; end?: ReactNode; viewKey?: string; rankings?: Rankings; checkpoint?: number; buy?: Readonly<{ coinKey: string; amount: string }>; /** The previous view's rows, held while the new view loads. */ swapping?: boolean }>) {
+export function CoinList({ coins, props, result, empty = false, end, viewKey, rankings, checkpoint = 0, buy, swapping = false }: Readonly<{ coins: readonly RankedCoin[]; props: ListProps; result?: ReactNode; empty?: boolean; end?: ReactNode; viewKey?: string; rankings?: Rankings; checkpoint?: number; buy?: Readonly<{ coinKey: string; cue: HomeBuyCue }>; /** The previous view's rows, held while the new view loads. */ swapping?: boolean }>) {
   const motion = motionKeys(props, viewKey, rankings?.motionVersion);
   const list = useRankMotion(motion.view, { group: motion.group, holding: swapping });
   const hasResult = Boolean(result);
@@ -144,13 +143,13 @@ export function CoinList({ coins, props, result, empty = false, end, viewKey, ra
   );
 }
 
-function CoinRows({ coins, props, latest, checkpoint, buy, list, rankings, swapping }: Readonly<{ coins: readonly RankedCoin[]; props: ListProps; latest: ReturnType<typeof useHomePrices>; checkpoint: number; buy?: Readonly<{ coinKey: string; amount: string }>; list: ReturnType<typeof useRankMotion>; rankings?: Rankings; swapping: boolean }>) {
+function CoinRows({ coins, props, latest, checkpoint, buy, list, rankings, swapping }: Readonly<{ coins: readonly RankedCoin[]; props: ListProps; latest: ReturnType<typeof useHomePrices>; checkpoint: number; buy?: Readonly<{ coinKey: string; cue: HomeBuyCue }>; list: ReturnType<typeof useRankMotion>; rankings?: Rankings; swapping: boolean }>) {
   return <ol aria-busy={swapping || undefined} className={clsx(styles.list, styles.rankedList)} data-swapping={swapping || undefined} data-volume-sort={props.source === "discover" && props.sort === "trending" || undefined} ref={list} {...rankings?.interactionProps}>
     {coins.map((coin, index) => (
     <CoinCard
       key={homeCoinKey(coin)}
       coin={coin}
-      buyAmount={buy?.coinKey === homeCoinKey(coin) ? buy.amount : undefined}
+      buy={buy?.coinKey === homeCoinKey(coin) ? buy.cue : undefined}
       rank={(props.page - 1) * props.rows + index + 1}
       livePrice={props.streamPrices ? newerHomePrice(latest, coin, coin.readCheckpoint ?? checkpoint) : undefined}
       nowMs={props.nowMs}
@@ -218,27 +217,27 @@ function holdNewCoins(query: HomeQuery): boolean {
   return query.sort === "newest" && query.page === 1 && query.cursor === null;
 }
 
+/** How long a buy stays on its row: long enough to read the figure, matched by the CSS animation. */
+const HOME_BUY_CUE_MS = 1_500;
+
 function useHomeBuyCue(query: HomeQuery, settled: boolean, showBuys: boolean | undefined, freshness: FeedFreshnessSource | undefined, coins: readonly RankedCoin[]) {
   const view = JSON.stringify(query);
-  const [buyCue, setBuyCue] = useState<{ view: string; coinKey: string; symbol: string; amount: string }>();
+  const [buyCue, setBuyCue] = useState<{ view: string; coinKey: string; symbol: string; cue: HomeBuyCue }>();
   const nextCueAt = useRef(0);
   useEffect(() => {
     if (!buyCue) return;
-    const timeout = window.setTimeout(() => setBuyCue(undefined), 900);
+    const timeout = window.setTimeout(() => setBuyCue(undefined), HOME_BUY_CUE_MS);
     return () => window.clearTimeout(timeout);
   }, [buyCue]);
   useHomeLive(query, settled, freshness, buys => {
     const now = performance.now();
     if (now < nextCueAt.current || !showBuys) return;
     const listed = new Map(coins.map(coin => [homeCoinKey(coin), coin.symbol]));
-    const buy = buys.filter(event => listed.has(event.coin_key))
-      .sort((a, b) => b.occurred_at_ms - a.occurred_at_ms)[0];
-    if (!buy) return;
-    const value = exactAtoms(buy.quote_atoms, buy.quote_decimals);
-    if (!value) return;
-    const amount = atLeastPow10(value, 0) ? qtyExact(value) : amtExact(value);
-    nextCueAt.current = now + 1_000;
-    setBuyCue({ view, coinKey: buy.coin_key, symbol: listed.get(buy.coin_key)!, amount: `${amount}\u00a0${buy.quote_symbol}` });
+    const buy = biggestBuy(buys.filter(event => listed.has(event.coin_key)));
+    const cue = buy && buyCueOf(buy);
+    if (!cue) return;
+    nextCueAt.current = now + HOME_BUY_CUE_MS + 100;
+    setBuyCue({ view, coinKey: buy.coin_key, symbol: listed.get(buy.coin_key)!, cue });
   });
   return settled && buyCue?.view === view ? buyCue : undefined;
 }
@@ -267,7 +266,7 @@ export function DiscoverList({ query, initial, props, freshness }: Readonly<{ qu
 
   return (
     <>
-      <span className="sr-only" role="status">{buy ? `${buy.symbol} buy for ${buy.amount}` : ""}</span>
+      <span className="sr-only" role="status">{buy ? `${buy.symbol} buy for ${buy.cue.text.slice(1)}` : ""}</span>
       {data ? <ResultsAnnouncement props={props} count={data.total} pages={data.pages} /> : null}
       <FreshnessNote asOf={data?.as_of} />
       <CoinList
