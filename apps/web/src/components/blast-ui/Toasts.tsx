@@ -5,13 +5,15 @@ import { createPortal } from "react-dom";
 import { toast as sonner, Toaster, type ToastClassnames } from "sonner";
 
 import { AlertCircleIcon, CheckIcon, CloseIcon, ExternalIcon } from "./Icons";
+import { LoadingIndicator } from "./LoadingIndicator";
 import styles from "./Toasts.module.css";
 
 /**
  * Toasts (FEATURE-MAP §18), on sonner (OA-28): bottom right (centred above
  * the tab bar on phones), in a polite live region. A plain toast lives 3.6 s;
  * one with a subtitle or link is "rich", and one with a link lives 7 s with a
- * dismiss button. Errors and recovery actions remain until used or dismissed.
+ * dismiss button. Pending toasts remain until the operation settles.
+ * Errors and recovery actions remain until used or dismissed.
  * The pointer over the stack pauses the timers.
  * sonner keeps the list, the timers and the exit;
  * `Toasts.module.css` draws the gate's toast and its motion.
@@ -22,7 +24,7 @@ export type ToastOptions = Readonly<{
   href?: string;
   link?: string;
   id?: string;
-  tone?: "error";
+  tone?: "error" | "pending";
   action?: Readonly<{ label: string; onClick: () => void }>;
   /** Mobile claim feedback occupies space beside its result instead of floating over it. */
   mobileTargetId?: string;
@@ -63,7 +65,7 @@ const TOAST_CLASSES: ToastClassnames = { content: styles.contents, title: styles
 /** No hotkey: sonner's Alt+T would take focus from a field where macOS types "†". */
 const NO_HOTKEY: string[] = [];
 
-const toastDuration = (options: ToastOptions) => options.tone === "error" || options.action ? Infinity : options.href ? 7000 : 3600;
+const toastDuration = (options: ToastOptions) => options.tone || options.action ? Infinity : options.href ? 7000 : 3600;
 
 const MOBILE_QUERY = "(max-width: 760px)";
 const mobileTargets = new Map<string, HTMLElement>();
@@ -145,6 +147,16 @@ export function ToastProvider({ children }: Readonly<{ children: ReactNode }>) {
   );
 }
 
+function ToastLink({ href, label = "View transaction" }: Readonly<{ href: string; label?: string }>) {
+  const external = !href.startsWith("/");
+  return (
+    <a className={styles.link} href={href} rel={external ? "noopener noreferrer" : undefined} target={external ? "_blank" : undefined}>
+      {label}
+      {external ? <ExternalIcon /> : null}
+    </a>
+  );
+}
+
 /** Shared feedback with an error icon and recovery action when requested. */
 export function ToastBody({
   id,
@@ -156,6 +168,12 @@ export function ToastBody({
     sonner.dismiss(id);
     if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true });
   };
+  if (options.tone === "pending") {
+    return <>
+      <LoadingIndicator label={title} />
+      <span aria-hidden="true" className={styles.text}><b>{title}</b></span>
+    </>;
+  }
   return (
     <>
       <span className={options.tone === "error" ? `${styles.tick} ${styles.errorIcon}` : styles.tick}>
@@ -164,12 +182,7 @@ export function ToastBody({
       <span className={styles.text}>
         <b>{options.titleContent ?? title}</b>
         {options.sub ? <span>{options.sub}</span> : null}
-        {options.href ? (
-          <a className={styles.link} href={options.href} rel={options.href.startsWith("/") ? undefined : "noopener noreferrer"} target={options.href.startsWith("/") ? undefined : "_blank"}>
-            {options.link ?? "View transaction"}
-            {options.href.startsWith("/") ? null : <ExternalIcon />}
-          </a>
-        ) : null}
+        {options.href ? <ToastLink href={options.href} label={options.link} /> : null}
       </span>
       {options.action ? (
         <button className={styles.retry} onBlur={stopToasterFocusTracking} onClick={() => { dismiss(); options.action?.onClick(); }} onFocus={stopToasterFocusTracking} type="button">

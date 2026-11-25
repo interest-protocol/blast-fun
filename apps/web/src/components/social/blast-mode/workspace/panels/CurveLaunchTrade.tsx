@@ -39,8 +39,30 @@ export function CurveLaunchTrade({
   children: ReactNode;
 }>) {
   const setup = use(CurveTradeSetupContext);
-  const client = useAppQueryClient();
   const candidate = setup !== null && mayTradeOnCurve(asset, coin);
+  const { live, shown, refresh } = useCurveTradeLaunch(asset, candidate, visible);
+  if (setup === null || shown === null) return children;
+  if (setup.availability.status === "unavailable") {
+    return live ? <CurveTradeUnavailable reason={setup.availability.reason} /> : children;
+  }
+  return (
+    <StandaloneCurveTrade
+      key={shown}
+      config={setup.availability.config}
+      connection={setup.connection}
+      launchId={shown}
+      coinType={asset.coin_type}
+      live={live}
+      onInvalidate={refresh}
+      onMigrated={refresh}
+      fallback={children}
+    />
+  );
+}
+
+/** Keep the last rail mounted while it finishes a trade after migration. */
+function useCurveTradeLaunch(asset: CoinAsset, candidate: boolean, visible: boolean) {
+  const client = useAppQueryClient();
   const read = useQuery({ ...curveLaunchQuery(client, asset), enabled: candidate && visible }, client);
   const [retained, setRetained] = useState<string | null>(null);
   const launchId = activeCurveLaunch(candidate, read, retained);
@@ -51,22 +73,5 @@ export function CurveLaunchTrade({
   const refresh = useCallback(() => {
     void client.invalidateQueries({ queryKey: queryKeys.workspace.curveLaunch(network, coinType) }).catch(() => {});
   }, [client, network, coinType]);
-  const shown = launchId ?? retained;
-  if (setup === null || shown === null) return children;
-  if (setup.availability.status === "unavailable") {
-    return launchId === null ? children : <CurveTradeUnavailable reason={setup.availability.reason} />;
-  }
-  return (
-    <StandaloneCurveTrade
-      key={shown}
-      config={setup.availability.config}
-      connection={setup.connection}
-      launchId={shown}
-      coinType={coinType}
-      live={launchId !== null}
-      onInvalidate={refresh}
-      onMigrated={refresh}
-      fallback={children}
-    />
-  );
+  return { live: launchId !== null, shown: launchId ?? retained, refresh };
 }

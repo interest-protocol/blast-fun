@@ -10,7 +10,8 @@ import { useState } from "react";
 
 import { Button, ButtonLink, IconButton } from "#web/components/blast-ui/Button.tsx";
 import { EmptyState } from "#web/components/blast-ui/EmptyState.tsx";
-import { ListsLate, useListsLate } from "#web/components/blast-ui/ServiceStatus.tsx";
+import { ListsLate } from "#web/components/blast-ui/ServiceStatus.tsx";
+import { useListsLate } from "#web/components/blast-ui/service-status.ts";
 import { LAUNCH_PATH } from "#web/components/blast-ui/nav.ts";
 import { updateSavedList, useListRestoration } from "#web/components/blast-ui/list-restoration.ts";
 import { IntentLink } from "#web/components/blast-ui/NavigationLink.tsx";
@@ -210,7 +211,7 @@ function FeaturedCurves({ heroes, answer, details }: Readonly<{
 }>) {
   if (heroes.length === 0) return null;
   return <section aria-label="Selected bonding curves">
-    <FeaturedCarousel count={heroes.length} hideControlsOnMobile kind="bonding curves">
+    <FeaturedCarousel kind="bonding curves">
       {heroes.map(hero => <FeaturedCurve key={hero.launchId} row={hero} featured={answer?.featured === true} metrics={answer?.metrics?.[hero.launchId]} seed={details?.[hero.launchId]} />)}
     </FeaturedCarousel>
   </section>;

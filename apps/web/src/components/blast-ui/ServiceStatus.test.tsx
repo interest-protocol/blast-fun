@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { installTestDom } from "../../../test/fixtures/social/test-dom.ts";
 import { createTestQueryClient, settleQueries, withQueryClient } from "#web/lib/query/test-client.ts";
-import { ServiceStatus, impactLine } from "./ServiceStatus";
+import { ServiceStatus } from "./ServiceStatus";
+import { impactLine } from "./service-status.ts";
 
 const { document } = installTestDom();
 const { act } = await import("react");

@@ -197,29 +197,43 @@ function CurveList({ launchId, tab, asset, coin, visible }: Readonly<{ launchId:
 export function HolderPositions({ asset, coin, visible, withThesis }: Readonly<{ asset: FocusContextProps["asset"]; coin: CoinRecord | null; visible: boolean; withThesis: boolean }>) {
   const load = useCallback((signal: AbortSignal) => fetchCoinHolders(asset.coin_type, signal), [asset.coin_type]);
   const holders = useCoinRead<HomeHoldersPage>(visible && asset.network === "mainnet", `holders:${asset.network}:${asset.coin_type}`, load);
-  const followingOnly = useContext(FollowingOnlyContext);
-  const clearFollowingOnly = useContext(ClearFollowingOnlyContext);
-  const store = useViewerStateStore();
-  useSyncExternalStore(store?.subscribe ?? noSubscribe, store?.version ?? noVersion, noVersion);
   const page = holders.value?.coin_type === asset.coin_type ? holders.value : null;
-  const callsigns = (page?.holders ?? []).flatMap(holder => holder.actor?.type === "account" ? [holder.actor.callsign] : []).join(",");
-  useEffect(() => {
-    if (store && callsigns) store.want({ callsigns: callsigns.split(","), followsYou: callsigns.split(",") });
-  }, [store, callsigns]);
+  const store = useHolderRelationships(page);
   if (asset.network !== "mainnet") return <NoRows><PanelEmptyState title="Holders unavailable for this coin" /></NoRows>;
   if (holders.status === "pending" && !page) return <span role="status" aria-label="Loading holders"><SkeletonText>Holder positions, PnL and entries</SkeletonText></span>;
   if (holders.status === "error" && !page) return <NoRows><HoldersFailure unavailable={holders.unavailable} retry={holders.retry} /></NoRows>;
   if (!page) return <NoRows><PanelEmptyState title="Holders unavailable for this coin" /></NoRows>;
+  return <HolderTable page={page} symbol={coin?.symbol ?? null} store={store} withThesis={withThesis} />;
+}
+
+function useHolderRelationships(page: HomeHoldersPage | null) {
+  const store = useViewerStateStore();
+  useSyncExternalStore(store?.subscribe ?? noSubscribe, store?.version ?? noVersion, noVersion);
+  const callsigns = (page?.holders ?? []).flatMap(holder => holder.actor?.type === "account" ? [holder.actor.callsign] : []).join(",");
+  useEffect(() => {
+    if (store && callsigns) store.want({ callsigns: callsigns.split(","), followsYou: callsigns.split(",") });
+  }, [store, callsigns]);
+  return store;
+}
+
+function HolderTable({ page, symbol, store, withThesis }: Readonly<{
+  page: HomeHoldersPage;
+  symbol: string | null;
+  store: ReturnType<typeof useViewerStateStore>;
+  withThesis: boolean;
+}>) {
+  const followingOnly = useContext(FollowingOnlyContext);
+  const clearFollowingOnly = useContext(ClearFollowingOnlyContext);
   const { rows, empty } = holderRows(page.holders, { follows: followingOnly ? callsign => store?.following({ kind: "account", callsign }) === true : null, withThesis });
   // Following only alone emptied a list that has holders: one press shows them all, as Trades does.
   if (empty !== null) return followingOnly && !withThesis && clearFollowingOnly && page.holders.length > 0
     ? <EmptyState compact role="status" title={empty} action={<Button variant="ghost" size="sm" type="button" onClick={clearFollowingOnly}>Show all holders</Button>} />
     : <PanelEmptyState title={empty} />;
-  return <table className={`${styles.holderTable} ${holderStyles.table}`} aria-label={`Largest ${coin?.symbol ?? ""} holders`.replace("  ", " ")}>
+  return <table className={`${styles.holderTable} ${holderStyles.table}`} aria-label={`Largest ${symbol ?? ""} holders`.replace("  ", " ")}>
     <thead><tr className={styles.holderHead}>
       <th scope="col">Trader</th><th scope="col">Position</th><th scope="col">PnL</th><th scope="col">Avg entry</th><th scope="col" className={holderStyles.thesis}>Thesis</th>
     </tr></thead>
-    <tbody>{rows.map(holder => <HolderRow key={actorKey(actorIdentity(holder.actor))} holder={holder} decimals={page.decimals} symbol={coin?.symbol ?? null} />)}</tbody>
+    <tbody>{rows.map(holder => <HolderRow key={actorKey(actorIdentity(holder.actor))} holder={holder} decimals={page.decimals} symbol={symbol} />)}</tbody>
   </table>;
 }
 

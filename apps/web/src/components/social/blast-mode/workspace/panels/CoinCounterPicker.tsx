@@ -6,7 +6,8 @@ import { useCallback, useId, useState } from "react";
 import type { SocialWallet } from "@blast/core/web/contracts/coins.ts";
 import { Sheet, SheetClose, SheetHeading } from "#web/components/blast-ui/Sheet.tsx";
 import { CoinMark } from "#web/components/blast-ui/CoinMark.tsx";
-import { TOKEN_PICKER_SHEET, TokenPicker } from "#web/components/social/coins/TokenPicker.tsx";
+import pickerStyles from "#web/components/social/coins/coins.module.css";
+import { TokenPicker } from "#web/components/social/coins/TokenPicker.tsx";
 import { PUBLIC_BASE_COINS, walletCoinViews, type WalletCoinView } from "#web/components/social/coins/coin-model.ts";
 import { fetchListedTradeCoins } from "#web/components/social/coins/swap-client.ts";
 import { ECOSYSTEM_COIN_VIEWS, tradableCoinView } from "#web/components/social/coins/swap-model.ts";
@@ -46,7 +47,7 @@ export function CoinCounterPicker({active=true,side,counter,wallet,hidden,disabl
       leadingIcon={<CoinMark coin={counter.choice.coin} size={22}/>}>
       <span className={styles.payText}><span className={styles.payLabel}>{label}</span><span className={styles.paySymbol}>{counter.facts.symbol}</span></span>
     </DisclosureButton>
-    <Sheet className={`${theme.theme} ${TOKEN_PICKER_SHEET}`} open={open && !disabled} onRequestClose={()=>setOpen(false)} labelledBy={title}>
+    <Sheet className={`${theme.theme} ${pickerStyles.pickerSheet}`} open={open && !disabled} onRequestClose={()=>setOpen(false)} labelledBy={title}>
       <SheetClose onClick={()=>setOpen(false)}/><SheetHeading id={title} title={label}/>
       {open && !disabled && <TokenPicker current={counter.choice.coin} wallet={walletCoinViews(wallet)} pins={[]} hidden={hidden} listCoins={counter.listCoins} listHoldings={listHoldings} catalogCoins={ECOSYSTEM_COIN_VIEWS} onPick={coin=>{if(disabled)return;onChange();counter.pick(coin);setOpen(false);}}/>}
     </Sheet>
