@@ -14,8 +14,8 @@ import { adoptAccountSettings } from "./use-account-settings-sync.ts";
 
 /**
  * OA-33 (amending OA-25 Q3a) at the point a signed-in session reads its
- * account's settings: an account that has never chosen (`sound: null`) never
- * turns sound on; an explicit choice is adopted; and the choice the reader
+ * account's settings: an account that has never chosen (`sound: null`) keeps the
+ * device’s choice or default; an explicit choice is adopted; and the choice the reader
  * made on this device is handed to an account that has none — once, with
  * only `{ sound }` in the body and the session's own credentials (OA-16).
  */
@@ -58,11 +58,11 @@ test.after(() => {
   globalThis.fetch = realFetch;
 });
 
-test("OA-33: an account that has not chosen leaves a device with no choice off, and nothing is written anywhere", async () => {
+test("OA-33: an account that has not chosen leaves a device with no choice on, and nothing is written anywhere", async () => {
   const { values, sent } = page();
   adoptAccountSettings({ explorer: "suiscan", sound: null }, soundChangeMark(), token);
   await settled();
-  assert.equal(soundEnabledNow(), false);
+  assert.equal(soundEnabledNow(), true);
   assert.equal(values.has(FEEL_SOUND_KEY), false);
   assert.deepEqual(sent, [], "no choice to hand over");
 });

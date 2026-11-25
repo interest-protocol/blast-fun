@@ -7,6 +7,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { AppRouterContext, type AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { PathnameContext } from "next/dist/shared/lib/hooks-client-context.shared-runtime";
 
+import { FeelProvider } from "#web/components/blast-feel/FeelProvider.tsx";
 import { CoinPageWallet } from "./CoinPageWallet";
 import { AppShell } from "./AppShell";
 import type { PortfolioSummaryState } from "./portfolio";
@@ -28,13 +29,15 @@ const READY: PortfolioSummaryState = { status: "ready", summary: { total_usd: 4_
 function shell(props: Partial<Parameters<typeof AppShell>[0]> = {}, pathname = "/feed"): string {
   return at(
     pathname,
-    <AppShell portfolio={READY} signInHref="/sign-in?next=%2F" signedIn viewer={KAI} {...props}>
-      <p>page</p>
-    </AppShell>,
+    <FeelProvider>
+      <AppShell portfolio={READY} signInHref="/sign-in?next=%2F" signedIn viewer={KAI} {...props}>
+        <p>page</p>
+      </AppShell>
+    </FeelProvider>,
   );
 }
 
-test("the rail holds its six destinations and the shared Create trigger; Search is in the top bar", () => {
+test("the rail holds its six destinations and the shared Create trigger; Search and one Audio menu share the top bar", () => {
   const html = shell();
   const rail = html.slice(html.indexOf('<nav aria-label="Primary"'), html.indexOf('class="railSpacer"'));
   assert.match(rail, /<a aria-label="Blast home"[^>]*href="\/"/);
@@ -45,6 +48,14 @@ test("the rail holds its six destinations and the shared Create trigger; Search 
   assert.match(rail, /<a aria-current="page" class="navItem" href="\/">/);
   assert.match(rail, /<button(?=[^>]*aria-haspopup="dialog")(?=[^>]*aria-label="Swap")(?=[^>]*class="navItem")[^>]*><svg[^>]*>.*?<\/svg><span>Swap<\/span><\/button>/s);
   assert.doesNotMatch(rail, /<kbd>/, "no key hints in the rail");
+  const document = new JSDOM(html).window.document;
+  const audio = document.querySelectorAll('button[aria-label="Audio"]');
+  assert.equal(audio.length, 1);
+  assert.equal(audio[0]!.previousElementSibling?.getAttribute("aria-label"), "Search");
+  assert.equal(audio[0]!.getAttribute("aria-haspopup"), "menu");
+  assert.equal(audio[0]!.querySelector("svg")?.getAttribute("aria-hidden"), "true");
+  assert.equal(document.querySelector("audio"), null, "the player is created only after opt-in");
+  assert.doesNotMatch(html, /cozy-vinyl-groove\.mp3/, "never requests the track on page load");
   const bar = html.slice(html.indexOf("<header"), html.indexOf("</header>"));
   assert.match(bar, /<button(?=[^>]*aria-keyshortcuts="\/")(?=[^>]*aria-label="Search")(?=[^>]*title="Search \(\/\)")[^>]*>/);
   assert.match(rail, /<button(?=[^>]*aria-label="Create")(?=[^>]*aria-haspopup="menu")(?=[^>]*class="navItem railCreate")[^>]*><svg[^>]*>.*?<\/svg><span>Create<\/span><\/button>/s);
@@ -184,7 +195,7 @@ test("unresolved authentication shows only a quiet, inaccessible account placeho
       const bar = html.slice(html.indexOf("<header"), html.indexOf("</header>"));
       assert.match(bar, /<div aria-hidden="true" class="accountPlaceholder"><\/div>/);
       assert.doesNotMatch(bar, /Fund|balancePlaceholder|avatarPlaceholder|Account menu|Sign in|data-nav-bal|\$0\.00|role="status"|Loading (?:account|balance|profile)/);
-      assert.equal([...bar.matchAll(/<button/g)].length, 3, "The shell renders Search, Notifications and Create");
+      assert.equal([...bar.matchAll(/<button/g)].length, 4, "The shell renders Search, Audio, Notifications and Create");
     }
   }
 });
