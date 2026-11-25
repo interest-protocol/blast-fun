@@ -380,12 +380,9 @@ export function EditProfileSheet({
         avatar_url: draft.picture.kind === "none" ? null : draft.picture.kind === "source" ? edit.source_avatar_url ?? null : edit.avatar_url,
       });
     }
-    try {
-      return await saveDraft(draft);
-    } finally {
-      // The confirmed answer (`onSaved`) or the page's own values replace the preview.
-      if (instant) onPreview(null);
-    }
+    const saving = saveDraft(draft);
+    // The confirmed answer (`onSaved`) or the page's own values replace the preview.
+    return instant ? saving.finally(() => onPreview?.(null)) : saving;
   }
 
   async function saveDraft(draft: ProfileEditDraft): Promise<ProfileEditSaveResult> {
