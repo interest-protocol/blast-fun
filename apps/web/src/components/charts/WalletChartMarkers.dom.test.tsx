@@ -7,6 +7,7 @@ import { walletMarkerBadges, walletMarkers } from "./wallet-markers.ts";
 const dom = installTestDom();
 const { act } = await import("react");
 const { createRoot } = await import("react-dom/client");
+const { AppRouterContext } = await import("next/dist/shared/lib/app-router-context.shared-runtime");
 const { WalletChartMarkers } = await import("./WalletChartMarkers.tsx");
 const { setDevicePref } = await import("#web/components/blast-ui/device-prefs.ts");
 
@@ -26,9 +27,11 @@ const badges = walletMarkerBadges(trades, 280, 140, 16, () => ({ x: 150, y: 65 }
 
 test("wallet marker activation opens the public profile or the chosen explorer account", async t => {
   const requests: { address: string; timestampMs: number }[][] = [];
-  const destinations: string[] = [];
+  const profilePaths: string[] = [];
+  const explorerDestinations: string[] = [];
+  const router = { push: (path: string) => { profilePaths.push(path); } };
   const originalLocation = location;
-  globalThis.location = { ...originalLocation, assign(destination) { destinations.push(String(destination)); } };
+  globalThis.location = { ...originalLocation, assign(destination) { explorerDestinations.push(String(destination)); } };
   let failLookup = false;
   let heldLookup: { signal: AbortSignal | null | undefined; finish: (response: Response) => void } | undefined;
   let holdLookup = false;
@@ -52,26 +55,28 @@ test("wallet marker activation opens the public profile or the chosen explorer a
 
   try {
     setDevicePref("explorer", "suivision");
-    await act(async () => root.render(<WalletChartMarkers badges={badges} />));
+    await act(async () => root.render(<AppRouterContext value={router as never}><WalletChartMarkers badges={badges} /></AppRouterContext>));
     assert.deepEqual(requests, [], "mounting both markers makes no profile lookup");
     await act(async () => button("Open seller wallet 0x1111…1111").click());
-    assert.deepEqual(destinations, ["/@trader"]);
+    assert.deepEqual(profilePaths, ["/@trader"]);
+    assert.deepEqual(explorerDestinations, [], "an internal profile keeps the current document");
     assert.deepEqual(requests, [[{ address: seller, timestampMs: 80_000 }]]);
 
     await act(async () => button("Choose from 2 buyer wallets").click());
     assert.ok(shell.querySelector('[role="dialog"] h2')?.textContent === "Choose a wallet");
-    assert.deepEqual(destinations, ["/@trader"], "opening the chooser doesn't pick a wallet");
+    assert.deepEqual(profilePaths, ["/@trader"], "opening the chooser doesn't pick a wallet");
+    assert.deepEqual(explorerDestinations, []);
     assert.equal(requests.length, 1);
     assert.ok(button("0x2222…2222"));
     await act(async () => button("0x3333…3333").click());
-    assert.equal(destinations.at(-1), `https://suivision.xyz/account/${chosenBuyer}`);
+    assert.equal(explorerDestinations.at(-1), `https://suivision.xyz/account/${chosenBuyer}`);
     assert.deepEqual(requests.at(-1), [{ address: chosenBuyer, timestampMs: 91_000 }]);
 
     const chooser = button("Choose from 2 buyer wallets");
     await act(async () => chooser.click());
     failLookup = true;
     await act(async () => button("Open seller wallet 0x1111…1111").click());
-    assert.equal(destinations.at(-1), `https://suivision.xyz/account/${seller}`, "lookup failure still opens the selected wallet");
+    assert.equal(explorerDestinations.at(-1), `https://suivision.xyz/account/${seller}`, "lookup failure still opens the selected wallet");
     assert.equal(requests.length, 3);
 
     holdLookup = true;
@@ -83,7 +88,8 @@ test("wallet marker activation opens the public profile or the chosen explorer a
     await act(async () => chooser.click());
     assert.equal(heldLookup?.signal?.aborted, true, "closing the chooser cancels its selection");
     await act(async () => heldLookup?.finish(Response.json({ [`${firstBuyer}:89000`]: null })));
-    assert.equal(destinations.length, 3, "a dismissed selection never navigates");
+    assert.equal(explorerDestinations.length, 2, "a dismissed selection never navigates");
+    assert.deepEqual(profilePaths, ["/@trader"]);
   } finally {
     await act(async () => root.unmount());
     setDevicePref("explorer", "suiscan");

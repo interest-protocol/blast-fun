@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useLayoutEffect, useSyncExternalStore, type FocusEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import Link from "next/link";
 import { toast as sonner, Toaster, type ToastClassnames } from "sonner";
 
 import { AlertCircleIcon, CheckIcon, CloseIcon, ExternalIcon } from "./Icons";
@@ -148,11 +149,13 @@ export function ToastProvider({ children }: Readonly<{ children: ReactNode }>) {
 }
 
 function ToastLink({ href, label = "View transaction" }: Readonly<{ href: string; label?: string }>) {
-  const external = !href.startsWith("/");
+  if (href.startsWith("/") && !href.startsWith("//")) {
+    return <Link className={styles.link} href={href} prefetch={false}>{label}</Link>;
+  }
   return (
-    <a className={styles.link} href={href} rel={external ? "noopener noreferrer" : undefined} target={external ? "_blank" : undefined}>
+    <a className={styles.link} href={href} rel="noopener noreferrer" target="_blank">
       {label}
-      {external ? <ExternalIcon /> : null}
+      <ExternalIcon />
     </a>
   );
 }

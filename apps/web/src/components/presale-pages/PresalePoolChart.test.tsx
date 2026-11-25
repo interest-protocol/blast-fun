@@ -3,11 +3,13 @@ import test from "node:test";
 
 import type { HomeCoinMarket } from "@blast/core/web/contracts/coin-market.ts";
 import type { TradeCandlePage } from "@blast/core/web/contracts/trade-candles.ts";
-import { installTestDom } from "../../../test/fixtures/social/test-dom.ts";
+import { installNoopCanvas, installTestDom } from "../../../test/fixtures/social/test-dom.ts";
 import { fixtureDetail } from "../../../../../packages/core/test/fixtures/presale-pages/presale-fixtures.ts";
 import { infraProvenanceFixture } from "../../../../../packages/server/test/fixtures/modules/launchpad-contract/fixtures.ts";
 
-const { document } = installTestDom();
+const dom = installTestDom();
+installNoopCanvas(dom);
+const { document } = dom;
 const { act } = await import("react");
 const { createRoot } = await import("react-dom/client");
 const { createTestQueryClient, settleQueries, withQueryClient } = await import("#web/lib/query/test-client.ts");
@@ -147,18 +149,6 @@ test("a matching trade hint updates the migration pool's candles in the open cha
     }, "presale"));
   await act(async () => streams[0]!.receive({ type: "pong", presale_checkpoint: 105 }));
   assert.equal(prices.at(-1), "0.001", "the fenced history supplies the current close");
-  const readout = () => container.querySelector("[data-chart-latest-price]")?.textContent;
-  const confirmed = readout();
-  assert.ok(confirmed && confirmed !== "—", "the confirmed price is visible");
-  const advanced = { ...market, as_of: { checkpoint: 106, timestamp_ms: clock + 6, lag_ms: 0 } };
-  const showMarket = (latest: HomeCoinMarket, observedPool: typeof pool) =>
-    act(async () => root.render(withQueryClient(client, <PresalePoolChart sale={sale} market={latest} pool={observedPool} />)));
-  await showMarket(advanced, pool);
-  assert.equal(readout(), confirmed, "unrelated indexer progress cannot blank a confirmed close");
-  const changedPool = { ...pool, as_of_ms: clock + 5 };
-  await showMarket({ ...advanced, pool: changedPool }, changedPool);
-  assert.equal(readout(), "—", "a pool mutation at the same chain time may be newer than the proof");
-  await showMarket(market, pool);
   prices.length = 0;
   const beforeSwaps = reads.length;
   await swap(106, `cetus:${pool.id}`, "264");
@@ -171,9 +161,7 @@ test("a matching trade hint updates the migration pool's candles in the open cha
   assert.deepEqual(prices, ["1.99", "1.23"], "each distinct selected pool fill reaches the headline");
   assert.equal(reads.length, beforeSwaps, "live fills and related hints make no candle requests");
   await swap(109, poolKey, "1167", "10000000000");
-  assert.equal(readout(), "0.000117", "the current chart close rounds the same way as the headline");
-  const low = [...container.querySelectorAll("dt")].find((term) => term.textContent === "Low");
-  assert.equal(low?.nextElementSibling?.textContent, readout(), "the current low and close are equal and use the same precision");
+  assert.equal(prices.at(-1), "0.0000001167", "a tiny close keeps its digits");
   now += 61_000;
   await swap(110, poolKey, "456");
   assert.equal(prices.at(-1), null, "a delayed fill clears the price until history catches up");

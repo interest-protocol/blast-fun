@@ -1,6 +1,6 @@
 # Blast web audio
 
-The speaker beside Search opens the Audio menu. Sound effects start on and remember the reader’s choice. Background music starts off. Once started, it continues while navigating in the shared app shell and pauses when the tab is hidden.
+The speaker beside Search opens the Audio menu. Sound effects start on and remember the reader’s choice. Background music starts off. Once started, it continues through in-app navigation in the same tab and pauses when the tab is hidden.
 
 | Page or surface | Action | Sound |
 | --- | --- | --- |
