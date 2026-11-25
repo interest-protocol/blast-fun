@@ -34,13 +34,13 @@ const STREAM_TEXT: Readonly<Partial<Record<ChartStreamStatus, string>>> = {
 
 /**
  * One venue pool's candles: HTTP history from the pool-keyed market read, then the tab's market stream.
- * `market` is a pool the stream serves live: its open is `launchAt`, and history the page lacks is named.
+ * `live` is a pool the tab's market stream serves; its stream status is shown.
  */
-export function PoolChart({ poolKey, coinType, symbol, decimals, quote = SUI_POOL_QUOTE, initialControls, market, price, uncovered }: Readonly<{
+export function PoolChart({ poolKey, coinType, symbol, decimals, quote = SUI_POOL_QUOTE, initialControls, live = false, price, uncovered }: Readonly<{
   poolKey: string; coinType?: string; symbol: string; decimals: number;
   quote?: Readonly<{ symbol: string; decimals: number }>;
   initialControls: ChartControls;
-  market?: Readonly<{ launchAt?: number }>;
+  live?: boolean;
   /** The current price the page shows beside the chart, held to the page's own rule; the chart's own price when absent. */
   price?: ChartPriceUpdate | null;
   /** Shown instead while the market read does not know this pool. */
@@ -55,7 +55,6 @@ export function PoolChart({ poolKey, coinType, symbol, decimals, quote = SUI_POO
   const own = useChartPrice(poolKey);
   const latest = price === undefined ? own : price;
   const [status, setStatus] = useState<ChartStreamStatus>("connecting");
-  const streams = market !== undefined;
   const client = useAppQueryClient();
   const queryKey = ["pool-candles", poolKey, key] as const;
   const polling = indexedPoolPolling(REFRESH_MS);
@@ -88,7 +87,7 @@ export function PoolChart({ poolKey, coinType, symbol, decimals, quote = SUI_POO
       request: () => chartTailRequest(controls, Date.now()),
       load: (_, checkpoint) => load(checkpoint),
       pollMs: () => pollMs(), retryReadErrors: false,
-      onStatus: (next) => { if (streams && stream.current === client) setStatus(next); },
+      onStatus: (next) => { if (live && stream.current === client) setStatus(next); },
       onSection: (_, section) => setState((previous) =>
         afterChartSourceRead(previous.key === key ? previous : initialChart(key, true), key, "venue", section, null)),
     });
@@ -98,13 +97,12 @@ export function PoolChart({ poolKey, coinType, symbol, decimals, quote = SUI_POO
       if (stream.current === client) stream.current = null;
       client.stop();
     };
-  }, [poolKey, coinType, controls, key, ready, streams, unknown]);
+  }, [poolKey, coinType, controls, key, ready, live, unknown]);
 
   if (unknown) return uncovered;
   return <ChartView
     compact
-    marketChart={streams}
-    source={{ curvePoolKey: null, venuePoolKey: poolKey, migration: null, expected: null, symbol, memeDecimals: decimals, quoteDecimals: quote.decimals, quoteSymbol: quote.symbol, launchAt: market?.launchAt }}
+    source={{ curvePoolKey: null, venuePoolKey: poolKey, migration: null, expected: null, symbol, memeDecimals: decimals, quoteDecimals: quote.decimals, quoteSymbol: quote.symbol }}
     state={state.key === key ? state : initialChart(key, true)}
     currentPrice={latest?.price ?? null}
     controls={controls}
@@ -112,7 +110,7 @@ export function PoolChart({ poolKey, coinType, symbol, decimals, quote = SUI_POO
     quoteUsd={currency?.quoteUsd}
     hidden={[]}
     pending={query.isFetching}
-    updates={streams ? STREAM_TEXT[status] ?? null : null}
+    updates={live ? STREAM_TEXT[status] ?? null : null}
     diagnostic={query.error ? publicErrorMessage(query.error, PRICE_HISTORY_UNAVAILABLE) : undefined}
     onControls={commit}
     onToggle={() => {}}

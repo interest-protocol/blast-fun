@@ -4,9 +4,11 @@ import test from "node:test";
 import type { ChartPriceUpdate } from "#web/components/launchpad/chart/chart-live-price.ts";
 import { shouldRetry } from "#web/lib/query/client.ts";
 import { createTestQueryClient, settleQueries, withQueryClient } from "#web/lib/query/test-client.ts";
-import { installTestDom } from "../../../../test/fixtures/social/test-dom.ts";
+import { installNoopCanvas, installTestDom } from "../../../../test/fixtures/social/test-dom.ts";
 
-const { document, window } = installTestDom();
+const dom = installTestDom();
+installNoopCanvas(dom);
+const { document, window } = dom;
 const { act } = await import("react");
 const { createRoot } = await import("react-dom/client");
 const { PoolChart } = await import("./PoolChart.tsx");
@@ -21,7 +23,7 @@ const CONTROLS = { range: "24h", interval: "1m" } as const;
 
 type Price = ChartPriceUpdate | null;
 
-async function mount(t: test.TestContext, reply: (path: string) => Response, launchAt?: number, price?: Price) {
+async function mount(t: test.TestContext, reply: (path: string) => Response, price?: Price) {
   t.mock.method(Date, "now", () => AT);
   const asked: string[] = [];
   t.mock.method(globalThis, "fetch", async (input: RequestInfo | URL) => {
@@ -40,7 +42,7 @@ async function mount(t: test.TestContext, reply: (path: string) => Response, lau
     decimals={9}
     quote={{ symbol: "USDC", decimals: 6 }}
     initialControls={CONTROLS}
-    market={{ launchAt }}
+    live
     uncovered={<p>The earlier sale chart</p>}
     {...price === undefined ? {} : { price }}
   />)));
@@ -51,17 +53,16 @@ async function mount(t: test.TestContext, reply: (path: string) => Response, lau
 const [venue, poolId] = POOL_KEY.split(":");
 const CANDLE_PATH = `/api/launchpad/market/pools/${venue}/${poolId}/candles`;
 
-test("a sale pool the market read knows draws the shared pool chart in the sale's quote and names partial history", async (t) => {
+test("a sale pool the market read knows draws the shared pool chart in the sale's quote", async (t) => {
   const fresh = { ...CANDLES, provenance: { ...CANDLES.provenance, observed_ms: AT, lag_ms: 400 }, migration: null };
   const chart = await mount(t, (path) => path === CANDLE_PATH ? Response.json(fresh) : Response.json({}, { status: 404 }));
   assert.ok(chart.asked.includes(CANDLE_PATH), "history is the pool's own candle read");
   assert.match(chart.text(), /USDC/);
-  assert.match(chart.text(), /Partial price history/, "a pool with no known opening time never claims full history");
   assert.doesNotMatch(chart.text(), /earlier sale chart/);
 });
 
 test("a sale pool the market read does not know keeps the sale's earlier chart after one read", async (t) => {
-  const chart = await mount(t, () => Response.json({ error: { code: "not_found" } }, { status: 404 }), AT - 3_600_000);
+  const chart = await mount(t, () => Response.json({ error: { code: "not_found" } }, { status: 404 }));
   assert.match(chart.text(), /The earlier sale chart/);
   assert.equal(chart.asked.filter((path) => path === CANDLE_PATH).length, 1, "an unknown pool is asked for once");
 });
@@ -72,6 +73,6 @@ test("a page that holds its price to its own rule decides the chart's current pr
     price: CANDLES.candles.at(-1)!.close, poolKey: POOL_KEY, cursor: null,
     provenance: { source: "blast-infra", network: "mainnet", deployment: null, checkpoint: 1, timestampMs: AT, observedAt: AT, lagMs: 0 },
   };
-  const chart = await mount(t, (path) => path === CANDLE_PATH ? Response.json(fresh) : Response.json({}, { status: 404 }), undefined, confirmed);
+  const chart = await mount(t, (path) => path === CANDLE_PATH ? Response.json(fresh) : Response.json({}, { status: 404 }), confirmed);
   assert.doesNotMatch(chart.text(), /Last close—/, "the page's confirmed price is the chart's current price");
 });

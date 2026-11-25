@@ -472,7 +472,7 @@ function SalePoolChart({ sale, market, pool }: Readonly<{
     decimals={market.decimals}
     quote={market.quote}
     initialControls={POOL_CHART_CONTROLS}
-    market={{ launchAt: sale.launched_ms ?? undefined }}
+    live
     price={price}
     uncovered={earlier}
   />;
