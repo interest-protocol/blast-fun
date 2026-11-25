@@ -185,7 +185,7 @@ test("an unavailable presale lookup does not turn a possible sale into a 404", a
 test("a short coin type opens an ordinary coin and an unknown type returns 404", async () => {
   const element = await CoinPage(params("0x2::sui::SUI"));
   const dom = JSDOM.fragment(renderToStaticMarkup(element));
-  assert.equal(dom.querySelector("h1")?.textContent, "Sui");
+  assert.equal(dom.querySelector("h1")?.textContent, "$SUI");
   assert.equal(dom.querySelector('h1 [aria-label="Known deployer"]'), null);
   assert.match(dom.textContent ?? "", /\$SUI/);
   assert.equal(dom.querySelector("[data-coin-type-tag] code")?.textContent, "0x0000…0002");
