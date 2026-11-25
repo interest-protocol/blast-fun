@@ -9,6 +9,7 @@ installNoopCanvas(dom);
 const { act } = await import("react");
 const { createRoot } = await import("react-dom/client");
 const { renderToStaticMarkup } = await import("react-dom/server");
+const { AppRouterContext } = await import("next/dist/shared/lib/app-router-context.shared-runtime");
 const hook = registerHooks({ resolve(specifier, context, next) {
   if (specifier === "./TradingViewChart" && context.parentURL?.endsWith("/charts/PoolCandleChart.tsx")) return {
     shortCircuit: true,
@@ -88,6 +89,7 @@ test("compact style controls keep one chart and the trade cue above it", async (
   const container = dom.document.createElement("div");
   dom.document.body.append(container);
   const root = createRoot(container);
+  const router = { push() {} };
   try {
     const controls = { interval: "1m", range: "all" } as const;
     const buy = { cursor: "1:0:1:0", side: "buy" as const, timestampMs: 1_790_337_600_000, price: "2", memeAmount: 9_631_238_640_097n, quoteAmount: 100_000_000n };
@@ -107,6 +109,7 @@ test("compact style controls keep one chart and the trade cue above it", async (
       return receipts.get(cursor)!;
     };
     const compactChart = (hidden: readonly "curve"[], trade: Omit<typeof buy, "side"> & { side: "buy" | "sell" } = buy, market = poolKey, close = "2", empty = false) => (
+      <AppRouterContext value={router as never}>
       <WalletTradesProvider deployer={actor}><Tape /><ChartTradeContext value={{ trade, poolKey: market, receivedAt: receivedAt(trade.cursor), decimals: 9, symbol: "SUI" }}>
       <ChartView
         compact
@@ -127,6 +130,7 @@ test("compact style controls keep one chart and the trade cue above it", async (
         onToggle={() => {}}
         onRefresh={() => {}}
       /></ChartTradeContext></WalletTradesProvider>
+      </AppRouterContext>
     );
     const render = (...args: Parameters<typeof compactChart>) => act(async () => root.render(compactChart(...args)));
     assert.doesNotMatch(renderToStaticMarkup(compactChart([])), /data-kline-plot/, "the chart loads in the browser only");

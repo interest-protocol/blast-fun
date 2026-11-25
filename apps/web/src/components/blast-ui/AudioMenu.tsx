@@ -1,7 +1,8 @@
 "use client";
 
 import clsx from "clsx";
-import { useEffect, useRef, useState } from "react";
+import { useSyncExternalStore } from "react";
+import { createStore } from "zustand/vanilla";
 
 import { useFeelSound } from "#web/components/blast-feel/FeelProvider.tsx";
 
@@ -12,6 +13,45 @@ import { CheckIcon } from "./Icons.tsx";
 import { accountMenuPlacement } from "./menu-placement.ts";
 
 const MUSIC_URL = "/audio/cozy-vinyl-groove.mp3";
+
+const playback = createStore<"paused" | "playing" | "failed">()(() => "paused");
+let player: HTMLAudioElement | undefined;
+
+function musicPlayer(): HTMLAudioElement {
+  if (player) return player;
+
+  // The player belongs to the document, which outlives the navigation shell.
+  const audio = new Audio();
+  audio.loop = true;
+  audio.preload = "none";
+  audio.onplay = () => {
+    if (!audio.paused) playback.setState("playing");
+  };
+  audio.onpause = () => {
+    if (audio.paused && playback.getState() !== "failed") playback.setState("paused");
+  };
+  audio.onerror = () => playback.setState("failed");
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) audio.pause();
+  });
+  player = audio;
+  return audio;
+}
+
+function toggleMusic() {
+  const audio = musicPlayer();
+  if (!audio.paused) {
+    audio.pause();
+    return;
+  }
+
+  playback.setState("paused");
+  if (!audio.getAttribute("src") || audio.error) audio.src = MUSIC_URL;
+  void audio.play().catch((error: unknown) => {
+    if (error instanceof DOMException && error.name === "AbortError") return;
+    playback.setState("failed");
+  });
+}
 
 const SPEAKER_ON = (
   <>
@@ -41,52 +81,9 @@ export function AudioMenu({ className, onToggle }: Readonly<{
   onToggle?: (on: boolean) => void;
 }>) {
   const { soundEnabled, setSoundEnabled } = useFeelSound();
-  const music = useRef<HTMLAudioElement>(null);
-  const [playing, setPlaying] = useState(false);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    const pauseWhenHidden = () => { if (document.hidden) music.current?.pause(); };
-    document.addEventListener("visibilitychange", pauseWhenHidden);
-    return () => {
-      document.removeEventListener("visibilitychange", pauseWhenHidden);
-      const audio = music.current;
-      if (!audio) return;
-      audio.onplay = null;
-      audio.onpause = null;
-      audio.onerror = null;
-      audio.pause();
-      music.current = null;
-    };
-  }, []);
-
-  const getMusic = () => {
-    if (music.current) return music.current;
-    const audio = new Audio();
-    audio.loop = true;
-    audio.preload = "none";
-    audio.onplay = () => setPlaying(!audio.paused);
-    audio.onpause = () => setPlaying(false);
-    audio.onerror = () => { setPlaying(false); setFailed(true); };
-    music.current = audio;
-    return audio;
-  };
-
-  const toggleMusic = () => {
-    // Create the background player only when the listener asks to hear it.
-    const audio = getMusic();
-    if (!audio.paused) {
-      audio.pause();
-      return;
-    }
-    setFailed(false);
-    if (!audio.getAttribute("src") || audio.error) audio.src = MUSIC_URL;
-    void audio.play().catch((error: unknown) => {
-      if (error instanceof DOMException && error.name === "AbortError") return;
-      setPlaying(false);
-      setFailed(true);
-    });
-  };
+  const music = useSyncExternalStore(playback.subscribe, playback.getState, playback.getInitialState);
+  const playing = music === "playing";
+  const failed = music === "failed";
 
   return <>
     <BlastMenu

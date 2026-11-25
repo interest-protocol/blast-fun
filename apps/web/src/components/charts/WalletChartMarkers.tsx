@@ -1,6 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { explorerAccountUrl } from "@blast/core/lib/explorer.ts";
 import { countWords, shortAddress } from "@blast/core/lib/format.ts";
 import { profilePagePath } from "@blast/core/modules/social/contracts/profiles.ts";
@@ -22,6 +23,7 @@ type Selection = Readonly<{ badge: string; address: string; controller: AbortCon
 const loadingLabel = "Opening wallet";
 
 export function WalletChartMarkers({ badges }: Readonly<{ badges: readonly Badge[] }>) {
+  const router = useRouter();
   const { explorer } = useDevicePrefs();
   const active = useRef<Selection | null>(null);
   const [pending, setPending] = useState<Selection | null>(null);
@@ -45,7 +47,8 @@ export function WalletChartMarkers({ badges }: Readonly<{ badges: readonly Badge
     active.current = null;
     setPending(null);
     const profile = profiles?.[traderProfileKey(wallet)];
-    location.assign(profile ? profilePagePath(profile.callsign) : explorerUrl);
+    if (profile) router.push(profilePagePath(profile.callsign));
+    else location.assign(explorerUrl);
   }
 
   function cancelWallet(badge: string) {

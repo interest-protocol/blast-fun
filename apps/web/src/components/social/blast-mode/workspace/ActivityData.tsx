@@ -5,6 +5,7 @@ import { DelayedNote, LoadFailed, NothingHere, RefreshFailed } from "./DataState
 import { workspaceScrollOwner } from "./scroll-owner";
 
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { isValidStructTag } from "@mysten/sui/utils";
 import { atLeastPow10, exactAtoms, exactDecimal, fixedExact, qtyExact } from "@blast/core/web/exact-amount.ts";
@@ -322,7 +323,7 @@ function ActivityRow({
           <span className={styles.sentence}>
             {actor.type === "account" ? (
               <>
-                <a className={styles.actor} href={actor.path}>{identity.kind === "account" ? identity.name : actor.callsign}</a>
+                <Link className={styles.actor} href={actor.path} prefetch={false}>{identity.kind === "account" ? identity.name : actor.callsign}</Link>
                 {actor.verified ? <VerifiedBadge className={styles.verified} /> : null}
               </>
             ) : (

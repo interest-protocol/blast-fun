@@ -37,14 +37,15 @@ function shell(props: Partial<Parameters<typeof AppShell>[0]> = {}, pathname = "
   );
 }
 
-test("the rail holds its six destinations and the shared Create trigger; Search and one Audio menu share the top bar", () => {
+test("the rail lists primary destinations directly; Search and one Audio menu share the top bar", () => {
   const html = shell();
   const rail = html.slice(html.indexOf('<nav aria-label="Primary"'), html.indexOf('class="railSpacer"'));
   assert.match(rail, /<a aria-label="Blast home"[^>]*href="\/"/);
   assert.deepEqual([...rail.matchAll(/title="([^"]+)"/g)].map((match) => match[1]), ["Collapse"]);
-  for (const label of ["Home", "Swap", "Bonding", "Presales", "Portfolio", "More", "Competitions", "Create"]) {
+  for (const label of ["Home", "Swap", "Bonding", "Presales", "Portfolio", "Create"]) {
     assert.ok(rail.includes(`>${label}<`));
   }
+  assert.doesNotMatch(rail, /aria-label="More"|href="\/competitions"/);
   assert.match(rail, /<a aria-current="page" class="navItem" href="\/">/);
   assert.match(rail, /<button(?=[^>]*aria-haspopup="dialog")(?=[^>]*aria-label="Swap")(?=[^>]*class="navItem")[^>]*><svg[^>]*>.*?<\/svg><span>Swap<\/span><\/button>/s);
   assert.doesNotMatch(rail, /<kbd>/, "no key hints in the rail");
@@ -229,7 +230,7 @@ test("the phone bar keeps five controls with Swap second and profile available i
   assert.match(shell({}, "/settings"), /aria-label="Account menu"/);
   assert.ok(!tabs.includes("Settings") && !tabs.includes('href="/settings"'));
   assert.match(tabsOf(shell({}, "/portfolio")), /<a aria-current="page"[^>]*href="\/portfolio">/);
-  assert.match(tabsOf(shell({}, "/portfolio")), /data-current="true" data-more-navigation/);
+  assert.equal(new JSDOM(tabsOf(shell({}, "/portfolio"))).window.document.querySelector('button[aria-label="More"]')?.getAttribute("data-current"), "true");
   assert.match(tabsOf(shell({}, "/presale")), /<a aria-current="page" href="\/presale">/);
   assert.doesNotMatch(tabsOf(shell({}, "/@kaimoreno")), /aria-current="page"/);
   for (const props of [{ signedIn: false, viewer: null }, { signedIn: false, viewer: null, viewerLoading: true }]) {
