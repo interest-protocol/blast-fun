@@ -4,7 +4,7 @@ import { findBrowserRoute } from "../trade/trade-estimate.ts";
 import { diagnosticMessage, publicErrorMessage } from "#web/lib/errors.ts";
 
 import { shortAddress } from "@blast/core/web/format.ts";
-import type { SuiGrpcClient } from "@mysten/sui/grpc";
+import { SuiGrpcClient } from "@mysten/sui/grpc";
 import { useQuery } from "@tanstack/react-query";
 import { PUBLIC_STALE_MS } from "#web/lib/query/client.ts";
 import { queryKeys } from "#web/lib/query/keys.ts";
@@ -43,8 +43,7 @@ import { refreshWalletCoinBalance } from "./use-wallet-coin-balance";
 export const DEPOSIT_POLL_MS = 5_000;
 export const DEPOSIT_POLL_LIMIT_MS = 10 * 60_000;
 
-/** Mainnet's node client, loaded at the first withdrawal (its gRPC code stays out of the sheet's load); null when it cannot load. */
-const mainnet = () => import("@mysten/sui/grpc").then(({ SuiGrpcClient: Client }) => new Client({ network: "mainnet", baseUrl: SUI_MAINNET_GRPC_URL }), () => null);
+const mainnet = () => new SuiGrpcClient({ network: "mainnet", baseUrl: SUI_MAINNET_GRPC_URL });
 
 function newRequestId(): string {
   return crypto.randomUUID();
@@ -288,12 +287,7 @@ export function CoinsHost({ inlineSale, inlineTrade, opening, active = true }: R
     const releaseAttempt = () => {
       if (attempt.current === current) attempt.current = null;
     };
-    client.current ??= await mainnet();
-    if (client.current === null) {
-      releaseAttempt();
-      toast("Your withdrawal could not start. Check your connection and try again.");
-      return false;
-    }
+    if (client.current === null) client.current = mainnet();
     const result = await runWithdraw(
       {
         api,
