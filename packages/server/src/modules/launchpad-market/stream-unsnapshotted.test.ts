@@ -54,7 +54,7 @@ function harness() {
     socket.receive({ type: "pong" });
   };
   const after = (client: ReturnType<typeof join>, from: number) =>
-    client.events.slice(from).map(({ event, data, id }) => [event, event === "status" ? `${data.state}@${data.cursor}` : id]);
+    client.events.slice(from).filter(({ event }) => event !== "heartbeat").map(({ event, data, id }) => [event, event === "status" ? `${data.state}@${data.cursor}` : id]);
   return { sockets, join, hello, after };
 }
 
@@ -149,4 +149,75 @@ test("after an upstream drop a boundary-fenced pool subscribes fresh and fences 
   ]);
   assert.equal(browser.events.some(({ event }) => event === "resync"), false);
   assert.equal(browser.closed, false);
+});
+
+/** Ten seconds of a live upstream: every ping answered, `each` run once a second. */
+function liveFor(t: import("node:test").TestContext, socket: Socket, each: (second: number) => void = () => {}) {
+  for (let second = 1; second <= 10; second++) {
+    t.mock.timers.tick(1_000);
+    socket.receive({ type: "pong" });
+    each(second);
+  }
+}
+
+// The SUI page: busy Cetus beside quiet Bluefin. The browser gives up on an unfenced pool 10 s after
+// its hello, so the quiet pool must be fenced by the busy pool's traffic, not at the relay's stall.
+test("a quiet pool beside an active one is fenced by the active pool's first frame, and the client stays", (t) => {
+  t.mock.timers.enable({ apis: ["setInterval", "setTimeout", "Date"] });
+  const { sockets, join, hello, after } = harness();
+  const browser = join(`pool=${POOL}&pool=${OTHER}`);
+  hello(sockets[0]!);
+  const start = browser.events.length;
+  sockets[0]!.receive(lifecycle(OTHER, 11));
+  assert.deepEqual(after(browser, start), [["status", "live@11:0:0:0"]], "fenced at once, before any timer");
+  liveFor(t, sockets[0]!, (second) => sockets[0]!.receive(lifecycle(OTHER, 11 + second)));
+  assert.equal(browser.closed, false, "the quiet pool does not end the client");
+  assert.equal(browser.events.some(({ data }) => data.state === "unavailable"), false);
+  sockets[0]!.receive(lifecycle(POOL, 22));
+  assert.deepEqual(after(browser, browser.events.length - 1), [["market", "22:0:0:0"]], "its trades then stream");
+});
+
+test("a pool's own frame is fenced when another pool's later checkpoint begins", (t) => {
+  t.mock.timers.enable({ apis: ["setInterval", "setTimeout", "Date"] });
+  const { sockets, join, hello, after } = harness();
+  const onPool = join(`pool=${POOL}`);
+  hello(sockets[0]!);
+  join(`pool=${OTHER}`);
+  const start = onPool.events.length;
+  sockets[0]!.receive(lifecycle(POOL, 11));
+  sockets[0]!.receive(lifecycle(OTHER, 11, 1));
+  assert.deepEqual(after(onPool, start), [], "checkpoint 11 may still hold more of the pool's events");
+  sockets[0]!.receive(lifecycle(OTHER, 12));
+  assert.deepEqual(after(onPool, start), [["status", "live@11:0:0:0"]]);
+});
+
+test("a quiet pool is fenced only by frames after a pong to a ping sent after its subscribe", (t) => {
+  t.mock.timers.enable({ apis: ["setInterval", "setTimeout", "Date"] });
+  const { sockets, join, hello, after } = harness();
+  join(`pool=${OTHER}`);
+  hello(sockets[0]!);
+  sockets[0]!.receive(snapshot(OTHER, 10));
+  const late = join(`pool=${POOL}`);
+  const start = late.events.length;
+  sockets[0]!.receive(lifecycle(OTHER, 11)); // May predate the reader registering POOL.
+  sockets[0]!.receive({ type: "pong" }); // Answers the ping already in flight at the subscribe.
+  sockets[0]!.receive(lifecycle(OTHER, 12));
+  assert.deepEqual(after(late, start), []);
+  t.mock.timers.tick(4_000); // The next heartbeat ping, sent after the subscribe.
+  sockets[0]!.receive({ type: "pong" });
+  sockets[0]!.receive(lifecycle(OTHER, 13));
+  assert.deepEqual(after(late, start), [["status", "live@13:0:0:0"]]);
+});
+
+test("a ping lost with the upstream does not hold back quiet fences after the reconnect", (t) => {
+  t.mock.timers.enable({ apis: ["setInterval", "setTimeout", "Date"] });
+  const { sockets, join, hello, after } = harness();
+  const browser = join(`pool=${POOL}&pool=${OTHER}`);
+  hello(sockets[0]!);
+  sockets[0]!.drop(); // A ping is in flight.
+  t.mock.timers.tick(400);
+  hello(sockets[1]!);
+  const start = browser.events.length;
+  sockets[1]!.receive(lifecycle(OTHER, 11));
+  assert.deepEqual(after(browser, start), [["status", "live@11:0:0:0"]]);
 });
