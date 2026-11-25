@@ -74,12 +74,11 @@ function NotifyMe({ detail }: Readonly<{ detail: SocialPresaleDetail }>) {
   const toast = useToast();
   const target = { kind: "presale", presale_id: sale.presale_id } as const;
   const on = useViewerFollow(target) === true;
-  const [busy, setBusy] = useState(false);
   return (
     <button
       aria-pressed={on}
       className={cx("btn btn-primary btn-lg btn-block notify-btn", on && "on")}
-      disabled={busy || gate.sessionPending}
+      disabled={gate.sessionPending}
       onClick={async (event: MouseEvent) => {
         if (!gate.signedIn) {
           gate.openSignIn(event);
@@ -87,9 +86,8 @@ function NotifyMe({ detail }: Readonly<{ detail: SocialPresaleDetail }>) {
           return;
         }
         if (!store) return;
-        setBusy(true);
-        // The button frees itself even when the write throws.
-        const result = await store.setFollowing(target, !on).finally(() => setBusy(false));
+        // Shown at once; a refusal puts the button back.
+        const result = await store.setFollowing(target, !on);
         if (result.status !== "ok") toast("That didn't save", { sub: "Nothing changed. Try again in a moment." });
       }}
       type="button"

@@ -3,7 +3,7 @@
 import { hoverExcerpt } from "#web/lib/hover-text.ts";
 import clsx from "clsx";
 import { IntentLink as Link } from "#web/components/blast-ui/NavigationLink.tsx";
-import { useCallback, useLayoutEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import { useCallback, useLayoutEffect, useRef, type MouseEvent, type ReactNode } from "react";
 
 import { BellIcon } from "#web/components/blast-ui/Icons.tsx";
 import { useShellActions } from "#web/components/blast-ui/shell-actions.tsx";
@@ -114,28 +114,23 @@ export function usePresaleNotify(presale: Pick<FeedItemPresale, "presale_id" | "
   const toast = useToast();
   const gate = useSignInGate();
   const run = useShellActions();
-  const [busy, setBusy] = useState(false);
   const toggle = useCallback(async () => {
     if (!gate.signedIn || !store) {
       if (!run("openSignIn")) window.location.assign(gate.signInHref);
       return;
     }
-    setBusy(true);
-    await store.setFollowing({ kind: "presale", presale_id: presale.presale_id }, !following).then((result) => {
-      if (result.status !== "ok") toast(followErrorMessage(result, !following));
-    }).finally(() => {
-      setBusy(false);
-    });
+    // Shown at once; a refusal puts the bell back.
+    const result = await store.setFollowing({ kind: "presale", presale_id: presale.presale_id }, !following);
+    if (result.status !== "ok") toast(followErrorMessage(result, !following));
   }, [gate.signedIn, gate.signInHref, store, run, presale.presale_id, following, toast]);
-  return { following, busy, toggle };
+  return { following, toggle };
 }
 
 /** The bell of an "Opening soon" row (36, round). */
 export function NotifyBell({ presale }: Readonly<{ presale: Pick<FeedItemPresale, "presale_id" | "name"> }>) {
-  const { following, busy, toggle } = usePresaleNotify(presale);
+  const { following, toggle } = usePresaleNotify(presale);
   return (
     <button
-      aria-busy={busy || undefined}
       aria-label={`${following ? "Notifications on" : "Notify me"} for ${presale.name}`}
       aria-pressed={following}
       className={clsx("icon-btn", styles.notify)}

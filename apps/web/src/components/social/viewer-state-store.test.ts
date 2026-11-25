@@ -339,20 +339,20 @@ test("follow requests are shared per target and invalidate exact counts without 
   client.setQueryData(targetCounts, { following: 2, followers: 8 });
   const target = { kind: "account" as const, callsign: "nova" };
   const write = store.setFollowing(target, false);
-  assert.equal(store.followPending(target), true);
-  assert.equal(store.following(target), true, "the confirmed relationship remains until acceptance");
-  assert.equal(store.setFollowing(target, false), write);
-  assert.equal(store.setFollowing(target, true), write, "a competing control cannot send an overlapping mutation");
+  assert.equal(store.following(target), false, "the tap shows at once");
+  assert.equal(store.setFollowing(target, false), write, "every control shares one settlement");
+  assert.equal(store.setFollowing(target, true), write);
+  assert.equal(store.following(target), true, "the newest tap wins");
   gate.resolve();
   assert.equal((await write).status, "ok");
-  assert.equal(store.followPending(target), false);
-  assert.equal(store.following(target), false);
+  assert.equal(store.following(target), true);
   assert.deepEqual(client.getQueryData(ownCounts), { following: 3, followers: 1 });
   assert.deepEqual(client.getQueryData(targetCounts), { following: 2, followers: 8 });
   assert.equal(client.getQueryState(ownCounts)?.isInvalidated, true);
   assert.equal(client.getQueryState(targetCounts)?.isInvalidated, true);
-  assert.equal(server.calls.filter((call) => call.method === "DELETE").length, 1);
+  assert.deepEqual(server.calls.filter((call) => call.url.includes("/follows/")).map((call) => call.method), ["DELETE", "PUT"], "writes go one at a time, in tap order");
   await store.setFollowing(target, true);
+  assert.equal(server.calls.filter((call) => call.url.includes("/follows/")).length, 2, "a tap that matches the server sends nothing");
   assert.deepEqual(client.getQueryData(ownCounts), { following: 3, followers: 1 });
   assert.deepEqual(client.getQueryData(targetCounts), { following: 2, followers: 8 });
   client.clear();
@@ -379,11 +379,135 @@ test("a private actor's follow waits for exact counts without temporarily adding
     store.want({ callsigns: ["nova"] }); await store.flush();
     const write = store.setFollowing(target, true);
     await countsRead.promise;
-    assert.equal(store.followPending(target), true, "pending includes active count reconciliation");
     assert.equal(store.following(target), true);
     assert.deepEqual(client.getQueryData(key), counts, "private actors are excluded from public follower totals");
     releaseCounts.resolve(); await write;
-    assert.equal(store.followPending(target), false);
     assert.deepEqual(client.getQueryData(key), counts);
   } finally { releaseCounts.resolve(); unsubscribe(); client.clear(); }
+});
+
+
+/** A fetch whose follow writes wait on `release()` one by one, answering with `statuses` in order (204 by default). */
+function heldWrites(statuses: number[] = []) {
+  const server = scripted();
+  const held: Array<() => void> = [];
+  let index = 0;
+  let started = 0;
+  const fetch: typeof globalThis.fetch = async (path, init) => {
+    if (!String(path).includes("/follows/")) return server.fetch(path, init);
+    started += 1;
+    const status = statuses[index++] ?? 204;
+    await new Promise<void>((resolve) => held.push(resolve));
+    if (status === 204) return server.fetch(path, init);
+    return Response.json({ error: { code: "follow_limit", message: "x" } }, { status });
+  };
+  // `storeWith` mocks `setTimeout`, so these waits use `setImmediate`.
+  const tick = () => new Promise<void>((resolve) => setImmediate(resolve));
+  const release = async () => {
+    for (let i = 0; held.length === 0; i += 1) {
+      if (i > 200) throw new Error("no follow write is waiting");
+      await tick();
+    }
+    held.shift()!();
+    for (let i = 0; i < 5; i += 1) await tick();
+  };
+  const writes = () => server.calls.filter((call) => call.url.includes("/follows/")).map((call) => call.method);
+  return { fetch, release, writes, started: () => started };
+}
+
+test("Slice B: a follow shows at once, and listeners hear it only once the route accepts it", async () => {
+  const net = heldWrites();
+  const { store } = storeWith(net.fetch);
+  const target = { kind: "presale" as const, presale_id: PRESALE };
+  const heard: boolean[] = [];
+  store.subscribeFollowWrites((_target, following) => heard.push(following));
+  const write = store.setFollowing(target, true);
+  assert.equal(store.following(target), true);
+  assert.deepEqual(heard, [], "nothing confirmed yet");
+  await net.release();
+  assert.deepEqual(await write, { status: "ok" });
+  assert.deepEqual(heard, [true]);
+  assert.deepEqual(net.writes(), ["PUT"]);
+});
+
+test("Slice B: a refused follow puts back the state that was read", async () => {
+  const server = scripted({ writeStatus: 422, writeBody: { error: { code: "follow_limit", message: "x" } } });
+  const { store, run } = storeWith(server.fetch);
+  const target = { kind: "account" as const, callsign: "nova" };
+  store.want({ callsigns: ["nova"] });
+  await run();
+  assert.equal(store.following(target), false);
+  const heard: boolean[] = [];
+  store.subscribeFollowWrites((_target, following) => heard.push(following));
+  const write = store.setFollowing(target, true);
+  assert.equal(store.following(target), true);
+  assert.equal((await write).status, "refused");
+  assert.equal(store.following(target), false);
+  assert.deepEqual(heard, []);
+});
+
+test("Slice B: follow then unfollow in quick succession sends both, in order, and ends unfollowed", async () => {
+  const net = heldWrites();
+  const { store } = storeWith(net.fetch);
+  const target = { kind: "account" as const, callsign: "nova" };
+  const heard: boolean[] = [];
+  store.subscribeFollowWrites((_target, following) => heard.push(following));
+  const first = store.setFollowing(target, true);
+  const second = store.setFollowing(target, false);
+  assert.equal(store.following(target), false, "the second tap is not dropped");
+  for (let i = 0; i < 5; i += 1) await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(net.started(), 1, "the second write waits for the first answer");
+  await net.release();
+  assert.equal(net.started(), 2);
+  await net.release();
+  assert.deepEqual(await first, { status: "ok" });
+  assert.deepEqual(await second, { status: "ok" });
+  assert.deepEqual(net.writes(), ["PUT", "DELETE"]);
+  assert.deepEqual(heard, [true, false]);
+  assert.equal(store.following(target), false);
+});
+
+test("Slice B: rapid taps collapse; a tap back to the server's state while a write is in flight sends nothing more", async () => {
+  const net = heldWrites();
+  const { store } = storeWith(net.fetch);
+  const target = { kind: "presale" as const, presale_id: PRESALE };
+  const write = store.setFollowing(target, true);
+  store.setFollowing(target, false);
+  store.setFollowing(target, true);
+  store.setFollowing(target, false);
+  store.setFollowing(target, true);
+  await net.release();
+  await write;
+  assert.deepEqual(net.writes(), ["PUT"], "one write for five taps that end where the first went");
+  assert.equal(store.following(target), true);
+});
+
+test("Slice B: a refused write is not resent when the newest tap asks for the same thing", async () => {
+  // Taps follow, unfollow, follow; the first PUT is refused while the newest tap still wants follow.
+  const net = heldWrites([422]);
+  const { store } = storeWith(net.fetch);
+  const target = { kind: "account" as const, callsign: "nova" };
+  const write = store.setFollowing(target, true);
+  store.setFollowing(target, false);
+  store.setFollowing(target, true);
+  await net.release();
+  assert.equal((await write).status, "refused");
+  assert.equal(net.started(), 1, "the same write would be refused again, so nothing more is sent");
+  assert.equal(store.following(target), undefined, "back to what the page read");
+});
+
+test("Slice B: a write in flight when the viewer pauses does not swallow the next tap", async () => {
+  const net = heldWrites();
+  const { store } = storeWith(net.fetch);
+  const target = { kind: "presale" as const, presale_id: "0x1" };
+  void store.setFollowing(target, true);
+  store.setActive(false);
+  assert.equal(store.following(target), undefined, "back to the last confirmed state");
+  store.setActive(true);
+  const next = store.setFollowing(target, true);
+  assert.equal(store.following(target), true);
+  await net.release();
+  await net.release();
+  assert.deepEqual(await next, { status: "ok" });
+  assert.equal(net.started(), 2, "the new tap is written by its own queue");
 });

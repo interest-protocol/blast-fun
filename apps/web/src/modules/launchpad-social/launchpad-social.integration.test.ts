@@ -192,10 +192,10 @@ function handler(harness: Harness, holderProof: HolderProofPort | null = harness
   );
 }
 
-async function postWithPrivy(harness: Harness, input: Record<string, unknown>, holderProof?: HolderProofPort | null): Promise<Response> {
+async function postWithPrivy(harness: Harness, input: Record<string, unknown>, holderProof?: HolderProofPort | null, idempotencyKey?: string): Promise<Response> {
   return handler(harness, holderProof)(new Request(`${ORIGIN}/api/launchpad/theses`, {
     method: "POST",
-    headers: headers(harness, { authorization: `Bearer ${PRIVY_TOKEN}` }),
+    headers: headers(harness, { authorization: `Bearer ${PRIVY_TOKEN}`, ...(idempotencyKey ? { "idempotency-key": idempotencyKey } : {}) }),
     body: JSON.stringify({ input }),
   }), testClient());
 }
@@ -797,5 +797,26 @@ test("the largest valid list token reads from the newest post; forged values are
       const refused = await list(encodeCursor(shape, [key], [tie]));
       assert.equal(refused.status, 400, `${key} ${tie}`);
     }
+  });
+});
+
+test("a retry with the same Idempotency-Key answers with the first post and writes nothing more", { skip }, async () => {
+  await withHarness(async (harness) => {
+    const key = "4f1c2a9e-7b3d-4e6f-9a01-23456789abcd";
+    const first = await created(await postWithPrivy(harness, postInput(), undefined, key));
+    const retry = await created(await postWithPrivy(harness, postInput(), undefined, key));
+    assert.equal(retry.id, first.id, "the retry is answered with the stored post");
+    assert.match(first.id, /^[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/, "a version 8 UUID from the key");
+    assert.equal((await audit(harness, first.thesisId))?.records.length, 1);
+    const other = await created(await postWithPrivy(harness, postInput(), undefined, "a-different-key-0123456789"));
+    assert.notEqual(other.id, first.id, "another key is another post");
+    // A retry key for another launch never answers with this launch's post.
+    const elsewhere = await created(await postWithPrivy(harness, postInput({ launchId: LAUNCH_B }), undefined, key));
+    assert.notEqual(elsewhere.id, first.id);
+    // The same key with other text is refused, never answered with the old post.
+    const changed = await postWithPrivy(harness, postInput({ body: "Other text under an old retry key." }), undefined, key);
+    assert.equal(changed.status, 409);
+    const malformed = await postWithPrivy(harness, postInput(), undefined, "short");
+    assert.equal(malformed.status, 400);
   });
 });

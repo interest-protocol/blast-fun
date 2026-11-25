@@ -119,6 +119,20 @@ test("a wallet author signs exactly the Wallet Proof challenge for social_post a
   });
 });
 
+test("a retry sends the same Idempotency-Key on the post, never on the proof challenge, and none without a key", async () => {
+  const key = "11111111-2222-4333-8444-555555555555";
+  const { calls, fetcher } = recorder([
+    Response.json({ requestId: "r", post: COMMUNITY }, { status: 201 }),
+    Response.json({ requestId: "r", post: COMMUNITY }, { status: 201 }),
+    Response.json({ requestId: "r", post: COMMUNITY }, { status: 201 }),
+  ]);
+  await publishThesis({ input: INPUT, credential: privy, idempotencyKey: key, fetcher, csrf: () => "c" });
+  await publishThesis({ input: INPUT, credential: privy, idempotencyKey: key, fetcher, csrf: () => "c" });
+  await publishThesis({ input: INPUT, credential: privy, fetcher, csrf: () => "c" });
+  assert.deepEqual(calls.map((call) => headers(call).get("idempotency-key")), [key, key, null]);
+  assert.deepEqual(body(calls[0]), { input: INPUT }, "the key never enters the exact body");
+});
+
 test("each refusal says what happened, that nothing was posted, and how to recover", async () => {
   const refusal = (status: number, code: string, extra: HeadersInit = {}) =>
     Response.json({ requestId: "r", error: { code, message: "server words" } }, { status, headers: extra });

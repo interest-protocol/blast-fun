@@ -8,7 +8,7 @@ import { useAppQueryClient } from "#web/lib/query/provider.tsx";
 import type { SocialProfileCalls, SocialProfileEdit } from "@blast/core/web/contracts/profile-page.ts";
 import type { SocialProfile } from "@blast/core/web/contracts/profiles.ts";
 
-import { EditProfileSheet } from "./profile/EditProfileSheet";
+import { EditProfileSheet, type ProfilePreview } from "./profile/EditProfileSheet";
 import { portfolioTrend, type PortfolioTrendView } from "./profile/portfolio-trend";
 import { goldFigures, type GoldFigures } from "./profile/profile-model";
 import { ProfileScreen, type ProfileScreenProfile } from "./profile/ProfileScreen";
@@ -45,7 +45,10 @@ export function ProfileView({
   const { own, pending } = useProfileOwnership(profile.callsign);
   const [edited, setEdited] = useState<Pick<SocialProfileEdit, "display_name" | "avatar_url" | "bio"> | null>(null);
   const [editing, setEditing] = useState(false);
-  const shown: ProfileScreenProfile = edited && own ? { ...profile, ...edited } : profile;
+  /** A save's details shown before the server answers (taken back on a refusal). */
+  const [preview, setPreview] = useState<ProfilePreview | null>(null);
+  const confirmed: ProfileScreenProfile = edited && own ? { ...profile, ...edited } : profile;
+  const shown: ProfileScreenProfile = preview && own ? { ...confirmed, ...preview } : confirmed;
   const calls = useProfileCalls(profile.callsign, initialCalls);
   const mePresales = useMePresales(own, true);
   const mutuals = useMutuals(profile.callsign, own);
@@ -85,11 +88,13 @@ export function ProfileView({
             avatarUrl={shown.avatar_url}
             callsign={profile.callsign}
             onClose={() => setEditing(false)}
+            onPreview={setPreview}
+            onReopen={() => setEditing(true)}
             onSaved={(edit) => {
               setEdited({ display_name: edit.display_name, avatar_url: edit.avatar_url, bio: edit.bio });
               const callsignChanged = edit.callsign && edit.callsign !== profile.callsign;
               // Refresh the shell only for details carried by `me`.
-              if (callsignChanged || edit.display_name !== shown.display_name || edit.avatar_url !== shown.avatar_url) {
+              if (callsignChanged || edit.display_name !== confirmed.display_name || edit.avatar_url !== confirmed.avatar_url) {
                 account.refresh();
               }
               if (callsignChanged) {

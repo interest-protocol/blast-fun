@@ -31,6 +31,9 @@ function dataUrlOf(blob: Blob): Promise<string | null> {
   });
 }
 
+/** The details a save shows on the page before the server answers. */
+export type ProfilePreview = Pick<SocialProfileEdit, "display_name" | "bio" | "avatar_url">;
+
 export type ProfileEditDraft = Readonly<{ name: string | null; picture: PictureChange; callsign?: string; bio?: string }>;
 type ProfileEditSaveResult = string | Readonly<{ message: string; saved: SocialProfileEdit }> | null;
 const noToken = async () => null;
@@ -96,6 +99,7 @@ function useEditSheetViewControls({
   loadError = null,
   onClose,
   onSave,
+  onReopen,
   getAccessToken = noToken,
 }: Readonly<{
   open: boolean;
@@ -107,6 +111,8 @@ function useEditSheetViewControls({
   loadError?: string | null;
   onClose: () => void;
   onSave: (draft: ProfileEditDraft) => Promise<ProfileEditSaveResult>;
+  /** Opens the sheet again after a save that closed it at once was refused (its draft and reason kept). */
+  onReopen?: () => void;
   getAccessToken?: () => Promise<string | null>;
 }>) {
   const [{ name, bio }, setTextDraft] = useState(() => profileTextDraft(initial));
@@ -115,6 +121,8 @@ function useEditSheetViewControls({
   const [picture, setPicture] = useState<PictureChange>({ kind: "keep" });
   const [message, setMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  /** Set while a save that closed the sheet at once settles: the close keeps the draft for a refusal. */
+  const keepDraft = useRef(false);
   const edit = acknowledged;
   const callsignInput = useCallsignInput(edit?.callsign ?? callsign, getAccessToken);
 
@@ -140,6 +148,10 @@ function useEditSheetViewControls({
   const canSave = ready && changed && !bad && !badBio && callsignReady && !saving;
 
   function resetDraft() {
+    if (keepDraft.current) {
+      keepDraft.current = false;
+      return;
+    }
     setTextDraft(profileTextDraft(edit));
     setPicture({ kind: "keep" });
     setMessage(null);
@@ -173,6 +185,12 @@ function useEditSheetViewControls({
     if (!canSave) return;
     setSaving(true);
     setMessage(null);
+    // Name, bio and photo choices show on the page at once; a new callsign or upload waits for the server.
+    const instant = !callsignChanged && picture.kind !== "upload" && onReopen !== undefined;
+    if (instant) {
+      keepDraft.current = true;
+      onClose();
+    }
     return await (async () => {
       const error = await onSave({
         name: nameChanged ? name : null,
@@ -180,6 +198,7 @@ function useEditSheetViewControls({
         ...(callsignChanged ? { callsign: callsignInput.value } : {}),
         ...(bioChanged ? { bio } : {}),
       });
+      if (instant && error !== null) onReopen();
       if (error !== null) {
         if (typeof error === "string") setMessage(error);
         else {
@@ -189,10 +208,13 @@ function useEditSheetViewControls({
         }
         return;
       }
-      onClose();
+      if (!instant) onClose();
     })().catch((error: unknown) => {
+      if (instant) onReopen();
       setMessage(publicErrorMessage(error, "The update could not be confirmed. Check your profile and try again."));
     }).finally(() => {
+      // A refusal that lands before the close finishes reopens a sheet that never closed.
+      keepDraft.current = false;
       setSaving(false);
     });
   }
@@ -289,6 +311,8 @@ export function EditProfileSheet({
   api,
   onClose,
   onSaved,
+  onPreview,
+  onReopen,
 }: Readonly<{
   open: boolean;
   callsign: string;
@@ -296,12 +320,26 @@ export function EditProfileSheet({
   api: SocialApiOptions;
   onClose: () => void;
   onSaved: (edit: SocialProfileEdit) => void;
+  /** Shows a save's details on the page before the server answers; null takes them back. */
+  onPreview?: (preview: ProfilePreview | null) => void;
+  /** Opens the sheet again; a save that closed it at once and was refused needs it. */
+  onReopen?: () => void;
 }>) {
   const queries = useAppQueryClient();
   const [edit, setEdit] = useState<SocialProfileEdit | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  /** The sheet reopens after a refusal: keep the draft and its answer instead of reading again. */
+  const reopening = useRef(false);
+  const isOpen = useRef(open);
+  useEffect(() => {
+    isOpen.current = open;
+  }, [open]);
   useEffect(() => {
     if (!open) return;
+    if (reopening.current) {
+      reopening.current = false;
+      return;
+    }
     let live = true;
     // Read on every opening, through the shared cache (OA-38).
     queries.fetchQuery({ ...profileEditQuery(api.getAccessToken), staleTime: 0 }).then(
@@ -334,6 +372,23 @@ export function EditProfileSheet({
   }
 
   async function save(draft: ProfileEditDraft): Promise<ProfileEditSaveResult> {
+    const instant = onPreview !== undefined && onReopen !== undefined && draft.callsign === undefined && draft.picture.kind !== "upload";
+    if (instant && edit) {
+      onPreview({
+        display_name: draft.name !== null ? draft.name.trim() || null : edit.display_name,
+        bio: draft.bio !== undefined ? normalizeProfileBio(draft.bio) || undefined : edit.bio,
+        avatar_url: draft.picture.kind === "none" ? null : draft.picture.kind === "source" ? edit.source_avatar_url ?? null : edit.avatar_url,
+      });
+    }
+    try {
+      return await saveDraft(draft);
+    } finally {
+      // The confirmed answer (`onSaved`) or the page's own values replace the preview.
+      if (instant) onPreview(null);
+    }
+  }
+
+  async function saveDraft(draft: ProfileEditDraft): Promise<ProfileEditSaveResult> {
     let latest = edit;
     const change: SocialProfileEditRequest = {
       ...(draft.callsign !== undefined ? { callsign: draft.callsign } : {}),
@@ -362,7 +417,12 @@ export function EditProfileSheet({
     return null;
   }
 
-  return <EditSheetView avatarUrl={avatarUrl} callsign={edit?.callsign ?? callsign} getAccessToken={api.getAccessToken} initial={edit} loadError={loadError} onClose={onClose} onSave={save} open={open} />;
+  const reopen = onPreview && onReopen ? () => {
+    // Opened again by hand meanwhile: nothing to skip.
+    if (!isOpen.current) reopening.current = true;
+    onReopen();
+  } : undefined;
+  return <EditSheetView avatarUrl={avatarUrl} callsign={edit?.callsign ?? callsign} getAccessToken={api.getAccessToken} initial={edit} loadError={loadError} onClose={onClose} onReopen={reopen} onSave={save} open={open} />;
 }
 
 function ProfilePictureEditor({ canUpload, callsign, preview, openPicker, picking, choose, ready, canUseSource, canRemove, saving, setPicture }: Pick<ReturnType<typeof useEditSheetViewControls>, "canUpload" | "callsign" | "preview" | "openPicker" | "picking" | "choose" | "ready" | "canUseSource" | "canRemove" | "saving" | "setPicture">) {
