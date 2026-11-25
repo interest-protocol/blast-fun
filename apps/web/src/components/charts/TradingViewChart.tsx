@@ -218,7 +218,8 @@ function useTradingViewPlot({
     let cleanupReady: void | (() => void);
     let times: number[] = [];
     const crosshairTone = coinAxes ? "--muted" : "--faint";
-    const liveOptions = coinViewport ? { rightOffsetPixels: LIVE_GUTTER_PX } : {};
+    // A pinned left edge is the library's only switch that slides the first time label inside the plot instead of clipping it.
+    const liveOptions = coinViewport ? { rightOffsetPixels: LIVE_GUTTER_PX, fixLeftEdge: true } : {};
     let previousBrowsing: boolean | undefined;
     let previousWidth = 0;
     const { schedule, afterChartWrite, cancel } = chartProjectionQueue(() => {

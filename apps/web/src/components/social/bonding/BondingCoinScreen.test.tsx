@@ -27,7 +27,7 @@ test("graduated page leads with venue economics and pool volume instead of the e
   const page = coinScreenFixture();
   const doc = render(page);
   const overview = doc.querySelector('[aria-label="Market overview"]')!;
-  assert.match(doc.body.textContent!, /Price—.*Chart fixture.*FDV.*\$53\.9K.*Holders.*Volume 24h.*\$310\.69.*DEX/);
+  assert.match(doc.body.textContent!, /Current pool price—.*Chart fixture.*FDV.*\$53\.9K.*Holders.*Volume 24h.*\$310\.69.*DEX/);
   assert.match(overview.textContent!, /FDV.*Holders.*Volume 24h.*DEX/);
   assert.ok(page.coin.state === "available");
   const tag = doc.querySelector("[data-page-head] [data-coin-type-tag]");
@@ -136,7 +136,7 @@ test("graduated reading order shows market stats between the chart and recent tr
 test("venue facts remain visible when curve history cannot be read", () => {
   const page = coinScreenFixture();
   const doc = render({ ...page, curve: { state: "unavailable", reason: "down" } });
-  assert.match(doc.body.textContent!, /Price.*Chart fixture.*Volume 24h/);
+  assert.match(doc.body.textContent!, /Current pool price.*Chart fixture.*Volume 24h/);
   assert.match(doc.body.textContent!, /Graduated/);
   assert.equal(doc.querySelector('[aria-label="Launch history"]'), null);
 });
@@ -144,7 +144,7 @@ test("venue facts remain visible when curve history cannot be read", () => {
 test("venue economics retain their own units when both coin and curve reads fail", () => {
   const page = coinScreenFixture();
   const doc = render({ ...page, curve: { state: "unavailable", reason: "down" }, coin: { state: "unavailable", reason: "down" } });
-  assert.match(doc.body.textContent!, /Price—.*Chart fixture.*FDV.*\$53\.9K.*Volume 24h.*\$310\.69/);
+  assert.match(doc.body.textContent!, /Current pool price—.*Chart fixture.*FDV.*\$53\.9K.*Volume 24h.*\$310\.69/);
 });
 
 test("venue outage retains graduation and recovery without curve-price fallback or active trade controls", () => {
@@ -202,7 +202,7 @@ test("missing USD conversion omits FDV without relabeling quote amounts as dolla
   const doc = render({ ...page, venue: { ...page.venue, data: { ...page.venue.data, fdvUsd: null } } });
   const overview = doc.querySelector('[aria-label="Market overview"]')!;
   assert.doesNotMatch(overview.textContent!, /FDV/);
-  assert.match(doc.body.textContent!, /Price.*SUI.*Chart fixture.*Volume 24h\$310\.69/);
+  assert.match(doc.body.textContent!, /Current pool price.*SUI.*Chart fixture.*Volume 24h\$310\.69/);
 });
 
 test("stale venue data is marked delayed without losing the graduated view", () => {
@@ -219,7 +219,7 @@ test("test quote amounts use the same TSUI display alias after graduation", () =
   const curve = page.curve.data;
   const doc = render({ ...page, curve: { ...page.curve, data: { ...curve, launch: { ...curve.launch, quoteType: CREATE_TEST_SUI_QUOTE_TYPE } } } });
   const overview = doc.querySelector('[aria-label="Market overview"]')!;
-  assert.match(doc.body.textContent!, /Price.*TSUI.*Chart fixture.*Volume 24h\$310\.69/);
+  assert.match(doc.body.textContent!, /Current pool price.*TSUI.*Chart fixture.*Volume 24h\$310\.69/);
   assert.match(overview.textContent!, /FDV\$53\.9K/);
 });
 
