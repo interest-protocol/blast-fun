@@ -1,57 +1,16 @@
 "use client";
 
 import clsx from "clsx";
-import { useSyncExternalStore } from "react";
-import { createStore } from "zustand/vanilla";
+import { useEffect, useSyncExternalStore } from "react";
 
 import { useFeelSound } from "#web/components/blast-feel/FeelProvider.tsx";
 
 import styles from "./AppShell.module.css";
+import { backgroundMusic, restoreBackgroundMusic, setBackgroundMusic } from "./background-music.ts";
 import { BlastMenu, BlastMenuCheckboxItem, BlastMenuCheckboxItemIndicator, BlastMenuTrigger } from "./BlastMenu.tsx";
 import { IconButton } from "./Button.tsx";
 import { CheckIcon } from "./Icons.tsx";
 import { accountMenuPlacement } from "./menu-placement.ts";
-
-const MUSIC_URL = "/audio/cozy-vinyl-groove.mp3";
-
-const playback = createStore<"paused" | "playing" | "failed">()(() => "paused");
-let player: HTMLAudioElement | undefined;
-
-function musicPlayer(): HTMLAudioElement {
-  if (player) return player;
-
-  // The player belongs to the document, which outlives the navigation shell.
-  const audio = new Audio();
-  audio.loop = true;
-  audio.preload = "none";
-  audio.onplay = () => {
-    if (!audio.paused) playback.setState("playing");
-  };
-  audio.onpause = () => {
-    if (audio.paused && playback.getState() !== "failed") playback.setState("paused");
-  };
-  audio.onerror = () => playback.setState("failed");
-  document.addEventListener("visibilitychange", () => {
-    if (document.hidden) audio.pause();
-  });
-  player = audio;
-  return audio;
-}
-
-function toggleMusic() {
-  const audio = musicPlayer();
-  if (!audio.paused) {
-    audio.pause();
-    return;
-  }
-
-  playback.setState("paused");
-  if (!audio.getAttribute("src") || audio.error) audio.src = MUSIC_URL;
-  void audio.play().catch((error: unknown) => {
-    if (error instanceof DOMException && error.name === "AbortError") return;
-    playback.setState("failed");
-  });
-}
 
 const SPEAKER_ON = (
   <>
@@ -81,9 +40,9 @@ export function AudioMenu({ className, onToggle }: Readonly<{
   onToggle?: (on: boolean) => void;
 }>) {
   const { soundEnabled, setSoundEnabled } = useFeelSound();
-  const music = useSyncExternalStore(playback.subscribe, playback.getState, playback.getInitialState);
-  const playing = music === "playing";
-  const failed = music === "failed";
+  const music = useSyncExternalStore(backgroundMusic.subscribe, backgroundMusic.getState, backgroundMusic.getInitialState);
+  const musicStatus = music === "blocked" ? "Starts when you interact." : music === "failed" ? "Playback failed." : "";
+  useEffect(restoreBackgroundMusic, []);
 
   return <>
     <BlastMenu
@@ -97,7 +56,7 @@ export function AudioMenu({ className, onToggle }: Readonly<{
         title="Audio"
         size="chip"
       >
-        <Speaker on={soundEnabled || playing} />
+        <Speaker on={soundEnabled || music === "playing"} />
       </IconButton>} />}
     >
       <BlastMenuCheckboxItem
@@ -111,14 +70,15 @@ export function AudioMenu({ className, onToggle }: Readonly<{
       </BlastMenuCheckboxItem>
       <BlastMenuCheckboxItem
         className={styles.mitem}
-        checked={playing}
+        checked={music !== "off"}
+        data-background-music-toggle=""
         data-feel-sound=""
-        onCheckedChange={toggleMusic}
+        onCheckedChange={setBackgroundMusic}
       >
-        <span className={styles.mtext}>Background music{failed && <span aria-hidden="true">Playback failed. Try again.</span>}</span>
+        <span className={styles.mtext}>Background music{musicStatus && <span aria-hidden="true">{musicStatus}</span>}</span>
         <BlastMenuCheckboxItemIndicator aria-hidden="true"><CheckIcon /></BlastMenuCheckboxItemIndicator>
       </BlastMenuCheckboxItem>
     </BlastMenu>
-    <span aria-live="polite" className="sr-only">{failed ? "Background music could not play. Try again." : ""}</span>
+    <span aria-live="polite" className="sr-only">{musicStatus && ("Background music. " + musicStatus)}</span>
   </>;
 }

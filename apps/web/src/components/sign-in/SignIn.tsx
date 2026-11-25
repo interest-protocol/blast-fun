@@ -17,7 +17,21 @@ import { useWalletSession } from "#web/components/social/WalletSession.tsx";
 
 import styles from "./SignIn.module.css";
 import { isSuiSignInMethod, methodsDisabled, oauthErrorState, PRIVY_OAUTH_PROVIDERS, PRIVY_WALLET_LOGIN, SIGN_IN_ATTEMPT_STORAGE_KEY, SIGN_IN_IDLE, SIGN_IN_METHOD_LABELS, SIGN_IN_METHOD_NAMES, SIGN_IN_METHODS, SIGN_IN_READY_TIMEOUT_MS, SUI_SIGN_IN_METHODS, SUI_WALLET_INSTALL_URLS, signInMessage, storedAttempt, waitingMethod, walletLoginErrorState, type SignInMethod, type SignInState } from "./sign-in-flow";
-import { suiWalletSigner } from "./sui-wallet-signer";
+
+type SuiWalletSignerModule = typeof import("./sui-wallet-signer");
+let suiWalletSignerModule: SuiWalletSignerModule | null = null;
+
+/** The Sui wallet kit (dApp Kit, Slush, the node client): code only, loaded when a sign-in surface opens, not with every page. */
+function loadSuiWalletSigner(): Promise<SuiWalletSignerModule> {
+  return import("./sui-wallet-signer").then((module) => (suiWalletSignerModule = module));
+}
+
+/** Loads the Sui wallet kit while sign-in is on screen, so a press finds it ready and the wallet's popup opens from the click itself. */
+function usePrepareSuiWallets(active: boolean): void {
+  useEffect(() => {
+    if (active) void loadSuiWalletSigner().catch(() => undefined);
+  }, [active]);
+}
 
 const HEADING_ID = "blast-sign-in-title";
 const METHOD_ICONS: Readonly<Record<SignInMethod, () => ReactNode>> = {
@@ -197,7 +211,13 @@ function useSignInFlow(
       void (async () => {
         if (isSuiSignInMethod(method)) {
           // Sui wallets use the app's own session (OA-16): no Privy step.
-          const result = await wallet.signIn(suiWalletSigner(method));
+          // Loaded with the sheet; a press that beats the load waits for it (a web wallet may then ask for a second click).
+          const signers = suiWalletSignerModule ?? (await loadSuiWalletSigner().catch(() => null));
+          if (signers === null) {
+            setState({ status: "failed", method });
+            return;
+          }
+          const result = await wallet.signIn(signers.suiWalletSigner(method));
           if (result !== "signed-in") {
             setState({ status: result === "rate-limited" ? "rate-limited" : result === "cancelled" ? "cancelled" : "failed", method });
             return;
@@ -249,6 +269,7 @@ function PrivySignInSheet() {
   const viewer = useSocialViewer();
   const [open, setOpen] = useState(false);
   usePreparePrivyWalletPicker(open && !viewer.signedIn);
+  usePrepareSuiWallets(open && !viewer.signedIn);
   const flow = useSignInFlow((outcome) => setOpen(!outcome.signedIn));
   const { reset } = flow;
 
@@ -302,6 +323,7 @@ export function SignInCard({ returnTo }: Readonly<{ returnTo: string }>) {
 function PrivySignInCard({ returnTo }: Readonly<{ returnTo: string }>) {
   const viewer = useSocialViewer();
   usePreparePrivyWalletPicker(!viewer.signedIn);
+  usePrepareSuiWallets(!viewer.signedIn);
   const flow = useSignInFlow(() => undefined);
   // react-doctor-disable-next-line react-doctor/clickjacking-redirect-risk -- The page passes only signInReturnPath-allowlisted local paths; CSP forbids framing.
   if (viewer.signedIn) redirect(returnTo);

@@ -134,11 +134,14 @@ async function walletProof(
 export async function publishThesis({
   input,
   credential,
+  idempotencyKey,
   fetcher = gatedFetch,
   csrf = browserCsrfToken,
 }: Readonly<{
   input: PostInput;
   credential: PostCredential;
+  /** The same key on a retry of the same draft: the server answers with the first try's post instead of writing a second. */
+  idempotencyKey?: string;
   fetcher?: typeof fetch;
   csrf?: () => string | null;
 }>): Promise<PublishOutcome> {
@@ -153,14 +156,15 @@ export async function publishThesis({
     const send = (url: string, payload: unknown, extra: Record<string, string> = {}) =>
       fetcher(url, { method: "POST", credentials: "same-origin", headers: { ...headers, ...extra }, body: JSON.stringify(payload) });
 
+    const retry: Record<string, string> = idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {};
     let response: Response;
     if (credential.kind === "privy") {
-      response = await send(LIST, { input }, { Authorization: `Bearer ${credential.accessToken}` });
+      response = await send(LIST, { input }, { ...retry, Authorization: `Bearer ${credential.accessToken}` });
     } else {
       const proven = await walletProof(credential, send);
       if (!("proof" in proven)) return proven;
       const { challengeId, address, message, signature } = proven.proof;
-      response = await send(LIST, { input, proof: { challengeId, address, message, signature } });
+      response = await send(LIST, { input, proof: { challengeId, address, message, signature } }, retry);
     }
     if (response.status !== 201) return refusal(response);
     try {

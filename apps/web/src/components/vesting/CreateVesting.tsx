@@ -56,7 +56,7 @@ import {
 } from "./creation-coins";
 import { useVestingWallet } from "./use-vesting-wallet";
 import { useVestingAccountState, vestingAccountKey } from "./use-account-state";
-import { VestingReviewRequiredError, VestingSubmissionPendingError } from "./execute-reviewed";
+import { VestingReviewRequiredError, VestingSubmissionPendingError } from "./vesting-errors";
 import { Address } from "./parts";
 import { ScheduleField } from "./ScheduleField";
 import { WalletAddressField } from "./WalletAddressField";

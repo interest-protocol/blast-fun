@@ -3,7 +3,6 @@
   "apps/web/src/components/blast-ui/AppShell.swap.test.tsx",
   "apps/web/src/components/blast-ui/BlastMenu.test.tsx",
   "apps/web/src/components/blast-ui/CursorMount.test.tsx",
-  "apps/web/src/components/blast-ui/Sheet.test.tsx",
   "apps/web/src/components/blast-ui/menus-oa31.test.tsx",
   "apps/web/src/components/blast-ui/mobile-toasts.test.tsx",
   "apps/web/src/components/blast-ui/notification-feedback.test.tsx",

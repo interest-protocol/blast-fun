@@ -1,3 +1,4 @@
+import { Button } from "#web/components/blast-ui/Button.tsx";
 import { SelectField } from "#web/components/blast-ui/TextField.tsx";
 import { useId } from "react";
 
@@ -43,6 +44,7 @@ export function ComposerForm({
   result,
   onChange,
   onPost,
+  onRetry,
 }: Readonly<{
   draft: ComposerDraft;
   /** The credentials offered: a Privy session and/or a wallet's Wallet Proof. */
@@ -54,6 +56,8 @@ export function ComposerForm({
   result: ComposerResult | null;
   onChange: (draft: ComposerDraft) => void;
   onPost: (signer: SignerKind) => void;
+  /** Sends the failed post again with its retry key; absent unless the last try failed. */
+  onRetry?: () => void;
 }>) {
   const id = useId();
   const limits = SOCIAL_LIMITS;
@@ -169,6 +173,16 @@ export function ComposerForm({
         {signers.includes("privy") ? <PostButton signer="privy" label="Post with Privy" pending={pending} onPost={onPost} /> : null}
         {signers.includes("wallet") ? <PostButton signer="wallet" label="Post with wallet" pending={pending} onPost={onPost} /> : null}
       </div>
+      {pending !== null ? (
+        <article className={styles.post} aria-label="Your post, posting" data-kind={draft.kind} data-pending="">
+          <h3 className={styles.postHeading}>
+            <span className={styles.kind}>{KIND_LABELS[draft.kind]}</span>
+            {draft.stance ? <span className={styles.stance} data-stance={draft.stance}>{STANCE_LABELS[draft.stance]}</span> : null}
+            <span className={styles.author}>Posting…</span>
+          </h3>
+          <p className={styles.body}>{draft.body}</p>
+        </article>
+      ) : null}
       <p className={styles.status} role="status" data-tone={pending === null ? result?.tone : undefined}>
         {pending === "privy"
           ? "Waiting for Privy and Blast…"
@@ -176,6 +190,7 @@ export function ComposerForm({
             ? "Waiting for the wallet and Blast…"
             : result?.message}
       </p>
+      {pending === null && onRetry ? <Button onClick={onRetry} size="sm" type="button" variant="ghost">Retry</Button> : null}
     </form>
   );
 }

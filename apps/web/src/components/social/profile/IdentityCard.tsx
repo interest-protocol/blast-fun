@@ -1,7 +1,6 @@
 "use client";
 
 import { Button, IconButton } from "#web/components/blast-ui/Button.tsx";
-import { LoadingIndicator } from "#web/components/blast-ui/LoadingIndicator.tsx";
 import clsx from "clsx";
 import Link from "next/link";
 import { useState, type MouseEvent, type ReactNode } from "react";
@@ -13,7 +12,7 @@ import type { SocialProfile } from "@blast/core/web/contracts/profiles.ts";
 
 import { useSignInGate } from "../SignInGate";
 import { followErrorMessage } from "../viewer-state-client";
-import { useViewerFollow, useViewerFollowPending, useViewerFollowReadFailed, useViewerStateStore } from "../ViewerState";
+import { useViewerFollow, useViewerFollowReadFailed, useViewerStateStore } from "../ViewerState";
 import styles from "./Profile.module.css";
 import { Avatar } from "./parts";
 import { mutualsLine, trackTiles } from "./profile-model";
@@ -27,8 +26,7 @@ function isUnverifiedAnsem(profile: IdentityProfile): boolean {
   return profile.callsign === "ansem" && (!profile.verified || profile.x_handle?.toLowerCase() !== "blknoiz06");
 }
 
-function followActionLabel(callsign: string, following: boolean, undo: boolean, busy: boolean) {
-  if (busy) return `Updating follow for @${callsign}`;
+function followActionLabel(callsign: string, following: boolean, undo: boolean) {
   if (undo) return `Undo unfollow @${callsign}`;
   return following ? `Following @${callsign}. Unfollow` : `Follow @${callsign}`;
 }
@@ -50,7 +48,6 @@ export function ProfileFollowView({
   signInHref,
   onSignIn,
   following,
-  busy = false,
   error = null,
   onToggle,
   undo = false,
@@ -62,7 +59,6 @@ export function ProfileFollowView({
   signInHref: string | null;
   onSignIn?: (event: MouseEvent) => void;
   following: boolean | undefined;
-  busy?: boolean;
   error?: string | null;
   onToggle?: () => void;
   undo?: boolean;
@@ -81,9 +77,7 @@ export function ProfileFollowView({
   return (
     <div>
       <button
-        aria-busy={busy || undefined}
-        aria-disabled={busy || undefined}
-        aria-label={followActionLabel(callsign, on, undo, busy)}
+        aria-label={followActionLabel(callsign, on, undo)}
         aria-pressed={on}
         className={clsx("btn btn-ink", styles.follow)}
         data-feel-follow=""
@@ -91,19 +85,19 @@ export function ProfileFollowView({
         onClick={onToggle}
         type="button"
       >
-        <LoadingIndicator label="Saving follow preference" loading={busy}>{undo ? "Undo" : on ? (
+        {undo ? "Undo" : on ? (
           <>
             <span className={styles.lOn}>Following</span>
             <span className={styles.lHover}>Unfollow</span>
           </>
         ) : (
           "Follow"
-        )}</LoadingIndicator>
+        )}
         <span className="sr"> @{callsign}</span>
       </button>
       {error ? (
         <p className={styles.followError} role="alert">
-          {error} <button className={styles.followRetry} aria-label={`Retry follow action for @${callsign}`} aria-disabled={busy || undefined} onClick={onToggle} type="button">Retry</button>
+          {error} <button className={styles.followRetry} aria-label={`Retry follow action for @${callsign}`} onClick={onToggle} type="button">Retry</button>
         </p>
       ) : null}
     </div>
@@ -119,15 +113,13 @@ export function ProfileFollow({ callsign, undo = false, followingHint }: Readonl
   const gate = useSignInGate();
   const store = useViewerStateStore();
   const following = useViewerFollow({ kind: "account", callsign }) ?? followingHint;
-  const pending = useViewerFollowPending({ kind: "account", callsign });
   const readFailed = useViewerFollowReadFailed({ kind: "account", callsign });
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState("");
   async function toggle() {
-    if (busy || pending || following === undefined || gate.sessionPending || !store) return;
+    if (following === undefined || gate.sessionPending || !store) return;
+    // Shown at once; a refusal puts the button back and says why.
     const next = undo || following !== true;
-    setBusy(true);
     setError(null);
     setAnnouncement("");
     try {
@@ -137,11 +129,9 @@ export function ProfileFollow({ callsign, undo = false, followingHint }: Readonl
     } catch {
       setError(followErrorMessage({ status: "error" }, next));
     }
-    setBusy(false);
   }
   return (
     <><span role="status" className="sr">{announcement}</span><ProfileFollowView
-      busy={busy || pending}
       undo={undo}
       callsign={callsign}
       error={error}

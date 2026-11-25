@@ -94,6 +94,8 @@ export interface LaunchpadMutationDefinition<Input, Result> {
     actor: LaunchpadActor;
     input: Input;
     transaction: TransactionContext;
+    /** The request's `Idempotency-Key` header, or null when none was sent. */
+    idempotencyKey: string | null;
   }>): Promise<Result>;
   /** The public response body; it must not echo credentials. */
   present(result: Result): Record<string, unknown>;
@@ -111,6 +113,8 @@ export interface LaunchpadMutationDependencies {
 const DEFAULT_BODY_BYTES = 16 * 1_024;
 const MAX_BODY_BYTES = 64 * 1_024;
 const BEARER = /^Bearer ([A-Za-z0-9._~+/=-]{1,8192})$/;
+/** A client-chosen retry key: 16 to 64 URL-safe characters (a UUID fits). */
+const IDEMPOTENCY_KEY = /^[A-Za-z0-9_-]{16,64}$/;
 
 type Credential =
   | { kind: "privy"; accessToken: string }
@@ -138,7 +142,7 @@ async function readMutationInput<Input, Result>(
   definition: LaunchpadMutationDefinition<Input, Result>,
   expectedOrigin: string,
   limit: number,
-): Promise<{ envelope: Record<string, unknown>; input: Input }> {
+): Promise<{ envelope: Record<string, unknown>; input: Input; idempotencyKey: string | null }> {
   if (request.method !== "POST") {
     throw new LaunchpadMutationError("LAUNCHPAD_METHOD_NOT_ALLOWED");
   }
@@ -160,7 +164,9 @@ async function readMutationInput<Input, Result>(
   } catch {
     throw invalidRequest();
   }
-  return { envelope, input };
+  const idempotencyKey = request.headers.get("idempotency-key");
+  if (idempotencyKey !== null && !IDEMPOTENCY_KEY.test(idempotencyKey)) throw invalidRequest();
+  return { envelope, input, idempotencyKey };
 }
 
 /**
@@ -193,7 +199,7 @@ export function createLaunchpadMutationHandler<Input, Result>(
     const requestId = createRequestId();
     let credential: Credential["kind"] | undefined;
     try {
-      const { envelope, input } = await readMutationInput(request, definition, dependencies.expectedOrigin, limit);
+      const { envelope, input, idempotencyKey } = await readMutationInput(request, definition, dependencies.expectedOrigin, limit);
       const presented = credentialFrom(request, envelope);
       credential = presented.kind;
 
@@ -237,7 +243,7 @@ export function createLaunchpadMutationHandler<Input, Result>(
         ) {
           throw new LaunchpadMutationError("LAUNCHPAD_FORBIDDEN");
         }
-        return definition.write({ actor, input: prepared, transaction });
+        return definition.write({ actor, input: prepared, transaction, idempotencyKey });
       }, { label: `launchpad.${definition.action}` });
 
       const status = definition.successStatus ?? 201;

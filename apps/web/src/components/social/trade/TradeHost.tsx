@@ -1,7 +1,7 @@
 "use client";
 
 import { invalidateAfter } from "#web/lib/query/invalidate.ts";
-import { SuiGrpcClient } from "@mysten/sui/grpc";
+import type { SuiGrpcClient } from "@mysten/sui/grpc";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, type ReactNode } from "react";
 
 import { useFeelSound } from "#web/components/blast-feel/index.ts";
@@ -16,17 +16,19 @@ import { SUI_COIN_TYPE } from "@blast/core/lib/sui/coin-types.ts";
 import { useBalancesContext, type Balances } from "../coins/balances";
 import { PrivyCoinSignerBridge, type PrivyCoinSigner } from "../coins/signers";
 import { quoteWalletQuery } from "../commit/commit-quote";
-import { walletCommitSigner } from "../commit/commit-signers";
 import { walletIdentityQuery, walletIdentityScope, walletQuery } from "../queries";
 import { useSocialViewer } from "../SignInGate";
 import { requestTradeQuote } from "../trades/trades-client";
 import type { TradeKit, TradeSendResult } from "./trade-kit";
-import { findBrowserRoute } from "./trade-estimate";
-import { sendTrade } from "./trade-send";
+import type { TradeRouteFinder } from "./trade-estimate";
 import { walletCoinBalanceQuery } from "../coins/use-wallet-coin-balance";
 
 
 const loadTradeFlow = () => import("../trades/trade-flow");
+/** The send path (the wallet signers, the node client), loaded at the first trade. */
+const loadTradeSend = () => Promise.all([import("./trade-send"), import("../commit/commit-signers"), import("@mysten/sui/grpc")]);
+/** The browser's route estimate, loaded at the first estimate. */
+const findBrowserRoute: TradeRouteFinder = (request) => import("./trade-estimate").then(({ findBrowserRoute: find }) => find(request));
 
 /**
  * The shell's trade host (R3-55; the commit dialog's host is the model,
@@ -49,11 +51,10 @@ const loadTradeFlow = () => import("../trades/trade-flow");
  *
  * Trading is not gated on the presale deployment: the route builds and the
  * wallet pays when Blast cannot sponsor (R3-31's `sponsorship_unavailable`).
- * The flow is imported when a trade runs, so the SDK and the transaction
- * builder stay out of a page's first load.
+ * The flow, the signers and the node client are imported when a trade
+ * runs, so the SDK, the wallet kit and the transaction builder stay out of
+ * a page's first load.
  */
-
-const mainnet = () => new SuiGrpcClient({ network: "mainnet", baseUrl: SUI_MAINNET_GRPC_URL });
 
 /** How long one wallet read serves every surface (a fresh balance after a trade is asked for explicitly). */
 export const TRADE_WALLET_MAX_AGE_MS = 5_000;
@@ -128,11 +129,11 @@ export function useTradeHost({ balances: shellBalances }: TradeHostOptions = {})
         const existing = quoteId === null ? undefined : submitted.get(quoteId);
         if (existing) return existing;
         const shell = latest.current;
-        const outcome = sendTrade(
+        const outcome = loadTradeSend().then(([{ sendTrade }, { walletCommitSigner }, { SuiGrpcClient }]) => sendTrade(
           {
             api,
             client: () => {
-              if (client.current === null) client.current = mainnet();
+              if (client.current === null) client.current = new SuiGrpcClient({ network: "mainnet", baseUrl: SUI_MAINNET_GRPC_URL });
               return client.current;
             },
             wallet: async () => {
@@ -157,7 +158,11 @@ export function useTradeHost({ balances: shellBalances }: TradeHostOptions = {})
             },
           },
           input,
-        );
+        ), (): TradeSendResult => {
+          // Nothing was sent: the code did not load, so the same quote may be pressed again.
+          shell.feel.play({ kind: "error" });
+          return { status: "refused", code: null, message: "The trade could not start. Check your connection and try again." };
+        });
         if (quoteId !== null) {
           submitted.set(quoteId, outcome);
           void outcome.then((result) => {

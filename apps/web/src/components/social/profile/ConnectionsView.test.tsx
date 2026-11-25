@@ -155,9 +155,8 @@ test("unfollow keeps its position, reconciles counts, and Undo performs a real f
   await act(async () => settleQueries(client));
   const row = container.querySelector("li")!;
   const button = row.querySelector("button")!;
-  await act(async () => { button.click(); button.click(); });
-  assert.equal(button.getAttribute("aria-disabled"), "true");
-  assert.match(button.textContent!, /Saving/);
+  await act(async () => { button.click(); });
+  assert.equal(button.getAttribute("aria-disabled"), null, "a follow never locks the button");
   assert.equal(writes.length, 1);
   await act(async () => { finish(); await settleQueries(client); });
   assert.equal(container.querySelector("li"), row);
@@ -306,9 +305,9 @@ test("unfollow retains its position, Undo performs a real request, failures keep
   const originalRows = [...container.querySelectorAll("li")];
   const button = originalRows[0]!.querySelector("button")!;
   assert.match(originalRows[0]!.textContent!, /Follows you/);
-  await act(async () => { button.click(); button.click(); });
-  assert.ok(button.querySelector('[role="status"][aria-label="Saving follow preference"]'));
-  assert.equal(button.getAttribute("aria-disabled"), "true");
+  await act(async () => { button.click(); });
+  assert.equal(button.querySelector('[role="status"][aria-label="Saving follow preference"]'), null, "a follow never locks the button");
+  assert.equal(button.getAttribute("aria-disabled"), null);
   assert.equal(methods.length, 1);
   await act(async () => { release!(); await settleQueries(client); });
   assert.deepEqual([...container.querySelectorAll("li")], originalRows);
@@ -318,7 +317,7 @@ test("unfollow retains its position, Undo performs a real request, failures keep
   assert.match(container.textContent!, /1 following/);
   failure = true;
   await act(async () => button.click());
-  assert.match(button.textContent!, /Saving/);
+  assert.equal(button.getAttribute("aria-disabled"), null);
   await act(async () => { release!(); await settleQueries(client); });
   assert.match(container.querySelector('[role="alert"]')!.textContent!, /Try again/);
   assert.match(button.textContent!, /Undo/);

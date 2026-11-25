@@ -34,7 +34,7 @@ const EDIT: SocialProfileEdit = { display_name: "Kai Moreno", picture: "upload",
 
 type Calls = { saves: ProfileEditDraft[]; closes: number };
 
-async function mount(t: TestContext, initial: SocialProfileEdit | null = EDIT, avatarUrl: string | null = null, onSave?: (draft: ProfileEditDraft) => Promise<string | null>, loadError?: string): Promise<Calls> {
+async function mount(t: TestContext, initial: SocialProfileEdit | null = EDIT, avatarUrl: string | null = null, onSave?: (draft: ProfileEditDraft) => Promise<string | null>, loadError?: string, onReopen?: () => void): Promise<Calls> {
   const calls: Calls = { saves: [], closes: 0 };
   const container = document.createElement("div");
   container.setAttribute("data-blast-ui", "");
@@ -49,6 +49,7 @@ async function mount(t: TestContext, initial: SocialProfileEdit | null = EDIT, a
           initial={initial}
           loadError={loadError}
           onClose={() => void calls.closes++}
+          onReopen={onReopen}
           onSave={async (draft) => {
             calls.saves.push(draft);
             return onSave ? onSave(draft) : null;
@@ -100,6 +101,23 @@ test("a rejected save keeps the draft open, reports the uncertain result, and pe
   assert.equal(calls.closes, 1);
   assert.equal(calls.saves.length, 2);
   assert.deepEqual(calls.saves[0], calls.saves[1], "the failed attempt retains the staged changes");
+});
+
+test("an instant save closes the sheet before the server answers; a refusal reopens it with the draft kept", async (t) => {
+  const answer = Promise.withResolvers<string | null>();
+  let reopened = 0;
+  const calls = await mount(t, EDIT, null, () => answer.promise, undefined, () => void reopened++);
+  await typeName("Kai New");
+  await click(save());
+  assert.equal(calls.closes, 1, "closed at once, before the server answered");
+  assert.equal(reopened, 0);
+  await act(async () => {
+    answer.resolve("The update could not be confirmed. Check your profile and try again.");
+    await answer.promise;
+  });
+  assert.equal(reopened, 1, "a refusal reopens the sheet");
+  assert.equal((sheet().querySelector("#edit-profile-name") as TestElement & { value: string }).value, "Kai New");
+  assert.equal(calls.saves.length, 1);
 });
 
 test("OA-44: the gate's copy and structure: 89px avatar with the upload badge, the Profile picture block, the handle hint, no counter", async (t) => {

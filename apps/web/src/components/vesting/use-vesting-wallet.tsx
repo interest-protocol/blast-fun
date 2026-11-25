@@ -18,8 +18,11 @@ import type {
   VestingAttempt,
   VestingIntent,
 } from "@blast/core/modules/vesting/model.ts";
+import { VestingReviewRequiredError } from "./vesting-errors";
 
-import { executeReviewedVesting } from "./execute-reviewed";
+/** The send path (the node client, the sponsor), loaded at the first submission, not with the page. */
+const loadVestingSend = () => import("./execute-reviewed");
+
 export function useVestingWallet() {
   const viewer = useSocialViewer();
   const queries = useAppQueryClient();
@@ -74,12 +77,18 @@ export function useVestingWallet() {
     if (busy) throw new Error("A transaction is already awaiting your wallet.");
     setPhase("Checking transaction status…");
     setBusy(true);
-    return executeReviewedVesting(attempt, {
-      refresh,
-      signTransaction,
-      setPhase,
-      api,
-    }).finally(() => {
+    return loadVestingSend().then(
+      ({ executeReviewedVesting }) => executeReviewedVesting(attempt, {
+        refresh,
+        signTransaction,
+        setPhase,
+        api,
+      }),
+      () => {
+        // Nothing was signed or sent: a fresh review may replace these bytes.
+        throw new VestingReviewRequiredError("The transaction could not start. Check your connection and try again.");
+      },
+    ).finally(() => {
       setBusy(false);
       setPhase("idle");
     });

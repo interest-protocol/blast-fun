@@ -29,6 +29,18 @@ export type ViewerStateStoreDependencies = Readonly<{
   scope?: string;
 }>;
 
+/**
+ * One target's follow writes: `want` is the newest tap, `base` the last state
+ * the server confirmed (undefined if never read), `hadWritten` whether a read
+ * could already not overwrite it.
+ */
+type FollowQueue = {
+  want: boolean;
+  base: boolean | undefined;
+  hadWritten: boolean;
+  run: Promise<FollowWriteResult>;
+};
+
 const followKey = (target: SocialFollowTarget) =>
   target.kind === "account" ? `c:${target.callsign}` : `p:${target.presale_id}`;
 
@@ -97,7 +109,8 @@ export class ViewerStateStore {
   readonly #reactionWrites = new Map<string, number>();
   #writeSequence = 0;
   readonly #listeners = new Set<() => void>();
-  readonly #followWrites = new Map<string, Promise<FollowWriteResult>>();
+  /** The follow writes in flight per target, with the newest tap still to settle. */
+  readonly #followQueues = new Map<string, FollowQueue>();
   readonly #followWriteListeners = new Set<(target: SocialFollowTarget, following: boolean) => void>();
   #pending: { entryIds: string[]; callsigns: string[]; presaleIds: string[]; backersOf: string[]; followsYou: string[] } = {
     entryIds: [], callsigns: [], presaleIds: [], backersOf: [], followsYou: [],
@@ -135,6 +148,13 @@ export class ViewerStateStore {
       return;
     }
     this.#controller.abort();
+    // A follow write in flight is no longer this viewer's: show the last confirmed
+    // state, and let the next read correct it if the write did land.
+    for (const [key, queue] of this.#followQueues) {
+      this.#putBack(key, queue);
+      this.#written.delete(key);
+    }
+    this.#followQueues.clear();
     this.#requested.clear();
     this.#failedFollows.clear();
     this.#pending = {
@@ -298,41 +318,85 @@ export class ViewerStateStore {
     return result;
   }
 
-  followPending(target: SocialFollowTarget): boolean {
-    return this.#followWrites.has(followKey(target));
-  }
-
-  /** Share a pending write across every control, then reconcile affected reads before it settles. */
+  /**
+   * Follows or unfollows `target` optimistically: every control shows the tap
+   * at once and the route writes it. Writes for one target go one at a time,
+   * and taps made while one is in flight collapse into the newest: when it
+   * settles, the store sends the newest tap only if it differs from what the
+   * server now holds. A refusal of the newest tap puts back the last confirmed
+   * state. Listeners, `cancelQueries` and `invalidateAfter` run only for a
+   * write the route accepted. Every tap of a burst shares one settlement.
+   * Pausing the viewer (`setActive(false)`) puts a tap in flight back to the
+   * last confirmed state for the next read to settle.
+   */
   setFollowing(target: SocialFollowTarget, following: boolean): Promise<FollowWriteResult> {
+    if (this.#controller.signal.aborted) return Promise.resolve({ status: "error", code: "owner_changed" });
     const key = followKey(target);
-    const pending = this.#followWrites.get(key);
-    if (pending) return pending;
-    const write = this.#writeFollowing(target, following).finally(() => {
-      this.#followWrites.delete(key);
-      this.#notify();
-    });
-    this.#followWrites.set(key, write);
+    const queued = this.#followQueues.get(key);
+    if (queued) {
+      queued.want = following;
+    } else {
+      const queue: FollowQueue = {
+        want: following,
+        base: this.#follows.get(key),
+        hadWritten: this.#written.has(key),
+        run: Promise.resolve({ status: "ok" }),
+      };
+      queue.run = this.#drainFollow(target, queue).finally(() => {
+        if (this.#followQueues.get(key) === queue) this.#followQueues.delete(key);
+        this.#notify();
+      });
+      this.#followQueues.set(key, queue);
+    }
+    // Marked before the write, so a viewer-state read in flight cannot overwrite the tap.
+    this.#written.add(key);
+    this.#follows.set(key, following);
     this.#notify();
-    return write;
+    return this.#followQueues.get(key)!.run;
   }
 
-  async #writeFollowing(target: SocialFollowTarget, following: boolean): Promise<FollowWriteResult> {
+  async #drainFollow(target: SocialFollowTarget, queue: FollowQueue): Promise<FollowWriteResult> {
     const signal = this.#controller.signal;
-    if (signal.aborted) return { status: "error", code: "owner_changed" };
-    const result = await writeFollow({
-      getAccessToken: this.#getAccessToken, target, following, fetch: this.#dependencies.fetch,
-    });
-    if (signal.aborted) return result;
-    if (result.status === "ok") {
-      if (target.kind === "account") await this.#client.cancelQueries({ queryKey: queryKeys.me.connections.all });
+    while (queue.want !== queue.base) {
+      if (signal.aborted) return { status: "error", code: "owner_changed" };
+      const sent = queue.want;
+      const result = await writeFollow({
+        getAccessToken: this.#getAccessToken, target, following: sent, fetch: this.#dependencies.fetch,
+      });
       if (signal.aborted) return result;
-      this.#written.add(followKey(target));
-      this.#follows.set(followKey(target), following);
-      for (const listener of this.#followWriteListeners) listener(target, following);
-      await invalidateAfter(this.#client, target.kind === "presale" ? { kind: "follow", target: "presale", id: target.presale_id } : { kind: "follow", target: "account", id: target.callsign });
-      this.#notify();
+      if (result.status === "ok") {
+        queue.base = sent;
+        queue.hadWritten = true;
+        await this.#followAccepted(target, sent, signal);
+      } else if (queue.want === sent) {
+        this.#followRefused(target, queue);
+        return result;
+      }
+      // Otherwise a newer tap is waiting: send it (or stop, if it matches the server).
     }
-    return result;
+    return { status: "ok" };
+  }
+
+  async #followAccepted(target: SocialFollowTarget, following: boolean, signal: AbortSignal): Promise<void> {
+    if (target.kind === "account") await this.#client.cancelQueries({ queryKey: queryKeys.me.connections.all });
+    if (signal.aborted) return;
+    for (const listener of this.#followWriteListeners) listener(target, following);
+    await invalidateAfter(this.#client, target.kind === "presale" ? { kind: "follow", target: "presale", id: target.presale_id } : { kind: "follow", target: "account", id: target.callsign });
+  }
+
+  #followRefused(target: SocialFollowTarget, queue: FollowQueue): void {
+    const key = followKey(target);
+    this.#putBack(key, queue);
+    // Tapped before the page's read: read the real state again.
+    if (queue.base !== undefined) return;
+    this.#requested.delete(key);
+    this.want(target.kind === "account" ? { callsigns: [target.callsign] } : { presaleIds: [target.presale_id] });
+  }
+
+  #putBack(key: string, queue: FollowQueue): void {
+    if (queue.base === undefined) this.#follows.delete(key);
+    else this.#follows.set(key, queue.base);
+    if (!queue.hadWritten) this.#written.delete(key);
   }
 
   /** Hears each follow written here once it succeeded (the watchlist card lists followed presales, OA-17). */
