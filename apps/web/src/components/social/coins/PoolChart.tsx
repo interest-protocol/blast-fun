@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { SUI_POOL_QUOTE } from "@blast/core/modules/social/portfolio/core-coins.ts";
 import { indexedPoolPolling, readIndexedPool } from "./indexed-pool-query.ts";
 import { atCheckpoint } from "#web/components/launchpad/blast-infra-browser.ts";
-import { useChartPrice } from "#web/components/launchpad/chart/chart-live-price.ts";
+import { useChartPrice, type ChartPriceUpdate } from "#web/components/launchpad/chart/chart-live-price.ts";
 import { ChartStream, type ChartStreamStatus } from "#web/components/launchpad/chart/chart-stream.ts";
 import { chartTailRequest, readChartPool } from "#web/components/launchpad/chart/chart-client.ts";
 import { afterChartSourceRead, chartKey, chartRequest, initialChart, type ChartControls } from "#web/components/launchpad/chart/chart-model.ts";
@@ -36,13 +36,13 @@ const STREAM_TEXT: Readonly<Partial<Record<ChartStreamStatus, string>>> = {
  * One venue pool's candles: HTTP history from the pool-keyed market read, then the tab's market stream.
  * `market` is a pool the stream serves live: its open is `launchAt`, and history the page lacks is named.
  */
-export function PoolChart({ poolKey, coinType, symbol, decimals, quote = SUI_POOL_QUOTE, initialControls, market, checkpoint, uncovered }: Readonly<{
+export function PoolChart({ poolKey, coinType, symbol, decimals, quote = SUI_POOL_QUOTE, initialControls, market, price, uncovered }: Readonly<{
   poolKey: string; coinType?: string; symbol: string; decimals: number;
   quote?: Readonly<{ symbol: string; decimals: number }>;
   initialControls: ChartControls;
   market?: Readonly<{ launchAt?: number }>;
-  /** The checkpoint the page's own price figures reflect; an older chart price is not shown beside them. */
-  checkpoint?: number | null;
+  /** The current price the page shows beside the chart, held to the page's own rule; the chart's own price when absent. */
+  price?: ChartPriceUpdate | null;
   /** Shown instead while the market read does not know this pool. */
   uncovered?: ReactNode;
 }>) {
@@ -52,7 +52,8 @@ export function PoolChart({ poolKey, coinType, symbol, decimals, quote = SUI_POO
   const stream = useRef<ChartStream | null>(null);
   const recoveryCheckpoint = useRef<number | null>(null);
   const [state, setState] = useState(() => initialChart(key, true));
-  const latest = useChartPrice(poolKey, checkpoint);
+  const own = useChartPrice(poolKey);
+  const latest = price === undefined ? own : price;
   const [status, setStatus] = useState<ChartStreamStatus>("connecting");
   const streams = market !== undefined;
   const client = useAppQueryClient();

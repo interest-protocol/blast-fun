@@ -23,7 +23,7 @@ import { readableUsd, subscriptZeros } from "#web/lib/market-format.ts";
 import { PUBLIC_STALE_MS } from "#web/lib/query/client.ts";
 import { queryKeys } from "#web/lib/query/keys.ts";
 import { useAppQueryClient } from "#web/lib/query/provider.tsx";
-import { POOL_KEY } from "@blast/core/modules/launchpad-contract/venues.ts";
+import { MIGRATOR_POOL_KEY } from "@blast/core/modules/launchpad-contract/venues.ts";
 import type { HomeCoinMarket } from "@blast/core/web/contracts/coin-market.ts";
 import {
   HOME_MAX_HOLDERS,
@@ -451,7 +451,7 @@ const POOL_CHART_CONTROLS = { range: "24h", interval: "5m" } as const;
 /**
  * A graduated sale's pool on the chart and market feed every coin uses. Only swaps of the verified pool are
  * candles: contributions, claims and refunds stay in the sale's own record. A pool the market read does not
- * know yet keeps the sale's earlier swap chart.
+ * know when the page loads keeps the sale's earlier swap chart until reload.
  */
 function SalePoolChart({ sale, market, pool }: Readonly<{
   sale: SocialPresaleDetail["presale"];
@@ -459,9 +459,11 @@ function SalePoolChart({ sale, market, pool }: Readonly<{
   pool: NonNullable<HomeCoinMarket["pool"]>;
 }>) {
   const poolKey = `${pool.venue}:${pool.id}`;
+  // The headline's rule, so the chart never shows a price the headline hides, or the reverse.
+  const price = usePresalePoolPrice(pool);
   const earlier = <PresalePoolChart sale={sale} market={market} pool={pool} />;
   // The shared feed keys pools by the venues it indexes: a pool on any other venue has only the earlier chart.
-  if (!POOL_KEY.test(poolKey)) return earlier;
+  if (!MIGRATOR_POOL_KEY.test(poolKey)) return earlier;
   return <PoolChart
     key={pool.id}
     poolKey={poolKey}
@@ -471,7 +473,7 @@ function SalePoolChart({ sale, market, pool }: Readonly<{
     quote={market.quote}
     initialControls={POOL_CHART_CONTROLS}
     market={{ launchAt: sale.launched_ms ?? undefined }}
-    checkpoint={market.as_of.checkpoint}
+    price={price}
     uncovered={earlier}
   />;
 }
