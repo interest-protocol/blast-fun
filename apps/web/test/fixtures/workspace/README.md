@@ -43,9 +43,11 @@ Numeric-figure and font-feature source contracts remain outside this check.
 `/price-row-proof` mounts the real `BondingCoinScreen` in `AppShell`. After a
 trade the page refreshes at a newer checkpoint than the chart's last live close,
 so the price waits with "—". The runner scrolls the reader down to the activity
-block, moves the page to the next checkpoint, and checks that the price row, the
-content below it and the scroll position do not move. It covers four widths and
-a short and a long price. Compiling this page needs about 3.5 GiB of Node heap:
+block, moves the page to the next checkpoint, and checks that the price row
+keeps its size, does not move the content below it or the scroll position, and
+keeps the last price unseen. It covers four widths and a short and a long price
+in quote-currency mode (the runner blocks the USD rate read). The chart,
+activity, holders and trade panels are fixed-height stand-ins. Compiling this page needs about 3.5 GiB of Node heap:
 start the server above with `--max-old-space-size=3584`.
 
 ```bash

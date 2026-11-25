@@ -55,7 +55,12 @@ for (const width of [1440, 1024, 390, 320]) {
       await row.filter({ hasText: "—" }).waitFor();
       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
       const waiting = await measure();
-      results.push({ width, price, shown, waiting });
+      const held = await page.evaluate(() => {
+        const copy = document.querySelector("[data-bonding-coin] strong[aria-hidden='true']");
+        return copy && getComputedStyle(copy).visibility;
+      });
+      results.push({ width, price, shown, waiting, held });
+      assert.equal(held, "hidden", "the kept price is unseen");
       assert.equal(waiting.row, shown.row, "the price row height");
       assert.equal(waiting.anchor, shown.anchor, "content below the price row");
       assert.equal(waiting.y, shown.y, "the reader's scroll position");
