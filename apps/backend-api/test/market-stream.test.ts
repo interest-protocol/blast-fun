@@ -453,7 +453,10 @@ test("bad deployments, cursor relationships, opening fills and lost continuity f
     await new Promise((resolve) => setTimeout(resolve, 600));
     assert.equal(sockets.length, 2, "the relay reconnects upstream");
     sockets[1]!.hello();
-    assert.ok(sockets[1]!.sent.some((op) => op.cursor === "10:1:1:0"), "and resumes the pool from its cursor");
+    assert.ok(
+      sockets[1]!.sent.some((op) => op.cursor === "10:1:1:0"),
+      "and resumes the pool from its cursor",
+    );
     await reader.cancel();
   }
 });
@@ -761,4 +764,3 @@ test("one shared stream combines sanitized activity hints with pool updates and 
     );
   }
 });
-

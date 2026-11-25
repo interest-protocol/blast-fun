@@ -84,7 +84,12 @@ export type LiveSocketData = {
 };
 
 type Socket = ServerWebSocket<LiveSocketData>;
-type Address = { sockets: number; opens: number[]; pools: Map<string, number>; priceCoins: Map<string, number> };
+type Address = {
+  sockets: number;
+  opens: number[];
+  pools: Map<string, number>;
+  priceCoins: Map<string, number>;
+};
 type Query = Readonly<{
   request: Request;
   pools: readonly string[];
@@ -98,7 +103,9 @@ const decoder = new TextDecoder();
 const texts = new WeakMap<Uint8Array, string>();
 const text = (chunk: Uint8Array) => {
   let value = texts.get(chunk);
-  if (value === undefined) texts.set(chunk, (value = decoder.decode(chunk)));
+  if (value === undefined) {
+    texts.set(chunk, (value = decoder.decode(chunk)));
+  }
   return value;
 };
 
@@ -107,7 +114,9 @@ export function liveSocketQuery(url: URL): Query {
   const params = new URLSearchParams(url.search);
   const resumes = params.getAll("resume");
   params.delete("resume");
-  if (params.has("cursor") || resumes.length > LIVE_SOCKET.maxResumes) throw new Error("Invalid live query.");
+  if (params.has("cursor") || resumes.length > LIVE_SOCKET.maxResumes) {
+    throw new Error("Invalid live query.");
+  }
   const request = new Request(`https://live.internal${MARKET_STREAM_PATH}?${params}`);
   const pools = marketStreamPools(request);
   const priceCoins = marketStreamPriceCoins(request);
@@ -115,8 +124,15 @@ export function liveSocketQuery(url: URL): Query {
   const resume = new Map<string, string>();
   for (const value of resumes) {
     const [pool = "", cursor = "", ...rest] = value.split("~");
-    if (rest.length || !POOL_KEY.test(pool) || !EVENT_CURSOR.test(cursor) || resume.has(pool) || !pools.includes(pool))
+    if (
+      rest.length ||
+      !POOL_KEY.test(pool) ||
+      !EVENT_CURSOR.test(cursor) ||
+      resume.has(pool) ||
+      !pools.includes(pool)
+    ) {
       throw new Error("Invalid live resume.");
+    }
     resume.set(pool, cursor);
   }
   return { request, pools, priceCoins, resume };
@@ -129,17 +145,26 @@ export function createLiveSocket(options: LiveSocketOptions) {
 
   const address = (key: string) => {
     let entry = addresses.get(key);
-    if (!entry) addresses.set(key, (entry = { sockets: 0, opens: [], pools: new Map(), priceCoins: new Map() }));
+    if (!entry) {
+      addresses.set(
+        key,
+        (entry = { sockets: 0, opens: [], pools: new Map(), priceCoins: new Map() }),
+      );
+    }
     return entry;
   };
   const prune = (entry: Address, now: number) => {
-    while (entry.opens.length && entry.opens[0]! <= now - 60_000) entry.opens.shift();
+    while (entry.opens.length && entry.opens[0]! <= now - 60_000) {
+      entry.opens.shift();
+    }
   };
   const sweep = setInterval(() => {
     const now = Date.now();
     for (const [key, entry] of addresses) {
       prune(entry, now);
-      if (!entry.sockets && !entry.opens.length) addresses.delete(key);
+      if (!entry.sockets && !entry.opens.length) {
+        addresses.delete(key);
+      }
     }
   }, 60_000);
   sweep.unref?.();
@@ -147,8 +172,11 @@ export function createLiveSocket(options: LiveSocketOptions) {
   const count = (table: Map<string, number>, keys: readonly string[], step: 1 | -1) => {
     for (const key of keys) {
       const next = (table.get(key) ?? 0) + step;
-      if (next > 0) table.set(key, next);
-      else table.delete(key);
+      if (next > 0) {
+        table.set(key, next);
+      } else {
+        table.delete(key);
+      }
     }
   };
   const distinct = (table: Map<string, number>, keys: readonly string[]) =>
@@ -156,7 +184,9 @@ export function createLiveSocket(options: LiveSocketOptions) {
 
   const release = (ws: Socket) => {
     const data = ws.data;
-    if (!sockets.delete(ws)) return;
+    if (!sockets.delete(ws)) {
+      return;
+    }
     clearTimeout(data.lifetime);
     const stop = data.stop;
     data.stop = undefined;
@@ -169,7 +199,9 @@ export function createLiveSocket(options: LiveSocketOptions) {
     }
   };
   const shut = (ws: Socket, code: number) => {
-    if (ws.data.closing) return;
+    if (ws.data.closing) {
+      return;
+    }
     ws.data.closing = true;
     release(ws);
     observeMetric("live.socket.close", { code });
@@ -178,8 +210,12 @@ export function createLiveSocket(options: LiveSocketOptions) {
 
   const sink = (ws: Socket): HintSink => ({
     send(chunk) {
-      if (ws.data.closing) return false;
-      if (ws.send(text(chunk)) === 0) return false;
+      if (ws.data.closing) {
+        return false;
+      }
+      if (ws.send(text(chunk)) === 0) {
+        return false;
+      }
       if (ws.getBufferedAmount() > MARKET_STREAM_BUDGET.queueBytesPerClient) {
         ws.data.slow = true;
         return false;
@@ -196,7 +232,9 @@ export function createLiveSocket(options: LiveSocketOptions) {
     const data = ws.data;
     const ticket = verifyLiveTicket(options.gatewaySecret, data.ticket, options.siteOrigin);
     data.ticket = "";
-    if (!ticket) return shut(ws, LIVE_CLOSE.ticket);
+    if (!ticket) {
+      return shut(ws, LIVE_CLOSE.ticket);
+    }
     let query: Query;
     try {
       query = liveSocketQuery(data.url);
@@ -211,10 +249,13 @@ export function createLiveSocket(options: LiveSocketOptions) {
       entry.opens.length >= LIVE_SOCKET.perIp.opensPerMinute ||
       distinct(entry.pools, query.pools) > LIVE_SOCKET.perIp.pools ||
       distinct(entry.priceCoins, query.priceCoins) > LIVE_SOCKET.perIp.priceCoins
-    )
+    ) {
       return shut(ws, LIVE_CLOSE.perIp);
+    }
     entry.opens.push(now);
-    if (draining || !options.relay.admits(query.pools, query.priceCoins)) return shut(ws, LIVE_CLOSE.busy);
+    if (draining || !options.relay.admits(query.pools, query.priceCoins)) {
+      return shut(ws, LIVE_CLOSE.busy);
+    }
     // Hold this address's slot while Redis answers, so parallel opens cannot overrun it.
     data.admitted = true;
     data.pools = query.pools;
@@ -235,17 +276,31 @@ export function createLiveSocket(options: LiveSocketOptions) {
     } catch {
       return shut(ws, LIVE_CLOSE.busy);
     }
-    if (data.closing) return;
-    if (burned !== "OK") return shut(ws, LIVE_CLOSE.ticket);
-    const result = options.relay.subscribe(query.request, sink(ws), { resume: query.resume, lifetime: false });
-    if (typeof result !== "function") {
-      if (!data.closing) shut(ws, result?.status === 400 ? LIVE_CLOSE.query : LIVE_CLOSE.busy);
+    if (data.closing) {
       return;
     }
-    if (data.closing) return result();
+    if (burned !== "OK") {
+      return shut(ws, LIVE_CLOSE.ticket);
+    }
+    const result = options.relay.subscribe(query.request, sink(ws), {
+      resume: query.resume,
+      lifetime: false,
+    });
+    if (typeof result !== "function") {
+      if (!data.closing) {
+        shut(ws, result?.status === 400 ? LIVE_CLOSE.query : LIVE_CLOSE.busy);
+      }
+      return;
+    }
+    if (data.closing) {
+      return result();
+    }
     data.stop = result;
     const { min, max } = LIVE_SOCKET.lifetimeMs;
-    data.lifetime = setTimeout(() => shut(ws, LIVE_CLOSE.done), min + Math.floor(Math.random() * (max - min)));
+    data.lifetime = setTimeout(
+      () => shut(ws, LIVE_CLOSE.done),
+      min + Math.floor(Math.random() * (max - min)),
+    );
   }
 
   const websocket: WebSocketHandler<LiveSocketData> = {
@@ -261,16 +316,26 @@ export function createLiveSocket(options: LiveSocketOptions) {
     },
     message(ws, message) {
       const now = Date.now();
-      if (typeof message !== "string" || message.length > LIVE_SOCKET.maxClientMessageBytes || now - ws.data.lastPing < LIVE_SOCKET.minPingIntervalMs)
+      if (
+        typeof message !== "string" ||
+        message.length > LIVE_SOCKET.maxClientMessageBytes ||
+        now - ws.data.lastPing < LIVE_SOCKET.minPingIntervalMs
+      ) {
         return shut(ws, LIVE_CLOSE.message);
+      }
       let ping: unknown;
       try {
         ping = JSON.parse(message);
       } catch {
         return shut(ws, LIVE_CLOSE.message);
       }
-      const { op, t, ...rest } = (ping && typeof ping === "object" ? ping : {}) as Record<string, unknown>;
-      if (op !== "ping" || !Number.isSafeInteger(t) || Object.keys(rest).length) return shut(ws, LIVE_CLOSE.message);
+      const { op, t, ...rest } = (ping && typeof ping === "object" ? ping : {}) as Record<
+        string,
+        unknown
+      >;
+      if (op !== "ping" || !Number.isSafeInteger(t) || Object.keys(rest).length) {
+        return shut(ws, LIVE_CLOSE.message);
+      }
       ws.data.lastPing = now;
       ws.send(`event: pong\ndata: ${JSON.stringify({ t, server_ms: Date.now() })}\n\n`);
     },
@@ -283,7 +348,11 @@ export function createLiveSocket(options: LiveSocketOptions) {
   return {
     websocket,
     /** A Response refuses before upgrade; undefined means Bun owns the socket now. */
-    upgrade(request: Request, server: Server<LiveSocketData>, peer: string | null): Response | undefined {
+    upgrade(
+      request: Request,
+      server: Server<LiveSocketData>,
+      peer: string | null,
+    ): Response | undefined {
       const forbidden = () => new Response(null, { status: 403, headers: NO_STORE });
       let host: string;
       try {
@@ -291,21 +360,31 @@ export function createLiveSocket(options: LiveSocketOptions) {
       } catch {
         return forbidden();
       }
-      if (host !== options.host || request.headers.get("origin") !== options.siteOrigin) return forbidden();
-      const offered = (request.headers.get("sec-websocket-protocol") ?? "").split(",").map((value) => value.trim());
-      if (!offered.includes(LIVE_SOCKET.protocol)) return forbidden();
+      if (host !== options.host || request.headers.get("origin") !== options.siteOrigin) {
+        return forbidden();
+      }
+      const offered = (request.headers.get("sec-websocket-protocol") ?? "")
+        .split(",")
+        .map((value) => value.trim());
+      if (!offered.includes(LIVE_SOCKET.protocol)) {
+        return forbidden();
+      }
       const client = attestClientAddress(ingressAddress(request, peer, options.ingress));
       if (!client) {
         // Render's proxy ranges are unverified: this shows which peers and header shapes arrive, never a client address.
         observeMetric("live.socket.refused", {
           cause: "client-address",
           ingress: options.ingress.mode,
-          peer_prefix: peer?.includes(".") ? peer.split(".").slice(0, 2).join(".") : (peer?.split(":").slice(0, 3).join(":") ?? null),
+          peer_prefix: peer?.includes(".")
+            ? peer.split(".").slice(0, 2).join(".")
+            : (peer?.split(":").slice(0, 3).join(":") ?? null),
           forwarded_entries: request.headers.get("x-forwarded-for")?.split(",").length ?? 0,
         });
         return forbidden();
       }
-      if (draining) return new Response(null, { status: 503, headers: { ...NO_STORE, "Retry-After": "5" } });
+      if (draining) {
+        return new Response(null, { status: 503, headers: { ...NO_STORE, "Retry-After": "5" } });
+      }
       const tickets = offered.filter((value) => value.startsWith(LIVE_SOCKET.ticketPrefix));
       const data: LiveSocketData = {
         ticket: tickets.length === 1 ? tickets[0]!.slice(LIVE_SOCKET.ticketPrefix.length) : "",
@@ -319,7 +398,10 @@ export function createLiveSocket(options: LiveSocketOptions) {
         priceCoins: [],
       };
       // Echo only the protocol name, never the ticket entry.
-      return server.upgrade(request, { headers: { "Sec-WebSocket-Protocol": LIVE_SOCKET.protocol }, data })
+      return server.upgrade(request, {
+        headers: { "Sec-WebSocket-Protocol": LIVE_SOCKET.protocol },
+        data,
+      })
         ? undefined
         : new Response(null, { status: 426, headers: NO_STORE });
     },
@@ -333,10 +415,13 @@ export function createLiveSocket(options: LiveSocketOptions) {
         [...sockets].map(
           (ws) =>
             new Promise<void>((resolve) =>
-              setTimeout(() => {
-                shut(ws, LIVE_CLOSE.drain);
-                resolve();
-              }, Math.floor(Math.random() * window)),
+              setTimeout(
+                () => {
+                  shut(ws, LIVE_CLOSE.drain);
+                  resolve();
+                },
+                Math.floor(Math.random() * window),
+              ),
             ),
         ),
       ).then(() => {});
