@@ -2,15 +2,10 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import type { ActivityRow } from "@blast/core/modules/launchpad-contract/activity.ts";
-import { installTestDom } from "../../../../test/fixtures/social/test-dom.ts";
+import { installNoopCanvas, installTestDom } from "../../../../test/fixtures/social/test-dom.ts";
 
 const dom = installTestDom();
-// jsdom has no canvas; the coin chart (KLineCharts) draws into this no-op 2D context.
-const context2d: object = new Proxy({}, {
-  get: (_, key) => key === "measureText" ? () => ({ width: 8 }) : key === "canvas" ? undefined : key === "createLinearGradient" ? () => ({ addColorStop() {} }) : () => context2d,
-  set: () => true,
-});
-dom.window.HTMLCanvasElement.prototype.getContext = (() => context2d) as never;
+installNoopCanvas(dom);
 const { act } = await import("react");
 const { createRoot } = await import("react-dom/client");
 const { renderToStaticMarkup } = await import("react-dom/server");
