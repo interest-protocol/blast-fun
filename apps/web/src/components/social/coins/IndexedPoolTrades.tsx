@@ -36,7 +36,7 @@ async function recentPoolTrades(poolKeys: readonly VenuePoolKey[], signal: Abort
 }
 
 /** `rows` with `fresh` in place, newest first, once each, cut to the lookback. */
-export function withLiveRows(rows: readonly ActivityRow[], fresh: readonly ActivityRow[]): ActivityRow[] {
+function withLiveRows(rows: readonly ActivityRow[], fresh: readonly ActivityRow[]): ActivityRow[] {
   const known = new Set(rows.map((row) => row.position));
   return [...fresh.filter((row) => !known.has(row.position)), ...rows]
     .sort((a, b) => compareEventCursors(b.position, a.position))
@@ -59,7 +59,7 @@ function useLiveTrades(client: QueryClient, queryKey: readonly unknown[], coinTy
     if (!hub || !coinType) return;
     let wasLive = false;
     let dropped = false;
-    return hub.observe(coinType, {
+    const unsubscribe = hub.observe(coinType, {
       live: (next) => {
         if (next && dropped) void client.refetchQueries({ queryKey, exact: true });
         dropped = wasLive && !next ? true : next ? false : dropped;
@@ -71,6 +71,7 @@ function useLiveTrades(client: QueryClient, queryKey: readonly unknown[], coinTy
         if (pool) setStreamed((held) => ({ pools, rows: withLiveRows(held.pools === pools ? held.rows : [], [venueTradeRow(trade, pool)]) }));
       },
     });
+    return () => unsubscribe();
     // `poolKeys` and `queryKey` are keyed by `pools`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client, coinType, pools, enabled]);

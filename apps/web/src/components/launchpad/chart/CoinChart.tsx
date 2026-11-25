@@ -5,7 +5,7 @@ import { useQuoteUsd } from "#web/components/social/prices/use-quote-usd.ts";
 
 import { atCheckpoint, browserMarketDependencies } from "../blast-infra-browser";
 import { chartFromSnapshot, chartPoolKeys, chartTailRequest, readChartPool, type ChartSnapshot, type ChartSource } from "./chart-client";
-import { afterChartSourceRead, chartKey, denseInterval, chartRequest, initialChart, type ChartCandlePage, type ChartControls } from "./chart-model";
+import { afterChartSourceRead, chartKey, denseInterval, tradedBuckets, chartRequest, initialChart, type ChartCandlePage, type ChartControls } from "./chart-model";
 import type { Section } from "@blast/core/modules/launchpad-contract/section.ts";
 import { useCoinPriceCurrency } from "./CoinPriceCurrency";
 import { ChartStream, type ChartStreamStatus } from "./chart-stream";
@@ -72,8 +72,7 @@ export function CoinChart({
   const stepToDensity = useEffectEvent((section: Section<ChartCandlePage>) => {
     if (!liveScreen || chosen || densityChecked.current || section.state !== "available") return;
     densityChecked.current = true;
-    const traded = section.data.candles.filter((candle) => candle.volumeQuote > 0n).map((candle) => candle.bucketStart);
-    const interval = denseInterval(traded, controls, Date.now());
+    const interval = denseInterval(tradedBuckets(section.data.candles), controls, Date.now());
     if (interval !== controls.interval) change({ ...controls, interval }, false);
   });
 

@@ -45,6 +45,11 @@ const MIN_RANGE_BUCKETS = 12;
  * first trade to `nowMs` traded, so a quiet coin opens on bars rather than a flat line.
  * `tradeTimes` are the starts of the traded candles read at `interval`.
  */
+/** The bucket starts of candles that traded. */
+export function tradedBuckets(candles: ChartCandlePage["candles"]): number[] {
+  return candles.filter((candle) => candle.volumeQuote > 0n).map((candle) => candle.bucketStart);
+}
+
 export function denseInterval(tradeTimes: readonly number[], controls: ChartControls, nowMs: number): ChartInterval {
   if (controls.range === "live" || !tradeTimes.length) return controls.interval;
   const first = Math.min(...tradeTimes);
