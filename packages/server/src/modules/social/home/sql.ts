@@ -1,6 +1,6 @@
 import type { ReadableDatabase } from "@blast/core/modules/database/transaction.ts";
 import { assertChainReadThroughViews } from "@blast/core/modules/database/modules.ts";
-import { CREATE_TEST_SUI_QUOTE_TYPE } from "@blast/core/modules/social/contracts/create.ts";
+import { CREATE_QUOTE_TYPE, CREATE_TEST_SUI_QUOTE_TYPE, createQuoteOf } from "@blast/core/modules/social/contracts/create.ts";
 import { Params } from "@blast/core/modules/social/presales/sql.ts";
 import { SHOWN_PRESALES } from "@blast/core/modules/social/read-model/chain-presales.ts";
 import { namedWalletsOfSql, namedWalletsSql } from "@blast/core/modules/social/read-model/naming.ts";
@@ -107,6 +107,8 @@ export type RowsRequest = Readonly<{
   kinds: readonly string[];
   sales: SaleScope;
   actors: ActorScope;
+  /** Drop trades proven under this many dollars; other kinds and unpriced trades stay. */
+  minTradeUsd?: number;
 }>;
 
 /** How far ahead a scheduled sale joins Trending: far enough not to miss one, near enough to bound spam. */
@@ -154,7 +156,7 @@ export function scopedHomeCoinsSql(scope: SaleScope, params: Params): string {
  * or `w:<wallet>`), with the sale's quote and decimals beside it.
  */
 export function rowsWithSql(request: RowsRequest, params: Params): string {
-  const { span, bounds, kinds, sales, actors } = request;
+  const { span, bounds, kinds, sales, actors, minTradeUsd } = request;
   const from = params.add(span.fromMs);
   const to = params.add(span.toMs);
   const kindList = params.add([...kinds]);
@@ -174,6 +176,7 @@ export function rowsWithSql(request: RowsRequest, params: Params): string {
   const source = scopedHomeCoinsSql(sales, params);
   // A few curves, all without a sale: their own rows through the coin index, not the whole window.
   const fewCoins = sales.kind === "discover" && sales.almost ? "AND a.coin_type IN (SELECT hs.coin_type FROM home_sales hs)" : "";
+  const tradeFloor = minTradeUsd === undefined ? "" : minTradeSql(minTradeUsd, params);
   return `WITH home_sales AS (
     SELECT p.source_id, p.presale_id, p.sale_token AS coin_type, p.quote_type, p.quote_symbol, p.quote_decimals, p.sale_decimals
     FROM ${source} p
@@ -188,6 +191,7 @@ export function rowsWithSql(request: RowsRequest, params: Params): string {
       AND a.kind = ANY(${kindList}::text[])
       AND a.checkpoint <= CASE WHEN a.kind IN ('presale_commit', 'presale_claim') THEN ${presaleCp}::bigint ELSE ${marketCp}::bigint END
       ${fewCoins}
+      ${tradeFloor}
   ),
   home_rows AS (
     SELECT c.source_id AS sale, c.coin_type AS sale_coin, c.quote_type AS sale_quote, c.quote_symbol AS sale_quote_symbol,
@@ -204,6 +208,20 @@ export function rowsWithSql(request: RowsRequest, params: Params): string {
     FROM home_rows r
     LEFT JOIN home_named n ON n.address = r.actor AND n.named_from_ms <= r.timestamp_ms
   )`;
+}
+
+const USDC_DECIMALS = createQuoteOf(CREATE_QUOTE_TYPE)!.decimals;
+
+/**
+ * Keeps a trade unless it is proven under `minUsd`, as the web's dust rule
+ * judges it (`small-trades.ts`): USDC at par by its atoms, any other quote by
+ * its USD, and a trade without that amount never counts as dust.
+ */
+function minTradeSql(minUsd: number, params: Params): string {
+  const usd = params.add(String(minUsd));
+  return `AND (a.kind NOT IN ('trade_buy', 'trade_sell') OR CASE
+        WHEN a.quote_type = ${params.add(CREATE_QUOTE_TYPE)}::text THEN a.quote_amount IS NULL OR a.quote_amount >= ${usd}::numeric * ${params.add(String(10n ** BigInt(USDC_DECIMALS)))}::numeric
+        ELSE a.usd_value IS NULL OR a.usd_value >= ${usd}::numeric END)`;
 }
 
 /**

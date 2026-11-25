@@ -43,8 +43,9 @@ import type { FeedItemActor } from "@blast/core/modules/social/contracts/items.t
  *   a single sale can request up to 100. `pool_volumes` excludes commits and claims.
  * - `GET /api/social/home/activity?presale=|coin=&window=&cursor=`: the thread under
  *   one presale (`presale`) or curve coin (`coin`, its type): participants grouped by identity, each with its
- *   totals per direction and its newest underlying events. Schema
- *   `schemas/home-thread-page.schema.json`.
+ *   totals per direction and its newest underlying events. `min_trade_usd=1` leaves trades
+ *   proven under a dollar out of the participants and their events, never the totals; an
+ *   unpriced trade stays. A cursor pages only the floor it came from. Schema `schemas/home-thread-page.schema.json`.
  * - `GET /api/social/home/activity-stream?window=&cursor=&limit=`: public
  *   indexed buys, sells and commitments across shown canonical assets, with
  *   frozen keyset bounds. Schema `schemas/home-activity-stream-page.schema.json`.
@@ -456,11 +457,13 @@ export function socialHomeActivityPath(
   cursor: string | null = null,
   at?: number,
   exactTradeUsd = false,
+  minTradeUsd?: number,
 ): string {
   const params = new URLSearchParams(coinKey.includes("::") ? { coin: coinKey } : { presale: coinKey });
   if (window !== HOME_DEFAULT_WINDOW) params.set("window", window);
   if (cursor) params.set("cursor", cursor);
   if (exactTradeUsd) params.set("exact_trade_usd", "1");
+  if (minTradeUsd !== undefined) params.set("min_trade_usd", String(minTradeUsd));
   if (at !== undefined) params.set("at", String(at));
   return `${SOCIAL_HOME_ACTIVITY_PATH}?${params.toString()}`;
 }

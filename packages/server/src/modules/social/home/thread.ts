@@ -2,6 +2,7 @@ import { accountIdOf } from "../accounts/lookup.ts";
 import { socialParameter, socialSingle } from "@blast/server/modules/social/route-kit/validation.ts";
 import { z } from "zod";
 import { socialCountSchema } from "@blast/core/modules/social/contracts/primitives.ts";
+import { SMALL_TRADE_USD } from "@blast/core/modules/social/contracts/coin-market.ts";
 
 import { assertChainReadThroughViews } from "@blast/core/modules/database/modules.ts";
 import type { ReadableDatabase } from "@blast/core/modules/database/transaction.ts";
@@ -169,10 +170,12 @@ export type ThreadRequest = Readonly<{
   actors: ActorScope;
   minimumMarketCheckpoint?: number;
   exactTradeUsd?: boolean;
+  /** Participants and their events without trades proven under this many dollars; the totals stay whole. */
+  minTradeUsd?: number;
 }>;
 
 /** The activity route's filters, each at most once. */
-export function parseThreadQuery(params: URLSearchParams): Pick<ThreadRequest, "coin" | "window" | "cursor" | "exactTradeUsd"> {
+export function parseThreadQuery(params: URLSearchParams): Pick<ThreadRequest, "coin" | "window" | "cursor" | "exactTradeUsd" | "minTradeUsd"> {
   const single = (name: string) => socialSingle(params, name);
   const coinType = single("coin");
   const presaleId = single("presale");
@@ -185,9 +188,13 @@ export function parseThreadQuery(params: URLSearchParams): Pick<ThreadRequest, "
   const cursor = single("cursor");
   if (cursor !== null && cursor.length === 0) throw invalidCursor();
   const exactTradeUsd = single("exact_trade_usd");
-  if (exactTradeUsd === null) return { coin, window, cursor };
-  socialParameter(z.literal("1"), exactTradeUsd, "exact_trade_usd");
-  return { coin, window, cursor, exactTradeUsd: true };
+  if (exactTradeUsd !== null) socialParameter(z.literal("1"), exactTradeUsd, "exact_trade_usd");
+  const minTradeUsd = single("min_trade_usd");
+  return {
+    coin, window, cursor,
+    ...(exactTradeUsd === null ? {} : { exactTradeUsd: true }),
+    ...(minTradeUsd === null ? {} : { minTradeUsd: socialParameter(z.literal(String(SMALL_TRADE_USD)).transform(Number), minTradeUsd, "min_trade_usd") }),
+  };
 }
 
 /** The whole thread page, in the public or the followed scope. */
@@ -204,7 +211,7 @@ export async function readHomeThread(db: ReadableDatabase, request: ThreadReques
 /** The thread with its bounds already read (the Following route shares the bounds across modes). */
 export async function readThreadIn(
   db: ReadableDatabase,
-  input: Readonly<{ coin: ThreadCoin; window: HomeWindow; cursor: ThreadCursor | null; hiddenKinds: readonly string[]; actors: ActorScope; span: HomeSpan; bounds: HomeBounds; asOf: HomeThreadPage["as_of"]; exactTradeUsd?: boolean }>,
+  input: Readonly<{ coin: ThreadCoin; window: HomeWindow; cursor: ThreadCursor | null; hiddenKinds: readonly string[]; actors: ActorScope; span: HomeSpan; bounds: HomeBounds; asOf: HomeThreadPage["as_of"]; exactTradeUsd?: boolean; minTradeUsd?: number }>,
 ): Promise<HomeThreadPage> {
   const { coin, span, bounds, actors, cursor } = input;
   const key = coin.presaleId ?? coin.coinType;
@@ -216,11 +223,13 @@ export async function readThreadIn(
     if (who === null) throw invalidCursor();
     after = { latestMs: cursor.latestMs, who };
   }
-  const [sides, grouped] = await Promise.all([readSides(db, request), readParticipantPage(db, request, after)]);
+  // A dust burst must not push the window's real trades off the page; the totals still count it.
+  const listed: RowsRequest = input.minTradeUsd === undefined ? request : { ...request, minTradeUsd: input.minTradeUsd };
+  const [sides, grouped] = await Promise.all([readSides(db, request), readParticipantPage(db, listed, after)]);
   const page = grouped.slice(0, HOME_THREAD_PAGE);
   const [people, events] = await Promise.all([
     readPeople(db, page.flatMap((row) => (row.account_id === null ? [] : [row.account_id]))),
-    readEvents(db, request, page.map((row) => row.who)),
+    readEvents(db, listed, page.map((row) => row.who)),
   ]);
   const sidesOf = new Map<string, SideRow[]>();
   for (const row of sides) sidesOf.set(row.who, [...(sidesOf.get(row.who) ?? []), row]);

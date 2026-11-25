@@ -959,6 +959,26 @@ test("The thread: participants grouped, mixed directions visible, the events ben
     for (const bad of ["", "?presale=x", `?presale=${P.orbit}&cursor=zzz`, `${pinned}&at=0`, `?presale=${P.orbit}&at=-1`]) assert.equal((await thread(bad)).status, 400, bad);
   }));
 
+test("The thread under a trade floor: a dust burst cannot hide the window's real trades; unproven trades stay; the totals stay whole", { skip }, () =>
+  withFixture(async ({ admin, now, thread }) => {
+    // 25 wallets trade a cent each, newer than every CROWD buy; checkpoints under the watermark, so all are committed.
+    const at = (n: number, ms: number, row: Partial<ChainActivityRow>) => activity("trade_buy", hex(`d0${n.toString(16).padStart(2, "0")}`), CROWD, ms, { checkpoint: 49_000 + n, ...row });
+    const dust = Array.from({ length: 25 }, (_, n) => at(n, now - 50_000 + n * 1_000, { quote_amount: "10000", usd_value: "0.01" }));
+    const unpriced = at(30, now - 55_000, { quote_type: SUI, quote_amount: "1000", usd_value: null });
+    const atPar = at(31, now - 56_000, { quote_amount: "1000000", usd_value: "0.99" });
+    const suiDust = at(32, now - 57_000, { quote_type: SUI, quote_amount: "100000000", usd_value: "0.35" });
+    const usdcDust = at(33, now - 58_000, { quote_amount: "990000", usd_value: null });
+    await seedChainRead(admin, { activity: [...dust, unpriced, atPar, suiDust, usdcDust] });
+    const all = await ok<HomeThreadPage>(await thread(`?presale=${P.crowd}`), "home-thread-page");
+    assert.deepEqual(keysOf(all.participants), dust.slice(5).reverse().map((row) => `w:${row.actor}`));
+    const floored = await ok<HomeThreadPage>(await thread(`?presale=${P.crowd}&min_trade_usd=1`), "home-thread-page");
+    assert.deepEqual(keysOf(floored.participants).slice(0, 3), [`w:${unpriced.actor}`, `w:${atPar.actor}`, `w:${hex("cc16")}`]);
+    assert.equal(floored.participants.length, HOME_THREAD_PAGE);
+    assert.ok(!keysOf(floored.participants).some((key) => key === `w:${suiDust.actor}` || key === `w:${usdcDust.actor}`));
+    assert.deepEqual(floored.totals, all.totals);
+    for (const bad of ["0", "2", "1.5", "01", "1&min_trade_usd=1"]) assert.equal((await thread(`?presale=${P.crowd}&min_trade_usd=${bad}`)).status, 400, bad);
+  }));
+
 test("The discussion: the sale's posts with a why, newest first, as feed items; empty is empty; a hidden sale has no page", { skip }, () =>
   withFixture(async ({ discussion, ids }) => {
     // T-043: a sale the web does not show has no discussion to read, whatever its posts were stamped with.

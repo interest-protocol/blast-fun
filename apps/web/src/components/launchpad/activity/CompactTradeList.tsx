@@ -75,12 +75,13 @@ export type TradeRowState = Readonly<{
   now: number | null;
 }>;
 
+/** `filter`: the "Hide trades under $1" switch's state, owned by whoever reads the rows. */
 export function useTradeVisibility<Row extends { position: string }>(
   rows: readonly Row[],
   availableRows: readonly Row[] | undefined,
   isUnderDollar: (row: Row) => boolean,
+  [hideSmallTrades, setHideSmallTrades]: readonly [boolean, (hide: boolean) => void],
 ) {
-  const [hideSmallTrades, setHideSmallTrades] = useState(true);
   const [heldRows, setHeldRows] = useState<readonly Row[] | null>(null);
   const visibleRows = heldRows ?? (hideSmallTrades ? filteredTrades(rows, availableRows, isUnderDollar) : rows);
   const holdRows = useCallback((active: boolean) => {
