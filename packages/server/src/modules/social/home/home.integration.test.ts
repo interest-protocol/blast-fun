@@ -31,6 +31,7 @@ import { homeCoinsPageReadSchema } from "@blast/core/modules/social/contracts/ho
 import type { HomeCoinMarket, HomeHoldersPage } from "@blast/core/modules/social/contracts/coin-market.ts";
 import { CREATE_TEST_SUI_QUOTE_TYPE } from "@blast/core/modules/social/contracts/create.ts";
 import { INDEXED_POOL_COINS } from "@blast/core/modules/social/portfolio/core-coins.ts";
+import { readCoinFacts } from "@blast/server/modules/social/home/coins.ts";
 import { createSocialHomeRoutes, type SocialHomeRouteDependencies } from "@blast/server/modules/social/home/route.ts";
 import { optionalSource } from "@blast/server/modules/social/optional-source.ts";
 import type { TraderPortfolioRead } from "@blast/server/modules/social/home/traders.ts";
@@ -226,6 +227,9 @@ async function withFixture(run: (fixture: Fixture) => Promise<void>, options: Re
     coin_holder_history: [
       { coin_type: coinOf(P.orbit, "ORBIT"), checkpoint: 40_002, timestamp_ms: now - 2 * DAY, holders: 10 },
       { coin_type: coinOf(P.orbit, "ORBIT"), checkpoint: 45_000, timestamp_ms: now - HOUR, holders: 42 },
+      // The crowd's 23 buyers are 23 new holders since yesterday.
+      { coin_type: coinOf(P.crowd, "CROWD"), checkpoint: 40_005, timestamp_ms: now - 5 * DAY, holders: 0 },
+      { coin_type: coinOf(P.crowd, "CROWD"), checkpoint: 45_001, timestamp_ms: now - MINUTE, holders: 23 },
     ],
     activity: rows,
   });
@@ -639,7 +643,7 @@ test("Sparse coins retain a full 24-hour comparison and Home labels shorter nati
   }));
 
 test("Discover: one item per coin, counts by identity, directions kept apart, honest market facts, the rank explained", { skip }, () =>
-  withFixture(async ({ discover, now }) => {
+  withFixture(async ({ discover, replica, now }) => {
     const page = await ok<HomeCoinsPage>(await discover(), "home-coins-page");
     assert.deepEqual(symbols(page.coins), ["CROWD", "ORBIT", "EMAN", "AFTR", "QUIET", ...TRACKED_SYMBOLS]);
     assert.equal(page.clock_ms, now);
@@ -682,6 +686,12 @@ test("Discover: one item per coin, counts by identity, directions kept apart, ho
     const scores = page.coins.map((coin) => coin.rank.score);
     assert.deepEqual(scores, [...scores].sort((a, b) => b - a));
     assert.ok(crowd.rank.score > orbit.rank.score && orbit.rank.score > eman.rank.score);
+    // New holders' baseline: the last count at or before the window's start (a change exactly on it counts), none before the first row.
+    const start = async (fromMs: number) => [...(await readCoinFacts(replica, { kind: "ids", presaleIds: [P.orbit, P.crowd, P.eman] }, { fromMs, toMs: now })).values()]
+      .map((row) => [row.symbol, row.holders, row.holders_at_start]);
+    assert.deepEqual(new Set(await start(now - DAY)), new Set([["ORBIT", "42", "10"], ["CROWD", "23", "0"], ["EMAN", null, null]]));
+    assert.deepEqual(new Set(await start(now - HOUR)), new Set([["ORBIT", "42", "42"], ["CROWD", "23", "0"], ["EMAN", null, null]]));
+    assert.deepEqual(new Set(await start(now - 6 * DAY)), new Set([["ORBIT", "42", null], ["CROWD", "23", null], ["EMAN", null, null]]));
     // A quiet coin is shown, last, and says so.
     const quiet = page.coins[4]!;
     assert.deepEqual([quiet.activity.participants, quiet.rank.why], [0, "No activity in the last 24h"]);

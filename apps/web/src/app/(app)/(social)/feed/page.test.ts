@@ -78,7 +78,7 @@ test("Home starts visible reads, uses the 24-hour leaderboard, and can render wh
         new Promise<null>((resolve) => setImmediate(() => resolve(null))),
       ]);
       assert.ok(shell, "Home can return its shell before the market resolves");
-      assert.deepEqual(requests.map((path) => path.split("?")[0]), ["/api/social/home"], "the default Relevant view reads only the market");
+      assert.deepEqual(requests.map((path) => path.split("?")[0]), ["/api/social/home"], "the default Trending view reads only the market");
       assert.ok(shell.props.initial instanceof Promise, "the shell streams before the market is ready");
       market.resolve();
       const seed = await shell.props.initial;

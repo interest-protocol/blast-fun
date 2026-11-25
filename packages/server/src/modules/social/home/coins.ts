@@ -88,8 +88,9 @@ type TrackedMarkets = Awaited<ReturnType<typeof readTrackedPoolMarket>>;
  * 1. the watermark's bounds and `as_of`;
  * 2. the candidates' facts: every shown trading coin, the price
  *    now and at the 24 h cutoff (indexed reads with a fallback for sparse history), the
- *    latest holder count (`coin_holder_history` by key) and its lifecycle
- *    times;
+ *    latest holder count and the count at the window's start
+ *    (`coin_holder_history` by key, the second scanning back through the
+ *    window's changes) and its lifecycle times;
  * 3. the window's sums per (sale, identity, kind, quote asset) over the
  *    window's activity rows (`sql.ts`), from which the counts and the totals
  *    of every coin follow without a second scan;
@@ -142,6 +143,8 @@ export type FactsRow = Readonly<{
   change_24h_from_ms: string | null;
   holders: string | null;
   holders_as_of_ms: string | null;
+  /** The holder count at the window's start: the last change at or before it; null when none is indexed by then. */
+  holders_at_start: string | null;
   /** USD per whole quote coin now, to value a sale's raise or a curve's target. */
   quote_price_usd: string | null;
   /** A sale's tokens still held in vesting, in atoms; outside its market cap. */
@@ -150,9 +153,10 @@ export type FactsRow = Readonly<{
 
 type HomePriceOptions = Pick<HomeReadContext, "includeLiveInputs" | "includeRollingChange">;
 
-/** $1 clock (the 24 h move's end), then the scope's own parameters. */
+/** $1 clock (the 24 h move's end), $2 the window's start (new holders' baseline), then the scope's own parameters. */
 function factsSql(scope: SaleScope, params: Params, options: HomePriceOptions = {}): string {
   const clock = `${params.add(0)}::bigint`;
+  const windowFrom = `${params.add(0)}::bigint`;
   const cutoff = `${clock} - ${HOME_WINDOW_MS["24h"]}`;
   const source = scopedHomeCoinsSql(scope, params);
   const shorter = options.includeRollingChange ? clock : undefined;
@@ -179,7 +183,7 @@ function factsSql(scope: SaleScope, params: Params, options: HomePriceOptions = 
     ${options.includeLiveInputs ? "(SELECT market_checkpoint::text FROM chain_read_v1.watermark)" : "NULL::text"} AS price_checkpoint,
     trim_scale(open_24h.usd_price)::text AS price_24h_usd, open_24h.as_of_ms::text AS open_24h_as_of_ms,
     CASE WHEN open_24h.as_of_ms > ${cutoff} THEN open_24h.as_of_ms::text END AS change_24h_from_ms,
-    h.holders::text AS holders, h.timestamp_ms::text AS holders_as_of_ms,
+    h.holders::text AS holders, h.timestamp_ms::text AS holders_as_of_ms, h0.holders::text AS holders_at_start,
     trim_scale(qp.usd_price)::text AS quote_price_usd,
     CASE WHEN p.presale_id IS NOT NULL THEN (${outstandingSaleTokensSql("p.presale_id")}) END AS escrowed
   FROM ${source} p
@@ -198,7 +202,11 @@ function factsSql(scope: SaleScope, params: Params, options: HomePriceOptions = 
   LEFT JOIN LATERAL (
     SELECT ch.holders, ch.timestamp_ms FROM chain_read_v1.coin_holder_history ch
     WHERE ch.coin_type = p.sale_token ORDER BY ch.checkpoint DESC LIMIT 1
-  ) h ON TRUE`;
+  ) h ON TRUE
+  LEFT JOIN LATERAL (
+    SELECT ch.holders FROM chain_read_v1.coin_holder_history ch
+    WHERE ch.coin_type = p.sale_token AND ch.timestamp_ms <= ${windowFrom} ORDER BY ch.checkpoint DESC LIMIT 1
+  ) h0 ON TRUE`;
 }
 
 assertChainReadThroughViews(factsSql({ kind: "discover" }, new Params(), {
@@ -206,12 +214,13 @@ assertChainReadThroughViews(factsSql({ kind: "discover" }, new Params(), {
   includeRollingChange: true,
 }));
 
-/** The facts of every sale in `scope`, keyed by presale id. */
-export async function readCoinFacts(db: ReadableDatabase, scope: SaleScope, clockMs: number, options: HomePriceOptions = {}): Promise<ReadonlyMap<string, FactsRow>> {
+/** The facts of every sale in `scope`, keyed by presale id; `span` dates the price clock and the new holders' baseline. */
+export async function readCoinFacts(db: ReadableDatabase, scope: SaleScope, span: Pick<HomeSpan, "fromMs" | "toMs">, options: HomePriceOptions = {}): Promise<ReadonlyMap<string, FactsRow>> {
   if (scope.kind === "ids" && scope.presaleIds.length === 0) return new Map();
   const params = new Params();
   const text = factsSql(scope, params, options);
-  params.values[0] = clockMs;
+  params.values[0] = span.toMs;
+  params.values[1] = span.fromMs;
   const { rows } = await db.read<FactsRow>(text, params.values);
   return new Map(rows.map((row) => [row.presale_id ?? row.coin_type, row]));
 }
@@ -489,7 +498,19 @@ export function coinOf(input: CoinInputs): HomeCoin {
   };
 }
 
-type Candidate = Rankable & Readonly<{ facts: FactsRow; counts: WindowCountsRow | undefined; marketCapUsd: number | null }>;
+type Candidate = Rankable & Readonly<{ facts: FactsRow; counts: WindowCountsRow | undefined; marketCapUsd: number | null; netInflow: number; newHolders: number }>;
+
+/**
+ * Holders gained in the window: the count now less the count at its start,
+ * 0 when negative. A coin launched inside the window started from none; any
+ * other coin without both counts gains 0, never a guess.
+ */
+export function newHoldersOf(facts: Pick<FactsRow, "holders" | "holders_at_start" | "launched_ms">, span: Pick<HomeSpan, "fromMs">): number {
+  if (facts.holders === null) return 0;
+  const launchedInWindow = facts.launched_ms !== null && Number(facts.launched_ms) > span.fromMs;
+  const start = facts.holders_at_start ?? (launchedInWindow ? "0" : null);
+  return start === null ? 0 : Math.max(0, Number(facts.holders) - Number(start));
+}
 
 /** The coin's FDV now in USD from its indexed price and supply, as a number for ordering; null without either. */
 function fdvNumber(price: string | null, totalSupply: string | null, decimals: number): number | null {
@@ -527,12 +548,16 @@ function candidateOf(facts: FactsRow, counts: WindowCountsRow | undefined, span:
   const latestMs = counts?.latest_ms === null || counts?.latest_ms === undefined ? null : Number(counts.latest_ms);
   const inputs = rankInputs({ participants: Number(counts?.participants ?? 0), events: Number(counts?.events ?? 0), latest_ms: latestMs, window: span.window, to_ms: span.toMs, volume_usd: counts?.volume_usd ?? null });
   const holders = facts.holders === null ? null : Number(facts.holders);
+  const netInflow = Math.max(0, Number(counts?.net_inflow_usd ?? 0)) || 0;
+  const newHolders = newHoldersOf(facts, span);
   const price = observedHomePrice(facts.price_usd, facts.price_as_of_ms, span.toMs)?.price ?? null;
   return {
     facts,
     counts,
     coinType: facts.coin_type,
-    score: relevanceScore({ inputs, latestMs, holders }, span.window, span.toMs),
+    score: relevanceScore({ inputs, latestMs, holders, netInflow, newHolders }, span.window, span.toMs),
+    netInflow,
+    newHolders,
     inputs,
     latestMs,
     launchedMs: facts.launched_ms === null ? null : Number(facts.launched_ms),
@@ -737,7 +762,7 @@ export async function readHomeDiscover(db: ReadableDatabase, query: HomeQuery, c
   const scope: SaleScope = { kind: "discover" };
   const actors: ActorScope = { kind: "everyone" };
   const [facts, sides] = await Promise.all([
-    readCoinFacts(db, scope, bounds.clockMs, context),
+    readCoinFacts(db, scope, span, context),
     readSides(db, { span, bounds, kinds, sales: scope, actors }, context.includeRecentBuys ? context.nowMs - HOME_RECENT_BUY_MS : undefined),
   ]);
   const counts = countsOf(sides);
@@ -796,7 +821,7 @@ export async function readHomeCoinsByIds(
   const scope: SaleScope = { kind: "ids", presaleIds, includeStandalone: presaleIds.some((id) => id.includes("::")) };
   const actors: ActorScope = { kind: "everyone" };
   const [facts, sides] = await Promise.all([
-    readCoinFacts(db, scope, bounds.clockMs, context),
+    readCoinFacts(db, scope, span, context),
     readSides(db, { span, bounds, kinds, sales: scope, actors }),
   ]);
   const counts = countsOf(sides);

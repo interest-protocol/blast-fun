@@ -36,7 +36,14 @@ import { decodeCursor, encodeCursor, invalidCursor } from "@blast/server/modules
  * - `breadth`: distinct participants (accounts and unlinked wallets, each
  *   once). One actor is one, whatever it did: a whale is never breadth.
  * - `volume`: the Volume column's priced dollars (DEX pools included when
- *   the read asks for them).
+ *   the read asks for them; net inflow never includes DEX pools, so a coin
+ *   with only DEX trades scores on volume, freshness and holders).
+ * - net inflow: priced dollars bought and committed, less dollars sold, 0
+ *   when negative. Claims are not money in. Buying and selling in a loop adds
+ *   volume but no net inflow.
+ * - new holders: blast-infra's holder count now, less its last count at or
+ *   before the window's start, 0 when negative. A coin launched inside the
+ *   window starts from none; any other coin without both counts gains 0.
  * - freshness: how little of the window has passed since the latest event.
  * - `holders`: blast-infra's holder count now, or 0 without one.
  * - `activity`: confirmed events, capped at three per participant
@@ -45,13 +52,16 @@ import { decodeCursor, encodeCursor, invalidCursor } from "@blast/server/modules
  *   (6 min of an hour, 2.4 h of a day), 1 within half of it, else 0; a
  *   Volume tie-break.
  *
- * **Relevant score**, out of 100 (stored ×100 as an integer):
- * `40 × breadth + 30 × volume + 20 × freshness + 10 × holders`, each input
- * scaled 0–1 on a log curve that stops at its cap (`RELEVANCE_CAPS`), so
- * neither one wallet's churn nor one large order can lead. Breadth weighs
- * most: many people beat big money. Freshness falls from 1 for a trade this
+ * **Relevant score** (shown as Trending), out of 100 (stored ×100 as an integer):
+ * `30 × breadth + 20 × net inflow + 15 × volume + 15 × new holders
+ * + 15 × freshness + 5 × holders`, each input scaled 0–1 on a log curve
+ * that stops at its cap (`RELEVANCE_CAPS`), so neither one wallet's churn
+ * nor one large order can lead. Breadth weighs most: many people beat big
+ * money. Money that stays and people who stay come next, so churn ranks
+ * below real buying. Freshness falls from 1 for a trade this
  * minute to 0 at the window's start, on a clock that ticks once a minute. Missing data is 0.
- * Selling counts exactly like buying.
+ * Selling counts as participation and volume; only net inflow treats it as
+ * money out.
  *
  * **Idle coins.** A coin with no participants and no dollars in the window
  * ranks after every active one, by market value: FDV (a coin without one
@@ -108,31 +118,35 @@ export function rankInputs(activity: Pick<HomeActivity, "participants" | "events
 /** A Blast coin whose raise (a presale's, or a curve's graduation target) or market cap is under this, in USD, stays off Home. */
 export const HOME_DUST_USD = 1_000;
 
-/** Relevant's weights, out of 100: who joined counts most, then dollars, then how recent, then how widely held. */
-export const RELEVANCE_WEIGHTS = { breadth: 40, volume: 30, freshness: 20, holders: 10 } as const;
+/** Relevant's weights, out of 100: who joined counts most, then money that stayed, then dollars, new holders and how recent, then how widely held. */
+export const RELEVANCE_WEIGHTS = { breadth: 30, netInflow: 20, volume: 15, newHolders: 15, freshness: 15, holders: 5 } as const;
 /** Where each input stops adding: past these, more of the same no longer lifts a coin. */
 export const RELEVANCE_CAPS = {
   breadth: { "1h": 10, "24h": 50 },
+  netInflow: { "1h": 1_000, "24h": 10_000 },
   volume: { "1h": 2_000, "24h": 20_000 },
+  newHolders: { "1h": 10, "24h": 50 },
   holders: 1_000,
-} as const satisfies Readonly<{ breadth: Record<HomeWindow, number>; volume: Record<HomeWindow, number>; holders: number }>;
+} as const satisfies Readonly<{ breadth: Record<HomeWindow, number>; netInflow: Record<HomeWindow, number>; volume: Record<HomeWindow, number>; newHolders: Record<HomeWindow, number>; holders: number }>;
 
 const MINUTE_MS = 60_000;
 const saturating = (value: number, cap: number) => Math.log1p(Math.min(cap, Math.max(0, value))) / Math.log1p(cap);
 
 /** The Relevant score (see the ranking notes above), ×100 and rounded so cursors carry an integer. */
 export function relevanceScore(
-  candidate: Readonly<{ inputs: Pick<RankInputs, "breadth" | "volume">; latestMs: number | null; holders?: number | null }>,
+  candidate: Readonly<{ inputs: Pick<RankInputs, "breadth" | "volume">; latestMs: number | null; holders?: number | null; netInflow?: number | null; newHolders?: number | null }>,
   window: HomeWindow,
   toMs: number,
 ): number {
-  const { inputs, latestMs, holders } = candidate;
+  const { inputs, latestMs, holders, netInflow, newHolders } = candidate;
   // The clock moves in whole minutes, the same step for every coin: scores hold still within a minute and never swap order on their own.
   // It rounds up, so a trade this minute is never later than the clock (the clamp only catches clock skew).
   const nowMs = Math.ceil(toMs / MINUTE_MS) * MINUTE_MS;
   const freshness = latestMs === null ? 0 : Math.min(1, Math.max(0, 1 - (nowMs - latestMs) / HOME_WINDOW_MS[window]));
   const score = RELEVANCE_WEIGHTS.breadth * saturating(inputs.breadth, RELEVANCE_CAPS.breadth[window])
+    + RELEVANCE_WEIGHTS.netInflow * saturating(netInflow ?? 0, RELEVANCE_CAPS.netInflow[window])
     + RELEVANCE_WEIGHTS.volume * saturating(inputs.volume, RELEVANCE_CAPS.volume[window])
+    + RELEVANCE_WEIGHTS.newHolders * saturating(newHolders ?? 0, RELEVANCE_CAPS.newHolders[window])
     + RELEVANCE_WEIGHTS.freshness * freshness
     + RELEVANCE_WEIGHTS.holders * saturating(holders ?? 0, RELEVANCE_CAPS.holders);
   return Math.round(score * 100);
