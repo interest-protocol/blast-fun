@@ -588,6 +588,20 @@ function poolPriceSeries({ sources, lines, compact, mode, migrationAt, walletTra
     seriesIndex += priceSeries.length;
     return priceSeries;
   });
+  // Live dots each priced execution on its step trace. They come after every
+  // price series so indices (wallet markers, exact prices) stay on the trace,
+  // and exist even when empty so a first trade does not remount the chart.
+  if (stepped && mode === "line") {
+    series.push(...sources.flatMap((history, sourceIndex): ChartSeries[] => lines[sourceIndex].length ? [{
+      type: "Line" as const,
+      data: chartData((history.liveTrades ?? []).flatMap(({ timestampMs, price: raw }) =>
+        raw === null ? [] : [{ time: chartTimestamp(timestampMs), value: scale.coordinate(price(raw)) }])),
+      options: {
+        color: "var(--ink)", lineVisible: false, pointMarkersVisible: true, pointMarkersRadius: 2.5,
+        priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, autoscaleInfoProvider,
+      },
+    }] : []));
+  }
   return { series, pointPrices, markers, tagged, up, down };
 }
 

@@ -396,13 +396,15 @@ test("Live holds the confirmed price as steps through quiet seconds and joins th
   };
   const plot = () => container.querySelector("[data-series]");
   const points = () => plot()?.getAttribute("data-points");
+  const dots = () => plot()?.getAttribute("data-last-points");
   const dateTime = () => container.querySelector("time")?.dateTime;
   const at = (ms: number) => ms / 1_000;
 
   // Active: the price before the window opens it, the trade changes it, and it holds to the clock.
   await render(null, [prior, active]);
-  assert.equal(plot()?.getAttribute("data-series"), "Area");
-  assert.equal(plot()?.getAttribute("data-line"), "step", "a connected step line, never disconnected points");
+  assert.equal(plot()?.getAttribute("data-series"), "Area,Line");
+  assert.equal(plot()?.getAttribute("data-line"), "step,points", "a connected step line with a dot on each execution");
+  assert.equal(dots(), `${at(active.timestampMs)}:92`, "a dot only where a trade executed in the window");
   assert.match(points() ?? "", new RegExp(`^${at(start - 300_000)}:90,${at(active.timestampMs)}:92,${at(start)}:92`));
   assert.doesNotMatch(container.textContent ?? "", /No trades in the last 5 min/);
 
@@ -410,8 +412,9 @@ test("Live holds the confirmed price as steps through quiet seconds and joins th
   for (const step of [241_000, 1_000]) {
     now += step;
     await render(null, [prior, active]);
-    assert.equal(plot()?.getAttribute("data-line"), "step");
+    assert.equal(plot()?.getAttribute("data-line"), "step,points");
     assert.match(points() ?? "", new RegExp(`^${at(now - 300_000)}:92,${at(now)}:92`), "a flat line across the whole window");
+    assert.equal(dots(), "", "no dot is drawn for a carried price");
     assert.equal(points()?.split(",").length, 2);
     assert.match(container.textContent ?? "", /No trades in the last 5 min/);
     assert.equal(dateTime(), new Date(active.timestampMs).toISOString(), "heartbeats keep the real execution time");
@@ -435,7 +438,8 @@ test("Live holds the confirmed price as steps through quiet seconds and joins th
   // The next trade joins the line once; a repeated execution collapses to one point (frame dedup is in chart-live-model.test.ts).
   now = next.timestampMs + 1_000;
   await render(null, [prior, active, next, next]);
-  assert.equal(plot()?.getAttribute("data-line"), "step");
+  assert.equal(plot()?.getAttribute("data-line"), "step,points");
+  assert.equal(dots(), `${at(next.timestampMs)}:93`, "the duplicate delivery draws one dot");
   const drawn = points()?.split(",") ?? [];
   assert.equal(drawn.filter(point => point.startsWith(`${at(next.timestampMs)}:`)).length, 1);
   assert.match(drawn[0] ?? "", /:92$/, "the leading edge carries the earlier confirmed price");
@@ -447,6 +451,7 @@ test("Live holds the confirmed price as steps through quiet seconds and joins th
   const unpriced = trade("4:0:0:0", now - 500, null);
   await render(null, [prior, active, next, unpriced]);
   assert.match(points() ?? "", new RegExp(`,${at(unpriced.timestampMs)}:gap$`));
+  assert.equal(dots(), `${at(next.timestampMs)}:93`, "an unpriced execution gets no dot");
 
   // A coin with no confirmed price in or before the window keeps the empty state.
   await render(null, [trade("5:0:0:0", now - 400_000, null)]);
