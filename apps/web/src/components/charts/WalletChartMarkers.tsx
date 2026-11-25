@@ -9,12 +9,10 @@ import { Button } from "#web/components/blast-ui/Button.tsx";
 import { Popover, PopoverSurface } from "#web/components/blast-ui/Popover.tsx";
 import { dyn } from "#web/components/blast-ui/csp-style.ts";
 import { useDevicePrefs } from "#web/components/blast-ui/device-prefs.ts";
-import { EASE_OUT, T3 } from "#web/components/blast-ui/motion-tokens.ts";
-import { prefersReducedMotion } from "#web/components/blast-ui/use-shell-prefs.ts";
 import { WalletLabelIcon } from "#web/components/launchpad/activity/WalletLabelIcon.tsx";
 import { WALLET_LABELS } from "#web/components/launchpad/activity/wallet-labels.ts";
 import { loadTraderProfiles } from "#web/components/launchpad/activity/trader-profiles.ts";
-import type { walletMarkerBadges, WalletRipple } from "./wallet-markers";
+import type { walletMarkerBadges } from "./wallet-markers";
 import styles from "./PoolCandleChart.module.css";
 
 type Badge = ReturnType<typeof walletMarkerBadges>[number];
@@ -112,42 +110,4 @@ export function WalletChartMarkers({ badges }: Readonly<{ badges: readonly Badge
       </div>;
     })}
   </div>;
-}
-
-const RIPPLE_CUE_MAX_AGE_MS = 2_500;
-const RIPPLE_MIN_GAP_MS = 600;
-
-export function WalletMarkerRipple({ badges, ripple }: Readonly<{ badges: readonly Badge[]; ripple?: WalletRipple | null }>) {
-  const ring = useRef<SVGCircleElement>(null);
-  const played = useRef<{ cursor: string; at: number } | undefined>(undefined);
-  const anchor = ripple ? rippleAnchor(badges, ripple.markerKey) : null;
-  const visible = anchor !== null;
-
-  useLayoutEffect(() => {
-    if (!visible || !ripple || !ring.current || played.current?.cursor === ripple.cursor) return;
-    const now = performance.now();
-    const previous = played.current?.at ?? -Infinity;
-    played.current = { cursor: ripple.cursor, at: previous };
-    if (now - ripple.receivedAt > RIPPLE_CUE_MAX_AGE_MS || now - previous < RIPPLE_MIN_GAP_MS || prefersReducedMotion()) return;
-    ring.current.animate?.([
-      { opacity: 0.62, transform: "scale(.95)" },
-      { opacity: 0, transform: "scale(1.8)" },
-    ], { duration: T3, easing: EASE_OUT });
-    played.current.at = now;
-  }, [ripple, visible]);
-
-  if (!anchor || !ripple) return null;
-  return <div className={styles.walletOverlay} aria-hidden="true">
-    <svg className={styles.walletDots} data-side={anchor.side}>
-      <circle key={ripple.cursor} ref={ring} className={styles.walletRipple} cx={anchor.x} cy={anchor.y} r={5.25} data-wallet-ripple="" />
-    </svg>
-  </div>;
-}
-
-function rippleAnchor(badges: readonly Badge[], key: string) {
-  for (const badge of badges) {
-    const point = badge.points.find(point => point.key === key);
-    if (point) return { ...point, side: badge.side };
-  }
-  return null;
 }

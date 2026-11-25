@@ -21,9 +21,7 @@ export type WalletChartTrade = Readonly<{
   labels: readonly WalletLabel[];
 }>;
 
-export type WalletRipple = Readonly<{ cursor: string; receivedAt: number; markerKey: string }>;
-
-export function walletMarkerKey(poolKey: string, side: WalletChartTrade["side"], bucket: number) {
+function walletMarkerKey(poolKey: string, side: WalletChartTrade["side"], bucket: number) {
   return `${poolKey}:${side}:${bucket}`;
 }
 

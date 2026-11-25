@@ -16,7 +16,6 @@ const RUNTIME = new Map([
   ["--transform-origin", "Base UI's popups"],
   ["--z-index", "Sonner's toasts (the inline toast portal has none, so its z-index is auto)"],
   ["--h", "presale-pages/bits.tsx, inline"],
-  ["--trade-room", "candle-trade.ts, measured trade-label width"],
 ]);
 
 const ROOT = new URL("../../", import.meta.url);

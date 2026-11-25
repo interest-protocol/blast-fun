@@ -12,6 +12,7 @@ import { afterChartSourceRead, chartKey, chartRequest, initialChart, type ChartC
 import { useCoinChartControls } from "#web/components/launchpad/chart/chart-preferences.ts";
 import { ChartView, PRICE_HISTORY_UNAVAILABLE } from "#web/components/launchpad/chart/ChartView.tsx";
 import { useCoinPriceCurrency } from "#web/components/launchpad/chart/CoinPriceCurrency.tsx";
+import { useLiveScreen } from "#web/components/launchpad/coin/LiveScreen.tsx";
 import { PublicError, publicErrorMessage } from "#web/lib/errors.ts";
 import { useAppQueryClient } from "#web/lib/query/provider.tsx";
 
@@ -30,6 +31,7 @@ export function LegacyCoinChart({ poolKey, symbol, decimals, quote = SUI_POOL_QU
 }>) {
   const { controls, ready, commit } = useCoinChartControls(true, initialControls, false);
   const currency = useCoinPriceCurrency();
+  const liveScreen = useLiveScreen();
   const key = chartKey(controls);
   const stream = useRef<ChartStream | null>(null);
   const recoveryCheckpoint = useRef<number | null>(null);
@@ -65,7 +67,7 @@ export function LegacyCoinChart({ poolKey, symbol, decimals, quote = SUI_POOL_QU
       pools: [poolKey], expected: null, migration: () => null,
       request: () => chartTailRequest(controls, Date.now()),
       load: (_, checkpoint) => load(checkpoint),
-      pollMs: () => pollMs(), retryReadErrors: false,
+      pollMs: () => pollMs(), livePolls: !liveScreen, retryReadErrors: false,
       onStatus: () => {},
       onSection: (_, section) => setState((previous) =>
         afterChartSourceRead(previous.key === key ? previous : initialChart(key, true), key, "venue", section, null)),
@@ -76,7 +78,7 @@ export function LegacyCoinChart({ poolKey, symbol, decimals, quote = SUI_POOL_QU
       client.stop();
       if (stream.current === client) stream.current = null;
     };
-  }, [poolKey, controls, key, ready]);
+  }, [poolKey, controls, key, ready, liveScreen]);
 
   return <ChartView
     compact

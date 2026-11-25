@@ -275,26 +275,3 @@ test("Live is a line chart on desktop and mobile and keeps the newest trade cue"
   await render(null, null, null, "traded");
   assert.equal(container.querySelectorAll("[data-kline-plot]").length, 1, "a graduated coin is one chart");
 });
-
-test("panning the live candle out of the price pane hides its amount", async () => {
-  const { projectCandleTrade } = await import("../../charts/candle-trade.ts");
-  type Handle = Parameters<typeof projectCandleTrade>[0];
-  const time = 1 as import("lightweight-charts").UTCTimestamp;
-  const specs = [{ type: "Candlestick", data: [{ time, open: 12, high: 14, low: 9, close: 10 }] }] as const;
-  let x = 99;
-  let y = 49;
-  const handle = {
-    chart: { timeScale: () => ({ options: () => ({ barSpacing: 8 }), timeToCoordinate: () => x }), paneSize: () => ({ width: 100, height: 50 }) },
-    series: [{ priceToCoordinate: () => y }],
-  } as unknown as Handle;
-  assert.deepEqual(projectCandleTrade(handle, specs, 0), { x: 95, y, width: 95, left: true, below: false });
-  x = 8;
-  assert.deepEqual(projectCandleTrade(handle, specs, 0), { x: 12, y, width: 88, left: false, below: false });
-  x = 101;
-  assert.equal(projectCandleTrade(handle, specs, 0), "offscreen");
-  x = -1;
-  assert.equal(projectCandleTrade(handle, specs, 0), "offscreen");
-  x = 20;
-  y = 51;
-  assert.equal(projectCandleTrade(handle, specs, 0), "offscreen", "a label never spills into volume");
-});

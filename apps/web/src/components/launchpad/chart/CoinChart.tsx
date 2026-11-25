@@ -11,6 +11,7 @@ import { ChartStream, type ChartStreamStatus } from "./chart-stream";
 import { useChartPrice } from "./chart-live-price";
 import { useCoinChartControls } from "./chart-preferences";
 import { ChartView, type ChartSourceName } from "./ChartView";
+import { useLiveScreen } from "../coin/LiveScreen";
 
 function plotForControls(state: ReturnType<typeof initialChart>, source: ChartSource, controls: ChartControls, committed: ChartSource["migration"], venuePoolKey: string | null, requestAt: number) {
   const key = chartKey(controls);
@@ -42,6 +43,7 @@ export function CoinChart({
   const dependencies = useMemo(() => browserMarketDependencies(expected), [expected]);
   const stream = useRef<ChartStream | null>(null);
   const [streamStatus, setStreamStatus] = useState<ChartStreamStatus>("connecting");
+  const liveScreen = useLiveScreen();
   const known = useRef(state.migration);
   const [requestAt, setRequestAt] = useState(entry?.readAt ?? 0);
   const [useEntry, setUseEntry] = useState(true);
@@ -83,6 +85,7 @@ export function CoinChart({
         setRequestAt(Date.now());
       },
       onStatus: setStreamStatus,
+      livePolls: !liveScreen,
     });
     stream.current = client;
     client.start(seed?.pools);
@@ -90,7 +93,7 @@ export function CoinChart({
       client.stop();
       if (stream.current === client) stream.current = null;
     };
-  }, [coinType, controls, curvePoolKey, venuePoolKey, committed, dependencies, expected, ready, entry, useEntry]);
+  }, [coinType, controls, curvePoolKey, venuePoolKey, committed, dependencies, expected, ready, entry, useEntry, liveScreen]);
 
   const refresh = () => {
     setPending(true);
