@@ -9,7 +9,8 @@ import { NO_VALUE, shortAddress as shortId } from "@blast/core/web/format.ts";
 import { MEME_TOTAL_SUPPLY_WHOLE_TOKENS } from "@interest-protocol/blast-sdk/launchpad";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { useCallback, useId, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import type { VenuePoolKey } from "#web/components/launchpad/activity/activity-live.ts";
 import { IndexedPoolTrades } from "#web/components/social/coins/IndexedPoolTrades.tsx";
@@ -48,6 +49,9 @@ import { LiveFigureCue } from "#web/components/blast-ui/LiveFigureCue.tsx";
 import { useAppQueryClient } from "#web/lib/query/provider.tsx";
 import { pollInterval } from "#web/lib/query/polling.ts";
 import { legacyCoinMarketQuery } from "./bonding-client.ts";
+import { useLiveListening, useLiveScreen, useReportListening } from "#web/components/launchpad/coin/LiveScreen.tsx";
+import { statsAfterRead, useLiveCoin, type LiveCoin, type LiveCoinStats } from "#web/components/launchpad/coin/live-coin.ts";
+import type { ExpectedDeployment } from "@blast/core/modules/launchpad-contract/provenance.ts";
 import styles from "./bonding-coin.module.css";
 import { ChartCard, CoinCover, CoinIdentityHeader, CoinPriceFigure, CoinTradingActivity, Fact, MarketOverview, MarketPriceRow, useLastPrice } from "./CoinPageParts.tsx";
 import { bpsPercent } from "@blast/core/lib/bps.ts";
@@ -367,10 +371,37 @@ function CoinPageHeader({ page, view, details, verified, marketCatchingUp }: Rea
   </>;
 }
 
-function CoinMarket({ snapshot, page, chart, activity, poolKey, checkpoint }: Readonly<{
-  snapshot: View; page: CoinPage; chart: ReactNode; activity: ReactNode; poolKey: string | null; checkpoint: number | null;
+/** The live screen's note while its stream has not been live for a while; the numbers shown stay as they were. */
+function Reconnecting({ live }: Readonly<{ live: LiveCoin }>) {
+  return live.reconnecting ? <p className={styles.notice} role="status">Reconnecting…</p> : null;
+}
+
+/**
+ * Re-reads the page once when the stream reports a new lifecycle for the coin (a curve that migrated):
+ * the live screen has no refresh timer to find it.
+ */
+function LifecycleRefresh({ lifecycle }: Readonly<{ lifecycle: string | null }>) {
+  const router = useRouter();
+  const first = useRef<string | null>(null);
+  useEffect(() => {
+    if (lifecycle === null) return;
+    if (first.current === null) first.current = lifecycle;
+    else if (first.current !== lifecycle) {
+      first.current = lifecycle;
+      router.refresh();
+    }
+  }, [lifecycle, router]);
+  return null;
+}
+
+function CoinMarket({ snapshot, page, chart, activity, poolKey, checkpoint, expected }: Readonly<{
+  snapshot: View; page: CoinPage; chart: ReactNode; activity: ReactNode; poolKey: string | null; checkpoint: number | null; expected: ExpectedDeployment | null;
 }>) {
   const { tick, lastTrade, receivedAt } = useCoinTrade(snapshot.identity.coinType, poolKey, checkpoint);
+  const liveOn = useLiveScreen() && expected !== null && page.confirmed;
+  const live = useLiveCoin({ coin: snapshot.identity.coinType, pools: poolKey ? [poolKey] : [], expected, enabled: liveOn });
+  const stats = statsAfterRead(live.stats, checkpoint);
+  useReportListening(live.live && live.stats !== null);
   const graduated = snapshot.lifecycle === "migrated";
   const view = !graduated && tick ? coinView(page, tick) : snapshot;
   const tradeId = tick?.showCue ? tick.trade.cursor : null;
@@ -380,24 +411,26 @@ function CoinMarket({ snapshot, page, chart, activity, poolKey, checkpoint }: Re
     <div className={styles.market}>
       <MarketPrice units={priceUnits(view)} price={price?.price} tradeId={tradeId && price?.cursor ? tradeId : null}
         showCurrency={view.identity.quoteType !== null} activity={context && <ChartLastTrade placement="headline" />} />
-      <CoinMarketCards graduated={graduated} view={view} tick={tick} tradeId={tradeId} chart={chart} activity={activity} />
+      <Reconnecting live={live} />
+      {liveOn ? <LifecycleRefresh lifecycle={live.stats?.lifecycle ?? null} /> : null}
+      <CoinMarketCards graduated={graduated} view={view} tick={tick} tradeId={tradeId} stats={stats} chart={chart} activity={activity} />
     </div>
   </ChartTradeContext></ChartPriceCheckpoint>;
 }
 
-function CoinMarketCards({ graduated, view, tick, tradeId, chart, activity }: Readonly<{
-  graduated: boolean; view: View; tick: ReturnType<typeof useCoinTrade>["tick"]; tradeId: string | null; chart: ReactNode; activity: ReactNode;
+function CoinMarketCards({ graduated, view, tick, tradeId, stats, chart, activity }: Readonly<{
+  graduated: boolean; view: View; tick: ReturnType<typeof useCoinTrade>["tick"]; tradeId: string | null; stats: LiveCoinStats | null; chart: ReactNode; activity: ReactNode;
 }>) {
   const phone = usePhoneLayout();
   const phoneProgress = phone && !graduated;
   const facts = view.curve && view.inputs ? <ProgressFacts view={view} tradeId={tradeId} /> : null;
-  const stats = graduated ? <GraduatedMarketOverview view={view} tick={tick} tradeId={tradeId} /> : (
+  const overview = graduated ? <GraduatedMarketOverview view={view} tick={tick} tradeId={tradeId} stats={stats} /> : (
     <ProgressCard view={view} tradeId={tradeId}>{phone ? null : facts}</ProgressCard>
   );
   return <>
-    {phoneProgress && stats}
+    {phoneProgress && overview}
     {chart && <ChartCard>{chart}</ChartCard>}
-    {!phoneProgress && stats}
+    {!phoneProgress && overview}
     {phoneProgress && facts ? <div className={`${styles.card} ${styles.progressFacts}`}>{facts}</div> : null}
     {activity}
   </>;
@@ -411,11 +444,11 @@ function coinTradeSource(view: View, poolKey: string | null, trade: ReturnType<t
   };
 }
 
-function GraduatedMarketOverview({ view, tick, tradeId }: Readonly<{
-  view: View; tick: ReturnType<typeof useCoinTrade>["tick"]; tradeId: string | null;
+function GraduatedMarketOverview({ view, tick, tradeId, stats }: Readonly<{
+  view: View; tick: ReturnType<typeof useCoinTrade>["tick"]; tradeId: string | null; stats: LiveCoinStats | null;
 }>) {
-  return <MarketOverview fdv={tick ? tick.trade.fdvUsd : view.pool?.fdvUsd} holders={view.coin?.stats.holders}
-    volume={view.pool?.stats.day.volumeUsd} venue={view.venue} tradeId={tradeId} />;
+  return <MarketOverview fdv={stats?.fdvUsd ?? (tick ? tick.trade.fdvUsd : view.pool?.fdvUsd)} holders={stats?.holders ?? view.coin?.stats.holders}
+    volume={stats?.volumeUsd ?? view.pool?.stats.day.volumeUsd} venue={view.venue} tradeId={tradeId} />;
 }
 
 function coinPageMarket(page: CoinPage, view: View) {
@@ -490,6 +523,16 @@ function LegacyMarketDetails({ market, decimals, symbol }: Readonly<{ market?: L
   </div>;
 }
 
+/** A legacy coin's market read; it rests while the live screen's stream carries the coin's numbers. */
+function useLegacyMarket(coinType: string, enabled: boolean, listening: boolean) {
+  const { data, isRefetchError } = useQuery({
+    ...legacyCoinMarketQuery(),
+    enabled,
+    refetchInterval: listening ? false : (query) => pollInterval(60_000, query),
+  }, useAppQueryClient());
+  return { market: data?.legacyMarket?.[coinType], fdvUsd: isRefetchError ? undefined : data?.legacyFdvUsd?.[coinType] };
+}
+
 export function LegacyCoinScreen({ coinType, name, symbol, logoUrl, chart, decimals, poolKey, poolKeys = [poolKey], quote = SUI_POOL_QUOTE, trade, legacy = true, major = false, verified = false, verifiedCommunity = false }: Readonly<{
   coinType: string; name: string; symbol: string; logoUrl: string; chart: ReactNode; decimals: number;
   poolKey: VenuePoolKey; poolKeys?: readonly VenuePoolKey[]; quote?: PoolQuote; trade: ReactNode; legacy?: boolean; major?: boolean; verified?: boolean; verifiedCommunity?: boolean;
@@ -502,13 +545,11 @@ export function LegacyCoinScreen({ coinType, name, symbol, logoUrl, chart, decim
     quoteMark: <QuoteMark coinType={quote.coinType} coinKey={quoteKey} symbol={quote.symbol} />,
   };
   const price = useChartPrice(poolKey);
-  const { data, isRefetchError } = useQuery({
-    ...legacyCoinMarketQuery(),
-    enabled: !major,
-    refetchInterval: (query) => pollInterval(60_000, query),
-  }, useAppQueryClient());
-  const market = data?.legacyMarket?.[coinType];
-  const fdvUsd = data?.legacyFdvUsd?.[coinType];
+  const liveScreen = useLiveScreen();
+  const live = useLiveCoin({ coin: coinType, pools: [poolKey], expected: null, enabled: liveScreen });
+  useReportListening(live.live && live.stats !== null);
+  const { market, fdvUsd: readFdvUsd } = useLegacyMarket(coinType, !major, useLiveListening());
+  const fdvUsd = live.stats?.fdvUsd ?? readFdvUsd;
   const mark = <>{verified || verifiedCommunity ? <CoinVerifiedMark community={verifiedCommunity} /> : null}{legacy ? <CoinLegacyMark /> : null}</>;
   return <div className={styles.page} data-legacy-coin="">
     <CoinBackLink origin={origin} tradeJump={trade != null} />
@@ -517,8 +558,9 @@ export function LegacyCoinScreen({ coinType, name, symbol, logoUrl, chart, decim
       <CoinPriceCurrencyProvider quoteType={quote.coinType} quoteSymbol={quote.symbol}>
         <div className={styles.market}>
           <MarketPrice units={units} price={price?.price} tradeId={price?.cursor} showCurrency={!major} />
+          <Reconnecting live={live} />
           <ChartCard><SectionBoundary subject="chart">{chart}</SectionBoundary></ChartCard>
-          <MarketOverview fdv={isRefetchError ? undefined : fdvUsd} venue={major ? null : poolKey.split(":")[0]} />
+          <MarketOverview fdv={major ? null : fdvUsd} holders={live.stats?.holders} volume={live.stats?.volumeUsd} venue={major ? null : poolKey.split(":")[0]} />
           <Card title="Trades">
             <SectionBoundary subject="trades" key={poolKeys.join()}>
               <IndexedPoolTrades poolKeys={poolKeys} units={units} />
@@ -532,10 +574,16 @@ export function LegacyCoinScreen({ coinType, name, symbol, logoUrl, chart, decim
   </div>;
 }
 
-/** A launch's permanent page, preserving chart, execution and migration contracts. */
-export function BondingCoinScreen({ page, details, verified = false, slots }: Readonly<{ page: CoinPage; details: LaunchPageDetails | null; verified?: boolean; slots: TerminalSlots }>) {
+/**
+ * A launch's permanent page, preserving chart, execution and migration contracts. `expected`: the
+ * deployment the chart streams for (null without a stream), so the live screen joins the same stream.
+ */
+export function BondingCoinScreen({ page, details, verified = false, slots, expected = null }: Readonly<{
+  page: CoinPage; details: LaunchPageDetails | null; verified?: boolean; slots: TerminalSlots; expected?: ExpectedDeployment | null;
+}>) {
   const view = coinView(page);
   const { graduated, poolKey, marketKey, marketCatchingUp, marketOffline, showMarket, checkpoint } = coinPageMarket(page, view);
+  const liveScreen = useLiveScreen();
   const slot = (name: keyof TerminalSlots) => <SectionBoundary subject={name} key={`${page.launchId}:${name}`}>{slots[name]}</SectionBoundary>;
   return <div className={styles.page} data-bonding-coin="">
     <CoinPageHeader page={page} view={view} details={details} verified={verified} marketCatchingUp={marketCatchingUp} />
@@ -543,9 +591,9 @@ export function BondingCoinScreen({ page, details, verified = false, slots }: Re
       <div className={styles.layout} data-graduated={graduated || undefined} data-market-offline={marketOffline || undefined} data-no-market={!showMarket || undefined}>
         {showMarket ? (
           <CoinPriceCurrencyProvider key={page.launchId} quoteType={view.identity.quoteType} quoteSymbol={view.identity.quoteSymbol}>
-            <CoinMarket key={marketKey} snapshot={view} page={page} poolKey={poolKey} checkpoint={checkpoint}
+            <CoinMarket key={marketKey} snapshot={view} page={page} poolKey={poolKey} checkpoint={checkpoint} expected={expected}
               chart={marketOffline || slots.chart == null ? null : slot("chart")}
-              activity={marketOffline ? null : <CoinTradingActivity key={page.launchId} trades={slots.activity} holders={slots.holders} />}
+              activity={marketOffline ? null : <CoinTradingActivity key={page.launchId} trades={slots.activity} holders={slots.holders} lazyHolders={liveScreen} />}
             />
           </CoinPriceCurrencyProvider>
         ) : null}

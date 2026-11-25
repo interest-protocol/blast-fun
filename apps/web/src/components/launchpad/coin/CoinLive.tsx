@@ -1,11 +1,13 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 import { tabActivityHints } from "#web/components/social/home/activity-hints.ts";
 import { spreadMs } from "#web/lib/query/polling.ts";
 import { reportCoinView } from "#web/modules/launchpad-telemetry/client.ts";
+
+import { useLiveListening } from "./LiveScreen.tsx";
 
 /**
  * The coin page's browser side. It reports the first view of a coin the page
@@ -16,14 +18,22 @@ import { reportCoinView } from "#web/modules/launchpad-telemetry/client.ts";
  * A change of the coin's own identity (its name, symbol, description or icon)
  * re-reads the page at once: the tab's hint stream names the coin, and the
  * page's server read takes the new identity from blast-infra uncached.
+ * With `restWhileListening` (the live screen on a healthy read), a tick is skipped while the
+ * screen's stream is live and carrying the coin's stats; once it drops, the timer reads again.
  */
 export function CoinLive({
   launchId,
   coinType,
   tradable,
   refreshMs,
-}: Readonly<{ launchId: string; coinType: string | null; tradable: boolean; refreshMs: number }>) {
+  restWhileListening = false,
+}: Readonly<{ launchId: string; coinType: string | null; tradable: boolean; refreshMs: number; restWhileListening?: boolean }>) {
   const router = useRouter();
+  const listening = useLiveListening();
+  const resting = useRef(false);
+  useEffect(() => {
+    resting.current = restWhileListening && listening;
+  }, [restWhileListening, listening]);
 
   useEffect(() => {
     if (tradable) reportCoinView(launchId);
@@ -31,7 +41,7 @@ export function CoinLive({
 
   useEffect(() => {
     const timer = window.setInterval(() => {
-      if (document.visibilityState === "visible") router.refresh();
+      if (document.visibilityState === "visible" && !resting.current) router.refresh();
     }, spreadMs(refreshMs, Date.now()));
     return () => window.clearInterval(timer);
   }, [router, refreshMs]);

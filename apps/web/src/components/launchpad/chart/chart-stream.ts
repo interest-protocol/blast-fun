@@ -34,6 +34,8 @@ type Options = Readonly<{
   request: () => ChartRequest;
   load: (poolKey: string, recoveryCheckpoint: number | null) => Promise<ChartPoolRead>;
   pollMs?: () => number | false;
+  /** False: no history poll while the stream is live on the chart's pools; the stream brings every change. */
+  livePolls?: boolean;
   retryReadErrors?: boolean;
   onSection: (poolKey: string, section: Section<PoolCandlePage>, migration: MigrationMarker | null) => void;
   onStatus: (status: ChartStreamStatus) => void;
@@ -144,8 +146,9 @@ export class ChartStream {
       const remaining = this.options.pollMs?.();
       if (remaining === false) return;
       if (remaining && remaining > 0) return this.poll();
-      // A hidden tab reads nothing; its stream's next fence brings the chart up to date.
-      if (this.visible()) {
+      // A hidden tab reads nothing; its stream's next fence brings the chart up to date. A live
+      // stream needs no read either when the screen asked for none (`livePolls`).
+      if (this.visible() && !(this.options.livePolls === false && this.hubState === "live")) {
         // A curve the coin has migrated off trades no more: once its history is read, only the venue is polled.
         const curve = this.options.migration()?.curvePoolKey;
         void Promise.all([...this.pools].filter(([key, pool]) => key !== curve || pool.page === null).map(([key]) => this.load(key)))
