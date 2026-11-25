@@ -7,6 +7,9 @@ import { SOCIAL_CONFIG_DEFAULTS } from "@blast/core/modules/social/contracts/con
 import { forYouNewEntries, forYouNewEntriesFromHead, forYouNewHead } from "@blast/server/modules/social/feed/for-you.ts";
 import { createAfterResponseScheduler, createRequestWork, runWithRequestWork, trackRequestWork } from "@blast/server/lib/request-work.ts";
 import { createForYouNewReader } from "@blast/server/modules/social/feed/feed-reader.ts";
+import { createSocialFeedRoute } from "@blast/server/modules/social/feed/route.ts";
+import { createSocialRouteKit } from "@blast/server/modules/social/route-kit/route.ts";
+import { testClient } from "../../../../../core/test/fixtures/lib/web-security/client-address.ts";
 import { deferred } from "../../../../../core/test/kit.ts";
 
 const config = SOCIAL_CONFIG_DEFAULTS;
@@ -206,6 +209,60 @@ test("watermark failure keeps the shared fill owned until its still-running sele
   assert.equal((await read({ config, sinceMs: 0, hiddenKinds: [] })).count, 5);
   assert.equal(fixture.scans(), 2, "settled failure is not retained");
 });
+
+for (const [stage, pausedSql, failingSql] of [
+  ["selection", "FROM social_presale_pins pin", "FROM chain_read_v1.watermark"],
+  ["item lookups", "FROM social_reactions", "FROM social_attributions"],
+] as const) {
+  test(`a failed first-page fill shares outstanding ${stage} until it settles, then retries`, async () => {
+    const gate = deferred();
+    const paused = deferred();
+    let fail = true;
+    let loads = 0;
+    const db: ReadableDatabase = {
+      async read<Row extends QueryResultRow>(sql: string): Promise<QueryResult<Row>> {
+        if (sql.includes(pausedSql)) {
+          paused.resolve();
+          await gate.promise;
+        }
+        if (fail && sql.includes(failingSql)) throw new Error("database read failed");
+        const rows = sql.includes("FROM chain_read_v1.watermark")
+          ? [{ market_checkpoint: "10", market_timestamp_ms: "900", presale_checkpoint: "11", presale_timestamp_ms: "950", observed_ms: "1000" }]
+          : sql.includes("LIMIT $8")
+            ? [{ entry_id: "a:10:0:0:0", occurred_at_ms: "900", rank_ms: "900", source: "activity", kind: "presale_commit", named_account_id: null, presale_id: null, usd_price_as_of_ms: null }]
+            : [];
+        return { rows, rowCount: rows.length, command: "SELECT", oid: 0, fields: [] } as QueryResult<Row>;
+      },
+    };
+    const origin = "https://blast.fun";
+    const unexpected = () => { throw new Error("unexpected authentication or primary access"); };
+    const kit = createSocialRouteKit({
+      expectedOrigin: origin, tradingVisible: () => true, verifyAccessToken: unexpected,
+      limiter: { async consume() { return { allowed: true }; } },
+      accounts: { resolve: unexpected, resolveWallet: unexpected }, primary: unexpected,
+    });
+    const { GET } = createSocialFeedRoute({ kit, config: async () => config, now: () => NOW, database: () => {
+      loads += 1;
+      return db;
+    } });
+    const get = () => GET(new Request(`${origin}/api/social/feed`), testClient());
+
+    const first = get();
+    await paused.promise;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    const second = get();
+    try {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      assert.equal(loads, 1, "a rejected sibling must not release the pending fill");
+    } finally {
+      gate.resolve();
+    }
+    assert.deepEqual((await Promise.all([first, second])).map((reply) => reply.status), [503, 503]);
+    fail = false;
+    assert.equal((await get()).status, 200);
+    assert.equal(loads, 2);
+  });
+}
 
 test("a complete head can scan farther than a high-since query when eligible candidates are sparse", async () => {
   const source = entries(1_200).map((entry, i) => ({ ...entry, candidate: i % 23 === 0 }));
