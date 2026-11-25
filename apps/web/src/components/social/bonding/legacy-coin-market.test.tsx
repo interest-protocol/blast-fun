@@ -107,7 +107,7 @@ test("a refused V1 candle read shows its diagnostic and skips retries without Ab
   const { document, window } = installTestDom();
   const { act } = await import("react");
   const { createRoot } = await import("react-dom/client");
-  const { PoolChart } = await import("../coins/PoolChart.tsx");
+  const { LegacyCoinChart } = await import("../coins/LegacyCoinChart.tsx");
   const any = Object.getOwnPropertyDescriptor(AbortSignal, "any")!;
   Object.defineProperty(AbortSignal, "any", { ...any, value: undefined });
   t.after(() => Object.defineProperty(AbortSignal, "any", any));
@@ -129,13 +129,13 @@ test("a refused V1 candle read shows its diagnostic and skips retries without Ab
   const root = createRoot(container);
   t.after(async () => { await act(async () => root.unmount()); client.clear(); });
   await act(async () => {
-    root.render(withQueryClient(client, <PoolChart poolKey={`cetus:${"0x" + "a".repeat(64)}`} symbol={coin.symbol} decimals={coin.decimals} initialControls={DEFAULT_CHART_CONTROLS} />));
+    root.render(withQueryClient(client, <LegacyCoinChart poolKey={`cetus:${"0x" + "a".repeat(64)}`} symbol={coin.symbol} decimals={coin.decimals} initialControls={DEFAULT_CHART_CONTROLS} />));
   });
   await act(async () => settleQueries(client));
   const alert = container.querySelector('[role="alert"]');
   assert.match(alert?.textContent ?? "", /Code: not_found\. Reference: v1-candles-fixture\./);
   assert.doesNotMatch(alert?.textContent ?? "", /Untrusted upstream text/);
-  const error = client.getQueryCache().find({ queryKey: ["pool-candles"], exact: false })?.state.error;
+  const error = client.getQueryCache().find({ queryKey: ["legacy-pool-candles"], exact: false })?.state.error;
   assert.ok(error);
   assert.equal(Reflect.get(error, "httpStatus"), 404);
   assert.equal(Reflect.get(error, "retryAfterSeconds"), 90);
