@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { legacyCoinMarket, legacyFdvUsd, trackedPoolMarketOf, trackedPoolPriceUsd } from "./legacy-fdv.ts";
+import { legacyCoinMarket, legacyFdvUsd, publishTimes, trackedPoolMarketOf, trackedPoolPriceUsd } from "./legacy-fdv.ts";
 
 test("values Wheels at the on-chain Bluefin close and rounds once after converting to USD", () => {
   const wheelsSupply = 981840660133807896n;
@@ -56,4 +56,29 @@ test("tracked snapshots keep the older price observation and retain supply on pr
   assert.deepEqual(trackedPoolMarketOf(market, 6, sui, undefined), { ...supply, price: undefined });
   assert.deepEqual(trackedPoolMarketOf(supply, 6, sui, 2_000), { ...supply, price: undefined });
   assert.equal(trackedPoolMarketOf({}, 6, null, undefined), undefined);
+});
+
+test("reads each coin's publish time once, shares a read in flight and retries a miss after ten minutes", async () => {
+  let clock = 0;
+  const reads: string[] = [];
+  const answers = new Map<string, number | null | Error>([["A", 1_700_000_000_000], ["B", new Error("node")], ["C", null]]);
+  const times = publishTimes(async (coinType) => {
+    reads.push(coinType);
+    const answer = answers.get(coinType);
+    if (answer instanceof Error) throw answer;
+    return answer ?? null;
+  }, () => clock);
+
+  const [first, second] = await Promise.all([times(["A", "B", "C"]), times(["A"])]);
+  assert.deepEqual([...first], [["A", 1_700_000_000_000]]);
+  assert.deepEqual([...second], [["A", 1_700_000_000_000]]);
+  assert.deepEqual(reads, ["A", "B", "C"]);
+
+  answers.set("B", 1_600_000_000_000);
+  clock = 599_999;
+  assert.deepEqual([...await times(["A", "B", "C"])], [["A", 1_700_000_000_000]]);
+  assert.deepEqual(reads, ["A", "B", "C"]);
+  clock = 600_000;
+  assert.deepEqual([...await times(["A", "B"])], [["A", 1_700_000_000_000], ["B", 1_600_000_000_000]]);
+  assert.deepEqual(reads, ["A", "B", "C", "B"]);
 });

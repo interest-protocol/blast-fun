@@ -144,6 +144,7 @@ async function withFixture(run: (fixture: Fixture) => Promise<void>, options: Re
   elapsedMs?: () => number;
   cached?: boolean;
   trackedPoolMarket?: (now: number) => ReturnType<NonNullable<SocialHomeRouteDependencies["trackedPoolMarket"]>>;
+  trackedPoolLaunches?: SocialHomeRouteDependencies["trackedPoolLaunches"];
 }> = {}): Promise<void> {
   const database = await freshTestDatabase();
   const admin = createPool(database.url, { max: 4 });
@@ -298,8 +299,8 @@ async function withFixture(run: (fixture: Fixture) => Promise<void>, options: Re
       coins: createReadCache<HomeCoinsByIds>(10_000, 64, readNow),
       portfolios: createReadCache<ReadonlyMap<string, TraderPortfolioRead>>(10_000, 64, readNow),
     } : undefined;
-    const { trackedPoolMarket } = options;
-    const common = { database: () => replica, ledgerDatabase: () => autocommitReader(webPool, "social"), wallets: accounts, config: reader.getSocialConfig, now: readNow, terms, caches, trackedPoolMarket: trackedPoolMarket && (() => trackedPoolMarket(now)) };
+    const { trackedPoolMarket, trackedPoolLaunches } = options;
+    const common = { database: () => replica, ledgerDatabase: () => autocommitReader(webPool, "social"), wallets: accounts, config: reader.getSocialConfig, now: readNow, terms, caches, trackedPoolMarket: trackedPoolMarket && (() => trackedPoolMarket(now)), trackedPoolLaunches };
     const all = createSocialHomeRoutes({ ...common, kit: kitWith(true) });
     const hidden = createSocialHomeRoutes({ ...common, kit: kitWith(false) });
     const get = (path: string, headers: Record<string, string> = {}) => new Request(`${ORIGIN}${path}`, { headers: { "x-forwarded-for": "203.0.113.7", ...headers } });
@@ -1122,6 +1123,44 @@ test("Discover and saved coins fill missing price and supply from tracked pools 
         },
         [wheels.coinType]: { price: { priceUsd: "0.01", asOfMs } },
       };
+    },
+  });
+});
+
+test("Tracked pool coins date Age from their package publish and share Top 10 of the node supply", { skip }, () => {
+  const bySymbol = new Map(INDEXED_POOL_COINS.map((coin) => [coin.symbol, coin]));
+  const one = bySymbol.get("ONE")!;
+  const helmet = bySymbol.get("HELMET")!;
+  const published = new Map<string, number>([[one.coinType, 1_700_000_000_000], [helmet.coinType, 1_690_000_000_000]]);
+  const asked: string[] = [];
+  return withFixture(async ({ admin, coins, discover, now }) => {
+    await seedChainRead(admin, {
+      coin_balances: [
+        { coin_type: one.coinType, owner: W.anon, balance: "3000000000", updated_checkpoint: 45_000 },
+        { coin_type: one.coinType, owner: W.solo, balance: "1500000000", updated_checkpoint: 45_000 },
+      ],
+    });
+    const saved = await ok<HomeCoinsByIds>(await coins(`?presale=${encodeURIComponent(one.coinType)}&presale=${encodeURIComponent(helmet.coinType)}`), "home-coins-page");
+    assert.deepEqual(saved.coins.map((coin) => [coin.symbol, coin.launched_ms]), [["ONE", 1_700_000_000_000], ["HELMET", 1_690_000_000_000]]);
+    // 3 and 1.5 of the node's 15 circulating: 20 % and 10 %, 30 % together.
+    const [oneRow] = saved.coins;
+    assert.deepEqual(oneRow?.top_holders.holders.map((holder) => holder.share_bps), [2_000, 1_000]);
+    assert.equal(oneRow?.top_holders.share_bps, 3_000);
+
+    const page = await ok<HomeCoinsPage>(await discover("?limit=50"), "home-coins-page");
+    const launchedOf = (coinType: string) => page.coins.find((coin) => coin.coin_type === coinType)?.launched_ms;
+    assert.deepEqual([launchedOf(one.coinType), launchedOf(helmet.coinType)], [1_700_000_000_000, 1_690_000_000_000]);
+    // A tracked coin with no publish time read stays undated; a Blast launch keeps its own launch.
+    assert.equal(launchedOf(bySymbol.get("MANIFEST")!.coinType), null);
+    assert.equal(page.coins.find((coin) => coin.symbol === "ORBIT")?.launched_ms, now - 2 * DAY);
+    // Only tracked pool coins are ever asked for.
+    const tracked = new Set<string>(INDEXED_POOL_COINS.map((coin) => coin.coinType));
+    assert.ok(asked.length > 0 && asked.every((coinType) => tracked.has(coinType)));
+  }, {
+    trackedPoolMarket: async () => ({ [one.coinType]: { totalSupplyAtoms: "20000000000", circulatingSupplyAtoms: "15000000000" } }),
+    trackedPoolLaunches: async (coinTypes) => {
+      asked.push(...coinTypes);
+      return new Map(coinTypes.flatMap((coinType) => (published.has(coinType) ? [[coinType, published.get(coinType)!] as const] : [])));
     },
   });
 });

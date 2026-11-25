@@ -64,6 +64,7 @@ export type SocialHomeRouteDependencies = Readonly<{
   /** The sales' terms (`createPresaleTermsReader`), for FDV; null when the projection is not configured. */
   terms: PresaleTermsReader | null;
   trackedPoolMarket?: HomeReadContext["trackedPoolMarket"];
+  trackedPoolLaunches?: HomeReadContext["trackedPoolLaunches"];
   now?: () => number;
   caches?: Readonly<{
     discover?: ReadCache<HomeCoinsPage>;
@@ -87,9 +88,9 @@ export type SocialHomeRouteDependencies = Readonly<{
  * `private, no-store`, through the kit's transaction on the primary.
  */
 export function createSocialHomeRoutes(dependencies: SocialHomeRouteDependencies) {
-  const { kit, database, ledgerDatabase, wallets, config, terms, trackedPoolMarket } = dependencies;
+  const { kit, database, ledgerDatabase, wallets, config, terms, trackedPoolMarket, trackedPoolLaunches } = dependencies;
   const now = dependencies.now ?? Date.now;
-  const context = (ctx: SocialRequestContext) => ({ nowMs: now(), hiddenKinds: ctx.hiddenKinds, terms });
+  const context = (ctx: SocialRequestContext) => ({ nowMs: now(), hiddenKinds: ctx.hiddenKinds, terms, trackedPoolLaunches });
   const wantsMobileMarket = (params: URLSearchParams) => params.get(HOME_MOBILE_MARKET_PARAM) === "1";
   const marketOptions = (params: URLSearchParams) => ({
     includeMobileMarket: wantsMobileMarket(params),
