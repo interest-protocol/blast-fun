@@ -12,7 +12,8 @@ export const MARKET_STREAM_BUDGET = Object.freeze({
   maxUpstreamFrameChars: 131_072,
   maxChunkBytes: 16_384,
   queueBytesPerClient: 65_536,
-  heartbeatMs: 15_000,
+  heartbeatMs: 4_000,
+  heartbeatTimeoutMs: 9_000,
   lifetimeMs: 270_000,
 });
 export const MARKET_STREAM_PATH = "/api/launchpad/market/stream";

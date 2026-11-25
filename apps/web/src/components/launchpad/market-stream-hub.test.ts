@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { MARKET_STREAM_BUDGET } from "@blast/core/modules/launchpad-contract/market-stream.ts";
 
 import { marketHintTransport } from "#web/lib/live-stream/market-hints.ts";
 import { HIDDEN_GRACE_MS, MarketStreamHub, STABLE_MS, UNSERVED_RETRY_MS, type MarketEventSource, type MarketStreamState, type MarketTrade } from "./market-stream-hub.ts";
@@ -11,7 +10,7 @@ const OTHER = `blast_curve:0x${"33".repeat(32)}`;
 const DEPLOYMENT = "ab".repeat(32);
 const NOW = 1_790_000_000_000;
 const expected = { network: "mainnet" as const, deployment: DEPLOYMENT };
-const wireProvenance = (checkpoint: number) => ({ network: "mainnet", deployment_fingerprint: DEPLOYMENT, checkpoint, timestamp_ms: NOW + checkpoint, observed_ms: NOW + checkpoint + 20, lag_ms: 20 });
+const wireProvenance = (checkpoint: number) => ({ network: "mainnet", deployment_fingerprint: DEPLOYMENT, checkpoint, timestamp_ms: NOW + checkpoint, observed_ms: NOW + checkpoint + 20, lag_ms: 20, hops: { arrived_ms: NOW + checkpoint + 5, r2_put_ms: 38, written_ms: NOW + checkpoint + 15, picked_ms: NOW + checkpoint + 20 } });
 
 function trade(checkpoint: number, part = 2, summary: unknown = { holders: checkpoint }) {
   return { type: "trade", cursor: `${checkpoint}:1:0:${part}`, checkpoint, timestamp_ms: NOW + checkpoint, provenance: wireProvenance(checkpoint), summary, trade: { cursor: `${checkpoint}:1:0:${part}`, timestamp_ms: NOW + checkpoint, digest: "1".repeat(32), pool_key: CURVE, venue: "blast_curve", trader: null, side: "buy", kind: "buy", quote_amount: "5", meme_amount: "3", price: "2", volume_usd: null, venue_swap: null } };
@@ -84,14 +83,14 @@ test("two subscribers to the same pool share one EventSource, and it closes afte
   assert.equal(s.listening(), false);
 });
 
-test("a missing heartbeat invalidates the live stream and requires a new fence", async () => {
+test("a legacy relay keeps its original heartbeat deadline and requires a new fence after loss", async () => {
   const s = setup();
   const chart = watcher();
   const subscription = s.hub.subscribe({ pools: chart.pools, expected, listener: chart.listener });
   const old = s.source();
   old.fence(10);
   old.hello(true);
-  s.fire(3 * MARKET_STREAM_BUDGET.heartbeatMs);
+  s.fire(45_000);
   assert.equal(old.closed, true);
   assert.equal(chart.states.at(-1), "reconnecting");
   old.emit("market", trade(11));
