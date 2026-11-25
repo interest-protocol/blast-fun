@@ -61,6 +61,7 @@ export type SocialHomeRouteDependencies = Readonly<{
   /** The sales' terms (`createPresaleTermsReader`), for FDV; null when the projection is not configured. */
   terms: PresaleTermsReader | null;
   trackedPoolMarket?: HomeReadContext["trackedPoolMarket"];
+  curveTargets?: HomeReadContext["curveTargets"];
   now?: () => number;
   caches?: Readonly<{
     discover?: ReadCache<HomeCoinsPage>;
@@ -82,7 +83,7 @@ export type SocialHomeRouteDependencies = Readonly<{
  * `private, no-store`, through the kit's transaction on the primary.
  */
 export function createSocialHomeRoutes(dependencies: SocialHomeRouteDependencies) {
-  const { kit, database, ledgerDatabase, wallets, config, terms, trackedPoolMarket } = dependencies;
+  const { kit, database, ledgerDatabase, wallets, config, terms, trackedPoolMarket, curveTargets } = dependencies;
   const now = dependencies.now ?? Date.now;
   const context = (ctx: SocialRequestContext) => ({ nowMs: now(), hiddenKinds: ctx.hiddenKinds, terms });
   const wantsMobileMarket = (params: URLSearchParams) => params.get(HOME_MOBILE_MARKET_PARAM) === "1";
@@ -97,7 +98,7 @@ export function createSocialHomeRoutes(dependencies: SocialHomeRouteDependencies
     DISCOVER: kit.route({ name: SOCIAL_HOME_ROUTE, ...publicRead }, async (ctx) => {
       const params = new URL(ctx.request.url).searchParams;
       const query = parseHomeQuery(params);
-      const ctxRead = { ...context(ctx), ...marketOptions(params), trackedPoolMarket, includeRecentBuys: params.get(HOME_RECENT_BUYS_PARAM) === "1" };
+      const ctxRead = { ...context(ctx), ...marketOptions(params), trackedPoolMarket, curveTargets, includeRecentBuys: params.get(HOME_RECENT_BUYS_PARAM) === "1" };
       const load = () => readHomeDiscover(database(), query, ctxRead);
       return cachedResponse(ctx, dependencies.caches?.discover, JSON.stringify([query, ctxRead.hiddenKinds, ctxRead.includeMobileMarket, ctxRead.includeLiveInputs, ctxRead.includeRollingChange, ctxRead.includeDexVolume, ctxRead.includeRecentBuys]), load);
     }),
