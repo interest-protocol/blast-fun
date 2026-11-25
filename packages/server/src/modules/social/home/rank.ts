@@ -16,7 +16,6 @@ import {
   isHomeWindow,
   type HomeActivity,
   type HomeQuery,
-  type HomeRank,
   type HomeSort,
   type HomeWindow,
 } from "@blast/core/modules/social/contracts/home.ts";
@@ -30,21 +29,27 @@ import { decodeCursor, encodeCursor, invalidCursor } from "@blast/server/modules
  * **Candidate universe.** Shown migrated presales, standalone launch vault
  * coins, and the tracked pool catalog (`HOME_LIST_COIN_SOURCES`).
  *
- * **Inputs**, all over the chosen window and all from `HomeActivity`:
+ * **Inputs**, all over the chosen window:
  * - `breadth`: distinct participants (accounts and unlinked wallets, each
  *   once). One actor is one, whatever it did: a whale is never breadth.
+ * - `volume`: the Volume column's priced dollars (DEX pools included when
+ *   the read asks for them).
+ * - freshness: how little of the window has passed since the latest event.
+ * - `holders`: blast-infra's holder count now, or 0 without one.
  * - `activity`: confirmed events, capped at three per participant
- *   (`min(events, 3 × breadth)`), so repeated trades by one actor count at
- *   most three.
+ *   (`min(events, 3 × breadth)`); a Volume tie-break, not a Relevant input.
  * - `recency`: 2 when the latest event is within a tenth of the window
- *   (6 min of an hour, 2.4 h of a day), 1 within half of it, else 0.
+ *   (6 min of an hour, 2.4 h of a day), 1 within half of it, else 0; a
+ *   Volume tie-break.
  *
- * **Score** `breadth × 10 + activity + recency × 5`. Missing data is 0: a coin
- * with no window activity scores 0 and is admitted anyway (Discover works
- * without a network), after every active coin, newest launch first. Follower
- * counts, posts, likes and market figures are not inputs. Selling counts
- * exactly like buying: a sold-off coin ranks by its breadth too, and its
- * summary says who sold.
+ * **Relevant score**, out of 100 (stored ×100 as an integer):
+ * `40 × breadth + 30 × volume + 20 × freshness + 10 × holders`, each input
+ * scaled 0–1 on a log curve that stops at its cap (`RELEVANCE_CAPS`), so
+ * neither one wallet's churn nor one large order can lead. Breadth weighs
+ * most: many people beat big money. Freshness falls from 1 for a trade this
+ * minute to 0 at the window's start, on a clock that ticks once a minute. Missing data is 0; a coin
+ * with nothing in the window ranks by its holders alone. Selling counts exactly
+ * like buying.
  *
  * **Ties** break by the latest event (newest first), then by coin type
  * (bytewise), so two reads of the same data give one order.
@@ -93,8 +98,34 @@ export function rankInputs(activity: Pick<HomeActivity, "participants" | "events
   };
 }
 
-export function relevanceScore(inputs: RankInputs): number {
-  return inputs.breadth * 10 + inputs.activity + inputs.recency * 5;
+/** Relevant's weights, out of 100: who joined counts most, then dollars, then how recent, then how widely held. */
+export const RELEVANCE_WEIGHTS = { breadth: 40, volume: 30, freshness: 20, holders: 10 } as const;
+/** Where each input stops adding: past these, more of the same no longer lifts a coin. */
+export const RELEVANCE_CAPS = {
+  breadth: { "1h": 10, "24h": 50 },
+  volume: { "1h": 2_000, "24h": 20_000 },
+  holders: 1_000,
+} as const satisfies Readonly<{ breadth: Record<HomeWindow, number>; volume: Record<HomeWindow, number>; holders: number }>;
+
+const MINUTE_MS = 60_000;
+const saturating = (value: number, cap: number) => Math.log1p(Math.min(cap, Math.max(0, value))) / Math.log1p(cap);
+
+/** The Relevant score (see the ranking notes above), ×100 and rounded so cursors carry an integer. */
+export function relevanceScore(
+  candidate: Readonly<{ inputs: Pick<RankInputs, "breadth" | "volume">; latestMs: number | null; holders?: number | null }>,
+  window: HomeWindow,
+  toMs: number,
+): number {
+  const { inputs, latestMs, holders } = candidate;
+  // The clock moves in whole minutes, the same step for every coin: scores hold still within a minute and never swap order on their own.
+  // It rounds up, so a trade this minute is never later than the clock (the clamp only catches clock skew).
+  const nowMs = Math.ceil(toMs / MINUTE_MS) * MINUTE_MS;
+  const freshness = latestMs === null ? 0 : Math.min(1, Math.max(0, 1 - (nowMs - latestMs) / HOME_WINDOW_MS[window]));
+  const score = RELEVANCE_WEIGHTS.breadth * saturating(inputs.breadth, RELEVANCE_CAPS.breadth[window])
+    + RELEVANCE_WEIGHTS.volume * saturating(inputs.volume, RELEVANCE_CAPS.volume[window])
+    + RELEVANCE_WEIGHTS.freshness * freshness
+    + RELEVANCE_WEIGHTS.holders * saturating(holders ?? 0, RELEVANCE_CAPS.holders);
+  return Math.round(score * 100);
 }
 
 /**
@@ -113,10 +144,6 @@ export function whyShown(activity: Pick<HomeActivity, "participants" | "events" 
   const trades = `${activity.events.toLocaleString("en-US")} ${indexed}${noun}${activity.events === 1 ? "" : "s"}`;
   const sold = activity.sellers > 0 ? ` · ${activity.sellers.toLocaleString("en-US")} sold` : "";
   return `${people} · ${trades}${sold} in the ${window}${where}`;
-}
-
-export function rankOf(activity: HomeActivity, coverage: TradeCoverage): HomeRank {
-  return { score: relevanceScore(rankInputs({ ...activity, volume_usd: volumeOf(activity) })), why: whyShown(activity, coverage) };
 }
 
 /** What the orders compare: every candidate carries these (`holders`: blast-infra's count now, null without one). */
@@ -169,7 +196,6 @@ export type HomeCursor = Readonly<{ sort: HomeSort; coinType: string; score: num
 /** Version 3 adds the holder count (`held`); a version 2 cursor of another sort still reads. */
 const VERSION = 3;
 const VERSION_WITHOUT_HOLDERS = 2;
-
 
 export function encodeHomeCursor(position: HomeCursor): string {
   return encodeCursor("discover", [VERSION, position.sort, position.coinType, position.score, position.breadth, position.activity, position.recency, position.volume, position.latestMs, position.launchedMs, position.holders ?? null]);
@@ -269,7 +295,7 @@ function parsePage(raw: string | null): number {
 
 /** `tradable`: absent is false; `1` true; `0` false; anything else refused. */
 /** `1` or `0`, absent meaning `0`. */
-function parseFlag(raw: string | null, parameter: "tradable" | "ranked" | "traction"): boolean {
+function parseFlag(raw: string | null, parameter: "tradable" | "ranked"): boolean {
   socialParameter(z.enum(["1", "0"]).nullable(), raw, parameter);
   return raw === "1";
 }
@@ -294,8 +320,6 @@ export function parseHomeQuery(params: URLSearchParams): HomeQuery {
   if (cursor !== null && page > 1) throw invalid("page");
   const window = parseChoice(single(params, "window"), HOME_DEFAULT_QUERY.window, isHomeWindow, "window");
   const sort = parseChoice(single(params, "sort"), HOME_DEFAULT_QUERY.sort, isHomeSort, "sort");
-  const traction = parseFlag(single(params, "traction"), "traction");
-  if (traction && (window !== "1h" || sort !== "relevant" || page !== 1 || cursor !== null)) throw invalid("traction");
   return {
     window,
     sort,
@@ -306,6 +330,5 @@ export function parseHomeQuery(params: URLSearchParams): HomeQuery {
     page,
     cursor,
     ...(parseFlag(single(params, "ranked"), "ranked") ? { ranked: true } : {}),
-    ...(traction ? { traction: true } : {}),
   };
 }
