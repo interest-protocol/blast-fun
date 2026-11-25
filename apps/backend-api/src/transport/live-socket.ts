@@ -15,12 +15,12 @@ import type { HintSink, HintSubscription } from "@blast/server/lib/hint-subscrip
 import type { Server, ServerWebSocket, WebSocketHandler } from "bun";
 
 /**
- * The direct browser socket: `wss://<live host>/v1/live`. Each message is one
+ * The direct browser socket: `wss://<live host>/v1/socket`. Each message is one
  * SSE event block from the market relay. Admission and limits follow
  * docs/architecture/live-data-delivery.md ("Direct browser socket: security review").
  */
 export const LIVE_SOCKET = Object.freeze({
-  path: "/v1/live",
+  path: "/v1/socket",
   protocol: "blast-live.v1",
   ticketPrefix: "blast-ticket.",
   perIp: Object.freeze({ sockets: 8, opensPerMinute: 20, pools: 4, priceCoins: 40 }),

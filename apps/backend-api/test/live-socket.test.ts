@@ -51,7 +51,7 @@ function harness(relay?: LiveRelay, redisDown = false) {
       return live.upgrade(request, native, native.requestIP(request)?.address ?? null) ?? new Response(null);
     },
   });
-  const url = (query: string) => `ws://127.0.0.1:${server.port}/v1/live?${query}`;
+  const url = (query: string) => `ws://127.0.0.1:${server.port}/v1/socket?${query}`;
   const open = (query: string, ticket = mintLiveTicket(SECRET, ORIGIN).ticket, origin = ORIGIN) => {
     const ws = new WebSocket(url(query), {
       headers: { Origin: origin },

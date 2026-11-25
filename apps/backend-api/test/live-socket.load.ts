@@ -37,7 +37,7 @@ if (process.argv[2] === "server") {
     port: 0, hostname: "127.0.0.1", websocket: live.websocket,
     fetch(request, native) {
       const path = new URL(request.url).pathname;
-      if (path === "/v1/live") return live.upgrade(request, native, native.requestIP(request)?.address ?? null);
+      if (path === "/v1/socket") return live.upgrade(request, native, native.requestIP(request)?.address ?? null);
       if (path === "/hello") {
         receive({ type: "hello", protocol: 1, provenance: provenance(1) });
         receive({ type: "pong" });
@@ -61,7 +61,7 @@ if (process.argv[2] === "server") {
   const open = (index: number) => new Promise<WebSocket>((resolve, reject) => {
     const ip = `10.${(index >> 16) & 255}.${(index >> 8) & 255}.${index & 255}`;
     const pools = [POOLS[index % POOLS.length]!, POOLS[(index + 1) % POOLS.length]!];
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/v1/live?activity=true&${pools.map((pool) => `pool=${pool}`).join("&")}`, {
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/v1/socket?activity=true&${pools.map((pool) => `pool=${pool}`).join("&")}`, {
       headers: { Origin: ORIGIN, "X-Forwarded-For": ip },
       protocols: ["blast-live.v1", `blast-ticket.${mintLiveTicket(SECRET, ORIGIN).ticket}`],
     } as unknown as string[]);
