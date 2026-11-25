@@ -56,7 +56,7 @@ test("a failed presale price read retries into a confirmed empty period without 
   assert.equal(reads, 2);
   assert.equal(container.querySelector('[role="alert"]'), null);
   assert.match(container.textContent!, /No recorded prices in this period/);
-  assert.match(container.textContent!, /Price0\.0₄88TSUI/, "the price names its quote coin");
+  assert.match(container.textContent!, /Price—/);
   assert.doesNotMatch(container.textContent!, /today/, "an unmeasured change is left out with its label");
   assert.doesNotMatch(container.textContent!, /0\.00%/);
 });
@@ -90,7 +90,7 @@ for (const outcome of ["success", "error"] as const) {
     assert.equal(pending.length, 1);
     assert.equal(container.querySelector('[data-price-history]')?.getAttribute("data-price-history"), "available", "routine refresh preserves the valid cached chart");
     assert.equal(container.querySelector('[aria-label="Loading price history"]'), null);
-    assert.match(container.textContent!, /\+5\.00%/);
+    assert.match(container.textContent!, /Price—/);
     await act(async () => { pending[0]!(new Response(null, { status: 503 })); await settleQueries(client); });
     const retry = container.querySelector<HTMLButtonElement>('[aria-label="Retry price history"]');
     assert.ok(retry);

@@ -13,7 +13,6 @@ import { Pager } from "#web/components/blast-ui/Pager.tsx";
 import { SkeletonText } from "#web/components/blast-ui/Skeleton.tsx";
 import { IntentLink as Link } from "#web/components/blast-ui/NavigationLink.tsx";
 import { formatAmountShort } from "#web/components/launchpad/coin/coin-format.ts";
-import { useChartPrice } from "#web/components/launchpad/chart/chart-live-price.ts";
 import { poolPrices } from "#web/components/charts/candle-data.ts";
 import { fetchCoinMarket } from "#web/components/social/blast-mode/workspace/panels/coin-market-reads.ts";
 import { coinsByIdsQuery } from "#web/components/social/coin-home/home-client.ts";
@@ -40,7 +39,7 @@ import type { PriceWindow } from "@blast/core/web/contracts/prices.ts";
 
 import { SalePriceChart, type MarketExtras } from "./SalePriceChart";
 import { formatMove, presaleHolderShare, priceDirection, type PriceMove } from "./sale-market-format";
-import { PresalePoolChart } from "./PresalePoolChart";
+import { PresalePoolChart, usePresalePoolPrice } from "./PresalePoolChart";
 import { PresaleHolderSummary } from "./PresaleHolderSummary";
 import { ChartCard, CoinPriceFigure, MarketOverview, MarketPriceRow } from "#web/components/social/bonding/CoinPageParts.tsx";
 import coinStyles from "#web/components/social/bonding/bonding-coin.module.css";
@@ -438,7 +437,7 @@ export function SaleMarket({
           </div>
           {extras.note}
         </CoinPriceCurrencyProvider>
-      ) : <SalePriceChart sale={sale} trade={null} enabled={!marketQuery.isPending} windows={windows} {...extras} />}
+      ) : <SalePriceChart sale={sale} trade={null} enabled={!marketQuery.isPending} windows={windows} note={extras.note} />}
     >
       {children}
     </SaleMarketView>
@@ -447,8 +446,7 @@ export function SaleMarket({
 
 function PresaleMarketPrice({ market, move }: Readonly<{ market: HomeCoinMarket; move?: PriceMove | null }>) {
   const currency = useCoinPriceCurrency();
-  const poolKey = market.pool ? `${market.pool.venue}:${market.pool.id}` : null;
-  const live = useChartPrice(poolKey, market.as_of.checkpoint);
+  const live = usePresalePoolPrice(market.pool);
   const prices = poolPrices(market.decimals, market.quote.decimals, currency?.quoteUsd);
   return <MarketPriceRow showCurrency={currency?.rate != null} showSound
     activity={<ChartLastTrade placement="headline" playSound />}

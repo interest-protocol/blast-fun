@@ -83,7 +83,7 @@ function MarketSurface({ coinsVolume }: Readonly<{ coinsVolume: boolean }>) {
         loading={false}
         failed={false}
         onRetry={noop}
-        chart={(extras) => <SalePriceChartView history={history} loading={false} window="24h" onWindow={noop} priceUsd={history.price_usd} trade={null} {...extras} />}
+        chart={(extras) => <SalePriceChartView history={history} loading={false} window="24h" onWindow={noop} trade={null} note={extras.note} />}
       />
     </div>
   );
