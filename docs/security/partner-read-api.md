@@ -15,7 +15,7 @@ Only GET and HEAD are authorized:
 - `/api/v1/market/coins/{coinType}` and its `/holders` and `/metadata` reads
 - `/api/v1/market/launches/{launchId}/activity`
 - `/api/v1/market/pools/{venue}/{poolId}` and its `/candles`: Blast curve, Cetus and Bluefin
-- `/api/v1/market/pools/{venue}/{poolId}/trades`: Cetus and Bluefin
+- `/api/v1/market/pools/{venue}/{poolId}/trades`: Blast curve, Cetus and Bluefin
 - `/api/v1/market/launches/{launchId}/rewards` and `/reward-rounds`: a launch's fees in its
   curve's and its vault's ledgers, and its holder-reward rounds
 - `/api/v1/market/wallets/{address}/launches`, `/launch-rewards` and

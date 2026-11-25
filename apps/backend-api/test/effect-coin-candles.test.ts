@@ -388,7 +388,7 @@ test("Effect market validation rejects ambiguous input before an upstream call",
     ["partners?cursor=wrong_scope", 400],
     ["creator-claims", 400],
     [`creator-claims?recipient=${CURVE.id}&account=${"f".repeat(64)}`, 400],
-    [`pools/blast_curve/${CURVE.id}/trades`, 404],
+    [`pools/uniswap/${CURVE.id}/trades`, 404],
     ["launchpad/policy/", 404],
     ["coins/%FF", 404],
   ] as const;

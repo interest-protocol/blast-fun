@@ -206,7 +206,7 @@ test("parameters are strict: only the page's query keys, once each, canonical ID
   }
   for (const path of [
     `/pools/uniswap/${POOL}`,
-    `/pools/blast_curve/${LAUNCH}/trades`,
+    `/pools/uniswap/${POOL}/trades`,
     `/pools/bluefin/${POOL}/holders`,
     `/coins/${COIN}/pools`,
     `/launches/${LAUNCH}`,

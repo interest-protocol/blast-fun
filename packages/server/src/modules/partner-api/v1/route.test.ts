@@ -69,7 +69,7 @@ test("v1 preserves errors and retry headers, strips HEAD bodies, and rejects wri
   assert.equal(await head.text(), "");
   assert.equal((await read(new Request(url, { method: "POST" }), testClient())).status, 405);
   for (const path of [
-    "/api/v2/presales", "/api/v1/me", "/api/v1/presales/viewer", `/api/v1/market/pools/blast_curve/${id}/trades`, "/api/v1/presales/", "/api/v1/%70resales",
+    "/api/v2/presales", "/api/v1/me", "/api/v1/presales/viewer", `/api/v1/market/pools/unknown/${id}/trades`, "/api/v1/presales/", "/api/v1/%70resales",
     // Near misses of the launchpad reads: another wallet route, a partial ID, an unknown suffix.
     `/api/v1/market/wallets/${id}`, `/api/v1/market/wallets/${id}/trades`, "/api/v1/market/wallets/0xa/launches",
     `/api/v1/market/partners/${id}/earnings`, "/api/v1/market/partners/", `/api/v1/market/launches/${id}/rewards/x`,

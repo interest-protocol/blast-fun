@@ -97,7 +97,7 @@ the key.
 | `GET /api/launchpad/market/launches/{launch_id}/activity?view=classified&limit&cursor` | `/v1/launches/{launch_id}/activity` | `launchpad_market_activity`, 240/min | 5 s, then 5 s stale |
 | `GET /api/launchpad/market/pools/blast_curve/{launch_id}` | `/v1/pools/blast_curve/{launch_id}` | `launchpad_market_pool`, 240/min | 5 s, then 5 s stale |
 | `GET /api/launchpad/market/pools/{venue}/{pool_id}/candles?interval&from&to&limit` | `/v1/pools/{venue}/{pool_id}/candles` | `launchpad_market_candles`, 480/min | 5 s; a page ending (`to`) at or before blast-infra's committed checkpoint 5 min, then 1 h stale |
-| `GET /api/launchpad/market/pools/{cetus or bluefin}/{pool_id}/trades?before&limit` | `/v1/pools/{venue}/{pool_id}/trades` | `launchpad_market_trades`, 240/min | 5 s, then 5 s stale |
+| `GET /api/launchpad/market/pools/{blast_curve, cetus or bluefin}/{pool_id}/trades?before&limit` | `/v1/pools/{venue}/{pool_id}/trades` | `launchpad_market_trades`, 240/min | 5 s, then 5 s stale |
 | `GET /api/launchpad/market/status` | `/v1/status` (a refusal's provenance) | `launchpad_market_status`, 120/min | 5 s, then 5 s stale |
 | `GET /api/launchpad/market/launches/{launch_id}/rewards` | `/v1/launches/{launch_id}/rewards` | `launchpad_market_rewards`, 240/min | 5 s, then 5 s stale |
 | `GET /api/launchpad/market/wallets/{address}/launch-rewards?limit&cursor` | `/v1/wallets/{address}/launch-rewards` | `launchpad_market_wallet_launch_rewards`, 120/min | never: `private, no-store` |

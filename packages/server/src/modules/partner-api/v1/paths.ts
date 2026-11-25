@@ -1,5 +1,5 @@
 import { SUI_OBJECT_ID_SOURCE } from "@blast/core/lib/sui/ids.ts";
-import { MIGRATOR_VENUES, VENUES } from "@blast/core/modules/launchpad-contract/venues.ts";
+import { VENUES } from "@blast/core/modules/launchpad-contract/venues.ts";
 import type { RateBucket } from "@blast/core/lib/web-security/rate-limits.ts";
 import {
   COIN_METADATA_READ,
@@ -17,7 +17,6 @@ import {
 
 /** V1 owns this explicit route registry; never derive it from frontend routes. */
 const VENUE_SEGMENT = `(?:${VENUES.join("|")})`;
-const MIGRATOR_VENUE_SEGMENT = `(?:${MIGRATOR_VENUES.join("|")})`;
 
 type ReadRoute = Readonly<{
   name: string;
@@ -46,7 +45,7 @@ const ROUTES = [
   { name: "market", path: "/api/v1/market/launches/:launchId/activity", params: { launchId: SUI_OBJECT_ID_SOURCE }, prefix: "/api/launchpad", bucket: "launchpad_market_activity" },
   { name: "market", path: "/api/v1/market/pools/:venue/:poolId", params: { venue: VENUE_SEGMENT, poolId: SUI_OBJECT_ID_SOURCE }, prefix: "/api/launchpad", bucket: "launchpad_market_pool" },
   { name: "market", path: "/api/v1/market/pools/:venue/:poolId/candles", params: { venue: VENUE_SEGMENT, poolId: SUI_OBJECT_ID_SOURCE }, prefix: "/api/launchpad", bucket: "launchpad_market_candles" },
-  { name: "market", path: "/api/v1/market/pools/:venue/:poolId/trades", params: { venue: MIGRATOR_VENUE_SEGMENT, poolId: SUI_OBJECT_ID_SOURCE }, prefix: "/api/launchpad", bucket: "launchpad_market_trades" },
+  { name: "market", path: "/api/v1/market/pools/:venue/:poolId/trades", params: { venue: VENUE_SEGMENT, poolId: SUI_OBJECT_ID_SOURCE }, prefix: "/api/launchpad", bucket: "launchpad_market_trades" },
   // The launchpad's rewards, wallet, partner and policy reads (LP-14). A wallet read names its
   // address in the path and returns public chain data about it: no viewer state.
   { name: "market", path: "/api/v1/market/launches/:launchId/rewards", params: { launchId: SUI_OBJECT_ID_SOURCE }, prefix: "/api/launchpad", bucket: "launchpad_market_rewards" },
