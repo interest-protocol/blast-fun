@@ -2,8 +2,6 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import { test } from "node:test";
 
-import { SOCIAL_HAPPENING_DISCOVER_PATH } from "@blast/core/modules/social/contracts/happening.ts";
-
 const requests: string[] = [];
 let homeSections: string;
 let holdPosts: Promise<void> | null = null;
@@ -60,15 +58,16 @@ test("Home starts visible reads, uses the 24-hour leaderboard, and can render wh
   try {
     const { default: Home } = await import("./page.tsx");
     const searchParams = Promise.resolve({ w: "1h" });
-    homeSections = "-coins.-presales.-posts.traders";
+    homeSections = "-coins.-posts.traders";
     await Home({ searchParams });
     assert.deepEqual(requests.splice(0), ["/api/social/home/traders?window=24h&page=1&limit=5"]);
 
+    // A cookie saved while Home had a Presales section still loads, and reads nothing for it.
     homeSections = "-coins.presales.-posts.-traders";
     await Home({ searchParams });
-    assert.deepEqual(requests.splice(0), [SOCIAL_HAPPENING_DISCOVER_PATH]);
+    assert.deepEqual(requests.splice(0), []);
 
-    homeSections = "coins.-presales.-posts.-traders";
+    homeSections = "coins.-posts.-traders";
     const market = Promise.withResolvers<void>();
     holdMarket = market.promise;
     const relevant = Home({ searchParams: Promise.resolve({}) });
@@ -79,6 +78,7 @@ test("Home starts visible reads, uses the 24-hour leaderboard, and can render wh
       ]);
       assert.ok(shell, "Home can return its shell before the market resolves");
       assert.deepEqual(requests.map((path) => path.split("?")[0]), ["/api/social/home"], "the default Trending view reads only the market");
+      assert.equal(new URL(requests[0], "http://home").searchParams.get("presales"), "1", "Trending asks for presales in the same read");
       assert.ok(shell.props.initial instanceof Promise, "the shell streams before the market is ready");
       market.resolve();
       const seed = await shell.props.initial;
@@ -89,7 +89,7 @@ test("Home starts visible reads, uses the 24-hour leaderboard, and can render wh
     }
     requests.length = 0;
 
-    homeSections = "-coins.-presales.posts.-traders";
+    homeSections = "-coins.posts.-traders";
     const pending = Promise.withResolvers<void>();
     holdPosts = pending.promise;
     const page = Home({ searchParams });
@@ -105,7 +105,7 @@ test("Home starts visible reads, uses the 24-hour leaderboard, and can render wh
       await page;
     }
 
-    homeSections = "-coins.-presales.-posts.-traders";
+    homeSections = "-coins.-posts.-traders";
     bondingFails = true;
     const withoutCurves = await Home({ searchParams });
     assert.equal(withoutCurves.props.pinned.curves, null, "a failed bonding read leaves the launch highlights without curves");

@@ -1,18 +1,18 @@
 /**
- * Home's sections (coins, bonding curves, presales, posts and traders, the Main board's
+ * Home's sections (coins, bonding curves, posts and traders, the Main board's
  * order): each movable
  * by its header (dragged, or walked with ArrowUp/ArrowDown on its grip) and
  * each hideable. The order and the hidden sections are **per device**, in
  * one cookie, `blast.home`, so the server lays the page out in the saved
  * order and reads nothing for a hidden section (its query never runs in the
  * browser either). The value is the order as the keys joined by `.`, a
- * hidden section marked with a leading `-`: `traders.coins.-presales`.
+ * hidden section marked with a leading `-`: `traders.coins.-posts`.
  * Anything malformed reads as the default: every section showing, coins
  * first. This file is pure except for the store at its end, so every rule is
  * unit-tested without a browser.
  */
 
-export const HOME_SECTIONS = ["coins", "bonding", "presales", "posts", "traders"] as const;
+export const HOME_SECTIONS = ["coins", "bonding", "posts", "traders"] as const;
 
 export type HomeSectionKey = (typeof HOME_SECTIONS)[number];
 
@@ -20,7 +20,6 @@ export const HOME_SECTION_TITLES: Readonly<Record<HomeSectionKey, string>> = {
   coins: "Coins",
   bonding: "Bonding Curves",
   traders: "PnL leaderboard",
-  presales: "Presales",
   posts: "Posts",
 };
 
@@ -41,23 +40,26 @@ const isKey = (value: string): value is HomeSectionKey => (HOME_SECTIONS as read
 
 /**
  * The cookie's value as the preferences: known keys only, de-duplicated,
- * and missing sections filled in. Legacy orders gain Bonding Curves before
- * Presales while keeping their existing order.
+ * and missing sections filled in. The retired Presales section (`presales`,
+ * now part of Trending) is dropped; an older order without Bonding Curves
+ * gains it where Presales stood, or at the end.
  */
 export function parseHomeSections(value: string | null | undefined): HomeSectionPrefs {
   if (!value) return HOME_SECTIONS_DEFAULT;
   const seen = new Set<HomeSectionKey>();
   const order: HomeSectionKey[] = [];
   const hidden: HomeSectionKey[] = [];
+  let presalesAt: number | null = null;
   for (const part of value.split(".")) {
     const key = part.startsWith("-") ? part.slice(1) : part;
+    if (key === "presales") presalesAt ??= order.length;
     if (!isKey(key) || seen.has(key)) continue;
     order.push(key);
     seen.add(key);
     if (part.startsWith("-")) hidden.push(key);
   }
-  for (const key of HOME_SECTIONS) if (key !== "bonding" && !seen.has(key)) order.push(key);
-  if (!seen.has("bonding")) order.splice(order.indexOf("presales"), 0, "bonding");
+  if (!seen.has("bonding")) order.splice(presalesAt ?? order.length, 0, "bonding");
+  for (const key of HOME_SECTIONS) if (!seen.has(key) && key !== "bonding") order.push(key);
   return normalize({ order, hidden });
 }
 

@@ -4,13 +4,13 @@ import { canonicalHomePath } from "#web/components/blast-ui/nav.ts";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense, use, useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 
-import { HOME_SOURCES, HOME_TRADERS_LIMIT, type HomeCoinsByIds, type HomeCoinsPage, type HomeQuery, type HomeSource, type HomeTradersPage } from "@blast/core/web/contracts/home.ts";
-import type { SocialHappeningResponse } from "@blast/core/web/contracts/happening.ts";
+import { HOME_SOURCES, HOME_TRADERS_LIMIT, type HomeCoinsPage, type HomeQuery, type HomeSource, type HomeTradersPage } from "@blast/core/web/contracts/home.ts";
 import type { SocialFeedPage } from "@blast/core/web/contracts/feed.ts";
 import type { SocialPresaleSummary } from "@blast/core/web/contracts/presales.ts";
 import type { BondingHeroSeed } from "#web/lib/backend-api/bonding.ts";
 
 import { blastModeCovering, onUncover } from "../blast-mode/live/mode-cover";
+import { happeningStore } from "../happening/happening-store";
 import { EmptyState } from "#web/components/blast-ui/EmptyState.tsx";
 import { usePhoneLayout } from "#web/components/blast-ui/use-shell-prefs.ts";
 import { PageHeader } from "#web/components/blast-ui/PageHeader.tsx";
@@ -28,7 +28,6 @@ import { setHomeRows, useHomeRows } from "./use-home-rows";
 import { FollowedTape } from "./FollowedTape";
 import { CoinsListControls, CoinTabs, HomeSearch, HomeSettingsMenu, SourceTabs } from "./HomeControls";
 import { HomeSections, type SectionChange, type SectionSpec } from "./HomeSections";
-import { PresaleSection, SaleCardsLoading } from "./PresaleSection";
 import { PinnedLaunches } from "./PinnedLaunches";
 import { PostsSection } from "./PostsSection";
 import { HeaderRankingControls } from "./RankingControls";
@@ -39,6 +38,7 @@ import { HomeBondingCurves } from "./HomeBondingCurves";
 import { TradersSection } from "./TradersSection";
 import { setHomeSections, useHomeSections } from "./use-home-sections";
 
+const noop = () => undefined;
 
 /** Relative times move on every 30 s (as the feed's), never while Blast mode covers the page. */
 function useClock(initialMs: number): number {
@@ -95,9 +95,6 @@ export type CoinHomeProps = Readonly<{
   /** The confirmed server result for the initial Discover view, when available. */
   initial: HomeCoinsPage | null;
   initialState: HomeViewState;
-  /** The server's happening read (the presales section) and the presale items it named; null when hidden or failed. */
-  happening: SocialHappeningResponse | null;
-  presales: HomeCoinsByIds | null;
   /** The server's reads of Blast's pins (presales, bonding curves); null when a read failed, and the browser then asks. */
   pinned?: Readonly<{ presales: readonly SocialPresaleSummary[] | null; curves: BondingHeroSeed | null; seed: string }>;
   /** The server's traders read; null when hidden or failed. */
@@ -113,10 +110,8 @@ export type CoinHomeProps = Readonly<{
 
 type SectionSeed<Data> = Data | null | Promise<Data | null>;
 type DiscoverSeed = SectionSeed<HomeCoinsPage>;
-type CoinHomeReadProps = Omit<CoinHomeProps, "initial" | "happening" | "presales" | "traders" | "posts"> & Readonly<{
+type CoinHomeReadProps = Omit<CoinHomeProps, "initial" | "traders" | "posts"> & Readonly<{
   initial: DiscoverSeed;
-  happening: SectionSeed<SocialHappeningResponse>;
-  presales: SectionSeed<HomeCoinsByIds>;
   traders: SectionSeed<HomeTradersPage>;
   posts?: SectionSeed<SocialFeedPage>;
 }>;
@@ -132,14 +127,14 @@ function scrollToCoins(animate = true): void {
 /**
  * Home (the Main board): the page header with Customize Home, the featured
  * carousel, the tape of followed trades, then the sections in
- * the device's order (by default the board's: Coins, Bonding Curves, Presales, Posts, Top
+ * the device's order (by default the board's: Coins, Bonding Curves, Posts, Top
  * traders). Each section is a title line over its own surface: Coins
  * (Discover, Following and the Watchlist as the title line's sources; one
- * table with links to coin pages), Bonding Curves (launchpad stages), Presales (cards, kept distinct from
- * trades), Posts and Top traders (tables) — movable and hideable from
+ * table with links to coin and presale pages; Trending lists presales next
+ * to coins), Bonding Curves (launchpad stages), Posts and Top traders (tables) — movable and hideable from
  * Customize Home, the hidden ones never read. The page has no right column.
  */
-export function CoinHome({ initial, initialState, happening, presales, pinned, traders, posts = null, sections, initialRows, nowMs, trading }: CoinHomeReadProps) {
+export function CoinHome({ initial, initialState, pinned, traders, posts = null, sections, initialRows, nowMs, trading }: CoinHomeReadProps) {
   const [state, setState] = useViewState(initialState);
   const phone = usePhoneLayout();
   const prefs = useHomeSections(sections);
@@ -150,14 +145,13 @@ export function CoinHome({ initial, initialState, happening, presales, pinned, t
   const id = useId();
   const viewer = useSocialViewer();
   const late = useListsLate();
+  // Home keeps the happening reads running, so the funded-presale notice and the portfolio refresh still hear a sale close.
+  useEffect(() => happeningStore().subscribe(noop), []);
   const listValue = useMemo(() => ({ rows, sections: prefs }), [rows, prefs]);
   const listRoot = useListRestoration(`home:${viewer.callsign ?? "public"}`, listValue, saved => {
     setRestoredRows(saved.rows);
-    // History entries written before Bonding Curves need the same upgrade as saved cookies.
-    const restoredSections = saved.sections.order.includes("bonding")
-      ? saved.sections
-      : parseHomeSections(serializeHomeSections(saved.sections));
-    setHomeSections(restoredSections);
+    // Older history entries (before Bonding Curves, or with the retired Presales section) need the same upgrade as saved cookies.
+    setHomeSections(parseHomeSections(serializeHomeSections(saved.sections)));
   }, { restoreOnMount: "history-traversal" });
   const change = (asked: HomeViewState) => {
     const next = withView(state, asked);
@@ -245,17 +239,6 @@ export function CoinHome({ initial, initialState, happening, presales, pinned, t
     ) },
     bonding: {
       children: <HomeBondingCurves nowMs={now} />,
-    },
-    presales: {
-      children: (
-        <Suspense fallback={<div className={styles.pending}><SaleCardsLoading /></div>}>
-          <HomeRead read={happening}>{(activity) => (
-            <HomeRead read={presales}>{(data) => (
-              <PresaleSection happening={activity} initial={data} initialMs={nowMs} nowMs={now} window={state.window} />
-            )}</HomeRead>
-          )}</HomeRead>
-        </Suspense>
-      ),
     },
   };
   const customize = <HomeSettingsMenu onSections={changeSections} sections={prefs} showLabel={phone} />;

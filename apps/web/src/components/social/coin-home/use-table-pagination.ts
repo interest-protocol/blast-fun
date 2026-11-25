@@ -5,13 +5,13 @@ import { useState, useSyncExternalStore } from "react";
 import { deviceStore } from "#web/components/ui-libraries/device-store.ts";
 import { parseHomeRows } from "./home-rows";
 
-type Table = "presales" | "traders" | "posts";
+type Table = "traders" | "posts";
 const TABLE_ROWS_DEFAULT = 5;
 const storageKey = (table: Table) => `blast.home.${table}.rows`;
 const rowStore = (table: Table) => deviceStore(() => {
   return parseHomeRows(readBrowserStorage("local", storageKey(table)), TABLE_ROWS_DEFAULT);
 });
-const stores = { presales: rowStore("presales"), traders: rowStore("traders"), posts: rowStore("posts") };
+const stores = { traders: rowStore("traders"), posts: rowStore("posts") };
 
 /** Shared row preference and page selection for local and server-paged Home tables. */
 export function useTablePage(table: Table, scope: string) {

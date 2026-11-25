@@ -32,7 +32,11 @@ export function useHomeLive(
     const discover = discoverQuery(query, true);
     const seen = new Map<string, number>();
     const look = (hint?: FreshnessHint) => {
-      if (document.visibilityState !== "visible" || !gate.admit(hint)) return;
+      if (document.visibilityState !== "visible") return;
+      // The stream's first connect right after load would repeat the page's own read:
+      // a page younger than the poll is current. A reconnect may have missed hints, so it reads.
+      if (hint?.cause === "connect" && !hint.reconnect && Date.now() - (client.getQueryState(discover.queryKey)?.dataUpdatedAt ?? 0) < NEW_POSTS_POLL_MS) return;
+      if (!gate.admit(hint)) return;
       const read = client.fetchQuery({ ...discover, staleTime: 0 }).catch(() => undefined);
       if (trackBuys) void read.then(page => {
         if (disposed || document.visibilityState !== "visible") return;

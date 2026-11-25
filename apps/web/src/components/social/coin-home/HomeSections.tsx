@@ -56,7 +56,7 @@ export const HOME_SECTIONS_MENU_ID = "home-sections-menu";
 /**
  * A section as the Main board draws it: the title row (the 20/650 title and
  * whatever the section puts on its line), then the section's own surface —
- * a table card (`TableCard`) or the presales' row of cards — under it.
+ * a table card (`TableCard`) or the bonding curves' cards — under it.
  */
 export type SectionSpec = Readonly<{
   /** Drawn in the header, before the grip (a link to the section's own page). */

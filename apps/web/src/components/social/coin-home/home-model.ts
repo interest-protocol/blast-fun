@@ -382,36 +382,6 @@ export function raiseFigures(coin: Pick<HomeCoin, "quote" | "sale">): Readonly<{
   };
 }
 
-/**
- * A sale's raise in full, in the coin it raises (the owner's rule: "show the
- * coin they are raising"): `312,400 USDC`, `91,280.5 SUI`. The raised figure
- * floors, so a raise never reads as its target before it gets there; null
- * when a figure is unreadable.
- */
-export function raiseAmounts(coin: Pick<HomeCoin, "quote" | "sale">): Readonly<{ raised: string | null; target: string | null }> {
-  if (coin.sale === null) return { raised: null, target: null };
-  const amount = (atoms: string, mode: "half-up" | "floor") => {
-    const value = exactAtoms(atoms, coin.quote.decimals);
-    return value === null ? null : `${groupedExact(value, 2, mode)} ${coin.quote.symbol}`;
-  };
-  return { raised: amount(coin.sale.raised, "floor"), target: amount(coin.sale.raise_target, "half-up") };
-}
-
-/** The lifecycle as the shared status chip tones it. */
-export function lifecycleTone(lifecycle: string): "trading" | "open" | "funded" | "pending" | "cancelled" {
-  switch (lifecycle) {
-    case "migrated":
-      return "trading";
-    case "open":
-    case "funded":
-    case "pending":
-    case "cancelled":
-      return lifecycle;
-    default:
-      return "pending";
-  }
-}
-
 /** The market facts, each with an explicit period and an honest absence (nothing, never 0). */
 export type MarketFacts = Readonly<{
   price: string | null;
@@ -527,8 +497,9 @@ export function homeCoinKey(coin: Pick<HomeCoin, "presale_id" | "coin_type">): s
  * The row's Status cell (plan decision 7), one short line: where the coin is
  * in its life. A filling curve or an open sale also gives its fill (0–100)
  * for the row's one bar; a coin on a DEX with no Blast history names its venue.
+ * `label` is what a screen reader hears when the line leaves out the bar's figure.
  */
-export type HomeStatus = Readonly<{ text: string; fill?: number; venue?: string }>;
+export type HomeStatus = Readonly<{ text: string; fill?: number; venue?: string; label?: string }>;
 
 export function homeStatus(coin: HomeCoin, nowMs: number): HomeStatus {
   if (coin.curve) return curveStatus(coin, coin.curve, nowMs);
@@ -559,11 +530,24 @@ function coarseUntil(ms: number, nowMs: number): string {
   return ms - nowMs < 60_000 ? "<1m" : timeUntil(ms, nowMs).replace(/ (\d+s|0[mh])$/, "");
 }
 
+/**
+ * A sale's line. Upcoming: when it opens and how many saved it ("Opens in 3h ·
+ * 12 saved"; the count only comes with Trending's presales and only when
+ * someone saved it). Live: when it ends, the bar giving the fill. Then
+ * Ended (time is up, not settled yet), Funded or Cancelled.
+ */
 function saleStatus(coin: HomeCoin, sale: NonNullable<HomeCoin["sale"]>, nowMs: number): HomeStatus {
   const fill = Math.min(100, fillPercent(Number(sale.raised), Number(sale.raise_target)));
   const lifecycle = saleLifecycleAt(coin.lifecycle, sale.start_ms, nowMs);
-  if (lifecycle === "pending") return { text: sale.start_ms > nowMs ? `Opens in ${coarseUntil(sale.start_ms, nowMs)}` : "Upcoming" };
-  if (lifecycle === "open") return { text: sale.end_ms > nowMs ? `${fill}% · closes in ${coarseUntil(sale.end_ms, nowMs)}` : `${fill}% · closing`, fill };
+  if (lifecycle === "pending") {
+    const saved = sale.savers ? ` · ${sale.savers.toLocaleString("en-US")} saved` : "";
+    return { text: `${sale.start_ms > nowMs ? `Opens in ${coarseUntil(sale.start_ms, nowMs)}` : "Upcoming"}${saved}` };
+  }
+  if (lifecycle === "open") {
+    if (sale.end_ms <= nowMs) return { text: "Ended", fill };
+    const text = `Live · ends in ${coarseUntil(sale.end_ms, nowMs)}`;
+    return { text, fill, label: `${text} · ${fill}% filled` };
+  }
   if (lifecycle === "funded") return { text: "Funded", fill: 100 };
   if (lifecycle === "cancelled") return { text: "Cancelled" };
   return { text: lifecycle.charAt(0).toUpperCase() + lifecycle.slice(1) };

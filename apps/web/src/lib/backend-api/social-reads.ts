@@ -1,12 +1,11 @@
 import "server-only";
-import { SOCIAL_HAPPENING_DISCOVER_PATH, type SocialHappeningResponse } from "@blast/core/modules/social/contracts/happening.ts";
 import type { SocialFeedPage } from "@blast/core/modules/social/contracts/feed.ts";
 import type { SocialItemResponse } from "@blast/core/modules/social/contracts/item-routes.ts";
 import type { SocialProfileCalls } from "@blast/core/modules/social/contracts/profile-page.ts";
 import { socialProfilePath, withProfileBio, type SocialProfile } from "@blast/core/modules/social/contracts/profiles.ts";
-import { HOME_DEFAULT_WINDOW, socialHomePath, socialHomeCoinsPath, socialHomeTradersPath, withHomeDiscoverDetails, type HomeQuery, type HomeWindow, type HomeCoinsPage, type HomeCoinsByIds, type HomeTradersPage } from "@blast/core/modules/social/contracts/home.ts";
+import { socialHomePath, socialHomeTradersPath, withHomeDiscoverDetails, type HomeQuery, type HomeWindow, type HomeCoinsPage, type HomeTradersPage } from "@blast/core/modules/social/contracts/home.ts";
 import { readPrivateBackendPage } from "./private-page-read.ts";
-import { testPresaleIds, withoutTestCoins, withoutTestHappening, withoutTestPosts } from "#web/lib/test-launches.ts";
+import { withoutTestCoins, withoutTestPosts } from "#web/lib/test-launches.ts";
 
 /** Only HTTP adaptation lives here; Bun owns visibility, clocks, account materialization and SQL. */
 async function socialRead<Result>(path: string): Promise<Result | null> {
@@ -34,19 +33,8 @@ export function readProfileCallsFromBackend(callsign: string): Promise<SocialPro
   return socialRead(`/api/social/profiles/${encodeURIComponent(callsign)}/calls`);
 }
 
-export async function readHappeningFromBackend(): Promise<SocialHappeningResponse | null> {
-  const read = await socialRead<SocialHappeningResponse>(SOCIAL_HAPPENING_DISCOVER_PATH);
-  if (!read) return null;
-  const testIds = await testPresaleIds(read, async (ids) => (await readHomeCoinsFromBackend(ids, HOME_DEFAULT_WINDOW, 1))?.coins ?? null);
-  return withoutTestHappening(read, testIds);
-}
-
 export function readHomeFromBackend(query: Partial<HomeQuery> = {}): Promise<HomeCoinsPage | null> {
   return socialRead<HomeCoinsPage>(withHomeDiscoverDetails(socialHomePath(query))).then((page) => page && withoutTestCoins(page));
-}
-
-export function readHomeCoinsFromBackend(ids: readonly string[], window: HomeWindow, holderLimit?: number): Promise<HomeCoinsByIds | null> {
-  return ids.length === 0 ? Promise.resolve(null) : socialRead(socialHomeCoinsPath(ids, window, holderLimit));
 }
 
 export function readHomeTradersFromBackend(window: HomeWindow): Promise<HomeTradersPage | null> {

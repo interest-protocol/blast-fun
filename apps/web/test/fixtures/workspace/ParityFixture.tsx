@@ -28,7 +28,6 @@ import type { Competition } from "@blast/core/modules/social/competitions/contra
 import { PROFILE_PNL } from "../social/profile/pnl-fixtures.ts";
 import { WatchlistCard } from "../../../src/components/social/watchlist/WatchlistCard.tsx";
 import { NotificationsView } from "../../../src/components/social/notifications/NotificationsView.tsx";
-import { PresaleSection } from "../../../src/components/social/coin-home/PresaleSection.tsx";
 import { CoinList, DiscoverList } from "../../../src/components/social/coin-home/sources.tsx";
 import { HomeSections } from "../../../src/components/social/coin-home/HomeSections.tsx";
 import { TableCard } from "../../../src/components/social/coin-home/TableFooter.tsx";
@@ -184,7 +183,7 @@ function BlastMode({ view }: Readonly<{ view: "holders" | "rows" }>) {
   return <WorkspaceHost resolveOwner={resolve} ownerKey={`parity-${view}`} entryGeneration={1} onExit={noop} storage={storage} slots={{ panel: FocusPanel, data: { Presales: PresalesData } }} />;
 }
 
-/* ---------- Home: the Presales section and the coin cards ---------- */
+/* ---------- Home: the coin cards ---------- */
 
 function Home({ empty }: Readonly<{ empty: boolean }>) {
   const list = { source: "discover" as const, window: "24h" as const, nowMs: NOW, trading: false, sort: "relevant" as const, onSort: noop, page: 1, rows: 10, onPage: noop, onRows: noop };
@@ -196,10 +195,9 @@ function Home({ empty }: Readonly<{ empty: boolean }>) {
           <HomeSections
             empty={null}
             onChange={noop}
-            prefs={{ order: ["bonding", "presales", "coins", "posts", "traders"], hidden: ["posts", "traders"] }}
+            prefs={{ order: ["bonding", "coins", "posts", "traders"], hidden: ["posts", "traders"] }}
             sections={{
               bonding: { children: null },
-              presales: { children: <PresaleSection happening={HAPPENING} initial={SALE_COINS} initialMs={NOW} nowMs={NOW} window="24h" /> },
               coins: { children: <TableCard><>{empty ? <DiscoverList initial={{ ...SALE_COINS, coins: [], total: 0, page: 1, pages: 1, next_cursor: null }} props={list} query={HOME_DEFAULT_QUERY} /> : <CoinList coins={HOME_COINS} props={list} />}</></TableCard> },
               posts: { children: null },
               traders: { children: null },

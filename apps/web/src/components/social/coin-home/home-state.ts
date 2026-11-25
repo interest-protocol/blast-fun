@@ -132,9 +132,15 @@ export function withView(current: HomeViewState, next: HomeViewState): HomeViewS
   return sameListView(current, next) ? next : { ...next, page: 1 };
 }
 
-/** The Discover read a view state asks for, at the device's rows per page. */
+/**
+ * The Discover read a view state asks for, at the device's rows per page.
+ * Home's Trending lists presales next to coins, upcoming ones too
+ * (`presales`); the path sends the flag on Trending only, so the other tabs'
+ * URLs are unchanged. The server render and the browser both build here, so
+ * they ask for the same URL.
+ */
 export function discoverQueryOf(state: HomeViewState, rows: number = HOME_PAGE_DEFAULT): HomeQuery {
-  return { ...HOME_DEFAULT_QUERY, stage: state.stage, sort: state.sort, window: state.window, minParticipants: state.minParticipants, age: state.age, tradable: state.tradable, limit: rows, page: state.page };
+  return { ...HOME_DEFAULT_QUERY, stage: state.stage, sort: state.sort, window: state.window, minParticipants: state.minParticipants, age: state.age, tradable: state.tradable, limit: rows, page: state.page, presales: true };
 }
 
 /** How many filters are away from their default (the Filters button's badge). */

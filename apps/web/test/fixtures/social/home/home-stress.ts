@@ -209,9 +209,11 @@ export function homeStressProps(
   state: HomeStressState,
 ): CoinHomeProps {
   if (state === "demo") return demo;
+  // Trending lists sales among the coins, so the demo's own sale rows seed the stressed ones.
+  const saleSeeds = demo.initial?.coins.filter((coin) => coin.sale) ?? [];
   if (
     !demo.initial?.coins.length ||
-    !demo.presales?.coins.length ||
+    !saleSeeds.length ||
     !demo.posts?.items.length
   )
     throw new Error(
@@ -226,11 +228,7 @@ export function homeStressProps(
     ),
   );
   const sales = Array.from({ length: count }, (_, i) =>
-    stressCoin(
-      demo.presales!.coins[i % demo.presales!.coins.length]!,
-      i,
-      demo.nowMs,
-    ),
+    stressCoin(saleSeeds[i % saleSeeds.length]!, i + count, demo.nowMs),
   );
   if (state === "one") {
     for (const collection of [coins, sales]) {
@@ -263,38 +261,16 @@ export function homeStressProps(
             },
     };
   });
-  const today = sales.map((coin) => ({
-    presale: {
-      ...demo.posts!.items.find((item) => item.presale)!.presale!,
-      presale_id: coin.presale_id!,
-      symbol: coin.symbol,
-      name: coin.name,
-      lifecycle: "open" as const,
-      start_ms: demo.nowMs - 86_400_000,
-      end_ms: demo.nowMs + 76_000,
-    },
-    interested: 1,
-    window_raised: "0",
-    launched_ms: null,
-  }));
   return {
     ...demo,
     initialRows: state === "max" ? 20 : 5,
     initial: {
       ...demo.initial,
-      coins: coins.slice(0, state === "max" ? 20 : 5),
+      coins: coins.flatMap((coin, i) => [coin, sales[i]!]).slice(0, state === "max" ? 20 : 5),
       page: 1,
       pages: state === "max" ? 9999 : 1,
-      total: state === "max" ? 199_980 : count,
+      total: state === "max" ? 199_980 : count * 2,
       next_cursor: null,
-    },
-    presales: { ...demo.presales, coins: sales },
-    happening: {
-      ...demo.happening!,
-      today,
-      fastest: [],
-      opening_soon: [],
-      tape: [],
     },
     traders: {
       ...demo.traders!,
