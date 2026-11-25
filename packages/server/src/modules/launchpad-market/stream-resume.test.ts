@@ -179,3 +179,24 @@ test("coin stats are state: latest wins, sent after each fence and to joiners, n
   assert.deepEqual(late.events.filter(({ event }) => event === "stats").map(({ data }) => data.holders), [2]);
   assert.equal(late.events.filter(({ event }) => event === "market").length, 1, "the ring replays the lifecycle only");
 });
+
+// This fails if stats that arrive while a pool resumes are lost when the resume finds no change.
+test("coin stats held during an unchanged resume reach connected browsers once it ends", (t) => {
+  t.mock.timers.enable({ apis: ["setInterval", "setTimeout", "Date"] });
+  const { sockets, join, hello } = harness();
+  const browser = join(`pool=${POOL}`);
+  hello(sockets[0]!);
+  sockets[0]!.receive(snapshot(POOL, 10));
+  sockets[0]!.receive(lifecycle(POOL, 11));
+  sockets[0]!.drop();
+  t.mock.timers.tick(400);
+  sockets[1]!.receive({ type: "hello", protocol: 1, provenance: provenance(1) });
+  sockets[1]!.receive({ type: "pong" });
+  const before = browser.events.length;
+  const stats = { type: "coin_stats", coin: `0x${"4".repeat(64)}::meme::MEME`, pool_key: POOL, holders: 250, ...envelope(15, "15:0:0:0") };
+  sockets[1]!.receive(stats);
+  assert.deepEqual(browser.events.slice(before), [], "held while resuming");
+  sockets[1]!.receive({ type: "resume_complete", cursor: "20:0:0:0" });
+  sockets[1]!.receive(snapshot(POOL, 20));
+  assert.deepEqual(browser.events.slice(before).map(({ event, data }) => [event, data.holders]), [["stats", 250]], "no new fence, only the held stats");
+});

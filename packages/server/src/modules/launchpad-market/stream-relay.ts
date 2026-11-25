@@ -53,7 +53,7 @@ type Topic = {
   /** A replayed frame arrived: the trailing snapshot is a new fence. Otherwise it is dropped. */
   resumeChanged?: boolean;
   /** The latest `coin_stats` (state, not log): sent after each fence, never in the ring. */
-  stats?: { checkpoint: number; bytes: Uint8Array };
+  stats?: { checkpoint: number; bytes: Uint8Array; unsent?: boolean };
 };
 /** Options for a direct socket subscriber. SSE keeps its finite lifetime and never resumes. */
 export type MarketSubscribeOptions = Readonly<{
@@ -354,8 +354,10 @@ export class MarketStreamRelay {
     if (topic.stats && (frame.checkpoint as number) < topic.stats.checkpoint) return;
     const bytes = event("stats", stampRelay(withoutLabels(frame), Date.now()));
     if (bytes.byteLength > B.maxChunkBytes) return;
-    topic.stats = { checkpoint: frame.checkpoint as number, bytes };
-    if (topic.fence && !topic.resuming) for (const client of topic.clients) this.#send(client, bytes);
+    const send = topic.fence !== undefined && !topic.resuming;
+    // Held during a resume: the trailing snapshot sends it, or #endResume does when nothing changed.
+    topic.stats = { checkpoint: frame.checkpoint as number, bytes, unsent: !send };
+    if (send) for (const client of topic.clients) this.#send(client, bytes);
   }
 
   #releaseTopics(client: Client): void {
@@ -610,8 +612,11 @@ export class MarketStreamRelay {
     const changed = topic.resumeChanged;
     clearTimeout(topic.deadline);
     Object.assign(topic, { deadline: undefined, resuming: false, resumeChanged: false });
+    if (changed === true) return true;
     // Nothing happened to the pool while upstream was away: browsers keep their fence and ring.
-    return changed === true;
+    if (topic.stats?.unsent) for (const client of topic.clients) this.#send(client, topic.stats.bytes);
+    if (topic.stats) topic.stats.unsent = false;
+    return false;
   }
 
   #deliver(pool: string, topic: Topic, frame: Frame, cursor: string): void {
@@ -631,6 +636,7 @@ export class MarketStreamRelay {
       topic.ring = [];
       topic.ringBytes = 0;
       topic.floor = cursor;
+      if (topic.stats) topic.stats.unsent = false;
       for (const client of topic.clients) {
         this.#send(client, event("status", topic.fence));
         if (topic.stats) this.#send(client, topic.stats.bytes);

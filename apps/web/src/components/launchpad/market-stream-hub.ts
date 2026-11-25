@@ -32,7 +32,7 @@ export type MarketStreamListener = Readonly<{
   frame?: (frame: ChartFrame, chars: number) => void;
   trade?: (trade: MarketTrade) => void;
   prices?: (frame: DisplayPriceFrame) => void;
-  /** The coin's latest market stats for a fenced pool; a later one replaces it, none is replayed. */
+  /** The coin's latest market stats for a fenced pool; a later one replaces it, and a late subscriber gets the latest. */
   stats?: (frame: CoinStatsFrame) => void;
   presale?: (frame: PresaleMarketFrame) => void;
   presaleReady?: (checkpoint: number | null) => void;
@@ -84,7 +84,7 @@ export type MarketStreamDependencies = Readonly<{
 type Subscriber = { request: MarketStreamRequest; state: MarketStreamState | null; unserved: boolean };
 type Observer = { coin: string; listener: CoinTradeListener; live: boolean | null };
 /** `coin` survives reconnects: it names the pool, not the connection's progress through it. */
-type Pool = { fence: number | null; seen: number; cursor: string | null; tradeCursor: string | null; summary: unknown; coin: string | null; priceMissing?: boolean };
+type Pool = { fence: number | null; seen: number; cursor: string | null; tradeCursor: string | null; summary: unknown; coin: string | null; priceMissing?: boolean; stats?: CoinStatsFrame };
 type Connection = { pools: Map<string, Pool>; priceCoins: Set<string>; presale?: string; presaleFence: number | null; presaleSeen: number; expected: ExpectedDeployment | null; source: MarketEventSource | null; live: boolean };
 
 const HELLO_DEADLINE_MS = 10_000;
@@ -288,7 +288,9 @@ export class MarketStreamHub {
       subscriber.request.listener.presaleReady?.(Math.max(connection.presaleFence, connection.presaleSeen));
     for (const key of subscriber.request.pools) {
       const pool = connection.pools.get(key)!;
-      if (pool.fence !== null) this.notifyFence(subscriber, key, pool);
+      if (pool.fence === null) continue;
+      this.notifyFence(subscriber, key, pool);
+      if (pool.stats) subscriber.request.listener.stats?.(pool.stats);
     }
   }
 
@@ -392,7 +394,7 @@ export class MarketStreamHub {
     connection.live = false;
     this.presaleState(connection, null);
     connection.presaleSeen = 0;
-    for (const pool of connection.pools.values()) Object.assign(pool, { fence: null, seen: 0, cursor: null, tradeCursor: null, summary: null });
+    for (const pool of connection.pools.values()) Object.assign(pool, { fence: null, seen: 0, cursor: null, tradeCursor: null, summary: null, stats: undefined });
     this.observed();
   }
 
@@ -492,11 +494,18 @@ export class MarketStreamHub {
       let frame: CoinStatsFrame;
       try {
         frame = coinStatsFrameSchema.parse(JSON.parse(event.data));
-        if (deploymentMismatch(parseInfraProvenance(frame.provenance), connection.expected)) return;
+        const provenance = parseInfraProvenance(frame.provenance);
+        if (provenance.checkpoint !== frame.checkpoint || deploymentMismatch(provenance, connection.expected)) return;
       } catch {
         return;
       }
-      if (connection.pools.get(frame.pool_key)?.fence == null) return;
+      const target = connection.pools.get(frame.pool_key);
+      if (target?.fence == null) return;
+      // One coin can span two pools (curve, then venue): only its newest stats count, from either pool.
+      const others = [...connection.pools.values()].filter((pool) => pool.stats?.coin === frame.coin);
+      if (others.some((pool) => pool.stats!.checkpoint > frame.checkpoint)) return;
+      for (const pool of others) pool.stats = undefined;
+      target.stats = frame;
       for (const subscriber of [...this.subscribers]) {
         const { pools, listener } = subscriber.request;
         if (listener.stats && pools.includes(frame.pool_key) && this.covers(subscriber) && current()) listener.stats(frame);

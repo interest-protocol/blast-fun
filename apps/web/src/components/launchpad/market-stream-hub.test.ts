@@ -431,3 +431,25 @@ test("coin stats reach only the fenced pool's subscribers from the expected depl
   assert.deepEqual(curve, [2]);
   assert.deepEqual(other, []);
 });
+
+// This fails if a migrated coin's frozen curve stats replace its venue stats, or a late screen waits for the next change.
+test("a coin's newest stats win across its two pools, and a late subscriber gets them at once", async () => {
+  const s = setup();
+  const first: unknown[] = [];
+  s.hub.subscribe({ pools: [CURVE, VENUE], expected, listener: { state: () => {}, stats: (frame) => first.push(frame.holders) } });
+  await settle();
+  const stats = (pool: string, checkpoint: number, holders: number) => ({
+    type: "coin_stats", coin: `0x${"44".repeat(32)}::meme::MEME`, pool_key: pool, checkpoint, timestamp_ms: NOW + checkpoint,
+    cursor: `${checkpoint}:0:0:0`, provenance: wireProvenance(checkpoint), holders, price: "0.5",
+  });
+  s.source().fence(10);
+  s.source().fence(10, VENUE);
+  s.source().hello();
+  s.source().emit("stats", stats(VENUE, 30, 250));
+  s.source().emit("stats", stats(CURVE, 20, 211));
+  assert.deepEqual(first, [250], "the curve's older stats are dropped");
+  const late: unknown[] = [];
+  s.hub.subscribe({ pools: [CURVE, VENUE], expected, listener: { state: () => {}, stats: (frame) => late.push(frame.holders) } });
+  await settle();
+  assert.deepEqual(late, [250]);
+});
