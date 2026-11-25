@@ -8,17 +8,16 @@ import { Checkbox, Switch } from "#web/components/blast-ui/Checkbox.tsx";
 import { Popover, PopoverSurface } from "#web/components/blast-ui/Popover.tsx";
 import type { DrawnSeries } from "#web/components/launchpad/chart/chart-geometry.ts";
 import { saveChartPreference, useChartPreference } from "#web/components/launchpad/chart/chart-preferences.ts";
-import { WALLET_LABELS } from "#web/components/launchpad/activity/wallet-labels.ts";
 import { shiftDecimal } from "#web/components/launchpad/coin/coin-format.ts";
 import { useMobileChartLayout } from "../use-mobile-chart-layout.ts";
 import { poolPrices } from "../candle-data.ts";
 import type { CandleTrade } from "../candle-trade.ts";
-import type { WalletChartTrade } from "../wallet-markers.ts";
 import {
   barChanges, foldTrades, klineBars, MAIN_INDICATORS, PANE_INDICATORS, pricePrecision, readChartSettings, toggleIndicator,
   type Bar, type ChartSettings, type IndicatorName,
 } from "./kline-model.ts";
 import { subscriptZeros } from "#web/lib/market-format.ts";
+import { BubbleStage, PeopleBubbles } from "./PeopleBubbles.tsx";
 import styles from "./KLineCoinChart.module.css";
 
 const PERIODS: Readonly<Record<CandleInterval, Period>> = {
@@ -28,9 +27,7 @@ const PERIODS: Readonly<Record<CandleInterval, Period>> = {
 
 const DRAWINGS = [["segment", "Trend line"], ["rayLine", "Ray"], ["horizontalStraightLine", "Horizontal line"], ["priceLine", "Price line"], ["fibonacciLine", "Fibonacci"]] as const;
 const INDICATOR_NAMES: Readonly<Record<IndicatorName, string>> = { MA: "Moving average", EMA: "Exponential MA", BOLL: "Bollinger bands", VOL: "Volume", MACD: "MACD", RSI: "RSI" };
-const MAX_WALLET_TAGS = 60;
 const DRAWING_GROUP = "drawings";
-const WALLET_GROUP = "wallet-tags";
 const GRADUATION_GROUP = "graduation";
 /** Trades the history has not caught up with yet; older ones are dropped. */
 const MAX_PENDING_TRADES = 500;
@@ -47,13 +44,12 @@ export type KLineCoinChartProps = Readonly<{
   /** Candles or a line; the page owns the picker (line on phones and in Live). */
   style: "candles" | "line";
   trade?: CandleTrade | null;
-  walletTrades?: readonly WalletChartTrade[];
   /** When the coin left its curve for a pool, marked with a line. */
   migrationAt?: number;
 }>;
 
-/** The coin page's chart (KLineCharts): candles or line, indicators, drawings and wallet tags, live to the last trade. */
-export default function KLineCoinChart({ sources, interval, memeDecimals, quoteDecimals, quoteUsd, latestAvailable, label, style, trade, walletTrades, migrationAt }: KLineCoinChartProps) {
+/** The coin page's chart (KLineCharts): candles or line, indicators, drawings and trader bubbles, live to the last trade. */
+export default function KLineCoinChart({ sources, interval, memeDecimals, quoteDecimals, quoteUsd, latestAvailable, label, style, trade, migrationAt }: KLineCoinChartProps) {
   const host = useRef<HTMLDivElement>(null);
   const chart = useRef<Chart | null>(null);
   const shown = useRef<readonly Bar[]>([]);
@@ -134,18 +130,6 @@ export default function KLineCoinChart({ sources, interval, memeDecimals, quoteD
     for (const name of settings.indicators) if ((PANE_INDICATORS as readonly string[]).includes(name)) current.overrideYAxis({ paneId: `pane_${name}`, gap: { top: 0.4 } });
   }, [settings.indicators]);
 
-  // Tags move only when the tagged trades or their bars change, not on every tick.
-  const tags = useMemo(() => showWalletTags && walletTrades?.length ? walletTags(walletTrades, bars) : [], [showWalletTags, walletTrades, bars]);
-  const tagKey = tags.map((tag) => `${tag.timestamp}:${tag.value}:${tag.text}`).join("|");
-  useEffect(() => {
-    const current = chart.current;
-    if (!current) return;
-    current.removeOverlay({ groupId: WALLET_GROUP });
-    for (const tag of tags)
-      current.createOverlay({ name: "simpleAnnotation", groupId: WALLET_GROUP, lock: true, points: [{ timestamp: tag.timestamp, value: tag.value }], extendData: tag.text });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- tagKey is the content of tags
-  }, [tagKey]);
-
   const graduationAt = migrationAt === undefined ? undefined : bars.findLast((bar) => bar.timestamp <= migrationAt)?.timestamp;
   useEffect(() => {
     const current = chart.current;
@@ -164,12 +148,15 @@ export default function KLineCoinChart({ sources, interval, memeDecimals, quoteD
       <div className={styles.toolbar} role="group" aria-label="Chart tools">
         <IndicatorMenu settings={settings} onToggle={(name) => update(toggleIndicator(settings, name))} />
         {!mobile && <DrawMenu onDraw={(name) => chart.current?.createOverlay({ name, groupId: DRAWING_GROUP })} onClear={() => chart.current?.removeOverlay({ groupId: DRAWING_GROUP })} />}
-        {walletTrades && <label className={styles.walletToggle}>
-          Wallet tags
+        <label className={styles.walletToggle}>
+          Traders
           <Switch checked={showWalletTags} onCheckedChange={(visible) => { setWalletChoice(visible); saveChartPreference("wallet-tags", visible ? "shown" : "hidden"); }} />
-        </label>}
+        </label>
       </div>
-      <div ref={host} className={styles.plot} role="img" aria-label={label} data-kline-plot="" />
+      <BubbleStage>
+        <div ref={host} className={styles.plot} role="img" aria-label={label} data-kline-plot="" />
+        {showWalletTags && <PeopleBubbles chart={chart} bars={bars} quoteDecimals={quoteDecimals} quoteUsd={quoteUsd} />}
+      </BubbleStage>
     </div>
   );
 }
@@ -196,17 +183,6 @@ function useLiveBars(sources: readonly DrawnSeries[], interval: CandleInterval, 
     });
     return foldTrades(history, interval, unseen);
   }, [history, interval, memeDecimals, quoteDecimals, quoteUsd, sources, pending]);
-}
-
-/** One tag per labelled trade, newest first up to a cap, on its bar's close. */
-function walletTags(trades: readonly WalletChartTrade[], bars: readonly Bar[]) {
-  const closes = new Map(bars.map((bar) => [bar.timestamp, bar.close]));
-  return [...trades].sort((a, b) => b.timestampMs - a.timestampMs).slice(0, MAX_WALLET_TAGS).flatMap((trade) => {
-    const bucket = bars.findLast((bar) => bar.timestamp <= trade.timestampMs)?.timestamp;
-    if (bucket === undefined) return [];
-    const name = trade.labels.map((key) => WALLET_LABELS[key].name).join(" · ");
-    return [{ timestamp: bucket, value: closes.get(bucket)!, text: `${name} ${trade.side === "buy" ? "bought" : "sold"}` }];
-  });
 }
 
 /** The chosen range fills the plot; a range too long for 3 px a bar scrolls from its newest bar. */
