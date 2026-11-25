@@ -59,7 +59,6 @@ export function CoinCard({ coin, rank, window, nowMs, trading, watchlist = false
       <article
         aria-labelledby={id}
         className={clsx(styles.row, styles.cols, styles.coinRow)}
-        data-buy={buy && buy.tier !== "small" ? buy.tier : undefined}
         data-sale={tradingCoin ? undefined : ""}
         data-surface=""
       >

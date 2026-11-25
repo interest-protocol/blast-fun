@@ -298,17 +298,17 @@ test("a newer Home price revalues each supply independently, preserves missing v
   assert.equal(sparkAtPrice(null, 600, "2"), null);
 });
 
-// Fails if a small buy lights the row, or a large one lands as quietly as a small one.
-test("a buy shows its figure, and only a large one lights the row", () => {
+// Fails if a buy's figure is missing, or a large one lands as quietly as a small one.
+test("a buy shows its figure, sized by the buy", () => {
   const cue = (buy?: HomeBuyCue) => {
     const dom = render(coin, false, 1, "24h", buy);
     try {
       const figure = dom.window.document.querySelector("[data-home-buy]");
-      return [figure?.textContent, figure?.getAttribute("data-home-buy"), dom.window.document.querySelector("article")?.getAttribute("data-buy")];
+      return [figure?.textContent, figure?.getAttribute("data-home-buy")];
     } finally { dom.window.close(); }
   };
-  assert.deepEqual(cue(), [undefined, undefined, null]);
-  assert.deepEqual(cue({ text: "+$13", tier: "small" }), ["+$13", "small", null]);
-  assert.deepEqual(cue({ text: "+$420", tier: "big" }), ["+$420", "big", "big"]);
-  assert.deepEqual(cue({ text: "+$1.2K", tier: "huge" }), ["+$1.2K", "huge", "huge"]);
+  assert.deepEqual(cue(), [undefined, undefined]);
+  assert.deepEqual(cue({ text: "+$13", tier: "small" }), ["+$13", "small"]);
+  assert.deepEqual(cue({ text: "+$420", tier: "big" }), ["+$420", "big"]);
+  assert.deepEqual(cue({ text: "+$1.2K", tier: "huge" }), ["+$1.2K", "huge"]);
 });

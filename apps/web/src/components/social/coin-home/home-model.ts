@@ -1,6 +1,6 @@
 import { coinPagePath } from "@blast/core/modules/launchpad-coin/page-key.ts";
 import { ago, bxSigned, qs, qsRaised, qm, raisedShort, short, shortAddress, signPct, usd0 } from "@blast/core/web/format.ts";
-import { amtExact, atLeastPow10, bxUsdExact, compareExact, exactAtoms, exactDecimal, groupedExact, numShortExact, shortQtyExact } from "@blast/core/web/exact-amount.ts";
+import { amtExact, atLeastPow10, bxUsdExact, compareExact, exactAtoms, exactDecimal, groupedExact, numShortExact, shortQtyExact, unitsAt } from "@blast/core/web/exact-amount.ts";
 import type { FeedItemActor } from "@blast/core/web/contracts/items.ts";
 import type { HomeTapeEvent, HomeActivity, HomeAmount, HomeCoin, HomeEvent, HomeKind, HomeParticipant, HomeRecentBuy, HomeSide, HomeWindow } from "@blast/core/web/contracts/home.ts";
 import type { DiscoveryResponse, DiscoveryRow } from "@blast/core/modules/launchpad-discovery/rows.ts";
@@ -101,8 +101,10 @@ export function buyCueOf(buy: Pick<HomeRecentBuy, "quote_atoms" | "quote_decimal
   const usd = exactDecimal(buy.usd);
   if (usd) {
     const text = atLeastPow10(usd, 1) ? `$${numShortExact(usd)}` : bxUsdExact(usd);
-    if (atLeastPow10(usd, 3)) return { text: `+${text}`, tier: "huge" };
-    return { text: `+${text}`, tier: atLeastPow10(usd, 2) ? "big" : "small" };
+    // Sized by the dollars as shown, so "+$100" always lands the same way.
+    const dollars = unitsAt(usd, 0, "half-up");
+    if (dollars >= 1_000n) return { text: `+${text}`, tier: "huge" };
+    return { text: `+${text}`, tier: dollars >= 100n ? "big" : "small" };
   }
   const paid = exactAtoms(buy.quote_atoms, buy.quote_decimals);
   if (!paid) return null;

@@ -708,7 +708,8 @@ function recentPageBuys(sides: readonly SideRow[], coins: readonly HomeCoin[], w
       quote_atoms: atoms,
       quote_symbol: asset.symbol,
       quote_decimals: asset.decimals,
-      ...(withUsd && usd !== null && { usd }),
+      // Digits only: a NaN or Infinity value would fail the page's strict schema.
+      ...(withUsd && usd !== null && /^\d+(\.\d+)?$/.test(usd) && { usd }),
     });
   }
   return [...buys.values()];
