@@ -145,7 +145,7 @@ export function CoinTradingActivity({ trades, holders, posts, lazy = false }: Re
   return <section className={styles.card} aria-label="Trading activity">
     <Segmented label="Trading activity" options={tabs} value={tab} onChange={setTab} stretch={phone} tabs tabId={(key) => `${id}-${key}`} panelId={(key) => `${id}-${key}-panel`} />
     {tabs.map(([key]) => <div className={styles.activityPanel} key={key} hidden={tab !== key} id={`${id}-${key}-panel`} role="tabpanel" aria-labelledby={`${id}-${key}`}>
-      {(!lazy || tab === key) && <SectionBoundary subject={key}>{panels[key]}</SectionBoundary>}
+      {(!lazy || key !== "holders" || tab === key) && <SectionBoundary subject={key}>{panels[key]}</SectionBoundary>}
     </div>)}
   </section>;
 }

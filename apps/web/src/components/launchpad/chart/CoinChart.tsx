@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { useQuoteUsd } from "#web/components/social/prices/use-quote-usd.ts";
 
 import { atCheckpoint, browserMarketDependencies } from "../blast-infra-browser";
 import { chartFromSnapshot, chartPoolKeys, chartTailRequest, readChartPool, type ChartSnapshot, type ChartSource } from "./chart-client";
-import { afterChartSourceRead, chartKey, chartRequest, initialChart, type ChartControls } from "./chart-model";
+import { afterChartSourceRead, chartKey, denseInterval, chartRequest, initialChart, type ChartCandlePage, type ChartControls } from "./chart-model";
+import type { Section } from "@blast/core/modules/launchpad-contract/section.ts";
 import { useCoinPriceCurrency } from "./CoinPriceCurrency";
 import { ChartStream, type ChartStreamStatus } from "./chart-stream";
 import { useChartPrice } from "./chart-live-price";
@@ -34,7 +35,7 @@ export function CoinChart({
   const standaloneRate = useQuoteUsd(currency ? null : source.quoteType ?? null);
   const quoteUsd = currency ? currency.quoteUsd : standaloneRate;
   const [entry] = useState(initialSnapshot);
-  const { controls, ready, commit } = useCoinChartControls(compact, initialControls, true, livePreset, entry !== undefined);
+  const { controls, ready, commit, chosen } = useCoinChartControls(compact, initialControls, true, livePreset, entry !== undefined);
   const [state, setState] = useState(() => chartFromSnapshot(source, initialControls, initialSnapshot));
   const [hidden, setHidden] = useState<readonly ChartSourceName[]>([]);
   const [pending, setPending] = useState(false);
@@ -58,6 +59,24 @@ export function CoinChart({
     ? { cursor: migrationCursor, timestampMs: migrationTimestamp, curvePoolKey: migrationCurve, venuePoolKey: migrationVenue }
     : null, [migrationCursor, migrationTimestamp, migrationCurve, migrationVenue]);
 
+  const change = (choice: ChartControls, remember = true) => {
+    stream.current?.stop();
+    setUseEntry(false);
+    const next = commit(choice, remember);
+    // Candles read for other controls are never shown under these: the chart starts over.
+    setState((shown) => initialChart(chartKey(next), shown.venue !== null, shown.migration));
+  };
+
+  // The live screen opens a quiet coin on a coarser interval, once, unless the viewer picked one.
+  const densityChecked = useRef(false);
+  const stepToDensity = useEffectEvent((section: Section<ChartCandlePage>) => {
+    if (!liveScreen || chosen || densityChecked.current || section.state !== "available") return;
+    densityChecked.current = true;
+    const traded = section.data.candles.filter((candle) => candle.volumeQuote > 0n).map((candle) => candle.bucketStart);
+    const interval = denseInterval(traded, controls, Date.now());
+    if (interval !== controls.interval) change({ ...controls, interval }, false);
+  });
+
   useEffect(() => {
     if (!ready) return;
     const key = chartKey(controls);
@@ -76,6 +95,7 @@ export function CoinChart({
         if (stream.current !== client) return;
         const marker = committed ?? migration ?? known.current;
         known.current = marker;
+        stepToDensity(section);
         if (seed?.pools.some(([key, read]) => key === pool && read.section === section)) return;
         const name = pool === curvePoolKey ? "curve" : "venue";
         setState((shown) => {
@@ -105,19 +125,12 @@ export function CoinChart({
   const updates = chartUpdateText(streamStatus, preview);
   const { shown, plotCurve } = plotForControls(state, source, controls, committed, venuePoolKey, requestAt);
 
-  const change = (choice: ChartControls) => {
-    stream.current?.stop();
-    setUseEntry(false);
-    const next = commit(choice);
-    // Candles read for other controls are never shown under these: the chart starts over.
-    setState((shown) => initialChart(chartKey(next), shown.venue !== null, shown.migration));
-  };
-
   return (
     <ChartView
       compact={compact}
       state={shown}
-      currentPrice={currentPrice?.price ?? null}
+      // Until the stream's first price arrives, the last REST close is the price shown, never "—".
+      currentPrice={currentPrice?.price}
       source={source}
       omitCurve={!plotCurve}
       quoteUsd={quoteUsd}

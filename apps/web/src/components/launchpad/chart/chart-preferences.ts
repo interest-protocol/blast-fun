@@ -86,7 +86,7 @@ export function useCoinChartControls(compact: boolean | undefined, initialContro
   const [selected, setControls] = useState<ChartControls | null>(null);
   const controls = !livePreset && selected?.range === "live" ? preferred : selected ?? preferred;
   const overrides = useRef(new Map<ChartControls["range"], ChartControls["interval"]>());
-  function commit(choice: ChartControls): ChartControls {
+  function commit(choice: ChartControls, remember = true): ChartControls {
     let next = choice;
     if (live && choice.range !== controls.range) {
       const fields = new URLSearchParams(snapshot("controls"));
@@ -95,8 +95,8 @@ export function useCoinChartControls(compact: boolean | undefined, initialContro
       const interval = LIVE_CHART_INTERVALS.find(item => item === savedInterval);
       next = { ...choice, interval: overrides.current.get(choice.range) ?? interval ?? fallback };
     }
-    if (live && choice.range === controls.range && next.range !== "live") overrides.current.set(next.range, next.interval);
-    if (compact && next.range !== "live") saveChartControls(controls, next, live);
+    if (remember && live && choice.range === controls.range && next.range !== "live") overrides.current.set(next.range, next.interval);
+    if (remember && compact && next.range !== "live") saveChartControls(controls, next, live);
     setControls(next);
     const url = new URL(window.location.href);
     for (const [key, value] of new URLSearchParams(chartSearch(next))) url.searchParams.set(key, value);
@@ -104,5 +104,7 @@ export function useCoinChartControls(compact: boolean | undefined, initialContro
     window.history.replaceState(listOriginHistoryState(), "", url);
     return next;
   }
-  return { controls, ready, commit };
+  // The viewer picked an interval: by link, or saved from an earlier visit.
+  const chosen = saved?.includes("interval") || (typeof window !== "undefined" && new URLSearchParams(window.location.search).has("interval"));
+  return { controls, ready, commit, chosen };
 }

@@ -49,7 +49,7 @@ import { LiveFigureCue } from "#web/components/blast-ui/LiveFigureCue.tsx";
 import { useAppQueryClient } from "#web/lib/query/provider.tsx";
 import { pollInterval } from "#web/lib/query/polling.ts";
 import { legacyCoinMarketQuery } from "./bonding-client.ts";
-import { useLiveScreen } from "#web/components/launchpad/coin/LiveScreen.tsx";
+import { useLiveListening, useLiveScreen, useReportListening } from "#web/components/launchpad/coin/LiveScreen.tsx";
 import { statsAfterRead, useLiveCoin, type LiveCoin, type LiveCoinStats } from "#web/components/launchpad/coin/live-coin.ts";
 import type { ExpectedDeployment } from "@blast/core/modules/launchpad-contract/provenance.ts";
 import styles from "./bonding-coin.module.css";
@@ -404,6 +404,7 @@ function CoinMarket({ snapshot, page, chart, activity, poolKey, checkpoint, expe
   const liveOn = useLiveScreen() && expected !== null && page.confirmed;
   const live = useLiveCoin({ coin: snapshot.identity.coinType, pools: poolKey ? [poolKey] : [], expected, enabled: liveOn });
   const stats = statsAfterRead(live.stats, checkpoint);
+  useReportListening(live.live && live.stats !== null);
   const graduated = snapshot.lifecycle === "migrated";
   const view = !graduated && tick ? coinView(page, tick) : snapshot;
   const tradeId = tick?.showCue ? tick.trade.cursor : null;
@@ -525,12 +526,12 @@ function LegacyMarketDetails({ market, decimals, symbol }: Readonly<{ market?: L
   </div>;
 }
 
-/** A legacy coin's market read; the live screen reads it once and then takes its numbers from the stream. */
-function useLegacyMarket(coinType: string, enabled: boolean, liveScreen: boolean) {
+/** A legacy coin's market read; it rests while the live screen's stream carries the coin's numbers. */
+function useLegacyMarket(coinType: string, enabled: boolean, listening: boolean) {
   const { data, isRefetchError } = useQuery({
     ...legacyCoinMarketQuery(),
     enabled,
-    refetchInterval: liveScreen ? false : (query) => pollInterval(60_000, query),
+    refetchInterval: listening ? false : (query) => pollInterval(60_000, query),
   }, useAppQueryClient());
   return { market: data?.legacyMarket?.[coinType], fdvUsd: isRefetchError ? undefined : data?.legacyFdvUsd?.[coinType] };
 }
@@ -549,7 +550,8 @@ export function LegacyCoinScreen({ coinType, name, symbol, logoUrl, chart, decim
   const price = useChartPrice(poolKey);
   const liveScreen = useLiveScreen();
   const live = useLiveCoin({ coin: coinType, pools: [poolKey], expected: null, enabled: liveScreen });
-  const { market, fdvUsd: readFdvUsd } = useLegacyMarket(coinType, !major, liveScreen);
+  useReportListening(live.live && live.stats !== null);
+  const { market, fdvUsd: readFdvUsd } = useLegacyMarket(coinType, !major, useLiveListening());
   const fdvUsd = live.stats?.fdvUsd ?? readFdvUsd;
   const mark = <>{verified || verifiedCommunity ? <CoinVerifiedMark community={verifiedCommunity} /> : null}{legacy ? <CoinLegacyMark /> : null}</>;
   return <div className={styles.page} data-legacy-coin="">

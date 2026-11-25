@@ -35,6 +35,31 @@ export function allChartInterval(launchAt: number | undefined, now: number, plot
   return CHART_INTERVALS.find((interval) => (now - launchAt) / candleIntervalMs(interval) <= slots) ?? "1w";
 }
 
+/** A chart this sparse reads better one interval coarser: under a quarter of its buckets traded. */
+const DENSE_SHARE = 0.25;
+/** A coarser interval still leaves a bounded range this many buckets. */
+const MIN_RANGE_BUCKETS = 12;
+
+/**
+ * The finest interval, from `interval` up, where at least a quarter of the buckets from the
+ * first trade to `nowMs` traded, so a quiet coin opens on bars rather than a flat line.
+ * `tradeTimes` are the starts of the traded candles read at `interval`.
+ */
+export function denseInterval(tradeTimes: readonly number[], controls: ChartControls, nowMs: number): ChartInterval {
+  if (controls.range === "live" || !tradeTimes.length) return controls.interval;
+  const first = Math.min(...tradeTimes);
+  const span = RANGE_MS[controls.range];
+  const candidates = CHART_INTERVALS.filter((item) => candleIntervalMs(item) >= candleIntervalMs(controls.interval)
+    && (span === null || span / candleIntervalMs(item) >= MIN_RANGE_BUCKETS));
+  for (const item of candidates) {
+    const step = candleIntervalMs(item);
+    const traded = new Set(tradeTimes.map((at) => candleBucketStart(item, at))).size;
+    const buckets = (candleBucketStart(item, nowMs) - candleBucketStart(item, first)) / step + 1;
+    if (traded / buckets >= DENSE_SHARE) return item;
+  }
+  return candidates.at(-1) ?? controls.interval;
+}
+
 export const LIVE_CHART_CONTROLS = { interval: "1s", range: "live" } as const satisfies ChartControls;
 
 export const CHART_CONTROLS_COOKIE = "blast-chart-controls";

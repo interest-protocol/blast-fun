@@ -100,10 +100,11 @@ export function useLiveCoin(request: Readonly<{
     const listener: MarketStreamListener & { stats?: (frame: unknown) => void } = {
       state: (next) => {
         if (next === state) return;
-        if (state === "live" || state === null || next === "live") since = Date.now();
+        // The stale clock starts when the stream begins (re)connecting, from live, paused or unavailable alike.
+        if (state !== "connecting" && state !== "reconnecting") since = Date.now();
         state = next;
         if (timer) clearTimeout(timer);
-        timer = next === "connecting" || next === "reconnecting" ? setTimeout(publish, LIVE_STALE_MS) : null;
+        timer = next === "connecting" || next === "reconnecting" ? setTimeout(publish, Math.max(0, since + LIVE_STALE_MS - Date.now())) : null;
         publish();
       },
       stats: (frame) => {

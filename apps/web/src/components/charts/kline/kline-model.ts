@@ -41,29 +41,47 @@ export function klineBars(sources: readonly DrawnSeries[], memeDecimals: number 
   return [...byStart.values()].sort((a, b) => a.timestamp - b.timestamp);
 }
 
-/** Above this many bars the chart shows the trades it has and leaves quiet buckets out. */
+/** The chart fills at most this many of the newest buckets; older quiet buckets stay out. */
 export const MAX_FILLED_BARS = 2_000;
 
+function flatBar(timestamp: number, close: number): Bar {
+  return { timestamp, open: close, high: close, low: close, close, volume: 0 };
+}
+
 /**
- * KLineCharts spaces bars by index, so a bucket without trades becomes a flat bar at the
- * previous close with no volume; the time axis then keeps its pace on a quiet coin.
- * A range that would pass `MAX_FILLED_BARS` stays unfilled.
+ * KLineCharts spaces bars by index, so the chart's series is made continuous: each bar
+ * snaps to its bucket and opens at the previous close (its range widened to match), and
+ * a bucket without trades becomes a flat bar at the previous close with no volume, up to
+ * the bucket holding `nowMs`. Only the newest `cap` buckets are filled, so a long quiet
+ * history stays light; the time axis then keeps its pace on a quiet coin.
  */
-export function fillGaps(bars: readonly Bar[], interval: CandleInterval): readonly Bar[] {
-  const first = bars[0];
-  const last = bars.at(-1);
-  if (!first || !last) return bars;
+export function fillGaps(bars: readonly Bar[], interval: CandleInterval, nowMs: number, cap = MAX_FILLED_BARS): readonly Bar[] {
+  if (!bars.length) return bars;
   const step = candleIntervalMs(interval);
-  if ((last.timestamp - first.timestamp) / step + 1 > MAX_FILLED_BARS) return bars;
+  const end = Math.max(candleBucketStart(interval, nowMs), candleBucketStart(interval, bars.at(-1)!.timestamp));
+  const from = end - (cap - 1) * step;
   const filled: Bar[] = [];
   for (const bar of bars) {
+    const at = candleBucketStart(interval, bar.timestamp);
     const previous = filled.at(-1);
-    if (previous) for (let at = previous.timestamp + step; at < bar.timestamp; at += step) {
-      filled.push({ timestamp: at, open: previous.close, high: previous.close, low: previous.close, close: previous.close, volume: 0 });
+    if (previous && at <= previous.timestamp) {
+      filled[filled.length - 1] = joinBars(previous, bar);
+      continue;
     }
-    filled.push(bar);
+    if (previous) for (let next = Math.max(previous.timestamp + step, from); next < at; next += step) filled.push(flatBar(next, previous.close));
+    const open = previous ? previous.close : bar.open;
+    filled.push({ ...bar, timestamp: at, open, high: Math.max(bar.high, open), low: Math.min(bar.low, open) });
   }
+  const last = filled.at(-1)!;
+  for (let next = Math.max(last.timestamp + step, from); next <= end; next += step) filled.push(flatBar(next, last.close));
   return filled;
+}
+
+/** Real trading buckets in `bars` (a filled bar carries no volume). */
+export function tradedBars(bars: readonly Bar[]): number {
+  let count = 0;
+  for (const bar of bars) if (bar.volume > 0) count++;
+  return count;
 }
 
 function joinBars(earlier: Bar, later: Bar): Bar {
@@ -92,14 +110,18 @@ export function pricePrecision(bars: readonly Bar[]): number {
  * How the chart moves from `shown` to `next` without losing the viewer's zoom and scroll:
  * `update` when only the newest bars changed or were added (each is pushed in order; a
  * rolling window that dropped its oldest bars keeps them on screen), `reset` when history
- * itself changed (another interval, another unit, a gap filled).
+ * itself changed (another interval, another unit). A quiet bucket that the server later
+ * filled with a trade takes the server's candle without a reload; the plot catches up on the next one.
  */
 export function barChanges(shown: readonly Bar[], next: readonly Bar[]): Readonly<{ kind: "reset" }> | Readonly<{ kind: "update"; bars: readonly Bar[]; kept: readonly Bar[] }> {
   const offset = next.length ? shown.findIndex((bar) => bar.timestamp === next[0]!.timestamp) : -1;
   if (offset < 0) return { kind: "reset" };
   const overlap = shown.length - offset;
   if (next.length < overlap) return { kind: "reset" };
-  for (let index = 0; index < overlap - 1; index++) if (!sameBar(shown[offset + index]!, next[index]!)) return { kind: "reset" };
+  for (let index = 0; index < overlap - 1; index++) {
+    const before = shown[offset + index]!;
+    if (!sameBar(before, next[index]!) && !(before.volume === 0 && before.timestamp === next[index]!.timestamp)) return { kind: "reset" };
+  }
   if (next[overlap - 1]!.timestamp !== shown.at(-1)!.timestamp) return { kind: "reset" };
   const bars = sameBar(shown.at(-1)!, next[overlap - 1]!) ? next.slice(overlap) : next.slice(overlap - 1);
   return { kind: "update", bars, kept: [...shown.slice(0, offset), ...next] };

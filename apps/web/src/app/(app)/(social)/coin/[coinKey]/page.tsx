@@ -188,12 +188,12 @@ async function renderLaunchCoin(
   });
   const execution = <CoinTradeExecution key={launchId} page={page} availability={tradeAvailability} connection={connection}>{slots.execution}</CoinTradeExecution>;
   const refreshMs = refreshIntervalMs(page);
-  // The live screen loads once and listens; it keeps the timer only while its read is unhealthy.
+  // The live screen loads once and listens; its timer rests while the stream listens on a healthy read.
   const healthy = refreshMs === HEALTHY_REFRESH_MS && page.confirmed && browserMarket !== null;
   return (
     <LiveScreen enabled={flags.liveScreen}>
       <BondingCoinScreen page={page} details={details ?? null} verified={verifiedTeam === true} slots={{ ...slots, execution }} expected={browserMarket?.expected ?? null} />
-      <CoinLive launchId={launchId} coinType={identity.coinType} tradable={page.tradable} refreshMs={flags.liveScreen && healthy ? null : refreshMs} />
+      <CoinLive launchId={launchId} coinType={identity.coinType} tradable={page.tradable} refreshMs={refreshMs} restWhileListening={flags.liveScreen && healthy} />
     </LiveScreen>
   );
 }

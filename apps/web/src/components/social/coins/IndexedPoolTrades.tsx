@@ -35,8 +35,6 @@ async function recentPoolTrades(poolKeys: readonly VenuePoolKey[], signal: Abort
   return { stale: reads.some((read) => read.stale), rows: rows.slice(0, POOL_TRADES_LOOKBACK) };
 }
 
-type RecentTrades = Awaited<ReturnType<typeof recentPoolTrades>>;
-
 /** `rows` with `fresh` in place, newest first, once each, cut to the lookback. */
 export function withLiveRows(rows: readonly ActivityRow[], fresh: readonly ActivityRow[]): ActivityRow[] {
   const known = new Set(rows.map((row) => row.position));
@@ -46,28 +44,37 @@ export function withLiveRows(rows: readonly ActivityRow[], fresh: readonly Activ
 }
 
 /**
- * The live screen's trades: the first read, then each trade the tab's stream brings for these pools.
- * The list re-reads on a timer only while the stream is not live. The screen streams its main pool
- * only, so a list over several pools (SUI) keeps its timer for the others.
+ * The live screen's trades: the first read, then each trade the tab's stream brings for these pools,
+ * kept apart from the read so a trade that lands before the read answers still shows. The list
+ * re-reads on a timer only while the stream is not live, and once each time the stream comes back,
+ * so a gap's trades are not lost. The screen streams its main pool only, so a list over several
+ * pools (SUI) keeps its timer for the others.
  */
 function useLiveTrades(client: QueryClient, queryKey: readonly unknown[], coinType: string | null, poolKeys: readonly VenuePoolKey[], enabled: boolean) {
   const [live, setLive] = useState(false);
+  const [streamed, setStreamed] = useState<Readonly<{ pools: string; rows: readonly ActivityRow[] }>>({ pools: "", rows: [] });
   const pools = poolKeys.join(",");
   useEffect(() => {
     const hub = enabled && coinType ? tabMarketStream() : null;
     if (!hub || !coinType) return;
+    let wasLive = false;
+    let dropped = false;
     return hub.observe(coinType, {
-      live: setLive,
+      live: (next) => {
+        if (next && dropped) void client.refetchQueries({ queryKey, exact: true });
+        dropped = wasLive && !next ? true : next ? false : dropped;
+        wasLive = next;
+        setLive(next);
+      },
       trade: ({ poolKey, trade }) => {
         const pool = poolKeys.find((key) => key === poolKey);
-        if (!pool) return;
-        client.setQueryData<RecentTrades>(queryKey, (data) => data && { ...data, rows: withLiveRows(data.rows, [venueTradeRow(trade, pool)]) });
+        if (pool) setStreamed((held) => ({ pools, rows: withLiveRows(held.pools === pools ? held.rows : [], [venueTradeRow(trade, pool)]) }));
       },
     });
     // `poolKeys` and `queryKey` are keyed by `pools`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client, coinType, pools, enabled]);
-  return enabled && live && poolKeys.length === 1;
+  return { live: enabled && live && poolKeys.length === 1, streamed: streamed.pools === pools ? streamed.rows : [] };
 }
 
 export function IndexedPoolTrades({ poolKeys, units }: Readonly<{ poolKeys: readonly VenuePoolKey[]; units: ActivityUnits }>) {
@@ -76,15 +83,15 @@ export function IndexedPoolTrades({ poolKeys, units }: Readonly<{ poolKeys: read
   const client = useAppQueryClient();
   const liveScreen = useLiveScreen();
   const queryKey = ["indexed-pool-trades", ...poolKeys];
-  const live = useLiveTrades(client, queryKey, units.coinType ?? null, poolKeys, liveScreen);
-  const polling = indexedPoolPolling(liveScreen ? POLL_MS : LIVE_POLL_MS);
+  const { live, streamed } = useLiveTrades(client, queryKey, units.coinType ?? null, poolKeys, liveScreen);
+  const polling = indexedPoolPolling(liveScreen && poolKeys.length === 1 ? POLL_MS : LIVE_POLL_MS);
   const query = useQuery({
     queryKey,
     queryFn: ({ signal }) => recentPoolTrades(poolKeys, signal),
     ...polling,
     refetchInterval: (query) => live && query.state.status !== "error" ? false : polling.refetchInterval(query),
   }, client);
-  const rows = heldRows ?? query.data?.rows;
+  const rows = heldRows ?? (query.data ? withLiveRows(query.data.rows, streamed) : undefined);
   if (query.isPending) return <TradeListSkeleton />;
   if (!rows || (query.isError && !rows.length)) {
     return <EmptyState title={UNAVAILABLE} role="alert" action={<Button size="sm" onClick={() => void query.refetch()}>Try again</Button>}>
