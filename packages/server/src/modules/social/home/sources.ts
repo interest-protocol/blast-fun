@@ -16,26 +16,8 @@ const TRACKED_POOL_SOURCE = `UNION ALL
       ${pg.escapeLiteral(SUI_COIN_TYPE)},'SUI',9,TRUE,NULL,NULL,NULL,NULL
     FROM (VALUES ${TRACKED_POOL_VALUES}) t(sale_token,sale_symbol,sale_name,sale_icon_url,venue,pool_id,sale_decimals)`;
 
-/**
- * Bonding curves still filling (`live`, `migration_ready`): blast-infra
- * creates a launch vault only when a curve migrates, so these have none yet.
- * The opening round is left out: its price is not public until it closes.
- * Their source lifecycle is `migrated` like every listed coin (it means
- * "has a market"); the curve's own lifecycle reaches the item as
- * `HomeCoin.curve.lifecycle` through the facts read.
- */
-const LIVE_CURVE_SOURCE = `UNION ALL
-    SELECT lp.coin_type,coalesce(m.symbol,m.name,lp.coin_type),coalesce(m.name,m.symbol,lp.coin_type),m.icon_url,m.decimals,
-      lp.venue,lp.pool_id,lp.quote_type,q.symbol,q.decimals,FALSE,lp.created_checkpoint,NULL,NULL,NULL
-    FROM chain_read_v1.pools lp
-    JOIN chain_read_v1.coin_metadata m ON m.coin_type=lp.coin_type
-    JOIN chain_read_v1.coin_metadata q ON q.coin_type=lp.quote_type
-    WHERE lp.venue='blast_curve' AND lp.lifecycle IN ('live','migration_ready')
-      AND m.decimals IS NOT NULL AND q.decimals IS NOT NULL AND q.symbol IS NOT NULL
-      AND NOT EXISTS (SELECT 1 FROM chain_read_v1.vaults v WHERE v.meme_type=lp.coin_type AND v.origin_kind='launch')`;
-
 /** Presales retain priority even when hidden, followed by the earliest eligible native launch vault. */
-function homeCoinSources(extraSources: string): string {
+function homeCoinSources(trackedPools: string): string {
   return `(SELECT p.presale_id AS source_id,p.presale_id,p.sale_token,p.sale_symbol,p.sale_name,p.sale_icon_url,
   p.sale_decimals,p.lifecycle,p.venue,p.pool_id,p.quote_type,p.quote_symbol,p.quote_decimals,
   p.start_ms,p.end_ms,p.raise_target,p.total_commitments,p.participants,FALSE AS tracked_pool_only
@@ -53,7 +35,7 @@ function homeCoinSources(extraSources: string): string {
     JOIN chain_read_v1.coin_metadata m ON m.coin_type=v.meme_type
     JOIN chain_read_v1.coin_metadata q ON q.coin_type=v.quote_type
     WHERE v.origin_kind='launch' AND m.decimals IS NOT NULL AND q.decimals IS NOT NULL AND q.symbol IS NOT NULL
-    ${extraSources}
+    ${trackedPools}
   ) c
   WHERE NOT EXISTS (SELECT 1 FROM chain_read_v1.presales p WHERE p.sale_token=c.sale_token)
   ORDER BY c.sale_token,c.tracked_pool_only,c.created_checkpoint,c.created_tx_slot,c.created_event_slot,c.vault_id))`;
@@ -61,5 +43,5 @@ function homeCoinSources(extraSources: string): string {
 
 /** Market detail and trade feeds require coverage from a launch or a presale. */
 export const HOME_COIN_SOURCES = homeCoinSources("");
-/** Discover and saved-coin reads also list live bonding curves and tracked pools with partial market coverage. */
-export const HOME_LIST_COIN_SOURCES = homeCoinSources(`${LIVE_CURVE_SOURCE}\n    ${TRACKED_POOL_SOURCE}`);
+/** Discover and saved-coin reads also expose tracked pools with partial market coverage. */
+export const HOME_LIST_COIN_SOURCES = homeCoinSources(TRACKED_POOL_SOURCE);

@@ -1,20 +1,20 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { HOME_ALMOST_GRADUATED_BPS, HOME_DEFAULT_QUERY } from "@blast/core/modules/social/contracts/home.ts";
-import { curveOf, isBlastDust, raiseUsdOf } from "@blast/server/modules/social/home/coins.ts";
+import { isBlastDust, raiseUsdOf } from "@blast/server/modules/social/home/coins.ts";
+import { createCurveTargetReader, CURVE_TARGET_REFRESH_MS } from "@blast/server/modules/social/home/curve-targets.ts";
 import { encodeCursor } from "@blast/server/modules/social/home/codec.ts";
-import { decodeHomeCursor, encodeHomeCursor, HOME_DUST_USD, homeOrder, pageOf, passesFilters, type Rankable } from "@blast/server/modules/social/home/rank.ts";
+import { decodeHomeCursor, HOME_DUST_USD, homeOrder, pageOf, type Rankable } from "@blast/server/modules/social/home/rank.ts";
 
-const base = { tracked_pool_only: false, quote_decimals: 9, quote_price_usd: "2" as string | null, raised: "0", graduation_target: null as string | null };
+const base = { tracked_pool_only: false, quote_decimals: 9, quote_price_usd: "2" as string | null, raised: "0" };
 const sale = (raised: string, quotePrice: string | null = "2") => ({ ...base, presale_id: "0xsale", raised, quote_price_usd: quotePrice });
 const curve = { ...base, presale_id: null };
 const catalog = { ...curve, tracked_pool_only: true };
-const dust = (facts: Parameters<typeof isBlastDust>[0], marketCapUsd: number | null, graduationTarget: string | null = null) => isBlastDust({ ...facts, graduation_target: graduationTarget ?? facts.graduation_target }, marketCapUsd);
+const dust = (facts: Parameters<typeof isBlastDust>[0], marketCapUsd: number | null, graduationTarget: string | null = null) => isBlastDust(facts, { marketCapUsd, graduationTarget });
 
 test("dust: a raise (a sale's, or a curve's graduation target) or a market cap under $1,000; never catalog coins or unknown values", () => {
   // TETEMU: 0.55 SUI at $2 raised $1.10.
-  assert.equal(raiseUsdOf(sale("550000000")), 1.1);
+  assert.equal(raiseUsdOf(sale("550000000"), null), 1.1);
   assert.equal(dust(sale("550000000"), 1_000_000), true, "a big market cap does not rescue a sale that raised dust");
   // 500 SUI at $2 is exactly the threshold: kept.
   assert.equal(dust(sale("500000000000"), null), false);
@@ -22,7 +22,7 @@ test("dust: a raise (a sale's, or a curve's graduation target) or a market cap u
   assert.equal(dust(sale("500000000000"), HOME_DUST_USD - 0.01), true, "a sale that raised enough but now trades under $1,000");
   assert.equal(dust(sale("1", null), null), false, "an unpriced quote is unknown, not small");
   // A curve that had to raise 400 SUI ($800) to graduate.
-  assert.equal(raiseUsdOf({ ...curve, graduation_target: "400000000000" }), 800);
+  assert.equal(raiseUsdOf(curve, "400000000000"), 800);
   assert.equal(dust(curve, 50_000, "400000000000"), true, "a low graduation target is dust whatever the coin trades at");
   assert.equal(dust(curve, HOME_DUST_USD, "8000000000000"), false);
   assert.equal(dust(curve, HOME_DUST_USD - 0.01, "8000000000000"), true);
@@ -66,79 +66,62 @@ test("a version 3 cursor (no FDV) still reads, with its FDV unknown", () => {
   assert.deepEqual(decodeHomeCursor(v3, "relevant"), { sort: "relevant", coinType: "dust", score: 903, breadth: 0, activity: 0, recency: 0, volume: 0, latestMs: null, launchedMs: null, holders: 8, fdvUsd: null });
 });
 
-/** Every row of `rows` in `sort`'s order, walked two at a time through the keyset cursor. */
-function walk(rows: Rankable[], sort: Parameters<typeof homeOrder>[0]): string[] {
-  const seen: string[] = [];
-  let cursor: string | null = null;
-  do {
-    const page: ReturnType<typeof pageOf<Rankable>> = pageOf(rows, sort, cursor === null ? null : decodeHomeCursor(cursor, sort), 2);
-    seen.push(...page.page.map((row) => row.coinType));
-    cursor = page.nextCursor;
-  } while (cursor !== null);
-  return seen;
-}
-
-test("progress, market cap and last trade: highest first, unknown last, ties by coin type; keyset paging repeats and skips nothing", () => {
-  const rows = [
-    rankable("c-unknown", {}),
-    rankable("b-half", { progressBps: 5_000, marketCapUsd: 10 }),
-    rankable("a-half", { progressBps: 5_000, marketCapUsd: 10 }),
-    rankable("ready", { progressBps: 10_000, marketCapUsd: 2_000, lastTradeMs: 50 }),
-    rankable("listed-big", { marketCapUsd: 900_000, lastTradeMs: 900, launchedMs: 1 }),
-    rankable("listed-small", { marketCapUsd: 5_000, launchedMs: 7 }),
-    rankable("quiet-old", { launchedMs: 3 }),
+test("curve targets: read once, kept, re-read only for an unseen launch, at most once a minute", async () => {
+  const launch = (launchId: string, target: bigint | null) => ({ launchId, economics: { inputs: { graduationTarget: target } } });
+  let pages: { launches: ReturnType<typeof launch>[]; nextCursor: string | null }[] = [
+    { launches: [launch("b", 8_000n), launch("a", 400n)], nextCursor: "c1" },
+    { launches: [launch("z", null)], nextCursor: null },
   ];
-  // Progress: curves by percent, then every other coin by market cap.
-  const progress = ["ready", "a-half", "b-half", "listed-big", "listed-small", "c-unknown", "quiet-old"];
-  assert.deepEqual([...rows].sort(homeOrder("progress")).map((row) => row.coinType), progress);
-  assert.deepEqual(walk(rows, "progress"), progress);
-  // A coin with no market cap goes last; it is not dropped.
-  const marketCap = ["listed-big", "listed-small", "ready", "a-half", "b-half", "c-unknown", "quiet-old"];
-  assert.deepEqual([...rows].sort(homeOrder("market_cap")).map((row) => row.coinType), marketCap);
-  assert.deepEqual(walk(rows, "market_cap"), marketCap);
-  assert.equal(pageOf(rows, "market_cap", null, 2).total, rows.length);
-  // Last trade: newest trade first; coins without one after, newest launch first.
-  const lastTrade = ["listed-big", "ready", "listed-small", "quiet-old", "a-half", "b-half", "c-unknown"];
-  assert.deepEqual([...rows].sort(homeOrder("last_trade")).map((row) => row.coinType), lastTrade);
-  assert.deepEqual(walk(rows, "last_trade"), lastTrade);
+  const asked: (string | null)[] = [];
+  let nowMs = 0;
+  const read = createCurveTargetReader(async (cursor) => {
+    asked.push(cursor);
+    const page = pages[cursor === null ? 0 : 1]!;
+    return { status: "fresh", provenance: {} as never, data: { kind: "answer", value: { view: "graduated", ...page } as never } };
+  }, () => nowMs);
+  assert.deepEqual([...(await read(["a"]))], [["b", "8000"], ["a", "400"]]);
+  assert.deepEqual(asked, [null, "c1"]);
+  await read(["a", "b"]);
+  assert.equal(asked.length, 2, "known targets need no read");
+  await read(["new"]);
+  assert.equal(asked.length, 2, "an unseen launch waits for the refresh interval");
+  nowMs = CURVE_TARGET_REFRESH_MS;
+  pages = [{ launches: [launch("new", 9_000n), launch("b", 8_000n)], nextCursor: "c1" }, pages[1]!];
+  assert.equal((await read(["new"])).get("new"), "9000");
+  assert.deepEqual(asked, [null, "c1", null], "a page with a launch it knew ends the walk");
 });
 
-test("a version 5 cursor carries progress, market cap and last trade; version 4 still reads", () => {
-  const position = { sort: "progress" as const, coinType: "x::x::X", score: 0, breadth: 0, activity: 0, recency: 0, volume: 0, latestMs: null, launchedMs: 4, holders: null, fdvUsd: 12.5, progressBps: 6_000, marketCapUsd: 99.5, lastTradeMs: 77 };
-  assert.deepEqual(decodeHomeCursor(encodeHomeCursor(position), "progress"), position);
-  assert.throws(() => decodeHomeCursor(encodeCursor("discover", [5, "progress", "x", 0, 0, 0, 0, 0, null, null, null, null, 10_001, null, null]), "progress"), "progress is at most 100%");
-  const v4 = encodeCursor("discover", [4, "relevant", "dust", 903, 0, 0, 0, 0, null, null, 8, 3.2]);
-  assert.deepEqual(decodeHomeCursor(v4, "relevant"), { sort: "relevant", coinType: "dust", score: 903, breadth: 0, activity: 0, recency: 0, volume: 0, latestMs: null, launchedMs: null, holders: 8, fdvUsd: 3.2 });
-});
+test("curve targets: a walk that fails keeps nothing, and a slow walk never holds a read", async () => {
+  const answer = (launches: { launchId: string; target: bigint }[], nextCursor: string | null) => ({
+    status: "fresh", provenance: {} as never,
+    data: { kind: "answer", value: { view: "graduated", nextCursor, launches: launches.map(({ launchId, target }) => ({ launchId, economics: { inputs: { graduationTarget: target } } })) } as never },
+  }) as const;
+  let nowMs = 0;
+  let failSecond = true;
+  const read = createCurveTargetReader(async (cursor) => {
+    if (cursor === null) return answer([{ launchId: "b", target: 8_000n }], "c1");
+    if (failSecond) return { status: "unavailable" } as never;
+    return answer([{ launchId: "a", target: 400n }], null);
+  }, () => nowMs);
+  assert.equal((await read(["a"])).size, 0, "page 2 failed: page 1's targets are not kept, so no gap hides behind them");
+  nowMs = CURVE_TARGET_REFRESH_MS;
+  failSecond = false;
+  assert.deepEqual([...(await read(["a"]))], [["b", "8000"], ["a", "400"]]);
 
-test("stages: almost needs a known progress of 60% or more; graduated needs a DEX listing", () => {
-  const candidate = { participants: 0, launchedMs: null, tradable: false, listed: false, progressBps: null as number | null, nowMs: 0 };
-  const almost = { ...HOME_DEFAULT_QUERY, stage: "almost" as const };
-  const graduated = { ...HOME_DEFAULT_QUERY, stage: "graduated" as const };
-  assert.equal(passesFilters(almost, { ...candidate, progressBps: HOME_ALMOST_GRADUATED_BPS }), true);
-  assert.equal(passesFilters(almost, { ...candidate, progressBps: HOME_ALMOST_GRADUATED_BPS - 1 }), false);
-  assert.equal(passesFilters(almost, candidate), false, "a curve with an unknown target is not almost graduated");
-  assert.equal(passesFilters(almost, { ...candidate, listed: true }), false);
-  assert.equal(passesFilters(graduated, { ...candidate, listed: true }), true);
-  assert.equal(passesFilters(graduated, { ...candidate, progressBps: 9_000 }), false, "a curve still filling is not graduated");
-  assert.equal(passesFilters(HOME_DEFAULT_QUERY, candidate), true);
-});
+  let release = () => {};
+  const slow = createCurveTargetReader(() => new Promise((resolve) => { release = () => resolve(answer([{ launchId: "s", target: 1n }], null)); }), () => 0, 5);
+  assert.equal((await slow(["s"])).size, 0, "the read returns after the wait, unknown");
+  release();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal((await slow(["s"])).get("s"), "1", "the walk finished on its own");
 
-test("curve progress is a percent of each curve's own target, so SUI and USDC curves order together", () => {
-  const facts = (lifecycle: string, reserve: string | null, target: string | null) => ({ curve_lifecycle: lifecycle, quote_reserve: reserve, graduation_target: target });
-  // 500 of 1,000 SUI (9 decimals) has far more atoms than 700 of 1,000 USDC (6 decimals), yet less progress.
-  const sui = curveOf(facts("live", "500000000000", "1000000000000"));
-  const usdc = curveOf(facts("live", "700000000", "1000000000"));
-  assert.deepEqual(sui, { lifecycle: "live", progress_bps: 5_000, quote_remaining: "500000000000" });
-  assert.deepEqual(usdc, { lifecycle: "live", progress_bps: 7_000, quote_remaining: "300000000" });
-  const rows = [rankable("sui", { progressBps: sui!.progress_bps }), rankable("usdc", { progressBps: usdc!.progress_bps })];
-  assert.deepEqual(rows.sort(homeOrder("progress")).map((row) => row.coinType), ["usdc", "sui"]);
-  // A full curve waiting to migrate, and one that has, are at 100% with nothing to go.
-  assert.deepEqual(curveOf(facts("migration_ready", "1", "2")), { lifecycle: "migration_ready", progress_bps: 10_000, quote_remaining: "0" });
-  assert.deepEqual(curveOf(facts("migrated", null, null)), { lifecycle: "migrated", progress_bps: 10_000, quote_remaining: "0" });
-  // An unknown or zero target is unknown progress, never a guess.
-  assert.deepEqual(curveOf(facts("live", "1", null)), { lifecycle: "live", progress_bps: null, quote_remaining: null });
-  assert.deepEqual(curveOf(facts("live", "1", "0")), { lifecycle: "live", progress_bps: null, quote_remaining: null });
-  assert.equal(curveOf(facts("unknown", "1", "2")), null);
-  assert.equal(curveOf({ curve_lifecycle: null, quote_reserve: null, graduation_target: null }), null);
+  // A bonding curve is never seen, so a walk starts every interval: only the first one may hold a read.
+  let laterMs = 0;
+  let walks = 0;
+  const later = createCurveTargetReader(() => (walks += 1) === 1 ? Promise.resolve(answer([{ launchId: "g", target: 2n }], null)) : new Promise(() => {}), () => laterMs, 60_000);
+  assert.equal((await later(["g"])).get("g"), "2");
+  laterMs = CURVE_TARGET_REFRESH_MS;
+  const startedMs = Date.now();
+  assert.deepEqual([[...(await later(["g", "bonding"]))], walks], [[["g", "2"]], 2]);
+  assert.ok(Date.now() - startedMs < 1_000, "the refresh runs behind the read, not before it");
 });

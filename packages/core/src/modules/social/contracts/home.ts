@@ -31,7 +31,7 @@ import type { FeedItemActor } from "@blast/core/modules/social/contracts/items.t
  * the replica through `chain_read_v1` views, and one viewer read on the
  * primary for the Following source.
  *
- * - `GET /api/social/home?window=&sort=&stage=&page=&limit=&min_participants=&age=&tradable=`:
+ * - `GET /api/social/home?window=&sort=&page=&limit=&min_participants=&age=&tradable=`:
  *   Discover, one page of coins (`page` is 1-based over the ranked list;
  *   `limit` rows per page; the answer carries `page`, `pages` and `total`;
  *   `cursor=` still names a keyset page for older readers). JSON Schema
@@ -100,12 +100,6 @@ export const SOCIAL_HOME_FOLLOWING_PATH = "/api/social/me/home/following";
 export const HOME_MOBILE_MARKET_PARAM = "mobile_market";
 export const HOME_ROLLING_CHANGE_PARAM = "rolling_change";
 export const HOME_DEX_VOLUME_PARAM = "dex_volume";
-/**
- * Opts into `HomeCoin.curve` and `HomeCoin.graduated_ms`. A tab loaded
- * before the fields shipped rejects a field it does not know, so only a
- * client that sends this receives them.
- */
-export const HOME_CURVE_PARAM = "curve";
 
 /** Keep the original response shape for clients that did not request mobile market figures. */
 export function withHomeMobileMarket(path: string, liveInputs = false): string {
@@ -114,7 +108,7 @@ export function withHomeMobileMarket(path: string, liveInputs = false): string {
 
 /** Home requests market fields and labeled shorter comparisons on its existing reads. */
 export function withHomeMarketDetails(path: string): string {
-  return `${withHomeMobileMarket(path, true)}&${HOME_DEX_VOLUME_PARAM}=1&${HOME_ROLLING_CHANGE_PARAM}=1&${HOME_CURVE_PARAM}=1`;
+  return `${withHomeMobileMarket(path, true)}&${HOME_DEX_VOLUME_PARAM}=1&${HOME_ROLLING_CHANGE_PARAM}=1`;
 }
 
 export const HOME_RECENT_BUYS_PARAM = "recent_buys";
@@ -148,27 +142,17 @@ export function isHomeWindow(value: unknown): value is HomeWindow {
 
 /**
  * Discover's orders. `relevant` is the documented rule-based score
- * (`home/rank.ts`), shown as Trending; `trending` is the most dollars moved in
- * the window (shown as Vol 24h); `newest` is the latest launch; `held` is the
- * most holders now (`HomeCoin.holders`, blast-infra's count; a coin without
- * one comes last). In `relevant` and `trending`, coins with no trades in the
- * window follow the active ones, by FDV, then holders.
- *
- * - `progress`: live bonding curves by graduation progress
- *   (`HomeCoin.curve.progress_bps`, a percent, so SUI and USDC curves compare
- *   fairly), highest first; every other coin after them by market cap.
- * - `market_cap`: market cap now, highest first. A curve coin's comes from
- *   its live supply, a sale's from its supply less the tokens still in
- *   vesting, a catalog coin's from the tracked pool's supply. A coin whose
- *   market cap is unknown comes last: never dropped, never guessed.
- * - `last_trade`: the newest buy or sell in the window first (trades only,
- *   not commitments or claims); coins without a trade in the window follow,
- *   newest launch first.
- *
- * A Blast coin whose raise, curve target or market cap is under $1,000
- * (`HOME_DUST_USD`) is left out of every order and every stage.
+ * (`home/rank.ts`); `trending` is the most distinct participants in the
+ * window; `newest` is the latest launch; `held` is the most holders now
+ * (`HomeCoin.holders`, blast-infra's count; a coin without one comes last),
+ * the redesign's "Most held". In `relevant` and `trending`, coins with no
+ * trades in the window follow the active ones, by FDV, then holders. A Blast
+ * coin whose raise or market cap is under $1,000 (`HOME_DUST_USD`) is left
+ * out of every order.
+ * Market cap is not offered as an order: a sale's supply can come from its
+ * terms, read for the page only, so no order over every coin could be true.
  */
-export const HOME_SORTS = ["relevant", "trending", "newest", "held", "progress", "market_cap", "last_trade"] as const;
+export const HOME_SORTS = ["relevant", "trending", "newest", "held"] as const;
 export type HomeSort = (typeof HOME_SORTS)[number];
 export const HOME_DEFAULT_SORT: HomeSort = "relevant";
 
@@ -176,23 +160,6 @@ export const homeSortSchema = z.enum(HOME_SORTS);
 
 export function isHomeSort(value: unknown): value is HomeSort {
   return homeSortSchema.safeParse(value).success;
-}
-
-/**
- * Which coins Discover lists. `all`: every coin. `almost`: live bonding
- * curves at `HOME_ALMOST_GRADUATED_BPS` or more of their graduation target.
- * `graduated`: every coin that trades on a DEX (graduated curves, migrated
- * sales, V1 and catalog coins); a sale or a curve still filling is left out.
- */
-export const HOME_STAGES = ["all", "almost", "graduated"] as const;
-export type HomeStage = (typeof HOME_STAGES)[number];
-/** A live curve at or past this progress (60%) is almost graduated, the Bonding card's rule. */
-export const HOME_ALMOST_GRADUATED_BPS = 6_000;
-
-export const homeStageSchema = z.enum(HOME_STAGES);
-
-export function isHomeStage(value: unknown): value is HomeStage {
-  return homeStageSchema.safeParse(value).success;
 }
 
 /** The launch-age filter: coins that started trading within the period, or every coin. */
@@ -276,9 +243,6 @@ export type HomeRank = HomeCoin["rank"];
 export type HomeCoin = HomeWire<z.infer<typeof homeCoinSchema>>;
 
 export type HomeDexVolume = NonNullable<HomeCoin["dex_volume"]>;
-
-/** A bonding curve coin's curve (`HomeCoin.curve`). */
-export type HomeCurve = NonNullable<HomeCoin["curve"]>;
 
 export type HomeCoinsPage = HomeWire<z.infer<typeof homeCoinsPageSchema>>;
 
@@ -370,8 +334,6 @@ export type HomeFollowingResponse = HomeWire<
 export type HomeQuery = Readonly<{
   window: HomeWindow;
   sort: HomeSort;
-  /** Which coins are listed (`HOME_STAGES`). */
-  stage: HomeStage;
   /** Only coins with at least this many distinct participants in the window (0: every coin). */
   minParticipants: number;
   age: HomeAge;
@@ -388,7 +350,6 @@ export type HomeQuery = Readonly<{
 export const HOME_DEFAULT_QUERY: HomeQuery = Object.freeze({
   window: HOME_DEFAULT_WINDOW,
   sort: HOME_DEFAULT_SORT,
-  stage: "all",
   minParticipants: 0,
   age: "all",
   tradable: false,
@@ -404,8 +365,6 @@ export function socialHomePath(query: Partial<HomeQuery>): string {
     params.set("window", query.window);
   if (query.sort !== undefined && query.sort !== HOME_DEFAULT_SORT)
     params.set("sort", query.sort);
-  if (query.stage !== undefined && query.stage !== "all")
-    params.set("stage", query.stage);
   if (query.minParticipants !== undefined && query.minParticipants > 0)
     params.set("min_participants", String(query.minParticipants));
   if (query.age !== undefined && query.age !== "all")

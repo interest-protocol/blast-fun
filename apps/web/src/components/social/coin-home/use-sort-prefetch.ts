@@ -4,10 +4,9 @@ import { useEffect } from "react";
 
 import { PUBLIC_STALE_MS } from "#web/lib/query/client.ts";
 import { useAppQueryClient } from "#web/lib/query/provider.tsx";
-import type { HomeQuery } from "@blast/core/web/contracts/home.ts";
+import { HOME_SORTS, type HomeQuery } from "@blast/core/web/contracts/home.ts";
 
 import { discoverQuery } from "./home-client";
-import { HOME_VIEW_SORTS } from "./home-state";
 
 /**
  * Makes a sort switch instant. Once the visible list has loaded, the first
@@ -31,7 +30,7 @@ export function useSortPrefetch(query: HomeQuery, loaded: boolean): void {
   useEffect(() => {
     if (!loaded || query.page !== 1 || query.cursor !== null) return;
     const prefetch = () => {
-      for (const sort of HOME_VIEW_SORTS) {
+      for (const sort of HOME_SORTS) {
         if (sort !== query.sort) void client.prefetchQuery(discoverQuery({ ...query, sort }, true));
       }
     };
