@@ -113,8 +113,16 @@ test("counts: distinct identities overall and per direction; one actor's repeats
     side({ who: "w:2", kind: "trade_buy", n: "1" }),
     side({ who: "w:3", kind: "presale_commit", n: "2", latest_ms: "100" }),
   ]).get(SALE);
-  assert.deepEqual(counts, { sale: SALE, participants: "3", events: "8", buyers: "2", sellers: "1", backers: "1", claimers: "0", latest_ms: "9000", volume_usd: "4.00", net_inflow_usd: "2.00" });
+  assert.deepEqual(counts, { sale: SALE, participants: "3", events: "8", buyers: "2", sellers: "1", backers: "1", claimers: "0", latest_ms: "9000", last_trade_ms: "9000", volume_usd: "4.00", net_inflow_usd: "2.00" });
   assert.equal(countsOf([]).size, 0);
+  // The last trade is a buy or a sell: a later commit or claim does not move it.
+  const later = countsOf([
+    side({ who: "a:1", kind: "trade_sell", latest_ms: "500" }),
+    side({ who: "w:2", kind: "presale_commit", latest_ms: "900" }),
+    side({ who: "w:3", kind: "presale_claim", latest_ms: "950" }),
+  ]).get(SALE);
+  assert.deepEqual([later?.latest_ms, later?.last_trade_ms], ["950", "500"]);
+  assert.equal(countsOf([side({ who: "w:2", kind: "presale_commit", latest_ms: "900" })]).get(SALE)?.last_trade_ms, null);
   // Net inflow: buys and commits in, sells out, claims neither; it may go below zero.
   const out = countsOf([
     side({ who: "a:1", kind: "trade_buy", usd: "10.50" }),
@@ -247,17 +255,17 @@ test("orders are total and deterministic; paging skips the cursor's position and
 test("filters: unknown data never passes a numeric filter", () => {
   const query = { ...HOME_DEFAULT_QUERY, minParticipants: 2, age: "7d" as const, tradable: true };
   const now = 100 * 86_400_000;
-  assert.equal(passesFilters(query, { participants: 2, launchedMs: now - 86_400_000, tradable: true, nowMs: now }), true);
-  assert.equal(passesFilters(query, { participants: 1, launchedMs: now - 86_400_000, tradable: true, nowMs: now }), false);
-  assert.equal(passesFilters(query, { participants: 2, launchedMs: null, tradable: true, nowMs: now }), false);
-  assert.equal(passesFilters(query, { participants: 2, launchedMs: now - 8 * 86_400_000, tradable: true, nowMs: now }), false);
-  assert.equal(passesFilters(query, { participants: 2, launchedMs: now - 86_400_000, tradable: false, nowMs: now }), false);
-  assert.equal(passesFilters(HOME_DEFAULT_QUERY, { participants: 0, launchedMs: null, tradable: false, nowMs: now }), true);
+  assert.equal(passesFilters(query, { participants: 2, launchedMs: now - 86_400_000, tradable: true, listed: true, progressBps: null, nowMs: now }), true);
+  assert.equal(passesFilters(query, { participants: 1, launchedMs: now - 86_400_000, tradable: true, listed: true, progressBps: null, nowMs: now }), false);
+  assert.equal(passesFilters(query, { participants: 2, launchedMs: null, tradable: true, listed: true, progressBps: null, nowMs: now }), false);
+  assert.equal(passesFilters(query, { participants: 2, launchedMs: now - 8 * 86_400_000, tradable: true, listed: true, progressBps: null, nowMs: now }), false);
+  assert.equal(passesFilters(query, { participants: 2, launchedMs: now - 86_400_000, tradable: false, listed: true, progressBps: null, nowMs: now }), false);
+  assert.equal(passesFilters(HOME_DEFAULT_QUERY, { participants: 0, launchedMs: null, tradable: false, listed: true, progressBps: null, nowMs: now }), true);
 });
 
 test("the query: defaults, each parameter once, malformed ranges refused rather than clamped", () => {
   assert.deepEqual(parseHomeQuery(new URLSearchParams("")), HOME_DEFAULT_QUERY);
-  assert.deepEqual(parseHomeQuery(new URLSearchParams("window=1h&sort=newest&min_participants=3&age=7d&tradable=1&limit=5&page=4")), { window: "1h", sort: "newest", minParticipants: 3, age: "7d", tradable: true, limit: 5, page: 4, cursor: null });
+  assert.deepEqual(parseHomeQuery(new URLSearchParams("window=1h&sort=newest&min_participants=3&age=7d&tradable=1&limit=5&page=4")), { window: "1h", sort: "newest", stage: "all", minParticipants: 3, age: "7d", tradable: true, limit: 5, page: 4, cursor: null });
   assert.equal(parseHomeQuery(new URLSearchParams("limit=50")).limit, 50);
   // `ranked=1` asks for the count; without it the query (and so the answer and cache key) is unchanged.
   assert.equal(parseHomeQuery(new URLSearchParams("sort=trending&ranked=1")).ranked, true);

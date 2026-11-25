@@ -165,6 +165,19 @@ export const homeCoinSchema = z.strictObject({
     .regex(SUI_OBJECT_ID_PATTERN)
     .nullable()
     .describe("A curve coin's launch, the key of its coin page; null for a sale's coin."),
+  curve: z
+    .strictObject({
+      lifecycle: z.enum(["opening_round", "live", "migration_ready", "migrated"]),
+      progress_bps: homeIntegerSchema.min(0).max(10000).nullable(),
+      quote_remaining: z.string().regex(/^(0|[1-9][0-9]*)$/).nullable(),
+    })
+    .nullable()
+    .optional()
+    .describe("A Blast bonding curve coin's curve: its lifecycle, its progress toward graduation in basis points (10000 once ready to migrate or migrated), and the quote atoms left to its target; progress and remaining are null while the target is unknown. Null for any other coin. Present only when the read asks for it (`curve=1`)."),
+  graduated_ms: z
+    .xor([z.null(), feedItemDefinitions.millis])
+    .optional()
+    .describe("When a curve coin graduated: its first DEX pool's creation. Null for a curve still filling and for any other coin. Present only with `curve=1`."),
   quote: z.strictObject({
     type: z.string().min(1),
     symbol: z.string().min(1),

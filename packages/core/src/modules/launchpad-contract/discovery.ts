@@ -277,11 +277,16 @@ export function launchProgressBps(launch: LaunchSummary): bigint {
   if (quoteReserve === null || graduationTarget === null) {
     throw new ContractViolation("inputs", "a curve has its Quote reserve and graduation target");
   }
-  return sdkLaunchProgressBps({
-    realQuoteReserve: quoteReserve,
-    graduationTarget,
-    lifecycle: SDK_LIFECYCLE[launch.lifecycle],
-  });
+  return curveProgressBps(launch.lifecycle, quoteReserve, graduationTarget);
+}
+
+/**
+ * The SDK's progress in basis points over a curve's lifecycle and raw atoms:
+ * 10,000 once it is ready to migrate or migrated, else its reserve over its
+ * target, capped. The target must be positive.
+ */
+export function curveProgressBps(lifecycle: LaunchLifecycle, quoteReserve: bigint, graduationTarget: bigint): bigint {
+  return sdkLaunchProgressBps({ realQuoteReserve: quoteReserve, graduationTarget, lifecycle: SDK_LIFECYCLE[lifecycle] });
 }
 
 /** A native position `c:t:e:p` as the three zero-padded tie-break parts. */
