@@ -112,13 +112,22 @@ export function liveMarketSource(path: string, state: LiveSourceState, deps: Liv
     }
     socket = current;
     silent = true;
+    /** Render's edge delivers custom close codes as 1005, so the server names its code in a last `close` frame. */
+    let named: number | null = null;
     current.onmessage = ({ data }) => {
       if (closed || typeof data !== "string") return;
-      silent = false;
-      state.failures = 0;
-      for (const block of parseSseBlocks(data)) emit(block.event, { data: block.data });
+      for (const block of parseSseBlocks(data)) {
+        if (block.event === "close") {
+          named = closeCode(block.data);
+          continue;
+        }
+        silent = false;
+        state.failures = 0;
+        emit(block.event, { data: block.data });
+      }
     };
-    current.onclose = ({ code }) => {
+    current.onclose = (event) => {
+      const code = named ?? event.code;
       if (socket !== current) return;
       socket = null;
       if (closed) return;
@@ -153,6 +162,15 @@ export function liveMarketSource(path: string, state: LiveSourceState, deps: Liv
       current?.close();
     },
   };
+}
+
+function closeCode(data: string): number | null {
+  try {
+    const { code } = JSON.parse(data) as { code?: unknown };
+    return Number.isInteger(code) ? (code as number) : null;
+  } catch {
+    return null;
+  }
 }
 
 /** The browser's WebSocket behind the two handlers the source sets. */

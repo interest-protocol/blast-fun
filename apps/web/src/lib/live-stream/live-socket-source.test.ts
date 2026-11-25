@@ -79,7 +79,9 @@ test("the tab uses the SSE relay while the socket is off, refused, or failing", 
   const refused = harness(async () => GRANT);
   refused.open();
   await settle();
-  refused.sockets[0]!.onclose!({ code: 4429 });
+  // Through Render's edge the code arrives in the last frame; the close itself says 1005.
+  refused.sockets[0]!.onmessage!({ data: 'event: close\ndata: {"code":4429}\n\n' });
+  refused.sockets[0]!.onclose!({ code: 1005 });
   refused.open();
   await settle();
   assert.deepEqual(refused.relays, [PATH], "a per-address refusal falls back at once");

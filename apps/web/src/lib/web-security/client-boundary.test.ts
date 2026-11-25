@@ -21,12 +21,16 @@ const sourcePath = (file: string) => relative(file.startsWith(`${CORE_SOURCE}/`)
 const EXTENSIONS = ["", ".ts", ".tsx", "/index.ts", "/index.tsx"];
 
 /** What no client module may contain, and why. */
+const OPENS_SOCKET = /new\s+WebSocket\b/;
+/** The one browser socket: to the hints live host (BLAST_LIVE_SOCKET_URL), admitted by a server-minted ticket, never private infra. */
+const LIVE_SOCKET_SOURCE = "lib/live-stream/live-socket-source.ts";
+
 const FORBIDDEN: readonly [RegExp, string][] = [
   [/BLAST_INFRA_API_KEY/, "blast-infra's server-only key"],
   [/BLAST_INFRA_ORIGIN/, "blast-infra's origin (server-only, or its deprecated public name)"],
   [/x-blast-infra-key/i, "the key header"],
   [/BLAST_INFRA_KEY_HEADER|blastInfraFetch|marketDataOrigin|defaultMarketDataDependencies/, "the server's blast-infra wiring"],
-  [/new\s+WebSocket\b/, "a browser socket to private infra needs the server's key"],
+  [OPENS_SOCKET, "a browser socket to private infra needs the server's key"],
 ];
 
 /** The server module that holds the origin and key: no client module may reach it. */
@@ -115,7 +119,8 @@ test("WP2: no client module names blast-infra's server-only origin or key, reach
   for (const serverOnly of SERVER_ONLY) assert.ok(!files.includes(serverOnly), `a client module reaches ${serverOnly}`);
   assert.deepEqual(serverReached(graph), [], "no client module reaches packages/server");
   const offences = [...graph].flatMap(([file, source]) =>
-    FORBIDDEN.filter(([pattern]) => pattern.test(source)).map(([, why]) => `${sourcePath(file)}: ${why}`),
+    FORBIDDEN.filter(([pattern]) => pattern.test(source) && !(pattern === OPENS_SOCKET && sourcePath(file) === LIVE_SOCKET_SOURCE))
+      .map(([, why]) => `${sourcePath(file)}: ${why}`),
   );
   assert.deepEqual(offences, []);
 });
