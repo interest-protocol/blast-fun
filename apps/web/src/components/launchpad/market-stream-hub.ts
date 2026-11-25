@@ -143,6 +143,8 @@ export class MarketStreamHub {
   private connection: Connection | null = null;
   private hints: ReturnType<typeof beginMarketHints> | null = null;
   private attempts = 0;
+  /** The stream was refused even after a gate refresh: no source and no timer until the tab returns or the pools change. */
+  private refused = false;
   private reconciling = false;
   private cancelHeartbeat: (() => void) | null = null;
   private cancelHello: (() => void) | null = null;
@@ -280,7 +282,10 @@ export class MarketStreamHub {
   private replay(subscriber: Subscriber): void {
     const connection = this.connection;
     if (!connection || !this.subscribers.includes(subscriber) || !this.covers(subscriber) || subscriber.state !== null) return;
-    if (!connection.source) return this.tell(subscriber, this.deps.visible() ? "connecting" : "paused");
+    if (!connection.source) {
+      if (this.refused) return this.tell(subscriber, "unavailable");
+      return this.tell(subscriber, this.deps.visible() ? "connecting" : "paused");
+    }
     this.tell(subscriber, connection.live ? "live" : "connecting");
     if (subscriber.request.presale && connection.presaleFence !== null)
       subscriber.request.listener.presaleReady?.(Math.max(connection.presaleFence, connection.presaleSeen));
@@ -402,6 +407,7 @@ export class MarketStreamHub {
     for (const key of connection.pools.keys()) params.append("pool", key);
     for (const coin of connection.priceCoins) params.append("price_coin", coin);
     if (connection.presale) params.set("presale", connection.presale);
+    this.refused = false;
     const source = this.deps.createSource(`${MARKET_STREAM_PATH}?${params}`);
     connection.source = source;
     this.covered("connecting");
@@ -504,12 +510,13 @@ export class MarketStreamHub {
     });
     // A drop after the stream opened: not live, retried with backoff.
     source.addEventListener("error", () => { if (current()) this.reconnect(); });
-    // Refused before it opened even after one gate refresh (a refused cookie, or `503 Market streaming is busy`):
-    // polls carry the page until the tab returns or a subscription changes.
+    // Refused before it opened even after one gate refresh (a refused cookie, or any non-200 open such as
+    // `503 Market streaming is busy`): polls carry the page until the tab returns or the wanted pools change.
     source.addEventListener("refused", () => {
       if (!current()) return;
       this.hints?.disconnected();
       this.drop();
+      this.refused = true;
       this.covered("unavailable");
     });
     source.addEventListener("hint", (event) => {

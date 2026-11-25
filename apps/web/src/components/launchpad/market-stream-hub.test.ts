@@ -312,6 +312,11 @@ test("a stream the gate still refuses after its refresh stops on polls until the
   assert.equal(s.source().closed, true);
   assert.deepEqual(chart.states, ["connecting", "unavailable"]);
   assert.equal(s.timers.length, 0, "no reconnect is scheduled, so a refused tab never loops");
+  const late = watcher();
+  s.hub.subscribe({ pools: late.pools, expected, listener: late.listener });
+  await settle();
+  assert.deepEqual(late.states, ["unavailable"], "a later subscriber to the same pools is told the truth");
+  assert.equal(s.sources.length, 1);
   s.setVisible(false);
   s.setVisible(true);
   assert.equal(s.sources.length, 2, "the tab's return tries once more");

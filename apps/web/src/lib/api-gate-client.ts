@@ -103,6 +103,8 @@ export function installGateAwareFetch(target: { fetch: Fetch } = globalThis): vo
 }
 
 let refreshingGate: Promise<boolean> | null = null;
+/** A hung refresh counts as failed, so a waiting stream stops instead of hanging. */
+const GATE_REFRESH_TIMEOUT_MS = 10_000;
 
 /**
  * `GET /api/gate` once for every caller waiting on it now: true when a new
@@ -110,7 +112,7 @@ let refreshingGate: Promise<boolean> | null = null;
  */
 export function refreshGate(): Promise<boolean> {
   return (refreshingGate ??= globalThis
-    .fetch(GATE_REFRESH_PATH, { method: "GET", credentials: "same-origin", cache: "no-store" })
+    .fetch(GATE_REFRESH_PATH, { method: "GET", credentials: "same-origin", cache: "no-store", signal: AbortSignal.timeout(GATE_REFRESH_TIMEOUT_MS) })
     .then((response) => response.ok)
     .catch(() => false)
     .finally(() => {

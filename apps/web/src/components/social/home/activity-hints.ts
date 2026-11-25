@@ -163,6 +163,8 @@ export class ActivityHints {
   #catchUp = false;
   /** The engine refused (not mainnet, no topic) or the browser did: no reconnect until the surfaces start over. */
   #refused = false;
+  /** The refusal came from the socket closing as unavailable (a gate refusal or a busy relay): the tab's return tries once more. */
+  #socketRefused = false;
   readonly #seen = new Set<string>();
   readonly #connectionListeners = new Set<() => void>();
 
@@ -186,6 +188,7 @@ export class ActivityHints {
     this.#surfaces.add(surface);
     if (this.#surfaces.size === 1) {
       this.#refused = false;
+      this.#socketRefused = false;
       this.#catchUp = this.#deps.onVisibilityChange !== undefined && !this.#deps.visible();
       this.#offVisibility = this.#deps.onVisibilityChange?.(() => this.#visibilityChanged()) ?? null;
       this.#connect();
@@ -235,6 +238,7 @@ export class ActivityHints {
     this.#connectionChanged();
     if (socket.unavailable && !this.#refused) {
       this.#refused = true;
+      this.#socketRefused = true;
       this.#metric({ event: "unavailable", reason: "socket" });
     }
     if (this.#surfaces.size === 0 || this.#refused || !this.#deps.visible()) return;
@@ -362,6 +366,7 @@ export class ActivityHints {
   /** The engine or the browser refused: close, and stay on the poll until the surfaces start over. */
   #refuse(reason: "socket" | "hello" | "network" | "subscribe"): void {
     this.#refused = true;
+    this.#socketRefused = false;
     this.#metric({ event: "unavailable", reason });
     const socket = this.#socket;
     this.#socket = null;
@@ -374,6 +379,7 @@ export class ActivityHints {
 
   #visibilityChanged(): void {
     if (this.#deps.visible()) {
+      if (this.#socketRefused) this.#refused = this.#socketRefused = false;
       if (this.#retry === null) this.#connect();
       return;
     }

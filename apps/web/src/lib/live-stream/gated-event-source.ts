@@ -1,7 +1,11 @@
 import { refreshGate } from "#web/lib/api-gate-client.ts";
 
 /** The part of a browser `EventSource` this module drives. */
-export type EventSourceLike = Pick<EventSource, "addEventListener" | "close" | "readyState">;
+export type EventSourceLike = {
+  readonly readyState: number;
+  addEventListener(type: string, listener: (event: Event) => void): void;
+  close(): void;
+};
 
 export type GatedEventSourceDependencies = {
   create: (url: string) => EventSourceLike;

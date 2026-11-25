@@ -109,7 +109,11 @@ export function marketHintTransport(url: string, fallback: (url: string) => Hint
     try {
       underlying = fallback(url);
       underlying.onmessage = (event) => socket.onmessage?.(event);
-      underlying.onclose = disconnect;
+      underlying.onclose = () => {
+        // A refused relay stream stops the hint client instead of its backoff.
+        if (underlying?.unavailable) socket.unavailable = true;
+        disconnect();
+      };
     } catch (error) {
       if (cause === "open") {
         socket.close();

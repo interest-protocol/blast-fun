@@ -19,6 +19,7 @@ import {
   type ActivityHintsDependencies,
   type HintSocket,
 } from "./activity-hints.ts";
+import { marketHintTransport } from "#web/lib/live-stream/market-hints.ts";
 import { anyFreshness, hintedGap, pollingFreshness, type FreshnessEnvironment, type FreshnessHint } from "./feed-freshness.ts";
 
 /** R3-26: the blast-infra `activity` hint (T-035) as a freshness source, without a browser. */
@@ -548,6 +549,46 @@ function fakeEnvironment(t: TestContext) {
     },
   };
 }
+
+test("a relay stream refused after its gate refresh stops the hint client; the tab's return tries once more", async () => {
+  const sockets: FakeSocket[] = [];
+  const timers: (() => void)[] = [];
+  const metrics: Record<string, unknown>[] = [];
+  let visible = true;
+  let onVisibility: (() => void) | null = null;
+  const hints = new ActivityHints({
+    url: "/api/social/activity/hints",
+    // The production path: the market transport wraps the same-origin stream.
+    createSocket: (url) => marketHintTransport(url, (path) => {
+      const socket = new FakeSocket(path);
+      sockets.push(socket);
+      return socket;
+    }),
+    now: () => 1_000_000,
+    setTimeout: (run) => timers.push(run),
+    clearTimeout: () => undefined,
+    random: () => 0.5,
+    visible: () => visible,
+    onVisibilityChange: (listener) => {
+      onVisibility = listener;
+      return () => { onVisibility = null; };
+    },
+    metric: (_name, fields) => metrics.push(fields),
+  });
+  hints.subscribe("happening", () => undefined);
+  await Promise.resolve();
+  assert.equal(sockets.length, 1);
+  sockets[0].unavailable = true;
+  sockets[0].drop();
+  assert.deepEqual(metrics.filter((fields) => fields.event === "unavailable"), [{ event: "unavailable", reason: "socket" }]);
+  assert.equal(timers.length, 0, "no backoff retry, so a refused tab never loops");
+  visible = false;
+  onVisibility!();
+  visible = true;
+  onVisibility!();
+  await Promise.resolve();
+  assert.equal(sockets.length, 2, "the tab's return opens the stream once more");
+});
 
 test("the same-origin SSE adapter shares the tab connection and delegates reconnect to ActivityHints", () => {
   const previous = globalThis.EventSource;
