@@ -2,7 +2,6 @@
 
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { SUI_POOL_QUOTE, type PoolQuote } from "@blast/core/modules/social/portfolio/core-coins.ts";
 import { indexedPoolPolling, readIndexedPool } from "./indexed-pool-query.ts";
 import { atCheckpoint } from "#web/components/launchpad/blast-infra-browser.ts";
 import { useChartPrice } from "#web/components/launchpad/chart/chart-live-price.ts";
@@ -25,8 +24,8 @@ async function readLegacyChart(poolKey: string, controls: ChartControls, signal:
   return { ...read, readAt };
 }
 
-export function LegacyCoinChart({ poolKey, symbol, decimals, quote = SUI_POOL_QUOTE, initialControls }: Readonly<{
-  poolKey: string; symbol: string; decimals: number; quote?: PoolQuote; initialControls: ChartControls;
+export function LegacyCoinChart({ poolKey, symbol, decimals, initialControls }: Readonly<{
+  poolKey: string; symbol: string; decimals: number; initialControls: ChartControls;
 }>) {
   const { controls, ready, commit } = useCoinChartControls(true, initialControls, false);
   const currency = useCoinPriceCurrency();
@@ -80,7 +79,7 @@ export function LegacyCoinChart({ poolKey, symbol, decimals, quote = SUI_POOL_QU
 
   return <ChartView
     compact
-    source={{ curvePoolKey: null, venuePoolKey: poolKey, migration: null, expected: null, symbol, memeDecimals: decimals, quoteDecimals: quote.decimals, quoteSymbol: quote.symbol }}
+    source={{ curvePoolKey: null, venuePoolKey: poolKey, migration: null, expected: null, symbol, memeDecimals: decimals, quoteDecimals: 9, quoteSymbol: "SUI" }}
     state={state.key === key ? state : initialChart(key, true)}
     currentPrice={latest?.price ?? null}
     controls={controls}
