@@ -78,6 +78,8 @@ export type LiveTradesOptions = Readonly<{
   pools: readonly string[];
   expected: ExpectedDeployment | null;
   feed: LiveActivityFeed;
+  /** A row the shown list leaves out (dust under its filter): it takes no row and asks no read until `showHidden`. */
+  hides?: (row: ActivityRow) => boolean;
   onState: (state: MarketStreamState) => void;
   schedule: (run: () => void, ms: number) => () => void;
   now: () => number;
@@ -94,9 +96,10 @@ export type LiveTradesOptions = Readonly<{
  * the floor doubling each time up to `FRAME_READ_MAX_MS`. Before the list's
  * first answer a read waits a whole floor: the first poll usually answers it.
  */
-export function followLiveTrades(options: LiveTradesOptions): () => void {
+export function followLiveTrades(options: LiveTradesOptions): (() => void) & Readonly<{ showHidden: () => void }> {
   const { feed } = options;
   let wanted: number | null = null;
+  let hidden: number | null = null;
   let lastRead = Number.NEGATIVE_INFINITY;
   let misses = 0;
   let cancel: (() => void) | null = null;
@@ -141,14 +144,25 @@ export function followLiveTrades(options: LiveTradesOptions): () => void {
       fence: (_pool, checkpoint) => want(checkpoint),
       trade: (frame) => {
         const row = provisionalActivityRow(options.launchId, frame);
+        if (row && options.hides?.(row)) {
+          hidden = Math.max(hidden ?? row.checkpoint, row.checkpoint);
+          return;
+        }
         // A row the list cannot map, or cannot hold past the cap, comes with a read.
         if (!row || feed.addLive(row)) want(frame.checkpoint);
       },
     },
   });
-  return () => {
+  const stop = () => {
     stopped = true;
     cancel?.();
     subscription.stop();
   };
+  /** The list shows what it hid again: one read through the newest hidden trade, as a frame read. */
+  const showHidden = () => {
+    const at = hidden;
+    hidden = null;
+    if (at !== null) want(at);
+  };
+  return Object.assign(stop, { showHidden });
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { isActivityTrade, type ActivityRow, type WindowName } from "@blast/core/modules/launchpad-contract/activity.ts";
 import type { ExpectedDeployment } from "@blast/core/modules/launchpad-contract/provenance.ts";
@@ -94,8 +94,8 @@ function CoinActivityFeed({ source, compact, initialActivity, start }: CoinActiv
   // An activity permalink starts partway through the tape and cannot name its latest trade.
   // The Last-trade pill skips dust, as the trades list does.
   const quoteUsd = dustQuoteUsd(source.units.quoteType, useCoinPriceCurrency(), source.units.quoteUsd);
-  const shownTrade = (row: ActivityRow) => isActivityTrade(row)
-    && !isTradeUnderDollar({ usd: row.volumeUsd, quote: row.amounts.quote, decimals: source.units.quoteDecimals, quoteUsd });
+  const isDust = (row: ActivityRow) => isTradeUnderDollar({ usd: row.volumeUsd, quote: row.amounts.quote, decimals: source.units.quoteDecimals, quoteUsd });
+  const shownTrade = (row: ActivityRow) => isActivityTrade(row) && !isDust(row);
   const lastTrade = start === null
     ? activity.newer?.rows.find(shownTrade) ?? activity.view?.rows.find(shownTrade)
     : null;
@@ -103,6 +103,16 @@ function CoinActivityFeed({ source, compact, initialActivity, start }: CoinActiv
   const scrolled = useRef(false);
   const showTape = Boolean(compact && !anchor);
   const recent = useSyncExternalStore(showTape ? tape.subscribe : skipSubscription, tape.snapshot, tape.serverSnapshot);
+
+  // "Hide trades under $1": while it is on, a streamed dust trade takes no row and asks no read, so a
+  // bot's burst cannot push the real trades off the list. Turning it off reads through the newest one skipped.
+  const [hideSmallTrades, setHideSmallTrades] = useState(true);
+  const following = useRef<ReturnType<typeof followLiveTrades> | null>(null);
+  const hidesLive = useEffectEvent((row: ActivityRow) => showTape && hideSmallTrades && isDust(row));
+  const smallTradeFilter = useMemo(() => [hideSmallTrades, (hide: boolean) => {
+    setHideSmallTrades(hide);
+    if (!hide) following.current?.showHidden();
+  }] as const, [hideSmallTrades]);
 
   // Only the newest page follows the stream; a link's page stays on its reads.
   const pools = start === null ? [...new Set(source.livePools ?? [])].filter((pool) => POOL_KEY.test(pool)).slice(0, 2) : [];
@@ -113,12 +123,13 @@ function CoinActivityFeed({ source, compact, initialActivity, start }: CoinActiv
   useEffect(() => {
     const hub = poolsKey ? tabMarketStream() : null;
     if (!hub) return;
-    return followLiveTrades({
+    const follow = followLiveTrades({
       hub,
       launchId,
       pools: poolsKey.split(","),
       expected: network && deployment ? { network, deployment } : null,
       feed,
+      hides: (row) => hidesLive(row),
       onState: (state) => setStream({ key: poolsKey, live: state === "live" }),
       schedule: (run, ms) => {
         const timer = window.setTimeout(run, ms);
@@ -127,6 +138,11 @@ function CoinActivityFeed({ source, compact, initialActivity, start }: CoinActiv
       now: Date.now,
       random: Math.random,
     });
+    following.current = follow;
+    return () => {
+      following.current = null;
+      follow();
+    };
   }, [feed, launchId, network, deployment, poolsKey]);
   useMarketPoll({
     live,
@@ -166,6 +182,7 @@ function CoinActivityFeed({ source, compact, initialActivity, start }: CoinActiv
       onMoreActivity={() => void feed.more()}
       onShowNewerActivity={() => feed.showNewer()}
       onWindow={setFlowWindow}
+      smallTradeFilter={smallTradeFilter}
     />
   );
 }

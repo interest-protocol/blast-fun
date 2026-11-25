@@ -5,6 +5,9 @@ import { compareExact, exactAtoms, exactDecimal, multiplyExact, type Exact } fro
 
 const SMALL_TRADE: Exact = { n: BigInt(SMALL_TRADE_USD), scale: 0 };
 
+/** The "Hide trades under $1" switch's state, owned by whatever reads the trades. */
+export type SmallTradeFilter = readonly [boolean, (hide: boolean) => void];
+
 function isSmall(usd: Exact): boolean {
   return compareExact(usd, SMALL_TRADE) < 0;
 }
