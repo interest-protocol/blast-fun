@@ -2,13 +2,14 @@
 
 import { useCallback, useMemo, useRef, type ReactNode } from "react";
 
+import { useFeelSound } from "#web/components/blast-feel/FeelProvider.tsx";
 import { usePrivySessionMounted } from "#web/components/presale/providers/PrivySessionProvider.tsx";
 import { invalidateAfter } from "#web/lib/query/invalidate.ts";
 import { useAppQueryClient } from "#web/lib/query/provider.tsx";
 import { SOCIAL_CLAIM_KINDS } from "@blast/core/web/contracts/claims.ts";
 import { LAUNCH_CLAIM_KINDS } from "@blast/core/web/contracts/launch-claims.ts";
 
-import { CREATOR_CAPS_KIND, isCreatorCapsClaimTarget, isLaunchClaimTarget, type ClaimKind, type ClaimPath } from "./claims";
+import { CREATOR_CAPS_KIND, isCreatorCapsClaimTarget, isLaunchClaimTarget, type ClaimKind, type ClaimOutcome, type ClaimPath } from "./claims";
 import { PrivyCoinSignerBridge, type PrivyCoinSigner } from "../coins/signers";
 import { blastWalletSigner } from "../commit/commit-signers";
 import { walletQuery } from "../queries";
@@ -50,6 +51,7 @@ export type ClaimHostValue = Readonly<{
 
 export function useClaimHost({ presaleDeployed }: ClaimHostOptions): ClaimHostValue {
   const viewer = useSocialViewer();
+  const { play } = useFeelSound();
   const queries = useAppQueryClient();
   const privyMounted = usePrivySessionMounted();
   const privy = useRef<PrivyCoinSigner | null>(null);
@@ -71,16 +73,19 @@ export function useClaimHost({ presaleDeployed }: ClaimHostOptions): ClaimHostVa
       const [target, signal] = args;
       try {
         const deps = { api, signer };
+        let outcome: ClaimOutcome;
         if (isCreatorCapsClaimTarget(target)) {
           const { runCreatorCapsClaim } = await import("./creator-caps-flow");
-          return await runCreatorCapsClaim(deps, target, signal);
-        }
-        if (isLaunchClaimTarget(target)) {
+          outcome = await runCreatorCapsClaim(deps, target, signal);
+        } else if (isLaunchClaimTarget(target)) {
           const { runLaunchClaim } = await import("./launch-claim-flow");
-          return await runLaunchClaim(deps, target, signal);
+          outcome = await runLaunchClaim(deps, target, signal);
+        } else {
+          const { runClaim } = await import("./claim-flow");
+          outcome = await runClaim(deps, target, signal);
         }
-        const { runClaim } = await import("./claim-flow");
-        return await runClaim(deps, target, signal);
+        if (!signal.aborted && outcome.status === "confirmed") play({ kind: "claim" });
+        return outcome;
       } finally {
         // Confirmed or refused, the claim may have moved the wallet, the position and the log (OA-38).
         if (!signal?.aborted) void invalidateAfter(queries, { kind: "claim", presaleId: target.presaleId ?? null });
@@ -90,7 +95,7 @@ export function useClaimHost({ presaleDeployed }: ClaimHostOptions): ClaimHostVa
     const kinds: readonly ClaimKind[] = [...SOCIAL_CLAIM_KINDS, ...LAUNCH_CLAIM_KINDS, CREATOR_CAPS_KIND];
     path.kinds = kinds;
     return path;
-  }, [getAccessToken, presaleDeployed, queries, signedIn]);
+  }, [getAccessToken, play, presaleDeployed, queries, signedIn]);
 
   const node = privyMounted ? <PrivyCoinSignerBridge onChange={onPrivy} /> : null;
   return { claimPath, node };

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { FEEL_CHARGING_CLASS, FEEL_SOUND_BUTTON_CLASS, flyBall, shakeBall } from "./feel-ball.ts";
+import { FEEL_CHARGING_CLASS, flyBall, shakeBall } from "./feel-ball.ts";
 import { FEEL_BALL_SHAKE_EXIT_MS } from "./feel-hold.ts";
 import { FeelScope, type FeelScopeHost } from "./feel-scope.ts";
 import { motionAllowed } from "./feel-sound-pref.ts";
@@ -201,7 +201,6 @@ test("motionAllowed is false on the server and under reduced motion, true otherw
 
 test("the classes the layer hands out are the module's own, not global names", () => {
   assert.equal(FEEL_CHARGING_CLASS, "charging");
-  assert.equal(FEEL_SOUND_BUTTON_CLASS, "soundButton");
 });
 
 test("R3-13-AC-8: the ball joins the app's root (the shell's tokens, its overlay layer), not the body, and is aria-hidden", async () => {

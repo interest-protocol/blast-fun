@@ -284,6 +284,8 @@ export function createLiveSocket(options: LiveSocketOptions) {
     ws.data.closing = true;
     release(ws);
     observeMetric("live.socket.close", { code });
+    // Render's edge delivers custom close codes as 1005: the last frame names the code for the browser.
+    ws.send(`event: close\ndata: {"code":${code}}\n\n`);
     ws.close(code);
   };
 
@@ -478,13 +480,13 @@ export function createLiveSocket(options: LiveSocketOptions) {
       }
       const client = attestClientAddress(ingressAddress(request, peer, options.ingress));
       if (!client) {
-        // Render's proxy ranges are unverified: this shows which peers and header shapes arrive, never a client address.
+        // Shows which proxy peers (their /24 or /64) and header shapes arrive, never a client address.
         observeMetric("live.socket.refused", {
           cause: "client-address",
           ingress: options.ingress.mode,
           peer_prefix: peer?.includes(".")
-            ? peer.split(".").slice(0, 2).join(".")
-            : (peer?.split(":").slice(0, 3).join(":") ?? null),
+            ? peer.split(".").slice(0, 3).join(".")
+            : (peer?.split(":").slice(0, 4).join(":") ?? null),
           forwarded_entries: request.headers.get("x-forwarded-for")?.split(",").length ?? 0,
         });
         return forbidden();

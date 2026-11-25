@@ -27,8 +27,10 @@ const graduatedPage: ReadPage = (cursor) =>
  * launch it knew once one walk has finished. A walk keeps its targets only
  * when it finishes, so a failed page never leaves a gap behind a known launch.
  * Past `MAX_PAGES` the oldest launches stay unknown.
- * Unknown is not dust (`isBlastDust`), and a Home read never waits on
- * blast-infra longer than `CURVE_TARGET_WAIT_MS`.
+ * Unknown is not dust (`isBlastDust`). Only the first walk holds a Home
+ * read, for at most `CURVE_TARGET_WAIT_MS`; later walks (a bonding curve is
+ * always unseen, so one starts every interval) run behind the reads, and a
+ * newly graduated launch counts from the next read after its walk.
  */
 export function createCurveTargetReader(
   readPage: ReadPage = graduatedPage,
@@ -66,7 +68,7 @@ export function createCurveTargetReader(
         observeMetric("social.source", { source: "home_curve_targets", outcome: "unavailable", error: errorLabel(error) });
       }).finally(() => { loading = null; });
     }
-    if (loading) {
+    if (loading && !finished) {
       let timer: ReturnType<typeof setTimeout> | undefined;
       await Promise.race([loading, new Promise((resolve) => { timer = setTimeout(resolve, waitMs); })]);
       clearTimeout(timer);

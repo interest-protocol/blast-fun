@@ -30,7 +30,7 @@ import { saleLifecycleAt } from "@blast/core/web/contracts/presales.ts";
 import { CoinParticipants } from "./CoinParticipants";
 import { ProgressRing } from "./panels/Figures";
 import { useWorkspace } from "./workspace-context";
-import { SORT_LABELS, SOURCE_LABELS } from "../../coin-home/home-state";
+import { BLAST_MODE_SORT_LABELS, SOURCE_LABELS } from "../../coin-home/home-state";
 import styles from "./CoinsData.module.css";
 
 /**
@@ -183,7 +183,7 @@ export function CoinsRows({
       aria-label={
         view === "Presales"
           ? "Open and upcoming presales"
-          : `${SOURCE_LABELS[snapshot.data.controls.Coins.source]} coins${snapshot.data.controls.Coins.source === "discover" ? `, ${SORT_LABELS[snapshot.data.controls.Coins.sort]}` : ""}`
+          : `${SOURCE_LABELS[snapshot.data.controls.Coins.source]} coins${snapshot.data.controls.Coins.source === "discover" ? `, ${BLAST_MODE_SORT_LABELS[snapshot.data.controls.Coins.sort]}` : ""}`
       }
       className={styles.list}
       ref={list}

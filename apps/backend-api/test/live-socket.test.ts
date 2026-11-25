@@ -152,6 +152,11 @@ test("a ticketed socket gets SSE blocks, answers pings, and never echoes its tic
     const reused = open(`pool=${pool(1)}`, ticket);
     const refusal = await reused.closed;
     assert.equal(refusal.code, LIVE_CLOSE.ticket, "single use");
+    assert.equal(
+      reused.messages.at(-1),
+      `event: close\ndata: {"code":${LIVE_CLOSE.ticket}}\n\n`,
+      "the last frame names the code",
+    );
     assert.equal(refusal.reason.includes(ticket.slice(0, 16)), false);
   } finally {
     server.stop(true);

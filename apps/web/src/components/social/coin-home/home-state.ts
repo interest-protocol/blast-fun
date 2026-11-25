@@ -44,7 +44,7 @@ export const HOME_DEFAULT_VIEW: HomeViewState = Object.freeze({
   page: 1,
 });
 
-/** Home opens on Relevant: the blended score of traders, volume, recency and holders (`home/rank.ts`). */
+/** Home opens on Trending (sort key `relevant`): the blended score of traders, net inflow, volume, new holders, recency and holders (`home/rank.ts`). */
 export const HOME_DEFAULT_FEED: HomeViewState = Object.freeze({ ...HOME_DEFAULT_VIEW, sort: "relevant" });
 
 /** The minimum-participants choices the filter offers. */
@@ -131,16 +131,18 @@ export function controlsApply(source: HomeSource): boolean {
   return source === "discover";
 }
 
-export const SORT_LABELS: Readonly<Record<HomeSort, string>> = { relevant: "Relevant", trending: "Volume", newest: "Newest", held: "Most held" };
+export const SORT_LABELS: Readonly<Record<HomeSort, string>> = { relevant: "Trending", trending: "Volume", newest: "Newest", held: "Most held" };
+/** Blast mode's names: its Trending tab is the Volume order, so the blended score keeps the name Relevant there until its tabs change. */
+export const BLAST_MODE_SORT_LABELS: Readonly<Record<HomeSort, string>> = { ...SORT_LABELS, relevant: "Relevant" };
 export const SORT_HINTS: Readonly<Partial<Record<HomeSort, string>>> = {
-  relevant: "Unique traders first, then dollar volume, how recent the last trade was, and holders",
+  relevant: "Unique traders first, then money in less money out, dollar volume, new holders, how recent the last trade was, and holders",
   trending: "Trade and presale dollar volume, then unique participants",
 };
 export const WINDOW_LABELS: Readonly<Record<HomeWindow, string>> = { "1h": "1h", "24h": "24h" };
 export const AGE_LABELS: Readonly<Record<HomeAge, string>> = { "24h": "Last 24h", "7d": "Last 7 days", "30d": "Last 30 days", all: "Any time" };
 export const SOURCE_LABELS: Readonly<Record<HomeSource, string>> = { discover: "Discover", following: "Following", watchlist: "Watchlist" };
 
-/** The spoken summary after a change: `Discover · 12 coins · page 2 of 3 · sorted by Relevant · last 24h`. */
+/** The spoken summary after a change: `Discover · 12 coins · page 2 of 3 · sorted by Trending · last 24h`. */
 export function resultsAnnouncement(state: Pick<HomeViewState, "source" | "page" | "sort" | "window">, count: number | null, pages = 1): string {
   const parts = [SOURCE_LABELS[state.source]];
   if (count !== null) parts.push(`${count.toLocaleString("en-US")} ${count === 1 ? "coin" : "coins"}`);

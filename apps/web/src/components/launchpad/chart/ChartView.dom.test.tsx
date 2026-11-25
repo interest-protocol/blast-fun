@@ -2,12 +2,14 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import type { ActivityRow } from "@blast/core/modules/launchpad-contract/activity.ts";
-import { installTestDom, recordAnimations } from "../../../../test/fixtures/social/test-dom.ts";
+import { installNoopCanvas, installTestDom } from "../../../../test/fixtures/social/test-dom.ts";
 
 const dom = installTestDom();
+installNoopCanvas(dom);
 const { act } = await import("react");
 const { createRoot } = await import("react-dom/client");
 const { renderToStaticMarkup } = await import("react-dom/server");
+const { AppRouterContext } = await import("next/dist/shared/lib/app-router-context.shared-runtime");
 const hook = registerHooks({ resolve(specifier, context, next) {
   if (specifier === "./TradingViewChart" && context.parentURL?.endsWith("/charts/PoolCandleChart.tsx")) return {
     shortCircuit: true,
@@ -29,7 +31,7 @@ const hook = registerHooks({ resolve(specifier, context, next) {
           return () => { mounted = false; };
         }
       }, [series, projectionKey]);
-      return React.createElement('div', {'data-latest-series': latestPrice?.seriesIndex, 'data-series': series.map(s=>s.type).join(','), 'data-tags': series.map(s=>String(s.options?.lastValueVisible)).join(','), 'data-points': series[0]?.data.map(p => p.time + ':' + (p.value === undefined && p.close === undefined ? 'gap' : priceFormatter(p.value ?? p.close)) + (p.lineColor === 'transparent' ? '~' : '')).join(','), 'data-line': series.map(s => s.options?.lineVisible === false ? 'points' : s.options?.lineType === 1 ? 'step' : 'line').join(','), 'data-last-points': series.at(-1)?.data.map(p => p.time + ':' + (p.value === undefined && p.close === undefined ? 'gap' : priceFormatter(p.value ?? p.close))).join(',')}, preview); }`)}`,
+      return React.createElement('div', {'data-latest-series': latestPrice?.seriesIndex, 'data-series': series.map(s=>s.type).join(','), 'data-tags': series.map(s=>String(s.options?.lastValueVisible)).join(','), 'data-points': series[0]?.data.map(p => p.time + ':' + priceFormatter(p.value ?? p.close)).join(','), 'data-last-points': series.at(-1)?.data.map(p => p.time + ':' + priceFormatter(p.value ?? p.close)).join(',')}, preview); }`)}`,
   };
   return next(specifier, context);
 } });
@@ -80,40 +82,14 @@ test("changing the interval leaves an untouched range at its coin default", asyn
   }
 });
 
-test("reopening a Live link keeps a different range at its own interval", async (t) => {
-  const { useCoinChartControls } = await import("./chart-preferences.ts");
-  const key = "blast.coin-chart.controls";
-  const original = window.location.href;
-  const node = dom.document.createElement("div");
-  dom.document.body.append(node);
-  const root = createRoot(node);
-  t.after(async () => {
-    await act(async () => root.unmount());
-    node.remove();
-    window.localStorage.removeItem(key);
-    window.history.replaceState(null, "", original);
-  });
-  window.localStorage.setItem(key, "interval=15m&range=7d");
-  window.history.replaceState(null, "", "?range=live&interval=1s");
-  function Probe() {
-    const { controls, commit } = useCoinChartControls(true, { range: "live", interval: "1s" });
-    return <button onClick={() => commit({ ...controls, range: "1h" })}>{controls.range} / {controls.interval}</button>;
-  }
-  await act(async () => root.render(<Probe />));
-  assert.equal(node.textContent, "live / 1s");
-  await act(async () => node.querySelector("button")?.click());
-  assert.equal(node.textContent, "1h / 1m");
-  assert.equal(window.location.search, "?range=1h&interval=1m");
-  assert.equal(window.localStorage.getItem(key), "range=1h&interval.7d=15m");
-});
-
-test("compact style controls update a single plot and show trades on its live candle", async t => {
+test("compact style controls keep one chart and the trade cue above it", async () => {
   const poolKey = "blast_curve:0x1";
   const venuePoolKey = `bluefin:0x${"a7".repeat(32)}`;
   const page = { poolKey, source: "curve" as const, venue: "blast_curve" as const, interval: "1m" as const, migration: null, candles: [{ bucketStart: 1_790_337_600_000, open: "1", high: "2", low: "1", close: "2", volumeQuote: 20n, volumeMeme: 10n, volumeUsd: null, buys: 1, sells: 0, trades: 1 }] };
   const container = dom.document.createElement("div");
   dom.document.body.append(container);
   const root = createRoot(container);
+  const router = { push() {} };
   try {
     const controls = { interval: "1m", range: "all" } as const;
     const buy = { cursor: "1:0:1:0", side: "buy" as const, timestampMs: 1_790_337_600_000, price: "2", memeAmount: 9_631_238_640_097n, quoteAmount: 100_000_000n };
@@ -133,10 +109,10 @@ test("compact style controls update a single plot and show trades on its live ca
       return receipts.get(cursor)!;
     };
     const compactChart = (hidden: readonly "curve"[], trade: Omit<typeof buy, "side"> & { side: "buy" | "sell" } = buy, market = poolKey, close = "2", empty = false) => (
+      <AppRouterContext value={router as never}>
       <WalletTradesProvider deployer={actor}><Tape /><ChartTradeContext value={{ trade, poolKey: market, receivedAt: receivedAt(trade.cursor), decimals: 9, symbol: "SUI" }}>
       <ChartView
         compact
-        preview
         source={{ expected: null, curvePoolKey: poolKey, venuePoolKey, migration: null, symbol: "PIP", quoteSymbol: "SUI", memeDecimals: 9, quoteDecimals: 9, opening: { timestampMs: 1_790_337_617_000, price: "0.5" } }}
         quoteUsd="0.70"
         state={{
@@ -154,352 +130,127 @@ test("compact style controls update a single plot and show trades on its live ca
         onToggle={() => {}}
         onRefresh={() => {}}
       /></ChartTradeContext></WalletTradesProvider>
+      </AppRouterContext>
     );
     const render = (...args: Parameters<typeof compactChart>) => act(async () => root.render(compactChart(...args)));
-    const initial = renderToStaticMarkup(compactChart([]));
-    assert.match(initial, /<svg[^>]*data-chart-preview=""[^>]*>.*<path d="M\d+/);
-    assert.doesNotMatch(renderToStaticMarkup(compactChart([], buy, poolKey, "2", true)), /data-chart-preview/);
+    assert.doesNotMatch(renderToStaticMarkup(compactChart([])), /data-kline-plot/, "the chart loads in the browser only");
     await render([], buy, poolKey, "2", true);
     const cue = container.querySelector("[data-trade-cue]");
     assert.equal(cue?.textContent, "Buy · 0.1\u00a0SUI", "an observed trade remains readable without plotted geometry");
-    assert.equal(container.querySelector("[data-series]"), null);
+    assert.equal(container.querySelector("[data-kline-plot]"), null);
     await render([]);
     assert.equal(container.querySelector("[data-trade-cue]"), cue, "showing the plot retains the original cue");
-    assert.ok(container.querySelector("[data-chart-last-trade]")?.nextElementSibling?.querySelector("[data-series]"), "the readout sits immediately above the real chart figure");
-    const plot = () => container.querySelector("[data-series]")!;
+    assert.ok(container.querySelector("[data-chart-last-trade]")?.nextElementSibling?.querySelector("[data-kline-plot]"), "the readout sits immediately above the real chart figure");
+    assert.equal(container.querySelectorAll("[data-kline-plot]").length, 1);
+    const plot = () => container.querySelector("[data-kline-plot]")!;
     const button = (name: string) => [...container.querySelectorAll("button")].find(b => b.textContent === name)!;
-    const sellBadge = () => container.querySelector<HTMLElement>('[data-coin-plot] [data-side="sell"] [title]');
-    const sellIcons = () => [...sellBadge()!.querySelectorAll("[data-wallet-label]")].map(icon => icon.getAttribute("data-wallet-label"));
     const toggle = container.querySelector<HTMLButtonElement>('button[role="switch"]')!;
     const originalPlot = plot();
     assert.equal(toggle.getAttribute("aria-checked"), "true");
     await act(async () => toggle.click());
     assert.equal(toggle.getAttribute("aria-checked"), "false");
     assert.equal(dom.window.localStorage.getItem("blast.coin-chart.wallet-tags"), "hidden");
-    assert.equal(sellBadge(), null);
-    assert.equal(container.querySelector("[data-wallet-label]"), null);
-    assert.equal(plot(), originalPlot);
+    assert.equal(plot(), originalPlot, "hiding wallet tags keeps the chart");
     await act(async () => toggle.click());
     assert.equal(toggle.getAttribute("aria-checked"), "true");
-    assert.equal(sellBadge()?.textContent, "↓");
-    assert.equal(sellBadge()?.getAttribute("aria-label"), "Open seller wallet 0x1111…1111");
-    assert.deepEqual(sellIcons(), ["deployer", "whale"]);
-    assert.ok(parseFloat(sellBadge()!.style.top) + 24 <= 40, "the sell badge is above the actual wick inside the price plot");
-    const dot = container.querySelector('[data-coin-plot] [data-side="sell"] circle');
-    assert.equal(dot?.getAttribute("cy"), "40");
-    assert.equal(dot?.getAttribute("cx"), "83");
-    assert.equal(dot?.getAttribute("r"), "3.7");
-    assert.equal(container.querySelector("[data-wallet-ripple]"), null, "historical dots are static");
-    assert.equal(container.querySelector('[data-coin-plot] [data-side="sell"] line'), null);
-    assert.equal(plot().getAttribute("data-series"), "Candlestick,Histogram");
     assert.equal(button("Candles & volume").getAttribute("aria-pressed"), "true");
     assert.equal(button("Candles & volume").nextElementSibling, button("Line chart"));
     await act(async () => button("Line chart").click());
-    assert.deepEqual(sellIcons(), ["deployer", "whale"], "the line marker follows the shifted first line point");
-    assert.equal(plot().getAttribute("data-series"), "Area");
-    assert.match(plot().getAttribute("data-points") ?? "", /^1790337617:\$0\.35,1790337631:\$1\.4$/, "the curve starts at its opening price before the first close");
-    await act(async () => button("Candles & volume").click());
-    assert.equal(plot().getAttribute("data-series"), "Candlestick,Histogram");
-    t.mock.timers.enable({ apis: ["setTimeout"] });
-    let now = 1000;
-    t.mock.method(performance, "now", () => now);
-    const advance = async (ms: number) => {
-      now += ms;
-      await act(async () => t.mock.timers.tick(ms));
-    };
-    const { all: animations } = recordAnimations();
-    const ripples = () => animations.filter(animation => animation.target.hasAttribute("data-wallet-ripple"));
-    const amount = () => container.querySelector<HTMLElement>("[data-candle-trade-amount]");
-    assert.equal(amount(), null, "switching into candles does not replay the retained trade");
-    await render([], { ...buy, cursor: "2:0:1:0" });
-    const label = amount();
-    assert.equal(label?.textContent, "+9.63K");
-    assert.equal(label?.parentElement?.style.left, "79px", "the label clears the full candle body");
-    assert.equal(label?.parentElement?.style.top, "40px", "the actual scaled close was passed to the drawn series");
-    assert.equal(ripples().length, 0, "an untagged trade does not ripple another dot");
-    await render([], { ...buy, cursor: "2:0:2:0", side: "sell", memeAmount: 1_000_000_000n });
-    assert.equal(amount(), label, "burst trades share one label");
-    assert.equal(amount()?.textContent, "−1");
-    assert.equal(ripples().length, 1);
-    const pulse = ripples()[0]!;
-    assert.equal(pulse.target.getAttribute("cx"), dot?.getAttribute("cx"));
-    assert.equal(pulse.target.getAttribute("cy"), dot?.getAttribute("cy"));
-    assert.equal(pulse.timing.duration, 280);
-    await advance(800);
-    await render([], { ...buy, cursor: "2:0:2:0", side: "sell", memeAmount: 1_000_000_000n });
-    assert.equal(ripples().length, 1, "a retained and reprojected trade cannot replay the ring");
-    await advance(650);
-    assert.ok(amount()?.hasAttribute("data-leaving"), "a duplicate cannot renew the hold");
-    await advance(100);
-    await render([], { ...buy, cursor: "2:0:2:1" });
-    assert.equal(amount(), label, "a trade during the fade reuses the label");
-    assert.equal(amount()?.textContent, "+9.63K");
-    assert.equal(amount()?.hasAttribute("data-leaving"), false, "an interrupted exit ends immediately");
-    await advance(1449);
-    assert.equal(amount()?.hasAttribute("data-leaving"), false, "the replacement gets its full hold");
-    await advance(201);
-    assert.equal(amount(), null, "the label is gone when the market stays quiet");
-    await render([], { ...buy, cursor: "2:0:3:0", price: "4" });
-    assert.equal(amount(), null, "an unmatched candle cannot carry the trade");
-    await render([], { ...buy, cursor: "2:0:4:0" }, venuePoolKey);
-    assert.equal(amount(), null, "a venue trade cannot mark the curve");
-    const delayed = { ...buy, cursor: "2:0:5:0" };
-    await render([], delayed, poolKey, "1");
-    await advance(850);
-    assert.equal(amount(), null);
-    await render([], delayed);
-    assert.equal(amount()?.textContent, "+9.63K");
-    await advance(1449);
-    assert.equal(amount()?.hasAttribute("data-leaving"), false, "the full reading time starts after the candle matches");
-    await advance(1);
-    assert.ok(amount()?.hasAttribute("data-leaving"));
-    await advance(200);
-    assert.equal(amount(), null);
-
-    dom.document.documentElement.dataset.testCandleX = "110";
-    await render([], { ...buy, cursor: "2:0:6:0" });
-    assert.equal(amount(), null);
-    delete dom.document.documentElement.dataset.testCandleX;
-    await render([], { ...buy, cursor: "2:0:6:0" });
-    assert.equal(amount(), null, "panning back cannot replay an offscreen arrival");
-
-    dom.document.documentElement.dataset.testProjectionSettled = "false";
-    dom.document.documentElement.dataset.testCandleX = "110";
-    const newBucket = { ...buy, cursor: "2:0:7:0" };
-    await render([], newBucket);
-    assert.equal(amount(), null, "the new candle has no visible location on the old scale");
-    delete dom.document.documentElement.dataset.testProjectionSettled;
-    delete dom.document.documentElement.dataset.testCandleX;
-    await render([], newBucket);
-    assert.equal(amount()?.textContent, "+9.63K", "settling the new bucket can place its first label");
-
-    await advance(1650);
-    dom.window.reducedMotion = true;
-    dom.document.documentElement.dataset.testSyncCandleX = "110";
-    await render([], { ...buy, cursor: "2:0:8:0" });
-    assert.equal(amount()?.textContent, "+9.63K");
-    assert.equal(amount()?.hasAttribute("data-leaving"), false, "reduced motion receives the trade at the first in-bounds native frame");
-    delete dom.document.documentElement.dataset.testSyncCandleX;
-    dom.window.reducedMotion = false;
-
-    const stale = { ...buy, cursor: "2:0:9:0" };
-    await render([], stale, poolKey, "1");
-    await advance(2000);
-    await render([], stale);
-    assert.equal(amount(), null, "late matching history cannot revive an old receipt");
+    assert.equal(button("Line chart").getAttribute("aria-pressed"), "true");
+    assert.equal(plot(), originalPlot, "switching style keeps the chart and its zoom");
+    assert.equal(container.querySelectorAll('[aria-label="Chart style"]').length, 1, "one style picker");
     assert.equal(container.querySelector('[aria-label="Bluefin pool candles"]'), null);
     assert.equal(container.querySelector('button[aria-label="Source details"]'), null);
     assert.doesNotMatch(container.textContent ?? "", new RegExp(venuePoolKey));
-    assert.equal(container.querySelectorAll("[data-series]").length, 1);
-    await act(async () => button("Line chart").click());
-    assert.equal(plot().getAttribute("data-series"), "Area");
-    await render([], { ...buy, cursor: "2:0:10:0" });
-    assert.equal(amount()?.textContent, "+9.63K", "line charts cue the trade beside the latest price");
   } finally {
     await act(async () => root.unmount());
     container.remove();
   }
 });
 
-test("a migrated coin tags only the venue and keeps the phone plot a line", async (t) => {
-  dom.window.localStorage.clear();
-  const migration = { cursor: "22:2:2:0", timestampMs: 1_790_337_660_000, curvePoolKey: "blast_curve:0x1", venuePoolKey: `cetus:0x${"c3".repeat(32)}` };
-  const candle = (bucketStart: number, close: string) => ({ bucketStart, open: close, high: close, low: close, close, volumeQuote: 20n, volumeMeme: 10n, volumeUsd: null, buys: 1, sells: 0, trades: 1 });
-  const provenance = { source: "blast-infra" as const, network: "localnet" as const, deployment: "fixture", checkpoint: 1, timestampMs: 1_790_337_800_000, observedAt: 1_790_337_800_000, lagMs: 0 };
-  const curve = { poolKey: migration.curvePoolKey, source: "curve" as const, venue: "blast_curve" as const, interval: "1m" as const, migration, candles: [candle(1_790_337_600_000, "2")] };
-  const venue = { poolKey: migration.venuePoolKey, source: "venue" as const, venue: "cetus" as const, interval: "1m" as const, migration, candles: [candle(1_790_337_720_000, "3")] };
-  const container = dom.document.createElement("div");
-  dom.document.body.append(container);
-  const root = createRoot(container);
-  try {
-    const controls = { interval: "1m", range: "all" } as const;
-    const renderChart = (marketChart: boolean) => act(async () => root.render(
-      <ChartView
-        key={String(marketChart)}
-        compact
-        marketChart={marketChart}
-        preview
-        source={{ expected: null, curvePoolKey: migration.curvePoolKey, venuePoolKey: migration.venuePoolKey, migration, symbol: "PIP", quoteSymbol: "SUI", memeDecimals: 9, quoteDecimals: 9, launchAt: 1_790_337_600_000 }}
-        state={{ key: "1m|all", curve: { state: "available", data: curve, provenance }, venue: { state: "available", data: venue, provenance }, migration }}
-        controls={controls}
-        request={chartRequest(controls, 1_790_337_800_000)}
-        hidden={[]}
-        updates={null}
-        pending={false}
-        onControls={() => {}}
-        onToggle={() => {}}
-        onRefresh={() => {}}
-      />,
-    ));
-    await renderChart(false);
-    const plot = () => container.querySelector("[data-series]")!;
-    const button = (name: string) => [...container.querySelectorAll("button")].find(b => b.textContent === name)!;
-    const preview = () => plot().querySelector("[data-chart-preview]");
-    assert.match(preview()?.lastElementChild?.getAttribute("d") ?? "", /^M333\.3 30V300$/);
-    assert.equal(plot().getAttribute("data-series"), "Candlestick,Candlestick,Histogram");
-    assert.equal(plot().getAttribute("data-tags"), "false,false,false");
-    assert.equal(plot().getAttribute("data-latest-series"), "1", "the neutral latest-price line belongs to the venue candles");
-    await act(async () => button("Line chart").click());
-    assert.equal(preview()?.firstElementChild?.getAttribute("d"), "M0 212L333.3 212M333.3 212L666.7 212L666.7 34L1000 34");
-    assert.equal(plot().getAttribute("data-series"), "Area,Area");
-    assert.equal(plot().getAttribute("data-tags"), "false,false");
-    assert.equal(plot().getAttribute("data-latest-series"), "1", "the neutral latest-price line belongs to the venue line");
-
-    const matchMedia = dom.window.matchMedia.bind(dom.window);
-    t.mock.method(dom.window, "matchMedia", (query: string) => {
-      const result = matchMedia(query);
-      return query.includes("max-width: 760px") ? { ...result, matches: true } : result;
-    });
-    dom.window.localStorage.setItem("blast.coin-chart.style", "candles");
-    await renderChart(true);
-    assert.equal(plot().getAttribute("data-series"), "Area,Area");
-    assert.equal(button("Candles & volume"), undefined);
-  } finally {
-    await act(async () => root.unmount());
-    container.remove();
-  }
-});
-
-test("Live holds the confirmed price as steps through quiet seconds and joins the next trade once", async (t) => {
+test("Live is a line chart on desktop and mobile and keeps the newest trade cue", async (t) => {
   const start = 1_800_000_000_000;
-  let now = start;
+  const now = start;
   t.mock.method(Date, "now", () => now);
-  const poolKey = "blast_curve:0x1";
-  const trade = (cursor: string, timestampMs: number, price: string | null) => ({
-    cursor, timestampMs, price, poolKey, venue: "blast_curve" as const, kind: "buy" as const, side: "buy" as const,
-    trader: null, digest: "1".repeat(32), quoteAmount: 20n, memeAmount: 10n, volumeUsd: null, venueSwap: null,
+  const media = "(max-width: 760px), (pointer: coarse)";
+  const layout = Object.assign(new dom.window.EventTarget(), {
+    matches: false, media, onchange: null, addListener() {}, removeListener() {},
   });
-  const candles = (trades: readonly ReturnType<typeof trade>[]) => trades.flatMap(({ timestampMs, price }) => price === null ? [] : [{
-    bucketStart: Math.floor(timestampMs / 1_000) * 1_000, open: price, high: price, low: price, close: price,
-    volumeQuote: 20n, volumeMeme: 10n, volumeUsd: null, buys: 1, sells: 0, trades: 1,
-  }]);
-  const prior = trade("1:0:0:0", start - 360_000, "90");
-  const active = trade("2:0:0:0", start - 60_000, "92");
-  const next = trade("3:0:0:0", start + 302_375, "93");
+  const matchMedia = dom.window.matchMedia.bind(dom.window);
+  t.mock.method(dom.window, "matchMedia", (query: string) => query === media ? layout : matchMedia(query));
+  async function setMobile(matches: boolean) {
+    await act(async () => {
+      layout.matches = matches;
+      layout.dispatchEvent(new dom.window.Event("change"));
+    });
+  }
+  const poolKey = "blast_curve:0x1";
+  const candle = (bucketStart: number, close: string) => ({
+    bucketStart, open: close, high: close, low: close, close, volumeQuote: 20n, volumeMeme: 10n, volumeUsd: null, buys: 1, sells: 0, trades: 1,
+  });
+  const page = {
+    poolKey, source: "curve" as const, venue: "blast_curve" as const, interval: "1s" as const, migration: null,
+    candles: [candle(start - 300_000, "91"), candle(start - 299_000, "92")],
+  };
+  const provenance = { source: "blast-infra" as const, network: "localnet" as const, deployment: "fixture", checkpoint: 1, timestampMs: start, observedAt: start, lagMs: 0 };
   const controls = { interval: "1s", range: "live" } as const;
   const container = dom.document.createElement("div");
   const root = createRoot(container);
   t.after(() => act(async () => root.unmount()));
-  const render = (updates: string | null, liveTrades: readonly ReturnType<typeof trade>[], observedAt = now, current = updates === null) => {
-    const provenance = { source: "blast-infra" as const, network: "localnet" as const, deployment: "fixture", checkpoint: 2, timestampMs: observedAt, observedAt, lagMs: 0 };
-    const page = {
-      poolKey, source: "curve" as const, venue: "blast_curve" as const, interval: "1s" as const, migration: null,
-      liveTrades, candles: candles(liveTrades),
-    };
-    return act(async () => root.render(<ChartView
-      compact marketChart livePreset
-      source={{ expected: null, curvePoolKey: poolKey, venuePoolKey: null, migration: null, symbol: "PIP", quoteSymbol: "SUI", memeDecimals: 9, quoteDecimals: 9 }}
-      state={{ key: "1s|live", curve: { state: "available", data: page, provenance }, venue: null, migration: null }}
-      controls={controls} request={chartRequest(controls, now)} hidden={[]} updates={updates} streamCurrent={current} pending={false}
-      onControls={() => {}} onToggle={() => {}} onRefresh={() => {}}
-    />));
-  };
-  const plot = () => container.querySelector("[data-series]");
-  const points = () => plot()?.getAttribute("data-points");
-  const dots = () => plot()?.getAttribute("data-last-points");
-  const dateTime = () => container.querySelector("time")?.dateTime;
-  const at = (ms: number) => ms / 1_000;
-
-  // Active: the price before the window opens it, the trade changes it, and it holds to the clock.
-  await render(null, [prior, active]);
-  assert.equal(plot()?.getAttribute("data-series"), "Area,Line");
-  assert.equal(plot()?.getAttribute("data-line"), "step,points", "a connected step line with a dot on each execution");
-  assert.equal(dots(), `${at(active.timestampMs)}:92`, "a dot only where a trade executed in the window");
-  assert.match(points() ?? "", new RegExp(`^${at(start - 300_000)}:90,${at(active.timestampMs)}:92,${at(start)}:92`));
-  assert.doesNotMatch(container.textContent ?? "", /No trades in the last 5 min/);
-
-  // Quiet: the trade leaves the window. The held price and the quiet status show together.
-  for (const step of [241_000, 1_000]) {
-    now += step;
-    await render(null, [prior, active]);
-    assert.equal(plot()?.getAttribute("data-line"), "step,points");
-    assert.match(points() ?? "", new RegExp(`^${at(now - 300_000)}:92,${at(now)}:92`), "a flat line across the whole window");
-    assert.equal(dots(), "", "no dot is drawn for a carried price");
-    assert.equal(points()?.split(",").length, 2);
-    assert.match(container.textContent ?? "", /No trades in the last 5 min/);
-    assert.equal(dateTime(), new Date(active.timestampMs).toISOString(), "heartbeats keep the real execution time");
+  const noRows: readonly ActivityRow[] = [];
+  function TradeHistory({ row }: Readonly<{ row: ActivityRow | null }>) {
+    usePublishWalletTrades(noRows, row);
+    return null;
   }
+  const render = (updates: string | null, trade: { cursor: string; timestampMs: number; side: "buy"; price: string; quoteAmount: bigint; memeAmount: bigint } | null = null, history: ActivityRow | null = null, graduated?: "traded" | "quiet") => {
+    const migration = graduated ? {
+      cursor: "1:0:0:0", timestampMs: now - (graduated === "quiet" ? 315_000 : 65_000) + 550,
+      curvePoolKey: poolKey, venuePoolKey: `cetus:0x${"c3".repeat(32)}`,
+    } : null;
+    const checkpoint = { ...provenance, observedAt: now, timestampMs: now };
+    const curve = { ...page, migration, candles: trade ? [candle(trade.timestampMs, trade.price)] : page.candles };
+    const venue = migration && (graduated === "traded" ? {
+      state: "available" as const, provenance: checkpoint,
+      data: { ...page, poolKey: migration.venuePoolKey, source: "venue" as const, venue: "cetus" as const, migration, candles: [candle(now - 65_000, "93")] },
+    } : { state: "empty" as const, provenance: checkpoint });
+    return act(async () => root.render(
+    <WalletTradesProvider deployer={null}><TradeHistory row={history} /><ChartTradeContext value={{ trade, poolKey, receivedAt: trade ? performance.now() : null, decimals: 9, symbol: "SUI" }}><ChartView
+      compact
+      livePreset
+      source={{ expected: null, curvePoolKey: poolKey, venuePoolKey: migration?.venuePoolKey ?? null, migration, symbol: "PIP", quoteSymbol: "SUI", memeDecimals: 9, quoteDecimals: 9 }}
+      state={{ key: "1s|live", curve: { state: "available", data: curve, provenance: checkpoint }, venue, migration }}
+      controls={controls}
+      request={chartRequest(controls, start)}
+      hidden={[]}
+      updates={updates}
+      pending={false}
+      onControls={() => {}}
+      onToggle={() => {}}
+      onRefresh={() => {}}
+    /></ChartTradeContext></WalletTradesProvider>,
+    ));
+  };
+  await render(null);
+  assert.ok(container.querySelector("[data-kline-plot]"));
+  assert.ok(container.querySelector('button[aria-label="Chart range: Live, last 5 minutes"]'));
+  assert.equal(container.querySelector("[data-compact-chart]")?.getAttribute("data-chart-style"), "line", "Live is a line");
+  await setMobile(true);
+  assert.equal(container.querySelector("[data-compact-chart]")?.getAttribute("data-chart-style"), "line");
+  await setMobile(false);
 
-  // Before the stream fences, a snapshot holds only to its read and makes no quiet claim.
-  await render(null, [prior, active], now - 30_000, false);
-  assert.match(points() ?? "", new RegExp(`,${at(now - 30_000)}:92$`), "a snapshot holds only to its read");
-  assert.doesNotMatch(container.textContent ?? "", /No trades in the last 5 min/);
+  await render("Trade updates delayed.");
+  assert.match(container.querySelector('[role="status"]')?.textContent ?? "", /Trade updates delayed/);
+  assert.doesNotMatch(container.textContent ?? "", /No trades in this range/);
 
-  // Delayed: the line stops at the last observed time and the quiet claim is withdrawn.
-  await render("Trade updates delayed.", [prior, active], now - 30_000);
-  assert.match(points() ?? "", new RegExp(`,${at(now - 30_000)}:92$`), "no price is drawn past confirmed coverage");
-  assert.doesNotMatch(container.textContent ?? "", /No trades in the last 5 min/);
-  assert.match(container.textContent ?? "", /Trade updates delayed/);
+  const buy = { cursor: "2:0:1:0", timestampMs: now, side: "buy" as const, price: "93", quoteAmount: 20n, memeAmount: 1_000_000_000n };
+  await render(null, buy);
+  assert.match(container.querySelector("[data-chart-last-trade] [data-trade-cue]")?.textContent ?? "", /^Buy/);
+  await render(null, buy, { position: "2:0:2:0", checkpoint: 2, timestampMs: now, digest: "newer", kind: "curve_sell",
+    source: "user", actor: null, lifecycle: null, amounts: { quote: 100_000_000n, meme: 1_000_000_000n } });
+  assert.equal(container.querySelector("[data-chart-last-trade] [data-trade-cue]")?.textContent, "Sell · 0.1\u00a0SUI", "newer history wins the cue");
 
-  // Fully stale coverage before the window draws nothing at all.
-  await render("Trade updates delayed.", [prior, active], now - 310_000);
-  assert.equal(plot(), null);
-
-  // The next trade joins the line once; a repeated execution collapses to one point (frame dedup is in chart-live-model.test.ts).
-  now = next.timestampMs + 1_000;
-  await render(null, [prior, active, next, next]);
-  assert.equal(plot()?.getAttribute("data-line"), "step,points");
-  assert.equal(dots(), `${at(next.timestampMs)}:93`, "the duplicate delivery draws one dot");
-  const drawn = points()?.split(",") ?? [];
-  assert.equal(drawn.filter(point => point.startsWith(`${at(next.timestampMs)}:`)).length, 1);
-  assert.match(drawn[0] ?? "", /:92$/, "the leading edge carries the earlier confirmed price");
-  assert.match(drawn.at(-1) ?? "", new RegExp(`^${at(now)}:93`));
-  assert.equal(dateTime(), new Date(next.timestampMs).toISOString());
-  assert.doesNotMatch(container.textContent ?? "", /No trades in the last 5 min/);
-
-  // An execution without a price breaks the line: no price is invented after it.
-  const unpriced = trade("4:0:0:0", now - 500, null);
-  await render(null, [prior, active, next, unpriced]);
-  assert.match(points() ?? "", new RegExp(`,${at(unpriced.timestampMs)}:gap$`));
-  assert.equal(dots(), `${at(next.timestampMs)}:93`, "an unpriced execution gets no dot");
-  assert.match(points() ?? "", new RegExp(`,${at(unpriced.timestampMs - 0.5)}:93~,${at(unpriced.timestampMs)}:gap$`), "the run into the break is hidden");
-
-  // A priced execution in the same millisecond as the unpriced one carries no price across the break.
-  const sameMs = trade("3:9:0:0", unpriced.timestampMs, "95");
-  const resumed = trade("6:0:0:0", now - 100, "96");
-  await render(null, [prior, active, next, sameMs, unpriced, resumed]);
-  assert.match(points() ?? "", new RegExp(`,${at(next.timestampMs)}:93~,${at(unpriced.timestampMs)}:gap,${at(resumed.timestampMs - 0.5)}:96~,`), "the same-millisecond break hides the run across it");
-
-  // The next priced execution starts a new segment: neither the run nor the rise into it is drawn.
-  const after = trade("6:0:0:0", now - 100, "95");
-  await render(null, [prior, active, next, unpriced, after]);
-  assert.match(points() ?? "", new RegExp(`,${at(unpriced.timestampMs)}:gap,${at(after.timestampMs - 0.5)}:95~,${at(after.timestampMs)}:95,${at(now)}:95$`));
-  assert.equal(dots(), `${at(next.timestampMs)}:93,${at(after.timestampMs)}:95`);
-
-  // A coin with no confirmed price in or before the window keeps the empty state.
-  await render(null, [trade("5:0:0:0", now - 400_000, null)]);
-  assert.equal(plot(), null);
-  assert.match(container.textContent ?? "", /No trades in the last 5 min/);
-});
-
-test("partial line history has only indexed candle closes, with no points in the gaps", async (t) => {
-  const { saveChartPreference } = await import("./chart-preferences.ts");
-  saveChartPreference("style", "line");
-  const at = 1_800_000_000_000;
-  const poolKey = "blast_curve:0x1";
-  const provenance = { source: "blast-infra" as const, network: "localnet" as const, deployment: "fixture", checkpoint: 2,
-    timestampMs: at + 300_000, observedAt: at + 300_000, lagMs: 0 };
-  const candles = [at, at + 240_000].map((bucketStart, index) => ({
-    bucketStart, open: "90", high: "92", low: "90", close: String(91 + index),
-    volumeQuote: 20n, volumeMeme: 10n, buys: 1, sells: 0, trades: 1,
-  }));
-  const controls = { interval: "1m", range: "1h" } as const;
-  const data = { poolKey, source: "curve" as const, venue: "blast_curve", interval: controls.interval, migration: null, candles };
-  const container = dom.document.createElement("div");
-  const root = createRoot(container);
-  t.after(async () => {
-    saveChartPreference("style", "");
-    await act(async () => root.unmount());
-  });
-  await act(async () => root.render(<ChartView
-    compact marketChart
-    source={{ expected: null, curvePoolKey: poolKey, venuePoolKey: null, migration: null, symbol: "PIP", quoteSymbol: "SUI", memeDecimals: 9, quoteDecimals: 9 }}
-    state={{ key: "1m|1h", curve: { state: "available", data, provenance }, venue: null, migration: null }}
-    controls={controls} request={chartRequest(controls, at + 300_000)} hidden={[]} updates={null} pending={false}
-    onControls={() => {}} onToggle={() => {}} onRefresh={() => {}}
-  />));
-  assert.match(container.textContent ?? "", /Partial price history/);
-  assert.equal(container.querySelector("[data-series]")?.getAttribute("data-points"), "1800000000:91,1800000240:92");
+  await render(null, null, null, "traded");
+  assert.equal(container.querySelectorAll("[data-kline-plot]").length, 1, "a graduated coin is one chart");
 });
 
 test("panning the live candle out of the price pane hides its amount", async () => {

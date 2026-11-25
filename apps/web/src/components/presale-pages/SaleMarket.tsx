@@ -448,7 +448,7 @@ function PresaleMarketPrice({ market, move }: Readonly<{ market: HomeCoinMarket;
   const currency = useCoinPriceCurrency();
   const live = usePresalePoolPrice(market.pool);
   const prices = poolPrices(market.decimals, market.quote.decimals, currency?.quoteUsd);
-  return <MarketPriceRow showCurrency={currency?.rate != null} showSound
+  return <MarketPriceRow showCurrency={currency?.rate != null}
     activity={<ChartLastTrade placement="headline" playSound />}
     price={live ? <CoinPriceFigure price={prices.price(live.price)} quoteSymbol={prices.usd ? undefined : market.quote.symbol}
       tradeId={live.cursor} /> : NO_VALUE}

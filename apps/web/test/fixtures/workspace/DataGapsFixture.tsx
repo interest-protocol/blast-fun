@@ -105,7 +105,7 @@ function Surface({ surface, volume }: Readonly<{ surface: string; volume: string
       callsign="kaimoreno" celebrate explorer="suiscan" mode="account"
       onCelebrate={noop} onCopy={noop} onExplorer={noop} onLinkWallet={noop}
       onLogOut={noop} onNotification={noop} onPrivate={noop} onPublicPortfolio={noop} onRetry={noop} onSignIn={noop}
-      onSound={noop} onBlastConfirmation={noop} sound={false}
+      onBlastConfirmation={noop}
       settings={{ privacy: "public", sharing_since_ms: 1, commit_too_coin_type: null, public_portfolio: false, explorer: "suiscan", sound: true, blast_mode_confirm_actions: false, notifications: { ...DEFAULT_NOTIFICATION_PREFERENCES, unlocks: false } }}
       wallets={[{ address: "0x88e1d0a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c35c907af", kind: "slush", linked_at_ms: NOW - 86_400_000 }]}
     />

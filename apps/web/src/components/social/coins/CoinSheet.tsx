@@ -1,4 +1,6 @@
 "use client";
+
+import Link from "next/link";
 import { EMPTY_TRADE_AMOUNT, type TradeAmount } from "../trade/trade-ticket.ts";
 import { fmtLive } from "#web/components/social/trade/trade-ticket.ts";
 import { exactText, groupDigits } from "@blast/core/web/exact-amount.ts";
@@ -439,7 +441,7 @@ function CoinSheetForm(props: CoinSheetProps & Readonly<{ titleId: string; onCon
       {commitKit ? <InlineCommit key={outCoin.presale.presaleId} kit={commitKit} presaleId={outCoin.presale.presaleId} nowMs={commitNowMs}
         purchase={{ active: props.open, onConfirmed: props.onConfirmed, initialPayCoin: inCoin.coinType, initialPaymentCoin: inCoin,
           draft: purchaseDrafts[outCoin.key], onDraftChange: savePurchaseDraft, onDetails: props.onClose, onPendingChange }}
-        fallback={<PresaleLoading symbol={outCoin.symbol} quoteSymbol={outCoin.presale.quoteSymbol} />} /> : <div className={commitStyles.purchaseRead}><p role="status">Presale purchases are unavailable here.</p><a className={commitStyles.detailsLink} href={`/presale/${outCoin.presale.presaleId}`} onClick={props.onClose}>Presale details →</a></div>}
+        fallback={<PresaleLoading symbol={outCoin.symbol} quoteSymbol={outCoin.presale.quoteSymbol} />} /> : <div className={commitStyles.purchaseRead}><p role="status">Presale purchases are unavailable here.</p><Link className={commitStyles.detailsLink} href={`/presale/${outCoin.presale.presaleId}`} onClick={props.onClose} prefetch={false}>Presale details →</Link></div>}
     </>;
     return (
       <>

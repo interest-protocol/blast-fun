@@ -1,0 +1,55 @@
+.chart { display: grid; gap: .5rem; min-inline-size: 0; }
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .25rem .5rem;
+  min-block-size: 2.75rem;
+}
+
+/* Candles and two panes need room; the phone keeps the line and a shorter plot. */
+.chart { --kline-plot-height: 26rem; }
+.plot { position: relative; inline-size: 100%; block-size: var(--kline-plot-height); }
+/* The loading block holds the toolbar and plot, so the chart arrives without a jump. */
+.loading { --kline-plot-height: 26rem; block-size: calc(2.75rem + .5rem + var(--kline-plot-height)); }
+@media (max-width: 760px) { .chart, .loading { --kline-plot-height: 20rem; } }
+
+.walletToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: .375rem;
+  margin-inline-start: auto;
+  min-block-size: 2.75rem;
+  color: var(--ink-2);
+  font-size: .8125rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.layer { z-index: 30; }
+
+.menu {
+  display: grid;
+  gap: .125rem;
+  min-inline-size: 12rem;
+  padding: .375rem;
+  border-radius: var(--r-sm);
+  background: var(--card);
+  box-shadow: var(--sh-pop);
+}
+
+.menuItem {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  min-block-size: 2.75rem;
+  padding-inline: .5rem;
+  border-radius: var(--r-inner);
+  color: var(--ink);
+  font-size: .875rem;
+  cursor: pointer;
+}
+@media (hover: hover) { .menuItem:hover { background: var(--raised); } }
+
+.menuButton { justify-content: flex-start; inline-size: 100%; }

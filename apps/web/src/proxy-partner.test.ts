@@ -102,7 +102,7 @@ test("all unversioned read aliases reject partner keys and preflights before key
     "/api/v1/market/status", `/api/v1/market/coins/${ID}%3A%3Acoin%3A%3ACOIN/holders`,
     `/api/v1/market/launches/${ID}/activity`, `/api/v1/market/pools/blast_curve/${ID}`,
     ...["cetus", "bluefin", "blast_curve"].map((venue) => `/api/v1/market/pools/${venue}/${ID}/candles`),
-    ...["cetus", "bluefin"].map((venue) => `/api/v1/market/pools/${venue}/${ID}/trades`),
+    ...["cetus", "bluefin", "blast_curve"].map((venue) => `/api/v1/market/pools/${venue}/${ID}/trades`),
   ];
   const aliases = paths.map((path) => {
     const route = partnerV1Route(path);

@@ -9,8 +9,6 @@ import { LiveFigureCue } from "#web/components/blast-ui/LiveFigureCue.tsx";
 import { DexIdentity } from "#web/components/blast-ui/DexIdentity.tsx";
 import { Segmented } from "#web/components/blast-ui/Segmented.tsx";
 import { usePhoneLayout, useShellPrefs } from "#web/components/blast-ui/use-shell-prefs.ts";
-import { FeelSoundButton } from "#web/components/blast-feel/FeelSoundSwitch.tsx";
-import { useSoundSwitch } from "#web/components/social/settings/use-sound-switch.ts";
 import { SectionBoundary } from "#web/components/launchpad/primitives/SectionBoundary.tsx";
 import { useCoinPriceCurrency } from "#web/components/launchpad/chart/CoinPriceCurrency.tsx";
 import { readablePrice, readableUsd } from "#web/lib/market-format.ts";
@@ -49,7 +47,7 @@ export function CoinIdentityHeader({ coin, name, symbol, status, graduated, mark
           </small>
         </span>}
         sub={<span className={styles.byline}>
-          <span className="status" data-tone={graduated ? "live" : "upcoming"}>{status}</span>
+          {status ? <span className="status" data-tone={graduated ? "live" : "upcoming"}>{status}</span> : null}
           {children}
           <CoinTypeTag coinType={coin.coinType} />
         </span>}
@@ -72,31 +70,29 @@ export function CoinPriceFigure({ price, tradeId, quoteSymbol, quoteMark }: Read
   </span>;
 }
 
-export function MarketPriceRow({ price, priceLabel = "Price", change, activity, showSound = false, showCurrency = true }: Readonly<{
+export function MarketPriceRow({ price, priceLabel = "Price", change, activity, showCurrency = true }: Readonly<{
   price: ReactNode; priceLabel?: string; change?: Readonly<{ value: ReactNode; direction?: "up" | "down" }> | null;
-  activity?: ReactNode; showSound?: boolean; showCurrency?: boolean;
+  activity?: ReactNode; showCurrency?: boolean;
 }>) {
-  const sound = useSoundSwitch();
   const { amountsHidden } = useShellPrefs();
   const displayCurrency = useCoinPriceCurrency();
   const currency = showCurrency ? displayCurrency : null;
   const hasPrice = price != null;
-  if (!hasPrice && !showSound && !currency && !activity) return null;
+  if (!hasPrice && !currency && !activity) return null;
   return <div className={styles.marketPriceRow}>
     {hasPrice || activity ? <div className={styles.marketPrice}>
       {hasPrice && <><span>{priceLabel}</span><strong>{price}</strong></>}
       {hasPrice && change && !amountsHidden && <span className={styles.priceChange} data-direction={change.direction}>{change.value}</span>}
       {activity}
     </div> : null}
-    <div className={styles.priceControls}>
-      {currency && <Segmented
+    {currency && <div className={styles.priceControls}>
+      <Segmented
         label="Price currency" size="sm"
         options={[["usd", "USD"], ["quote", currency.quoteSymbol]]}
         value={currency.currency} onChange={currency.setCurrency}
         optionDisabled={(choice) => choice === "usd" && currency.rate === null}
-      />}
-      <span className={styles.soundSlot}>{showSound && <FeelSoundButton onToggle={sound.set} />}</span>
-    </div>
+      />
+    </div>}
   </div>;
 }
 

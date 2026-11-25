@@ -158,5 +158,3 @@ export function feelBarFor(button: Element, presaleId: string): Element | null {
 
 /** The class a charging Blast button wears, and the custom property it reads. */
 export const FEEL_CHARGING_CLASS: string = styles.charging ?? "";
-/** The class the sound button wears, for its 34 → 44 px sizing. */
-export const FEEL_SOUND_BUTTON_CLASS: string = styles.soundButton ?? "";

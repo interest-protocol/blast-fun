@@ -5,7 +5,7 @@ import { useQuoteUsd } from "#web/components/social/prices/use-quote-usd.ts";
 
 import { atCheckpoint, browserMarketDependencies } from "../blast-infra-browser";
 import { chartFromSnapshot, chartPoolKeys, chartTailRequest, readChartPool, type ChartSnapshot, type ChartSource } from "./chart-client";
-import { allChartInterval, afterChartSourceRead, chartKey, chartRequest, initialChart, type ChartControls } from "./chart-model";
+import { afterChartSourceRead, chartKey, chartRequest, initialChart, type ChartControls } from "./chart-model";
 import { useCoinPriceCurrency } from "./CoinPriceCurrency";
 import { ChartStream, type ChartStreamStatus } from "./chart-stream";
 import { useChartPrice } from "./chart-live-price";
@@ -33,11 +33,7 @@ export function CoinChart({
   const standaloneRate = useQuoteUsd(currency ? null : source.quoteType ?? null);
   const quoteUsd = currency ? currency.quoteUsd : standaloneRate;
   const [entry] = useState(initialSnapshot);
-  const plot = useRef<HTMLDivElement>(null);
-  const { controls, ready, commit } = useCoinChartControls(compact, initialControls, true, livePreset, entry !== undefined, () => {
-    const width = plot.current?.querySelector("[data-coin-plot]")?.clientWidth || plot.current?.clientWidth;
-    return allChartInterval(source.launchAt, Date.now(), width);
-  });
+  const { controls, ready, commit } = useCoinChartControls(compact, initialControls, true, livePreset, entry !== undefined);
   const [state, setState] = useState(() => chartFromSnapshot(source, initialControls, initialSnapshot));
   const [hidden, setHidden] = useState<readonly ChartSourceName[]>([]);
   const [pending, setPending] = useState(false);
@@ -73,7 +69,7 @@ export function CoinChart({
       expected,
       migration: () => committed ?? known.current,
       request: () => chartTailRequest(controls, Date.now()),
-      load: (pool, checkpoint) => readChartPool(pool, controls, atCheckpoint(dependencies, checkpoint), Date.now(), committed ?? known.current),
+      load: (pool, checkpoint) => readChartPool(pool, controls, atCheckpoint(dependencies, checkpoint), Date.now()),
       onSection: (pool, section, migration) => {
         if (stream.current !== client) return;
         const marker = committed ?? migration ?? known.current;
@@ -86,13 +82,13 @@ export function CoinChart({
         });
         setRequestAt(Date.now());
       },
-      onStatus: (status) => { if (stream.current === client) setStreamStatus(status); },
+      onStatus: setStreamStatus,
     });
     stream.current = client;
     client.start(seed?.pools);
     return () => {
-      if (stream.current === client) stream.current = null;
       client.stop();
+      if (stream.current === client) stream.current = null;
     };
   }, [coinType, controls, curvePoolKey, venuePoolKey, committed, dependencies, expected, ready, entry, useEntry]);
 
@@ -107,40 +103,31 @@ export function CoinChart({
   const { shown, plotCurve } = plotForControls(state, source, controls, committed, venuePoolKey, requestAt);
 
   const change = (choice: ChartControls) => {
-    const active = stream.current;
-    stream.current = null;
-    active?.stop();
-    setStreamStatus("connecting");
+    stream.current?.stop();
     setUseEntry(false);
-    setRequestAt(Date.now());
     const next = commit(choice);
     // Candles read for other controls are never shown under these: the chart starts over.
     setState((shown) => initialChart(chartKey(next), shown.venue !== null, shown.migration));
   };
 
   return (
-    <div ref={plot}>
-      <ChartView
-        marketChart
-        compact={compact}
-        preview={preview}
-        state={shown}
-        currentPrice={currentPrice?.price ?? null}
-        source={source}
-        omitCurve={!plotCurve}
-        quoteUsd={quoteUsd}
-        controls={controls}
-        request={chartRequest(controls, requestAt)}
-        hidden={hidden}
-        pending={pending}
-        updates={updates}
-        streamCurrent={streamStatus === "streaming"}
-        livePreset={livePreset}
-        onControls={change}
-        onToggle={(name, shown) => setHidden((current) => (shown ? current.filter((item) => item !== name) : [...current, name]))}
-        onRefresh={() => void refresh()}
-      />
-    </div>
+    <ChartView
+      compact={compact}
+      state={shown}
+      currentPrice={currentPrice?.price ?? null}
+      source={source}
+      omitCurve={!plotCurve}
+      quoteUsd={quoteUsd}
+      controls={controls}
+      request={chartRequest(controls, requestAt)}
+      hidden={hidden}
+      pending={pending}
+      updates={updates}
+      livePreset={livePreset}
+      onControls={change}
+      onToggle={(name, shown) => setHidden((current) => (shown ? current.filter((item) => item !== name) : [...current, name]))}
+      onRefresh={() => void refresh()}
+    />
   );
 }
 

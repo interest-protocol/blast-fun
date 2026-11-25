@@ -2,6 +2,9 @@ name: Contributor checks
 
 on:
   pull_request:
+  # The merge queue tests each batch of PRs on top of main once, instead of
+  # every PR re-running after each merge to stay up to date.
+  merge_group:
 
 permissions:
   contents: read
@@ -11,7 +14,7 @@ defaults:
     shell: bash
 
 concurrency:
-  group: contributor-${{ github.event.pull_request.number }}
+  group: contributor-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -45,6 +48,8 @@ jobs:
           npm test
           npm run test:partner-live
       - name: Check React diagnostics on changed lines
+        # Changed-line diagnostics need the PR's own base; the PR run already did them.
+        if: github.event_name == 'pull_request'
         working-directory: apps/web
         run: |
           # The merge commit's first parent is main as GitHub merged it; the event's base.sha

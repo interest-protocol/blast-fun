@@ -180,7 +180,7 @@ test("backend deadlines preserve family codes before the frontend relay deadline
   }
 });
 
-test("ambiguous trusted forwarding is refused before any admission or handler work", async (t) => {
+test("an unreadable last forwarded entry is refused before any admission or handler work", async (t) => {
   let handled = 0;
   const runtime = createBackendServer({
     gatewaySecret: "synthetic-gateway-secret-01234567890123456789",
@@ -204,7 +204,7 @@ test("ambiguous trusted forwarding is refused before any admission or handler wo
   });
   t.after(() => runtime.drain());
   const origin = `http://127.0.0.1:${runtime.server.port}/api/v1/market/status`;
-  for (const ip of [undefined, "unavailable", "203.0.113.1, 203.0.113.2"]) {
+  for (const ip of [undefined, "unavailable", "203.0.113.1, unavailable"]) {
     const response = await fetch(origin, {
       headers: ip ? { "x-forwarded-for": ip } : {},
     });

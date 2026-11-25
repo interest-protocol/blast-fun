@@ -205,3 +205,49 @@ test("a tracked coin shows completed pool swaps with exact coin and SUI amounts 
   await act(async () => link.blur());
   assert.match(container.textContent ?? "", /No swaps indexed yet/);
 });
+
+test("the SUI page renders its chart, trades from both pools priced in USDC, and the swap", async (t) => {
+  const { document, window } = installTestDom();
+  const { act } = await import("react");
+  const { createRoot } = await import("react-dom/client");
+  const { LegacyCoinScreen } = await import("./BondingCoinScreen.tsx");
+  const sui = indexedPoolCoin("0x2::sui::SUI")!;
+  const trade = (poolKey: string, cursor: string, checkpoint: number) => ({
+    pool_key: poolKey, venue: poolKey.split(":")[0], kind: "swap", side: "buy", cursor, trader: `0x${"a".repeat(64)}`,
+    digest: checkpoint === 40 ? "FvFRVLsgYqA3DyDLNaiqFP77Z5UuVrFfYyRzpLEHEwZh" : "FvFRVLsgYqA3DyDLNaiqFP77Z5UuVrFfYyRzpLEHEwZi",
+    timestamp_ms: 1790338175000 + checkpoint * 1000, meme_amount: "1000000000", quote_amount: "3000000",
+    venue_swap: { amount_in: "3000000", amount_out: "1000000000", ref_amount: poolKey.startsWith("cetus:") ? "0" : null, before_sqrt_price: "1", after_sqrt_price: "2", a_to_b: true },
+    volume_usd: null, price: null, inputs: null, market_cap: null,
+  });
+  const seen: string[] = [];
+  t.mock.method(globalThis, "fetch", async (input: RequestInfo | URL) => {
+    const url = new URL(String(input), window.location.origin);
+    seen.push(url.pathname);
+    const [poolKey, rows] = url.pathname.includes("/cetus/")
+      ? [sui.poolKeys[0], [trade(sui.poolKeys[0], "40:1:0:0", 40)]]
+      : url.pathname.includes("/bluefin/") ? [sui.poolKeys[1]!, [trade(sui.poolKeys[1]!, "41:1:0:0", 41)]] : [null, null];
+    if (!poolKey) return Response.json({}, { status: 404 });
+    const now = Date.now();
+    return Response.json({ provenance: { network: "mainnet", deployment_fingerprint: null, checkpoint: 41, timestamp_ms: now - 400, observed_ms: now, lag_ms: 400 }, trades: rows });
+  });
+  const client = createTestQueryClient();
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  t.after(async () => { await act(async () => root.unmount()); client.clear(); });
+  await act(async () => root.render(withQueryClient(client,
+    <LegacyCoinScreen {...sui} legacy={false} chart={<div>Coin chart</div>} trade={<div>Swap form</div>} />,
+  )));
+  await act(async () => settleQueries(client));
+  const text = container.textContent ?? "";
+  assert.match(text, /Coin chart/);
+  assert.match(text, /Swap form/);
+  assert.doesNotMatch(text, /Graduated/);
+  assert.equal(seen.some((path) => path.includes("/discovery")), false, "SUI reads no V1 discovery market");
+  assert.ok(seen.some((path) => path.includes("/cetus/")) && seen.some((path) => path.includes("/bluefin/")));
+  assert.ok(seen.some((path) => path.includes(sui.poolKeys[0].split(":")[1]!)) && seen.some((path) => path.includes(sui.poolKeys[1]!.split(":")[1]!)), "both allowlisted pools are read");
+  const rows = [...container.querySelectorAll('ol[aria-label="Recent trades"] li')];
+  assert.equal(rows.length, 2, `both pools' swaps are listed: ${text}`);
+  // Newest first across pools: the Bluefin swap (checkpoint 41) above the Cetus swap (40).
+  const times = rows.map((row) => row.querySelector("time")?.getAttribute("datetime"));
+  assert.deepEqual(times, [new Date(1790338175000 + 41_000).toISOString(), new Date(1790338175000 + 40_000).toISOString()]);
+});

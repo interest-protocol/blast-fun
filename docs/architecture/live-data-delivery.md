@@ -111,7 +111,7 @@ After 3 failures in a row, the tab uses SSE for 10 minutes.
 | Ticket leaks through logs, history or Referer | The ticket travels only in `Sec-WebSocket-Protocol`, never in the URL. Surfaces that must not record it: Render request logs (they record the path only), error and trace reporters, and refusal close reasons. A test checks that no refusal echoes it. |
 | Another site embeds the socket | Exact `Origin` match, and the ticket binds `o`. The server never reads `Cookie`. The gate cookie is `__Host-` (host-only); sign-off checks that no first-party cookie uses `Domain=blast.fun`. |
 | One client starves the shared tables | Limits per IP across the fleet: **8 open sockets** and **20 opens a minute** (resumes count). One Redis script on the private-replay store checks both, then burns the ticket, so the count holds at any instance count. Closes remove their entries in one batched command per address; a failed removal is retried every 2 s and once more at drain. An entry also expires after the longest socket life plus 5 minutes (65 min), so a crashed instance frees its slots by then. Per IP, per instance: **4 distinct pools** and **40 distinct price coins** across that IP's sockets, because they guard that process's own tables. The key is `ClientAddress.rateKey`, a /64 for IPv6. Global tables per process: 64 pool topics and 128 price coins (`MARKET_STREAM_BUDGET`). A socket whose new topics or coins would not fit is refused with 4503; tables never fill silently. A pool the engine never snapshots frees its slot after 10 s. |
-| Process exhaustion | Sockets and SSE streams share the relay's client ceiling, `ACTIVITY_HINT_STREAM_BUDGET.maxClients`, which is 512 per instance. Fleet capacity is instances × 512, so 2 starter instances give 1,024. The rollout percent keeps expected sockets under 70% of that. Going past it needs the load test (memory per socket) and Jose's go on the cap and the instance count. One upstream reader socket per process, never one per browser. |
+| Process exhaustion | Sockets and SSE streams share the relay's client ceiling: the configured `BLAST_BACKEND_MAX_HINT_STREAMS`, at most 1,024 per instance (`ACTIVITY_HINT_STREAM_BUDGET.maxClients`, a 64 MiB queue budget per relay; activity SSE has its own relay with the same cap). Fleet capacity is instances × the configured value. The rollout percent keeps expected sockets under 70% of that. Measured locally on 2026-11-25: about 60 KB a socket under traffic, CPU before memory; raising the configured value needs a Render memory and CPU reading first. One upstream reader socket per process, never one per browser. |
 | Expensive subscriptions | Topics are fixed at connect, using the SSE parsers (`marketStreamPools`, `marketStreamPriceCoins`, `marketStreamPresale`, `marketStreamActivity`): ≤ 2 pools, ≤ 20 price coins, ≤ 1 presale. `resume=<pool>~<cursor>` is allowed at most 2 times. Its pool must match `POOL_KEY`, appear in `pool=` and not repeat; its cursor must match `EVENT_CURSOR`. Otherwise 4400. The browser cannot send subscribe messages. |
 | Client messages | The only accepted message is `{"op":"ping","t":<int>}`: at most 128 bytes and 1 a second. Anything else, binary or over the rate closes 1008. `maxPayloadLength` is 1 KiB and `perMessageDeflate` is off. |
 | Slow readers | The relay queue (64 KiB a client) is the control: overflow closes 4408. Bun's `backpressureLimit` is 256 KiB with `closeOnBackpressureLimit`, as a backstop only. |
@@ -120,7 +120,7 @@ After 3 failures in a row, the tab uses SSE for 10 minutes.
 | Long-lived sockets | Each socket closes 1000 after a random 30–60 minutes and reconnects with a fresh ticket. So turning the flag off, rotating the secret, or changing a limit reaches every socket within an hour. |
 | Reconnect storms after a deploy | Drain closes with 1012, spread over 5 s. Clients wait a random 1–30 s before reconnecting. Prices may clear (9 s watchdog), and the screens' 15 s CDN poll covers the gap. A resume from the ring avoids a history refetch per tab. |
 | Data integrity | Frames are the reader's frames after the same checks: an explicit type allowlist with a validator per type, `parseInfraProvenance`, cursor and deployment fingerprint. New frame types (for example `coin_stats`) are added to the allowlist with a validator. The socket adds no data source. |
-| Spoofed client IP | The hints service runs `trusted-proxy` ingress, so `render.yaml` declares `BLAST_BACKEND_TRUSTED_PROXY_CIDRS`. `ingressAddress` accepts exactly one `X-Forwarded-For` address. Null means refuse; it never falls back to the peer address. Sign-off test: send `X-Forwarded-For: 1.2.3.4` from outside, to both `live.blast.fun` and the onrender.com host, and record what arrives. |
+| Spoofed client IP | The hints service runs `trusted-proxy` ingress, so `render.yaml` declares `BLAST_BACKEND_TRUSTED_PROXY_CIDRS`. `ingressAddress` keys on the last `X-Forwarded-For` entry, the one Render appended; client-sent entries before it are ignored. Measured 2026-11-25: Render's proxies sit in 10.24.0.0/13 and append to a forged header (2 entries arrive). Null means refuse; it never falls back to the peer address. |
 | Transport | TLS ends at Render's proxy (managed certificate). `wss` only. CSP `connect-src` adds the live origin from configuration per environment, checked by `assertPlainSources`. `/v1/socket` is served only on the live host. |
 
 ### Residual risks
@@ -140,14 +140,14 @@ After 3 failures in a row, the tab uses SSE for 10 minutes.
 ### Sign-off
 
 - [ ] Jose: controls accepted, flag may go on.
-- [ ] Render `X-Forwarded-For` test recorded (see above).
+- [ ] Render `X-Forwarded-For` test recorded: two client IPs get separate keys, and neither a forged leading entry nor a second `X-Forwarded-For` line changes the key, on `live.blast.fun` and the onrender.com host.
 - [ ] No first-party cookie uses `Domain=blast.fun`.
 - [ ] Load test: memory per socket, the chosen cap and the instance count recorded here.
 
 ## Rollout on develop (applied 2026-10-27)
 
 1. **Hints process** `blast-backend-hints`: the backend image, Docker
-   command `bun run src/hints-main.ts`, two starter instances, shutdown
+   command `bun run src/hints-main.ts`, seven starter instances, shutdown
    allowance 20 s, environment per `apps/backend-api/hints.env.example` plus
    `BLAST_BACKEND_MARKET_STREAM_ENABLED=true`, `BLAST_NETWORK=mainnet` and
    `BLAST_DEPLOYMENT_FINGERPRINT`.

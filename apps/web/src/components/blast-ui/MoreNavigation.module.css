@@ -1,35 +1,13 @@
-.more { min-width: 0; }
-.trigger { width: 100%; touch-action: manipulation; }
-/*
- * Rail board: More is a rail row with a disclosure chevron at its right. The
- * shared nav-row DisclosureButton (`variant="nav"`) owns the row: 42px, 12px
- * padding and gap, 11px corners, the 20px glyph and label at every other row's
- * x, muted until open or current, current as the rows' neutral fill, lit edge
- * and pink glyph, and the muted chevron.
- */
-.panel { padding-inline: 0.1875rem; margin-inline: -0.1875rem; }
-/* Open, More is a heading for its rows: no fill of its own, so only the current page is filled, and its rows keep the rail's 4px rhythm. */
-.more:not(.mobile) .trigger[aria-expanded="true"] { background: none; }
-.more:not(.mobile):has([aria-current="page"]) .trigger { font-weight: 600; }
-.more:not(.mobile) .panel > div { display: grid; gap: 0.25rem; padding-top: 0.25rem; }
-.destination { padding-left: 1.75rem; font-size: 0.875rem; min-height: max(44px, 2.75rem); }
-.destination svg { width: 1.125rem; height: 1.125rem; }
-.destination:active { background: var(--hair); }
-.mobile { display: none; }
-:global([data-rail="mini"]) .trigger :global([data-ui-chevron]) { display:none; }
-/* The 80px by 56px cell of the other rows (AppShell, KA-5), so "More" never breaks mid-word. */
-:global([data-rail="mini"]) .more:not(.mobile) .trigger.trigger { --control-pad-start: 0.125rem; --control-pad-end: 0.125rem; width: calc(100% + 1.25rem); max-width: none; height: 3.5rem; margin-inline: -0.625rem; }
-/* The panel widens to the rail's 80px cells (AppShell, KA-5) and keeps its 3px inset for focus rings, so no name is clipped. */
-:global([data-rail="mini"]) .more:not(.mobile) .panel { margin-inline: -0.8125rem; }
-:global([data-rail="mini"]) .panel .destination.destination { margin-inline: 0; }
+.more { display: none; }
+.trigger { width: 100%; }
 
 /*
  * Mobile board: More is a tab cell like the others, its 22px glyph over the
  * 12px label, both centred in the 54px cell, the cell's 14px corner.
  */
 @media (max-width: 760px) {
-  .mobile { display: contents; }
-  .more.mobile .trigger {
+  .more { display: contents; }
+  .more .trigger {
     --control-radius: var(--r-sm);
     min-width: 0;
     height: auto;
@@ -40,12 +18,12 @@
     font: 600 0.75rem/1rem var(--font);
     color: var(--muted);
   }
-  .more.mobile .trigger > svg { width: 1.375rem; height: 1.375rem; }
-  .more.mobile .trigger[data-current] { color: var(--ink); background: var(--chip); box-shadow: inset 0 1px 0 var(--card-lit); font-weight: 600; }
-  .more.mobile .trigger[data-current] > svg { color: var(--pink); }
-  .more.mobile .trigger[aria-expanded="true"] { background: var(--hair); color: var(--ink); }
-  .mobile .trigger:active { background: var(--hair); }
-  .mobile .trigger, .mobile .destination {
+  .more .trigger > svg { width: 1.375rem; height: 1.375rem; }
+  .more .trigger[data-current] { color: var(--ink); background: var(--chip); box-shadow: inset 0 1px 0 var(--card-lit); font-weight: 600; }
+  .more .trigger[data-current] > svg { color: var(--pink); }
+  .more .trigger[aria-expanded="true"] { background: var(--hair); color: var(--ink); }
+  .more .trigger:active { background: var(--hair); }
+  .more .trigger, .more .destination {
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
     -webkit-user-select: none;
@@ -53,9 +31,8 @@
     -webkit-touch-callout: none;
     transition: transform var(--t1) var(--ease);
   }
-  .mobile .trigger:active { transform: scale(.97); }
-  .mobile :global([data-ui-chevron]) { display: none; }
-  .mobile .panel {
+  .more .trigger:active { transform: scale(.97); }
+  .more .panel {
     position: absolute;
     inset: auto 0.75rem calc(100% + 0.5rem);
     height: auto;
@@ -67,12 +44,12 @@
     transform: translateY(0);
     transition: transform var(--t2) var(--ease), opacity var(--t1) var(--ease);
   }
-  .mobile .panel[data-starting-style], .mobile .panel[data-ending-style] {
+  .more .panel[data-starting-style], .more .panel[data-ending-style] {
     height: auto;
     opacity: 0;
     transform: translateY(0.5rem);
   }
-  .mobile .panel[data-ending-style] {
+  .more .panel[data-ending-style] {
     transition-duration: 160ms, 100ms;
   }
   .mobileDestinations {
@@ -81,7 +58,7 @@
     overscroll-behavior: contain;
     padding: 0.5rem;
   }
-  .mobile .destination {
+  .more .destination {
     width: 100%;
     min-height: max(48px, 3rem);
     padding: 0.625rem 0.75rem;
@@ -93,14 +70,14 @@
     letter-spacing: normal;
     border-radius: var(--r-sm);
   }
-  .mobile .destination svg { width: 1.375rem; height: 1.375rem; }
-  .mobile .destination:active { background: var(--hair); transform: scale(.98); }
-  .mobile .destination .destinationChevron { width: 1rem; height: 1rem; margin-left: auto; }
-  :global([data-rail="mini"]) .mobile .destination span { opacity: 1; pointer-events: auto; }
+  .more .destination svg { width: 1.375rem; height: 1.375rem; }
+  .more .destination:active { background: var(--hair); transform: scale(.98); }
+  .more .destination .destinationChevron { width: 1rem; height: 1rem; margin-left: auto; }
+  :global([data-rail="mini"]) .more .destination span { opacity: 1; pointer-events: auto; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .mobile .panel, .mobile .trigger, .mobile .destination { transition: none; }
-  .mobile .trigger:active, .mobile .destination:active { transform: none; opacity: .7; color: var(--ink); }
-  .mobile .trigger:active svg, .mobile .destination:active svg { opacity: 1; color: inherit; }
+  .more .panel, .more .trigger, .more .destination { transition: none; }
+  .more .trigger:active, .more .destination:active { transform: none; opacity: .7; color: var(--ink); }
+  .more .trigger:active svg, .more .destination:active svg { opacity: 1; color: inherit; }
 }
-:global(html[data-blast-input="keyboard"]) .mobile :is(.panel, .trigger, .destination, .trigger > svg, .destination svg) { transition: none; }
+:global(html[data-blast-input="keyboard"]) .more :is(.panel, .trigger, .destination, .trigger > svg, .destination svg) { transition: none; }

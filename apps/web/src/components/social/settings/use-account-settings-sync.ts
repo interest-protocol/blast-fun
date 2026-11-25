@@ -34,12 +34,12 @@ function markSynced(accountId: string): void {
  *
  *  - the **explorer** (Settings → Transactions), so transaction links follow
  *    the account;
- *  - the **sound** switch (Settings → Feel, R3-12), when the account has
+ *  - the header's sound control, when the account has
  *    chosen: the Feel layer's live flag becomes that choice, unless the reader
  *    changed it on this device while the read was in flight (`soundMark`), in
  *    which case their newer choice stands. An account that has not chosen
- *    (`sound: null`) never turns sound on: the device keeps its own flag (off
- *    until the reader turns it on), and a choice the reader made here is
+ *    (`sound: null`) leaves the device’s choice or default in place. A choice
+ *    the reader made here is
  *    handed to the account (`keepDeviceSound`) so it follows them.
  */
 export function adoptAccountSettings(
