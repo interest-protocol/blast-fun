@@ -155,12 +155,12 @@ test("ranking: breadth first, one actor capped at three events, recency in steps
   assert.equal(relevanceScore({ inputs: { breadth: 0, volume: 0 }, latestMs: day / 2, holders: 0 }, "24h", day), 1_000);
   assert.equal(relevanceScore({ inputs: { breadth: 0, volume: 0 }, latestMs: null, holders: 1_000 }, "24h", day), 1_000);
   // The clock ticks once a minute for every coin: within a minute a score holds still, and two coins
-  // whose last trades are half a minute apart keep the same gap, so they never swap on their own.
+  // keep the same gap across ticks, even while one traded within the current minute, so they never swap on their own.
   const at = 36_000_000;
   const fresh = (latestMs: number, toMs: number) => relevanceScore({ inputs: { breadth: 0, volume: 0 }, latestMs, holders: 0 }, "1h", toMs);
-  const gaps = [120_000, 135_000, 150_000, 165_000].map(offset => fresh(at + 30_000, at + offset) - fresh(at, at + offset));
-  assert.deepEqual(new Set(gaps).size, 1, `gaps ${gaps.join(", ")}`);
-  assert.equal(fresh(at, at + 120_000), fresh(at, at + 179_999));
+  const gaps = [95_000, 110_000, 130_000, 185_000].map(offset => fresh(at + 90_000, at + offset) - fresh(at + 36_000, at + offset));
+  assert.deepEqual(gaps, [30, 30, 30, 30]);
+  assert.equal(fresh(at, at + 120_001), fresh(at, at + 180_000));
   assert.equal(recencyOf(null, "1h", 10_000_000), 0);
   assert.equal(recencyOf(10_000_000 - 300_000, "1h", 10_000_000), 2);
   assert.equal(recencyOf(10_000_000 - 1_500_000, "1h", 10_000_000), 1);

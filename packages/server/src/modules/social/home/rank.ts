@@ -118,7 +118,8 @@ export function relevanceScore(
 ): number {
   const { inputs, latestMs, holders } = candidate;
   // The clock moves in whole minutes, the same step for every coin: scores hold still within a minute and never swap order on their own.
-  const nowMs = Math.floor(toMs / MINUTE_MS) * MINUTE_MS;
+  // It rounds up, so a trade this minute is never later than the clock (the clamp only catches clock skew).
+  const nowMs = Math.ceil(toMs / MINUTE_MS) * MINUTE_MS;
   const freshness = latestMs === null ? 0 : Math.min(1, Math.max(0, 1 - (nowMs - latestMs) / HOME_WINDOW_MS[window]));
   const score = RELEVANCE_WEIGHTS.breadth * saturating(inputs.breadth, RELEVANCE_CAPS.breadth[window])
     + RELEVANCE_WEIGHTS.volume * saturating(inputs.volume, RELEVANCE_CAPS.volume[window])
