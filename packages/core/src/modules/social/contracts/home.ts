@@ -110,7 +110,9 @@ export const HOME_CURVE_PARAM = "curve";
 /**
  * Opts Trending (`sort=relevant`) into presales that are not trading yet:
  * upcoming, live, and ended within the window, each carrying
- * `HomeCoin.sale.savers`. Home sends it; other sorts ignore it.
+ * `HomeCoin.sale.savers`; and into live bonding curves with at least one
+ * trade in the window, ranked on the same score. Home sends it; other sorts
+ * ignore it.
  */
 export const HOME_PRESALES_PARAM = "presales";
 
@@ -164,7 +166,8 @@ export function isHomeWindow(value: unknown): value is HomeWindow {
  * - `progress`: live bonding curves by graduation progress
  *   (`HomeCoin.curve.progress_bps`, a percent, so SUI and USDC curves compare
  *   fairly), highest first; every other coin after them by market cap. Only
- *   `stage=almost` lists curves still filling.
+ *   `stage=almost` (and Trending with `HOME_PRESALES_PARAM`) lists curves
+ *   still filling.
  * - `market_cap`: market cap now, highest first. A curve coin's comes from
  *   its live supply, a sale's from its supply less the tokens still in
  *   vesting, a catalog coin's from the tracked pool's supply. A coin whose
@@ -188,7 +191,8 @@ export function isHomeSort(value: unknown): value is HomeSort {
 
 /**
  * Which coins Discover lists. `all`: every coin except bonding curves still
- * filling, which list only on `almost`. `almost`: live bonding curves at
+ * filling, which list only on `almost` and, once traded in the window, on
+ * Trending with `HOME_PRESALES_PARAM`. `almost`: live bonding curves at
  * `HOME_ALMOST_GRADUATED_BPS` or more of their graduation target, and curves
  * ready to migrate.
  * `graduated`: every coin that trades on a DEX (graduated curves, migrated
@@ -393,7 +397,7 @@ export type HomeQuery = Readonly<{
   cursor: string | null;
   /** Also answer `ranked` (`ranked=1`). Only Blast mode Discover asks, so a client loaded before the field never receives it. */
   ranked?: boolean;
-  /** Let Trending list presales not trading yet (`HOME_PRESALES_PARAM`). Only Home asks; the path carries it on `sort=relevant` only, so other orders keep one URL. */
+  /** Let Trending list presales not trading yet and live curves traded in the window (`HOME_PRESALES_PARAM`). Only Home asks; the path carries it on `sort=relevant` only, so other orders keep one URL. */
   presales?: boolean;
 }>;
 

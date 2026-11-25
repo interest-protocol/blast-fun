@@ -1385,3 +1385,63 @@ test("Trending with presales: upcoming, live and ended sales in their bounds, sa
     const tradable = await ok<HomeCoinsPage>(await discover("?sort=relevant&presales=1&tradable=1&limit=50"), "home-coins-page");
     assert.deepEqual(symbols(tradable.coins).filter((symbol) => notTrading.includes(symbol)), []);
   }));
+
+test("Trending with presales: live curves traded in the window rank beside every coin; idle, dust and other orders stay off", { skip }, () =>
+  withFixture(async ({ admin, discover, now }) => {
+    await admin.query("INSERT INTO blast_infra_fixture.coin_metadata (coin_type,name,symbol,decimals) VALUES ($1,'USD Coin','USDC',6)", [QUOTE]);
+    // Live USDC curves, 2,000 of 8,000 USDC (25%), a billion whole coins each.
+    const curve = async (id: string, symbol: string, usdPrice: string, tradedAgoMs: number, cp: number, kind = "trade_buy") => {
+      const coinType = coinOf(hex(id), symbol);
+      const poolKey = `blast_curve:${hex(`${id}0`)}`;
+      await admin.query("INSERT INTO blast_infra_fixture.coin_metadata (coin_type,name,symbol,decimals) VALUES ($1,$2,$2,9)", [coinType, symbol]);
+      await admin.query(`INSERT INTO coins (coin_type,decimals,launcher,creator,metadata,pool_key,created_checkpoint,created_at_ms,currency_supply,balance_0x0)
+        VALUES ($1,9,$2,$2,'{}',$3,41000,$4,1000000000000000000,0)`, [coinType, W.anon, poolKey, now - 2 * DAY]);
+      await admin.query(`INSERT INTO pools (pool_key,venue,coin_type,quote_type,lifecycle,created_checkpoint,created_at_ms,quote_reserve,params)
+        VALUES ($1,'blast_curve',$2,$3,'live',41000,$4,'2000000000',$5)`, [poolKey, coinType, QUOTE, now - 2 * DAY, { graduation_target: "8000000000" }]);
+      await seedChainRead(admin, {
+        prices: [{ coin_type: coinType, usd_price: usdPrice, as_of_ms: now - MINUTE, source: "pool" }],
+        // Under the market watermark, as a committed curve trade, unless the caller passes a later checkpoint.
+        activity: [activity(kind, W.anon, null, now - tradedAgoMs, { checkpoint: cp, coin_type: coinType, coin_amount: "1000000000", quote_amount: "50000000", usd_value: "50", venue: "blast_curve" })],
+      });
+      return coinType;
+    };
+    // $5,000 market caps: HOT traded 10 minutes ago, WARM 3 hours ago, COLD 2 days ago. TINY traded, but its market cap is $500: dust.
+    const hot = await curve("c401", "HOT", "0.000005", 10 * MINUTE, 49_990);
+    await curve("c402", "WARM", "0.000005", 3 * HOUR, 49_991);
+    await curve("c403", "COLD", "0.000005", 2 * DAY, 49_992);
+    await curve("c404", "TINY", "0.0000005", 5 * MINUTE, 49_993);
+    // SOLD only had a sell, which counts. LATE's buy sits above the market watermark, not yet committed.
+    await curve("c405", "SOLD", "0.000005", 2 * HOUR, 49_994, "trade_sell");
+    await curve("c406", "LATE", "0.000005", 5 * MINUTE, checkpoint + 1_000);
+    const curves = ["HOT", "WARM", "COLD", "TINY", "SOLD", "LATE"];
+    const shownCurves = (page: HomeCoinsPage) => symbols(page.coins).filter((symbol) => curves.includes(symbol));
+
+    const day = await ok<HomeCoinsPage>(await discover("?sort=relevant&presales=1&curve=1&limit=50"), "home-coins-page");
+    assert.deepEqual(shownCurves(day).sort(), ["HOT", "SOLD", "WARM"], "traded in the last 24h, under the watermark, and not dust");
+    const hotCoin = day.coins.find((coin) => coin.coin_type === hot)!;
+    assert.deepEqual([hotCoin.curve, hotCoin.lifecycle, hotCoin.venue], [{ lifecycle: "live", progress_bps: 2_500, quote_remaining: "6000000000" }, "migrated", "blast_curve"]);
+    assert.deepEqual([hotCoin.activity.participants, hotCoin.rank.why], [1, "1 participant · 1 trade in the last 24h in its pool"]);
+    // The same score as every coin: active coins in score order, HOT ahead of WARM on freshness alone.
+    const active = day.coins.filter((coin) => coin.activity.participants > 0).map((coin) => coin.rank.score);
+    assert.deepEqual(active, [...active].sort((a, b) => b - a));
+    assert.ok(symbols(day.coins).indexOf("HOT") < symbols(day.coins).indexOf("WARM"));
+
+    const hour = await ok<HomeCoinsPage>(await discover("?window=1h&sort=relevant&presales=1&limit=50"), "home-coins-page");
+    assert.deepEqual(shownCurves(hour), ["HOT"], "only the curve traded in the last hour");
+
+    // Keyset pages over the mixed list: the same items, none twice.
+    const paged: string[] = [];
+    let cursor: string | null = null;
+    do {
+      const page: HomeCoinsPage = await ok<HomeCoinsPage>(await discover(`?sort=relevant&presales=1&curve=1&limit=3${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`), "home-coins-page");
+      paged.push(...symbols(page.coins));
+      cursor = page.next_cursor;
+    } while (cursor);
+    assert.deepEqual(paged, symbols(day.coins));
+
+    // Only Home's Trending: not without the flag, not on another order or the Graduated tab, not while trades are hidden.
+    for (const query of ["?sort=relevant&limit=50", "?sort=trending&presales=1&limit=50", "?sort=newest&presales=1&limit=50", "?sort=held&presales=1&limit=50", "?stage=graduated&sort=relevant&presales=1&limit=50"]) {
+      assert.deepEqual(shownCurves(await ok<HomeCoinsPage>(await discover(query), "home-coins-page")), [], query);
+    }
+    assert.deepEqual(shownCurves(await ok<HomeCoinsPage>(await discover("?sort=relevant&presales=1&limit=50", { trades: false }), "home-coins-page")), [], "trades hidden");
+  }));

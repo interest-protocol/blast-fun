@@ -37,7 +37,9 @@ import { decodeCursor, encodeCursor, invalidCursor } from "@blast/server/modules
  * are never dust. Trending with `presales=1` also ranks presales not trading
  * yet (upcoming, live, ended or funded; never cancelled or test-SUI) on the
  * same 0–100 score through `saleSlots`; their dust test reads the raise
- * target, and a target of 0 is never dust.
+ * target, and a target of 0 is never dust. It also lists the live bonding
+ * curves with a buy or sell in the window (`homeTrendingCoinSources`),
+ * scored and dust-tested like every other coin.
  *
  * **Inputs**, all over the chosen window:
  * - `breadth`: distinct participants (accounts and unlinked wallets, each
@@ -89,7 +91,8 @@ import { decodeCursor, encodeCursor, invalidCursor } from "@blast/server/modules
  * **Stages.** `almost` keeps curves still filling at 60% or more
  * (`HOME_ALMOST_GRADUATED_BPS`) and curves ready to migrate; `graduated`
  * keeps coins that trade on a DEX (no sale and no curve still filling); `all`
- * keeps every candidate, which has no curve still filling.
+ * keeps every candidate, which has no curve still filling except Trending's
+ * traded ones.
  *
  * **Why shown vs why ranked.** Every coin carries `rank.why`: the inputs in
  * words ("4 participants · 8 trades in the last 24h"; a standalone vault coin
