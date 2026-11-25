@@ -205,6 +205,16 @@ export class MarketStreamRelay {
     );
   }
 
+  /** Whether a socket for these pools and coins fits the shared tables now; it never fills them silently. */
+  admits(pools: readonly string[], priceCoins: readonly string[]): boolean {
+    const added = pools.filter((pool) => !this.#topics.has(pool)).length;
+    return (
+      this.#clients.size < ACTIVITY_HINT_STREAM_BUDGET.maxClients &&
+      this.#topics.size + added <= B.maxTopics &&
+      (this.#prices?.admits(priceCoins) ?? true)
+    );
+  }
+
   subscribe(request: Request, sink?: HintSink, options: MarketSubscribeOptions = {}): HintSubscription {
     let pools: readonly string[];
     let priceCoins: readonly string[];
