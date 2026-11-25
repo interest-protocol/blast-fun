@@ -50,11 +50,7 @@ export function CoinChart({
   const [useEntry, setUseEntry] = useState(true);
   const venuePoolKey = source.venuePoolKey ?? state.migration?.venuePoolKey ?? null;
   const curvePoolKey = source.curvePoolKey;
-  const pricePool = venuePoolKey ?? curvePoolKey;
-  const currentPrice = useChartPrice(pricePool, checkpoint);
-  // `undefined` means no stream price yet (show the last close); `null` means the stream withdrew its price.
-  const [pricedPool, setPricedPool] = useState<string | null>(null);
-  if (currentPrice && pricedPool !== pricePool) setPricedPool(pricePool);
+  const currentPrice = useShownPrice(venuePoolKey ?? curvePoolKey, checkpoint);
   const migrationCursor = source.migration?.cursor ?? null;
   const migrationTimestamp = source.migration?.timestampMs ?? null;
   const migrationCurve = source.migration?.curvePoolKey ?? null;
@@ -140,7 +136,7 @@ export function CoinChart({
       compact={compact}
       state={shown}
       // Until the stream's first price arrives, the last REST close is the price shown, never "—".
-      currentPrice={currentPrice?.price ?? (pricedPool === pricePool ? null : undefined)}
+      currentPrice={currentPrice}
       source={source}
       omitCurve={!plotCurve}
       quoteUsd={quoteUsd}
@@ -168,4 +164,12 @@ const STREAM_TEXT: Readonly<Record<ChartStreamStatus, string | null>> = {
 
 function chartUpdateText(status: ChartStreamStatus, preview: boolean): string | null {
   return preview && status === "connecting" ? null : STREAM_TEXT[status];
+}
+
+/** The chart's price: `undefined` until the stream's first price (the last close shows), `null` once the stream withdraws it. */
+function useShownPrice(poolKey: string | null, checkpoint: number | null): string | null | undefined {
+  const price = useChartPrice(poolKey, checkpoint);
+  const [pricedPool, setPricedPool] = useState<string | null>(null);
+  if (price && pricedPool !== poolKey) setPricedPool(poolKey);
+  return price?.price ?? (pricedPool === poolKey ? null : undefined);
 }
