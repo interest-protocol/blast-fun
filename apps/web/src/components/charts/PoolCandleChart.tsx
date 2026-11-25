@@ -540,18 +540,16 @@ function poolPriceSeries({ sources, lines, compact, mode, migrationAt, walletTra
         ? [
             {
               type: "Area" as const,
-              data: chartData(
-                line.map(({ timestampMs, price: raw }) => raw === null
-                  ? { time: chartTimestamp(timestampMs) }
-                  : { time: chartTimestamp(timestampMs), value: pointValue(timestampMs, raw) }),
-              ),
+              data: chartData(stepped ? steppedLineData(line, pointValue) : line.map(({ timestampMs, price: raw }) => raw === null
+                ? { time: chartTimestamp(timestampMs) }
+                : { time: chartTimestamp(timestampMs), value: pointValue(timestampMs, raw) })),
               options: {
                 priceLineVisible: false,
                 ...tag,
                 ...lineStyle,
                 ...(stepped ? { lineType: STEP_LINE } : {}),
                 lineVisible: !pointsOnly,
-                pointMarkersVisible: pointsOnly || line.length === 1,
+                pointMarkersVisible: pointsOnly || (!stepped && line.length === 1),
                 autoscaleInfoProvider,
               },
             },
@@ -590,7 +588,8 @@ function poolPriceSeries({ sources, lines, compact, mode, migrationAt, walletTra
   });
   // Live dots each priced execution on its step trace. They come after every
   // price series so indices (wallet markers, exact prices) stay on the trace,
-  // and exist even when empty so a first trade does not remount the chart.
+  // and one exists with each trace, even when empty, so a trade entering a
+  // quiet window does not remount the chart.
   if (stepped && mode === "line") {
     series.push(...sources.flatMap((history, sourceIndex): ChartSeries[] => lines[sourceIndex].length ? [{
       type: "Line" as const,
@@ -603,6 +602,26 @@ function poolPriceSeries({ sources, lines, compact, mode, migrationAt, walletTra
     }] : []));
   }
   return { series, pointPrices, markers, tagged, up, down };
+}
+
+const HIDDEN_RUN = { lineColor: "transparent" } as const;
+
+/**
+ * A step trace with real breaks. The chart drops gap rows and joins their
+ * neighbours, and a step takes its flat run from the earlier point and its
+ * rise from the later one. So the run out of an unpriced execution is hidden,
+ * and a hidden point just before the next price hides the rise into it. Gap
+ * rows stay, so an inspected time inside the break reads no price.
+ */
+function steppedLineData(line: readonly LinePoint[], pointValue: (at: number, raw: string) => number) {
+  return line.flatMap(({ timestampMs, price: raw }, index) => {
+    const time = chartTimestamp(timestampMs);
+    if (raw === null) return [{ time }];
+    const value = pointValue(timestampMs, raw);
+    const point = line[index + 1]?.price === null ? { time, value, ...HIDDEN_RUN } : { time, value };
+    if (index === 0 || line[index - 1]?.price !== null) return [point];
+    return [{ time: chartTimestamp(timestampMs - 0.5), value, ...HIDDEN_RUN }, point];
+  });
 }
 
 function priceLines(sources: readonly Source[], options: Readonly<{

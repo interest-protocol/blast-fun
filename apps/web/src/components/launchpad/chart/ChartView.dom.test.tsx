@@ -29,7 +29,7 @@ const hook = registerHooks({ resolve(specifier, context, next) {
           return () => { mounted = false; };
         }
       }, [series, projectionKey]);
-      return React.createElement('div', {'data-latest-series': latestPrice?.seriesIndex, 'data-series': series.map(s=>s.type).join(','), 'data-tags': series.map(s=>String(s.options?.lastValueVisible)).join(','), 'data-points': series[0]?.data.map(p => p.time + ':' + (p.value === undefined && p.close === undefined ? 'gap' : priceFormatter(p.value ?? p.close))).join(','), 'data-line': series.map(s => s.options?.lineVisible === false ? 'points' : s.options?.lineType === 1 ? 'step' : 'line').join(','), 'data-last-points': series.at(-1)?.data.map(p => p.time + ':' + (p.value === undefined && p.close === undefined ? 'gap' : priceFormatter(p.value ?? p.close))).join(',')}, preview); }`)}`,
+      return React.createElement('div', {'data-latest-series': latestPrice?.seriesIndex, 'data-series': series.map(s=>s.type).join(','), 'data-tags': series.map(s=>String(s.options?.lastValueVisible)).join(','), 'data-points': series[0]?.data.map(p => p.time + ':' + (p.value === undefined && p.close === undefined ? 'gap' : priceFormatter(p.value ?? p.close)) + (p.lineColor === 'transparent' ? '~' : '')).join(','), 'data-line': series.map(s => s.options?.lineVisible === false ? 'points' : s.options?.lineType === 1 ? 'step' : 'line').join(','), 'data-last-points': series.at(-1)?.data.map(p => p.time + ':' + (p.value === undefined && p.close === undefined ? 'gap' : priceFormatter(p.value ?? p.close))).join(',')}, preview); }`)}`,
   };
   return next(specifier, context);
 } });
@@ -452,6 +452,13 @@ test("Live holds the confirmed price as steps through quiet seconds and joins th
   await render(null, [prior, active, next, unpriced]);
   assert.match(points() ?? "", new RegExp(`,${at(unpriced.timestampMs)}:gap$`));
   assert.equal(dots(), `${at(next.timestampMs)}:93`, "an unpriced execution gets no dot");
+  assert.match(points() ?? "", new RegExp(`,${at(unpriced.timestampMs - 0.5)}:93~,${at(unpriced.timestampMs)}:gap$`), "the run out of the break is hidden");
+
+  // The next priced execution starts a new segment: neither the run nor the rise into it is drawn.
+  const after = trade("6:0:0:0", now - 100, "95");
+  await render(null, [prior, active, next, unpriced, after]);
+  assert.match(points() ?? "", new RegExp(`,${at(unpriced.timestampMs)}:gap,${at(after.timestampMs - 0.5)}:95~,${at(after.timestampMs)}:95,${at(now)}:95$`));
+  assert.equal(dots(), `${at(next.timestampMs)}:93,${at(after.timestampMs)}:95`);
 
   // A coin with no confirmed price in or before the window keeps the empty state.
   await render(null, [trade("5:0:0:0", now - 400_000, null)]);
