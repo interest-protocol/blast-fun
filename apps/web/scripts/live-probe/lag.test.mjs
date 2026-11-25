@@ -25,7 +25,8 @@ test("percentile uses nearest rank and summarize groups by kind", () => {
   assert.equal(percentile(values, 95), 95);
   assert.equal(percentile([3], 99), 3);
   assert.equal(percentile([], 50), null);
-  const summary = summarize([{ kind: "a", lag_ms: 10 }, { kind: "a", lag_ms: 30 }, { kind: "b", lag_ms: 20 }]);
-  assert.deepEqual(summary.all, { n: 3, p50: 20, p95: 30, p99: 30 });
-  assert.deepEqual(summary.a, { n: 2, p50: 10, p95: 30, p99: 30 });
+  const summary = summarize([{ kind: "market:trade", lag_ms: 10 }, { kind: "market:trade", lag_ms: 30 }, { kind: "market:candle_closed", lag_ms: 20 }, { kind: "prices", lag_ms: 5000 }]);
+  assert.deepEqual(summary.market, { n: 3, p50: 20, p95: 30, p99: 30 });
+  assert.deepEqual(summary.prices, { n: 1, p50: 5000, p95: 5000, p99: 5000 });
+  assert.deepEqual(summary["market:trade"], { n: 2, p50: 10, p95: 30, p99: 30 });
 });

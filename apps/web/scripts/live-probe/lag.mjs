@@ -69,9 +69,10 @@ export function percentile(values, p) {
 
 /** Count and p50/p95/p99 lag per kind, plus "all". */
 export function summarize(samples) {
-  const groups = new Map([["all", []]]);
+  // Headline "market" pools every market frame; prices measure price age, not chain-to-screen.
+  const groups = new Map([["market", []]]);
   for (const sample of samples) {
-    groups.get("all").push(sample.lag_ms);
+    if (sample.kind.startsWith("market:")) groups.get("market").push(sample.lag_ms);
     if (!groups.has(sample.kind)) groups.set(sample.kind, []);
     groups.get(sample.kind).push(sample.lag_ms);
   }
