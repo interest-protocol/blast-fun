@@ -20,11 +20,26 @@ import {
   parsePriceString,
   parseUsdString,
 } from "@blast/core/modules/launchpad-contract/decimal.ts";
-import type { RelaySocket } from "../social/activity/hint-relay.ts";
+import type { WebSocket } from "undici";
 import { POOL_KEY } from "@blast/core/modules/launchpad-contract/venues.ts";
 import { parseOpeningRound } from "@blast/core/modules/launchpad-contract/activity.ts";
 import { DisplayPriceFeed, type DisplayPriceReader } from "./display-price-feed.ts";
-import { hintWebResponse, type HintSink, type HintSubscription } from "../../lib/hint-subscription.ts";
+import type { HintSink, HintSubscription } from "../../lib/hint-subscription.ts";
+
+/** Only the upstream operations this read-only relay needs. */
+export interface RelaySocket {
+  send(text: string): void;
+  close(): void;
+  onmessage:
+    | ((event: Parameters<NonNullable<WebSocket["onmessage"]>>[0]) => void)
+    | null;
+  onclose:
+    | ((event: Parameters<NonNullable<WebSocket["onclose"]>>[0]) => void)
+    | null;
+  onerror:
+    | ((event: Parameters<NonNullable<WebSocket["onerror"]>>[0]) => void)
+    | null;
+}
 
 type Frame = Readonly<Record<string, unknown>>;
 type Client = {
@@ -55,21 +70,15 @@ type Topic = {
   /** The latest `coin_stats` (state, not log): sent after each fence, never in the ring. */
   stats?: { checkpoint: number; bytes: Uint8Array; unsent?: boolean };
 };
-/** Options for a direct socket subscriber. SSE keeps its finite lifetime and never resumes. */
+/** Options for a direct socket subscriber. */
 export type MarketSubscribeOptions = Readonly<{
   resume?: ReadonlyMap<string, string>;
-  lifetime?: boolean;
 }>;
 /** How long, and how many frames, each pool keeps for browser resume. */
 export const RESUME_RING = Object.freeze({ ms: 120_000, frames: 256, bytes: 65_536, replayBytes: 32_768 });
 /** Upstream losses that keep browsers connected while the relay reconnects. */
 const UPSTREAM_LOSS = new Set(["upstream-unavailable", "upstream-silent", "upstream-resync", "handshake-timeout"]);
 const encoder = new TextEncoder();
-export const MARKET_STREAM_HEADERS = {
-  "content-type": "text/event-stream",
-  "cache-control": "private, no-store",
-  "x-accel-buffering": "no",
-} as const;
 const event = (name: string, value: unknown, id?: string) =>
   encoder.encode(
     `${id ? `id: ${id}\n` : ""}event: ${name}\ndata: ${JSON.stringify(value)}\n\n`,
@@ -212,7 +221,7 @@ export class MarketStreamRelay {
   readonly #connect: () => RelaySocket;
   readonly #expected: ExpectedDeployment;
   readonly #prices?: DisplayPriceFeed;
-  /** SSE streams and sockets together; the process's configured stream count. */
+  /** Live sockets; the process's configured stream count. */
   readonly #maxClients: number;
   readonly #topics = new Map<string, Topic>();
   readonly #presales = new Map<string, Set<Client>>();
@@ -244,15 +253,6 @@ export class MarketStreamRelay {
     if (prices) this.#prices = new DisplayPriceFeed(prices);
   }
 
-  stream(request: Request): Response {
-    return hintWebResponse(
-      request.signal,
-      (sink) => this.subscribe(request, sink),
-      MARKET_STREAM_HEADERS,
-      { highWaterMark: B.queueBytesPerClient, size: (chunk) => chunk?.byteLength ?? 0 },
-    );
-  }
-
   /** Whether a socket for these pools and coins fits the shared tables now; it never fills them silently. */
   admits(pools: readonly string[], priceCoins: readonly string[]): boolean {
     const added = pools.filter((pool) => !this.#topics.has(pool)).length;
@@ -263,7 +263,7 @@ export class MarketStreamRelay {
     );
   }
 
-  subscribe(request: Request, sink?: HintSink, options: MarketSubscribeOptions = {}): HintSubscription {
+  subscribe(request: Request, sink: HintSink, options: MarketSubscribeOptions = {}): HintSubscription {
     const parsed = parseSubscription(request);
     if (!parsed) {
       return publicErrorResponse(
@@ -273,12 +273,6 @@ export class MarketStreamRelay {
       );
     }
     const { pools, priceCoins, presale } = parsed;
-    if (request.signal.aborted)
-      return publicErrorResponse(
-        "request_cancelled",
-        "The request was cancelled.",
-        499,
-      );
     const added = pools.filter((pool) => !this.#topics.has(pool));
     if (
       this.#clients.size >= this.#maxClients ||
@@ -290,7 +284,6 @@ export class MarketStreamRelay {
         503,
         { headers: { "Retry-After": "5" } },
       );
-    if (!sink) return null;
     const client: Client = {
       pools,
       activity: marketStreamActivity(request) || presale !== null,
@@ -298,11 +291,9 @@ export class MarketStreamRelay {
       sink,
       stop: () => stop(),
     };
-    const deadline = options.lifetime === false ? undefined : setTimeout(() => stop(), B.lifetimeMs);
     const stopPrices = this.#prices?.subscribe(priceCoins, (frame) => this.#send(client, event("prices", frame)));
     const stop = () => {
       if (!this.#clients.delete(client)) return;
-      clearTimeout(deadline);
       stopPrices?.();
       if (presale) {
         const clients = this.#presales.get(presale);
@@ -318,9 +309,6 @@ export class MarketStreamRelay {
       const clients = this.#presales.get(presale) ?? new Set<Client>();
       clients.add(client);
       this.#presales.set(presale, clients);
-    }
-    if (request.headers.has("last-event-id") || new URL(request.url).searchParams.has("cursor")) {
-      this.#send(client, event("resync", { reason: "rest-recovery-required" }));
     }
     this.#send(client, event("status", { state: "connecting" }));
     this.#joinTopics(client, options.resume);

@@ -37,14 +37,7 @@ export type BackendHttpOptions = Readonly<{
   cronSecret?: string;
   maxInflight?: number;
   maxAdminInflight?: number;
-  maxHintStreams?: number;
   maxPrivateWorkMs?: number;
-  /**
-   * Drain closes each connected stream at a random moment within this window
-   * (default 0, all at once), so its browsers reconnect spread out rather than
-   * together. It must leave the process's drain deadline its margin.
-   */
-  streamDrainMs?: number;
   ingress?: IngressTrust;
   ready: () => Promise<boolean>;
   privateApi?: PrivateApi;

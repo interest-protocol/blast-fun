@@ -6,7 +6,7 @@ import { createHintsServer } from "./server.ts";
 export function startHints() {
   const config = hintsConfig();
   const runtime = createHintsServer(
-    // Connected streams close spread over half of the 10 s exit deadline below.
+    // Live sockets close spread over half of the 10 s exit deadline below.
     { ...config, streamDrainMs: 5_000 },
     configuredRedis("quota")!,
     configuredRedis("private-replay")!,

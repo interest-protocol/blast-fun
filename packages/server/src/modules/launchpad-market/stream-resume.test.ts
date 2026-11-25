@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { MarketStreamRelay } from "./stream-relay.ts";
-import type { RelaySocket } from "../social/activity/hint-relay.ts";
+import type { RelaySocket } from "./stream-relay.ts";
 
 const fingerprint = "a".repeat(64);
 const POOL = `cetus:0x${"1".repeat(64)}`;
@@ -129,7 +129,7 @@ test("a browser that reconnects inside the ring gets a resumed fence and only th
   sockets[0]!.receive(snapshot(POOL, 10));
   for (const checkpoint of [11, 12, 13]) sockets[0]!.receive(lifecycle(POOL, checkpoint));
 
-  const resumed = join(`pool=${POOL}`, { resume: new Map([[POOL, "11:0:0:0"]]), lifetime: false });
+  const resumed = join(`pool=${POOL}`, { resume: new Map([[POOL, "11:0:0:0"]]) });
   assert.deepEqual(resumed.events.map(({ event, data, id }) => event === "status" ? [event, data.state, data.cursor, data.resumed] : [event, id]), [
     ["status", "connecting", undefined, undefined],
     ["status", "live", "11:0:0:0", true],
@@ -139,9 +139,6 @@ test("a browser that reconnects inside the ring gets a resumed fence and only th
 
   const stale = join(`pool=${POOL}`, { resume: new Map([[POOL, "9:0:0:0"]]) });
   assert.deepEqual(stale.events.at(-1)?.data.resumed, undefined, "a cursor before the ring gets a normal fence");
-  t.mock.timers.tick(300_000);
-  assert.equal(resumed.closed, false, "a socket subscriber has no lifetime");
-  assert.equal(stale.closed, true, "SSE keeps its lifetime");
 });
 
 // This fails if the relay's strict frame check drops frames carrying engine hops, or delivers them without relay_ms.

@@ -1,21 +1,19 @@
 #!/usr/bin/env node
-// Live market probe: holds market streams open and logs, per frame, receipt time minus the
+// Live market probe: holds direct market sockets open and logs, per frame, receipt time minus the
 // frame's chain timestamp. Stdout is JSONL samples; a summary goes to stderr every minute.
-//   node apps/web/scripts/live-probe/run.mjs [--site URL] [--mode sse|socket] [--pool KEY]... [--price-coin TYPE]... [--minutes N]
+//   node apps/web/scripts/live-probe/run.mjs [--site URL] [--pool KEY]... [--price-coin TYPE]... [--minutes N]
 import { execFileSync } from "node:child_process";
 import { parseArgs } from "node:util";
-import { frameLag, parseSse, parseSseBlock, summarize } from "./lag.mjs";
+import { frameLag, parseSseBlock, summarize } from "./lag.mjs";
 
 const { values } = parseArgs({ options: {
   site: { type: "string", default: "https://www.blast.fun" },
-  mode: { type: "string", default: "sse" },
   pool: { type: "string", multiple: true, default: [] },
   "price-coin": { type: "string", multiple: true, default: ["0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI"] },
   pools: { type: "string", default: "4" },
   minutes: { type: "string", default: "1440" },
   host: { type: "string", default: process.env.HOSTNAME ?? "probe" },
 } });
-if (!["sse", "socket"].includes(values.mode)) throw new Error("--mode is sse or socket");
 const positive = (name) => {
   const value = Number(values[name]);
   if (!Number.isInteger(value) || value < 1) throw new Error(`--${name} must be a positive integer`);
@@ -78,34 +76,21 @@ function record(event, receivedMs, stream, run) {
   if (sample.lag_ms < 0) console.error(`[${stream}] negative lag ${sample.lag_ms} ms (${sample.kind}): check the clock`);
   minute.push(sample);
   all.push({ kind: sample.kind, lag_ms: sample.lag_ms });
-  process.stdout.write(`${JSON.stringify({ host, mode: values.mode, stream, ...sample })}\n`);
+  process.stdout.write(`${JSON.stringify({ host, stream, ...sample })}\n`);
 }
 
 // Prices ride on stream 0 only, so every stream does not carry the same price frames.
 const streamQuery = (pools, stream) => new URLSearchParams([["activity", "true"], ...pools.map((pool) => ["pool", pool]), ...(stream === 0 ? values["price-coin"] : []).map((coin) => ["price_coin", coin])]);
 const headers = () => ({ cookie, "sec-fetch-site": "same-origin", origin: site });
 
-async function openSse(pools, stream, run) {
-  const query = streamQuery(pools, stream);
-  const response = await fetch(`${site}/api/launchpad/market/stream?${query}`, { headers: headers() });
-  if (!response.ok || !response.body) throw new Error(`stream ${response.status}`);
-  const decoder = new TextDecoder();
-  let buffer = "";
-  for await (const chunk of response.body) {
-    const now = Date.now();
-    const parsed = parseSse(buffer + decoder.decode(chunk, { stream: true }));
-    buffer = parsed.rest;
-    for (const event of parsed.events) record(event, now, stream, run);
-    if (Date.now() > endAt) return;
-  }
-}
-
 async function openSocket(pools, stream, run) {
-  const ticket = await fetch(`${site}/api/launchpad/market/ticket`, { method: "POST", headers: { ...headers(), "x-blast-live-bucket": "0" }, signal: AbortSignal.timeout(15_000) });
+  const ticket = await fetch(`${site}/api/launchpad/market/ticket`, { method: "POST", headers: headers(), signal: AbortSignal.timeout(15_000) });
+  // 204: the socket is off on this site.
   if (ticket.status !== 200) throw new Error(`ticket ${ticket.status}`);
   const { ticket: token, url } = await ticket.json();
   const query = streamQuery(pools, stream);
-  const socket = new WebSocket(`${url}?${query}`, ["blast-live.v1", `blast-ticket.${token}`]);
+  // The socket admits only the site's own origin, as a browser would send it.
+  const socket = new WebSocket(`${url}?${query}`, { protocols: ["blast-live.v1", `blast-ticket.${token}`], headers: { Origin: site } });
   socket.binaryType = "arraybuffer";
   const decoder = new TextDecoder();
   await new Promise((resolve, reject) => {
@@ -134,7 +119,7 @@ async function hold(initialPools, stream) {
     const openedAt = Date.now();
     try {
       await gateCookie();
-      await (values.mode === "sse" ? openSse : openSocket)(pools, stream, run);
+      await openSocket(pools, stream, run);
     } catch (error) {
       console.error(`[${stream}] ${error.message}`);
     }
@@ -152,7 +137,7 @@ async function hold(initialPools, stream) {
 
 const pools = await discoverPools();
 const synced = ntpSynced();
-console.error(JSON.stringify({ host, mode: values.mode, site, pools, ntp_synced: synced }));
+console.error(JSON.stringify({ host, site, pools, ntp_synced: synced }));
 if (synced !== true) console.error("warning: clock not confirmed NTP-synced; lags may be off by the clock error");
 // Per-minute window; the JSONL on stdout is the full record.
 const timer = setInterval(() => {

@@ -1,5 +1,4 @@
 import { deploymentIdentity } from "@blast/core/lib/config/deployment-identity.ts";
-import { MARKET_STREAM_ROUTE_ID } from "@blast/core/modules/launchpad-contract/market-stream.ts";
 import assert from "node:assert/strict";
 import { setTimeout as pause } from "node:timers/promises";
 import test from "node:test";
@@ -19,13 +18,10 @@ const environment = {
 };
 
 test("every private API contract reaches its capability through native Effect dispatch", async () => {
-  const apiRoutes = PRIVATE_ROUTES.filter(
-    ({ id }) => id !== "social.activity.hints" && id !== MARKET_STREAM_ROUTE_ID,
-  );
   let dispatched = 0;
   let canceled = 0;
   const owners = Object.fromEntries(
-    apiRoutes.map(({ id }) => {
+    PRIVATE_ROUTES.map(({ id }) => {
       const operation: PrivateHandler = async (request, { proof }) => {
         dispatched++;
         assert.equal(proof.route.id, id);
@@ -74,7 +70,7 @@ test("every private API contract reaches its capability through native Effect di
     { clientAddress: () => "192.0.2.1" },
   );
   try {
-    for (const route of apiRoutes) {
+    for (const route of PRIVATE_ROUTES) {
       const segment = route.id === "social.launch.read" ? "DISCOVERY" : "fixture;%ff";
       const path = route.path.replace(/:\w+/g, segment);
       const purpose = route.ssrOnly ? "ssr-read" : "browser";
@@ -105,8 +101,8 @@ test("every private API contract reaches its capability through native Effect di
     await native.drain();
     await api.dispose();
   }
-  assert.equal(dispatched, apiRoutes.length + 1);
-  assert.equal(canceled, apiRoutes.filter(({ method }) => method === "HEAD").length);
+  assert.equal(dispatched, PRIVATE_ROUTES.length + 1);
+  assert.equal(canceled, PRIVATE_ROUTES.filter(({ method }) => method === "HEAD").length);
 });
 
 test("native private transport forwards intentional redirects and cookies without following signed requests", async () => {

@@ -5,10 +5,9 @@ type HintSocket = {
   close(): void;
   onmessage: ((event: { data: unknown }) => void) | null;
   onclose: (() => void) | null;
-  unavailable?: boolean;
 };
-/** `lost`: the market stream dropped or missed its hello deadline; hint clients use the legacy stream until a new hello. */
-type Carrier = { hello: string | null; pong: string | null; lost: boolean };
+/** The market stream's handshake: while it has no hello, hint clients wait for it (it reconnects with its own backoff). */
+type Carrier = { hello: string | null; pong: string | null };
 type Notice = Readonly<{ type: "changed" | "disconnected" }> | Readonly<{ type: "frame"; data: string }>;
 let carrier: Carrier | null = null;
 const listeners = new Set<(notice: Notice) => void>();
@@ -18,7 +17,7 @@ const announce = (notice: Notice) => {
 
 /** The chart carries activity hints too. No activity history or cursor is cached here. */
 export function beginMarketHints() {
-  const owner: Carrier = { hello: null, pong: null, lost: false };
+  const owner: Carrier = { hello: null, pong: null };
   carrier = owner;
   announce({ type: "changed" });
   return {
@@ -31,8 +30,7 @@ export function beginMarketHints() {
           const first = owner.hello === null;
           owner.hello = data;
           owner.pong = null;
-          owner.lost = false;
-          // Close the legacy connection once the market carrier is usable.
+          // Close the activity-only socket once the market carrier is usable.
           if (first) announce({ type: "changed" });
         } else if (hint.type === "pong" && owner.hello !== null) {
           owner.pong = data;
@@ -40,17 +38,10 @@ export function beginMarketHints() {
         announce({ type: "frame", data });
       } catch { /* Invalid hints cannot change transport ownership or paint data. */ }
     },
+    /** The market stream dropped, paused or was refused and will start again: hint clients wait for its next hello. */
     disconnected(): void {
       if (carrier !== owner) return;
       owner.hello = owner.pong = null;
-      owner.lost = true;
-      announce({ type: "disconnected" });
-    },
-    /** The market stream paused and will start again: hint clients wait for its next hello. */
-    waiting(): void {
-      if (carrier !== owner) return;
-      owner.hello = owner.pong = null;
-      owner.lost = false;
       announce({ type: "disconnected" });
     },
     stop(): void {
@@ -61,16 +52,14 @@ export function beginMarketHints() {
   };
 }
 
-const pending = (owner: Carrier | null) => owner !== null && owner.hello === null && !owner.lost;
-
 /**
- * Prefer the market stream's connection; healthy legacy hints remain available during market outages.
- * While a market stream is starting, the legacy stream opens only if its hello misses the deadline.
+ * While the tab has a market stream, hints ride it, and a client waits for its hello however long it takes:
+ * the tab never holds two sockets. The activity-only socket opens only while no market stream exists.
  */
 export function marketHintTransport(url: string, fallback: (url: string) => HintSocket): HintSocket {
   let underlying: HintSocket | null = null;
   let closed = false;
-  /** The carrier this socket reads; null on the legacy stream, undefined while still choosing. */
+  /** The carrier this socket reads; null on the activity-only socket, undefined while still choosing. */
   let selected: Carrier | null | undefined;
   const socket: HintSocket = {
     send: () => undefined,
@@ -92,7 +81,7 @@ export function marketHintTransport(url: string, fallback: (url: string) => Hint
   };
   /** `notice`: the carrier's hello just arrived, and its frame follows; otherwise the handshake is replayed. */
   const choose = (cause: "open" | "wait" | "notice") => {
-    if (closed || selected !== undefined || pending(carrier)) return;
+    if (closed || selected !== undefined || (carrier !== null && carrier.hello === null)) return;
     if (carrier?.hello) {
       const owner = carrier;
       selected = owner;
@@ -109,18 +98,11 @@ export function marketHintTransport(url: string, fallback: (url: string) => Hint
     try {
       underlying = fallback(url);
       underlying.onmessage = (event) => socket.onmessage?.(event);
-      underlying.onclose = () => {
-        // A refused relay stream stops the hint client instead of its backoff.
-        if (underlying?.unavailable) socket.unavailable = true;
-        disconnect();
-      };
+      underlying.onclose = disconnect;
     } catch (error) {
-      if (cause === "open") {
-        socket.close();
-        throw error;
-      }
-      socket.unavailable = true;
-      disconnect();
+      if (cause !== "open") return disconnect();
+      socket.close();
+      throw error;
     }
   };
   const notice = (event: Notice) => {
@@ -129,7 +111,10 @@ export function marketHintTransport(url: string, fallback: (url: string) => Hint
       if (event.type !== "frame") choose("notice");
     } else if (event.type === "frame") {
       if (selected !== null && carrier === selected) socket.onmessage?.({ data: event.data });
-    } else if (selected !== (carrier?.hello ? carrier : null)) disconnect();
+    } else if (selected === null ? carrier !== null : selected !== carrier || !carrier.hello) {
+      // A market stream began (close the activity-only socket and wait for its hello), or the carrier dropped or changed.
+      disconnect();
+    }
   };
   listeners.add(notice);
   if (carrier) choose("open");

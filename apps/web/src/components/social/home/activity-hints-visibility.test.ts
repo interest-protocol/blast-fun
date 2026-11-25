@@ -47,7 +47,7 @@ function world(initiallyVisible = true, metric: () => void = () => undefined) {
     },
   };
   const hints = new ActivityHints({
-    url: "/api/social/activity/hints", createSocket: () => { const socket = new Socket(); sockets.push(socket); return socket; },
+    url: "/api/launchpad/market/stream?activity=true", createSocket: () => { const socket = new Socket(); sockets.push(socket); return socket; },
     ...clock, random: () => 0.5, visible: () => visible,
     onVisibilityChange: (listener) => { visibility.add(listener); return () => visibility.delete(listener); },
     metric,
@@ -240,38 +240,45 @@ test("resume replaces an in-flight lifecycle read; another resume keeps the five
   }
 });
 
-test("the browser factory closes EventSource while hidden and removes visibility ownership", async () => {
-  const previous = Object.fromEntries(["window", "document", "EventSource"].map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+test("the browser factory closes the socket while hidden and removes visibility ownership", async () => {
+  const previous = Object.fromEntries(["window", "document", "WebSocket", "fetch"].map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   const document = Object.assign(new EventTarget(), { visibilityState: "hidden" });
-  const sources: EventSource[] = [];
-  class EventSource extends EventTarget {
+  const sockets: WebSocket[] = [];
+  class WebSocket {
+    static OPEN = 1;
     closed = false;
     readyState = 0;
-    constructor() { super(); sources.push(this); }
+    onmessage: ((event: { data: unknown }) => void) | null = null;
+    onclose: ((event: { code: number }) => void) | null = null;
+    constructor() { sockets.push(this); }
     close() { this.closed = true; }
+    send() {}
   }
+  const hint = (frame: unknown) => sockets[0]!.onmessage!({ data: `event: hint\ndata: ${JSON.stringify(frame)}\n\n` });
+  const settle = () => new Promise((resolve) => setImmediate(resolve));
   try {
     Object.defineProperty(globalThis, "document", { value: document, configurable: true });
     Object.defineProperty(globalThis, "window", { value: { setTimeout, clearTimeout }, configurable: true });
-    Object.defineProperty(globalThis, "EventSource", { value: EventSource, configurable: true });
+    Object.defineProperty(globalThis, "WebSocket", { value: WebSocket, configurable: true });
+    Object.defineProperty(globalThis, "fetch", { value: async () => Response.json({ url: "wss://live.blast.test/v1/socket", ticket: `t.${"a".repeat(43)}` }), configurable: true });
     const hints = tabActivityHints()!;
     const off = hints.subscribe("happening", () => undefined);
-    assert.equal(sources.length, 0);
+    assert.equal(sockets.length, 0);
     document.visibilityState = "visible";
     document.dispatchEvent(new Event("visibilitychange"));
-    await Promise.resolve(); // with no market stream starting, the legacy stream opens after the current task
-    assert.equal(sources.length, 1);
-    sources[0]!.dispatchEvent(new MessageEvent("message", { data: JSON.stringify(HELLO) }));
-    sources[0]!.dispatchEvent(new MessageEvent("message", { data: JSON.stringify({ type: "pong" }) }));
+    await settle(); // with no market stream starting, the activity-only socket opens after its ticket
+    assert.equal(sockets.length, 1);
+    hint(HELLO);
+    hint({ type: "pong" });
     document.visibilityState = "hidden";
     document.dispatchEvent(new Event("visibilitychange"));
-    assert.equal(sources[0]!.closed, true);
+    assert.equal(sockets[0]!.closed, true);
     assert.equal(hints.active(), false);
     off();
     document.visibilityState = "visible";
     document.dispatchEvent(new Event("visibilitychange"));
-    await Promise.resolve();
-    assert.equal(sources.length, 1);
+    await settle();
+    assert.equal(sockets.length, 1);
   } finally {
     for (const [key, descriptor] of Object.entries(previous)) {
       if (descriptor) Object.defineProperty(globalThis, key, descriptor);

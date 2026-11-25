@@ -7,7 +7,7 @@
 import { ingressTrust } from "@blast/core/lib/web-security/ingress.ts";
 import { mintLiveTicket } from "@blast/core/modules/launchpad-contract/live-ticket.ts";
 import { MarketStreamRelay } from "@blast/server/modules/launchpad-market/stream-relay.ts";
-import type { RelaySocket } from "@blast/server/modules/social/activity/hint-relay.ts";
+import type { RelaySocket } from "@blast/server/modules/launchpad-market/stream-relay.ts";
 import { createLiveSocket, type LiveSocketData } from "../src/transport/live-socket.ts";
 
 const SECRET = "s".repeat(48);

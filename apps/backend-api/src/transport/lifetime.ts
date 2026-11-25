@@ -134,7 +134,6 @@ export function requestLifetime(
 
   return {
     signal: controller.signal,
-    abort,
     aborted,
     responseBody,
     failed(error: unknown) {

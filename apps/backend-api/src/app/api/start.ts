@@ -45,8 +45,6 @@ export function startBackend() {
     ...config,
     adminToken: config.runtime.adminToken,
     cronSecret: config.runtime.cronSecret,
-    // Well inside the drain deadline (at least 70 s).
-    streamDrainMs: 30_000,
     redis,
     privateReplayRedis,
     handle,

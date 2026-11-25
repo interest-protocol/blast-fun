@@ -7,7 +7,8 @@ import { signPrivateRequest } from "@blast/core/modules/backend-api/private-gate
 import { SOCIAL_ERROR_MESSAGES } from "@blast/core/modules/social/contracts/errors.ts";
 import { trackRequestWork } from "@blast/server/lib/request-work.ts";
 import { createBackendHttp } from "../src/app/server.ts";
-import { relayToOneBackend } from "./relay-fixture.ts";
+import { privateBackendRelay } from "@blast/server/private/relay.ts";
+import { parseRelayConfig } from "@blast/server/private/relay-config.ts";
 import { deferred } from "../../../packages/core/test/kit.ts";
 
 const siteOrigin = "https://frontend.test";
@@ -48,14 +49,14 @@ function fixture(maxInflight = 64) {
       async handle(request) {
         const path = new URL(request.url).pathname;
         owners.push(path);
-        if (path !== "/api/social/me" && path !== "/api/social/activity/hints") {
+        if (path !== "/api/social/me") {
           trackRequestWork(work.promise);
         }
         return new Response("accepted");
       },
     },
   });
-  const relay = relayToOneBackend(environment, {
+  const relay = privateBackendRelay(parseRelayConfig(environment), {
     clientAddress: () => "192.0.2.1",
     fetch: (input, init) => backend.fetch(new Request(input, init), "127.0.0.1"),
   });
@@ -179,7 +180,6 @@ test("other expensive work cannot take trading's reserved permits: quotes and tr
     assert.equal(source.owners.length, 8, "the eight-work bound is unchanged");
     assert.equal(source.replayWrites(), 8, "refusals precede the nonce burn");
     assert.equal(await consumed(await source.request("/api/social/me", "GET")), 200);
-    assert.equal(await consumed(await source.request("/api/social/activity/hints", "GET")), 200);
     assert.equal(
       await consumed(
         await source.backend.fetch(new Request(backendOrigin + "/v1/health"), "127.0.0.1"),

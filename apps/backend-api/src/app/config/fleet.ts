@@ -114,8 +114,8 @@ export function validateBackendFleet(environment: Environment, local: LocalSetti
     reportingClients: api * reporting,
     quotaRedisClients: 2 * (api + hints),
     cacheRedisClients: plan.api.cacheRedis ? api : 0,
-    // Only hints processes hold engine sockets: an activity one, and a market one when enabled.
-    infraHintSockets: hints + hints * Number(Boolean(plan.hints.marketStream)),
+    // Only hints processes hold an engine socket: the shared market one, when enabled.
+    infraHintSockets: hints * Number(Boolean(plan.hints.marketStream)),
     quoteWorkers: api * SOCIAL_TRADE_QUOTE_WORKERS,
   };
   const totals = { ...demand };

@@ -1,5 +1,4 @@
 import { ingressAddress } from "@blast/core/lib/web-security/ingress.ts";
-import { MARKET_STREAM_ROUTE_ID } from "@blast/core/modules/launchpad-contract/market-stream.ts";
 import {
   type createAfterResponseScheduler,
   createRequestWork,
@@ -81,13 +80,11 @@ export async function executeOrdinaryRequest(
 ): Promise<Response> {
   const { path, operator, privateContract, cronContract } = target;
   const permit = admission.reserveOrdinary(target, transportContext.pendingRequests);
-  let disconnectHint: (() => void) | undefined;
   let releasePrivateLane: (() => void) | undefined;
   const work = privateContract || cronContract || operator ? createRequestWork(background) : null;
   const lifetime = requestLifetime(
     request,
     () => {
-      disconnectHint?.();
       const release = () => {
         releasePrivateLane?.();
         permit.release();
@@ -102,27 +99,10 @@ export async function executeOrdinaryRequest(
     workBudget(target, options.maxPrivateWorkMs),
   );
 
-  function promoteConnectedHint(response: Response): Response {
-    const stream =
-      (privateContract?.id === "social.activity.hints" ||
-        privateContract?.id === MARKET_STREAM_ROUTE_ID) &&
-      request.method === "GET" &&
-      response.status === 200 &&
-      response.headers.get("content-type")?.split(";")[0]?.trim() === "text/event-stream";
-    if (!stream) {
-      return response;
-    }
-    disconnectHint = permit.connectHint(lifetime.abort, lifetime.signal);
-    return response;
-  }
-
   const operatorSignal = operator?.operationDeadlineMs
     ? AbortSignal.any([lifetime.signal, AbortSignal.timeout(operator.operationDeadlineMs)])
     : lifetime.signal;
-  const operation = invokeOwner()
-    .then(promoteConnectedHint)
-    .then(lifetime.responseBody)
-    .catch(lifetime.failed);
+  const operation = invokeOwner().then(lifetime.responseBody).catch(lifetime.failed);
   return Promise.race([operation, lifetime.aborted]);
 
   async function invokeOwner(): Promise<Response> {

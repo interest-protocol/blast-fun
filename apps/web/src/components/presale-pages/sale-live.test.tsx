@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { installTestDom } from "../../../test/fixtures/social/test-dom.ts";
+import { installTestDom, waitFor } from "../../../test/fixtures/social/test-dom.ts";
 
 /**
  * P-11: the sale page's figures move after the viewer's own commit. The
@@ -106,24 +106,13 @@ test("infra hints move a closed sale through funding and migration through the s
   const { tabActivityHints } = await import("#web/components/social/home/activity-hints.ts");
   const { saleReadEveryMs } = await import("./presales-client");
   const { queryKeys } = await import("#web/lib/query/keys.ts");
+  const { installLiveSocket, LIVE_TICKET_PATH, liveTicket } = await import("../../../test/fixtures/lib/live-socket.testing.ts");
   const beforeFetch = globalThis.fetch;
-  const beforeSource = globalThis.EventSource;
+  const live = installLiveSocket();
   const beforeNow = Date.now;
   let now = beforeNow();
-  let opens = 0;
   let reads = 0;
   let phase: "closed" | "funded" | "trading" = "closed";
-  const sources: FakeEventSource[] = [];
-  class FakeEventSource extends EventTarget {
-    readyState = 0;
-    constructor(url: string) {
-      super();
-      assert.equal(url, "/api/social/activity/hints");
-      opens += 1;
-      sources.push(this);
-    }
-    close() {}
-  }
   const client = createTestQueryClient({ queries: { gcTime: 60_000 } });
   const container = document.createElement("div");
   document.body.appendChild(container);
@@ -134,11 +123,11 @@ test("infra hints move a closed sale through funding and migration through the s
     const detail = useSaleDetail(served, now);
     return <b>{detail.presale.phase}</b>;
   }
-  const receive = (frame: unknown) => sources[0].dispatchEvent(new MessageEvent("message", { data: JSON.stringify(frame) }));
+  const receive = (frame: unknown) => live.sockets[0]!.emit("hint", frame);
   try {
     Date.now = () => now;
-    Object.defineProperty(globalThis, "EventSource", { value: FakeEventSource, configurable: true, writable: true });
     globalThis.fetch = (async (url: RequestInfo | URL) => {
+      if (String(url) === LIVE_TICKET_PATH) return liveTicket();
       assert.equal(String(url), `/api/social/presales/${ID}`);
       reads += 1;
       return Response.json({ ...served, presale: { ...served.presale, phase } });
@@ -146,8 +135,9 @@ test("infra hints move a closed sale through funding and migration through the s
     client.setQueryData(queryKeys.me.wallet(), { untouched: true });
     await act(async () => root.render(withQueryClient(client, <><LiveQueries /><Stage /><Stage /></>)));
     await act(async () => settleQueries(client));
+    await act(async () => waitFor(() => live.sockets.length > 0, "the shared socket opens"));
     assert.equal(reads, 0, "no hydration read");
-    assert.equal(opens, 1, "both columns and the global bridge share one stream");
+    assert.equal(live.sockets.length, 1, "both columns and the global bridge share one socket");
     await act(async () => {
       receive({ type: "hello", provenance: infraProvenanceFixture({ deployment_fingerprint: null }) });
       receive({ type: "pong" });
@@ -167,14 +157,14 @@ test("infra hints move a closed sale through funding and migration through the s
     }
     assert.equal(reads, 3, "one read per signal, shared by both columns");
     assert.deepEqual(client.getQueryData(queryKeys.me.wallet()), { untouched: true });
-    await act(async () => sources[0].dispatchEvent(new Event("error")));
+    await act(async () => live.sockets[0]!.drop());
     assert.equal(tabActivityHints()!.connected(), false);
     assert.equal(saleReadEveryMs(served.presale, now, false), 30_000, "disconnect restores the unfinished sale's fallback");
   } finally {
     await act(async () => root.unmount());
     client.clear();
     globalThis.fetch = beforeFetch;
-    Object.defineProperty(globalThis, "EventSource", { value: beforeSource, configurable: true, writable: true });
+    live.restore();
     Date.now = beforeNow;
   }
 });

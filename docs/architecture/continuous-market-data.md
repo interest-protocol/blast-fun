@@ -1,7 +1,8 @@
 # Continuous coin charts
 
-The coin detail chart consumes committed trades through the same-origin
-`/api/launchpad/market/stream` SSE route. It offers `1s`, `1m`, `5m`, `15m`,
+The coin detail chart consumes committed trades through the browser's direct
+market socket on the hints process (`/v1/socket`, opened with a single-use
+ticket from `/api/launchpad/market/ticket`). It offers `1s`, `1m`, `5m`, `15m`,
 `1h`, `4h`, `1d` and `1w` candles. A one-second interval describes the bucket,
 not a guaranteed one-second delivery deadline: updates arrive after the Rust
 engine commits the relevant checkpoint. No trade means no new candle. Wall
@@ -11,8 +12,7 @@ clock time never creates or closes a candle.
 
 The browser sends one or two canonical `pool` parameters, for the curve and
 the venue recorded by its committed migration, and `activity=true`. The
-isolated hints process authenticates the existing private gateway proof and
-owns one shared market WebSocket per process. Its pool subscriptions are
+isolated hints process checks the ticket and owns one shared market WebSocket per process. Its pool subscriptions are
 shared by viewers. It also subscribes to activity hints on that socket.
 
 Named `market` events carry validated market frames. Named `hint` events carry
@@ -21,14 +21,14 @@ Hints remain refresh signals; they never supply a price or a candle. Existing
 hint coalescing, reader admission, reconnect catch-up and visibility policy
 remain intact.
 
-Once the market handshake is usable, hint consumers release their legacy SSE
-connection and use the chart's carrier. They retain their existing connection
-while the chart is connecting and recover it when the market carrier fails or
-unmounts. The carrier retains only hello/pong for a late subscriber; it never
+Once the market handshake is usable, hint consumers use the chart's carrier.
+Without a market subscription, or while the chart is connecting, they keep an
+activity-only socket (`activity=true`, no pools) and return to it when the
+market carrier fails or unmounts. The carrier retains only hello/pong for a late subscriber; it never
 replays activity or treats a market cursor as an activity cursor. Ownership
 generations prevent a previous chart from clearing its replacement's carrier.
 There is one established browser stream in the healthy combined case. A
-recovery handshake may briefly overlap the healthy hint fallback; stream
+recovery handshake may briefly overlap the activity-only socket; stream
 admission, connection deadlines and retry backoff still apply.
 
 ## History and exact updates

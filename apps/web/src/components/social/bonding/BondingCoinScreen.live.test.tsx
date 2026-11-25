@@ -108,8 +108,8 @@ test("curve progress advances and a delayed trade or page read cannot undo the b
     price_usd: "2", price_as_of_ms: Date.now(), price_24h_usd: null,
     change_24h_bps: null, day_open_usd: null, day_open_ms: null,
   }));
-  const original = globalThis.EventSource;
-  globalThis.EventSource = class {} as unknown as typeof EventSource;
+  const original = Object.getOwnPropertyDescriptor(globalThis, "WebSocket");
+  Object.defineProperty(globalThis, "WebSocket", { value: class {}, configurable: true, writable: true });
   let listener: CoinTradeListener;
   let observing = false;
   t.mock.method(MarketStreamHub.prototype, "observe", (coin: string, subscriber: CoinTradeListener) => {
@@ -126,7 +126,8 @@ test("curve progress advances and a delayed trade or page read cannot undo the b
   t.after(async () => {
     await act(async () => root.unmount());
     container.remove();
-    globalThis.EventSource = original;
+    if (original) Object.defineProperty(globalThis, "WebSocket", original);
+    else Reflect.deleteProperty(globalThis, "WebSocket");
     client.clear();
   });
   const slots = { activity: null, chart: <><ChartLastTrade /><ChartCurrencyProbe /></>, discovery: null, execution: null, holders: null, market: null, overview: null, theses: null };

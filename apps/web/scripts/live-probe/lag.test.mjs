@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { frameLag, parseSse, percentile, summarize } from "./lag.mjs";
+import { frameLag, parseSseBlock, percentile, summarize } from "./lag.mjs";
 
-test("parseSse keeps the unfinished tail and joins data lines", () => {
-  const { events, rest } = parseSse("id: 1:0:0:0\nevent: market\ndata: {\"a\":\ndata: 1}\n\n: comment\n\nevent: heartbeat\ndata: {}\n\nevent: hint\ndata: {");
-  assert.deepEqual(events, [{ event: "market", data: "{\"a\":\n1}", id: "1:0:0:0" }, { event: "heartbeat", data: "{}", id: null }]);
-  assert.equal(rest, "event: hint\ndata: {");
+test("parseSseBlock joins data lines and skips comments", () => {
+  assert.deepEqual(parseSseBlock("id: 1:0:0:0\nevent: market\n: comment\ndata: {\"a\":\ndata: 1}"), { event: "market", data: "{\"a\":\n1}", id: "1:0:0:0" });
+  assert.deepEqual(parseSseBlock("event: heartbeat\ndata: {}"), { event: "heartbeat", data: "{}", id: null });
+  assert.equal(parseSseBlock(": comment"), null);
 });
 
 test("frameLag measures receipt minus chain time, with hop offsets", () => {

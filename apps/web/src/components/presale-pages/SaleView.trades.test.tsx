@@ -4,7 +4,8 @@ import test from "node:test";
 import type { HomeThreadPage } from "@blast/core/web/contracts/home.ts";
 import { socialHomeActivityPath } from "@blast/core/web/contracts/home.ts";
 import { CREATE_SUI_QUOTE_TYPE } from "@blast/core/web/contracts/create.ts";
-import { installTestDom, recordAnimations, testEvent } from "../../../test/fixtures/social/test-dom.ts";
+import { installTestDom, recordAnimations, testEvent, waitFor } from "../../../test/fixtures/social/test-dom.ts";
+import { installLiveSocket, LIVE_TICKET_PATH, liveTicket, type FakeLiveSocket } from "../../../test/fixtures/lib/live-socket.testing.ts";
 import { fixtureDetail, FIXTURE_NOW } from "../../../../../packages/core/test/fixtures/presale-pages/presale-fixtures.ts";
 import { infraProvenanceFixture } from "../../../../../packages/server/test/fixtures/modules/launchpad-contract/fixtures.ts";
 
@@ -71,32 +72,16 @@ test("confirmed presale trades update the list and headline without a read, incl
   let now = Date.now();
   t.mock.method(Date, "now", () => now);
   t.mock.method(performance, "now", () => now);
-  const streams: EventStream[] = [];
-  let reconnected: ((source: EventStream) => void) | undefined;
-  class EventStream {
-    private readonly listeners = new Map<string, (event: { data: string }) => void>();
-    constructor(readonly url: string) {
-      streams.push(this);
-      if (url.includes("presale=")) reconnected?.(this);
-    }
-    close() {}
-    addEventListener(type: string, receive: (event: { data: string }) => void) {
-      this.listeners.set(type, receive);
-    }
-    receive(frame: unknown, type = "hint") {
-      this.listeners.get(type)?.({ data: JSON.stringify(frame) });
-    }
-  }
-
-  const beforeSource = Object.getOwnPropertyDescriptor(globalThis, "EventSource");
-  Object.defineProperty(globalThis, "EventSource", { configurable: true, value: EventStream });
+  let reconnected: ((socket: FakeLiveSocket) => void) | undefined;
+  const live = installLiveSocket((socket) => { if (socket.query.has("presale")) reconnected?.(socket); });
+  const streams = live.sockets;
   const animations = recordAnimations();
   let latestCheckpoint = 100;
   let pollCanSeeLatest = false;
   const reads: string[] = [];
   t.mock.method(globalThis, "fetch", async (input: RequestInfo | URL) => {
     const path = String(input);
-    if (path === "/api/launchpad/market/ticket") return new Response(null, { status: 204 });
+    if (path === LIVE_TICKET_PATH) return liveTicket();
     if (!path.startsWith(activityPath)) return new Response(null, { status: 404 });
     reads.push(path);
     const target = Number(path.match(/&at=(\d+)$/)?.[1] ?? 100);
@@ -116,17 +101,16 @@ test("confirmed presale trades update the list and headline without a read, incl
     const fixture = fixtureDetail("kstl");
     const detail = { ...fixture, presale: { ...fixture.presale, presale_id: ID, phase: "trading" as const } };
     await act(async () => root.render(withQueryClient(client, <SaleView detail={detail} viewerEntry={null} nowMs={FIXTURE_NOW} />)));
-    await settle();
+    await waitFor(() => streams.length === 1, "the market socket");
     const source = streams[0];
-    assert.equal(streams.length, 1);
-    assert.equal(new URL(source!.url, "https://blast.test").searchParams.get("presale"), ID);
+    assert.equal(source!.query.get("presale"), ID);
     const emitTrade = (checkpoint: number, presaleId = ID, quoteType = CREATE_SUI_QUOTE_TYPE, stream = source) => {
       const row = tradePage(checkpoint).participants[0]!.events![0]!;
-      return act(async () => stream?.receive({
+      return act(async () => stream?.emit("presale", {
         type: "presale_trade", presale_id: presaleId, cursor: row.activity_id, kind: row.kind,
         timestamp_ms: row.occurred_at_ms, actor: "0x" + "2".repeat(64), digest,
         coin_atoms: row.tokens, quote_atoms: row.quote!.atoms, quote_type: quoteType, usd: row.quote!.usd,
-      }, "presale"));
+      }));
     };
     const panel = () => container.querySelector('[role="tabpanel"]')?.textContent;
     const chart = container.querySelector('[aria-label="Price chart"]');
@@ -142,8 +126,8 @@ test("confirmed presale trades update the list and headline without a read, incl
     assert.equal(chartCues().length, 0, "history cannot flash");
     assert.match(panel() ?? "", /0x1111…1111/);
     await act(async () => {
-      source?.receive({ type: "hello", provenance: infraProvenanceFixture({ deployment_fingerprint: null }) });
-      source?.receive({ type: "pong", presale_checkpoint: 100 });
+      source?.emit("hint", { type: "hello", provenance: infraProvenanceFixture({ deployment_fingerprint: null }) });
+      source?.emit("hint", { type: "pong", presale_checkpoint: 100 });
     });
     await settle();
     const readsAfterConnect = reads.length;
@@ -154,7 +138,7 @@ test("confirmed presale trades update the list and headline without a read, incl
     now += 6_000;
     await emitTrade(101);
     await act(async () => {
-      source?.receive({ type: "activity", activity_id: "101:0:4294967295:0", kind: "trade_buy", presale_id: ID });
+      source?.emit("hint", { type: "activity", activity_id: "101:0:4294967295:0", kind: "trade_buy", presale_id: ID });
     });
     await settle();
     assert.match(panel() ?? "", /0x2222…2222/, "the new buy appears without remounting the page");
@@ -196,7 +180,7 @@ test("confirmed presale trades update the list and headline without a read, incl
     now += 6_000;
     latestCheckpoint = 103;
     await act(async () => {
-      source?.receive({ type: "activity", activity_id: "103:0:4294967295:0", kind: "trade_buy", presale_id: ID });
+      source?.emit("hint", { type: "activity", activity_id: "103:0:4294967295:0", kind: "trade_buy", presale_id: ID });
     });
     await settle();
     assert.equal(reads.at(-1), `${filteredPath}&at=103`, "a hint without a trade frame still fetches");
@@ -205,12 +189,12 @@ test("confirmed presale trades update the list and headline without a read, incl
     now += 6_000;
     latestCheckpoint = 104;
     pollCanSeeLatest = true;
-    const next = new Promise<EventStream>(resolve => { reconnected = resolve; });
+    const next = new Promise<FakeLiveSocket>(resolve => { reconnected = resolve; });
     await act(async () => {
-      source?.receive({}, "resync");
+      source?.emit("resync");
       const resumed = await next;
-      resumed.receive({ type: "hello", provenance: infraProvenanceFixture({ deployment_fingerprint: null }) });
-      resumed.receive({ type: "pong", presale_checkpoint: 104 });
+      resumed.emit("hint", { type: "hello", provenance: infraProvenanceFixture({ deployment_fingerprint: null }) });
+      resumed.emit("hint", { type: "pong", presale_checkpoint: 104 });
     });
     await settle();
     assert.equal(headline.querySelector("[data-trade-cue]")?.getAttribute("data-trade-cue"), "sell");
@@ -222,12 +206,12 @@ test("confirmed presale trades update the list and headline without a read, incl
     await emitTrade(105, ID, CREATE_SUI_QUOTE_TYPE, await next);
     await settle();
     assert.equal(container.querySelector('ol[aria-label="Recent trades"] > li [data-side]')?.getAttribute("data-side"), "sell", "a sub-dollar live buy stays hidden");
-    const historyStream = new Promise<EventStream>(resolve => { reconnected = resolve; });
+    const historyStream = new Promise<FakeLiveSocket>(resolve => { reconnected = resolve; });
     await act(async () => {
-      (await next).receive({}, "resync");
+      (await next).emit("resync");
       const resumed = await historyStream;
-      resumed.receive({ type: "hello", provenance: infraProvenanceFixture({ deployment_fingerprint: null }) });
-      resumed.receive({ type: "pong", presale_checkpoint: 105 });
+      resumed.emit("hint", { type: "hello", provenance: infraProvenanceFixture({ deployment_fingerprint: null }) });
+      resumed.emit("hint", { type: "pong", presale_checkpoint: 105 });
     });
     await settle();
     assert.equal(reads.at(-1), `${filteredPath}&at=104`, "the history read asks for trades of a dollar or more, pinned to the newest one shown");
@@ -238,7 +222,7 @@ test("confirmed presale trades update the list and headline without a read, incl
     const history = await historyStream;
     await emitTrade(106, ID, CREATE_SUI_QUOTE_TYPE, history);
     await act(async () => {
-      history.receive({ type: "activity", activity_id: "106:0:4294967295:0", kind: "trade_buy", presale_id: ID });
+      history.emit("hint", { type: "activity", activity_id: "106:0:4294967295:0", kind: "trade_buy", presale_id: ID });
     });
     await settle();
     assert.equal(reads.length, readsBeforeDust, "a dust trade's hint asks for no read");
@@ -253,7 +237,6 @@ test("confirmed presale trades update the list and headline without a read, incl
     await act(async () => root.unmount());
     client.clear();
     container.remove();
-    if (beforeSource) Object.defineProperty(globalThis, "EventSource", beforeSource);
-    else Reflect.deleteProperty(globalThis, "EventSource");
+    live.restore();
   }
 });

@@ -4,9 +4,8 @@ import { EVENT_CURSOR } from "../launchpad-contract/cursor.ts";
 import { COIN_TYPE, SUI_OBJECT_ID_PATTERN } from "@blast/core/lib/sui/ids.ts";
 
 /**
- * What of blast-infra's `/v1/ws` crosses to a browser as a hint. Both relays
- * use it: the activity relay (`packages/server/.../hint-relay.ts`) and the
- * market stream relay, which carries the same hints beside a chart's trades.
+ * What of blast-infra's `/v1/ws` crosses to a browser as a hint. The market
+ * stream relay uses it, carrying hints beside a chart's trades.
  *
  * A hint is a signal, not data: "look now" plus the fields that select which
  * reads it affects. Nothing else of the engine's frame crosses, so neither a

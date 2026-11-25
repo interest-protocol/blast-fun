@@ -582,6 +582,41 @@ test("on a live stream a quiet pool shown stale reads again on the next tick and
   assert.equal(prices.at(-1)?.provenance.checkpoint, 60_000, "the price returns once the indexer catches up");
 });
 
+// This fails if a refused socket (off, 4429, or failing) leaves the live
+// screen without history polls until the socket comes back.
+test("while the socket is refused the live screen's history polls resume, and stop again once it is live", async () => {
+  const s = setup([CURVE], undefined, null, false);
+  s.client.start();
+  s.source().ready(10);
+  s.source().emit("hint", { type: "hello", provenance: wireProvenance(10) });
+  s.loads.shift()!.resolve(answer(10));
+  await settle();
+  const poll = async () => {
+    s.timers.find((timer) => timer.ms === 15_000)!.run();
+    const read = s.loads.splice(0);
+    for (const load of read) load.resolve(answer(10));
+    await settle();
+    return read.map((load) => load.pool);
+  };
+  assert.deepEqual(await poll(), [], "no read while live");
+  s.source().listeners.get("refused")![0]!({ data: "600000" });
+  await settle();
+  assert.equal(s.statuses.at(-1), "unavailable");
+  s.loads.splice(0);
+  assert.deepEqual(await poll(), [CURVE]);
+  assert.deepEqual(await poll(), [CURVE], "every poll reads while the hub is not live");
+  const retry = s.timers.find((timer) => timer.ms === 600_000)!;
+  s.timers.splice(s.timers.indexOf(retry), 1);
+  retry.run();
+  s.source().ready(10);
+  s.source().emit("hint", { type: "hello", provenance: wireProvenance(10) });
+  await settle();
+  s.loads.splice(0).forEach((load) => load.resolve(answer(10)));
+  await settle();
+  assert.deepEqual(await poll(), [], "the socket is back: polls stop");
+  s.client.stop();
+});
+
 test("a tab shown after a long hide reads history at once, as a fresh chart did", async () => {
   let visible = true;
   let onVisibility = () => {};

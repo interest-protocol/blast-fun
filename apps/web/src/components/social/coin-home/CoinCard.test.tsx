@@ -10,7 +10,8 @@ import type { HomeCoin, HomeWindow } from "@blast/core/modules/social/contracts/
 import { CoinCard } from "./CoinCard";
 import type { HomeBuyCue } from "./home-model";
 import { CoinList, type ListProps } from "./sources";
-import { installTestDom, recordAnimations } from "../../../../test/fixtures/social/test-dom.ts";
+import { installTestDom, recordAnimations, waitFor } from "../../../../test/fixtures/social/test-dom.ts";
+import { installLiveSocket, liveTicket } from "../../../../test/fixtures/lib/live-socket.testing.ts";
 
 const coin: HomeCoin = {
   presale_id: null, coin_type: "0x1::fixture::TEST", symbol: "TEST", name: "A long fixture token name",
@@ -34,21 +35,14 @@ test("streamed prices revalue the existing row's market cap without reordering i
   dom.document.body.append(host);
   const root = createRoot(host);
   const animations = recordAnimations();
-  const streams: Events[] = [];
-  class Events extends dom.window.EventTarget {
-    constructor(readonly url: string) { super(); streams.push(this); }
-    close() {}
-  }
-  const original = Object.getOwnPropertyDescriptor(globalThis, "EventSource");
-  Object.defineProperty(globalThis, "EventSource", { value: Events, configurable: true });
-  // The live socket is off: the ticket answers 204 and the tab uses the SSE relay.
-  t.mock.method(globalThis, "fetch", async () => new Response(null, { status: 204 }));
+  const live = installLiveSocket();
+  const streams = live.sockets;
+  t.mock.method(globalThis, "fetch", async () => liveTicket());
   t.after(async () => {
     await act(() => root.unmount());
     host.remove();
     client.clear();
-    if (original) Object.defineProperty(globalThis, "EventSource", original);
-    else Reflect.deleteProperty(globalThis, "EventSource");
+    live.restore();
   });
 
   const type = (id: string) => `0x${id.repeat(64)}::coin::COIN`;
@@ -71,14 +65,13 @@ test("streamed prices revalue the existing row's market cap without reordering i
   assert.equal(host.querySelector('[aria-label="Refresh market prices"]'), null);
   const rows = [...host.querySelectorAll("[data-list-row]")];
   const mcap = (row = 1) => rows[row]?.querySelector('[data-slot="coin-mcap"]')?.textContent;
-  await act(async () => {});
-  assert.equal(streams.length, 1);
+  await waitFor(() => streams.length === 1, "the market socket");
   const stream = streams[0]!;
-  assert.deepEqual(new URL(stream.url, "https://blast.test").searchParams.getAll("price_coin"), coins.map((row) => row.coin_type));
+  assert.deepEqual(stream.query.getAll("price_coin"), coins.map((row) => row.coin_type));
   const send = (checkpoint: number, price: string, asOf: number) => act(() => {
-    stream.dispatchEvent(new dom.window.MessageEvent("prices", { data: JSON.stringify({ checkpoint, prices: [
+    stream.emit("prices", { checkpoint, prices: [
       { coin_type: type("2"), usd_price: price, as_of_ms: asOf },
-    ] }) }));
+    ] });
   });
   await send(11, "0.9", 500);
   assert.equal(mcap(), "$10K", "HTTP wins timestamp ties across different checkpoints");

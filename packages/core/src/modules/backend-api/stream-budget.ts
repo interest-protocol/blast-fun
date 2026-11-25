@@ -1,19 +1,10 @@
-const queuedChunks = 64;
 const maxChunkBytes = 1_024;
-// Application relay queue payload only; runtime, socket and proxy buffers are additional.
-// 1,024 clients per relay at the worst-case queue; the configured stream count sets the cap.
-const queuePayloadBudgetBytes = 64 * 1_024 * 1_024;
+// 64 queued hint chunks per client under a 64 MiB relay queue budget: 1,024 clients per relay.
+const maxClients = Math.floor((64 * 1_024 * 1_024) / (64 * maxChunkBytes));
 
-/** Connected streams use a separate bounded lane from ordinary request work. */
+/** Live market sockets per hints process; the configured stream count sets the cap. */
 export const ACTIVITY_HINT_STREAM_BUDGET = Object.freeze({
   defaultClients: 200,
-  maxClients: Math.floor(
-    queuePayloadBudgetBytes / (queuedChunks * maxChunkBytes),
-  ),
-  queuePayloadBudgetBytes,
-  queuedChunks,
+  maxClients,
   maxChunkBytes,
-  maxUpstreamFrameChars: 65_536,
-  heartbeatMs: 15_000,
-  lifetimeMs: 270_000,
 });

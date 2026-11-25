@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { routePattern } from "@blast/core/modules/backend-api/route-path.ts";
 import { SOCIAL_DISCOVERY_PRIVATE_ROUTES } from "@blast/core/modules/backend-api/private/social-discovery-contracts.ts";
 import type { VerifiedPrivateProof } from "@blast/core/modules/backend-api/private-gateway.ts";
 import { siteOrigin } from "../lib/site-origin.ts";
@@ -20,9 +19,9 @@ test("discovery keeps original Origin checks before public SQL, including HEAD",
   }
 });
 
-test("only actual happening page reads carry SSR capability, never hint streams", () => {
+test("only actual happening page reads carry SSR capability", () => {
   // Activity, its followed buy card, happening and search: each a GET with its HEAD.
   assert.equal(SOCIAL_DISCOVERY_PRIVATE_ROUTES.length, 8);
   assert.deepEqual(SOCIAL_DISCOVERY_PRIVATE_ROUTES.filter((route) => route.ssrRead).map((route) => [route.id, route.method]), [["social.happening", "GET"], ["social.happening", "HEAD"]]);
-  assert.ok(SOCIAL_DISCOVERY_PRIVATE_ROUTES.every((route) => route.maxBodyBytes === 0 && !routePattern(route.path).test("/api/social/activity/hints")));
+  assert.ok(SOCIAL_DISCOVERY_PRIVATE_ROUTES.every((route) => route.maxBodyBytes === 0));
 });

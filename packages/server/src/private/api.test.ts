@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { PRIVATE_ROUTES } from "@blast/core/modules/backend-api/private-routes.ts";
 import type { VerifiedPrivateProof } from "@blast/core/modules/backend-api/private-gateway.ts";
-import { MARKET_STREAM_ROUTE_ID } from "@blast/core/modules/launchpad-contract/market-stream.ts";
 import { PRIVATE_HANDLER_FAMILIES, PRIVATE_HANDLERS, privateApi } from "./api.ts";
 import { testClient } from "../../../core/test/fixtures/lib/web-security/client-address.ts";
 import { withErrorBoundary, type PrivateContext } from "./handler.ts";
@@ -19,8 +18,7 @@ function context(id: string): PrivateContext {
 // This fails if a contract loses its handler, a handler outlives its contract,
 // or two families claim one id (the merge would silently keep only one).
 test("every main-API route id has exactly one handler and no handler lacks a route", () => {
-  const streamIds = new Set([MARKET_STREAM_ROUTE_ID, "social.activity.hints"]);
-  const routeIds = new Set(PRIVATE_ROUTES.map((route) => route.id).filter((id) => !streamIds.has(id)));
+  const routeIds = new Set(PRIVATE_ROUTES.map((route) => route.id));
   const handlerIds = Object.keys(PRIVATE_HANDLERS);
 
   assert.deepEqual([...handlerIds].sort(), [...routeIds].sort());
@@ -29,7 +27,7 @@ test("every main-API route id has exactly one handler and no handler lacks a rou
 
 // This fails if an unknown or object-prototype id reaches a handler instead of 404.
 test("unknown and object-prototype route ids answer 404", async () => {
-  for (const id of ["social.unknown", "__proto__", "constructor", "toString", "social.activity.hints"]) {
+  for (const id of ["social.unknown", "__proto__", "constructor", "toString"]) {
     const response = await privateApi(new Request("https://www.blast.fun/"), context(id));
     assert.equal(response.status, 404, id);
     assert.equal((await response.json()).error.code, "not_found", id);

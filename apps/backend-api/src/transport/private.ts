@@ -13,8 +13,6 @@ import { boundedPrivateBody } from "./body.ts";
 
 export type PrivateApi = Readonly<{
   siteOrigin: string;
-  /** A narrow process may accept only its own capabilities. */
-  allowedRoutes?: readonly string[];
   handle: PrivateHandler;
 }>;
 
@@ -36,9 +34,6 @@ export async function privateRequest(
       { error: { code } },
       { status, headers: { "Cache-Control": "private, no-store" } },
     );
-  if (options.privateApi.allowedRoutes && !options.privateApi.allowedRoutes.includes(contract.id)) {
-    return refuse(403, "private_gateway_forbidden");
-  }
   const proof = verifyPrivateEnvelope(request, options.gatewaySecret, {
     namespace: options.namespace,
     siteOrigin: options.privateApi.siteOrigin,

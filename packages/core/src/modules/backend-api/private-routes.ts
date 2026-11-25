@@ -1,6 +1,5 @@
 import { DEVELOP_PRIVATE_ROUTES } from "./private/develop-contracts.ts";
 import { ANALYTICS_PRIVATE_ROUTES } from "./private/analytics-contracts.ts";
-import { MARKET_STREAM_PRIVATE_ROUTES } from "./private/market-stream-contracts.ts";
 import { VIEWER_THESES_PRIVATE_ROUTES } from "./private/viewer-theses-contracts.ts";
 import { CARD_PRIVATE_ROUTES } from "./private/card-contracts.ts";
 import { FRONTEND_SECURITY_PRIVATE_ROUTES } from "./private/frontend-security-contracts.ts";
@@ -17,7 +16,6 @@ import { LAUNCHPAD_IDENTITY_PRIVATE_ROUTES } from "./private/launchpad-identity-
 import { ASSET_PRIVATE_ROUTES } from "./private/asset-contracts.ts";
 import { LAUNCHPAD_TELEMETRY_PRIVATE_ROUTES } from "./private/launchpad-telemetry-contracts.ts";
 import { COIN_PAGE_PRIVATE_ROUTES } from "./private/coin-page-contracts.ts";
-import { SOCIAL_STREAM_PRIVATE_ROUTES } from "./private/social-stream-contracts.ts";
 import { SOCIAL_CLAIMS_PRIVATE_ROUTES } from "./private/social-claims-contracts.ts";
 import { SOCIAL_DEPOSITS_PRIVATE_ROUTES } from "./private/social-deposits-contracts.ts";
 import { PRESALE_PRIVATE_ROUTES } from "./private/presale-contracts.ts";
@@ -150,8 +148,6 @@ export const PRIVATE_ROUTES: readonly PrivateRouteContract[] = Object.freeze([
   ...SOCIAL_COINS_PRIVATE_ROUTES,
   ...SOCIAL_INTENTS_PRIVATE_ROUTES,
   ...SOCIAL_DEPOSITS_PRIVATE_ROUTES,
-  ...SOCIAL_STREAM_PRIVATE_ROUTES,
-  ...MARKET_STREAM_PRIVATE_ROUTES,
   ...SOCIAL_CLAIMS_PRIVATE_ROUTES,
   ...IDENTITY_ROUTES,
   ...IDENTITY_ROUTES.filter((route) => route.method === "GET").map((route) => ({

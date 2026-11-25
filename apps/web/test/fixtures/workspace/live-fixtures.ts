@@ -53,7 +53,8 @@ export function liveResponse(path: string, body: Record<string, unknown> = {}) {
   if (url.pathname.endsWith("/trades/coins")) return Response.json({ coins: liveTradeCoins(url.searchParams.get("q")), next_cursor: null });
   if (url.pathname.endsWith("/prices")) return Response.json({ prices: livePrices(url.searchParams), as_of });
   if (url.pathname.endsWith("/home/activity")) return Response.json({ presale_id: url.searchParams.get("presale"), participants: [], totals, as_of, next_cursor: null, window, clock_ms });
-  if (url.pathname.endsWith("/activity/hints")) return new Response(null, { status: 204 });
+  // The live socket is off: the tab has no stream and stays on its polls.
+  if (url.pathname.endsWith("/market/ticket")) return new Response(null, { status: 204 });
   if (url.pathname === "/api/social/home" || url.pathname.endsWith("/home/coins")) {
     const coins = liveHomeCoins(url.pathname.endsWith("/coins"));
     return Response.json({ coins, missing: [], as_of, window, clock_ms, next_cursor: null, page: 1, pages: 1, total: coins.length });

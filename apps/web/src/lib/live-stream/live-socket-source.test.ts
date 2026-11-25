@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type { MarketEventSource } from "#web/components/launchpad/market-stream-hub.ts";
 import {
-  LIVE_FALLBACK_MS,
+  LIVE_BACKOFF_MS,
   LIVE_OFF_MS,
   LIVE_PROTOCOL,
+  fetchLiveTicket,
   liveMarketSource,
   liveSourceState,
   type LiveGrant,
@@ -15,10 +15,9 @@ import {
 const PATH = "/api/launchpad/market/stream?activity=true&pool=p";
 const GRANT: LiveGrant = { url: "wss://live.blast.test/v1/socket", ticket: "t" };
 
-function harness(tickets: () => Promise<LiveGrant | null>, throwOnOpen = false) {
+function harness(tickets: () => Promise<LiveGrant | null>, throwOnOpen = false, random = () => 0.5) {
   let now = 1_000;
   const sockets: (LiveSocketLike & { url: string; protocols: string[]; closed: boolean })[] = [];
-  const relays: string[] = [];
   const timers: { run: () => void; ms: number }[] = [];
   const deps = {
     fetchTicket: tickets,
@@ -28,32 +27,28 @@ function harness(tickets: () => Promise<LiveGrant | null>, throwOnOpen = false) 
       sockets.push(socket);
       return socket;
     },
-    openEventSource: (path: string): MarketEventSource => {
-      relays.push(path);
-      return { addEventListener() {}, close() {} };
-    },
     schedule: (run: () => void, ms: number) => {
       timers.push({ run, ms });
       return () => {};
     },
     now: () => now,
-    random: () => 0.5,
+    random,
   };
   const state = liveSourceState();
   const open = () => {
     const events: [string, string | undefined][] = [];
     const source = liveMarketSource(PATH, state, deps);
-    for (const type of ["status", "market", "prices", "error"]) source.addEventListener(type, ({ data }) => events.push([type, data]));
+    for (const type of ["status", "market", "prices", "error", "refused"]) source.addEventListener(type, ({ data }) => events.push([type, data]));
     return { source, events };
   };
-  return { open, sockets, relays, timers, state, advance: (ms: number) => { now += ms; } };
+  return { open, sockets, timers, state, advance: (ms: number) => { now += ms; } };
 }
 
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 
 // This fails if the socket's SSE blocks reach the hub differently from the
-// relay's, or if a healthy socket ever signals an error (which drops prices).
-test("a healthy socket delivers the relay's events and only a close reports an error", async () => {
+// SSE format, or if a healthy socket ever signals an error (which drops prices).
+test("a healthy socket delivers its events and only a close reports an error", async () => {
   const { open, sockets, state } = harness(async () => GRANT);
   const { events } = open();
   await settle();
@@ -67,14 +62,28 @@ test("a healthy socket delivers the relay's events and only a close reports an e
   assert.equal(state.failures, 0, "a socket that delivered is not a failure");
 });
 
-// This fails if a browser keeps retrying a socket that is off, refused for its
-// address, or failing, instead of using the SSE relay.
-test("the tab uses the SSE relay while the socket is off, refused, or failing", async () => {
-  const off = harness(async () => null);
+// This fails if a browser keeps asking for tickets while the socket is off,
+// refused for its address, or failing, or if the tab is not told how long to wait.
+test("the tab gets refused, with the wait, while the socket is off, refused, or failing", async () => {
+  const refusedWith = (events: [string, string | undefined][]) => events.filter(([type]) => type === "refused").map(([, data]) => Number(data));
+  // The harness's random is 0.5: long waits are stretched by a quarter.
+  const OFF = LIVE_OFF_MS * 1.25;
+  const BACKOFF = LIVE_BACKOFF_MS * 1.25;
+
+  let asked = 0;
+  const off = harness(async () => { asked++; return null; });
+  const first = off.open();
+  await settle();
+  assert.deepEqual(refusedWith(first.events), [OFF], "a 204 waits the off window");
+  off.advance(1_000);
+  const again = off.open();
+  await settle();
+  assert.deepEqual(refusedWith(again.events), [OFF - 1_000]);
+  off.advance(OFF - 1_000);
+  assert.equal(asked, 1, "no ticket is asked for during the window");
   off.open();
   await settle();
-  assert.deepEqual(off.relays, [PATH]);
-  assert.equal(off.state.fallbackUntil, 1_000 + LIVE_OFF_MS);
+  assert.equal(asked, 2, "the ticket is asked for again after the window");
 
   const refused = harness(async () => GRANT);
   refused.open();
@@ -82,10 +91,11 @@ test("the tab uses the SSE relay while the socket is off, refused, or failing", 
   // Through Render's edge the code arrives in the last frame; the close itself says 1005.
   refused.sockets[0]!.onmessage!({ data: 'event: close\ndata: {"code":4429}\n\n' });
   refused.sockets[0]!.onclose!({ code: 1005 });
-  refused.open();
+  refused.advance(1_000);
+  const afterRefusal = refused.open();
   await settle();
-  assert.deepEqual(refused.relays, [PATH], "a per-address refusal falls back at once");
-  assert.equal(refused.state.fallbackUntil, 1_000 + LIVE_FALLBACK_MS);
+  assert.equal(refused.sockets.length, 1, "a per-address refusal backs off at once");
+  assert.deepEqual(refusedWith(afterRefusal.events), [BACKOFF - 1_000]);
 
   const failing = harness(async () => GRANT);
   for (let i = 0; i < 3; i++) {
@@ -93,16 +103,16 @@ test("the tab uses the SSE relay while the socket is off, refused, or failing", 
     await settle();
     failing.sockets.at(-1)!.onclose!({ code: 1006 });
   }
-  failing.open();
+  const afterFailures = failing.open();
   await settle();
   assert.equal(failing.sockets.length, 3);
-  assert.deepEqual(failing.relays, [PATH], "three sockets closed before a frame");
-  failing.advance(LIVE_FALLBACK_MS);
+  assert.deepEqual(refusedWith(afterFailures.events), [BACKOFF], "three sockets closed before a frame");
+  failing.advance(BACKOFF);
   failing.open();
   await settle();
-  assert.equal(failing.sockets.length, 4, "the socket is tried again after the fallback window");
+  assert.equal(failing.sockets.length, 4, "the socket is tried again after the backoff");
 
-  // A named refusal is no first frame: three framed 4401s still fall back, and the frame never reaches listeners.
+  // A named refusal is no first frame: three framed 4401s still back off, and the frame never reaches listeners.
   const named = harness(async () => GRANT);
   for (let i = 0; i < 3; i++) {
     const { events } = named.open();
@@ -113,19 +123,27 @@ test("the tab uses the SSE relay while the socket is off, refused, or failing", 
   }
   named.open();
   await settle();
-  assert.deepEqual(named.relays, [PATH], "three named refusals before a frame");
+  assert.equal(named.sockets.length, 3, "three named refusals before a frame");
 
   // A hung network: the hub's hello deadline closes sockets that never spoke.
   const hung = harness(async () => GRANT);
   for (let i = 0; i < 3; i++) {
     const { source } = hung.open();
     await settle();
-    source.close();
+    source.close(true);
     hung.sockets.at(-1)!.onclose?.({ code: 1006 });
   }
   hung.open();
   await settle();
-  assert.deepEqual(hung.relays, [PATH], "three silent sockets closed by the hub");
+  assert.equal(hung.sockets.length, 3, "three silent sockets closed by the hub");
+
+  // A pool change or a handover closes a socket before it spoke: that is not the network failing.
+  const handover = harness(async () => GRANT);
+  for (let i = 0; i < 3; i++) {
+    handover.open().source.close();
+    await settle();
+  }
+  assert.equal(handover.state.failures, 0, "closes without a deadline do not count");
 
   // A pong answers the tab's own clock ping: a socket that only ever pongs is still silent.
   const pongs = harness(async () => GRANT);
@@ -137,7 +155,18 @@ test("the tab uses the SSE relay while the socket is off, refused, or failing", 
   }
   pongs.open();
   await settle();
-  assert.deepEqual(pongs.relays, [PATH], "pongs alone do not prove the stream");
+  assert.equal(pongs.sockets.length, 3, "pongs alone do not prove the stream");
+  // `connecting` arrives before the upstream answers: a relay with its upstream down still backs off.
+  const connecting = harness(async () => GRANT);
+  for (let i = 0; i < 3; i++) {
+    connecting.open();
+    await settle();
+    connecting.sockets.at(-1)!.onmessage!({ data: 'event: status\ndata: {"state":"connecting"}\n\n' });
+    connecting.sockets.at(-1)!.onclose!({ code: 1006 });
+  }
+  connecting.open();
+  await settle();
+  assert.equal(connecting.sockets.length, 3, "connecting alone does not prove the stream");
 
   const throwing = harness(async () => GRANT, true);
   const { events } = throwing.open();
@@ -162,4 +191,55 @@ test("after a drain close the next ticket waits a random 1–9 s", async () => {
   timers[0]!.run();
   await settle();
   assert.equal(asked, 2);
+});
+
+// This fails if tabs that failed together come back together (one stampede every 10 or 30 minutes).
+test("two tabs refused at the same moment wait different times", async () => {
+  const waits: number[] = [];
+  for (const random of [() => 0.1, () => 0.9]) {
+    const tab = harness(async () => null, false, random);
+    const { events } = tab.open();
+    await settle();
+    waits.push(Number(events.find(([type]) => type === "refused")![1]));
+  }
+  assert.notEqual(waits[0], waits[1]);
+  for (const wait of waits) assert.ok(wait >= LIVE_OFF_MS && wait <= LIVE_OFF_MS * 1.5, String(wait));
+});
+
+// This fails if a ticket request that never answers holds the tab forever instead of counting as a failure.
+test("a ticket that does not answer in time is a failure toward the backoff", async (t) => {
+  t.mock.method(globalThis, "fetch", (_path: string, init: RequestInit) => new Promise((_resolve, reject) => {
+    init.signal!.addEventListener("abort", () => reject(init.signal!.reason));
+  }));
+  await assert.rejects(fetchLiveTicket(5), { name: "TimeoutError" });
+  // A timeout is a throw, which the source counts.
+  const throwing = harness(async () => { throw new DOMException("timed out", "TimeoutError"); });
+  for (let i = 0; i < 3; i++) {
+    const { events } = throwing.open();
+    await settle();
+    assert.deepEqual(events, [["error", undefined]]);
+  }
+  const { events } = throwing.open();
+  await settle();
+  assert.deepEqual(events.map(([type]) => type), ["refused"], "three timeouts back off");
+});
+
+// This fails if the caller's hello deadline, firing while the ticket request still hangs, is not counted.
+test("a caller's deadline during a hung ticket request is a failure toward the backoff", async () => {
+  const hung = harness(() => new Promise<never>(() => {}));
+  for (let i = 0; i < 3; i++) {
+    const { source } = hung.open();
+    await settle();
+    source.close(true);
+  }
+  const { events } = hung.open();
+  await settle();
+  assert.deepEqual(events.map(([type]) => type), ["refused"], "three hung tickets back off");
+  // A close the caller chose (a pool change) is not a failure.
+  const changed = harness(() => new Promise<never>(() => {}));
+  for (let i = 0; i < 3; i++) {
+    changed.open().source.close();
+    await settle();
+  }
+  assert.equal(changed.state.failures, 0);
 });

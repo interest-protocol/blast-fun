@@ -9,17 +9,18 @@ import {
   ActivityHints,
   activityHints,
   HINT_GAP_MS,
-  hintEventStream,
   liveFreshness,
   RECONNECT_CAP_MS,
   reconnectDelay,
   recordHintPainted,
+  socketHintStream,
   STABLE_MS,
   tabActivityHints,
   type ActivityHintsDependencies,
   type HintSocket,
 } from "./activity-hints.ts";
-import { marketHintTransport } from "#web/lib/live-stream/market-hints.ts";
+import { HELLO_DEADLINE_MS, type MarketEventSource } from "#web/components/launchpad/market-stream-hub.ts";
+import { MARKET_STREAM_BUDGET } from "@blast/core/modules/launchpad-contract/market-stream.ts";
 import { anyFreshness, hintedGap, pollingFreshness, type FreshnessEnvironment, type FreshnessHint } from "./feed-freshness.ts";
 
 /** R3-26: the blast-infra `activity` hint (T-035) as a freshness source, without a browser. */
@@ -28,7 +29,6 @@ import { anyFreshness, hintedGap, pollingFreshness, type FreshnessEnvironment, t
 class FakeSocket implements HintSocket {
   sent: Record<string, unknown>[] = [];
   closed = false;
-  unavailable?: boolean;
   onmessage: ((event: { data: unknown }) => void) | null = null;
   onclose: (() => void) | null = null;
   readonly url: string;
@@ -135,7 +135,7 @@ function surface(w: ReturnType<typeof world>, name = "happening") {
   return { looks, off };
 }
 
-test("SSR and browsers without EventSource keep polling; no private infra wiring reaches the browser", async () => {
+test("SSR keeps polling; no private infra wiring reaches the browser", async () => {
   assert.equal(tabActivityHints(), null);
   assert.equal(liveFreshness("happening").name, "poll");
 });
@@ -551,91 +551,92 @@ function fakeEnvironment(t: TestContext) {
   };
 }
 
-test("a relay stream refused after its gate refresh stops the hint client; the tab's return tries once more", async () => {
-  const sockets: FakeSocket[] = [];
-  const timers: (() => void)[] = [];
-  const metrics: Record<string, unknown>[] = [];
-  let visible = true;
-  let onVisibility: (() => void) | null = null;
-  const hints = new ActivityHints({
-    url: "/api/social/activity/hints",
-    // The production path: the market transport wraps the same-origin stream.
-    createSocket: (url) => marketHintTransport(url, (path) => {
-      const socket = new FakeSocket(path);
-      sockets.push(socket);
-      return socket;
-    }),
-    now: () => 1_000_000,
-    setTimeout: (run) => timers.push(run),
-    clearTimeout: () => undefined,
-    random: () => 0.5,
-    visible: () => visible,
-    onVisibilityChange: (listener) => {
-      onVisibility = listener;
-      return () => { onVisibility = null; };
-    },
-    metric: (_name, fields) => metrics.push(fields),
-  });
-  hints.subscribe("happening", () => undefined);
-  await Promise.resolve();
-  assert.equal(sockets.length, 1);
-  sockets[0].unavailable = true;
-  sockets[0].drop();
-  assert.deepEqual(metrics.filter((fields) => fields.event === "unavailable"), [{ event: "unavailable", reason: "socket" }]);
-  assert.equal(timers.length, 0, "no backoff retry, so a refused tab never loops");
-  visible = false;
-  onVisibility!();
-  visible = true;
-  onVisibility!();
-  await Promise.resolve();
-  assert.equal(sockets.length, 2, "the tab's return opens the stream once more");
+// This fails if hints stop reaching the client from the market socket, or if a
+// drop or a refused (off or backing-off) socket is not handed to the client's own backoff.
+test("the socket adapter forwards hints, and a drop or a refusal closes it for the client's backoff", () => {
+  for (const ending of ["error", "refused"]) {
+    const listeners = new Map<string, (event: { data?: string }) => void>();
+    let closed = 0;
+    const source: MarketEventSource = { addEventListener: (type, listener) => { listeners.set(type, listener); }, close: () => { closed += 1; } };
+    const adapter = socketHintStream(source, () => () => undefined);
+    const frames: unknown[] = [];
+    let disconnected = 0;
+    adapter.onmessage = (message) => frames.push(message.data);
+    adapter.onclose = () => { disconnected += 1; };
+    listeners.get("hint")!({ data: JSON.stringify(HELLO) });
+    assert.deepEqual(frames, [JSON.stringify(HELLO)]);
+    listeners.get(ending)!({ data: "600000" });
+    assert.deepEqual([closed, disconnected], [1, 1], ending);
+  }
 });
 
-test("the same-origin SSE adapter shares the tab connection and delegates reconnect to ActivityHints", () => {
-  const previous = globalThis.EventSource;
-  const previousWindow = globalThis.window;
-  const previousDocument = globalThis.document;
-  const visibility = new EventTarget();
-  let opened = 0;
-  let closed = 0;
-  const sources: FakeEventSource[] = [];
-  class FakeEventSource extends EventTarget {
-    // CONNECTING: the browser is retrying a dropped stream, which is not a refusal.
+// This fails if a half-open activity-only socket (no heartbeat, no close) keeps the client waiting forever,
+// or if the watchdog closes a socket whose heartbeats keep arriving.
+test("the activity-only socket closes as failed when its hello or heartbeat stops, and the client reconnects", () => {
+  const listeners = new Map<string, (event: { data?: string }) => void>();
+  const closes: (boolean | undefined)[] = [];
+  const source: MarketEventSource = { addEventListener: (type, listener) => { listeners.set(type, listener); }, close: (failed) => { closes.push(failed); } };
+  const timers: { run: () => void; ms: number; cancelled: boolean }[] = [];
+  const armed = () => timers.filter((timer) => !timer.cancelled);
+  const adapter = socketHintStream(source, (run, ms) => {
+    const timer = { run, ms, cancelled: false };
+    timers.push(timer);
+    return () => { timer.cancelled = true; };
+  });
+  let disconnected = 0;
+  adapter.onclose = () => { disconnected += 1; };
+  assert.deepEqual(armed().map(({ ms }) => ms), [HELLO_DEADLINE_MS], "a socket must say hello in time");
+  listeners.get("hint")!({ data: JSON.stringify(HELLO) });
+  listeners.get("heartbeat")!({});
+  assert.deepEqual(armed().map(({ ms }) => ms), [MARKET_STREAM_BUDGET.heartbeatTimeoutMs], "each frame re-arms one watchdog");
+  armed()[0]!.run();
+  assert.deepEqual([closes, disconnected], [[true], 1], "a silent socket is closed as failed and the client reconnects");
+  listeners.get("error")!({});
+  adapter.close();
+  assert.deepEqual([closes.length, disconnected], [1, 1], "the end is reported once");
+});
+
+// This fails if a tab with hints but no market subscription has no live hints:
+// it must open the market socket itself, for activity only.
+test("a tab without a market stream gets its hints over an activity-only market socket", async () => {
+  const keys = ["window", "document", "fetch", "WebSocket"] as const;
+  const previous = Object.fromEntries(keys.map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  const opened: { url: string; protocols: string[] }[] = [];
+  const asked: string[] = [];
+  class FakeWebSocket {
+    static OPEN = 1;
     readyState = 0;
-    constructor(url: string) {
-      super();
-      assert.equal(url, "/api/social/activity/hints");
-      opened += 1;
-      sources.push(this);
-    }
-    close() { closed += 1; }
+    onmessage: ((event: { data: unknown }) => void) | null = null;
+    onclose: ((event: { code: number }) => void) | null = null;
+    constructor(url: string, protocols: string[]) { opened.push({ url, protocols }); }
+    close() {}
+    send() {}
   }
   try {
-    Object.defineProperty(globalThis, "EventSource", { value: FakeEventSource, configurable: true, writable: true });
-    Object.defineProperty(globalThis, "document", { value: Object.assign(visibility, { visibilityState: "visible" }), configurable: true, writable: true });
-    const adapter = hintEventStream("/api/social/activity/hints");
-    const frames: unknown[] = [];
-    adapter.onmessage = (message) => frames.push(message.data);
-    let disconnected = false;
-    adapter.onclose = () => { disconnected = true; };
-    sources[0].dispatchEvent(new MessageEvent("message", { data: JSON.stringify(HELLO) }));
-    assert.deepEqual(frames, [JSON.stringify(HELLO)]);
-    visibility.dispatchEvent(new Event("visibilitychange"));
-    assert.equal(JSON.parse(String(frames[1])).type, "resync_required", "returning to a tab recovers missed hints");
-    sources[0].dispatchEvent(new Event("error"));
-    assert.equal(disconnected, true);
-    assert.equal(closed, 1, "native reconnect stops so the existing backoff owns reconnects");
-    visibility.dispatchEvent(new Event("visibilitychange"));
-    assert.equal(frames.length, 2, "the transport removes its visibility listener on close");
-    Object.defineProperty(globalThis, "window", { value: {}, configurable: true, writable: true });
+    Object.defineProperty(globalThis, "window", { value: { setTimeout, clearTimeout }, configurable: true, writable: true });
+    Object.defineProperty(globalThis, "document", { value: Object.assign(new EventTarget(), { visibilityState: "visible" }), configurable: true, writable: true });
+    Object.defineProperty(globalThis, "WebSocket", { value: FakeWebSocket, configurable: true, writable: true });
+    Object.defineProperty(globalThis, "fetch", {
+      value: async (path: string) => {
+        asked.push(path);
+        return Response.json({ url: "wss://live.blast.test/v1/socket", ticket: `t.${"a".repeat(43)}` });
+      },
+      configurable: true, writable: true,
+    });
     const shared = tabActivityHints();
     assert.ok(shared);
     assert.equal(tabActivityHints(), shared);
-    assert.equal(opened, 1, "the tab's stream is lazy until a surface subscribes");
+    assert.deepEqual(asked, [], "the tab's socket is lazy until a surface subscribes");
+    const off = shared.subscribe("happening", () => undefined);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(asked, ["/api/launchpad/market/ticket"]);
+    assert.deepEqual(opened.map(({ url }) => url), ["wss://live.blast.test/v1/socket?activity=true"]);
+    off();
   } finally {
-    Object.defineProperty(globalThis, "EventSource", { value: previous, configurable: true, writable: true });
-    Object.defineProperty(globalThis, "window", { value: previousWindow, configurable: true, writable: true });
-    Object.defineProperty(globalThis, "document", { value: previousDocument, configurable: true, writable: true });
+    for (const key of keys) {
+      if (previous[key]) Object.defineProperty(globalThis, key, previous[key]);
+      else Reflect.deleteProperty(globalThis, key);
+    }
   }
 });
 

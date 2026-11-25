@@ -4,7 +4,7 @@
 // `/api/launchpad/market/*` routes (`modules/launchpad-market`), which relay
 // the exact `/v1` answer. The validated `/v1` client still builds and checks
 // every HTTP read; only its fetch goes to this app. Holders and Activity use
-// `use-market-poll.ts`; the chart also receives the same-origin market SSE feed.
+// `use-market-poll.ts`; the chart also follows the direct market socket.
 
 import type { ExpectedDeployment } from "@blast/core/modules/launchpad-contract/provenance.ts";
 import type { MarketDataDependencies } from "@blast/core/modules/read-routing/market-data.ts";

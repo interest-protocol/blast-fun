@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { installTestDom } from "../../../../test/fixtures/social/test-dom.ts";
+import { installTestDom, waitFor } from "../../../../test/fixtures/social/test-dom.ts";
 
 /**
  * An open coin page re-reads itself the moment its own coin's identity (name,
@@ -17,36 +17,32 @@ const { createRoot } = await import("react-dom/client");
 const { AppRouterContext } = await import("next/dist/shared/lib/app-router-context.shared-runtime");
 const { infraProvenanceFixture } = await import("../../../../../../packages/server/test/fixtures/modules/launchpad-contract/fixtures.ts");
 const { CoinLive } = await import("./CoinLive.tsx");
+const { installLiveSocket, LIVE_TICKET_PATH, liveTicket } = await import("../../../../test/fixtures/lib/live-socket.testing.ts");
 
 const COIN = `0x${"3f".repeat(32)}::froggy::FROGGY`;
 const OTHER = `0x${"4e".repeat(32)}::toad::TOAD`;
 
 test("a coin page refreshes at once on its own coin's identity change, and on nothing else the stream hints", async () => {
-  const beforeSource = globalThis.EventSource;
-  const sources: FakeEventSource[] = [];
-  class FakeEventSource extends EventTarget {
-    readyState = 0;
-    constructor(url: string) {
-      super();
-      assert.equal(url, "/api/social/activity/hints");
-      sources.push(this);
-    }
-    close() {}
-  }
+  const live = installLiveSocket();
+  const beforeFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    assert.equal(String(input), LIVE_TICKET_PATH);
+    return liveTicket();
+  }) as typeof fetch;
   let refreshes = 0;
   const router = { bfcacheId: "test", back() {}, forward() {}, refresh() { refreshes += 1; }, hmrRefresh() {}, push() {}, replace() {}, prefetch: async () => {} };
-  const receive = (frame: unknown) => sources[0]!.dispatchEvent(new MessageEvent("message", { data: JSON.stringify(frame) }));
+  const receive = (frame: unknown) => live.sockets[0]!.emit("hint", frame);
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
   try {
-    Object.defineProperty(globalThis, "EventSource", { value: FakeEventSource, configurable: true, writable: true });
     await act(async () => root.render(
       <AppRouterContext value={router}>
         <CoinLive launchId={`0x${"a1".repeat(32)}`} coinType={COIN} tradable={false} refreshMs={60_000} />
       </AppRouterContext>,
     ));
-    assert.equal(sources.length, 1, "the page joins the tab's one hint stream");
+    await act(async () => waitFor(() => live.sockets.length > 0, "the hint socket opens"));
+    assert.deepEqual(live.sockets.map((socket) => socket.query.toString()), ["activity=true"], "the page joins the tab's one hint socket");
     await act(async () => {
       receive({ type: "hello", provenance: infraProvenanceFixture({ deployment_fingerprint: null }) });
       receive({ type: "pong" });
@@ -64,6 +60,7 @@ test("a coin page refreshes at once on its own coin's identity change, and on no
   } finally {
     await act(async () => root.unmount());
     container.remove();
-    Object.defineProperty(globalThis, "EventSource", { value: beforeSource, configurable: true, writable: true });
+    live.restore();
+    globalThis.fetch = beforeFetch;
   }
 });
