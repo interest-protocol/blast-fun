@@ -556,7 +556,7 @@ function CompactChart({ view }: Readonly<{ view: ChartViewControls }>) {
   const live = view.controls.range === "live";
   const { source, quoteUsd, geometry, drawn } = view;
   // The chart draws a line for a handful of trades, so the picker would offer a style it ignores.
-  const fewTrades = forcesLine(klineBars(drawn, source.memeDecimals, source.quoteDecimals, quoteUsd ?? null));
+  const fewTrades = drawn.length > 0 && forcesLine(klineBars(drawn, source.memeDecimals, source.quoteDecimals, quoteUsd ?? null));
   const style = mobile || live || fewTrades ? "line" : preferredStyle;
   const unit = geometry && (exactDecimal(quoteUsd) ? "USD" : source.quoteSymbol);
   return <div className={styles.chart} data-compact-chart="" data-chart-style={style}>

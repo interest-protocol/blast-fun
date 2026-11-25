@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { DrawnSeries } from "#web/components/launchpad/chart/chart-geometry.ts";
-import { barChanges, fillGaps, foldTrade, foldTrades, MAX_FILLED_BARS, klineBars, pricePrecision, readChartSettings, toggleIndicator, tradedBars, DEFAULT_CHART_SETTINGS, type Bar } from "./kline-model.ts";
+import { barChanges, fillGaps, foldTrade, foldTrades, MAX_FILLED_BARS, klineBars, pricePrecision, readChartSettings, toggleIndicator, tradedBars, forcesLine, DEFAULT_CHART_SETTINGS, type Bar } from "./kline-model.ts";
 
 const MINUTE = 60_000;
 const T0 = 1_795_188_300_000; // a 5-minute boundary
@@ -95,6 +95,9 @@ test("a quiet coin's series is continuous: flat bars at the previous close throu
   assert.deepEqual(sparse.map((row) => row.timestamp / M), [0, 6, 7, 8, 9], "only the newest buckets up to the cap are filled");
   assert.equal(fillGaps([bar(0, 1), bar(MAX_FILLED_BARS * 3, 2)], "1m", MAX_FILLED_BARS * 3 * M).length, MAX_FILLED_BARS + 1);
   assert.equal(tradedBars(fillGaps([bar(0, 2), bar(3, 5)], "1m", 3 * M)), 2);
+  const traded = (count: number) => Array.from({ length: count }, (_, i) => bar(i, 1));
+  assert.equal(forcesLine(traded(9)), true, "nine traded buckets draw a line");
+  assert.equal(forcesLine([...traded(10), bar(10, 1, 0)]), false, "ten traded buckets draw candles; flat bars do not count");
 });
 
 test("an older quiet bucket the server fills later reloads the chart so the plot shows it", () => {
