@@ -2,7 +2,7 @@
 
 import { dispose, init, type Chart, type DeepPartial, type KLineData, type Period, type Styles } from "klinecharts";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { candleBucketStart, candleIntervalMs, type CandleInterval } from "@blast/core/modules/launchpad-contract/venue-history.ts";
+import type { CandleInterval } from "@blast/core/modules/launchpad-contract/venue-history.ts";
 import { Button } from "#web/components/blast-ui/Button.tsx";
 import { Checkbox, Switch } from "#web/components/blast-ui/Checkbox.tsx";
 import { Popover, PopoverSurface } from "#web/components/blast-ui/Popover.tsx";
@@ -13,7 +13,7 @@ import { useMobileChartLayout } from "../use-mobile-chart-layout.ts";
 import { poolPrices } from "../candle-data.ts";
 import type { CandleTrade } from "../candle-trade.ts";
 import {
-  barChanges, fillGaps, foldTrades, klineBars, MAIN_INDICATORS, PANE_INDICATORS, pricePrecision, readChartSettings, toggleIndicator, forcesLine,
+  barChanges, foldTrades, klineBars, MAIN_INDICATORS, PANE_INDICATORS, pricePrecision, readChartSettings, toggleIndicator,
   type Bar, type ChartSettings, type IndicatorName,
 } from "./kline-model.ts";
 import { subscriptZeros } from "#web/lib/market-format.ts";
@@ -63,7 +63,6 @@ export default function KLineCoinChart({ sources, interval, memeDecimals, quoteD
   const showWalletTags = walletChoice ?? walletPreference !== "hidden";
   const bars = useLiveBars(sources, interval, memeDecimals, quoteDecimals, quoteUsd, trade);
   const precision = pricePrecision(bars);
-  const drawn = style === "line" || forcesLine(bars) ? "line" : "candles";
 
   useEffect(() => {
     const element = host.current;
@@ -117,8 +116,8 @@ export default function KLineCoinChart({ sources, interval, memeDecimals, quoteD
   }, [bars, precision, interval]);
 
   useEffect(() => {
-    chart.current?.setStyles({ candle: { type: drawn === "line" ? "area" : "candle_solid", priceMark: { last: { show: latestAvailable } } } });
-  }, [drawn, latestAvailable]);
+    chart.current?.setStyles({ candle: { type: style === "line" ? "area" : "candle_solid", priceMark: { last: { show: latestAvailable } } } });
+  }, [style, latestAvailable]);
 
   useEffect(() => {
     const current = chart.current;
@@ -165,7 +164,6 @@ export default function KLineCoinChart({ sources, interval, memeDecimals, quoteD
 /** History bars with every live trade it has not seen yet folded into the open bars. */
 function useLiveBars(sources: readonly DrawnSeries[], interval: CandleInterval, memeDecimals: number | null, quoteDecimals: number | null, quoteUsd: string | null, trade?: CandleTrade | null) {
   const history = useMemo(() => klineBars(sources, memeDecimals, quoteDecimals, quoteUsd), [sources, memeDecimals, quoteDecimals, quoteUsd]);
-  const now = useBucketStart(interval);
   const [pending, setPending] = useState<readonly CandleTrade[]>([]);
   const [seen, setSeen] = useState(trade);
   if (trade !== seen) {
@@ -173,7 +171,7 @@ function useLiveBars(sources: readonly DrawnSeries[], interval: CandleInterval, 
     if (trade?.trade.price) setPending((held) => [...held.filter((item) => item.trade.cursor !== trade.trade.cursor), trade].slice(-MAX_PENDING_TRADES));
   }
   return useMemo(() => {
-    if (memeDecimals === null) return fillGaps(history, interval, now);
+    if (memeDecimals === null) return history;
     const shown = poolPrices(memeDecimals, quoteDecimals, quoteUsd);
     const quote = poolPrices(memeDecimals, quoteDecimals);
     const unseen = pending.flatMap(({ poolKey, trade: { timestampMs, price, memeAmount } }) => {
@@ -183,27 +181,16 @@ function useLiveBars(sources: readonly DrawnSeries[], interval: CandleInterval, 
       const volume = Number(shiftDecimal(memeAmount.toString(), -memeDecimals)) * Number(quote.price(price));
       return [{ timestampMs, price: Number(shown.price(price)), volume }];
     });
-    return fillGaps(foldTrades(history, interval, unseen), interval, now);
-  }, [history, interval, now, memeDecimals, quoteDecimals, quoteUsd, sources, pending]);
+    return foldTrades(history, interval, unseen);
+  }, [history, interval, memeDecimals, quoteDecimals, quoteUsd, sources, pending]);
 }
 
-/** The start of the bucket now in, moving on at each bucket boundary so a quiet chart keeps time. */
-function useBucketStart(interval: CandleInterval): number {
-  const step = candleIntervalMs(interval);
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const timer = window.setTimeout(() => setNow(Date.now()), step - (Date.now() % step) + 50);
-    return () => window.clearTimeout(timer);
-  }, [now, step]);
-  return candleBucketStart(interval, now);
-}
-
-/** The chosen range fills the plot; a range too long for 2 px a bar scrolls from its newest bar. */
+/** The chosen range fills the plot; a range too long for 3 px a bar scrolls from its newest bar. */
 function fitBars(chart: Chart, element: HTMLElement | null, count: number) {
   if (!element || count === 0) return;
   const plot = element.clientWidth - 72;
   chart.setOffsetRightDistance(12);
-  chart.setBarSpace(Math.min(12, Math.max(2, (plot - 12) / count)));
+  chart.setBarSpace(Math.min(12, Math.max(3, (plot - 12) / count)));
 }
 
 /** The page's tokens resolved to colours the canvas can use. */

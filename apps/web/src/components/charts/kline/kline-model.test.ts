@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { DrawnSeries } from "#web/components/launchpad/chart/chart-geometry.ts";
-import { barChanges, fillGaps, foldTrade, foldTrades, MAX_FILLED_BARS, klineBars, pricePrecision, readChartSettings, toggleIndicator, tradedBars, forcesLine, DEFAULT_CHART_SETTINGS, type Bar } from "./kline-model.ts";
+import { barChanges, foldTrade, foldTrades, klineBars, pricePrecision, readChartSettings, toggleIndicator, DEFAULT_CHART_SETTINGS, type Bar } from "./kline-model.ts";
 
 const MINUTE = 60_000;
 const T0 = 1_795_188_300_000; // a 5-minute boundary
@@ -82,27 +82,4 @@ test("settings survive a reload and ignore anything unknown", () => {
   const on = toggleIndicator(DEFAULT_CHART_SETTINGS, "BOLL");
   assert.deepEqual(on.indicators, ["MA", "BOLL", "VOL"]);
   assert.deepEqual(toggleIndicator(on, "MA").indicators, ["BOLL", "VOL"]);
-});
-
-test("a quiet coin's series is continuous: flat bars at the previous close through the current bucket, the newest buckets only", () => {
-  const M = 60_000;
-  const bar = (minute: number, close: number, volume = 1, open = close): Bar => ({ timestamp: minute * M, open, high: Math.max(open, close), low: Math.min(open, close), close, volume });
-  assert.deepEqual(fillGaps([bar(0, 2), bar(3, 5)], "1m", 5 * M + 30_000),
-    [bar(0, 2), bar(1, 2, 0), bar(2, 2, 0), bar(3, 5, 1, 2), bar(4, 5, 0), bar(5, 5, 0)], "each bar opens at the previous close and the tail runs to now");
-  assert.deepEqual(fillGaps([], "1m", 0), []);
-  assert.deepEqual(fillGaps([{ ...bar(0, 2), timestamp: 20_000 }, bar(1, 3)], "1m", M), [bar(0, 2), bar(1, 3, 1, 2)], "a carried close snaps to its bucket");
-  const sparse = fillGaps([bar(0, 1), bar(9, 2)], "1m", 9 * M, 4);
-  assert.deepEqual(sparse.map((row) => row.timestamp / M), [0, 6, 7, 8, 9], "only the newest buckets up to the cap are filled");
-  assert.equal(fillGaps([bar(0, 1), bar(MAX_FILLED_BARS * 3, 2)], "1m", MAX_FILLED_BARS * 3 * M).length, MAX_FILLED_BARS + 1);
-  assert.equal(tradedBars(fillGaps([bar(0, 2), bar(3, 5)], "1m", 3 * M)), 2);
-  const traded = (count: number) => Array.from({ length: count }, (_, i) => bar(i, 1));
-  assert.equal(forcesLine(traded(9)), true, "nine traded buckets draw a line");
-  assert.equal(forcesLine([...traded(10), bar(10, 1, 0)]), false, "ten traded buckets draw candles; flat bars do not count");
-});
-
-test("an older quiet bucket the server fills later reloads the chart so the plot shows it", () => {
-  const bar = (minute: number, close: number, volume = 1): Bar => ({ timestamp: minute * 60_000, open: close, high: close, low: close, close, volume });
-  const shown = [bar(0, 2), bar(1, 2, 0), bar(2, 2)];
-  assert.equal(barChanges(shown, [bar(0, 2), bar(1, 3), bar(2, 2)]).kind, "reset");
-  assert.equal(barChanges(shown, [bar(0, 4), bar(1, 2, 0), bar(2, 2)]).kind, "reset", "a traded bar that changed still reloads");
 });
