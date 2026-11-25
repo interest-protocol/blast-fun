@@ -8,8 +8,9 @@ const requests: string[] = [];
 let homeSections: string;
 let holdPosts: Promise<void> | null = null;
 let holdMarket: Promise<void> | null = null;
+let bondingFails = false;
 const fixture = "blast.test.homeRequest";
-const state = { requests, sections: () => homeSections, holdPosts: () => holdPosts, holdMarket: () => holdMarket };
+const state = { requests, sections: () => homeSections, holdPosts: () => holdPosts, holdMarket: () => holdMarket, bondingFails: () => bondingFails };
 
 function localModule(source: string) {
   return { shortCircuit: true, url: `data:text/javascript,${encodeURIComponent(source)}` };
@@ -29,7 +30,10 @@ test("Home starts visible reads, uses the 24-hour leaderboard, and can render wh
         return localModule("export async function connection() {}");
       }
       if (specifier === "#web/lib/backend-api/bonding.ts") {
-        return localModule("export async function readBondingHeroFromBackend() { return null; }");
+        return localModule(`export async function readBondingHeroFromBackend() {
+          if (globalThis[${JSON.stringify(fixture)}].bondingFails()) throw new Error("bonding hero down");
+          return null;
+        }`);
       }
       if (specifier === "#web/lib/launch-flags.server.ts") {
         return localModule("export async function requestLaunchFlags() { return { trading: false }; }");
@@ -100,7 +104,13 @@ test("Home starts visible reads, uses the 24-hour leaderboard, and can render wh
       pending.resolve();
       await page;
     }
+
+    homeSections = "-coins.-presales.-posts.-traders";
+    bondingFails = true;
+    const withoutCurves = await Home({ searchParams });
+    assert.equal(withoutCurves.props.pinned.curves, null, "a failed bonding read leaves the launch highlights without curves");
   } finally {
+    bondingFails = false;
     hooks.deregister();
     Reflect.deleteProperty(globalThis, fixture);
   }

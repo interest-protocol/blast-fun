@@ -43,7 +43,7 @@ async function loadHome(state: HomeViewState, sections: HomeSectionPrefs, rows: 
   // Once the highlights land, a ready coins result can paint directly; an unfinished read streams into the card.
   const [pinnedPresales, pinnedCurves, initial] = await Promise.all([
     readFeaturedPresalesFromBackend().catch(failed("pinned-presales")),
-    readBondingHeroFromBackend().then((seed) => seed ?? failed("pinned-curves")()),
+    readBondingHeroFromBackend().then((seed) => seed ?? failed("pinned-curves")(), failed("pinned-curves")),
   ]).then(async ([presales, curves]) => [presales, curves, await Promise.race([coins, coinsPending] as const)] as const);
   return {
     coins: initial === coinsPending ? coins : initial,
