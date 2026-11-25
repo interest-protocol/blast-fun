@@ -393,7 +393,7 @@ test("connected activity stream capacity is explicit and bounded by the relay bu
     backendConfig({ ...environment, BLAST_BACKEND_MAX_HINT_STREAMS: "512" }).maxHintStreams,
     512,
   );
-  for (const value of ["0", "513", "1.5", "NaN", "Infinity", ""]) {
+  for (const value of ["0", "1025", "1.5", "NaN", "Infinity", ""]) {
     assert.throws(
       () =>
         backendConfig({

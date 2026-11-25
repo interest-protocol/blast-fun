@@ -63,14 +63,15 @@ read and uses ordinary admission despite its 60-second budget. Other long
 workflows remain bounded until their owner costs are assessed; receipt rendering
 retains its existing four-workflow limit rather than changing its contention.
 
-`BLAST_BACKEND_MAX_HINT_STREAMS` is optional: default 200, integer range 1–512 per
-replica. The maximum derives from a 32 MiB application relay queue payload budget:
-512 clients × 64 queued chunks × at most 1 KiB per encoded chunk. Slow readers
-close before exceeding 64 chunks; every outgoing frame has the byte bound. This
-budget excludes JavaScript/runtime overhead, Bun/kernel socket and proxy buffers,
-and bandwidth. One upstream is shared per process. Configuring 512 permits 10,000
-simultaneous tabs across at least 20 replicas arithmetically; local connection
-checks do not establish production memory, egress, or 10,000-user latency.
+`BLAST_BACKEND_MAX_HINT_STREAMS` is optional: default 200, integer range 1–1,024
+per replica. The relay and SSE admission both use the configured value. The
+maximum derives from a 64 MiB application relay queue payload budget: 1,024
+clients × 64 queued chunks × at most 1 KiB per encoded chunk. Slow readers close
+before exceeding 64 chunks; every outgoing frame has the byte bound. This budget
+excludes JavaScript/runtime overhead, Bun/kernel socket and proxy buffers, and
+bandwidth. One upstream is shared per process. A local check on 2026-11-25
+measured about 35 KB a socket idle and 60 KB under traffic, with CPU running out
+before memory; confirm on the deployed plan before raising the configured value.
 
 ## Source organization
 
