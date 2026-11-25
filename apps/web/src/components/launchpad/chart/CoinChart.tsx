@@ -29,8 +29,7 @@ export function CoinChart({
   initialControls,
   initialSnapshot,
   livePreset,
-  checkpoint,
-}: Readonly<{ source: ChartSource; compact?: boolean; coinType: string; initialControls: ChartControls; initialSnapshot?: ChartSnapshot; livePreset: boolean; checkpoint?: number | null }>) {
+}: Readonly<{ source: ChartSource; compact?: boolean; coinType: string; initialControls: ChartControls; initialSnapshot?: ChartSnapshot; livePreset: boolean }>) {
   const currency = useCoinPriceCurrency();
   const standaloneRate = useQuoteUsd(currency ? null : source.quoteType ?? null);
   const quoteUsd = currency ? currency.quoteUsd : standaloneRate;
@@ -50,7 +49,7 @@ export function CoinChart({
   const [useEntry, setUseEntry] = useState(true);
   const venuePoolKey = source.venuePoolKey ?? state.migration?.venuePoolKey ?? null;
   const curvePoolKey = source.curvePoolKey;
-  const currentPrice = useShownPrice(venuePoolKey ?? curvePoolKey, checkpoint ?? null);
+  const currentPrice = useShownPrice(venuePoolKey ?? curvePoolKey);
   const migrationCursor = source.migration?.cursor ?? null;
   const migrationTimestamp = source.migration?.timestampMs ?? null;
   const migrationCurve = source.migration?.curvePoolKey ?? null;
@@ -167,8 +166,8 @@ function chartUpdateText(status: ChartStreamStatus, preview: boolean): string | 
 }
 
 /** The chart's price: `undefined` until the stream's first price (the last close shows), `null` once the stream withdraws it. */
-function useShownPrice(poolKey: string | null, checkpoint: number | null): string | null | undefined {
-  const price = useChartPrice(poolKey, checkpoint);
+function useShownPrice(poolKey: string | null): string | null | undefined {
+  const price = useChartPrice(poolKey);
   const [pricedPool, setPricedPool] = useState<string | null>(null);
   if (price && pricedPool !== poolKey) setPricedPool(poolKey);
   return price?.price ?? (pricedPool === poolKey ? null : undefined);

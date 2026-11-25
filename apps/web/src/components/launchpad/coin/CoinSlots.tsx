@@ -249,8 +249,7 @@ function CoinChartSlot({ page, market, controls, compact, initialSnapshot }: Rea
 }>) {
   const chart = coinChartOptions(page, market, controls);
   if (typeof chart !== "string") {
-    const checkpoint = (page.source.kind === "venue" ? page.venue : page.curve)?.provenance?.checkpoint ?? null;
-    return <CoinChart key={chart.coinType} {...chart} compact={compact} initialSnapshot={initialSnapshot} checkpoint={checkpoint} />;
+    return <CoinChart key={chart.coinType} {...chart} compact={compact} initialSnapshot={initialSnapshot} />;
   }
   return (
     <DataState state={{ status: "unavailable", reason: chart }} subject="price chart" recovery="">

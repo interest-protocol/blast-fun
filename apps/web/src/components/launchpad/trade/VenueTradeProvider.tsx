@@ -17,6 +17,7 @@ import type { TradeDirection } from "./curve-adapter";
 import { venueTradeAdapter, type VenueTradeInput } from "./venue-adapter";
 import { readRecordedSwap, readVenueAvailability, readVenueRoute, type VenueLocator, type VenueRouteRead, type VenueTrade } from "./venue-route";
 import { gateVenueTrades } from "./venue-session";
+import { noteOwnTrade } from "../chart/chart-live-price";
 
 export const DEFAULT_VENUE_SLIPPAGE_BPS = 100n;
 
@@ -154,7 +155,8 @@ export function VenueTradeProvider({
   }, [onInvalidate, shellBalances]);
   useEffect(() => {
     const stops = (["buy", "sell"] as const).map((key) =>
-      controllers[key].onInvalidate((keys) => {
+      controllers[key].onInvalidate((keys, checkpoint) => {
+        if (checkpoint !== null) noteOwnTrade(locator.launchId, checkpoint);
         refresh();
         invalidateRef.current?.(keys);
         void invalidateAfter(queries, { kind: "trade" }).catch(() => {});
@@ -162,7 +164,7 @@ export function VenueTradeProvider({
       }),
     );
     return () => stops.forEach((stop) => stop());
-  }, [controllers, refresh, queries]);
+  }, [controllers, refresh, queries, locator.launchId]);
 
   // What a reconciled swap did, from its own transaction; refresh reads when a review opens or is refused.
   useEffect(() => {

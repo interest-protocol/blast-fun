@@ -19,7 +19,7 @@ const { priceQuery } = await import("#web/components/social/prices/price-client.
 const { useCoinPriceCurrency } = await import("#web/components/launchpad/chart/CoinPriceCurrency.tsx");
 const { setShellPref } = await import("#web/components/blast-ui/use-shell-prefs.ts");
 const { ChartLastTrade } = await import("#web/components/launchpad/chart/ChartLastTrade.tsx");
-const { publishChartPrice, useChartPrice } = await import("#web/components/launchpad/chart/chart-live-price.ts");
+const { noteOwnTrade, publishChartPrice, useChartPrice } = await import("#web/components/launchpad/chart/chart-live-price.ts");
 const { BondingCoinScreen } = await import("./BondingCoinScreen.tsx");
 const { CoinPriceFigure } = await import("./CoinPageParts.tsx");
 
@@ -46,8 +46,9 @@ function ChartCurrencyProbe() {
   return <output aria-label="Chart currency">{selection?.unit} {selection?.quoteUsd}</output>;
 }
 
-test("both coin price consumers hide a stream close behind the page's confirmed checkpoint", async (t) => {
-  const page = coinScreenFixture("live");
+test("both coin price consumers show the best known close at once, and after the viewer's trade only one that includes it", async (t) => {
+  // Its own launch: the viewer's trades are kept for the tab's lifetime.
+  const page = { ...coinScreenFixture("live"), launchId: "own-trade-launch" };
   assert.ok(page.curve.state === "available");
   const curve = page.curve;
   const checkpoint = curve.provenance.checkpoint!;
@@ -75,15 +76,21 @@ test("both coin price consumers hide a stream close behind the page's confirmed 
   const held = () => container.querySelector('[aria-label="Price chart"]')?.previousElementSibling?.querySelector('strong[aria-hidden="true"]')?.textContent;
   const values = () => [header(), container.querySelector("output")?.textContent];
   await render(checkpoint);
-  await publish(checkpoint, "1.25");
+  // A quiet pool's close can predate the page's read: it is still the price.
+  await publish(checkpoint - 5, "1.25");
   const shown = header();
   assert.ok(shown && shown !== "—");
   assert.equal(values()[1], "1.25");
   assert.equal(held(), undefined);
+  // A routine page refresh does not hide it.
   await render(checkpoint + 1);
+  assert.equal(header(), shown);
+  assert.equal(values()[1], "1.25");
+  // The viewer's own trade does, until a close includes it.
+  await act(async () => noteOwnTrade(page.launchId, checkpoint + 2));
   assert.deepEqual(values(), ["—", "—"]);
   assert.equal(held(), shown);
-  await publish(checkpoint + 1, "1.5");
+  await publish(checkpoint + 2, "1.5");
   assert.ok(header() && header() !== "—");
   assert.equal(values()[1], "1.5");
   assert.equal(held(), undefined);

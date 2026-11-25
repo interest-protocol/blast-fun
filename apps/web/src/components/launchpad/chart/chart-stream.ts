@@ -10,11 +10,15 @@ import { chartPriceRemaining, publishChartPrice, type ChartPriceUpdate } from ".
 import type { ChartRequest } from "./chart-model.ts";
 
 export type ChartStreamStatus = "connecting" | "streaming" | "recovering" | "reconnecting" | "unavailable" | "paused";
+/** A live stream renews a quiet pool's price once this little of its proof is left, before the next poll tick. */
+const PRICE_RENEW_MS = 20_000;
 type Pool = {
   fence: number | null;
   cutoff: number | null;
   priceMissing: boolean;
   cancelPriceExpiry: (() => void) | null;
+  /** When the last published price's proof runs out, kept after it does; null while the pool has no price. */
+  priceProofEnds: number | null;
   page: PoolCandlePage | null;
   section: Section<PoolCandlePage> | null;
   loading: boolean;
@@ -73,7 +77,7 @@ export class ChartStream {
 
   constructor(options: Options) {
     this.options = options;
-    for (const pool of options.pools) this.pools.set(pool, { fence: null, cutoff: null, priceMissing: false, cancelPriceExpiry: null, page: null, section: null, loading: false, buffered: [], retryAttempts: 0, cancelRetry: null, inflight: null, untouched: null });
+    for (const pool of options.pools) this.pools.set(pool, { fence: null, cutoff: null, priceMissing: false, cancelPriceExpiry: null, priceProofEnds: null, page: null, section: null, loading: false, buffered: [], retryAttempts: 0, cancelRetry: null, inflight: null, untouched: null });
   }
 
   start(initial?: readonly (readonly [string, ChartPoolRead])[]): void {
@@ -146,14 +150,18 @@ export class ChartStream {
       const remaining = this.options.pollMs?.();
       if (remaining === false) return;
       if (remaining && remaining > 0) return this.poll();
-      // A hidden tab reads nothing; its stream's next fence brings the chart up to date. A live
-      // stream needs no read either when the screen asked for none (`livePolls`).
-      if (this.visible() && !(this.options.livePolls === false && this.hubState === "live")) {
-        // A curve the coin has migrated off trades no more: once its history is read, only the venue is polled.
-        const curve = this.options.migration()?.curvePoolKey;
-        void Promise.all([...this.pools].filter(([key, pool]) => key !== curve || pool.page === null).map(([key]) => this.load(key)))
-          .then(() => this.poll());
-      } else this.poll();
+      // A hidden tab reads nothing; its stream's next fence brings the chart up to date.
+      if (!this.visible()) return this.poll();
+      // A live stream needs no read when the screen asked for none (`livePolls`), except to renew the
+      // price of a quiet pool, whose proof would otherwise run out before the next tick.
+      const live = this.options.livePolls === false && this.hubState === "live";
+      const renewBy = this.now() + PRICE_RENEW_MS;
+      // A curve the coin has migrated off trades no more: once its history is read, only the venue is polled.
+      const curve = this.options.migration()?.curvePoolKey;
+      const due = [...this.pools].filter(([key, pool]) => (key !== curve || pool.page === null)
+        && (!live || (pool.priceProofEnds !== null && pool.priceProofEnds <= renewBy)));
+      if (!due.length) return this.poll();
+      void Promise.all(due.map(([key]) => this.load(key))).then(() => this.poll());
     }, Math.max(1_000, delay));
   }
 
@@ -162,8 +170,10 @@ export class ChartStream {
     const resumed = this.hubState === "paused" && state === "connecting";
     this.hubState = state;
     if (this.stopped || state === "live") return;
+    // A pool the stream never served is the polls' alone: their history and price stay on screen.
+    if (state === "unavailable") this.dropFences();
     // A fence ends with its connection; "connecting" after a pool change replaces one still held.
-    if (state !== "connecting" || [...this.pools.values()].some((pool) => pool.fence !== null)) this.unfence();
+    else if (state !== "connecting" || [...this.pools.values()].some((pool) => pool.fence !== null)) this.unfence();
     this.options.onStatus(state);
     if (resumed) void this.refresh();
   }
@@ -181,9 +191,11 @@ export class ChartStream {
       // (the chart opened, or its interval changed, and the read beat the stream's fence).
       const read = pool.loading ? null : pool.untouched;
       if (read !== null && read >= pool.fence && pool.page && pool.section) this.acceptRead(key, pool.page, pool.section, read);
-      // An already-running pre-fence read is validated against this fence when it settles.
+      // An already-running pre-fence read is validated against this fence when it settles. Until a
+      // read reaches the fence, the shown price is the best one known, unless the stream says the
+      // latest trade has none.
       else {
-        this.invalidatePrice(key);
+        if (priceMissing) this.invalidatePrice(key);
         void this.load(key);
       }
     } catch {
@@ -201,6 +213,15 @@ export class ChartStream {
     }
     if (pool.cutoff === null) this.buffer(pool, frame, chars);
     else this.apply(frame.poolKey, frame, chars);
+  }
+
+  /** Frames stop for every pool; reads and what they showed stay. */
+  private dropFences(): void {
+    for (const pool of this.pools.values()) {
+      pool.fence = null;
+      pool.cutoff = null;
+      pool.buffered = [];
+    }
   }
 
   /** A lost fence voids in-flight reads and leaves only historical candles on screen. */
@@ -255,7 +276,9 @@ export class ChartStream {
       this.adoptRead(key, answer, Math.max(required, pool.fence ?? 0));
     } catch {
       if (this.stopped || generation !== this.generation) return;
-      pool.cutoff = null;
+      // Shown history follows the stream, which keeps it current: a failed read changes nothing, and
+      // the next tick reads again.
+      if (pool.cutoff !== null) return;
       this.options.onSection(key, { state: "unavailable", reason: "stream-history-unavailable" }, null);
       this.options.onStatus("unavailable");
       this.invalidatePrice(key);
@@ -268,24 +291,33 @@ export class ChartStream {
   private adoptRead(key: string, answer: ChartPoolRead, required: number): void {
     const pool = this.pools.get(key)!;
     const checkpoint = answer.section.provenance?.checkpoint ?? null;
+    // A healthy stream advances while HTTP is in flight. Its prior snapshot cannot undo a trade.
+    const newer = checkpoint !== null && checkpoint >= (pool.section?.provenance?.checkpoint ?? 0);
     if (answer.page && checkpoint !== null && checkpoint >= required) {
-      // A healthy stream advances while HTTP is in flight. Its prior snapshot cannot undo a trade.
-      if (checkpoint >= (pool.section?.provenance?.checkpoint ?? 0)) {
-        this.acceptRead(key, answer.page, answer.section, checkpoint);
-      }
+      if (newer) this.acceptRead(key, answer.page, answer.section, checkpoint);
       return;
     }
-    pool.cutoff = null;
-    const section = answer.page
-      ? { state: "unavailable", reason: "stream-history-behind", provenance: answer.section.provenance } as const
-      : answer.section;
-    this.options.onSection(key, section, answer.page?.migration ?? null);
+    // Shown history already reaches the fence and follows the stream: an older or failed read changes nothing.
+    if (pool.cutoff !== null) return;
+    if (answer.page && newer) {
+      // History behind the stream's fence is still the best known: show it and its close while
+      // frames wait for a read that reaches the fence.
+      this.acceptRead(key, answer.page, answer.section, checkpoint, false);
+      // The read itself already waited once for the fence (`atCheckpoint`); wait longer before the next.
+      pool.retryAttempts = Math.max(pool.retryAttempts, 2);
+    } else if (!answer.page) {
+      this.options.onSection(key, answer.section, null);
+      this.invalidatePrice(key);
+    }
     this.options.onStatus("recovering");
-    this.invalidatePrice(key);
     this.retry(key);
   }
 
-  private acceptRead(key: string, page: PoolCandlePage, section: Section<PoolCandlePage>, checkpoint: number): void {
+  /**
+   * Show a history read and its close. `follow`: the read reaches the stream's fence, so buffered
+   * and later frames apply on top of it.
+   */
+  private acceptRead(key: string, page: PoolCandlePage, section: Section<PoolCandlePage>, checkpoint: number, follow = true): void {
     const migration = this.options.migration();
     if (migration && !sameChartMigration(migration, page.migration)) throw new Error("History does not name the committed migration");
     const pool = this.pools.get(key)!;
@@ -293,19 +325,21 @@ export class ChartStream {
     this.pendingPrices.delete(key);
     pool.page = page;
     pool.section = section;
-    pool.cutoff = checkpoint;
-    pool.retryAttempts = 0;
     pool.untouched = checkpoint;
     const close = latestClose(page);
     this.pending.add(key);
-    this.pendingPrices.set(key, pool.fence !== null && section.state === "available" && close !== undefined
+    this.pendingPrices.set(key, section.state === "available" && close !== undefined
       ? { price: close, poolKey: key, cursor: null, provenance: section.provenance }
       : null);
-    const buffered = pool.buffered;
-    pool.buffered = [];
-    for (const item of buffered) this.apply(key, item.frame, item.chars, false);
+    if (follow) {
+      pool.cutoff = checkpoint;
+      pool.retryAttempts = 0;
+      const buffered = pool.buffered;
+      pool.buffered = [];
+      for (const item of buffered) this.apply(key, item.frame, item.chars, false);
+    }
     this.publishPool(key);
-    if ([...this.pools.values()].every((item) => item.fence !== null && item.cutoff !== null)) this.options.onStatus("streaming");
+    if (follow && [...this.pools.values()].every((item) => item.fence !== null && item.cutoff !== null)) this.options.onStatus("streaming");
   }
 
   private invalidatePrice(key: string): void {
@@ -350,6 +384,8 @@ export class ChartStream {
     const remaining = price ? this.priceRemaining(price.provenance) : 0;
     pool.cancelPriceExpiry?.();
     pool.cancelPriceExpiry = null;
+    // Stale history is due at once: the next visible tick reads it again rather than leave "—" until a trade.
+    pool.priceProofEnds = price && !pool.priceMissing ? this.now() + remaining : pool.section?.state === "stale" ? this.now() : null;
     if (!price || pool.priceMissing || remaining <= 0) {
       publishChartPrice(key, null);
       return;
@@ -359,7 +395,11 @@ export class ChartStream {
   }
 
   private priceRemaining(provenance: ChartPriceUpdate["provenance"]): number {
-    return chartPriceRemaining(provenance, WORKLOAD_ROUTES.market.maxLagMs, (this.options.now ?? Date.now)());
+    return chartPriceRemaining(provenance, WORKLOAD_ROUTES.market.maxLagMs, this.now());
+  }
+
+  private now(): number {
+    return (this.options.now ?? Date.now)();
   }
 
   private buffer(pool: Pool, frame: ChartFrame, chars: number): void {

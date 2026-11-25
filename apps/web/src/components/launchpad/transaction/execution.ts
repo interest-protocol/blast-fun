@@ -211,5 +211,5 @@ export async function reconcileTransaction({
       message: diagnosticMessage(`Transaction ${digest} completed, but its expected Blast record was not found. Check the transaction before signing again.`, { code: "evidence-missing" }),
     };
   }
-  return { status: "succeeded", explorerUrl };
+  return { status: "succeeded", explorerUrl, checkpoint: Number(transaction.checkpoint) };
 }

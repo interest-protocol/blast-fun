@@ -18,17 +18,41 @@ const listeners = new Map<string, Set<Listener>>();
 const currentPrices = new Map<string, ChartPriceUpdate>();
 const noPrice = () => null;
 
-export const ChartPriceCheckpoint = createContext<Readonly<{ poolKey: string | null; checkpoint: number | null }> | null>(null);
+const ownTrades = new Map<string, number>();
+const ownTradeListeners = new Set<() => void>();
 
-export function useChartPrice(poolKey: string | null, checkpoint: number | null = null): ChartPriceUpdate | null {
-  const page = useContext(ChartPriceCheckpoint);
+/** The viewer's own trade on `launchId` settled at `checkpoint`. */
+export function noteOwnTrade(launchId: string, checkpoint: number): void {
+  if (checkpoint <= (ownTrades.get(launchId) ?? -1)) return;
+  ownTrades.set(launchId, checkpoint);
+  for (const listener of ownTradeListeners) listener();
+}
+
+function subscribeOwnTrades(changed: () => void): () => void {
+  ownTradeListeners.add(changed);
+  return () => ownTradeListeners.delete(changed);
+}
+
+/** The launch whose pool `poolKey` prices, for `useChartPrice` calls below the one that names it. */
+export const ChartPriceLaunch = createContext<Readonly<{ poolKey: string | null; launchId: string }> | null>(null);
+
+/**
+ * The pool's best known price. `checkpoint` holds it to a read the caller already shows. With a
+ * launch (`launchId`, or `ChartPriceLaunch` above), a price after the viewer's own trade counts
+ * once its checkpoint includes that trade. A trade frame from that checkpoint may precede the
+ * viewer's own transaction, but the stream delivers the rest of the checkpoint with it.
+ */
+export function useChartPrice(poolKey: string | null, checkpoint: number | null = null, ownLaunch?: string): ChartPriceUpdate | null {
+  const launch = useContext(ChartPriceLaunch);
+  const launchId = ownLaunch ?? (launch && launch.poolKey === poolKey ? launch.launchId : null);
+  const ownTrade = useSyncExternalStore(subscribeOwnTrades, () => launchId === null ? null : ownTrades.get(launchId) ?? null, noPrice);
   const subscribe = useCallback((changed: () => void) => poolKey
     ? subscribeChartPrice(poolKey, null, changed)
     : () => {}, [poolKey]);
   const snapshot = () => poolKey ? currentPrices.get(poolKey) ?? null : null;
   const price = useSyncExternalStore(subscribe, snapshot, noPrice);
-  const required = Math.max(checkpoint ?? -1, page && page.poolKey === poolKey ? page.checkpoint ?? -1 : -1);
-  return price && priceCoversHeader(price, required) ? price : null;
+  if (!price || !priceCoversHeader(price, checkpoint)) return null;
+  return ownTrade === null || (price.provenance.checkpoint ?? -1) >= ownTrade ? price : null;
 }
 
 /** Source progress expires independently of transport liveness or the age of the last swap. */

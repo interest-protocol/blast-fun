@@ -159,7 +159,7 @@ test("reconciliation decides success, on-chain failure, or a pending result", ()
   assert.equal(reduceAction(reconciling, { type: "edit", input: { amount: "2" } }), reconciling, "no edits mid-flight");
   const done = (outcome: ReconciliationOutcome) =>
     reduceAction(reconciling, { type: "reconciled", attempt: reconciling.attempt, outcome });
-  const succeeded = done({ status: "succeeded", explorerUrl: "https://suiscan.xyz/mainnet/tx/Dg" });
+  const succeeded = done({ status: "succeeded", explorerUrl: "https://suiscan.xyz/mainnet/tx/Dg", checkpoint: 41 });
   assert.equal(succeeded.phase, "succeeded");
   assert.equal(succeeded.phase === "succeeded" && succeeded.explorerUrl, "https://suiscan.xyz/mainnet/tx/Dg");
   const failed = done({ status: "failed", explorerUrl: null, message: "The launch aborted the purchase." });

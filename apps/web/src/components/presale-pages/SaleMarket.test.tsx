@@ -11,6 +11,8 @@ const { createRoot } = await import("react-dom/client");
 const { renderToStaticMarkup } = await import("react-dom/server");
 const { SaleMarket, SaleMarketView } = await import("./SaleMarket.tsx");
 const { SaleView } = await import("./SaleView.tsx");
+const { SaleTradeFeed } = await import("./SaleTrades.tsx");
+const { ChartLastTrade } = await import("#web/components/launchpad/chart/ChartLastTrade.tsx");
 const { coinsByIdsQuery } = await import("../social/coin-home/home-client.ts");
 const { createTestQueryClient, withQueryClient } = await import(
   "#web/lib/query/test-client.ts"
@@ -338,6 +340,14 @@ test("a graduated pool shows a dash until its current close is confirmed", () =>
   const html = renderToStaticMarkup(withQueryClient(client, <SaleMarket nowMs={FIXTURE_NOW} sale={sale} terms={detail.terms} />));
   assert.match(html, /<span>Price<\/span><strong>—<\/strong>/);
   assert.doesNotMatch(html, /\+\$0\.0137/);
+  client.clear();
+});
+
+test("before its first trade read, the headline keeps the width of the sale quote's largest trade", () => {
+  const client = createTestQueryClient();
+  const sale = fixtureDetail("kstl").presale;
+  const html = renderToStaticMarkup(withQueryClient(client, <SaleTradeFeed sale={sale}><ChartLastTrade placement="headline" /></SaleTradeFeed>));
+  assert.match(html, new RegExp(`data-width-sample="Large buy · 8+\\u00a0${sale.quote_symbol}"`));
   client.clear();
 });
 
