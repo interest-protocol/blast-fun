@@ -56,7 +56,7 @@ For a site-wide pass on concise dates, icons, and semantic color, use [Blast fro
 | Pagination | `Pager` (`pages` or `hasMore`; `alwaysShow` keeps a single page) | Previous/Next markup |
 | Page title | `PageHeader` | a bare `<h1>` in a route view |
 | Price or amount text | `readablePrice` (lib/market-format.ts), `chartPrice`/`chartNumber` (charts), presale `qm`/`qs`/`saleMoney` | `toPrecision`, `toExponential`, `e-` output |
-| Chart | KLineCharts (`components/charts/kline`) for the coin page chart; TradingView Lightweight Charts components in `components/charts` elsewhere | a third chart library |
+| Chart | the TradingView Lightweight Charts components in `components/charts` | a new chart library |
 | Trading venue (Cetus, Bluefin, Aftermath) | `DexIdentity` icon with an accessible name (`size` 16–24); where the person picks a venue, `DexIdentity` with its name beside the icon | the venue's name as plain text without the icon |
 
 ## Rules that bite
