@@ -373,7 +373,7 @@ export function createLiveSocket(options: LiveSocketOptions) {
       }
       const client = attestClientAddress(ingressAddress(request, peer, options.ingress));
       if (!client) {
-        // Shows which proxy peers (their /24 or /64, the narrowest trusted range) and header shapes arrive, never a client address.
+        // Shows which proxy peers (their /24 or /64) and header shapes arrive, never a client address.
         observeMetric("live.socket.refused", {
           cause: "client-address",
           ingress: options.ingress.mode,

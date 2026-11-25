@@ -44,6 +44,10 @@ test("a private 10/8 proxy range may be as wide as /13", () => {
   });
   assert.equal(ingressAddress(request, "10.31.155.4", trust), "198.51.100.7");
   assert.equal(ingressAddress(request, "10.32.0.1", trust), null, "outside the /13");
+  assert.equal(ingressAddress(request, "::ffff:10.31.155.4", trust), "198.51.100.7", "a mapped peer");
+  const mapped = { BLAST_BACKEND_INGRESS_MODE: "trusted-proxy" };
+  assert.doesNotThrow(() => ingressTrust({ ...mapped, BLAST_BACKEND_TRUSTED_PROXY_CIDRS: "::ffff:10.24.0.0/109" }));
+  assert.throws(() => ingressTrust({ ...mapped, BLAST_BACKEND_TRUSTED_PROXY_CIDRS: "::ffff:10.24.0.0/108" }));
 });
 
 test("proxy CIDRs normalize mapped IPv6 and key on the entry the proxy appended", () => {

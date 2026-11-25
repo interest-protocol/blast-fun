@@ -7,7 +7,7 @@ export type IngressTrust = Readonly<{ mode: "direct" }> | Readonly<{ mode: "trus
 type Environment = Readonly<Record<string, string | undefined>>;
 
 /** Render's edge proxies sit in 10.24.0.0/13 and move between /24s, so ranges inside 10/8 may be as wide as /13. */
-const PRIVATE_PROXY_SPACE: Network = [ipaddr.parse("10.0.0.0"), 8];
+const PRIVATE_PROXY_SPACE = ipaddr.parseCIDR("10.0.0.0/8");
 const PRIVATE_PROXY_MIN_PREFIX = 13;
 
 /** One address, never a forwarded chain, zone identifier or permissively parsed IPv4. */
@@ -27,8 +27,9 @@ function proxyNetwork(value: string): Network {
   const parsed = ipaddr.parse(canonical);
   const maximum = parsed.kind() === "ipv4" ? 32 : 128;
   const prefix = width === undefined ? maximum : Number(width) - (mapped ? 96 : 0);
-  // Wide internal/platform ranges would trust unrelated tenants. Deployment must
-  // supply the actual ingress ranges; nothing implicitly trusts private IPs.
+  // A trusted range can set any client key, so deployment supplies the actual ingress ranges and
+  // nothing implicitly trusts private IPs. A /13 inside 10/8 assumes that space carries only the
+  // platform's edge proxies; the Render probe saw nothing else there (live-data-delivery.md).
   let minimum = 64;
   if (parsed.kind() === "ipv4") minimum = parsed.match(PRIVATE_PROXY_SPACE) ? PRIVATE_PROXY_MIN_PREFIX : 24;
   if (prefix < minimum || prefix > maximum) throw new Error("Trusted proxy CIDRs must be IPv4 /24+ (/13+ inside 10.0.0.0/8) or IPv6 /64+ ranges.");
