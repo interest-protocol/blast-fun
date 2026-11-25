@@ -1147,7 +1147,7 @@ test("Discover and saved coins fill missing price and supply from tracked pools 
   });
 });
 
-test("Tracked pool coins date Age from their package publish and skip the Top 10 read", { skip }, () => {
+test("Tracked pool coins date Age from their package publish and share Top 10 of the node supply", { skip }, () => {
   const bySymbol = new Map(INDEXED_POOL_COINS.map((coin) => [coin.symbol, coin]));
   const one = bySymbol.get("ONE")!;
   const helmet = bySymbol.get("HELMET")!;
@@ -1162,9 +1162,10 @@ test("Tracked pool coins date Age from their package publish and skip the Top 10
     });
     const saved = await ok<HomeCoinsByIds>(await coins(`?presale=${encodeURIComponent(one.coinType)}&presale=${encodeURIComponent(helmet.coinType)}`), "home-coins-page");
     assert.deepEqual(saved.coins.map((coin) => [coin.symbol, coin.launched_ms]), [["ONE", 1_700_000_000_000], ["HELMET", 1_690_000_000_000]]);
-    // `readTopHolders` skips a tracked pool coin, even with balances indexed (see its comment).
+    // 3 and 1.5 of the node's 15 circulating: 20 % and 10 %, 30 % together.
     const [oneRow] = saved.coins;
-    assert.deepEqual(oneRow?.top_holders, { holders: [], share_bps: null });
+    assert.deepEqual(oneRow?.top_holders.holders.map((holder) => holder.share_bps), [2_000, 1_000]);
+    assert.equal(oneRow?.top_holders.share_bps, 3_000);
 
     const page = await ok<HomeCoinsPage>(await discover("?limit=50"), "home-coins-page");
     const launchedOf = (coinType: string) => page.coins.find((coin) => coin.coin_type === coinType)?.launched_ms;

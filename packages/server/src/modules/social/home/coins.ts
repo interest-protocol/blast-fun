@@ -8,7 +8,8 @@ import type { ReadableDatabase } from "@blast/core/modules/database/transaction.
 import { coinLabel } from "@blast/core/modules/social/contracts/financial-wire.ts";
 import type { PresaleTermsReader } from "@blast/core/modules/presale/terms/index.ts";
 import { blastV1Coin } from "@blast/core/modules/social/portfolio/core-coins.ts";
-import { namedWalletsSql } from "@blast/core/modules/social/read-model/naming.ts";
+import { namedWalletsOfSql } from "@blast/core/modules/social/read-model/naming.ts";
+import { addressesOfAccountsSql } from "@blast/core/modules/social/presales/sql.ts";
 import { SocialRouteError } from "@blast/core/modules/social/route-kit/errors.ts";
 
 import {
@@ -336,24 +337,86 @@ export async function readDiscussionCounts(db: ReadableDatabase, presaleIds: rea
 export type HolderRow = Readonly<{ coin_type: string; who: string; account_id: string | null; wallet: string; balance: string }>;
 
 /**
+ * Balances read per coin beyond the holders asked for, so an account whose
+ * wallets all sit just below the holders shown can still be found.
+ */
+const HOLDER_HEADROOM = 50;
+
+/**
+ * Balances read when one coin is asked for (its holders page, or one coin by
+ * id): the 1,000 largest, the same cut `chain_read_v1.coin_balances` keeps
+ * for a tracked coin.
+ */
+const ONE_COIN_HOLDER_ROWS = 1000;
+
+/** A holder balance from `chain_read_v1.coin_balances`, where the view's own rows are not a position. */
+const HOLDER_BALANCE_SQL = `cb.balance > 0 AND NOT (cb.owner = ANY($2::text[]))
+        AND cb.owner <> ('0x' || repeat('0', 64))
+        AND NOT EXISTS (SELECT 1 FROM chain_read_v1.pools pl WHERE pl.pool_key = cb.owner)`;
+
+/**
  * The biggest holders of each coin now, from `chain_read_v1.coin_balances`:
  * an account's wallets summed into one holder (the naming rule as of now),
  * an unnamed wallet its own; the sale's own object, its pool and any pool
  * address left out (they hold the supply, not a position), and `0x0`, whose
  * burned balance the view lists but the live supply already subtracts. $1
- * coin types, $2 the addresses left out, $3 the clock, $4 holders per coin.
+ * coin types, $2 the addresses left out, $3 the clock, $4 holders per coin,
+ * $5 balances read per coin.
+ *
+ * Each step after the first reads by index and is bounded by the rows
+ * before it, so no row estimate for the view can make it slow (joining every
+ * holder to every named wallet let one pick a nested loop over all of them,
+ * past Home's 2 s statement timeout):
+ *
+ * 1. `home_top`: each coin's `$5` largest balances (a tracked coin's view
+ *    rows are its 1,000 largest; a launch or sale coin sorts all its holders).
+ * 2. `home_named`: the owners of those wallets, by address.
+ * 3. `home_account_wallets`: every wallet of those owners, by account.
+ * 4. `home_account_balances`: those wallets' balances of the coin (by
+ *    `(coin_type, owner)`, or among a tracked coin's 1,000 view rows), so
+ *    each account sums all its wallets.
+ *
+ * An account none of whose wallets is among a coin's `$5` largest balances
+ * is not listed for it, and one account holding most of those balances can
+ * leave fewer than `$4` holders listed.
  */
-const TOP_HOLDERS_SQL = `WITH home_named AS (${namedWalletsSql()}),
+const TOP_HOLDERS_SQL = `WITH home_top AS MATERIALIZED (
+    SELECT home_coin.coin_type, top.owner, top.balance
+    FROM (SELECT DISTINCT unnest($1::text[]) AS coin_type) home_coin
+    CROSS JOIN LATERAL (
+      SELECT cb.owner, cb.balance FROM chain_read_v1.coin_balances cb
+      WHERE cb.coin_type = home_coin.coin_type AND ${HOLDER_BALANCE_SQL}
+      ORDER BY cb.balance DESC, cb.owner
+      LIMIT $5::int) top
+  ),
+  home_named AS MATERIALIZED (
+    SELECT n.* FROM (${namedWalletsOfSql("ARRAY(SELECT DISTINCT t.owner FROM home_top t)")}) n WHERE n.named_from_ms <= $3::bigint
+  ),
+  home_account_wallets AS MATERIALIZED (
+    SELECT n.* FROM (${namedWalletsOfSql(`ARRAY(SELECT mine.address FROM (${addressesOfAccountsSql("ARRAY(SELECT DISTINCT hn.account_id FROM home_named hn)")}) mine)`)}) n
+    WHERE n.named_from_ms <= $3::bigint AND n.account_id IN (SELECT hn.account_id FROM home_named hn)
+  ),
+  home_account_balances AS MATERIALIZED (
+    SELECT home_coin.coin_type, held.owner, held.balance
+    FROM (
+      SELECT t.coin_type, array_agg(DISTINCT w.address) AS addresses
+      FROM home_top t
+      JOIN home_named hn ON hn.address = t.owner
+      JOIN home_account_wallets w ON w.account_id = hn.account_id
+      GROUP BY t.coin_type
+    ) home_coin
+    CROSS JOIN LATERAL (
+      SELECT cb.owner, cb.balance FROM chain_read_v1.coin_balances cb
+      WHERE cb.coin_type = home_coin.coin_type AND cb.owner = ANY(home_coin.addresses) AND ${HOLDER_BALANCE_SQL}
+    ) held
+  ),
   home_holders AS (
-    SELECT cb.coin_type,
-      CASE WHEN n.account_id IS NULL THEN 'w:' || cb.owner ELSE 'a:' || n.account_id::text END AS who,
-      n.account_id::text AS account_id, min(cb.owner) AS wallet, sum(cb.balance) AS balance
-    FROM chain_read_v1.coin_balances cb
-    LEFT JOIN home_named n ON n.address = cb.owner AND n.named_from_ms <= $3::bigint
-    WHERE cb.coin_type = ANY($1::text[]) AND cb.balance > 0 AND NOT (cb.owner = ANY($2::text[]))
-      AND cb.owner <> ('0x' || repeat('0', 64))
-      AND NOT EXISTS (SELECT 1 FROM chain_read_v1.pools pl WHERE pl.pool_key = cb.owner)
-    GROUP BY cb.coin_type, 2, n.account_id
+    SELECT b.coin_type,
+      CASE WHEN w.account_id IS NULL THEN 'w:' || b.owner ELSE 'a:' || w.account_id::text END AS who,
+      w.account_id::text AS account_id, min(b.owner) AS wallet, sum(b.balance) AS balance
+    FROM (SELECT t.coin_type, t.owner, t.balance FROM home_top t UNION SELECT h.coin_type, h.owner, h.balance FROM home_account_balances h) b
+    LEFT JOIN (SELECT hn.address, hn.account_id FROM home_named hn UNION SELECT aw.address, aw.account_id FROM home_account_wallets aw) w ON w.address = b.owner
+    GROUP BY b.coin_type, 2, w.account_id
   )
   SELECT ranked.coin_type, ranked.who, ranked.account_id, ranked.wallet, ranked.balance::text AS balance
   FROM (SELECT h.*, row_number() OVER (PARTITION BY h.coin_type ORDER BY h.balance DESC, h.who) AS rn FROM home_holders h) ranked
@@ -361,19 +424,12 @@ const TOP_HOLDERS_SQL = `WITH home_named AS (${namedWalletsSql()}),
   ORDER BY ranked.coin_type, ranked.rn`;
 assertChainReadThroughViews(TOP_HOLDERS_SQL);
 
-/**
- * The top holders of the trading coins in `facts`, keyed by coin type.
- *
- * A tracked pool coin is skipped: `coin_balances` checks each of its rows
- * against the coin registry, so its top ten costs a scan of every holder
- * (ONE, about 111k rows, timed Home out). It shows no top holders until that
- * view serves a tracked coin's largest balances only.
- */
-export async function readTopHolders(db: ReadableDatabase, facts: readonly Pick<FactsRow, "presale_id" | "pool_id" | "launch_id" | "coin_type" | "tracked_pool_only">[], clockMs: number, limit = HOME_TOP_HOLDERS): Promise<ReadonlyMap<string, readonly HolderRow[]>> {
-  const read = facts.filter((row) => !row.tracked_pool_only);
-  if (read.length === 0) return new Map();
-  const excluded = [...new Set(read.flatMap((row) => [row.presale_id, row.pool_id, row.launch_id].filter((id): id is string => typeof id === "string")))];
-  const { rows } = await db.read<HolderRow>(`SELECT home_result.* FROM (${TOP_HOLDERS_SQL}) AS home_result`, [read.map((row) => row.coin_type), excluded, clockMs, limit]);
+/** The top holders of the trading coins in `facts`, keyed by coin type. */
+export async function readTopHolders(db: ReadableDatabase, facts: readonly Pick<FactsRow, "presale_id" | "pool_id" | "launch_id" | "coin_type">[], clockMs: number, limit = HOME_TOP_HOLDERS): Promise<ReadonlyMap<string, readonly HolderRow[]>> {
+  if (facts.length === 0) return new Map();
+  const excluded = [...new Set(facts.flatMap((row) => [row.presale_id, row.pool_id, row.launch_id].filter((id): id is string => typeof id === "string")))];
+  const perCoin = facts.length === 1 ? ONE_COIN_HOLDER_ROWS : limit + HOLDER_HEADROOM;
+  const { rows } = await db.read<HolderRow>(`SELECT home_result.* FROM (${TOP_HOLDERS_SQL}) AS home_result`, [facts.map((row) => row.coin_type), excluded, clockMs, limit, perCoin]);
   const byCoin = new Map<string, HolderRow[]>();
   for (const row of rows) byCoin.set(row.coin_type, [...(byCoin.get(row.coin_type) ?? []), row]);
   return byCoin;
