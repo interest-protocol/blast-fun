@@ -393,27 +393,38 @@ type RecentTrade = Readonly<{ participant: HomeParticipant; event: HomeEvent }>;
 /** With its "Hide trades under $1" switch: on, the read leaves those trades out. */
 type ActivityRead = ReadResult<HomeThreadPage | null> & Readonly<{ filter: SmallTradeFilter }>;
 
+/**
+ * The page's trades, newest first, and whether the window traded at all. The totals are never
+ * floored: trades there but none listed means every one was under the floor.
+ */
+function pageTrades(page: HomeThreadPage): Readonly<{ trades: readonly RecentTrade[]; traded: boolean }> {
+  const trades = page.participants.flatMap((participant) =>
+    (participant.events ?? []).filter(event => event.kind === "trade_buy" || event.kind === "trade_sell").map((event) => ({ participant, event })),
+  ).sort((a, b) => b.event.occurred_at_ms - a.event.occurred_at_ms);
+  return { trades, traded: trades.length > 0 || page.totals.buyers + page.totals.sellers > 0 };
+}
+
+function NoTrades({ traded }: Readonly<{ traded: boolean }>) {
+  const followingOnly = useContext(FollowingOnlyContext);
+  const clearFollowingOnly = useContext(ClearFollowingOnlyContext);
+  return followingOnly && clearFollowingOnly && traded
+    ? <EmptyState compact role="status" title="No trades by people you follow in this period" action={<Button variant="ghost" size="sm" type="button" onClick={clearFollowingOnly}>Show all trades</Button>} />
+    : <PanelEmptyState title={followingOnly ? "No trades by people you follow in this period" : "No recorded trades in this period"} />;
+}
+
 function Activity({ page, coin, filter }: Readonly<{ page: HomeThreadPage | null; coin: CoinRecord | null; filter: SmallTradeFilter }>) {
   const noteId = useId();
   const followingOnly = useContext(FollowingOnlyContext);
-  const clearFollowingOnly = useContext(ClearFollowingOnlyContext);
   const store = useViewerStateStore();
   useSyncExternalStore(store?.subscribe ?? noSubscribe, store?.version ?? noVersion, noVersion);
   const callsigns = followingOnly ? (page?.participants ?? []).flatMap(row => row.actor.type === "account" ? [row.actor.callsign] : []).join(",") : "";
   useEffect(() => { if (store && callsigns) store.want({ callsigns: callsigns.split(",") }); }, [store, callsigns]);
   if (!page)
     return <NoRows><PanelEmptyState title="Trades unavailable for this coin" /></NoRows>;
-  const trades = page.participants.flatMap((participant) =>
-    (participant.events ?? []).filter(event => event.kind === "trade_buy" || event.kind === "trade_sell").map((event) => ({ participant, event })),
-  ).sort((a, b) => b.event.occurred_at_ms - a.event.occurred_at_ms);
+  const { trades, traded } = pageTrades(page);
   const events = followingOnly ? trades.filter(({ participant }) => participant.actor.type === "account" &&
     store?.following({ kind: "account", callsign: participant.actor.callsign }) === true) : trades;
   const freshness = activityFreshness(page.as_of);
-  // The totals are never floored: trades there but none listed means every one was under the floor.
-  const traded = trades.length > 0 || page.totals.buyers + page.totals.sellers > 0;
-  const empty = followingOnly && clearFollowingOnly && traded
-    ? <EmptyState compact role="status" title="No trades by people you follow in this period" action={<Button variant="ghost" size="sm" type="button" onClick={clearFollowingOnly}>Show all trades</Button>} />
-    : <PanelEmptyState title={followingOnly ? "No trades by people you follow in this period" : "No recorded trades in this period"} />;
   return (
     <>
       <ListNote id={noteId}>
@@ -429,7 +440,7 @@ function Activity({ page, coin, filter }: Readonly<{ page: HomeThreadPage | null
         coin={coin}
         nowMs={page.clock_ms}
         noteId={noteId}
-        empty={empty}
+        empty={<NoTrades traded={traded} />}
         filter={filter}
         onlySmall={!followingOnly && trades.length === 0 && traded}
       />
