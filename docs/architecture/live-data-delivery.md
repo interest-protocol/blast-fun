@@ -94,10 +94,11 @@ never write to Redis and a ticket is never burned on a refusal.
    only sees `error` and 1006.
 3. Ticket HMAC and `exp` → close 4401.
 4. Query (same parsers as SSE, plus `resume`) → close 4400.
-5. Per-IP limits → close 4429.
+5. Per-instance pool and coin limits per IP → close 4429.
 6. Global capacity → close 4503.
-7. Burn the ticket nonce in Redis → close 4401 if reused. Redis down → close
-   4503 (fail closed).
+7. One Redis step: fleet-wide per-IP sockets and opens → close 4429, then burn
+   the ticket nonce → close 4401 if reused. Redis down → close 4503 (fail
+   closed).
 
 Clients treat a handshake that never opens like 4503: wait a random 1–30 s.
 After 3 failures in a row, the tab uses SSE for 10 minutes.
@@ -109,7 +110,7 @@ After 3 failures in a row, the tab uses SSE for 10 minutes.
 | Anyone opens sockets | A **ticket** from `POST /api/launchpad/market/ticket`. The route is behind the first-party API gate. It has no per-IP quota: web routes carry no rate limits (founder ruling). The gate cookie costs one page GET, so the ticket is a **cost, not authentication**. The socket limits below are the real bound. Ticket: `key = HMAC(gateway secret, "blast-live-ticket-v1")`, then `HMAC(key, payload)`. The payload is `{v, exp, n, o}`. A ticket lives 60 s and is **single use**: its nonce is burned with `SET NX PX <remaining life>` under its own `live-ticket:` prefix in the private-replay Redis. |
 | Ticket leaks through logs, history or Referer | The ticket travels only in `Sec-WebSocket-Protocol`, never in the URL. Surfaces that must not record it: Render request logs (they record the path only), error and trace reporters, and refusal close reasons. A test checks that no refusal echoes it. |
 | Another site embeds the socket | Exact `Origin` match, and the ticket binds `o`. The server never reads `Cookie`. The gate cookie is `__Host-` (host-only); sign-off checks that no first-party cookie uses `Domain=blast.fun`. |
-| One client starves the shared tables | Limits per IP, per instance: **8 open sockets**, **20 opens a minute** (resumes count), **4 distinct pools** and **40 distinct price coins** across that IP's sockets. The key is `ClientAddress.rateKey`, a /64 for IPv6. With 2 instances the effective limit doubles. Global tables per process: 64 pool topics and 128 price coins (`MARKET_STREAM_BUDGET`). A socket whose new topics or coins would not fit is refused with 4503; tables never fill silently. A pool the engine never snapshots frees its slot after 10 s. |
+| One client starves the shared tables | Limits per IP across the fleet: **8 open sockets** and **20 opens a minute** (resumes count). One Redis script on the private-replay store checks both, then burns the ticket, so the count holds at any instance count. A socket's entry expires after the longest socket life (65 min), so a crashed instance frees its slots by then. Per IP, per instance: **4 distinct pools** and **40 distinct price coins** across that IP's sockets, because they guard that process's own tables. The key is `ClientAddress.rateKey`, a /64 for IPv6. Global tables per process: 64 pool topics and 128 price coins (`MARKET_STREAM_BUDGET`). A socket whose new topics or coins would not fit is refused with 4503; tables never fill silently. A pool the engine never snapshots frees its slot after 10 s. |
 | Process exhaustion | Sockets and SSE streams share the relay's client ceiling, `ACTIVITY_HINT_STREAM_BUDGET.maxClients`, which is 512 per instance. Fleet capacity is instances × 512, so 2 starter instances give 1,024. The rollout percent keeps expected sockets under 70% of that. Going past it needs the load test (memory per socket) and Jose's go on the cap and the instance count. One upstream reader socket per process, never one per browser. |
 | Expensive subscriptions | Topics are fixed at connect, using the SSE parsers (`marketStreamPools`, `marketStreamPriceCoins`, `marketStreamPresale`, `marketStreamActivity`): ≤ 2 pools, ≤ 20 price coins, ≤ 1 presale. `resume=<pool>~<cursor>` is allowed at most 2 times. Its pool must match `POOL_KEY`, appear in `pool=` and not repeat; its cursor must match `EVENT_CURSOR`. Otherwise 4400. The browser cannot send subscribe messages. |
 | Client messages | The only accepted message is `{"op":"ping","t":<int>}`: at most 128 bytes and 1 a second. Anything else, binary or over the rate closes 1008. `maxPayloadLength` is 1 KiB and `perMessageDeflate` is off. |

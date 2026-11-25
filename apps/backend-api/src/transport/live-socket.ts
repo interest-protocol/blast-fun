@@ -1,5 +1,5 @@
 import { observeMetric } from "@blast/core/lib/metrics.ts";
-import type { RedisCommands } from "@blast/core/lib/redis.ts";
+import { redisScript, type RedisCommands } from "@blast/core/lib/redis.ts";
 import { attestClientAddress } from "@blast/core/lib/web-security/client-address.ts";
 import { ingressAddress, type IngressTrust } from "@blast/core/lib/web-security/ingress.ts";
 import { EVENT_CURSOR } from "@blast/core/modules/launchpad-contract/cursor.ts";
@@ -14,6 +14,7 @@ import {
 import { POOL_KEY } from "@blast/core/modules/launchpad-contract/venues.ts";
 import type { HintSink, HintSubscription } from "@blast/server/lib/hint-subscription.ts";
 import type { Server, ServerWebSocket, WebSocketHandler } from "bun";
+import { randomUUID } from "node:crypto";
 
 /**
  * The direct browser socket: `wss://<live host>/v1/socket`. Each message is one
@@ -45,6 +46,31 @@ export const LIVE_CLOSE = Object.freeze({
   busy: 4503,
 });
 
+/**
+ * One atomic step on the private-replay Redis: per-IP socket and open counts
+ * across every instance, then the single-use ticket burn. Checks come before
+ * any write; Redis owns the clock. A socket's entry expires after the longest
+ * socket life, so a crashed instance leaks a slot for at most that long.
+ * KEYS: ticket, IP sockets, IP opens. ARGV: ticket ms, socket id, socket cap,
+ * opens cap, socket entry ms. Returns 1 admitted, 0 ticket reused, 2 per IP.
+ */
+const admitScript = redisScript(`
+local time = redis.call('TIME')
+local now = tonumber(time[1]) * 1000 + math.floor(tonumber(time[2]) / 1000)
+local life = tonumber(ARGV[5])
+redis.call('ZREMRANGEBYSCORE', KEYS[2], '-inf', now)
+redis.call('ZREMRANGEBYSCORE', KEYS[3], '-inf', now - 60000)
+if redis.call('ZCARD', KEYS[2]) >= tonumber(ARGV[3]) or redis.call('ZCARD', KEYS[3]) >= tonumber(ARGV[4]) then return 2 end
+if not redis.call('SET', KEYS[1], '1', 'NX', 'PX', ARGV[1]) then return 0 end
+redis.call('ZADD', KEYS[2], now + life, ARGV[2])
+redis.call('PEXPIRE', KEYS[2], life)
+redis.call('ZADD', KEYS[3], now, ARGV[2])
+redis.call('PEXPIRE', KEYS[3], 60000)
+return 1
+`);
+/** Room past the longest socket life before a leaked slot frees itself. */
+const SOCKET_ENTRY_MS = LIVE_SOCKET.lifetimeMs.max + 5 * 60_000;
+
 /** What the socket needs from the market relay. */
 export type LiveRelay = Readonly<{
   admits(pools: readonly string[], priceCoins: readonly string[]): boolean;
@@ -73,6 +99,8 @@ export type LiveSocketData = {
   ticket: string;
   url: URL;
   rateKey: string;
+  /** This socket's member in the shared per-IP set, once Redis admitted it. */
+  id: string;
   admitted: boolean;
   closing: boolean;
   slow: boolean;
@@ -84,9 +112,9 @@ export type LiveSocketData = {
 };
 
 type Socket = ServerWebSocket<LiveSocketData>;
+/** Distinct pools and coins per IP guard this process's own tables, so they stay per instance. */
 type Address = {
   sockets: number;
-  opens: number[];
   pools: Map<string, number>;
   priceCoins: Map<string, number>;
 };
@@ -143,31 +171,15 @@ export function createLiveSocket(options: LiveSocketOptions) {
   const addresses = new Map<string, Address>();
   let draining = false;
 
+  const ipKey = (rateKey: string, kind: "sockets" | "opens") =>
+    `${options.namespace}:live-ip:${kind}:${rateKey}`;
   const address = (key: string) => {
     let entry = addresses.get(key);
     if (!entry) {
-      addresses.set(
-        key,
-        (entry = { sockets: 0, opens: [], pools: new Map(), priceCoins: new Map() }),
-      );
+      addresses.set(key, (entry = { sockets: 0, pools: new Map(), priceCoins: new Map() }));
     }
     return entry;
   };
-  const prune = (entry: Address, now: number) => {
-    while (entry.opens.length && entry.opens[0]! <= now - 60_000) {
-      entry.opens.shift();
-    }
-  };
-  const sweep = setInterval(() => {
-    const now = Date.now();
-    for (const [key, entry] of addresses) {
-      prune(entry, now);
-      if (!entry.sockets && !entry.opens.length) {
-        addresses.delete(key);
-      }
-    }
-  }, 60_000);
-  sweep.unref?.();
 
   const count = (table: Map<string, number>, keys: readonly string[], step: 1 | -1) => {
     for (const key of keys) {
@@ -193,9 +205,15 @@ export function createLiveSocket(options: LiveSocketOptions) {
     stop?.();
     if (data.admitted) {
       const entry = address(data.rateKey);
-      entry.sockets--;
       count(entry.pools, data.pools, -1);
       count(entry.priceCoins, data.priceCoins, -1);
+      if (--entry.sockets === 0) {
+        addresses.delete(data.rateKey);
+      }
+    }
+    if (data.id) {
+      // Best effort: a missed removal frees itself when the entry expires.
+      void options.redis.execute(["ZREM", ipKey(data.rateKey, "sockets"), data.id]).catch(() => {});
     }
   };
   const shut = (ws: Socket, code: number) => {
@@ -228,6 +246,49 @@ export function createLiveSocket(options: LiveSocketOptions) {
     },
   });
 
+  /** This instance's tables: distinct pools and coins for one address. */
+  const crowded = (rateKey: string, query: Query) => {
+    const entry = addresses.get(rateKey);
+    return (
+      !!entry &&
+      (distinct(entry.pools, query.pools) > LIVE_SOCKET.perIp.pools ||
+        distinct(entry.priceCoins, query.priceCoins) > LIVE_SOCKET.perIp.priceCoins)
+    );
+  };
+  const hold = (data: LiveSocketData, query: Query) => {
+    const entry = address(data.rateKey);
+    data.admitted = true;
+    data.pools = query.pools;
+    data.priceCoins = query.priceCoins;
+    entry.sockets++;
+    count(entry.pools, query.pools, 1);
+    count(entry.priceCoins, query.priceCoins, 1);
+  };
+  /** The fleet-wide part, in one Redis step: null admits, otherwise the close code. */
+  const claim = async (data: LiveSocketData, ticket: { nonce: string; expiresAtMs: number }) => {
+    // Set before the call: a close while Redis answers sends its removal after the admit on the same connection.
+    data.id = randomUUID();
+    const result = await admitScript(
+      options.redis,
+      [
+        `${options.namespace}:live-ticket:${ticket.nonce}`,
+        ipKey(data.rateKey, "sockets"),
+        ipKey(data.rateKey, "opens"),
+      ],
+      [
+        String(Math.max(1, ticket.expiresAtMs - Date.now())),
+        data.id,
+        String(LIVE_SOCKET.perIp.sockets),
+        String(LIVE_SOCKET.perIp.opensPerMinute),
+        String(SOCKET_ENTRY_MS),
+      ],
+    );
+    if (result === 1) {
+      return null;
+    }
+    return result === 2 ? LIVE_CLOSE.perIp : LIVE_CLOSE.ticket;
+  };
+
   async function admit(ws: Socket) {
     const data = ws.data;
     const ticket = verifyLiveTicket(options.gatewaySecret, data.ticket, options.siteOrigin);
@@ -241,46 +302,25 @@ export function createLiveSocket(options: LiveSocketOptions) {
     } catch {
       return shut(ws, LIVE_CLOSE.query);
     }
-    const now = Date.now();
-    const entry = address(data.rateKey);
-    prune(entry, now);
-    if (
-      entry.sockets >= LIVE_SOCKET.perIp.sockets ||
-      entry.opens.length >= LIVE_SOCKET.perIp.opensPerMinute ||
-      distinct(entry.pools, query.pools) > LIVE_SOCKET.perIp.pools ||
-      distinct(entry.priceCoins, query.priceCoins) > LIVE_SOCKET.perIp.priceCoins
-    ) {
+    if (crowded(data.rateKey, query)) {
       return shut(ws, LIVE_CLOSE.perIp);
     }
-    entry.opens.push(now);
     if (draining || !options.relay.admits(query.pools, query.priceCoins)) {
       return shut(ws, LIVE_CLOSE.busy);
     }
-    // Hold this address's slot while Redis answers, so parallel opens cannot overrun it.
-    data.admitted = true;
-    data.pools = query.pools;
-    data.priceCoins = query.priceCoins;
-    entry.sockets++;
-    count(entry.pools, query.pools, 1);
-    count(entry.priceCoins, query.priceCoins, 1);
-    let burned: unknown;
+    // Hold this address's pools and coins while Redis answers, so parallel opens cannot overrun them.
+    hold(data, query);
+    let refused: number | null;
     try {
-      burned = await options.redis.execute([
-        "SET",
-        `${options.namespace}:live-ticket:${ticket.nonce}`,
-        "1",
-        "NX",
-        "PX",
-        String(Math.max(1, ticket.expiresAtMs - Date.now())),
-      ]);
+      refused = await claim(data, ticket);
     } catch {
       return shut(ws, LIVE_CLOSE.busy);
     }
     if (data.closing) {
       return;
     }
-    if (burned !== "OK") {
-      return shut(ws, LIVE_CLOSE.ticket);
+    if (refused) {
+      return shut(ws, refused);
     }
     const result = options.relay.subscribe(query.request, sink(ws), {
       resume: query.resume,
@@ -390,6 +430,7 @@ export function createLiveSocket(options: LiveSocketOptions) {
         ticket: tickets.length === 1 ? tickets[0]!.slice(LIVE_SOCKET.ticketPrefix.length) : "",
         url: new URL(request.url),
         rateKey: client.rateKey,
+        id: "",
         admitted: false,
         closing: false,
         slow: false,
@@ -409,7 +450,6 @@ export function createLiveSocket(options: LiveSocketOptions) {
     /** Close every socket with 1012 at a random moment within the drain window. */
     drain(): Promise<void> {
       draining = true;
-      clearInterval(sweep);
       const window = options.drainMs ?? 0;
       return Promise.all(
         [...sockets].map(

@@ -24,8 +24,11 @@ type Sub = {
   stopped: boolean;
 };
 
-function harness(relay?: LiveRelay, redisDown = false) {
-  const burned = new Set<string>();
+/** One Redis that every instance shares: burned tickets and the per-IP sets. */
+const store = () => ({ burned: new Set<string>(), ipSets: new Map<string, Set<string>>() });
+
+function harness(relay?: LiveRelay, redisDown = false, { burned, ipSets } = store()) {
+  const ipSet = (key: string) => ipSets.get(key) ?? ipSets.set(key, new Set()).get(key)!;
   const subs: Sub[] = [];
   const fake: LiveRelay = relay ?? {
     admits: () => true,
@@ -50,13 +53,27 @@ function harness(relay?: LiveRelay, redisDown = false) {
         if (redisDown) {
           throw new Error("down");
         }
-        assert.equal(args[0], "SET");
-        assert.match(args[1]!, /^test:live-ticket:/);
-        if (burned.has(args[1]!)) {
-          return null;
+        if (args[0] === "ZREM") {
+          ipSet(args[1]!).delete(args[2]!);
+          return 1;
         }
-        burned.add(args[1]!);
-        return "OK";
+        // EVALSHA admitScript: KEYS ticket, IP sockets, IP opens; ARGV ttl, id, socket cap, opens cap, life.
+        assert.equal(args[0], "EVALSHA");
+        const [ticketKey, socketsKey, opensKey, , id, socketCap, opensCap] = args.slice(3);
+        assert.match(ticketKey!, /^test:live-ticket:/);
+        assert.match(socketsKey!, /^test:live-ip:sockets:/);
+        const open = ipSet(socketsKey!);
+        const opens = ipSet(opensKey!);
+        if (open.size >= Number(socketCap) || opens.size >= Number(opensCap)) {
+          return 2;
+        }
+        if (burned.has(ticketKey!)) {
+          return 0;
+        }
+        burned.add(ticketKey!);
+        open.add(id!);
+        opens.add(id!);
+        return 1;
       },
     },
   });
@@ -229,5 +246,37 @@ test("the real relay serves a socket subscriber through an upstream frame", asyn
     await until(() => client.messages.some((message) => message.includes('"connecting"')));
   } finally {
     server.stop(true);
+  }
+});
+
+test("per-IP socket and open counts are shared by every instance", async () => {
+  const shared = store();
+  const a = harness(undefined, false, shared);
+  const b = harness(undefined, false, shared);
+  try {
+    const held = [];
+    for (let i = 0; i < 8; i++) {
+      const client = (i % 2 ? b : a).open(`pool=${pool(1)}`);
+      assert.equal(await client.opened, true);
+      held.push(client);
+    }
+    await Bun.sleep(20);
+    assert.equal(
+      (await a.open(`pool=${pool(1)}`).closed).code,
+      LIVE_CLOSE.perIp,
+      "the ninth socket from one address, on either instance",
+    );
+    held.pop()!.ws.close();
+    await until(() => [...shared.ipSets.values()].some((set) => set.size === 7));
+    const again = a.open(`pool=${pool(1)}`);
+    assert.equal(await again.opened, true);
+    await Bun.sleep(20);
+    assert.equal(again.ws.readyState, WebSocket.OPEN, "a closed socket frees its shared slot");
+    for (const client of [...held, again]) {
+      client.ws.close();
+    }
+  } finally {
+    a.server.stop(true);
+    b.server.stop(true);
   }
 });
