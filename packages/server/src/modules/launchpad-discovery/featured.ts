@@ -16,6 +16,7 @@ import type {
 import { defaultMarketDataDependencies } from "@blast/core/modules/read-routing/blast-infra.ts";
 import { databaseFor } from "@blast/core/modules/read-routing/databases.ts";
 import type { MarketDataDependencies } from "@blast/core/modules/read-routing/market-data.ts";
+import { isHighlightable } from "@blast/core/modules/social/create/coin-text-policy.ts";
 import { handleBondingRequest } from "./bonding.ts";
 import { discoveryRow, isPublicLaunch } from "./row.ts";
 import { verifiedTeamOf, type VerifiedReader } from "./verified.ts";
@@ -31,6 +32,8 @@ export type SharedRead = <T>(key: string, load: () => Promise<T>, ttlMs: number)
 const unshared: SharedRead = (_key, load) => load();
 /** Every open Home and Bonding tab asks, and pins change at an operator's pace: one composed answer serves them all this long. */
 const FEATURED_SHARE_MS = 10_000;
+/** The closest curves read for the highlight; the first one `isHighlightable` passes is shown. */
+const HIGHLIGHT_CANDIDATES = "20";
 
 async function closestToGraduation(
   request: Request,
@@ -40,7 +43,7 @@ async function closestToGraduation(
   url.search = new URLSearchParams({
     catalog: "bonding",
     sort: "progress",
-    limit: "1",
+    limit: HIGHLIGHT_CANDIDATES,
   }).toString();
   const response = await handleBondingRequest(new Request(url), dependencies, undefined, undefined, UNREAD);
   if (!response.ok) throw new Error("Featured market read unavailable");
@@ -188,15 +191,16 @@ async function composeFeatured(
   if (selected) return selected;
   const body = await closestToGraduation(request, dependencies);
   const section = body.section;
+  if (section.state !== "available" && section.state !== "stale") return { ...body, featured: false };
+  // Slurs and coins about the founder are never highlighted; the next closest curve is.
+  const rows = section.data.rows.filter(isHighlightable).slice(0, 1);
+  const shown = rows[0];
+  const shownMetrics = shown && body.metrics?.[shown.launchId];
   return {
     ...body,
-    ...(section.state === "available" || section.state === "stale"
-      ? await verifiedTeamOf(section.data.rows, readVerified)
-      : {}),
+    metrics: shown && shownMetrics ? { [shown.launchId]: shownMetrics } : {},
+    ...(await verifiedTeamOf(rows, readVerified)),
     featured: false,
-    section:
-      section.state === "available" || section.state === "stale"
-        ? { ...section, data: { ...section.data, nextCursor: null } }
-        : section,
+    section: { ...section, data: { rows, nextCursor: null } },
   };
 }

@@ -20,7 +20,7 @@ import { minimumRaiseIssue } from "@blast/core/modules/social/create/minimum-rai
 import { blankDraft, CREATE_DEFAULT_FEE_POLICY, venueTiers } from "@blast/core/modules/social/create/model.ts";
 import { createIssues } from "@blast/core/modules/social/create/presale-args.ts";
 
-import { coinTextIssues } from "../coin-text-policy.ts";
+import { coinTextIssues } from "@blast/core/modules/social/create/coin-text-policy.ts";
 import { quoteUnavailableReason, venueAvailable } from "./quote-coins";
 import type { CreateStep } from "./create-steps";
 import { writeGuestDraft, type GuestDraftRestore, type GuestDraftSnapshot, type GuestStorage } from "./guest-draft-storage.ts";
