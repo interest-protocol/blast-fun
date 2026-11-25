@@ -107,8 +107,9 @@ export function ListHead({ sort, defaultSort = "relevant", onSort, window }: Pic
  * With no rows (a `result` in their place) the pager, count go;
  * a settled `empty` result drops the column header and its sorts too.
  */
-export function CoinList({ coins, props, result, empty = false, end, viewKey, rankings, checkpoint = 0, buy }: Readonly<{ coins: readonly RankedCoin[]; props: ListProps; result?: ReactNode; empty?: boolean; end?: ReactNode; viewKey?: string; rankings?: Rankings; checkpoint?: number; buy?: Readonly<{ coinKey: string; amount: string }> }>) {
-  const list = useRankMotion(JSON.stringify([viewKey ?? [props.source, props.window, props.sort, props.page, props.rows], rankings?.motionVersion]));
+export function CoinList({ coins, props, result, empty = false, end, viewKey, rankings, checkpoint = 0, buy, swapping = false }: Readonly<{ coins: readonly RankedCoin[]; props: ListProps; result?: ReactNode; empty?: boolean; end?: ReactNode; viewKey?: string; rankings?: Rankings; checkpoint?: number; buy?: Readonly<{ coinKey: string; amount: string }>; /** The previous view's rows, held while the new view loads. */ swapping?: boolean }>) {
+  // A new sort or filter re-ranks the same list, so its rows slide; another source or page starts fresh.
+  const list = useRankMotion(JSON.stringify([viewKey ?? [props.source, props.window, props.sort, props.page, props.rows], rankings?.motionVersion]), JSON.stringify([props.source, props.page, props.rows]));
   const hasResult = Boolean(result);
   const latest = useHomePrices(coins, props.streamPrices === true && !hasResult);
   // Home shows new-coin admissions in the Coins header.
@@ -125,7 +126,7 @@ export function CoinList({ coins, props, result, empty = false, end, viewKey, ra
       {controls}
       {coins.length > 0 ? <span className={styles.phoneWindow}>{props.window === "1h" ? "1 hour" : "24 hours"}</span> : null}
       {header}
-      <ol className={clsx(styles.list, styles.rankedList)} data-volume-sort={props.source === "discover" && props.sort === "trending" || undefined} ref={list} {...rankings?.interactionProps}>
+      <ol aria-busy={swapping || undefined} className={clsx(styles.list, styles.rankedList)} data-swapping={swapping || undefined} data-volume-sort={props.source === "discover" && props.sort === "trending" || undefined} ref={list} {...rankings?.interactionProps}>
         {coins.map((coin, index) => (
           <CoinCard
             key={homeCoinKey(coin)}
@@ -262,6 +263,7 @@ export function DiscoverList({ query, initial, props, freshness }: Readonly<{ qu
         props={{ ...props, marketLoading: data !== undefined && read.isFetching }}
         result={result}
         empty={data === undefined ? error !== null : coins.length === 0}
+        swapping={previous !== undefined}
       />
       {data ? error : null}
     </>
