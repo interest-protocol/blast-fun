@@ -156,6 +156,7 @@ test("success needs checkpointed effects and the configured launchpad event", as
   assert.deepEqual(await reconcile(fixture, deployment, submitted.digest), {
     status: "succeeded",
     explorerUrl: `http://127.0.0.1:9001/tx/${submitted.digest}`,
+    checkpoint: 41,
   });
 });
 

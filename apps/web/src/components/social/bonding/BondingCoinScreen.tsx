@@ -42,7 +42,7 @@ import { CoinPageWallet } from "#web/components/blast-ui/CoinPageWallet.tsx";
 import { CoinMark } from "#web/components/blast-ui/CoinMark.tsx";
 import { CoinLegacyMark, CoinVerifiedMark, PreviousIcon, TelegramIcon } from "#web/components/blast-ui/Icons.tsx";
 import { useCoinTrade } from "./use-coin-trade.ts";
-import { ChartPriceCheckpoint, useChartPrice } from "#web/components/launchpad/chart/chart-live-price.ts";
+import { ChartPriceLaunch, useChartPrice } from "#web/components/launchpad/chart/chart-live-price.ts";
 import { ChartLastTrade } from "#web/components/launchpad/chart/ChartLastTrade.tsx";
 import { ChartTradeContext } from "#web/components/launchpad/chart/chart-trade-context.ts";
 import { LiveFigureCue } from "#web/components/blast-ui/LiveFigureCue.tsx";
@@ -405,9 +405,10 @@ function CoinMarket({ snapshot, page, chart, activity, poolKey, checkpoint, expe
   const graduated = snapshot.lifecycle === "migrated";
   const view = !graduated && tick ? coinView(page, tick) : snapshot;
   const tradeId = tick?.showCue ? tick.trade.cursor : null;
-  const price = useChartPrice(poolKey, checkpoint);
+  // The best known price at once; after the viewer's own trade, only one that includes it.
+  const price = useChartPrice(poolKey, null, page.launchId);
   const context = coinTradeSource(view, poolKey, lastTrade, receivedAt);
-  return <ChartPriceCheckpoint value={{ poolKey, checkpoint }}><ChartTradeContext value={context}>
+  return <ChartPriceLaunch value={{ poolKey, launchId: page.launchId }}><ChartTradeContext value={context}>
     <div className={styles.market}>
       <MarketPrice units={priceUnits(view)} price={price?.price} tradeId={tradeId && price?.cursor ? tradeId : null}
         showCurrency={view.identity.quoteType !== null} activity={context && <ChartLastTrade placement="headline" />} />
@@ -415,7 +416,7 @@ function CoinMarket({ snapshot, page, chart, activity, poolKey, checkpoint, expe
       {liveOn ? <LifecycleRefresh lifecycle={live.stats?.lifecycle ?? null} /> : null}
       <CoinMarketCards graduated={graduated} view={view} tick={tick} tradeId={tradeId} stats={stats} chart={chart} activity={activity} />
     </div>
-  </ChartTradeContext></ChartPriceCheckpoint>;
+  </ChartTradeContext></ChartPriceLaunch>;
 }
 
 function CoinMarketCards({ graduated, view, tick, tradeId, stats, chart, activity }: Readonly<{

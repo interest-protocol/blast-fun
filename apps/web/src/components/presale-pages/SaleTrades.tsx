@@ -245,12 +245,16 @@ export function SaleTradeFeed({ sale, children }: Readonly<{ sale: SocialPresale
         quoteAmount: BigInt(quote?.atoms ?? 0),
       } : null,
       receivedAt: data?.receivedAt ?? null,
-      decimals: quote?.quote_symbol ? quote.quote_decimals : null,
-      symbol: quote?.quote_symbol ?? "",
-      quoteType: quote?.quote_type,
+      // Before the first trade, the sale's quote, so the headline reserves its full width. A trade with
+      // an unknown quote shows only its direction.
+      ...(event ? {
+        decimals: quote?.quote_symbol ? quote.quote_decimals : null,
+        symbol: quote?.quote_symbol ?? "",
+        quoteType: quote?.quote_type,
+      } : { decimals: sale.quote_decimals, symbol: sale.quote_symbol, quoteType: sale.quote_type }),
       tradeUsd: quote?.usd_complete ? quote.usd : null,
     };
-  }, [data]);
+  }, [data, sale.quote_decimals, sale.quote_symbol, sale.quote_type]);
   return <SaleTradeRead value={read}>
     <ChartTradeContext value={chart}>{children}</ChartTradeContext>
   </SaleTradeRead>;

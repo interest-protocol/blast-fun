@@ -27,6 +27,7 @@ import { readCurve, type CurveRead } from "./curve-read";
 import { tradeLedger, type CurveDiagnostic, type TradeLedger } from "./diagnostics";
 
 import { reportCurveToAnalytics, createCurveTradeControllers, watchCurveTrades, curveCompletionHandler, gateWhileUnresolved } from "./curve-trade-provider-model";
+import { noteOwnTrade } from "../chart/chart-live-price";
 
 type Balances = Readonly<{ quote: bigint; meme: bigint }> | null;
 
@@ -167,7 +168,8 @@ export function CurveTradeProvider({
   }, [onInvalidate, shellBalances]);
   useEffect(() => {
     const stops = (["buy", "sell"] as const).map((key) =>
-      controllers[key].onInvalidate((keys) => {
+      controllers[key].onInvalidate((keys, checkpoint) => {
+        if (checkpoint !== null) noteOwnTrade(launchId, checkpoint);
         refresh();
         invalidateRef.current?.(keys);
         void invalidateAfter(queries, { kind: "trade" }).catch(() => {});
@@ -175,7 +177,7 @@ export function CurveTradeProvider({
       }),
     );
     return () => stops.forEach((stop) => stop());
-  }, [controllers, refresh, queries]);
+  }, [controllers, refresh, queries, launchId]);
 
   // Diagnostics from each controller's state changes; completion, and a completed Buy's verified
   // outcome, only from the completed event.

@@ -37,6 +37,8 @@
 .marketPrice .priceChange { font-variant-numeric: tabular-nums; }
 .marketPrice .priceChange[data-direction="up"] { color: var(--up); }
 .marketPrice .priceChange[data-direction="down"] { color: var(--down); }
+/* The label and the last trade each have their own line, so a price arriving or growing never moves them. */
+.marketPrice > span:first-child, .marketPrice > [data-chart-last-trade="headline"] { flex-basis: 100%; }
 .marketPrice strong { font-family: var(--display); font-size: 2.25rem; font-weight: 650; letter-spacing: -.04em; overflow-wrap: anywhere; }
 .priceHold { display: inline-grid; min-width: 0; }
 .priceHold > * { grid-area: 1 / 1; }
@@ -44,9 +46,6 @@
 :global([data-amounts="hidden"]) .priceFigure > * { display: none; }
 :global([data-amounts="hidden"]) .priceFigure::after { content: "••••"; }
 .marketPrice .amount { flex-wrap: wrap; }
-@media (max-width: 360px) {
-  .marketPrice:has(.amount) { flex-basis: 100%; }
-}
 .marketPrice .amount > span:last-child { font-family: var(--font); font-size: .875rem; font-weight: 500; letter-spacing: 0; color: var(--muted); }
 .stats .amount { max-inline-size: 100%; overflow-wrap: anywhere; }
 .migrationState { display: grid; gap: .5rem; }
@@ -99,8 +98,10 @@
 .heroMark img, .heroMark svg { width: 100%; height: 100%; }
 .pair .facts { margin-top: 1rem; }
 @media (min-width: 761px) {
-  .marketPriceRow { padding: .75rem 1.25rem; border-radius: var(--r-md); background: var(--card); }
-  .marketPrice { display: flex; flex-wrap: wrap; align-items: baseline; }
+  /* The currency switch keeps the first line, so a price or trade arriving never wraps it below. */
+  .marketPriceRow { flex-wrap: nowrap; padding: .75rem 1.25rem; border-radius: var(--r-md); background: var(--card); }
+  .marketPrice { display: flex; flex: 1 1 auto; flex-wrap: wrap; align-items: baseline; }
+  .priceControls { flex: none; }
 }
 /* A shorter laptop keeps the chart in view while long amounts can still wrap. */
 @media (min-width: 761px) and (max-height: 850px) {
@@ -127,8 +128,6 @@
   .market { gap: 0.75rem; }
   .marketPrice { display: flex; flex: 1 1 8rem; flex-wrap: wrap; align-items: baseline; gap: .125rem .375rem; }
   .marketPrice strong { font-size: 1.75rem; line-height: 1.15; }
-  .marketPrice > [data-chart-last-trade="headline"] { flex-basis: 100%; }
-  .marketPrice > [data-chart-last-trade="headline"][data-idle] { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; }
   .priceControls { flex: none; gap: .25rem; }
   .progressCard .raised { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 0.375rem; }
   .progressCard .raised small { display: inline; font-size: 0.8125rem; }
@@ -151,6 +150,10 @@
     background: linear-gradient(to bottom, transparent, var(--bg) 1.3125rem);
   }
   .tradeDock button { width: 100%; }
+}
+/* A narrow phone gives the price its own line from the start, so the first price never pushes the currency switch below. */
+@media (max-width: 360px) {
+  .marketPrice { flex-basis: 100%; }
 }
 
 .tradeSheet > :first-child { padding-inline-end: 2.75rem; overflow-wrap: anywhere; }

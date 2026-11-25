@@ -35,8 +35,11 @@ export type ActionController<Input> = Readonly<{
   approve(reviewId: string): void;
   recheck(): void;
   acknowledge(): void;
-  /** Listens for the read keys to refresh after a transaction completes. */
-  onInvalidate(listener: (keys: readonly string[]) => void): () => void;
+  /**
+   * Listens for the read keys to refresh after a transaction completes, with the checkpoint
+   * of a successful one (null when it failed).
+   */
+  onInvalidate(listener: (keys: readonly string[], checkpoint: number | null) => void): () => void;
 }>;
 
 export type CaptureConfirmation = (signer: LaunchpadSigner) => ((confirmation: Readonly<{
@@ -93,7 +96,7 @@ export function createActionController<Input, Fresh>({
   // The evidence the last ready review's transaction must show to succeed.
   let completion: CompletionExpectation = adapter.completion;
   const listeners = new Set<() => void>();
-  const invalidationListeners = new Set<(keys: readonly string[]) => void>();
+  const invalidationListeners = new Set<(keys: readonly string[], checkpoint: number | null) => void>();
   // One entry per started step and attempt; a signature request is never repeated.
   const started = new Set<string>();
 
@@ -211,7 +214,8 @@ export function createActionController<Input, Fresh>({
     }
     if (outcome.status === "pending") return;
     const keys = adapter.affectedReads(current.input);
-    for (const listener of invalidationListeners) listener(keys);
+    const checkpoint = outcome.status === "succeeded" ? outcome.checkpoint : null;
+    for (const listener of invalidationListeners) listener(keys, checkpoint);
   }
 
   function run(current: ActionState<Input>) {

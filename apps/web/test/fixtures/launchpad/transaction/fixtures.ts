@@ -607,7 +607,7 @@ export function actionStateFixtures<Input = FixtureBuyInput>(
     reconciling: replay(submitted),
     succeeded: replay([
       ...submitted,
-      reconciled({ status: "succeeded", explorerUrl: `http://127.0.0.1:9001/tx/${GAS_COIN.digest}` }),
+      reconciled({ status: "succeeded", explorerUrl: `http://127.0.0.1:9001/tx/${GAS_COIN.digest}`, checkpoint: 41 }),
     ]),
     failed: replay([
       ...submitted,

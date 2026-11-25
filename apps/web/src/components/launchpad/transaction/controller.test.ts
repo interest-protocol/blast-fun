@@ -35,7 +35,7 @@ function harness(
   }> = {},
 ) {
   const fixture = createFixtureChain(overrides);
-  const counts = { connect: [] as SignerKind[], signatures: 0, invalidated: [] as (readonly string[])[] };
+  const counts = { connect: [] as SignerKind[], signatures: 0, invalidated: [] as (readonly string[])[], checkpoints: [] as (number | null)[] };
   const behavior: FixtureSignerBehavior = { decide: options.decide, onRequest: () => (counts.signatures += 1) };
   let connected: LaunchpadSigner | null = null;
   const wallet = { chains: options.walletChains ?? ["sui:mainnet"] };
@@ -59,7 +59,7 @@ function harness(
     ...(options.onSigned ? { onSigned: options.onSigned } : {}),
     ...(options.restart ? { restart: options.restart } : {}),
   });
-  controller.onInvalidate((keys) => counts.invalidated.push(keys));
+  controller.onInvalidate((keys, checkpoint) => { counts.invalidated.push(keys); counts.checkpoints.push(checkpoint); });
   return { fixture, counts, controller, wallet, disconnect: () => { connected = null; } };
 }
 
@@ -110,6 +110,7 @@ test("both signer kinds complete with one signature, canonical evidence, and rea
     assert.equal(h.fixture.calls.execute, 1);
     assert.match(done.phase === "succeeded" ? (done.explorerUrl ?? "") : "", /^http:\/\/127\.0\.0\.1:9001\/tx\/\w+$/);
     assert.deepEqual(h.counts.invalidated, [[`launch:${FIXTURE_LAUNCH_ID}`, "wallet:balances"]]);
+    assert.deepEqual(h.counts.checkpoints, [41], "the trade's checkpoint, which the coin's price must include");
   }
 });
 
@@ -269,6 +270,7 @@ test("an on-chain failure keeps the entry and still refreshes affected reads", a
   assert.equal(failed.phase, "failed");
   assert.deepEqual(failed.input, { launchId: FIXTURE_LAUNCH_ID, amount: "12.5" });
   assert.equal(h.counts.invalidated.length, 1);
+  assert.deepEqual(h.counts.checkpoints, [null]);
 });
 
 test("the whole flow makes no Blast Account or backend request", async () => {

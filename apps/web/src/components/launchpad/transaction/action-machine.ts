@@ -70,7 +70,7 @@ export type PreflightOutcome =
 export type AmbiguityReason = "submission-unknown" | "confirmation-pending" | "evidence-missing";
 
 export type ReconciliationOutcome =
-  | Readonly<{ status: "succeeded"; explorerUrl: string | null }>
+  | Readonly<{ status: "succeeded"; explorerUrl: string | null; checkpoint: number }>
   | Readonly<{ status: "failed"; explorerUrl: string | null; message: string }>
   | Readonly<{ status: "pending"; reason: Exclude<AmbiguityReason, "submission-unknown">; message: string }>;
 
