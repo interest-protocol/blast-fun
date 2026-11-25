@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import type { Chart } from "klinecharts";
-import { memo, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import type { BaseUIEvent } from "@base-ui/react/types";
+import { memo, useContext, useEffect, useMemo, useRef, useState, type ComponentProps, type MouseEvent, type PointerEvent, type ReactNode, type RefObject } from "react";
 import { profilePagePath } from "@blast/core/modules/social/contracts/profiles.ts";
 import type { TraderProfile } from "@blast/core/modules/social/contracts/trader-profiles.ts";
 import { Avatar } from "#web/components/blast-ui/Avatar.tsx";
@@ -158,31 +159,17 @@ const PersonBubble = memo(function PersonBubble({ person, x, y, size, profile }:
   const who = personIdentity(person.address, profile);
   const explorer = useWalletExplorer(who.anonymous ? person.address : null);
   const badge = person.labels[0];
-  // A mouse click opens who the trader is; a tap, a key or a screen reader opens the card, which holds the same links.
-  const href = who.anonymous ? explorer?.url : profilePagePath(who.callsign);
-  const mouse = useRef(false);
-  let page = <span />;
-  if (href && !who.anonymous) page = <Link href={href} prefetch={false} />;
-  else if (href) page = <a href={href} rel="noopener noreferrer" target="_blank" />;
+  const page = useBubblePage(who.anonymous ? explorer?.url : profilePagePath(who.callsign), who.anonymous);
   return <Popover.Root>
     <Popover.Trigger
       openOnHover
       delay={80}
       nativeButton={false}
-      render={page}
-      onPointerDown={(event) => { mouse.current = mousePress(event); }}
-      onClick={(event) => {
-        if (!href) return;
-        const followLink = mouse.current && event.detail > 0;
-        mouse.current = false;
-        if (followLink) event.preventBaseUIHandler();
-        else event.preventDefault();
-      }}
+      {...page}
       className={styles.bubble}
       data-side={person.side}
       data-own={person.own || undefined}
       data-anonymous={who.anonymous || undefined}
-      data-page={href ? "" : undefined}
       aria-label={who.name}
       title={explorer?.label}
       {...dyn({ left: x - size / 2, top: y - size / 2, width: size, height: size })}
@@ -193,21 +180,50 @@ const PersonBubble = memo(function PersonBubble({ person, x, y, size, profile }:
       {badge && <span className={styles.badge}><WalletLabelIcon label={badge} /></span>}
     </Popover.Trigger>
     <PopoverSurface positioner={{ side: person.side === "buy" ? "bottom" : "top", sideOffset: 6, collisionPadding: 12, className: styles.cardLayer }} popup={{ className: styles.card }}>
-      <Popover.Title className={who.anonymous && !person.own ? "sr-only" : styles.cardName}>
-        {who.anonymous ? <span className={person.own ? "sr-only" : undefined}>{who.name}</span> : <Link href={profilePagePath(who.callsign)}>{who.name}</Link>}
-        {person.own && <span className={styles.you}>You</span>}
-      </Popover.Title>
-      <TraderWallet address={person.address} />
-      <dl className={styles.cardFigures}>
-        {person.buys > 0 && <div><dt>Bought</dt><dd data-side="buy">{usd(person.bought)}</dd></div>}
-        {person.sells > 0 && <div><dt>Sold</dt><dd data-side="sell">{usd(person.sold)}</dd></div>}
-      </dl>
-      {person.labels.length > 0 && <p className={styles.cardLabels}>
-        {person.labels.map((label) => <span key={label}><WalletLabelIcon label={label} /> {WALLET_LABELS[label].name}</span>)}
-      </p>}
+      <PersonCard person={person} who={who} />
     </PopoverSurface>
   </Popover.Root>;
 });
+
+/** The card a bubble opens: who the trader is, their wallet, what they traded and their wallet labels. */
+function PersonCard({ person, who }: Readonly<{ person: Person; who: ReturnType<typeof personIdentity> }>) {
+  return <>
+    <Popover.Title className={who.anonymous && !person.own ? "sr-only" : styles.cardName}>
+      {who.anonymous ? <span className={person.own ? "sr-only" : undefined}>{who.name}</span> : <Link href={profilePagePath(who.callsign)}>{who.name}</Link>}
+      {person.own && <span className={styles.you}>You</span>}
+    </Popover.Title>
+    <TraderWallet address={person.address} />
+    <dl className={styles.cardFigures}>
+      {person.buys > 0 && <div><dt>Bought</dt><dd data-side="buy">{usd(person.bought)}</dd></div>}
+      {person.sells > 0 && <div><dt>Sold</dt><dd data-side="sell">{usd(person.sold)}</dd></div>}
+    </dl>
+    {person.labels.length > 0 && <p className={styles.cardLabels}>
+      {person.labels.map((label) => <span key={label}><WalletLabelIcon label={label} /> {WALLET_LABELS[label].name}</span>)}
+    </p>}
+  </>;
+}
+
+/**
+ * A bubble's link to who the trader is: the profile page, or the wallet on the explorer in a new tab.
+ * A mouse click follows it; a tap, a key or a screen reader opens the card, which holds the same links.
+ */
+function useBubblePage(href: string | undefined, external: boolean) {
+  const mouse = useRef(false);
+  if (!href) return { render: <span /> };
+  return {
+    "data-page": "",
+    render: external
+      ? (props: ComponentProps<"a">) => <a {...props} href={href} rel="noopener noreferrer" target="_blank" />
+      : (props: ComponentProps<"a">) => <Link {...props} href={href} prefetch={false} />,
+    onPointerDown: (event: PointerEvent) => { mouse.current = mousePress(event); },
+    onClick: (event: BaseUIEvent<MouseEvent>) => {
+      const followLink = mouse.current && event.detail > 0;
+      mouse.current = false;
+      if (followLink) event.preventBaseUIHandler();
+      else event.preventDefault();
+    },
+  };
+}
 
 function MoreBubble({ bubble: { people, x, y }, size }: Readonly<{ bubble: Extract<Bubble, { kind: "more" }>; size: number }>) {
   const buyers = people.filter((person) => person.side === "buy").length;
