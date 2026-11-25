@@ -91,6 +91,14 @@ function withoutLabels(value: unknown): unknown {
   return value;
 }
 
+/** The relay's send time joins the engine's hop stamps (protocol.md section 4); frames without `hops`, or with all 8 keys used, pass unchanged. */
+export function stampRelay(frame: unknown, now: number): unknown {
+  const provenance = (frame as { provenance?: { hops?: unknown } }).provenance;
+  const hops = provenance?.hops;
+  if (!hops || typeof hops !== "object" || Array.isArray(hops) || Object.keys(hops).length >= 8) return frame;
+  return { ...(frame as object), provenance: { ...provenance, hops: { ...hops, relay_ms: now } } };
+}
+
 function marketPool(frame: Frame): string {
   let pool: unknown;
   if (frame.type === "snapshot") {
@@ -596,7 +604,7 @@ export class MarketStreamRelay {
       for (const client of topic.clients)
         this.#send(client, event("status", topic.fence));
     } else {
-      const bytes = event("market", withoutLabels(frame), cursor);
+      const bytes = event("market", stampRelay(withoutLabels(frame), Date.now()), cursor);
       if (bytes.byteLength > B.maxChunkBytes)
         return this.#end("frame-too-large");
       this.#remember(topic, cursor, bytes);

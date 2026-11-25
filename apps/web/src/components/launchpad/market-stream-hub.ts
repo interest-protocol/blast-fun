@@ -9,6 +9,7 @@ import { normalizeStructTag } from "@mysten/sui/utils";
 import { parseChartFrame, type ChartFrame } from "./chart/chart-live-model.ts";
 import { publishChartRound } from "./chart/chart-live-round.ts";
 import { beginMarketHints } from "#web/lib/live-stream/market-hints.ts";
+import { createLiveTiming, TIMING_SAMPLE_RATE } from "#web/lib/live-stream/live-timing.ts";
 import { browserSocket, fetchLiveTicket, liveBucket, liveMarketSource, liveSourceState } from "#web/lib/live-stream/live-socket-source.ts";
 import { presaleMarketFrameSchema, type PresaleMarketFrame } from "@blast/core/modules/live/presale-market-frames.ts";
 
@@ -638,15 +639,37 @@ export function tabMarketStream(): MarketStreamHub | null {
     const timer = window.setTimeout(run, ms);
     return () => window.clearTimeout(timer);
   };
-  return (tab = new MarketStreamHub({
-    createSource: (url) => liveMarketSource(url, live, {
-      fetchTicket: () => fetchLiveTicket(bucket),
-      openSocket: browserSocket,
-      openEventSource: eventSource,
-      schedule,
+  const timing = Math.random() < TIMING_SAMPLE_RATE
+    ? createLiveTiming({
       now: Date.now,
-      random: Math.random,
-    }),
+      schedule,
+      afterPaint: (run) => requestAnimationFrame(() => run()),
+      send: (path, body) => navigator.sendBeacon(path, body),
+    })
+    : null;
+  return (tab = new MarketStreamHub({
+    createSource: (url) => {
+      const source = liveMarketSource(url, live, {
+        fetchTicket: () => fetchLiveTicket(bucket),
+        openSocket: (socketUrl, protocols) => {
+          const socket = browserSocket(socketUrl, protocols);
+          timing?.socket(socket);
+          return socket;
+        },
+        openEventSource: (path) => {
+          timing?.relay();
+          return eventSource(path);
+        },
+        schedule,
+        now: Date.now,
+        random: Math.random,
+      });
+      if (timing) {
+        source.addEventListener("market", ({ data }) => timing.market(data));
+        source.addEventListener("pong", ({ data }) => timing.pong(data));
+      }
+      return source;
+    },
     schedule,
     defer: (run) => queueMicrotask(run),
     random: Math.random,
