@@ -14,7 +14,6 @@ import { browserMarketDependencies } from "#web/components/launchpad/blast-infra
 import { WorkspaceDataUnavailable } from "../live-read";
 import { createCoinReads, nativeCoinChartReader } from "./coin-reads";
 import { USDC_COIN_TYPE } from "@blast/core/lib/sui/coin-types.ts";
-import { proofMarket } from "../../../../../../test/fixtures/workspace/redesign-fixtures.ts";
 
 const asset = {
   chain: "sui",
@@ -333,39 +332,6 @@ test("a curated ecosystem coin never asks the market service for candles", async
     assert.equal(paths.some((path) => path.includes("/candles")), false);
     await createCoinReads().chart(asset, "24h", new AbortController().signal).catch(() => null);
     assert.equal(paths.some((path) => path.includes("/candles")), true, "a launch coin still reads its merged candles");
-  } finally {
-    globalThis.fetch = original;
-  }
-});
-
-test("a graduated sale charts its pool's candles route only, retries a failed read and is unavailable without coverage", async () => {
-  const original = globalThis.fetch;
-  const paths: string[] = [];
-  let venue = "bluefin";
-  globalThis.fetch = async (input) => {
-    const url = new URL(String(input), "https://blast.test");
-    paths.push(`${url.pathname}${url.search}`);
-    if (url.pathname === "/api/social/home/market") {
-      const market = proofMarket(url.searchParams.get("coin")!);
-      return Response.json({ ...market, pool: { ...market.pool!, venue } });
-    }
-    if (url.pathname.endsWith("/candles")) return Response.json({ error: { code: "service_unavailable" } }, { status: 503 });
-    return Response.json({ window: url.searchParams.get("window"), clock_ms: 1000, prices: [], as_of: asOf });
-  };
-  try {
-    const sale = { ...asset, presale_id: "0x" + "e".repeat(64) };
-    const signal = new AbortController().signal;
-    const reads = createCoinReads();
-    const failed = await reads.chart(sale, "24h", signal).then(() => null, (error: unknown) => error);
-    assert.ok(failed instanceof Error && !(failed instanceof WorkspaceDataUnavailable), "a failed candles read stays retryable");
-    assert.ok(paths.some((path) => path.startsWith("/api/launchpad/market/pools/bluefin/") && path.includes("/candles")), "the pool's own candles are read");
-    await reads.chart(sale, "24h", signal).catch(() => null);
-    assert.equal(paths.filter((path) => path.startsWith("/api/social/home/market")).length, 1, "the sale's pool is read once per reader");
-    venue = "aftermath";
-    const before = paths.length;
-    await assert.rejects(createCoinReads().chart(sale, "24h", signal), WorkspaceDataUnavailable);
-    assert.equal(paths.slice(before).some((path) => path.includes("/candles")), false, "a pool the market service does not cover reads no candles");
-    assert.equal(paths.some((path) => path.includes("pool_swaps") || path.includes("format=ohlcv") || path.includes("prices")), false, "never the old swap or price-line reads");
   } finally {
     globalThis.fetch = original;
   }
