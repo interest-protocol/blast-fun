@@ -1,3 +1,4 @@
+import { errorLabel, observeMetric } from "@blast/core/lib/metrics.ts";
 import { DISCOVERY_PAGE, readDiscoveryPage, type DiscoveryPage } from "@blast/core/modules/launchpad-contract/discovery.ts";
 import type { RoutedRead } from "@blast/core/modules/launchpad-contract/read.ts";
 import type { V1Answer } from "@blast/core/modules/launchpad-contract/v1.ts";
@@ -44,7 +45,7 @@ export function createCurveTargetReader(
     let cursor: string | null = null;
     for (let page = 0; page < MAX_PAGES; page += 1) {
       const read = await readPage(cursor);
-      if (read.status === "unavailable" || read.data.kind !== "answer") return;
+      if (read.status === "unavailable" || read.data.kind !== "answer") throw new Error(`graduated page ${read.status === "unavailable" ? "unavailable" : read.data.kind}`);
       const { launches, nextCursor } = read.data.value;
       for (const launch of launches) {
         const target = launch.economics.inputs.graduationTarget;
@@ -61,7 +62,9 @@ export function createCurveTargetReader(
     if (!launchIds.some((id) => !known.has(id))) return known;
     if (!loading && now() - lastLoadMs >= CURVE_TARGET_REFRESH_MS) {
       lastLoadMs = now();
-      loading = load().catch(() => undefined).finally(() => { loading = null; });
+      loading = load().catch((error: unknown) => {
+        observeMetric("social.source", { source: "home_curve_targets", outcome: "unavailable", error: errorLabel(error) });
+      }).finally(() => { loading = null; });
     }
     if (loading) {
       let timer: ReturnType<typeof setTimeout> | undefined;
