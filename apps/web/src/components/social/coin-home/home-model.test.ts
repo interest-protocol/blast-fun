@@ -244,6 +244,8 @@ test("a live buy reads in a glance and lands as loud as its size", () => {
   assert.deepEqual(buyCueOf(buy("13.482913")), { text: "+$13", tier: "small" });
   assert.deepEqual(buyCueOf(buy("99.99")), { text: "+$100", tier: "big" });
   assert.deepEqual(buyCueOf(buy("99.4")), { text: "+$99", tier: "small" });
+  assert.deepEqual(buyCueOf(buy("999.4")), { text: "+$999", tier: "big" });
+  assert.deepEqual(buyCueOf(buy("999.5")), { text: "+$1,000", tier: "huge" });
   assert.deepEqual(buyCueOf(buy("100")), { text: "+$100", tier: "big" });
   assert.deepEqual(buyCueOf(buy("1204.5")), { text: "+$1.2K", tier: "huge" });
   assert.deepEqual(buyCueOf(buy("2310000")), { text: "+$2.31M", tier: "huge" });
