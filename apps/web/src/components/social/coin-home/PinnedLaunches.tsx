@@ -6,7 +6,7 @@ import type { DiscoveryResponse } from "@blast/core/modules/launchpad-discovery/
 import type { SocialPresaleSummary } from "@blast/core/web/contracts/presales.ts";
 
 import { CspStyles } from "#web/components/presale-pages/csp-style.tsx";
-import { eligibleFeatured, shuffleFeatured } from "#web/components/presale-pages/featured-model.ts";
+import { eligibleFeatured, shuffleFeaturedBy } from "#web/components/presale-pages/featured-model.ts";
 import { FeaturedCarousel } from "#web/components/presale-pages/FeaturedCarousel.tsx";
 import { FeaturedSale } from "#web/components/presale-pages/FeaturedPresales.tsx";
 import carousel from "#web/components/presale-pages/FeaturedPresales.module.css";
@@ -42,7 +42,6 @@ function useClosestLiveCurve(featured: DiscoveryResponse | undefined, client: Qu
   return { row: closestLiveCurve(laterPages.data), metrics: laterPages.data?.metrics };
 }
 
-/** Home's featured carousel: pinned presales, pinned curves, then the live curve closest to graduation. */
 export function PinnedLaunches({ now, nowMs, initialPinSeed, presales: seededPresales = null, curves: seededCurves = null }: Readonly<{
   now: number;
   /** When the server read the seeds. */
@@ -56,17 +55,36 @@ export function PinnedLaunches({ now, nowMs, initialPinSeed, presales: seededPre
   const presales = useSeededQuery({ ...featuredPresalesQuery(), refetchInterval: (query) => pollInterval(PIN_POLL_MS, query) }, seededPresales, nowMs, client);
   const curves = useSeededQuery({ ...bondingFeaturedQuery(), refetchInterval: (query) => pollInterval(PIN_POLL_MS, query) }, seededCurves?.answer, seededCurves?.nowMs ?? nowMs, client);
   const [seed] = useState(() => initialPinSeed);
-  const sales = shuffleFeatured(eligibleFeatured(presales.data ?? [], now), seed);
+  const sales = eligibleFeatured(presales.data ?? [], now);
   const pinnedCurves = curves.data?.featured === true ? (pageOf(curves.data)?.rows ?? []) : [];
   const { row: nearest, metrics } = useClosestLiveCurve(curves.data, client);
   const closestCurve = nearest && !pinnedCurves.some((row) => row.coinType === nearest.coinType) ? nearest : undefined;
-  if (sales.length === 0 && pinnedCurves.length === 0 && !closestCurve) return null;
+  const curveRows = closestCurve ? [...pinnedCurves, closestCurve] : pinnedCurves;
+  const slides = shuffleFeaturedBy([
+    ...sales.map((sale) => ({ id: `presale:${sale.presale_id}`, sale })),
+    ...curveRows.map((row) => ({ id: `curve:${row.launchId}`, row })),
+  ], seed, (slide) => slide.id);
+  if (slides.length === 0) return null;
   return (
     <section aria-label="Launch highlights" className={`${carousel.catalogFeatured} ${styles.bar}`}>
       <FeaturedCarousel kind="launches">
-        {sales.map((sale) => <FeaturedSale className={styles.sale} key={sale.presale_id} now={now} sale={sale} viewer={null} />)}
-        {pinnedCurves.map((row) => <FeaturedCurve className={`card ${styles.curve}`} key={row.launchId} featured metrics={curves.data?.metrics?.[row.launchId]} row={row} seed={seededCurves?.details[row.launchId]} />)}
-        {closestCurve ? <FeaturedCurve className={`card ${styles.curve}`} key={closestCurve.launchId} featured={false} metrics={metrics?.[closestCurve.launchId]} row={closestCurve} seed={seededCurves?.details[closestCurve.launchId]} /> : null}
+        {slides.map((slide) => {
+          if ("sale" in slide) {
+            return <FeaturedSale className={styles.sale} key={slide.id} now={now} sale={slide.sale} viewer={null} />;
+          }
+          const { row } = slide;
+          const featured = row !== closestCurve;
+          return (
+            <FeaturedCurve
+              className={`card ${styles.curve}`}
+              featured={featured}
+              key={slide.id}
+              metrics={(featured ? curves.data?.metrics : metrics)?.[row.launchId]}
+              row={row}
+              seed={seededCurves?.details[row.launchId]}
+            />
+          );
+        })}
       </FeaturedCarousel>
       {/* The site's CSP drops server-rendered style attributes: this writes the presale bars' widths after hydration. */}
       <CspStyles />

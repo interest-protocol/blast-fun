@@ -19,11 +19,15 @@ export function eligibleFeatured(sales: readonly SocialPresaleSummary[], nowMs: 
   });
 }
 
-/** Rank each pin independently so refetches, admin reordering and expired pins leave the remaining order steady. */
 export function shuffleFeatured(sales: readonly SocialPresaleSummary[], seed: string): readonly SocialPresaleSummary[] {
-  if (sales.length < 2) return sales;
-  return sales
-    .map(sale => ({ sale, rank: bytesToHex(sha256(utf8ToBytes(`${seed}:${sale.presale_id}`))) }))
+  return shuffleFeaturedBy(sales, seed, (sale) => sale.presale_id);
+}
+
+/** Rank each slide independently so refetches and membership changes leave the remaining order steady. */
+export function shuffleFeaturedBy<T>(slides: readonly T[], seed: string, idOf: (slide: T) => string): readonly T[] {
+  if (slides.length < 2) return slides;
+  return slides
+    .map((slide) => ({ slide, rank: bytesToHex(sha256(utf8ToBytes(`${seed}:${idOf(slide)}`))) }))
     .sort((a, b) => a.rank.localeCompare(b.rank, "en-US"))
-    .map(({ sale }) => sale);
+    .map(({ slide }) => slide);
 }
