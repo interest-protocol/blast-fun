@@ -42,12 +42,14 @@ export function ReferralAccounting({
   accounting,
   compact = false,
 }: Readonly<{ accounting: Accounting; compact?: boolean }>) {
+  const rate = !compact && <p className={styles.note}>Current referral rate {accounting.share_bps / 100}%</p>;
   if (accounting.as_of_ms === null)
-    return (
+    return <>
+      {rate}
       <p className={styles.note} role="status">
         Updating referral earnings
       </p>
-    );
+    </>;
   const cutoff = new Date(accounting.as_of_ms);
   const hasAssets = accounting.assets.length > 0;
   const pending = accounting.pending_events > 0;
@@ -76,7 +78,7 @@ export function ReferralAccounting({
               </dd>
             </div>
             <div>
-              <dt>Earnings (60%)</dt>
+              <dt>Earnings</dt>
               <dd className="num">
                 <Amount asset={asset} field="earnings_atoms" identity={identity} />
               </dd>
@@ -91,6 +93,7 @@ export function ReferralAccounting({
         <p className={styles.note}>{emptyLabel}</p>
       )}
       {!compact && <>
+        {rate}
         {Number.isFinite(cutoff.getTime()) && <p className={styles.note}>
           Lifetime totals through <time dateTime={cutoff.toISOString().slice(0, 10)}>{shortUtcDate(cutoff)}</time>
         </p>}

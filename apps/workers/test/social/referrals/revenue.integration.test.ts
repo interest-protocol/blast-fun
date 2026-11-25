@@ -468,6 +468,86 @@ test(
       start + 3000,
     );
 
+    const standardOwner = await create("standard_owner", null);
+    const specialOwner = await create("special_owner", null, "7777777777");
+    const reservationCode = "special_reservation";
+    const reservationSubject = "5555555555";
+    await admin.query(
+      "INSERT INTO social_referral_reservations(code,x_subject,x_handle,display_name) VALUES ($1,$2,'special_x','Special X')",
+      [reservationCode, reservationSubject],
+    );
+    const standardFollower = await create("standard_follower", "standard_owner");
+    const reservationFollower = await create("reservation_follower", reservationCode);
+    const standardWallet = objectId("7");
+    const reservationWallet = objectId("8");
+    await admin.query(
+      "UPDATE social_accounts SET created_at=to_timestamp($3/1000.0) WHERE account_id IN ($1,$2)",
+      [standardFollower, reservationFollower, start - 1000],
+    );
+    await admin.query(
+      `INSERT INTO social_account_wallets(address,account_id,verified_at)
+       VALUES ($1,$2,to_timestamp($5/1000.0)),($3,$4,to_timestamp($5/1000.0))`,
+      [standardWallet, standardFollower, reservationWallet, reservationFollower, start - 1000],
+    );
+    const laterSale = objectId("a");
+    const laterPartnerLaunch = objectId("b");
+    const laterPartnerTicket = objectId("c");
+    const unpartneredBuy = (fee: bigint) => launchEvent("Bought", {
+      quote_in: 10n * SUI,
+      protocol_quote_fee: fee,
+    });
+    await advance(3001);
+    await receipt([unpartneredBuy(3n), commit(laterSale), funded(laterSale)], 3001, true, standardWallet);
+    await receipt([
+      launchEvent("LaunchTicketCreated", { ticket_id: laterPartnerTicket, meme }),
+      launchEvent("LaunchCreated", { launch_id: laterPartnerLaunch, ticket_id: laterPartnerTicket, quote, partner_id: objectId("6") }),
+      launchEvent("Bought", { launch_id: laterPartnerLaunch, quote_in: 10n * SUI, protocol_quote_fee: 5n }),
+    ], 3001, true, standardWallet);
+    await collect();
+    const beforeRateChange = (await readReferralSummary(db, standardOwner)).accounting!;
+    assert.equal(beforeRateChange.share_bps, 6000);
+    assert.equal(beforeRateChange.assets[0].earnings_atoms, "1");
+
+    await admin.query(
+      "INSERT INTO social_config (key,value,updated_by) VALUES ('referral_rate_policy',$1,'test')",
+      [JSON.stringify({
+        effective_at_ms: start + 3002,
+        special_account_ids: [specialOwner],
+        special_reservation_codes: [reservationCode],
+      })],
+    );
+    const standardBeforeSettlement = (await readReferralSummary(db, standardOwner)).accounting!;
+    assert.equal(standardBeforeSettlement.share_bps, 3000);
+    assert.deepEqual(standardBeforeSettlement.assets, beforeRateChange.assets);
+    await advance(3002);
+    await receipt([unpartneredBuy(4n), paid(laterSale, 11n)], 3002, true, standardWallet);
+    await receipt([feePayment("launch", {
+      origin: laterPartnerLaunch,
+      quote_amount: 3n,
+      partner_quote_amount: 2n,
+      meme_amount: 0n,
+      partner_meme_amount: 0n,
+    })], 3002, true, standardWallet);
+    await receipt([unpartneredBuy(5n)], 3002, true, reservationWallet);
+    await collect();
+    const standard = (await readReferralSummary(db, standardOwner)).accounting!;
+    assert.equal(standard.assets[0].revenue_atoms, "21");
+    assert.equal(standard.assets[0].earnings_atoms, "7"); // floor(3 × .6 + (4 + 11 + 3) × .3)
+    assert.deepEqual((await readReferralInvitees(db, standardOwner, null)).invitees[0].accounting, standard);
+    assert.equal((await readReferralSummary(db, specialOwner)).accounting!.share_bps, 6000);
+
+    await admin.query("UPDATE social_accounts SET x_subject=$2 WHERE account_id=$1", [standardOwner, reservationSubject]);
+    await admin.query(
+      "UPDATE social_referral_reservations SET claimed_at=to_timestamp($2/1000.0) WHERE code=$1",
+      [reservationCode, start + 3003],
+    );
+    await advance(3003);
+    await receipt([unpartneredBuy(5n)], 3003, true, standardWallet);
+    await collect();
+    const claimed = (await readReferralSummary(db, standardOwner)).accounting!;
+    assert.equal(claimed.share_bps, 6000);
+    assert.equal(claimed.assets[0].earnings_atoms, "13"); // prior 7 + new direct 3 + pre-claim reservation 3
+
     const migration =
       "../../../../../packages/core/src/modules/database/migrations/0143_x_referral_revenue";
     await admin.query(
