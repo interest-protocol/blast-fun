@@ -39,7 +39,7 @@ function setup(pools = [CURVE], requestFrom?: number, migration: MigrationMarker
   let now = NOW;
   const sources: Source[] = [];
   const urls: string[] = [];
-  const loads: { pool: string; resolve: (answer: ChartPoolRead) => void }[] = [];
+  const loads: { pool: string; resolve: (answer: ChartPoolRead) => void; reject: (error: unknown) => void }[] = [];
   const sections: { pool: string; section: Section<PoolCandlePage> }[] = [];
   const statuses: ChartStreamStatus[] = [];
   const timers: { run: () => void; ms: number }[] = [];
@@ -51,7 +51,7 @@ function setup(pools = [CURVE], requestFrom?: number, migration: MigrationMarker
   });
   const client = new ChartStream({
     pools, expected, migration: () => migration, request: () => ({ ...chartRequest({ interval: "1s", range: "all" }, NOW), ...(requestFrom === undefined ? {} : { from: requestFrom }) }),
-    load: (pool) => new Promise<ChartPoolRead>((resolve) => loads.push({ pool, resolve })),
+    load: (pool) => new Promise<ChartPoolRead>((resolve, reject) => loads.push({ pool, resolve, reject })),
     onSection: (pool, section) => sections.push({ pool, section }), onStatus: (status) => statuses.push(status),
     hub, visible: () => true, schedule, now: () => now, ...(livePolls === undefined ? {} : { livePolls }),
     publish: (run) => { publications.push(run); return () => { const index = publications.indexOf(run); if (index >= 0) publications.splice(index, 1); }; }, random: () => 0,
@@ -506,6 +506,55 @@ test("on a live stream a quiet pool's price is renewed by a read before its proo
   s.advance(5_000);
   poll();
   assert.equal(s.loads.length, 0, "a trade renews the price without a read");
+});
+
+test("a failed or unavailable renewal read leaves a live chart and its price as they are", async (t) => {
+  const s = setup([CURVE], undefined, null, false);
+  const prices: (ChartPriceUpdate | null)[] = [];
+  t.after(subscribeChartPrice(CURVE, expected, (price) => prices.push(price)));
+  s.client.start();
+  t.after(() => s.client.stop());
+  s.source().ready(10);
+  s.source().emit("hint", { type: "hello", provenance: wireProvenance(10) });
+  s.loads.shift()!.resolve(answer(10));
+  await settle();
+  const poll = () => s.timers.find((timer) => timer.ms === 15_000)!.run();
+  const shown = s.sections.length;
+  s.advance(10_000);
+  poll();
+  s.loads.shift()!.reject(new Error("429"));
+  await settle();
+  s.advance(1_000);
+  poll();
+  s.loads.shift()!.resolve({ page: null, section: { state: "unavailable", reason: "stream-history-unavailable" } });
+  await settle();
+  assert.equal(s.sections.length, shown, "the shown history stays");
+  assert.equal(prices.includes(null), false, "the price stays");
+  assert.equal(s.statuses.at(-1), "streaming");
+  s.source().emit("market", trade(20_000)); s.flush();
+  assert.equal(prices.at(-1)?.provenance.checkpoint, 20_000, "a later trade still applies");
+});
+
+test("on a live stream a quiet pool shown stale reads again on the next tick and recovers its price", async (t) => {
+  const s = setup([CURVE], undefined, null, false);
+  const prices: (ChartPriceUpdate | null)[] = [];
+  t.after(subscribeChartPrice(CURVE, expected, (price) => prices.push(price)));
+  s.client.start();
+  t.after(() => s.client.stop());
+  s.source().ready(10);
+  s.source().emit("hint", { type: "hello", provenance: wireProvenance(10) });
+  s.loads.shift()!.resolve(answer(10));
+  await settle();
+  s.advance(60_000);
+  s.source().emit("market", trade(20)); s.flush();
+  assert.equal(s.sections.at(-1)?.section.state, "stale");
+  assert.equal(prices.at(-1), null);
+  assert.equal(s.statuses.at(-1), "streaming");
+  s.timers.find((timer) => timer.ms === 15_000)!.run();
+  assert.deepEqual(s.loads.map((load) => load.pool), [CURVE], "stale history is read again");
+  s.loads.shift()!.resolve(answer(60_000));
+  await settle();
+  assert.equal(prices.at(-1)?.provenance.checkpoint, 60_000, "the price returns once the indexer catches up");
 });
 
 test("a tab shown after a long hide reads history at once, as a fresh chart did", async () => {

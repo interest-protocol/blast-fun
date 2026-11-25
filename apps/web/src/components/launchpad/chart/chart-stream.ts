@@ -276,7 +276,9 @@ export class ChartStream {
       this.adoptRead(key, answer, Math.max(required, pool.fence ?? 0));
     } catch {
       if (this.stopped || generation !== this.generation) return;
-      pool.cutoff = null;
+      // Shown history follows the stream, which keeps it current: a failed read changes nothing, and
+      // the next tick reads again.
+      if (pool.cutoff !== null) return;
       this.options.onSection(key, { state: "unavailable", reason: "stream-history-unavailable" }, null);
       this.options.onStatus("unavailable");
       this.invalidatePrice(key);
@@ -295,8 +297,8 @@ export class ChartStream {
       if (newer) this.acceptRead(key, answer.page, answer.section, checkpoint);
       return;
     }
-    // Shown history already reaches the fence and follows the stream: an older read changes nothing.
-    if (answer.page && pool.cutoff !== null) return;
+    // Shown history already reaches the fence and follows the stream: an older or failed read changes nothing.
+    if (pool.cutoff !== null) return;
     if (answer.page && newer) {
       // History behind the stream's fence is still the best known: show it and its close while
       // frames wait for a read that reaches the fence.
@@ -304,7 +306,6 @@ export class ChartStream {
       // The read itself already waited once for the fence (`atCheckpoint`); wait longer before the next.
       pool.retryAttempts = Math.max(pool.retryAttempts, 2);
     } else if (!answer.page) {
-      pool.cutoff = null;
       this.options.onSection(key, answer.section, null);
       this.invalidatePrice(key);
     }
@@ -383,7 +384,8 @@ export class ChartStream {
     const remaining = price ? this.priceRemaining(price.provenance) : 0;
     pool.cancelPriceExpiry?.();
     pool.cancelPriceExpiry = null;
-    pool.priceProofEnds = price && !pool.priceMissing ? this.now() + remaining : null;
+    // Stale history is due at once: the next visible tick reads it again rather than leave "—" until a trade.
+    pool.priceProofEnds = price && !pool.priceMissing ? this.now() + remaining : pool.section?.state === "stale" ? this.now() : null;
     if (!price || pool.priceMissing || remaining <= 0) {
       publishChartPrice(key, null);
       return;

@@ -19,7 +19,7 @@ const start = curve.provenance.checkpoint ?? 0;
 const block = (label: string, height: number) => <div data-proof-slot={label} style={{ height }}>{label}</div>;
 const NO_ROWS: readonly ActivityRow[] = [];
 const LAST_TRADE = "price-row-proof:last-trade";
-const LARGE_BUY = { quote: 987_654_321_000n, meme: 1n };
+const TRADE_AMOUNTS = { quote: 987_654_321_000n, meme: 1n };
 
 /** The activity feed: its newest trade becomes the header's "Last trade" note when the proof asks. */
 function ActivitySlot() {
@@ -27,7 +27,7 @@ function ActivitySlot() {
   useEffect(() => {
     const arrive = () => setLatest({
       kind: "curve_buy", source: null, actor: null, lifecycle: null, position: `${start + 1}:1:0:0`, checkpoint: start + 1,
-      digest: "proof", timestampMs: Date.now(), amounts: LARGE_BUY,
+      digest: "proof", timestampMs: Date.now(), amounts: TRADE_AMOUNTS,
     });
     window.addEventListener(LAST_TRADE, arrive);
     return () => window.removeEventListener(LAST_TRADE, arrive);
