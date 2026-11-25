@@ -118,7 +118,7 @@ function selectedBy(hint: Hint | null): Selected {
     case "activity": {
       const checkpoint = Number(hint.activity_id.split(":", 1)[0]);
       return hint.kind && Number.isSafeInteger(checkpoint)
-        ? { trade: { presaleId: hint.presale_id, coinType: hint.coin_type, checkpoint, cursor: hint.activity_id } }
+        ? { trade: { presaleId: hint.presale_id, coinType: hint.coin_type, checkpoint, cursor: hint.activity_id, kind: hint.kind, ...(hint.actor ? { actor: hint.actor } : {}) } }
         : {};
     }
     case "presale_lifecycle":

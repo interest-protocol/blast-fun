@@ -21,7 +21,8 @@ test("discovery keeps original Origin checks before public SQL, including HEAD",
 });
 
 test("only actual happening page reads carry SSR capability, never hint streams", () => {
-  assert.equal(SOCIAL_DISCOVERY_PRIVATE_ROUTES.length, 6);
+  // Activity, its followed buy card, happening and search: each a GET with its HEAD.
+  assert.equal(SOCIAL_DISCOVERY_PRIVATE_ROUTES.length, 8);
   assert.deepEqual(SOCIAL_DISCOVERY_PRIVATE_ROUTES.filter((route) => route.ssrRead).map((route) => [route.id, route.method]), [["social.happening", "GET"], ["social.happening", "HEAD"]]);
   assert.ok(SOCIAL_DISCOVERY_PRIVATE_ROUTES.every((route) => route.maxBodyBytes === 0 && !routePattern(route.path).test("/api/social/activity/hints")));
 });

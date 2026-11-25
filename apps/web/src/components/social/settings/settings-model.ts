@@ -32,6 +32,7 @@ if (NOTIFICATION_ROWS.map((row) => row.key).join() !== NOTIFICATION_PREFERENCE_K
 
 export const COPY = {
   celebrations: { title: "Celebrations" },
+  buyAlerts: { title: "Buy alerts from people you follow" },
   // The Settings board's lines: sentence fragments, no closing period.
   private: {
     title: "Private account",

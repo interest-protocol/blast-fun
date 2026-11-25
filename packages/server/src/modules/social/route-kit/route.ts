@@ -40,6 +40,17 @@ export const SOCIAL_PUBLIC_CACHE_CONTROL = "public, s-maxage=10, stale-while-rev
  * answering from the edge within 10 s.
  */
 export const SOCIAL_PUBLIC_FRESH_CACHE_CONTROL = "public, s-maxage=10";
+/**
+ * A public read of a settled fact (one trade's buy card): the CDN serves a
+ * success 5 minutes, so a privacy change still reaches the edge within 5
+ * minutes.
+ */
+export const SOCIAL_PUBLIC_SETTLED_CACHE_CONTROL = "public, s-maxage=300";
+const SHARED_CACHE_CONTROL = {
+  public: SOCIAL_PUBLIC_CACHE_CONTROL,
+  "public-fresh": SOCIAL_PUBLIC_FRESH_CACHE_CONTROL,
+  "public-settled": SOCIAL_PUBLIC_SETTLED_CACHE_CONTROL,
+} as const;
 
 export interface SocialRouteKitDependencies {
   /** The site origin: a present `Origin` header must equal it. */
@@ -175,7 +186,7 @@ function assertSpec(spec: SocialRouteSpec): void {
   if (account !== "none" && spec.auth === "none") {
     throw new TypeError(`${spec.name} loads an account, so it must read the caller.`);
   }
-  if ((spec.cache === "public" || spec.cache === "public-fresh") && spec.auth !== "none") {
+  if (spec.cache !== undefined && spec.cache in SHARED_CACHE_CONTROL && spec.auth !== "none") {
     throw new TypeError(`${spec.name} is publicly cached, so it must not read the caller.`);
   }
   if (spec.bucket) {
@@ -210,7 +221,8 @@ function visibility(trading: boolean): Pick<SocialRequestContext, "trading" | "h
  *
  * Every answer has `Cache-Control` (`no-store`, or `private, no-store` for a
  * `private` route, or `SOCIAL_PUBLIC_CACHE_CONTROL` for a `public` route's
- * 200, `SOCIAL_PUBLIC_FRESH_CACHE_CONTROL` for a `public-fresh` one's) and
+ * 200, `SOCIAL_PUBLIC_FRESH_CACHE_CONTROL` for a `public-fresh` one's,
+ * `SOCIAL_PUBLIC_SETTLED_CACHE_CONTROL` for a `public-settled` one's) and
  * `X-Request-ID`; 429 and 503 carry `Retry-After`. A
  * failure maps to a published code and no cause reaches the body or a log
  * line: metrics carry the route, the code and a value-free cause label only.
@@ -319,7 +331,7 @@ export function createSocialRouteKit(dependencies: SocialRouteKitDependencies) {
       assertSpec(spec);
       const cacheControl = spec.cache === "private" ? PRIVATE_NO_STORE : NO_STORE;
       const sharedCacheControl =
-        spec.cache === "public" ? SOCIAL_PUBLIC_CACHE_CONTROL : spec.cache === "public-fresh" ? SOCIAL_PUBLIC_FRESH_CACHE_CONTROL : null;
+        spec.cache !== undefined && spec.cache in SHARED_CACHE_CONTROL ? SHARED_CACHE_CONTROL[spec.cache as keyof typeof SHARED_CACHE_CONTROL] : null;
       const accountMode = spec.account ?? "none";
       return async (request, client) => {
         const requestId = createRequestId();

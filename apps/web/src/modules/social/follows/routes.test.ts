@@ -35,10 +35,11 @@ test("T-009-AC-2 (AC-034): the follow routes take a callsign or a presale id, ne
   assert.deepEqual(follows, ["follows/account/[callsign]", "follows/presale/[presale_id]"]);
   // No social route at all has an address-like path parameter or segment. The exceptions are
   // T-017's static `me/wallets` (linking the caller's own wallet; the address travels in the body)
-  // and UI-14's static `me/wallet` (the caller's own Blast wallet; it names no address).
+  // and UI-14's static `me/wallet` (the caller's own Blast wallet; it names no address), and the
+  // static `me/following/wallets` (the named wallets of the caller's follows; it takes no address).
   for (const segments of routes) {
     const path = segments.join("/");
-    if (path === "me/wallets" || path === "me/wallets/challenge" || path === "me/wallet") continue;
+    if (path === "me/wallets" || path === "me/wallets/challenge" || path === "me/wallet" || path === "me/following/wallets") continue;
     for (const segment of segments) {
       assert.doesNotMatch(segment, /address|wallet/i, path);
     }

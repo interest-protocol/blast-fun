@@ -4,6 +4,7 @@ import { socialInput } from "@blast/server/modules/social/route-kit/validation.t
 import { assertChainReadThroughViews } from "@blast/core/modules/database/modules.ts";
 import type { ReadableDatabase } from "@blast/core/modules/database/transaction.ts";
 import { coinLabel } from "@blast/core/modules/social/contracts/financial-wire.ts";
+import { toUsd } from "@blast/core/modules/social/items/decimal.ts";
 import { SHOWN_PRESALES } from "@blast/core/modules/social/read-model/chain-presales.ts";
 import { SocialRouteError } from "@blast/core/modules/social/route-kit/errors.ts";
 
@@ -191,7 +192,7 @@ async function readFollowingPreview(
   return { mode: "preview", window: request.window, clock_ms: bounds.clockMs, previews, as_of: asOf };
 }
 
-type TapeRow = EventRow & Readonly<{ account_id: string | null; actor: string; presale_id: string; sale_token: string; sale_symbol: string; sale_name: string; sale_icon_url: string | null; lifecycle: string; verified_team: boolean }>;
+type TapeRow = EventRow & Readonly<{ market_cap_usd: string | null; account_id: string | null; actor: string; presale_id: string; sale_token: string; sale_symbol: string; sale_name: string; sale_icon_url: string | null; lifecycle: string; verified_team: boolean }>;
 
 /**
  * The tape: the newest `HOME_TAPE_LIMIT` events by the people the viewer
@@ -210,6 +211,7 @@ async function readFollowingTape(
   const text = selectHome(rowsWithSql({ span, bounds, kinds, sales: { kind: "all" }, actors }, params), `SELECT w.who, w.account_id::text AS account_id, w.actor, w.activity_id, w.kind, w.timestamp_ms::text AS timestamp_ms, w.digest,
     w.quote_type, w.sale_quote, w.sale_quote_symbol, w.sale_quote_decimals,
     w.quote_amount::text AS quote_amount, w.coin_amount::text AS coin_amount, w.quote_refund::text AS quote_refund, w.usd_value::text AS usd_value,
+    w.market_cap_usd::text AS market_cap_usd,
     EXISTS (SELECT 1 FROM social_whys wy WHERE wy.entry_id = 'a:' || w.activity_id AND wy.state = 'active') AS has_why,
     w.sale AS presale_id, p.sale_token, p.sale_symbol, p.sale_name, p.sale_icon_url, p.lifecycle,
     coalesce(trust.verified_team, false) AS verified_team
@@ -225,7 +227,7 @@ async function readFollowingTape(
     const event = eventOf(row);
     const actor = actorOf({ account_id: row.account_id, wallet: row.actor }, people.identities);
     if (!event || actor.type !== "account") return [];
-    return [{ ...event, actor, coin: { presale_id: row.presale_id, ...coinLabel({ coinType: row.sale_token, symbol: row.sale_symbol, name: row.sale_name }), icon_url: row.sale_icon_url || null, ...(row.verified_team ? { verified_team: true } : {}), lifecycle: row.lifecycle } }];
+    return [{ ...event, actor, coin: { presale_id: row.presale_id, ...coinLabel({ coinType: row.sale_token, symbol: row.sale_symbol, name: row.sale_name }), icon_url: row.sale_icon_url || null, ...(row.verified_team ? { verified_team: true } : {}), lifecycle: row.lifecycle }, market_cap_usd: row.market_cap_usd === null ? null : toUsd(row.market_cap_usd) }];
   });
   return { mode: "tape", window: request.window, clock_ms: bounds.clockMs, events, as_of: asOf };
 }

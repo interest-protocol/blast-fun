@@ -151,7 +151,7 @@ export function rowsWithSql(request: RowsRequest, params: Params): string {
   ${followed}
   home_window AS (
     SELECT a.activity_id, a.checkpoint, a.tx_slot, a.event_slot, a.part, a.kind, a.timestamp_ms, a.digest, a.actor,
-      a.presale_id, a.coin_type, a.quote_type, a.quote_amount, a.coin_amount, a.quote_refund, a.usd_value
+      a.presale_id, a.coin_type, a.quote_type, a.quote_amount, a.coin_amount, a.quote_refund, a.usd_value, a.market_cap_usd
     FROM chain_read_v1.activity a
     ${winJoin}
     WHERE a.timestamp_ms > ${from}::bigint AND a.timestamp_ms <= ${to}::bigint

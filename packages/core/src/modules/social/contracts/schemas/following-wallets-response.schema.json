@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "wallets": {
+      "maxItems": 5000,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^0x[0-9a-f]{64}$"
+      },
+      "uniqueItems": true
+    }
+  },
+  "required": [
+    "wallets"
+  ],
+  "additionalProperties": false,
+  "title": "Following wallets",
+  "description": "GET /api/social/me/following/wallets 200: the wallets the naming rule names now for the accounts the caller follows (private, never cached).",
+  "$id": "https://blast-v2.invalid/social/contracts/following-wallets-response.schema.json"
+}

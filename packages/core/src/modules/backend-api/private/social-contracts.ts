@@ -6,6 +6,7 @@ const SOCIAL_METHODS: readonly PrivateRouteContract[] = [
   { id: "social.follow.account.delete", method: "DELETE", path: "/api/social/follows/account/:callsign", maxBodyBytes: 4096 },
   { id: "social.follow.presale.put", method: "PUT", path: "/api/social/follows/presale/:presale_id", maxBodyBytes: 4096 },
   { id: "social.follow.presale.delete", method: "DELETE", path: "/api/social/follows/presale/:presale_id", maxBodyBytes: 4096 },
+  { id: "social.following.wallets", method: "GET", path: "/api/social/me/following/wallets", maxBodyBytes: 0 },
   { id: "social.watchlist.list", method: "GET", path: "/api/social/me/watchlist", maxBodyBytes: 0 },
   { id: "social.watchlist.ids", method: "GET", path: "/api/social/me/watchlist/ids", maxBodyBytes: 0 },
   { id: "social.watchlist.keys", method: "GET", path: "/api/social/me/watchlist/keys", maxBodyBytes: 0 },

@@ -9,11 +9,11 @@ function memory(entries: Record<string, string> = {}) {
   return { getItem: (key: string) => map.get(key) ?? null, setItem: (key: string, value: string) => void map.set(key, value), map };
 }
 
-test("UI-07: device preferences: Celebrations on and Suiscan by default; junk and blocked storage read as defaults", () => {
-  assert.deepEqual(DEFAULT_DEVICE_PREFS, { celebrate: true, explorer: "suiscan" });
-  assert.deepEqual(DEVICE_PREF_KEYS, { celebrate: "blast.celebrate", explorer: "blast.explorer" });
+test("UI-07: device preferences: Celebrations and buy alerts on, Suiscan by default; junk and blocked storage read as defaults", () => {
+  assert.deepEqual(DEFAULT_DEVICE_PREFS, { celebrate: true, explorer: "suiscan", buyAlerts: true });
+  assert.deepEqual(DEVICE_PREF_KEYS, { celebrate: "blast.celebrate", explorer: "blast.explorer", buyAlerts: "blast.buyAlerts" });
   assert.deepEqual(readDevicePrefs(null), DEFAULT_DEVICE_PREFS);
-  assert.deepEqual(readDevicePrefs(memory({ "blast.celebrate": "false", "blast.explorer": '"suivision"' })), { celebrate: false, explorer: "suivision" });
+  assert.deepEqual(readDevicePrefs(memory({ "blast.celebrate": "false", "blast.explorer": '"suivision"', "blast.buyAlerts": "false" })), { celebrate: false, explorer: "suivision", buyAlerts: false });
   assert.deepEqual(readDevicePrefs(memory({ "blast.celebrate": "{", "blast.explorer": '"etherscan"' })), DEFAULT_DEVICE_PREFS);
   const throwing = { getItem: () => { throw new Error("SecurityError"); }, setItem: () => { throw new Error("QuotaExceeded"); } };
   assert.deepEqual(readDevicePrefs(throwing), DEFAULT_DEVICE_PREFS);

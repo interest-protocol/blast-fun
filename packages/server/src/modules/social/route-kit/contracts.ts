@@ -29,11 +29,13 @@ export type SocialRouteSpec = Readonly<{
    * `public`: a success is `SOCIAL_PUBLIC_CACHE_CONTROL` (the CDN may share
    * it); errors stay `no-store`. `public-fresh`: the same, as
    * `SOCIAL_PUBLIC_FRESH_CACHE_CONTROL` (shared 10 s, never served stale),
-   * for an answer its owner can withdraw. Only a route that never reads the
+   * for an answer its owner can withdraw. `public-settled`: the same, as
+   * `SOCIAL_PUBLIC_SETTLED_CACHE_CONTROL` (shared 5 minutes), for an answer
+   * about a fact that never changes. Only a route that never reads the
    * caller (`auth: "none"`) may be public, so a shared answer cannot depend
    * on who asked. Default `no-store`.
    */
-  cache?: "no-store" | "private" | "public" | "public-fresh";
+  cache?: "no-store" | "private" | "public" | "public-fresh" | "public-settled";
 }>;
 
 /** The caller's Blast Account. Resolving may create a member's row. */

@@ -103,7 +103,7 @@ function Surface({ surface, volume }: Readonly<{ surface: string; volume: string
   return (
     <SettingsView
       callsign="kaimoreno" celebrate explorer="suiscan" mode="account"
-      onCelebrate={noop} onCopy={noop} onExplorer={noop} onLinkWallet={noop}
+      onCelebrate={noop} onBuyAlerts={noop} buyAlerts onCopy={noop} onExplorer={noop} onLinkWallet={noop}
       onLogOut={noop} onNotification={noop} onPrivate={noop} onPublicPortfolio={noop} onRetry={noop} onSignIn={noop}
       onBlastConfirmation={noop}
       settings={{ privacy: "public", sharing_since_ms: 1, commit_too_coin_type: null, public_portfolio: false, explorer: "suiscan", sound: true, blast_mode_confirm_actions: false, notifications: { ...DEFAULT_NOTIFICATION_PREFERENCES, unlocks: false } }}

@@ -77,7 +77,7 @@ export function keysChangedBy(change: ServerChange): readonly QueryKey[] {
       // A follow changes Home's Following source and every followed preview and thread.
       return change.target === "presale"
         ? [queryKeys.me.watchlist.all, queryKeys.me.presaleViewerAll]
-        : [queryKeys.me.mutuals(change.id), queryKeys.me.connections.all, queryKeys.me.home.all];
+        : [queryKeys.me.mutuals(change.id), queryKeys.me.connections.all, queryKeys.me.home.all, queryKeys.me.followingWallets()];
     case "watchlist":
       return [queryKeys.me.watchlist.all];
     case "settings":
