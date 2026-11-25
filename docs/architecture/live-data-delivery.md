@@ -65,13 +65,13 @@ header price arrive on its market stream.
 ## Direct browser socket: security review (2026-11-25)
 
 Proposal: a tab opens one WebSocket to the hints process at
-`wss://live.blast.fun/v1/live` and receives the same events the SSE route
+`wss://live.blast.fun/v1/socket` and receives the same events the SSE route
 sends, one SSE event block per message. The Vercel route stays for one release
 as the rollback. Wire details: `handoffs/realtime-tonight/protocol.md` in the
 workspace. Status: **awaiting Jose's sign-off**; the flag stays off until then.
 
 What changes: the hints service is already a public Render web service, but
-every route that does work needs the signed gateway proof. `/v1/live` is its
+every route that does work needs the signed gateway proof. `/v1/socket` is its
 first unsigned route that does work. It must not become a free fan-out, an
 amplifier, a way to starve other tabs, or a way to read anything the public SSE
 stream does not already show.
@@ -106,7 +106,7 @@ After 3 failures in a row, the tab uses SSE for 10 minutes.
 
 | Risk | Control |
 | --- | --- |
-| Anyone opens sockets | A **ticket** from `POST /api/launchpad/market/ticket`. The route is behind the first-party API gate and has a per-IP quota of 60 tickets a minute. The gate cookie costs one page GET, so the ticket is a **cost and a throttle, not authentication**. The socket limits below are the real bound. Ticket: `key = HMAC(gateway secret, "blast-live-ticket-v1")`, then `HMAC(key, payload)`. The payload is `{v, exp, n, o}`. A ticket lives 60 s and is **single use**: its nonce is burned with `SET NX PX <remaining life>` under its own `live-ticket:` prefix in the private-replay Redis. |
+| Anyone opens sockets | A **ticket** from `POST /api/launchpad/market/ticket`. The route is behind the first-party API gate. It has no per-IP quota: web routes carry no rate limits (founder ruling). The gate cookie costs one page GET, so the ticket is a **cost, not authentication**. The socket limits below are the real bound. Ticket: `key = HMAC(gateway secret, "blast-live-ticket-v1")`, then `HMAC(key, payload)`. The payload is `{v, exp, n, o}`. A ticket lives 60 s and is **single use**: its nonce is burned with `SET NX PX <remaining life>` under its own `live-ticket:` prefix in the private-replay Redis. |
 | Ticket leaks through logs, history or Referer | The ticket travels only in `Sec-WebSocket-Protocol`, never in the URL. Surfaces that must not record it: Render request logs (they record the path only), error and trace reporters, and refusal close reasons. A test checks that no refusal echoes it. |
 | Another site embeds the socket | Exact `Origin` match, and the ticket binds `o`. The server never reads `Cookie`. The gate cookie is `__Host-` (host-only); sign-off checks that no first-party cookie uses `Domain=blast.fun`. |
 | One client starves the shared tables | Limits per IP, per instance: **8 open sockets**, **20 opens a minute** (resumes count), **4 distinct pools** and **40 distinct price coins** across that IP's sockets. The key is `ClientAddress.rateKey`, a /64 for IPv6. With 2 instances the effective limit doubles. Global tables per process: 64 pool topics and 128 price coins (`MARKET_STREAM_BUDGET`). A socket whose new topics or coins would not fit is refused with 4503; tables never fill silently. A pool the engine never snapshots frees its slot after 10 s. |
@@ -120,7 +120,7 @@ After 3 failures in a row, the tab uses SSE for 10 minutes.
 | Reconnect storms after a deploy | Drain closes with 1012, spread over 5 s. Clients wait a random 1–30 s before reconnecting. Prices may clear (9 s watchdog), and the screens' 15 s CDN poll covers the gap. A resume from the ring avoids a history refetch per tab. |
 | Data integrity | Frames are the reader's frames after the same checks: an explicit type allowlist with a validator per type, `parseInfraProvenance`, cursor and deployment fingerprint. New frame types (for example `coin_stats`) are added to the allowlist with a validator. The socket adds no data source. |
 | Spoofed client IP | The hints service runs `trusted-proxy` ingress, so `render.yaml` declares `BLAST_BACKEND_TRUSTED_PROXY_CIDRS`. `ingressAddress` accepts exactly one `X-Forwarded-For` address. Null means refuse; it never falls back to the peer address. Sign-off test: send `X-Forwarded-For: 1.2.3.4` from outside, to both `live.blast.fun` and the onrender.com host, and record what arrives. |
-| Transport | TLS ends at Render's proxy (managed certificate). `wss` only. CSP `connect-src` adds the live origin from configuration per environment, checked by `assertPlainSources`. `/v1/live` is served only on the live host. |
+| Transport | TLS ends at Render's proxy (managed certificate). `wss` only. CSP `connect-src` adds the live origin from configuration per environment, checked by `assertPlainSources`. `/v1/socket` is served only on the live host. |
 
 ### Residual risks
 
@@ -132,7 +132,8 @@ After 3 failures in a row, the tab uses SSE for 10 minutes.
 - Pre-existing: the global tables can already be exhausted through SSE by
   scripts that hold a gate cookie. The per-IP pool and coin limits above
   apply to sockets only.
-- Unsigned routes on the service: `/v1/live`, `/v1/health` and readiness.
+- Unsigned routes on the service: `/v1/socket`, plus the existing liveness
+  (`/v1/live`), `/v1/health` and readiness.
   The last two are bounded by a 5 s cache and 8 requests in flight.
 
 ### Sign-off
