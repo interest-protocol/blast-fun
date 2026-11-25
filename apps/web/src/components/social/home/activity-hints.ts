@@ -49,8 +49,8 @@ import type { MetricFields } from "@blast/core/lib/metrics.ts";
 import { compareEventCursors } from "@blast/core/modules/launchpad-contract/cursor.ts";
 import { parseInfraProvenance } from "@blast/core/modules/launchpad-contract/provenance.ts";
 import { DEPLOYMENT_NETWORKS } from "@blast/core/web/launchpad-read.ts";
-import { MARKET_STREAM_PATH } from "@blast/core/modules/launchpad-contract/market-stream.ts";
-import type { MarketEventSource } from "#web/components/launchpad/market-stream-hub.ts";
+import { MARKET_STREAM_BUDGET, MARKET_STREAM_PATH } from "@blast/core/modules/launchpad-contract/market-stream.ts";
+import { HELLO_DEADLINE_MS, type MarketEventSource } from "#web/components/launchpad/market-stream-hub.ts";
 import { browserLiveSource } from "#web/lib/live-stream/live-socket-source.ts";
 import { marketHintTransport } from "#web/lib/live-stream/market-hints.ts";
 import { hintOf, type Hint } from "@blast/core/modules/live/hint-frames.ts";
@@ -80,8 +80,6 @@ export interface HintSocket {
   close(): void;
   onmessage: ((event: { data: unknown }) => void) | null;
   onclose: (() => void) | null;
-  /** Set before `onclose` when no retry can succeed (no service to ask): the client stays on its poll. */
-  unavailable?: boolean;
 }
 
 /** What the client needs of the browser; tests pass fakes. */
@@ -167,8 +165,6 @@ export class ActivityHints {
   #catchUp = false;
   /** The engine refused (not mainnet, no topic) or the browser did: no reconnect until the surfaces start over. */
   #refused = false;
-  /** The refusal came from the socket closing as unavailable (the browser refused to open it): the tab's return tries once more. */
-  #socketRefused = false;
   readonly #seen = new Set<string>();
   readonly #connectionListeners = new Set<() => void>();
 
@@ -192,7 +188,6 @@ export class ActivityHints {
     this.#surfaces.add(surface);
     if (this.#surfaces.size === 1) {
       this.#refused = false;
-      this.#socketRefused = false;
       this.#catchUp = this.#deps.onVisibilityChange !== undefined && !this.#deps.visible();
       this.#offVisibility = this.#deps.onVisibilityChange?.(() => this.#visibilityChanged()) ?? null;
       this.#connect();
@@ -240,11 +235,6 @@ export class ActivityHints {
     if (this.#socket !== socket) return;
     this.#socket = null;
     this.#connectionChanged();
-    if (socket.unavailable && !this.#refused) {
-      this.#refused = true;
-      this.#socketRefused = true;
-      this.#metric({ event: "unavailable", reason: "socket" });
-    }
     if (this.#surfaces.size === 0 || this.#refused || !this.#deps.visible()) return;
     if (this.#liveSince !== null && this.#deps.now() - this.#liveSince >= STABLE_MS) this.#failures = 0;
     const delay = reconnectDelay(this.#failures, this.#deps.random);
@@ -370,7 +360,6 @@ export class ActivityHints {
   /** The engine or the browser refused: close, and stay on the poll until the surfaces start over. */
   #refuse(reason: "socket" | "hello" | "network" | "subscribe"): void {
     this.#refused = true;
-    this.#socketRefused = false;
     this.#metric({ event: "unavailable", reason });
     const socket = this.#socket;
     this.#socket = null;
@@ -383,7 +372,6 @@ export class ActivityHints {
 
   #visibilityChanged(): void {
     if (this.#deps.visible()) {
-      if (this.#socketRefused) this.#refused = this.#socketRefused = false;
       if (this.#retry === null) this.#connect();
       return;
     }
@@ -428,18 +416,41 @@ export function activityHints(surface: string, hints: ActivityHints, accepts?: H
   return { name: "activity", subscribe: (signal) => hints.subscribe(surface, signal, accepts) };
 }
 
-/** The socket's hint events as a hint socket. The hints process subscribes and pings upstream, so `send` does nothing. */
-export function socketHintStream(source: MarketEventSource): HintSocket {
-  const socket: HintSocket = { send: () => undefined, close: () => source.close(), onmessage: null, onclose: null };
-  const end = () => {
-    source.close();
+/**
+ * The socket's hint events as a hint socket. The hints process subscribes and pings upstream, so `send` does
+ * nothing. Like the market hub, it gives up on a socket with no first frame within the hello deadline or no
+ * frame within the heartbeat timeout after it: a half-open socket closes and the client reconnects.
+ */
+export function socketHintStream(source: MarketEventSource, schedule: (run: () => void, ms: number) => () => void): HintSocket {
+  let ended = false;
+  let cancel: (() => void) | null = null;
+  const stop = (failed: boolean) => {
+    ended = true;
+    cancel?.();
+    cancel = null;
+    source.close(failed);
+  };
+  const end = (failed = false) => {
+    if (ended) return;
+    stop(failed);
     socket.onclose?.();
   };
-  source.addEventListener("hint", (event) => socket.onmessage?.({ data: event.data }));
+  const expect = (ms: number) => {
+    if (ended) return;
+    cancel?.();
+    cancel = schedule(() => end(true), ms);
+  };
+  const socket: HintSocket = { send: () => undefined, close: () => { if (!ended) stop(false); }, onmessage: null, onclose: null };
+  expect(HELLO_DEADLINE_MS);
+  source.addEventListener("heartbeat", () => expect(MARKET_STREAM_BUDGET.heartbeatTimeoutMs));
+  source.addEventListener("hint", (event) => {
+    expect(MARKET_STREAM_BUDGET.heartbeatTimeoutMs);
+    socket.onmessage?.({ data: event.data });
+  });
   // A drop, or a socket that is off or backing off: the client retries with its own backoff, and the source
   // answers at once without a ticket until its wait ends.
-  source.addEventListener("error", end);
-  source.addEventListener("refused", end);
+  source.addEventListener("error", () => end());
+  source.addEventListener("refused", () => end());
   return socket;
 }
 
@@ -471,7 +482,10 @@ function tabClient(createSocket: ActivityHintsDependencies["createSocket"]): Act
 export function tabActivityHints(): ActivityHints | null {
   if (typeof window === "undefined" || typeof WebSocket === "undefined") return null;
   // The chart's market stream carries the tab's hints while a coin page holds one.
-  return (tabHints ??= tabClient((url) => marketHintTransport(url, (path) => socketHintStream(browserLiveSource(path)))));
+  return (tabHints ??= tabClient((url) => marketHintTransport(url, (path) => socketHintStream(browserLiveSource(path), (run, ms) => {
+    const timer = window.setTimeout(run, ms);
+    return () => window.clearTimeout(timer);
+  }))));
 }
 
 /**

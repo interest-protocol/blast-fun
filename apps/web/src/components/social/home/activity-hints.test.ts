@@ -19,7 +19,8 @@ import {
   type ActivityHintsDependencies,
   type HintSocket,
 } from "./activity-hints.ts";
-import type { MarketEventSource } from "#web/components/launchpad/market-stream-hub.ts";
+import { HELLO_DEADLINE_MS, type MarketEventSource } from "#web/components/launchpad/market-stream-hub.ts";
+import { MARKET_STREAM_BUDGET } from "@blast/core/modules/launchpad-contract/market-stream.ts";
 import { anyFreshness, hintedGap, pollingFreshness, type FreshnessEnvironment, type FreshnessHint } from "./feed-freshness.ts";
 
 /** R3-26: the blast-infra `activity` hint (T-035) as a freshness source, without a browser. */
@@ -28,7 +29,6 @@ import { anyFreshness, hintedGap, pollingFreshness, type FreshnessEnvironment, t
 class FakeSocket implements HintSocket {
   sent: Record<string, unknown>[] = [];
   closed = false;
-  unavailable?: boolean;
   onmessage: ((event: { data: unknown }) => void) | null = null;
   onclose: (() => void) | null = null;
   readonly url: string;
@@ -550,45 +550,6 @@ function fakeEnvironment(t: TestContext) {
   };
 }
 
-test("a socket the browser refuses to open stops the hint client; the tab's return tries once more", async () => {
-  const sockets: FakeSocket[] = [];
-  const timers: (() => void)[] = [];
-  const metrics: Record<string, unknown>[] = [];
-  let visible = true;
-  let onVisibility: (() => void) | null = null;
-  const hints = new ActivityHints({
-    url: "/api/launchpad/market/stream?activity=true",
-    createSocket: (url) => {
-      const socket = new FakeSocket(url);
-      sockets.push(socket);
-      return socket;
-    },
-    now: () => 1_000_000,
-    setTimeout: (run) => timers.push(run),
-    clearTimeout: () => undefined,
-    random: () => 0.5,
-    visible: () => visible,
-    onVisibilityChange: (listener) => {
-      onVisibility = listener;
-      return () => { onVisibility = null; };
-    },
-    metric: (_name, fields) => metrics.push(fields),
-  });
-  hints.subscribe("happening", () => undefined);
-  await Promise.resolve();
-  assert.equal(sockets.length, 1);
-  sockets[0].unavailable = true;
-  sockets[0].drop();
-  assert.deepEqual(metrics.filter((fields) => fields.event === "unavailable"), [{ event: "unavailable", reason: "socket" }]);
-  assert.equal(timers.length, 0, "no backoff retry, so a refused tab never loops");
-  visible = false;
-  onVisibility!();
-  visible = true;
-  onVisibility!();
-  await Promise.resolve();
-  assert.equal(sockets.length, 2, "the tab's return opens the stream once more");
-});
-
 // This fails if hints stop reaching the client from the market socket, or if a
 // drop or a refused (off or backing-off) socket is not handed to the client's own backoff.
 test("the socket adapter forwards hints, and a drop or a refusal closes it for the client's backoff", () => {
@@ -596,7 +557,7 @@ test("the socket adapter forwards hints, and a drop or a refusal closes it for t
     const listeners = new Map<string, (event: { data?: string }) => void>();
     let closed = 0;
     const source: MarketEventSource = { addEventListener: (type, listener) => { listeners.set(type, listener); }, close: () => { closed += 1; } };
-    const adapter = socketHintStream(source);
+    const adapter = socketHintStream(source, () => () => undefined);
     const frames: unknown[] = [];
     let disconnected = 0;
     adapter.onmessage = (message) => frames.push(message.data);
@@ -606,6 +567,32 @@ test("the socket adapter forwards hints, and a drop or a refusal closes it for t
     listeners.get(ending)!({ data: "600000" });
     assert.deepEqual([closed, disconnected], [1, 1], ending);
   }
+});
+
+// This fails if a half-open activity-only socket (no heartbeat, no close) keeps the client waiting forever,
+// or if the watchdog closes a socket whose heartbeats keep arriving.
+test("the activity-only socket closes as failed when its hello or heartbeat stops, and the client reconnects", () => {
+  const listeners = new Map<string, (event: { data?: string }) => void>();
+  const closes: (boolean | undefined)[] = [];
+  const source: MarketEventSource = { addEventListener: (type, listener) => { listeners.set(type, listener); }, close: (failed) => { closes.push(failed); } };
+  const timers: { run: () => void; ms: number; cancelled: boolean }[] = [];
+  const armed = () => timers.filter((timer) => !timer.cancelled);
+  const adapter = socketHintStream(source, (run, ms) => {
+    const timer = { run, ms, cancelled: false };
+    timers.push(timer);
+    return () => { timer.cancelled = true; };
+  });
+  let disconnected = 0;
+  adapter.onclose = () => { disconnected += 1; };
+  assert.deepEqual(armed().map(({ ms }) => ms), [HELLO_DEADLINE_MS], "a socket must say hello in time");
+  listeners.get("hint")!({ data: JSON.stringify(HELLO) });
+  listeners.get("heartbeat")!({});
+  assert.deepEqual(armed().map(({ ms }) => ms), [MARKET_STREAM_BUDGET.heartbeatTimeoutMs], "each frame re-arms one watchdog");
+  armed()[0]!.run();
+  assert.deepEqual([closes, disconnected], [[true], 1], "a silent socket is closed as failed and the client reconnects");
+  listeners.get("error")!({});
+  adapter.close();
+  assert.deepEqual([closes.length, disconnected], [1, 1], "the end is reported once");
 });
 
 // This fails if a tab with hints but no market subscription has no live hints:

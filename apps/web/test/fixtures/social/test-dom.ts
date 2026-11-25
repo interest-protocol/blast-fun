@@ -238,6 +238,6 @@ export function installTestDom(): TestDom {
   // Fetch keeps Node's implementation; jsdom supplies the browser-only APIs above.
   for (const name of ["fetch", "Response", "Request", "Headers"]) Object.defineProperty(window, name, { value: (globalThis as Record<string, unknown>)[name], configurable: true, writable: true });
   // No live socket unless a test installs a fake one (`installLiveSocket`): Node's WebSocket would reach the network.
-  Reflect.deleteProperty(globalThis, "WebSocket");
+  if (!Reflect.deleteProperty(globalThis, "WebSocket")) throw new Error("the global WebSocket could not be removed");
   return { window, document: window.document } as TestDom;
 }

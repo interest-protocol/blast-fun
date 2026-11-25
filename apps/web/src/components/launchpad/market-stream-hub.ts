@@ -73,7 +73,8 @@ export type MarketStreamSubscription = Readonly<{
 
 export interface MarketEventSource {
   addEventListener(type: string, listener: (event: { data?: string }) => void): void;
-  close(): void;
+  /** `failed`: the caller gave up on it at a deadline, so a socket that never spoke counts against the tab. */
+  close(failed?: boolean): void;
 }
 
 export type MarketStreamDependencies = Readonly<{
@@ -96,7 +97,8 @@ type Observer = { coin: string; listener: CoinTradeListener; live: boolean | nul
 type Pool = { fence: number | null; seen: number; lastEvent: number; cursor: string | null; tradeCursor: string | null; summary: unknown; coin: string | null; priceMissing?: boolean; stats?: CoinStatsFrame };
 type Connection = { pools: Map<string, Pool>; priceCoins: Set<string>; presale?: string; presaleFence: number | null; presaleSeen: number; expected: ExpectedDeployment | null; source: MarketEventSource | null; live: boolean };
 
-const HELLO_DEADLINE_MS = 10_000;
+/** A stream with no hello by then is given up on (its socket counts as failed if it never spoke). */
+export const HELLO_DEADLINE_MS = 10_000;
 const LEGACY_HEARTBEAT_TIMEOUT_MS = 45_000;
 /** A hidden tab keeps its stream this long, so a quick tab flip costs no reconnect or history read. */
 export const HIDDEN_GRACE_MS = 15_000;
@@ -370,7 +372,7 @@ export class MarketStreamHub {
     if (!this.connection) return;
     this.drop();
     // Hint clients wait for the hello that follows the tab's return, not open their own socket.
-    this.hints?.waiting();
+    this.hints?.disconnected();
     this.covered("paused");
   }
 
@@ -390,7 +392,7 @@ export class MarketStreamHub {
   }
 
   /** Ends the current source and every timer that belongs to it; pools lose their fences. */
-  private drop(): void {
+  private drop(deadline = false): void {
     const connection = this.connection;
     this.refused = false;
     this.cancelHello?.();
@@ -404,7 +406,7 @@ export class MarketStreamHub {
     this.cancelStable?.();
     this.cancelStable = null;
     if (!connection) return;
-    connection.source?.close();
+    connection.source?.close(deadline);
     connection.source = null;
     connection.live = false;
     this.presaleState(connection, null);
@@ -427,7 +429,7 @@ export class MarketStreamHub {
     this.covered("connecting");
     const current = () => this.connection === connection && connection.source === source;
     let hintReady = false;
-    this.cancelHello = this.deps.schedule(() => { if (current()) this.reconnect(); }, HELLO_DEADLINE_MS);
+    this.cancelHello = this.deps.schedule(() => { if (current()) this.reconnect(true); }, HELLO_DEADLINE_MS);
     const ready = () => {
       if (connection.live || !hintReady || [...connection.pools.values()].some((pool) => pool.fence === null)) return;
       this.cancelHello?.();
@@ -445,7 +447,7 @@ export class MarketStreamHub {
       if (!current() || heartbeatTimeoutMs === null) return;
       this.cancelHeartbeat?.();
       this.cancelHeartbeat = this.deps.schedule(() => {
-        if (current()) this.reconnect();
+        if (current()) this.reconnect(true);
       }, heartbeatTimeoutMs);
     };
     const confirmPong = (checkpoint: unknown) => {
@@ -547,8 +549,8 @@ export class MarketStreamHub {
     });
     // A drop after the stream opened: not live, retried with backoff.
     source.addEventListener("error", () => { if (current()) this.reconnect(); });
-    // The socket is off or backing off for `data` ms: polls carry the page until then. A returning tab or a
-    // pool change asks the source again, and it answers at once while the wait lasts.
+    // The socket is off or backing off for `data` ms: polls carry the page until then. A returning tab waits
+    // for this timer; a pool change asks the source again, and it answers at once while the wait lasts.
     source.addEventListener("refused", (event) => {
       if (!current()) return;
       this.hints?.disconnected();
@@ -665,11 +667,12 @@ export class MarketStreamHub {
     }, delay);
   }
 
-  private reconnect(): void {
+  /** `deadline`: the source missed a hello or heartbeat deadline. */
+  private reconnect(deadline = false): void {
     const connection = this.connection;
     if (!connection?.source) return;
     this.hints?.disconnected();
-    this.drop();
+    this.drop(deadline);
     this.covered("reconnecting");
     const delay = Math.round(Math.min(30_000, 500 * 2 ** Math.min(this.attempts++, 6)) * (1 + this.deps.random() / 2));
     this.cancelReconnect = this.deps.schedule(() => {
