@@ -1,6 +1,7 @@
 import { WorkspaceDataUnavailable } from "../live-read";
-import { coinMarketHistory, type MarketCoinHistory } from "./coin-market-history";
-import { tradeCoinHistory, type TradeCoinHistory } from "./trade-coin-history";
+import { coinMarketHistory, poolMarketHistory, type MarketCoinHistory } from "./coin-market-history";
+import { fetchCoinMarket } from "./coin-market-reads";
+import { MIGRATOR_POOL_KEY } from "@blast/core/modules/launchpad-contract/venues.ts";
 import { createPresaleReads } from "./presale-reads";
 import type { ProjectMetadata } from "./ProjectLinks";
 import { normalizeStructTag } from "@mysten/sui/utils";
@@ -73,7 +74,7 @@ export type NativeCoinChart = Readonly<{
   chart: MigratedChart;
   request?: ChartRequest;
 }>;
-export type CoinHistory = SocialPriceHistory | NativeCoinChart | MarketCoinHistory | TradeCoinHistory;
+export type CoinHistory = SocialPriceHistory | NativeCoinChart | MarketCoinHistory;
 export type CoinReads = Readonly<{
   links?: (asset: CoinAsset, signal: AbortSignal) => Promise<ProjectMetadata | null>;
   posts?: (asset:CoinAsset,cursor:string|null,signal:AbortSignal)=>Promise<HomeDiscussionPage|null>;
@@ -158,6 +159,8 @@ export function createCoinReads(
   cached: () => readonly ListedPage[] = () => [],
   now: () => number = Date.now,
 ): CoinReads {
+  // A graduated sale's pool never changes: each reader reads it once per coin; a miss is read again on the next call.
+  const salePools = new Map<string, SalePool>();
   return {
     links: async (asset, signal) => (await createPresaleReads().detail(asset, signal))?.presale.metadata ?? null,
     posts: (asset,cursor,signal) => asset.network === "mainnet" && asset.presale_id ? fetchHomeDiscussion(asset.presale_id,cursor,signal) : Promise.resolve(null),
@@ -202,9 +205,13 @@ export function createCoinReads(
     },
     async chart(asset, window, signal, interval) {
       if (asset.network !== "mainnet") throw new WorkspaceDataUnavailable("This network has no price history source.");
-      const executions = await tradeCoinHistory(asset, window, signal, interval);
-      // Quiet ranges retain the observed-price line; they cannot invent trade candles or volume.
-      if (executions && (executions.page.status !== "available" || executions.page.candles.length > 0)) return executions;
+      // A graduated sale charts its pool's own candles, or nothing: never the coin's observed-price line.
+      const pool = asset.presale_id ? await salePool(salePools, asset, signal) : null;
+      if (pool) {
+        const history = MIGRATOR_POOL_KEY.test(pool.poolKey) ? await poolMarketHistory(asset, pool, window, signal, interval) : null;
+        if (history) return history;
+        throw new WorkspaceDataUnavailable("No price history for this pool yet.");
+      }
       // Curated ecosystem coins are never Blast launches, so the market service has no candles for them.
       const market = coreCoin(asset.coin_type) ? null : await coinMarketHistory(asset, window, signal, interval);
       if (market) return market;
@@ -239,6 +246,22 @@ export function createCoinReads(
       return page.presale_id === asset.presale_id ? page : null;
     },
   };
+}
+
+type SalePool = Readonly<{ poolKey: string; decimals: number; quoteDecimals: number }>;
+
+/** The pool a graduated sale trades in, from the sale's market; null while it has none or the market is unknown. */
+async function salePool(salePools: Map<string, SalePool>, asset: CoinAsset, signal: AbortSignal): Promise<SalePool | null> {
+  const known = salePools.get(asset.coin_type);
+  if (known) return known;
+  const market = await fetchCoinMarket(asset.coin_type, signal).catch((error: unknown) => {
+    if (error instanceof WorkspaceDataUnavailable && !signal.aborted) return null;
+    throw error;
+  });
+  if (!market?.pool || !sameCoin(market.coin_type, asset)) return null;
+  const pool = { poolKey: `${market.pool.venue}:${market.pool.id}`, decimals: market.decimals, quoteDecimals: market.quote.decimals };
+  salePools.set(asset.coin_type, pool);
+  return pool;
 }
 
 /** A caller must already possess the canonical asset's pool binding; discovery never guesses one. */

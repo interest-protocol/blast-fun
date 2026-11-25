@@ -252,7 +252,7 @@ function useCoinPanelReads({
   const views = useCoinViews({ visible, focus, tab, key, reads, asset, setup, onSetupChange, coinPending: coinRead.status === "pending", pollMs });
   const { history } = views;
   const snapshot = history.value;
-  const streamed = snapshot && "kind" in snapshot && (snapshot.kind === "market" || snapshot.kind === "trades") ? snapshot : null;
+  const streamed = snapshot && "kind" in snapshot && snapshot.kind === "market" ? snapshot : null;
   // An empty read keeps the stream open. Native coins and price-point charts end it.
   const stream = useMarketStream(asset.coin_type, streamed, focus && visible && (streamed !== null || snapshot === null), history.refresh);
   if (stream.live !== live) {
