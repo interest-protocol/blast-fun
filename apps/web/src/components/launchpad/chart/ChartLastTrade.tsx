@@ -11,6 +11,7 @@ import { prefersReducedMotion, useShellPrefs } from "#web/components/blast-ui/us
 import { useFeelSound } from "#web/components/blast-feel/FeelProvider.tsx";
 import { formatAmountShort, formatTime } from "../coin/coin-format.ts";
 import { useLatestActivityTrade } from "../activity/wallet-trades.tsx";
+import { dustQuoteUsd, isTradeUnderDollar } from "../activity/small-trades.ts";
 import { ChartTradeContext, type ChartTradeCue, type TradePlacement } from "./chart-trade-context.ts";
 import { useCoinPriceCurrency } from "./CoinPriceCurrency.tsx";
 import { useChartClock } from "./use-chart-clock.ts";
@@ -31,7 +32,12 @@ export function ChartLastTrade({ placement = "chart", playSound = false }: Reado
   const history = useLatestActivityTrade();
   const currency = useCoinPriceCurrency();
   if (!source || (source.placement ?? "chart") !== placement) return null;
-  const observed = source.trade;
+  // Dust never becomes the Last-trade pill, as the trades list hides it. A pool's
+  // stream trade is checked here; a feed's trade (no pool) was picked past dust.
+  const observed = source.trade && (source.poolKey === null || !isTradeUnderDollar({
+    usd: source.tradeUsd, quote: source.trade.quoteAmount, decimals: source.decimals,
+    quoteUsd: dustQuoteUsd(source.quoteType, currency),
+  })) ? source.trade : null;
   const trade = latestTrade(history, observed);
   const cue = trade === observed && source.receivedAt !== null ? observed : null;
   const largeBuy = placement === "headline" && isLargeBuy(cue, source, currency);

@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import type { ReadableDatabase } from "@blast/core/modules/database/transaction.ts";
 import { SHOWN_ACTIVITY } from "@blast/core/modules/social/read-model/chain-presales.ts";
 import { entryFromRow, entryIdBranch, type FeedEntry } from "@blast/core/modules/social/read-model/entries.ts";
-import { namedOwnerSql } from "@blast/core/modules/social/read-model/naming.ts";
+import { namedOwnerSql, personEntrySql } from "@blast/core/modules/social/read-model/naming.ts";
 import { SocialRouteError } from "@blast/core/modules/social/route-kit/errors.ts";
 
 /**
@@ -90,7 +90,7 @@ const THESES_SQL = `
   ) rockets
   WHERE w.author_account_id = $1::uuid AND w.state = 'active'
     AND e.entry_id = w.entry_id
-    AND e.kind IN ('presale_commit', 'presale_claim', 'trade_buy', 'trade_sell')
+    AND ${personEntrySql("e")}
     AND named.account_id = $1::uuid
     AND ($2::int IS NULL OR (rockets.n, e.occurred_at_ms, e.entry_id COLLATE "C") < ($2::int, $3::bigint, $4::text COLLATE "C"))
   ORDER BY rockets.n DESC, e.occurred_at_ms DESC, e.entry_id COLLATE "C" DESC

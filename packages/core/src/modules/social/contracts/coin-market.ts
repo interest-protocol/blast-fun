@@ -103,6 +103,11 @@ export type HomeHoldersPage = HomeWire<
   z.infer<typeof homeHoldersReadModelSchema>
 >;
 
+/**
+ * Trades under this many dollars are dust: the trades lists hide them, and
+ * they never become a post or the coin page's Last-trade pill.
+ */
+export const SMALL_TRADE_USD = 1;
 /** The chart's "Big trades": trades of at least this many dollars. */
 export const HOME_BIG_TRADE_USD = 1_000;
 /** The most trades one chart page carries, newest first. */

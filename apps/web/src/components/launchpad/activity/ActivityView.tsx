@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { shortAddress as shortId } from "@blast/core/lib/format.ts";
 import { SUI_COIN_TYPE } from "@blast/core/lib/sui/coin-types.ts";
-import { CREATE_QUOTE_TYPE, quotePriceType } from "@blast/core/web/contracts/create.ts";
 import { CoinMark } from "#web/components/blast-ui/CoinMark.tsx";
 import { DateStamp } from "#web/components/blast-ui/DateStamp.tsx";
 import { DexIdentity } from "#web/components/blast-ui/DexIdentity.tsx";
@@ -10,7 +9,7 @@ import { traderProfileKey, type TraderProfile } from "@blast/core/modules/social
 import { ActivityAmount, CompactTradeList, CompactTradeRow, Transaction, useTradeInspector, useTradeVisibility, type TradeExplorer, type TradeRowState, type TransactionExplorer } from "./CompactTradeList";
 import { WalletAddress } from "./WalletAddress";
 import { recentTrades } from "./recent-trades";
-import { isTradeUnderDollar } from "./small-trades";
+import { dustQuoteUsd, isTradeUnderDollar } from "./small-trades";
 import { useTraderProfiles } from "./trader-profiles";
 import { Button } from "#web/components/blast-ui/Button.tsx";
 import { Disclosure } from "#web/components/blast-ui/Disclosure.tsx";
@@ -458,9 +457,7 @@ export const TradeList = memo(function TradeList({ rows, availableRows, units, e
   hold?: (hold: boolean) => void;
 }>) {
   const currency = useCoinPriceCurrency();
-  const quoteType = units.quoteType ? quotePriceType(units.quoteType) : null;
-  const currentRate = currency?.quoteType && quoteType === quotePriceType(currency.quoteType) ? currency.rate : null;
-  const quoteUsd = quoteType === CREATE_QUOTE_TYPE ? "1" : currentRate ?? units.quoteUsd;
+  const quoteUsd = dustQuoteUsd(units.quoteType, currency, units.quoteUsd);
   const visibility = useTradeVisibility(rows, availableRows,
     (row) => isTradeUnderDollar({ usd: row.volumeUsd, quote: row.amounts.quote, decimals: units.quoteDecimals, quoteUsd }),
   );

@@ -4,6 +4,6 @@
   "packages/core/src/modules/social/contracts/schemas/sale-metadata.schema.json": "d5e5c7d7765e09884444fee4630155d3e276af4e6ddf5915305960d2e1e59a14",
   "packages/core/src/modules/social/contracts/schemas/as-of.schema.json": "798aec294a36329f6bd28e1eda7390cfaf8accf7a9b90c4a3675afd10645eb11",
   "packages/core/src/modules/social/contracts/schemas/presale-detail.schema.json": "13074ae5f011ee54b16ff94aefa127ba5800380fc76c52b4fbc8517b4949e3f3",
-  "packages/core/src/modules/social/contracts/schemas/feed-item.schema.json": "978a49d946980a9e7490998cb90427bb1d07fe987a75f54c0b386fde937e57f6",
+  "packages/core/src/modules/social/contracts/schemas/feed-item.schema.json": "64854bfd845f9c0759b5366805b9b8aeb36686475dd96daf4f4c159ee11e502c",
   "packages/core/src/modules/social/contracts/schemas/prices-response.schema.json": "7913da1021912c4310e3f19a9f9c7f4c555102b354d104088169d52f4ed16143"
 }

@@ -130,7 +130,7 @@ test("curve progress advances and a delayed trade or page read cannot undo the b
   ));
   const summary = curvePoolSummary("live");
   const after = { ...summary, price: "1", market_cap: "5000000000000", inputs: { ...summary.inputs as object, quote_reserve: "1500000000000" } };
-  const send = (position: number, data: unknown, poolKey = CURVE_POOL_KEY, quoteAmount = 100_000_000n) => act(async () => listener.trade({
+  const send = (position: number, data: unknown, poolKey = CURVE_POOL_KEY, quoteAmount = 1_000_000_000n) => act(async () => listener.trade({
     checkpoint, poolKey, summary: data, trade: { cursor: `${checkpoint}:0:${position}:0`, timestampMs: 1_800_000_000_000, side: "buy", kind: "buy", price: "0.8", quoteAmount } as MarketTrade["trade"],
   }));
   const price = () => container.querySelector('[aria-label="Price chart"]')?.previousElementSibling?.querySelector("strong")?.textContent;
@@ -166,7 +166,7 @@ test("curve progress advances and a delayed trade or page read cannot undo the b
   const firstCue = tradeCue();
   assert.equal(container.querySelector('[aria-label="Price chart"] [data-chart-last-trade]'), null);
   assert.equal(container.querySelectorAll("[data-trade-cue]").length, 1);
-  assert.equal(firstCue?.textContent, "Buy · 0.1\u00a0SUI");
+  assert.equal(firstCue?.textContent, "Buy · 1\u00a0SUI");
   assert.equal(status(), "New buy");
   await send(9, summary);
   await send(10, summary);
@@ -197,11 +197,11 @@ test("curve progress advances and a delayed trade or page read cannot undo the b
   const animations = recordAnimations();
   await send(15, summary);
   assert.deepEqual(figures(), baseline, "catch-up updates the summary");
-  assert.equal(tradeCue()?.textContent, "Buy · 0.1\u00a0SUI");
+  assert.equal(tradeCue()?.textContent, "Buy · 1\u00a0SUI");
   assert.equal(animations.all.length, 0, "catch-up can change the figures without cueing any of them");
   await act(async () => listener.live(true));
   await send(16, after);
-  assert.equal(tradeCue()?.textContent, "Buy · 0.1\u00a0SUI");
+  assert.equal(tradeCue()?.textContent, "Buy · 1\u00a0SUI");
   await render({ ...page, curve: { ...read, provenance: { ...read.provenance, checkpoint: checkpoint + 1 } } });
   assert.deepEqual(figures(), baseline, "a newer authoritative page takes over the figures");
   const whileDelayed = animations.all.length;
@@ -232,7 +232,7 @@ test("curve progress advances and a delayed trade or page read cannot undo the b
   const baselineVenue = headlines();
   const swap = (position: number, side: "buy" | "sell", poolKey: string = VENUE_POOL_KEY, at = checkpoint, price = "0.5", fdvUsd: string | null = "37200") => act(async () => listener.trade({
     poolKey, checkpoint: at, summary: null,
-    trade: { cursor: `${at}:0:${position}:0`, timestampMs: 1_800_000_000_000, kind: "swap", side, price, fdvUsd, trader: "0x1", quoteAmount: 100_000_000n } as MarketTrade["trade"],
+    trade: { cursor: `${at}:0:${position}:0`, timestampMs: 1_800_000_000_000, kind: "swap", side, price, fdvUsd, trader: "0x1", quoteAmount: 1_000_000_000n } as MarketTrade["trade"],
   }));
   await swap(19, "sell", VENUE_POOL_KEY, venueCheckpoint);
   assert.equal(tradeCue(), null, "a swap already covered by the initial venue snapshot stays quiet");
@@ -259,7 +259,7 @@ test("curve progress advances and a delayed trade or page read cannot undo the b
   await render({ ...graduated, venue: { ...graduated.venue, provenance: { ...graduated.venue.provenance!, checkpoint } } });
   assert.deepEqual(headlines(), baselineVenue, "the complete venue snapshot takes over once it catches up");
   await act(async () => listener.live(false));
-  assert.equal(tradeCue()?.textContent, "Buy · 0.1\u00a0SUI", "the latest venue trade stays readable across the disconnect");
+  assert.equal(tradeCue()?.textContent, "Buy · 1\u00a0SUI", "the latest venue trade stays readable across the disconnect");
   await act(async () => findCurrency("USD").click());
   await act(async () => {
     client.setQueryData(priceQuery(ask).queryKey, null);

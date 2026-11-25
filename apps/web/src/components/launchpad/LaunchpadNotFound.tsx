@@ -6,8 +6,7 @@ import { LaunchpadPlaceholder } from "./LaunchpadShell";
 export function LaunchpadNotFound() {
   return (
     <LaunchpadPlaceholder title="Page not found">
-
-      <p><Link href="/">Back to the terminal</Link></p>
+      <p><Link href="/">Back to Home</Link></p>
     </LaunchpadPlaceholder>
   );
 }

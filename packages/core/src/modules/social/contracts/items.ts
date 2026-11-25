@@ -149,9 +149,9 @@ export const feedItemAmountsSchema = z.strictObject({
     z.null(),
     z.number().min(0).max(255).refine(Number.isInteger).meta({ type: "integer" }),
   ]),
-  usd: z.xor([z.null(), feedItemUsdSchema]).meta({
+  usd: z.xor([z.null(), feedItemDecimalSchema]).meta({
     description:
-      "The activity row's usd_value, priced by the indexer at the event's time; null when it stored none.",
+      "The activity row's usd_value, priced by the indexer at the event's time, unrounded to at most 12 places; null when it stored none.",
   }),
   tokens: z.xor([z.null(), feedItemAtomsSchema]),
   quote_refund: z.xor([z.null(), feedItemAtomsSchema]),

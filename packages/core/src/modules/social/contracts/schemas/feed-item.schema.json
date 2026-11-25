@@ -426,13 +426,13 @@
           ]
         },
         "usd": {
-          "description": "The activity row's usd_value, priced by the indexer at the event's time; null when it stored none.",
+          "description": "The activity row's usd_value, priced by the indexer at the event's time, unrounded to at most 12 places; null when it stored none.",
           "oneOf": [
             {
               "type": "null"
             },
             {
-              "$ref": "#/$defs/usd"
+              "$ref": "#/$defs/decimal"
             }
           ]
         },

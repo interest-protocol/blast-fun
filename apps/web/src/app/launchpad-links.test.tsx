@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { MetadataRoute } from "next";
 import { isValidElement, type ReactElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 
 import { LaunchpadNotFound } from "#web/components/launchpad/LaunchpadNotFound.tsx";
 import { LaunchpadShell } from "#web/components/launchpad/LaunchpadShell.tsx";
@@ -13,7 +14,7 @@ import * as robotsModule from "./robots";
 import * as sitemapModule from "./sitemap";
 
 installRequestHeaders();
-const { default: NotFound } = await import("./not-found");
+const { default: NotFound, metadata: notFoundMetadata } = await import("./not-found");
 
 const sitemap = sitemapModule.default;
 const robots = robotsModule.default;
@@ -31,6 +32,13 @@ test("the not-found page includes the launchpad shell, search, Boosts link and m
   assert.equal(page.props.boostsUrl, BOOSTS_URL);
   assert.ok(isValidElement(page.props.search) && page.props.search.type === LaunchpadSearch);
   assert.ok(isValidElement(page.props.children) && page.props.children.type === LaunchpadNotFound);
+});
+
+test("the not-found page uses the app's title form and plain copy back to Home", () => {
+  assert.deepEqual(notFoundMetadata.title, { absolute: "Page not found · Blast" });
+  const html = renderToStaticMarkup(<LaunchpadNotFound />);
+  assert.match(html, /<a href="\/">Back to Home<\/a>/);
+  assert.doesNotMatch(html, /terminal/i);
 });
 
 const paths = (entries: MetadataRoute.Sitemap) => entries.map((entry) => new URL(entry.url).pathname);

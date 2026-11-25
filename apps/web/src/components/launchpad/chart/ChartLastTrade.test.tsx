@@ -98,3 +98,23 @@ test("a trade holds once, a burst stays quiet and remounting historical data can
   await act(() => root.render(<ChartLastTrade />));
   assert.equal(host.querySelector("[data-chart-last-trade]"), null, "a chart without a live market has no empty strip");
 });
+
+test("a stream trade under a dollar never becomes the Last-trade pill; the latest real trade stays", async t => {
+  const { CREATE_QUOTE_TYPE } = await import("@blast/core/web/contracts/create.ts");
+  const host = dom.document.createElement("div");
+  const root = createRoot(host);
+  t.after(async () => { await act(() => root.unmount()); });
+  const render = (cursor: number, quoteAmount: bigint) => act(async () => {
+    const trade = { cursor: `10:0:${cursor}:0`, timestampMs: TRADE_TIME, side: "buy", quoteAmount } as MarketTrade["trade"];
+    root.render(<WalletTradesProvider deployer={null}>
+      <PublishedHistory position="9:0:1:0" timestampMs={TRADE_TIME - 12 * 60_000} />
+      <ChartTradeContext value={{ trade, poolKey: "curve", receivedAt: null, decimals: 6, symbol: "USDC", quoteType: CREATE_QUOTE_TYPE }}>
+        <ChartLastTrade />
+      </ChartTradeContext>
+    </WalletTradesProvider>);
+  });
+  await render(1, 100n);
+  assert.equal(host.querySelector("[data-trade-cue]")?.textContent, "Sell · 250 USDC", "$0.0001 of USDC is dust");
+  await render(2, 1_000_000n);
+  assert.equal(host.querySelector("[data-trade-cue]")?.textContent, "Buy · 1 USDC", "a dollar is a trade");
+});
