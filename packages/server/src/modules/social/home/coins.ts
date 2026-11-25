@@ -39,7 +39,7 @@ import { changeBps } from "@blast/core/modules/social/prices/change.ts";
 import { readPriceHistories } from "@blast/server/modules/social/prices/history.ts";
 import { latestWindowPriceSql, rollingPriceAtSql } from "@blast/server/modules/social/prices/price-at.ts";
 import { PRICE_TIER_SPAN_MS, type PricePoint } from "@blast/core/modules/social/contracts/prices.ts";
-import type { readTrackedPoolMarket, TrackedPoolMarket } from "@blast/server/modules/launchpad-market/legacy-fdv.ts";
+import type { readTrackedPoolLaunches, readTrackedPoolMarket, TrackedPoolMarket } from "@blast/server/modules/launchpad-market/legacy-fdv.ts";
 import { optionalSource } from "@blast/server/modules/social/optional-source.ts";
 import { curveProgressBps } from "@blast/core/modules/launchpad-contract/discovery.ts";
 import { LAUNCH_LIFECYCLES, quoteRemaining, type LaunchLifecycle } from "@blast/core/modules/launchpad-contract/discovery-views.ts";
@@ -162,7 +162,7 @@ export type FactsRow = Readonly<{
   graduated_ms: string | null;
 }>;
 
-type HomePriceOptions = Pick<HomeReadContext, "includeLiveInputs" | "includeRollingChange">;
+type HomePriceOptions = Pick<HomeReadContext, "includeLiveInputs" | "includeRollingChange" | "trackedPoolLaunches">;
 
 /** $1 clock (the 24 h move's end), $2 the window's start (new holders' baseline), then the scope's own parameters. */
 function factsSql(scope: SaleScope, params: Params, options: HomePriceOptions = {}): string {
@@ -237,7 +237,21 @@ export async function readCoinFacts(db: ReadableDatabase, scope: SaleScope, span
   params.values[0] = span.toMs;
   params.values[1] = span.fromMs;
   const { rows } = await db.read<FactsRow>(text, params.values);
-  return new Map(rows.map((row) => [row.presale_id ?? row.coin_type, row]));
+  const launches = await trackedLaunchesOf(rows, options.trackedPoolLaunches);
+  return new Map(rows.map((row) => {
+    const launchedMs = launches.get(row.coin_type);
+    return [row.presale_id ?? row.coin_type, launchedMs === undefined ? row : { ...row, launched_ms: String(launchedMs) }];
+  }));
+}
+
+/**
+ * A tracked pool coin has no Blast launch, so its Age is when its package was
+ * published (never when tracking began); every other coin keeps its launch.
+ */
+async function trackedLaunchesOf(rows: readonly FactsRow[], read: HomeReadContext["trackedPoolLaunches"]): Promise<ReadonlyMap<string, number>> {
+  const coinTypes = rows.flatMap((row) => (row.tracked_pool_only && row.launched_ms === null ? [row.coin_type] : []));
+  if (coinTypes.length === 0 || !read) return new Map();
+  return optionalSource("tracked_pool_launches", () => read(coinTypes), new Map());
 }
 
 /** The window's sums per (sale, identity, kind, quote asset). */
@@ -633,6 +647,8 @@ export type HomeReadContext = Readonly<{
   /** The sales' terms, for FDV; null when the projection is not configured. */
   terms: PresaleTermsReader | null;
   trackedPoolMarket?: typeof readTrackedPoolMarket;
+  /** Each tracked pool coin's package publish time, its Age. */
+  trackedPoolLaunches?: typeof readTrackedPoolLaunches;
   signal?: AbortSignal;
   holderLimit?: number;
   includeMobileMarket?: boolean;
@@ -741,16 +757,18 @@ export async function assembleCoins(
       ? candidate.facts.total_supply
       : presaleTotalSupply(candidate.facts.total_supply, terms);
     const supply = candidate.facts.supply ?? totalSupply ?? terms?.supply.total ?? null;
+    const trackedMarket = candidate.facts.tracked_pool_only ? trackedMarkets?.[candidate.coinType] : undefined;
     const indexed = coinOf({
       facts: candidate.facts, activity, score: candidate.score, nowMs: context.nowMs, supply, totalSupply, posts: posts.get(id) ?? 0, spark: sparks.get(id) ?? [],
-      top_holders: topHoldersOf(holders.get(candidate.facts.coin_type) ?? [], supply, people.identities),
+      // A tracked pool coin's live supply is the node's, as for its market cap.
+      top_holders: topHoldersOf(holders.get(candidate.facts.coin_type) ?? [], supply ?? trackedMarket?.circulatingSupplyAtoms ?? null, people.identities),
       mobileMarket: mobileMarket?.get(id),
       includeLiveInputs: context.includeLiveInputs,
       includeCurve: context.includeCurve,
       rollingChangeClockMs: context.includeRollingChange ? bounds.clockMs : undefined,
     });
     const coin = candidate.facts.tracked_pool_only
-      ? withTrackedPoolMarket(indexed, trackedMarkets?.[candidate.coinType], totalSupply, candidate.facts.supply)
+      ? withTrackedPoolMarket(indexed, trackedMarket, totalSupply, candidate.facts.supply)
       : indexed;
     const dexVolume = dexVolumes?.get(candidate.coinType);
     return dexVolume ? { ...coin, dex_volume: dexVolume } : coin;

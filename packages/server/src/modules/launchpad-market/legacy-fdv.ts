@@ -1,4 +1,6 @@
-import { normalizeStructTag } from "@mysten/sui/utils";
+import type { ClientWithCoreApi } from "@mysten/sui/client";
+import { SuiGraphQLClient } from "@mysten/sui/graphql";
+import { normalizeStructTag, parseStructTag } from "@mysten/sui/utils";
 import { exactAtoms, exactDecimal, exactText, fixedExact, multiplyExact, shiftExact } from "@blast/core/lib/exact-amount.ts";
 import { processSingleton } from "@blast/core/lib/process-singleton.ts";
 import { SUI_COIN_TYPE } from "@blast/core/lib/sui/coin-types.ts";
@@ -198,4 +200,58 @@ export async function readLegacyMarket(): Promise<LegacyDiscoveryMarket> {
 
 export async function readTrackedPoolMarket(): Promise<TrackedPoolMarkets> {
   return (await readPoolMarket()).tracked ?? {};
+}
+
+/** Mysten's public mainnet GraphQL keeps every transaction; a full node prunes old publishes. */
+const ARCHIVE_GRAPHQL_URL = "https://graphql.mainnet.sui.io/graphql";
+const PUBLISH_READ_TIMEOUT_MS = 2_500;
+const PUBLISH_RETRY_MS = 600_000;
+
+/**
+ * When a coin type's package was published: the checkpoint time of the
+ * package object's previous transaction. A published package never changes
+ * (an upgrade is a new object), so that transaction is its publish.
+ */
+export async function packagePublishedMs(client: ClientWithCoreApi, coinType: string, signal?: AbortSignal): Promise<number | null> {
+  const { object } = await client.core.getObject({ objectId: parseStructTag(coinType).address, include: { previousTransaction: true }, signal });
+  if (object.type !== "package" || !object.previousTransaction) return null;
+  const { Transaction } = await client.core.getTransaction({ digest: object.previousTransaction, signal });
+  return Transaction?.timestampMs ?? null;
+}
+
+/**
+ * A publish time never changes, so it is kept for good once read: one read
+ * per coin per process, shared by concurrent requests, never one per request.
+ * A failed or empty read is retried after ten minutes.
+ */
+export function publishTimes(read: (coinType: string) => Promise<number | null>, now: () => number = Date.now) {
+  const known = new Map<string, number>();
+  const retryAt = new Map<string, number>();
+  const pending = new Map<string, Promise<void>>();
+  const load = (coinType: string) => {
+    const miss = () => { retryAt.set(coinType, now() + PUBLISH_RETRY_MS); };
+    const done = Promise.resolve().then(() => read(coinType))
+      .then((ms) => (ms === null ? miss() : known.set(coinType, ms)), miss)
+      .then(() => { pending.delete(coinType); });
+    pending.set(coinType, done);
+    return done;
+  };
+  return async (coinTypes: readonly string[]): Promise<ReadonlyMap<string, number>> => {
+    await Promise.all(coinTypes.map((coinType) => {
+      if (known.has(coinType)) return undefined;
+      return pending.get(coinType) ?? ((retryAt.get(coinType) ?? 0) > now() ? undefined : load(coinType));
+    }));
+    return new Map(coinTypes.flatMap((coinType) => {
+      const ms = known.get(coinType);
+      return ms === undefined ? [] : [[coinType, ms] as const];
+    }));
+  };
+}
+
+/** Each tracked pool coin's creation time: when its package was published. */
+export function readTrackedPoolLaunches(coinTypes: readonly string[]): Promise<ReadonlyMap<string, number>> {
+  return processSingleton("launchpad.tracked-pool-launches", () => {
+    const client = new SuiGraphQLClient({ network: "mainnet", url: ARCHIVE_GRAPHQL_URL });
+    return publishTimes((coinType) => packagePublishedMs(client, coinType, AbortSignal.timeout(PUBLISH_READ_TIMEOUT_MS)));
+  })(coinTypes);
 }
