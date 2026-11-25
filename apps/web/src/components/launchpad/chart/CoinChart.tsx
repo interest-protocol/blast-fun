@@ -50,7 +50,11 @@ export function CoinChart({
   const [useEntry, setUseEntry] = useState(true);
   const venuePoolKey = source.venuePoolKey ?? state.migration?.venuePoolKey ?? null;
   const curvePoolKey = source.curvePoolKey;
-  const currentPrice = useChartPrice(venuePoolKey ?? curvePoolKey, checkpoint);
+  const pricePool = venuePoolKey ?? curvePoolKey;
+  const currentPrice = useChartPrice(pricePool, checkpoint);
+  // `undefined` means no stream price yet (show the last close); `null` means the stream withdrew its price.
+  const [pricedPool, setPricedPool] = useState<string | null>(null);
+  if (currentPrice && pricedPool !== pricePool) setPricedPool(pricePool);
   const migrationCursor = source.migration?.cursor ?? null;
   const migrationTimestamp = source.migration?.timestampMs ?? null;
   const migrationCurve = source.migration?.curvePoolKey ?? null;
@@ -69,11 +73,16 @@ export function CoinChart({
 
   // The live screen opens a quiet coin on a coarser interval, once, unless the viewer picked one.
   const densityChecked = useRef(false);
-  const stepToDensity = useEffectEvent((section: Section<ChartCandlePage>) => {
-    if (!liveScreen || chosen || densityChecked.current || section.state !== "available") return;
+  // It decides once every pool the chart reads has answered, on their traded buckets together.
+  const stepToDensity = useEffectEvent((reads: ReadonlyMap<string, Section<ChartCandlePage>>, pools: readonly string[], current: () => boolean) => {
+    if (!liveScreen || chosen || densityChecked.current || reads.size < pools.length) return;
+    const sections = [...reads.values()];
+    if (sections.some((section) => section.state === "unavailable" || section.state === "stale")) return;
     densityChecked.current = true;
-    const interval = denseInterval(tradedBuckets(section.data.candles), controls, Date.now());
-    if (interval !== controls.interval) change({ ...controls, interval }, false);
+    const traded = sections.flatMap((section) => section.state === "available" ? tradedBuckets(section.data.candles) : []);
+    const interval = denseInterval(traded, controls, Date.now());
+    // Outside the stream's callback: changing controls stops this stream.
+    if (interval !== controls.interval) queueMicrotask(() => { if (current()) change({ ...controls, interval }, false); });
   });
 
   useEffect(() => {
@@ -82,6 +91,7 @@ export function CoinChart({
     const seed = useEntry && entry?.key === key ? entry : undefined;
     const startedAt = seed?.readAt ?? Date.now();
     const pools = chartPoolKeys({ curvePoolKey, venuePoolKey, migration: committed ?? known.current }, controls, startedAt);
+    const densityReads = new Map<string, Section<ChartCandlePage>>();
     // The tab's market stream hub keeps the connection through short hides and closes it after longer ones.
     const client = new ChartStream({
       pools,
@@ -94,7 +104,8 @@ export function CoinChart({
         if (stream.current !== client) return;
         const marker = committed ?? migration ?? known.current;
         known.current = marker;
-        stepToDensity(section);
+        densityReads.set(pool, section);
+        stepToDensity(densityReads, pools, () => stream.current === client);
         if (seed?.pools.some(([key, read]) => key === pool && read.section === section)) return;
         const name = pool === curvePoolKey ? "curve" : "venue";
         setState((shown) => {
@@ -129,7 +140,7 @@ export function CoinChart({
       compact={compact}
       state={shown}
       // Until the stream's first price arrives, the last REST close is the price shown, never "—".
-      currentPrice={currentPrice?.price}
+      currentPrice={currentPrice?.price ?? (pricedPool === pricePool ? null : undefined)}
       source={source}
       omitCurve={!plotCurve}
       quoteUsd={quoteUsd}

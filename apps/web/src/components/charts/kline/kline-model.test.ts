@@ -97,9 +97,9 @@ test("a quiet coin's series is continuous: flat bars at the previous close throu
   assert.equal(tradedBars(fillGaps([bar(0, 2), bar(3, 5)], "1m", 3 * M)), 2);
 });
 
-test("a quiet bucket the server fills later updates in place instead of reloading the chart", () => {
+test("an older quiet bucket the server fills later reloads the chart so the plot shows it", () => {
   const bar = (minute: number, close: number, volume = 1): Bar => ({ timestamp: minute * 60_000, open: close, high: close, low: close, close, volume });
   const shown = [bar(0, 2), bar(1, 2, 0), bar(2, 2)];
-  assert.equal(barChanges(shown, [bar(0, 2), bar(1, 3), bar(2, 2)]).kind, "update");
+  assert.equal(barChanges(shown, [bar(0, 2), bar(1, 3), bar(2, 2)]).kind, "reset");
   assert.equal(barChanges(shown, [bar(0, 4), bar(1, 2, 0), bar(2, 2)]).kind, "reset", "a traded bar that changed still reloads");
 });

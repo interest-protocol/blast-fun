@@ -14,7 +14,6 @@ import { TradeList, TradeListSkeleton, type ActivityUnits } from "#web/component
 import { venueTradeRow, type VenuePoolKey } from "#web/components/launchpad/activity/activity-live.ts";
 import styles from "#web/components/launchpad/activity/Activity.module.css";
 import { LIVE_POLL_MS } from "#web/components/launchpad/use-market-poll.ts";
-import { POLL_MS } from "#web/components/launchpad/blast-infra-browser.ts";
 import { tabMarketStream } from "#web/components/launchpad/market-stream-hub.ts";
 import { useLiveScreen } from "#web/components/launchpad/coin/LiveScreen.tsx";
 import { PublicError, publicErrorMessage } from "#web/lib/errors.ts";
@@ -46,8 +45,8 @@ function withLiveRows(rows: readonly ActivityRow[], fresh: readonly ActivityRow[
 /**
  * The live screen's trades: the first read, then each trade the tab's stream brings for these pools,
  * kept apart from the read so a trade that lands before the read answers still shows. The list
- * re-reads on a timer only while the stream is not live, and once each time the stream comes back,
- * so a gap's trades are not lost. The screen streams its main pool only, so a list over several
+ * re-reads on a timer only while the stream is not live, and once each time the stream goes live,
+ * so trades from before it joined are not lost. The screen streams its main pool only, so a list over several
  * pools (SUI) keeps its timer for the others.
  */
 function useLiveTrades(client: QueryClient, queryKey: readonly unknown[], coinType: string | null, poolKeys: readonly VenuePoolKey[], enabled: boolean) {
@@ -58,11 +57,10 @@ function useLiveTrades(client: QueryClient, queryKey: readonly unknown[], coinTy
     const hub = enabled && coinType ? tabMarketStream() : null;
     if (!hub || !coinType) return;
     let wasLive = false;
-    let dropped = false;
     const unsubscribe = hub.observe(coinType, {
       live: (next) => {
-        if (next && dropped) void client.refetchQueries({ queryKey, exact: true });
-        dropped = wasLive && !next ? true : next ? false : dropped;
+        // Trades from before the stream joined (or while it was away) arrive only by a read.
+        if (next && !wasLive) void client.refetchQueries({ queryKey, exact: true });
         wasLive = next;
         setLive(next);
       },
@@ -85,7 +83,7 @@ export function IndexedPoolTrades({ poolKeys, units }: Readonly<{ poolKeys: read
   const liveScreen = useLiveScreen();
   const queryKey = ["indexed-pool-trades", ...poolKeys];
   const { live, streamed } = useLiveTrades(client, queryKey, units.coinType ?? null, poolKeys, liveScreen);
-  const polling = indexedPoolPolling(liveScreen && poolKeys.length === 1 ? POLL_MS : LIVE_POLL_MS);
+  const polling = indexedPoolPolling(LIVE_POLL_MS);
   const query = useQuery({
     queryKey,
     queryFn: ({ signal }) => recentPoolTrades(poolKeys, signal),

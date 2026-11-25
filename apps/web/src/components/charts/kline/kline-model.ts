@@ -110,8 +110,7 @@ export function pricePrecision(bars: readonly Bar[]): number {
  * How the chart moves from `shown` to `next` without losing the viewer's zoom and scroll:
  * `update` when only the newest bars changed or were added (each is pushed in order; a
  * rolling window that dropped its oldest bars keeps them on screen), `reset` when history
- * itself changed (another interval, another unit). A quiet bucket that the server later
- * filled with a trade takes the server's candle without a reload; the plot catches up on the next one.
+ * itself changed (another interval, another unit, or an older bar the server filled in).
  */
 export function barChanges(shown: readonly Bar[], next: readonly Bar[]): Readonly<{ kind: "reset" }> | Readonly<{ kind: "update"; bars: readonly Bar[]; kept: readonly Bar[] }> {
   const offset = next.length ? shown.findIndex((bar) => bar.timestamp === next[0]!.timestamp) : -1;
@@ -120,7 +119,8 @@ export function barChanges(shown: readonly Bar[], next: readonly Bar[]): Readonl
   if (next.length < overlap) return { kind: "reset" };
   for (let index = 0; index < overlap - 1; index++) {
     const before = shown[offset + index]!;
-    if (!sameBar(before, next[index]!) && !(before.volume === 0 && before.timestamp === next[index]!.timestamp)) return { kind: "reset" };
+    // An older bar can't be redrawn in place, so any change to it reloads the plot.
+    if (!sameBar(before, next[index]!)) return { kind: "reset" };
   }
   if (next[overlap - 1]!.timestamp !== shown.at(-1)!.timestamp) return { kind: "reset" };
   const bars = sameBar(shown.at(-1)!, next[overlap - 1]!) ? next.slice(overlap) : next.slice(overlap - 1);

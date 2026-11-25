@@ -98,6 +98,8 @@ export function useCoinChartControls(compact: boolean | undefined, initialContro
     if (remember && live && choice.range === controls.range && next.range !== "live") overrides.current.set(next.range, next.interval);
     if (remember && compact && next.range !== "live") saveChartControls(controls, next, live);
     setControls(next);
+    // An automatic step is not the viewer's choice: it stays out of the URL, so a reload or a shared link decides again.
+    if (!remember) return next;
     const url = new URL(window.location.href);
     for (const [key, value] of new URLSearchParams(chartSearch(next))) url.searchParams.set(key, value);
     // The chart controls change the URL within the same coin entry.

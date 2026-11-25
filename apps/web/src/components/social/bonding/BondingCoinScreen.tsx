@@ -596,7 +596,7 @@ export function BondingCoinScreen({ page, details, verified = false, slots, expe
           <CoinPriceCurrencyProvider key={page.launchId} quoteType={view.identity.quoteType} quoteSymbol={view.identity.quoteSymbol}>
             <CoinMarket key={marketKey} snapshot={view} page={page} poolKey={poolKey} checkpoint={checkpoint} expected={expected}
               chart={marketOffline || slots.chart == null ? null : slot("chart")}
-              activity={marketOffline ? null : <CoinTradingActivity key={page.launchId} trades={slots.activity} holders={slots.holders} lazy={liveScreen} />}
+              activity={marketOffline ? null : <CoinTradingActivity key={page.launchId} trades={slots.activity} holders={slots.holders} lazyHolders={liveScreen} />}
             />
           </CoinPriceCurrencyProvider>
         ) : null}
