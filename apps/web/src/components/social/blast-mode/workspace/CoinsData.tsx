@@ -123,8 +123,10 @@ function CoinsContent() {
     setEcosystem(true);
     requestAnimationFrame(() => region.current?.focus({ preventScroll: true }));
   };
+  // Blast mode lists every stage; Home's tabs are its own.
   const state: HomeViewState = {
     ...controls,
+    stage: "all",
     minParticipants: controls.min_participants,
   };
   const change = (next: HomeViewState) => {

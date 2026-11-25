@@ -23,10 +23,10 @@ import styles from "./CoinHome.module.css";
 import { homeAnalytics } from "./home-analytics";
 import { rememberHomeFilters, restoreHomeFilters } from "./home-filter-preferences";
 import { parseHomeSections, serializeHomeSections, type HomeSectionKey, type HomeSectionPrefs } from "./home-sections";
-import { HOME_DEFAULT_FEED, activeFilterCount, discoverQueryOf, viewSearchOf, viewStateOf, withView, type HomeViewState } from "./home-state";
+import { HOME_DEFAULT_FEED, activeFilterCount, discoverQueryOf, stageDefaultSort, tabOf, viewSearchOf, viewStateOf, withView, type HomeViewState } from "./home-state";
 import { setHomeRows, useHomeRows } from "./use-home-rows";
 import { FollowedTape } from "./FollowedTape";
-import { CoinsListControls, HomeSearch, HomeSettingsMenu, SourceTabs } from "./HomeControls";
+import { CoinsListControls, CoinTabs, HomeSearch, HomeSettingsMenu, SourceTabs } from "./HomeControls";
 import { HomeSections, type SectionChange, type SectionSpec } from "./HomeSections";
 import { PresaleSection, SaleCardsLoading } from "./PresaleSection";
 import { PinnedLaunches } from "./PinnedLaunches";
@@ -192,8 +192,9 @@ export function CoinHome({ initial, initialState, happening, presales, pinned, t
     window: state.window,
     nowMs: now,
     trading,
+    stage: state.stage,
     sort: state.sort,
-    defaultSort: HOME_DEFAULT_FEED.sort,
+    defaultSort: stageDefaultSort(state.stage),
     streamPrices: true,
     onSort: (sort) => change({ ...state, sort }),
     page: state.page,
@@ -201,7 +202,7 @@ export function CoinHome({ initial, initialState, happening, presales, pinned, t
     onPage,
     onRows,
     onWindow: (window) => change({ ...state, window, page: 1 }),
-    onReset: () => change(HOME_DEFAULT_FEED),
+    onReset: () => change({ ...HOME_DEFAULT_FEED, stage: state.stage, sort: state.sort }),
   // eslint-disable-next-line react-hooks/exhaustive-deps -- `change` closes over the same state the keys name.
   }), [state, rows, now, trading, onPage, onRows]);
   const specs: Readonly<Record<HomeSectionKey, SectionSpec>> = {
@@ -226,7 +227,9 @@ export function CoinHome({ initial, initialState, happening, presales, pinned, t
           {HOME_SOURCES.map((source) => (
             <section aria-labelledby={`${panelId(source)}-tab`} hidden={state.source !== source} id={panelId(source)} key={source} role="tabpanel">
               {state.source === source ? (
-                source === "discover" ? <DiscoverSource read={matchesInitial ? initial : null} props={list} query={query} />
+                source === "discover" ? <DiscoverTabs onChange={change} panelId={`${panelId(source)}-coins`} state={state}>
+                  <DiscoverSource read={matchesInitial ? initial : null} props={list} query={query} />
+                </DiscoverTabs>
                   : source === "following" ? <FollowingList onDiscover={() => change({ ...state, source: "discover" })} props={list} />
                     : <WatchlistList props={list} />
               ) : null}
@@ -288,6 +291,15 @@ type DiscoverProps = Readonly<{
   props: ListProps;
   query: HomeQuery;
 }>;
+
+/** Discover's tabs over the one list they control, labelled by the tab in force. */
+function DiscoverTabs({ state, onChange, panelId, children }: Readonly<{ state: HomeViewState; onChange: (next: HomeViewState) => void; panelId: string; children: ReactNode }>) {
+  const tab = tabOf(state);
+  return <>
+    <CoinTabs onChange={onChange} panelId={panelId} state={state} />
+    <div aria-label={tab ? undefined : "Coins"} aria-labelledby={tab ? `${panelId}-${tab}` : undefined} id={panelId} role="tabpanel">{children}</div>
+  </>;
+}
 
 function DiscoverSource({ read, props, query }: DiscoverProps) {
   return (

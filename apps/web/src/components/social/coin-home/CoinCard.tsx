@@ -8,34 +8,27 @@ import clsx from "clsx";
 import Link from "next/link";
 import { useId, useMemo, useRef } from "react";
 import { usePriceTick } from "./use-price-tick";
-import { coinAtPrice, sparkAtPrice } from "./live-market";
+import { coinAtPrice } from "./live-market";
 
 import { DexIdentity } from "#web/components/blast-ui/DexIdentity.tsx";
 import { CoinVerifiedMark, CloseIcon } from "#web/components/blast-ui/Icons.tsx";
-import { usePrice } from "../prices/price-client";
 import { useShellActions } from "#web/components/blast-ui/shell-actions.tsx";
-import { bxAgo, fillPercent, NO_VALUE, signPct, timeUntil, utc } from "@blast/core/web/format.ts";
+import { bxAgo, NO_VALUE, signPct, utc } from "@blast/core/web/format.ts";
 import type { HomeCoin, HomeWindow } from "@blast/core/web/contracts/home.ts";
 import type { SocialTradeCoin } from "@blast/core/web/contracts/trades.ts";
 
 import { encodeTradeAction } from "../coins/swap-model";
 import { useWatchStar } from "../watchlist/Watchlist";
-import { Fill } from "../happening/parts";
 import { PresaleMark } from "../post/PostMedia";
-import { saleLifecycleAt } from "@blast/core/web/contracts/presales.ts";
 import styles from "./CoinHome.module.css";
-import { HomeSpark } from "./HomeSpark";
 import { homeAnalytics } from "./home-analytics";
-import { homeCoinHref, homeCoinKey, lifecycleTone, marketFacts, marketVolume, raiseFigures, shareText, type HomeBuyCue } from "./home-model";
-import { Unknown } from "./MetricHelp";
-import { homeTablePrice } from "#web/lib/market-format.ts";
+import { homeCoinHref, homeCoinKey, homeStatus, marketVolume, shareText, type HomeBuyCue, type HomeStatus } from "./home-model";
+import { readableUsd } from "#web/lib/market-format.ts";
 import type { DisplayPrice } from "@blast/core/modules/launchpad-contract/market-stream.ts";
 import { coinPagePath } from "@blast/core/modules/launchpad-coin/page-key.ts";
 
 export type CoinCardProps = Readonly<{
   coin: HomeCoin;
-  /** The row's place in its list (the board's `#` column), counted across pages; omitted where a list has no order. */
-  rank?: number;
   marketLoading?: boolean;
   livePrice?: DisplayPrice;
   /** A buy that just landed on this coin. */
@@ -47,31 +40,45 @@ export type CoinCardProps = Readonly<{
   watchlist?: boolean;
 }>;
 
-/** The ticker link covers the row. Buy has its own target above the link. */
-export function CoinCard({ coin, rank, window, nowMs, trading, watchlist = false, marketLoading = false, livePrice, buy }: CoinCardProps) {
+/**
+ * One row of the Coins table (plan decision 7): Coin · MCap · price change ·
+ * Volume · Holders · Status, then the row's actions. Every row draws every
+ * cell, "—" where a figure is unknown, so the columns line up. The ticker
+ * link covers the row; Buy has its own target above the link.
+ */
+export function CoinCard({ coin, window, nowMs, trading, watchlist = false, marketLoading = false, livePrice, buy }: CoinCardProps) {
   const marketCoin = useMemo(() => coinAtPrice(coin, livePrice), [coin, livePrice]);
   const valuationAt = livePrice && !coin.live_inputs ? coin.price_as_of_ms : marketCoin.price_as_of_ms;
   const id = useId();
-  const tradingCoin = coin.lifecycle === "migrated";
-  const canBuy = tradingCoin && coin.tradable && trading;
+  const canBuy = coin.lifecycle === "migrated" && coin.tradable && trading;
+  const status = homeStatus(coin, nowMs);
+  // The Status cell already says where the coin trades while it names a venue or a curve still filling.
+  const filling = coin.curve != null && coin.curve.lifecycle !== "migrated";
+  const { text: volume, label: volumeLabel } = marketVolume(coin);
   return (
-    <li data-list-row={homeCoinKey(coin)} className={styles.item} data-lifecycle={coin.lifecycle}>
-      <article
-        aria-labelledby={id}
-        className={clsx(styles.row, styles.cols, styles.coinRow)}
-        data-sale={tradingCoin ? undefined : ""}
-        data-surface=""
-      >
-        {rank === undefined ? null : <span className={clsx("num", styles.rank)}>{rank.toLocaleString("en-US")}</span>}
-        <CoinIdentity coin={coin} id={id} buy={buy} />
-        {tradingCoin ? <MarketCells window={window} coin={marketCoin} nowMs={nowMs} loading={marketLoading} valuationAt={valuationAt} /> : <SaleCells coin={coin} nowMs={nowMs} />}
-        {canBuy || watchlist ? <span className={styles.rowActions}>
+    <li className={styles.item} data-lifecycle={coin.lifecycle} data-list-row={homeCoinKey(coin)} role="none">
+      <div aria-labelledby={id} className={clsx(styles.row, styles.cols, styles.coinRow)} data-surface="" role="row">
+        <CoinIdentity buy={buy} coin={coin} id={id} nowMs={nowMs} venue={status.venue || filling ? null : coin.venue} />
+        <MarketCap amount={marketCoin.mobile_market?.market_cap_usd ?? null} at={valuationAt} loading={marketLoading} nowMs={nowMs} />
+        <PriceChange coin={marketCoin} window={window} />
+        <span className={clsx("num", styles.vol)} role="cell">
+          <span aria-hidden="true">{volume ?? NO_VALUE}</span>
+          <span className="sr-only">{volumeLabel}</span>
+        </span>
+        <HoldersCell coin={coin} />
+        <StatusCell status={status} />
+        <span className={styles.rowActions} role="cell">
           {canBuy ? <RowBuy coin={coin} /> : null}
           {watchlist ? <RemoveSavedCoin coin={coin} /> : null}
-        </span> : null}
-      </article>
+        </span>
+      </div>
     </li>
   );
+}
+
+/** An unknown figure: a dash on screen, its name for assistive technology. */
+function Missing({ what }: Readonly<{ what: string }>) {
+  return <><span aria-hidden="true">{NO_VALUE}</span><span className="sr-only">{what} unknown</span></>;
 }
 
 /** Buying a coin opens the shell's transaction dialog with the coin chosen (nothing executes); with the page as a fallback. */
@@ -106,13 +113,31 @@ function tradeCoinOf(coin: HomeCoin): SocialTradeCoin {
   return { coin_type: coin.coin_type, symbol: coin.symbol, name: coin.name, decimals: coin.decimals, icon_url: coin.icon_url, usd_price: coin.price_usd, presale_id: coin.presale_id };
 }
 
-/** The identity: the coin icon, linked symbol, name and the venue's logo (its name for assistive technology and on hover). */
-function CoinIdentity({ coin, id, buy }: Readonly<{ coin: HomeCoin; id: string; buy?: HomeBuyCue }>) {
-  const venue = coin.venue && coin.lifecycle !== "cancelled" ? coin.venue : null;
+/**
+ * Holders, over the top 10's share when it is known (phones drop it). The line is kept even when empty, so every
+ * known count sits at the same height.
+ */
+function HoldersCell({ coin }: Readonly<{ coin: HomeCoin }>) {
+  if (coin.holders === null) return <span className={clsx("num", styles.holders)} role="cell"><Missing what="Holders" /></span>;
+  const topTen = shareText(coin.top_holders.share_bps);
+  return (
+    <span className={clsx("num", styles.holders)} role="cell">
+      {coin.holders.toLocaleString("en-US")}
+      <span className={styles.topTen}>
+        {topTen === null ? null : <><span aria-hidden="true">top 10 · {topTen}</span><span className="sr-only">, top 10 hold {topTen}</span></>}
+      </span>
+    </span>
+  );
+}
+
+/** The identity: the coin icon, linked symbol, name, age and the venue's logo (its name for assistive technology and on hover) when the Status cell does not name it. */
+function CoinIdentity({ coin, id, nowMs, buy, venue }: Readonly<{ coin: HomeCoin; id: string; nowMs: number; buy?: HomeBuyCue; venue: string | null }>) {
+  const shownVenue = venue && coin.lifecycle !== "cancelled" ? venue : null;
   const href = homeCoinHref(coin) ?? coinPagePath(coin.coin_type);
   const distinct = coin.name.trim().toLowerCase() !== coin.symbol.trim().toLowerCase();
+  const age = coin.launched_ms === null ? null : bxAgo(coin.launched_ms, nowMs);
   return (
-    <span className={styles.ident}>
+    <span className={styles.ident} role="cell">
       <PresaleMark coinType={coin.coin_type} presaleId={homeCoinKey(coin)} size={44} src={coin.icon_url} />
       <span className={styles.identText}>
         {buy ? <span aria-hidden="true" className={styles.buyAnchor}>
@@ -124,18 +149,19 @@ function CoinIdentity({ coin, id, buy }: Readonly<{ coin: HomeCoin; id: string; 
           </Link>
           {coin.verified_team ? <CoinVerifiedMark /> : null}
         </span>
-        <span className={clsx(styles.coinName, styles.coinMeta)}>
+        <span className={clsx(styles.coinName, styles.coinMeta)} data-age={age === null ? undefined : ""}>
           {distinct ? <span className={styles.coinNameText} title={hoverExcerpt(coin.name)}>{coin.name}</span> : null}
-          {venue ? <span className={styles.coinVenue}><DexIdentity iconOnly venue={venue} /></span> : null}
+          {age === null ? null : (
+            <span className={clsx("num", styles.coinAge)}>
+              {distinct ? <span aria-hidden="true" className={styles.ageDot}>·</span> : null}
+              <span className="sr-only">Age </span>{age}
+            </span>
+          )}
+          {shownVenue ? <span className={styles.coinVenue}><DexIdentity iconOnly venue={shownVenue} /></span> : null}
         </span>
       </span>
     </span>
   );
-}
-
-function MarketValue({ value, loading, name }: Readonly<{ value: string | null; loading: boolean; name: string }>) {
-  if (value !== null) return value;
-  return loading ? <span className={styles.metricLoading} role="status" aria-label={`Loading ${name}`} /> : null;
 }
 
 function marketObservation(asOfMs: number | null, nowMs: number) {
@@ -143,144 +169,41 @@ function marketObservation(asOfMs: number | null, nowMs: number) {
   return `Last price update ${utc(asOfMs)}`;
 }
 
-function MarketPrice({ amount, at, loading, observed }: Readonly<{ amount: string | null; at: number | null; loading: boolean; observed?: string }>) {
+/** Market cap from the live price (`coinAtPrice`); a change in its visible digits pulses once in its direction. */
+function MarketCap({ amount, at, loading, nowMs }: Readonly<{ amount: string | null; at: number | null; loading: boolean; nowMs: number }>) {
   const node = useRef<HTMLSpanElement>(null);
-  const display = amount === null ? null : homeTablePrice(amount);
+  const display = amount === null ? null : readableUsd(amount);
   usePriceTick(node, amount, display, at);
-  if (!loading && display === null) return null;
-  return <span className={clsx("num", styles.price)} title={observed} data-stale={observed ? true : undefined}>
-    <span ref={node} data-slot="coin-price"><MarketValue value={display} loading={loading} name="Price" /></span>{observed ? <span className="sr-only">{observed}</span> : null}
+  const observed = marketObservation(at, nowMs);
+  return <span className={clsx("num", styles.mcap)} data-stale={observed && display ? true : undefined} role="cell" title={display ? observed : undefined}>
+    <span data-slot="coin-mcap" ref={node}>
+      {display ?? (loading ? <span aria-label="Loading market cap" className={styles.metricLoading} role="status" /> : <Missing what="Market cap" />)}
+    </span>
+    {observed && display ? <span className="sr-only">{observed}</span> : null}
   </span>;
 }
 
-function MarketFdv({ value, loading, observed }: Readonly<{ value: string | null; loading: boolean; observed?: string }>) {
-  if (!loading && value === null) return null;
-  return <span className={clsx("num", styles.fdv)} title={observed} data-stale={observed ? true : undefined}><MarketValue value={value} loading={loading} name="FDV" /></span>;
-}
-
-function StaleMarketLabel({ observed }: Readonly<{ observed?: string }>) {
-  return observed ? <>
-    <span className={styles.mobileMarketLabel} aria-hidden="true">Stale</span>
-    <span className="sr-only">{observed}</span>
-  </> : null;
-}
-
-function MobileFdv({ value, loading, observed }: Readonly<{ value: string | null; loading: boolean; observed?: string }>) {
-  if (value === null && !loading) return null;
-  return <span className={clsx("num", styles.mobileFdv)} title={observed}>
-    <span className={styles.mobileMarketLabel}>FDV</span>
-    <span><MarketValue value={value} loading={loading} name="FDV" /></span>
-    {value !== null ? <StaleMarketLabel observed={observed} /> : null}
-  </span>;
-}
-
-function MobilePriceChange({ bps, window, observed, since }: Readonly<{ bps: number; window: HomeWindow; observed?: string; since?: string }>) {
-  return <span className={clsx("num", styles.change, styles.mobileChange, bps > 0 ? styles.up : bps < 0 ? styles.down : undefined)} title={since}>
-    <span className="sr-only">{since ?? (window === "1h" ? "1-hour price change" : "24-hour price change")} </span>
-    <span className={since ? styles.mobileMarketLabel : styles.changeWindow} aria-hidden="true">{since ? "≤24h" : window}</span>
-    {bps === 0 ? "0%" : signPct(bps / 100)}
-    <StaleMarketLabel observed={observed} />
-  </span>;
-}
-
-function PriceChangeCells({ coin, window, observed }: Readonly<{ coin: HomeCoin; window: HomeWindow; observed?: string }>) {
+/** The price move over the window, signed and uncoloured: the row's one colour is its progress bar (Shibui). */
+function PriceChange({ coin, window }: Readonly<{ coin: HomeCoin; window: HomeWindow }>) {
   const bps = window === "1h" ? coin.mobile_market?.change_1h_bps : coin.change_24h_bps;
-  if (coin.price_usd === null || bps == null) return null;
+  if (coin.price_usd === null || bps == null) return <span className={clsx("num", styles.change)} role="cell"><Missing what="Price change" /></span>;
   const since = window === "24h" && coin.change_24h_from_ms !== undefined
     ? `Since the first price on ${utc(coin.change_24h_from_ms)}`
     : undefined;
-  return <>
-    <span className={clsx("num", styles.change, styles.desktopChange, bps >= 0 ? styles.up : styles.down)} title={since}>
-      {since ? <>
-        <span className="sr-only">{since} </span>
-        <span className={styles.changeWindow} aria-hidden="true">≤24h </span>
-      </> : null}{signPct(bps / 100)}
-    </span>
-    <MobilePriceChange bps={bps} window={window} observed={observed} since={since} />
-  </>;
+  return <span className={clsx("num", styles.change)} role="cell" title={since}>
+    {since ? <>
+      <span className="sr-only">{since} </span>
+      <span aria-hidden="true" className={styles.changeWindow}>≤24h </span>
+    </> : null}{bps === 0 ? "0%" : signPct(bps / 100)}
+  </span>;
 }
 
-/** Each figure stays in its own column when other figures are missing. */
-function MarketCells({ coin, nowMs, window, loading, valuationAt }: Readonly<{ coin: HomeCoin; window: HomeWindow; nowMs: number; loading: boolean; valuationAt: number | null }>) {
-  const facts = marketFacts(coin, nowMs);
-  const observed = marketObservation(valuationAt, nowMs);
-  const { text: volume, label: volumeLabel } = marketVolume(coin);
-  const concentration = shareText(coin.top_holders.share_bps);
-  return <>
-    <span className={styles.marketQuote}>
-      <MarketPrice amount={coin.price_usd} at={coin.price_as_of_ms} loading={loading} observed={marketObservation(coin.price_as_of_ms, nowMs)} />
-      <MobileFdv value={facts.fdv} loading={loading} observed={observed} />
-    </span>
-    <PriceChangeCells coin={coin} window={window} observed={facts.fdv === null ? observed : undefined} />
-    <span className={clsx("num", styles.vol)}>
-      <span aria-hidden="true">{volume ?? NO_VALUE}</span>
-      <span className="sr-only">{volumeLabel}</span>
-    </span>
-    <MarketFdv value={facts.fdv} loading={loading} observed={observed} />
-    {concentration !== null ? <span className={clsx("num", styles.top)}>{concentration}</span> : null}
-    {coin.launched_ms !== null ? <span className={clsx("num", styles.age)}>{bxAgo(coin.launched_ms, nowMs)}</span> : null}
-    <WeekLine coin={coin} up={facts.change?.up} />
-  </>;
-}
-
-/** Use the row's observed day history when the weekly reader has too few samples. */
-function WeekLine({ coin, up }: Readonly<{ coin: HomeCoin; up: boolean | undefined }>) {
-  const history = usePrice({ presaleId: coin.presale_id, coin: coin.coin_type, window: "7d" });
-  const useWeek = (history?.points.length ?? 0) >= 2 || (coin.spark.length === 0 && Boolean(history?.points.length));
-  const source = useWeek ? history?.points : coin.spark;
-  const observed = useMemo(() => source?.map(([at, usd]) => [at, Number(usd)] as const) ?? null, [source]);
-  const points = useMemo(() => sparkAtPrice(observed, coin.price_as_of_ms, coin.price_usd, useWeek ? 7 : 1),
-    [observed, coin.price_as_of_ms, coin.price_usd, useWeek]);
-  const tone = up === undefined ? (points && points.length >= 2 ? (points.at(-1)![1] >= points[0]![1] ? styles.up : styles.down) : undefined) : up ? styles.up : styles.down;
-  return <HomeSpark className={clsx(styles.week, tone)} points={points} slot="coin-week" title={useWeek ? "Last 7 days" : "Last 24 hours"} />;
-}
-
-/** A presale's cells in the same columns: raised, of target, the bar, backers, the state, the time. */
-function SaleCells({ coin, nowMs }: Readonly<{ coin: HomeCoin; nowMs: number }>) {
-  if (coin.sale === null) return null;
-  const { raised, target } = raiseFigures(coin);
-  const pct = fillPercent(Number(coin.sale.raised), Number(coin.sale.raise_target));
-  const oversubscribed = BigInt(coin.sale.raised) > BigInt(coin.sale.raise_target) && BigInt(coin.sale.raise_target) > BigInt(0);
-  const lifecycle = saleLifecycleAt(coin.lifecycle, coin.sale.start_ms, nowMs);
-  const closingSoon = lifecycle === "open" && coin.sale.end_ms > nowMs && coin.sale.end_ms - nowMs <= 3_600_000;
-  return <>
-    <span className={styles.funding}>
-      <span className="num">{raised ?? <Unknown why="Raised amount unavailable" />} <span className={styles.ofTarget}>/ {target ?? <Unknown why="Target unavailable" />}</span></span>
-      <span className={styles.bar} role="progressbar" aria-label={`Raised ${raised ?? "unknown"} of ${target ?? "unknown"}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.min(100, pct)} aria-valuetext={`${raised ?? "Unknown"} raised of ${target ?? "unknown"}${oversubscribed ? "; oversubscribed" : ""}`}><Fill pct={Math.min(100, pct)} /></span>
-    </span>
-    <SaleClosingTime coin={coin} nowMs={nowMs} />
-    <span className={clsx("num", styles.backers)}><span className={styles.mobileLabel}>Backers</span>{coin.sale.participants.toLocaleString("en-US")}</span>
-    <span className={styles.saleStatus}><span className="status" data-tone={lifecycleTone(lifecycle)}>{stateWord(lifecycle)}</span>{oversubscribed ? <span>Above target</span> : closingSoon ? <span>Closing soon</span> : null}</span>
-  </>;
-}
-
-function SaleClosingTime({ coin, nowMs }: Readonly<{ coin: HomeCoin; nowMs: number }>) {
-  const due = saleDue(coin, nowMs);
-  const lifecycle = saleLifecycleAt(coin.lifecycle, coin.sale?.start_ms, nowMs);
-  return <span className={clsx("num", styles.closes)}><span className={styles.mobileLabel}>{due?.word === "opens" ? "Opens" : "Closes"}</span>{due?.time || (lifecycle === "open" ? "Awaiting close" : lifecycle === "pending" ? <Unknown why="Opening time unavailable" /> : "Ended")}</span>;
-}
-
-/** The sale's state as a word in its column (`saleLifecycleAt`): `open`, `upcoming`, `funded`, `cancelled`. */
-function stateWord(lifecycle: string): string {
-  switch (lifecycle) {
-    case "open":
-      return "open";
-    case "pending":
-      return "upcoming";
-    case "funded":
-      return "funded";
-    default:
-      return lifecycle;
-  }
-}
-
-/** When the sale closes or opens, to the minute (`closes 1h 11m`, `opens 39m`): a row never ticks by the second. */
-function saleDue(coin: HomeCoin, nowMs: number): Readonly<{ word: string; time: string }> | null {
-  if (coin.sale === null) return null;
-  const coarse = (ms: number) => timeUntil(ms, nowMs).replace(/\s*\d+s$/, "") || "<1m";
-  const lifecycle = saleLifecycleAt(coin.lifecycle, coin.sale.start_ms, nowMs);
-  if (lifecycle === "open" && coin.sale.end_ms > nowMs) return { word: "closes", time: coarse(coin.sale.end_ms) };
-  if (lifecycle === "pending" && coin.sale.start_ms > nowMs) return { word: "opens", time: coarse(coin.sale.start_ms) };
-  if (lifecycle === "funded") return { word: "funded", time: "" };
-  return null;
+/** Where the coin is in its life, in one line: a filling curve or an open sale draws its bar; a coin with no Blast history, its venue. */
+function StatusCell({ status }: Readonly<{ status: HomeStatus }>) {
+  return <span className={styles.status} role="cell">
+    {status.venue ? <DexIdentity venue={status.venue} /> : <>
+      {status.fill === undefined ? null : <progress aria-hidden="true" className={styles.fill} max={100} value={status.fill} />}
+      <span className={styles.statusText}>{status.text}</span>
+    </>}
+  </span>;
 }

@@ -156,15 +156,6 @@ export function elapsedTimeScale(input: readonly number[], limit = 4096) {
   };
 }
 
-/** Home charts use stable time slots so a new quote in the same slot mutates only the last point. */
-export function sparkTimeScale(first: number, last: number) {
-  const span = Math.max(1, last - first);
-  const step = Math.max(1, 2 ** Math.ceil(Math.log2(span / 128)));
-  const slot = (at: number) => Math.round((at - first) / step);
-  const timeline = Array.from({ length: slot(last) + 1 }, (_, index) => first + index * step);
-  return { timeline, timestamp: (at: number) => chartTimestamp(first + slot(at) * step) };
-}
-
 type Plotted = Readonly<{ time: unknown; value?: number }>;
 
 /** The first or last valued point at or inside a time bound, by binary search over sorted library data. */

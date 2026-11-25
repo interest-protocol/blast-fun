@@ -5,7 +5,6 @@ import {
   exactDecimal,
   fixedExact,
   groupedExact,
-  groupDigits,
   numShortExact,
   qtyExact,
   subscriptZeros,
@@ -45,16 +44,6 @@ export function readablePrice(raw: string): string {
     .replace(/0+$/, "")
     .replace(/\.$/, "");
   return subscriptZeros(rounded);
-}
-
-/** Fixed precision in each Home table price range, including after rounding up into a new range. */
-export function homeTablePrice(raw: string): string {
-  const value = exactDecimal(raw);
-  if (!value) return "—";
-  const places = (quote: typeof value) => quote.n === 0n || atLeastPow10(quote, 0)
-    ? 2 : Math.max(4, quote.scale - quote.n.toString().length + 3);
-  const rounded = exactDecimal(fixedExact(value, places(value)))!;
-  return "$" + subscriptZeros(groupDigits(fixedExact(rounded, places(rounded))));
 }
 
 /** Compact from $1,000 (`$1.2K`, `$48.2M`, `$1.84B`), cents from $1, and meaningful nonzero values below one dollar. */

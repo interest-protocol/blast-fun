@@ -16,13 +16,33 @@ import { HOME_AGES, HOME_ROWS_CHOICES, HOME_SOURCES, HOME_WINDOWS, type HomeSour
 import styles from "./CoinHome.module.css";
 import { HOME_SECTIONS_MENU_ID, type SectionChange } from "./HomeSections";
 import { HOME_SECTIONS_DEFAULT, moveHomeSection, HOME_SECTION_TITLES, isHomeSectionShown, setHomeSectionShown, shownHomeSections, type HomeSectionPrefs } from "./home-sections";
-import { AGE_LABELS, HOME_VIEW_SORTS, SORT_HINTS, SORT_LABELS, HOME_DEFAULT_FEED, activeFilterCount, MIN_PARTICIPANT_CHOICES, SOURCE_LABELS, WINDOW_LABELS, controlsApply, type HomeViewState } from "./home-state";
+import { AGE_LABELS, HOME_DEFAULT_FEED, HOME_TAB_KEYS, HOME_TABS, activeFilterCount, MIN_PARTICIPANT_CHOICES, SOURCE_LABELS, WINDOW_LABELS, controlsApply, tabOf, type HomeTab, type HomeViewState } from "./home-state";
 
 const SOURCE_OPTIONS = HOME_SOURCES.map((key) => [key, SOURCE_LABELS[key]] as const);
 
 /** The three sources as tabs (the brief's §5): the shared segmented tablist at the chip size (Main board: 36px beside the chips), arrow keys and Home/End move between them. */
 export function SourceTabs({ source, onSource, ids }: Readonly<{ source: HomeSource; onSource: (source: HomeSource) => void; ids: (source: HomeSource) => string }>) {
   return <Segmented className={styles.sources} label="Coin sources" onChange={onSource} options={SOURCE_OPTIONS} panelId={ids} size="chip" tabId={(key) => `${ids(key)}-tab`} tabs value={source} />;
+}
+
+const TAB_OPTIONS = HOME_TAB_KEYS.map((key) => [key, HOME_TABS[key].label] as const);
+
+/**
+ * Discover's five tabs (plan decision 1), each a stage and an order, on one row that scrolls sideways when narrow.
+ * A header sort the tabs do not name leaves no tab selected; every tab controls the one list.
+ */
+export function CoinTabs({ state, onChange, panelId }: ViewProps & Readonly<{ panelId: string }>) {
+  return <Segmented<HomeTab | "">
+    label="Coins"
+    onChange={(key) => { if (key) onChange({ ...state, stage: HOME_TABS[key].stage, sort: HOME_TABS[key].sort }); }}
+    options={TAB_OPTIONS}
+    panelId={() => panelId}
+    size="touch"
+    stretch
+    tabId={(key) => `${panelId}-${key}`}
+    tabs
+    value={tabOf(state) ?? ""}
+  />;
 }
 
 export function HomeSearch() {
@@ -114,13 +134,10 @@ export function HomeSettingsMenu({ sections, onSections, showLabel }: Readonly<{
 export function CoinsListControls({ state, onChange }: ViewProps) {
   const discover = controlsApply(state.source);
   const changed = discover
-    ? state.sort !== HOME_DEFAULT_FEED.sort || state.window !== HOME_DEFAULT_FEED.window || activeFilterCount(state) > 0
+    ? state.window !== HOME_DEFAULT_FEED.window || activeFilterCount(state) > 0
     : state.window !== HOME_DEFAULT_FEED.window;
-  const label = ["Filters", discover ? SORT_LABELS[state.sort] : null, WINDOW_LABELS[state.window], changed ? "active" : null].filter(Boolean).join(", ");
+  const label = ["Filters", WINDOW_LABELS[state.window], changed ? "active" : null].filter(Boolean).join(", ");
   return <FilterMenu active={changed} label={label}>
-    {discover ? <label>View<SelectField aria-label="View" value={state.sort} onChange={event => onChange({ ...state, sort: event.target.value as HomeViewState["sort"] })}>
-      {HOME_VIEW_SORTS.map(key => <option key={key} title={SORT_HINTS[key]} value={key}>{SORT_LABELS[key]}</option>)}
-    </SelectField></label> : null}
     <label>Activity window<SelectField aria-label="Activity window" value={state.window} onChange={event => onChange({ ...state, window: event.target.value as HomeViewState["window"] })}>
       {HOME_WINDOWS.map(key => <option key={key} value={key}>{WINDOW_LABELS[key]}</option>)}
     </SelectField></label>
@@ -133,6 +150,6 @@ export function CoinsListControls({ state, onChange }: ViewProps) {
       </SelectField></label>
       <label><Checkbox checked={state.tradable} onChange={event => onChange({ ...state, tradable: event.target.checked })} />Trades in the app only</label>
     </> : null}
-    {changed ? <Button onClick={() => onChange(discover ? { ...HOME_DEFAULT_FEED, source: state.source } : { ...state, window: HOME_DEFAULT_FEED.window })} size="sm">Reset filters</Button> : null}
+    {changed ? <Button onClick={() => onChange(discover ? { ...HOME_DEFAULT_FEED, source: state.source, stage: state.stage, sort: state.sort } : { ...state, window: HOME_DEFAULT_FEED.window })} size="sm">Reset filters</Button> : null}
   </FilterMenu>;
 }

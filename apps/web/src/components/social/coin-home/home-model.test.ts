@@ -11,6 +11,7 @@ import {
   HOME_DEFAULT_FEED,
   HOME_DEFAULT_VIEW,
   resultsAnnouncement,
+  tabOf,
   viewSearchOf,
   viewStateOf,
 } from "./home-state";
@@ -23,6 +24,7 @@ import {
   eventSentence,
   followersText,
   homeCoinHref,
+  homeStatus,
   marketFacts,
   namesOf,
   participantLabel,
@@ -126,6 +128,36 @@ test("market facts carry their period and show a dash, never 0, when unknown", (
   assert.deepEqual(marketFacts({ ...coin, price_usd: null, change_24h_bps: null, holders: null, fdv_usd: null, launched_ms: null }, NOW), { price: null, change: null, holders: null, fdv: null, age: null });
 });
 
+test("a tab is a stage and an order; a header sort keeps the stage's tab and leaves the shared stage's tabs", () => {
+  assert.equal(tabOf({ stage: "all", sort: "relevant" }), "trending");
+  assert.equal(tabOf({ stage: "all", sort: "last_trade" }), "last");
+  assert.equal(tabOf({ stage: "almost", sort: "held" }), "almost");
+  assert.equal(tabOf({ stage: "graduated", sort: "market_cap" }), "graduated");
+  assert.equal(tabOf({ stage: "all", sort: "market_cap" }), null);
+});
+
+test("the Status cell says where a coin is in one line: its curve, its sale, its listing or its venue", () => {
+  const DAY = 86_400_000;
+  const base = {
+    presale_id: null, coin_type: "0x1::c::C", symbol: "ORBIT", name: "Orbit", icon_url: null, decimals: 9, lifecycle: "migrated", venue: "blast_curve", tradable: false,
+    opened_ms: null, launched_ms: NOW - 3 * DAY, launch_id: "0xlaunch", quote: { type: SUI, symbol: "SUI", decimals: 9 }, sale: null,
+    price_usd: null, price_as_of_ms: null, change_24h_bps: null, holders: null, holders_as_of_ms: null, fdv_usd: null, spark: [],
+    activity: activity(), top_holders: { holders: [], share_bps: null }, discussion: { posts: 0 }, rank: { score: 1, why: "x" },
+  } satisfies HomeCoin;
+  const curve = (over: Partial<NonNullable<HomeCoin["curve"]>>) => ({ ...base, curve: { lifecycle: "live", progress_bps: 7_250, quote_remaining: "310000000000", ...over } } satisfies HomeCoin);
+  assert.deepEqual(homeStatus(curve({}), NOW), { text: "72% · 310 SUI to go", fill: 72 });
+  assert.deepEqual(homeStatus(curve({ quote_remaining: null }), NOW), { text: "72%", fill: 72 });
+  assert.deepEqual(homeStatus(curve({ lifecycle: "migration_ready", progress_bps: 10_000, quote_remaining: "0" }), NOW), { text: "Graduating", fill: 100 });
+  assert.deepEqual(homeStatus({ ...curve({ lifecycle: "migrated" }), graduated_ms: NOW - 3 * DAY }, NOW), { text: "Graduated 3d ago" });
+  assert.deepEqual(homeStatus(curve({ lifecycle: "migrated" }), NOW), { text: "Graduated" });
+  assert.deepEqual(homeStatus({ ...base, presale_id: "0xsale", launch_id: null }, NOW), { text: "Listed 3d ago" });
+  assert.deepEqual(homeStatus({ ...base, launch_id: null, venue: "cetus" }, NOW), { text: "", venue: "cetus" });
+  const sale = { ...base, presale_id: "0xsale", launch_id: null, lifecycle: "open", sale: { start_ms: NOW - DAY, end_ms: NOW + 3 * 3_600_000, raise_target: "100", raised: "42", participants: 3 } } satisfies HomeCoin;
+  assert.deepEqual(homeStatus(sale, NOW), { text: "42% · closes in 3h", fill: 42 });
+  assert.deepEqual(homeStatus({ ...sale, lifecycle: "pending", sale: { ...sale.sale, start_ms: NOW + 39 * 60_000 + 5_000 } }, NOW), { text: "Opens in 39m" });
+  assert.deepEqual(homeStatus({ ...sale, lifecycle: "pending", sale: { ...sale.sale, start_ms: NOW + 20_000 } }, NOW), { text: "Opens in <1m" });
+});
+
 test("a sale opens its presale page, a curve coin its coin page, and a coin with neither has no link", () => {
   assert.equal(homeCoinHref({ coin_type: "0x1::coin::COIN", presale_id: "0xsale", launch_id: null }), "/presale/0xsale");
   assert.equal(homeCoinHref({ coin_type: "0x1::coin::COIN", presale_id: null, launch_id: "0xlaunch" }), "/coin/0x1%3A%3Acoin%3A%3ACOIN");
@@ -142,14 +174,21 @@ test("the view state round-trips through the URL, with defaults left out and unk
   assert.equal(viewSearchOf(viewStateOf(new URLSearchParams("w=1h"))), "");
   // Relevant is the default view, so its old explicit link folds to the plain address.
   assert.equal(viewSearchOf(viewStateOf(new URLSearchParams("sort=relevant"))), "");
-  const state = { source: "following", sort: "newest", window: "24h", minParticipants: 5, age: "7d", tradable: true, page: 3 } as const;
+  const state = { source: "following", stage: "all", sort: "newest", window: "24h", minParticipants: 5, age: "7d", tradable: true, page: 3 } as const;
   assert.equal(viewSearchOf(state), "?src=following&sort=newest&w=24h&min=5&age=7d&tradable=1&page=3");
   assert.deepEqual(viewStateOf(new URLSearchParams(viewSearchOf(state))), state);
   assert.equal(viewSearchOf(HOME_DEFAULT_FEED), "");
   assert.equal(viewSearchOf(HOME_DEFAULT_VIEW), "?sort=held");
   assert.deepEqual(viewStateOf(new URLSearchParams("src=x&sort=cap&w=7d&min=3&age=1d&tradable=yes&page=0")), HOME_DEFAULT_FEED);
-  // An order Home does not offer yet reads as the default, so an old backend never sees it.
-  assert.equal(viewStateOf(new URLSearchParams("sort=progress")).sort, HOME_DEFAULT_FEED.sort);
+  // A tab's stage implies its order, so the link names only the stage; a header sort within it is named.
+  const almost = viewStateOf(new URLSearchParams("stage=almost"));
+  assert.deepEqual([almost.stage, almost.sort], ["almost", "progress"]);
+  assert.equal(viewSearchOf(almost), "?stage=almost");
+  assert.equal(viewSearchOf({ ...almost, sort: "held" }), "?stage=almost&sort=held");
+  assert.equal(viewStateOf(new URLSearchParams("stage=graduated")).sort, "market_cap");
+  assert.equal(viewStateOf(new URLSearchParams("stage=moon")).stage, "all");
+  assert.equal(viewSearchOf(viewStateOf(new URLSearchParams("sort=last_trade"))), "?sort=last_trade");
+  assert.equal(resultsAnnouncement(almost, 12, 3), "Discover · Almost graduated · 12 coins · page 1 of 3 · sorted by Progress · last hour");
   // The page: an integer from 1; anything else (0, a fraction, a word, beyond the last page allowed) is page 1.
   assert.equal(viewStateOf(new URLSearchParams("page=12")).page, 12);
   assert.equal(viewStateOf(new URLSearchParams("page=12")).sort, "held");
