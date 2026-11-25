@@ -143,3 +143,18 @@ test("a browser that reconnects inside the ring gets a resumed fence and only th
   assert.equal(resumed.closed, false, "a socket subscriber has no lifetime");
   assert.equal(stale.closed, true, "SSE keeps its lifetime");
 });
+
+// This fails if the relay's strict frame check drops frames carrying engine hops, or delivers them without relay_ms.
+test("a frame with engine hops reaches the browser with relay_ms added", (t) => {
+  t.mock.timers.enable({ apis: ["setInterval", "setTimeout"] });
+  const { sockets, join, hello } = harness();
+  const browser = join(`pool=${POOL}`);
+  hello(sockets[0]!);
+  sockets[0]!.receive(snapshot(POOL, 10));
+  const frame = lifecycle(POOL, 11);
+  sockets[0]!.receive({ ...frame, provenance: { ...frame.provenance, hops: { arrived_ms: 11_000, picked_ms: 11_001 } } });
+  const market = browser.events.filter(({ event }) => event === "market").at(-1)!;
+  const hops = (market.data.provenance as { hops: Record<string, number> }).hops;
+  assert.equal(hops.arrived_ms, 11_000);
+  assert.equal(typeof hops.relay_ms, "number");
+});

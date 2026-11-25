@@ -44,6 +44,7 @@ test("a sampled tab pings its socket and sends one beacon a minute", () => {
     now: () => now,
     schedule: (run, ms) => { timers.push({ run, at: now + ms }); },
     afterPaint: (run) => { now += 16; run(); },
+    visible: () => true,
     send: (path, body) => { beacons.push([path, body]); },
   });
   const advance = (ms: number) => {
