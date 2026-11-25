@@ -3,7 +3,6 @@
 import Link from "next/link";
 import type { Chart } from "klinecharts";
 import { memo, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
-import { isActivityTrade, type ActivityRow } from "@blast/core/modules/launchpad-contract/activity.ts";
 import { profilePagePath } from "@blast/core/modules/social/contracts/profiles.ts";
 import type { TraderProfile } from "@blast/core/modules/social/contracts/trader-profiles.ts";
 import { Avatar } from "#web/components/blast-ui/Avatar.tsx";
@@ -12,14 +11,13 @@ import { Popover, PopoverSurface } from "#web/components/blast-ui/Popover.tsx";
 import { dyn } from "#web/components/blast-ui/csp-style.ts";
 import { WalletLabelIcon } from "#web/components/launchpad/activity/WalletLabelIcon.tsx";
 import { TRADER_PROFILES_QUERY } from "#web/components/launchpad/activity/trader-profiles.ts";
-import { tradeWalletLabels, WALLET_LABELS } from "#web/components/launchpad/activity/wallet-labels.ts";
+import { WALLET_LABELS } from "#web/components/launchpad/activity/wallet-labels.ts";
 import { useLaunchWallet, useWalletTrades } from "#web/components/launchpad/activity/wallet-trades.tsx";
-import { shiftDecimal } from "#web/components/launchpad/coin/coin-format.ts";
 import { SocialAccountContext } from "#web/components/social/use-social-account.ts";
 import { useAppQueryClient } from "#web/lib/query/provider.tsx";
 import { readableUsd } from "#web/lib/market-format.ts";
 import type { Bar } from "./kline-model.ts";
-import { barPeople, layoutBubbles, personIdentity, profileAt, rememberProfiles, type Bubble, type Person, type PersonTrade, type SeenProfile } from "./people-bubbles.ts";
+import { barPeople, layoutBubbles, personIdentity, personTrades, profileAt, rememberProfiles, type Bubble, type Person, type SeenProfile } from "./people-bubbles.ts";
 import styles from "./PeopleBubbles.module.css";
 
 /** Bubble size in px; phones get smaller ones so the price stays readable. */
@@ -60,19 +58,6 @@ export function PeopleBubbles({ chart, bars, quoteDecimals, quoteUsd }: Readonly
       ? <PersonBubble key={bubble.key} person={bubble.person} x={bubble.x} y={bubble.y} size={size} profile={bubble.person.own ? ownProfile : profileAt(seen, bubble.person.address, bubble.person.lastMs)} />
       : <MoreBubble key={bubble.key} bubble={bubble} size={size} />)}
   </div>;
-}
-
-/** Trades from the activity rows, sized in USD (the indexer's figure, else quote × the quote's USD price). */
-export function personTrades(rows: readonly ActivityRow[], deployer: string | null, quoteDecimals: number | null, quoteUsd: string | null): PersonTrade[] {
-  return rows.flatMap((row): PersonTrade[] => {
-    if (!row.actor || !isActivityTrade(row)) return [];
-    const quote = row.amounts.quote;
-    let usd: number | null = null;
-    if (row.volumeUsd !== undefined) usd = Number(row.volumeUsd);
-    else if (quote !== undefined && quoteDecimals !== null && quoteUsd !== null) usd = Number(shiftDecimal(quote.toString(), -quoteDecimals)) * Number(quoteUsd);
-    const side = row.kind === "curve_buy" || row.kind === "venue_buy" ? "buy" : "sell";
-    return [{ address: row.actor, timestampMs: row.timestampMs, side, usd: usd !== null && Number.isFinite(usd) ? usd : null, labels: tradeWalletLabels(row, deployer) }];
-  });
 }
 
 /**

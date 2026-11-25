@@ -1,6 +1,8 @@
 import { shortAddress } from "@blast/core/lib/format.ts";
+import { isActivityTrade, type ActivityRow } from "@blast/core/modules/launchpad-contract/activity.ts";
 import { traderProfilesSchema, type TraderProfile } from "@blast/core/modules/social/contracts/trader-profiles.ts";
-import { WALLET_LABELS, type WalletLabel } from "#web/components/launchpad/activity/wallet-labels.ts";
+import { tradeWalletLabels, WALLET_LABELS, type WalletLabel } from "#web/components/launchpad/activity/wallet-labels.ts";
+import { shiftDecimal } from "#web/components/launchpad/coin/coin-format.ts";
 import type { Bar } from "./kline-model.ts";
 
 /** One trade by one wallet: when, which way, its USD size when known, and its wallet tags. */
@@ -22,6 +24,19 @@ export type Person = Readonly<{
   own: boolean;
   lastMs: number;
 }>;
+
+/** Trades from the activity rows, sized in USD (the indexer's figure, else quote × the quote's USD price). */
+export function personTrades(rows: readonly ActivityRow[], deployer: string | null, quoteDecimals: number | null, quoteUsd: string | null): PersonTrade[] {
+  return rows.flatMap((row): PersonTrade[] => {
+    if (!row.actor || !isActivityTrade(row)) return [];
+    const quote = row.amounts.quote;
+    let usd: number | null = null;
+    if (row.volumeUsd !== undefined) usd = Number(row.volumeUsd);
+    else if (quote !== undefined && quoteDecimals !== null && quoteUsd !== null) usd = Number(shiftDecimal(quote.toString(), -quoteDecimals)) * Number(quoteUsd);
+    const side = row.kind === "curve_buy" || row.kind === "venue_buy" ? "buy" : "sell";
+    return [{ address: row.actor, timestampMs: row.timestampMs, side, usd: usd !== null && Number.isFinite(usd) ? usd : null, labels: tradeWalletLabels(row, deployer) }];
+  });
+}
 
 const LABEL_ORDER = Object.keys(WALLET_LABELS) as WalletLabel[];
 /** Bubbles drawn at most, newest visible first; the viewer's own always stay. */
