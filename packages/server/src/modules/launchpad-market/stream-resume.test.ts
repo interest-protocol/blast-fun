@@ -68,21 +68,39 @@ test("an upstream drop keeps browsers connected and resumes each fenced pool fro
   assert.equal(browser.events.some(({ event }) => event === "resync"), false);
   t.mock.timers.tick(400);
   assert.equal(sockets.length, 2, "the relay reconnects upstream by itself");
-  hello(sockets[1]!);
-  assert.deepEqual(
-    sockets[1]!.sent.filter((op) => op.cursor),
-    [{ op: "subscribe", topics: [`pool:${POOL}`], cursor: "11:0:0:0" }],
-  );
-  assert.ok(sockets[1]!.sent.some((op) => (op.topics as string[] | undefined)?.includes(`pool:${OTHER}`) && !op.cursor), "an unfenced pool subscribes fresh");
+  sockets[1]!.receive({ type: "hello", protocol: 1, provenance: provenance(1) });
+  const subscribes = sockets[1]!.sent.filter((op) => op.op === "subscribe");
+  assert.deepEqual(subscribes[0], { op: "subscribe", topics: [`pool:${POOL}`], cursor: "11:0:0:0" }, "resumes go before the plain subscribe");
+  assert.ok((subscribes[1]!.topics as string[]).includes(`pool:${OTHER}`) && !subscribes[1]!.cursor, "an unfenced pool subscribes fresh");
+  sockets[1]!.receive({ type: "pong" });
 
+  // The reader's order: replayed frames, resume_complete, then the state snapshot.
   const before = browser.events.length;
-  sockets[1]!.receive(lifecycle(POOL, 11));
-  sockets[1]!.receive(lifecycle(POOL, 12));
-  sockets[1]!.receive(snapshot(POOL, 12));
-  sockets[1]!.receive({ type: "resume_complete", cursor: "12:0:0:0" });
-  assert.deepEqual(browser.events.slice(before).map(({ event, id }) => [event, id]), [["market", "12:0:0:0"]], "replayed frames arrive once; the resume snapshot is not a new fence");
+  sockets[1]!.receive({ type: "resume_complete", cursor: "20:0:0:0" });
+  sockets[1]!.receive(snapshot(POOL, 20));
+  assert.deepEqual(browser.events.slice(before), [], "an unchanged pool keeps its fence: no refetch");
   t.mock.timers.tick(10_000);
   assert.equal(browser.closed, false, "a finished resume clears its deadline");
+});
+
+test("a pool that changed while upstream was away gets one new fence after its resume", (t) => {
+  t.mock.timers.enable({ apis: ["setInterval", "setTimeout", "Date"] });
+  const { sockets, join, hello } = harness();
+  const browser = join(`pool=${POOL}`);
+  hello(sockets[0]!);
+  sockets[0]!.receive(snapshot(POOL, 10));
+  sockets[0]!.drop();
+  t.mock.timers.tick(400);
+  hello(sockets[1]!);
+  const before = browser.events.length;
+  sockets[1]!.receive({ ...lifecycle(POOL, 12), replayed: true });
+  sockets[1]!.receive({ type: "resume_complete", cursor: "12:0:0:0" });
+  sockets[1]!.receive(snapshot(POOL, 13));
+  sockets[1]!.receive(lifecycle(POOL, 14));
+  assert.deepEqual(browser.events.slice(before).map(({ event, data, id }) => [event, data.cursor ?? id]), [
+    ["status", "13:0:0:0"],
+    ["market", "14:0:0:0"],
+  ], "replayed frames lack state: the snapshot's fence replaces them");
 });
 
 test("a resume the reader cannot fill ends only that pool's browsers", (t) => {
@@ -112,7 +130,7 @@ test("a browser that reconnects inside the ring gets a resumed fence and only th
   for (const checkpoint of [11, 12, 13]) sockets[0]!.receive(lifecycle(POOL, checkpoint));
 
   const resumed = join(`pool=${POOL}`, { resume: new Map([[POOL, "11:0:0:0"]]), lifetime: false });
-  assert.deepEqual(resumed.events.filter(({ event }) => event !== "status" || resumed.events.indexOf({ event, data: {} } as never) === -1).map(({ event, data, id }) => event === "status" ? [event, data.state, data.cursor, data.resumed] : [event, id]), [
+  assert.deepEqual(resumed.events.map(({ event, data, id }) => event === "status" ? [event, data.state, data.cursor, data.resumed] : [event, id]), [
     ["status", "connecting", undefined, undefined],
     ["status", "live", "11:0:0:0", true],
     ["market", "12:0:0:0"],

@@ -44,8 +44,14 @@ type Topic = {
   ring: { cursor: string; bytes: Uint8Array; at: number }[];
   ringBytes: number;
   floor?: string;
-  /** An upstream resume from `cursor` is in flight: its snapshot is not a new fence. */
+  /**
+   * An upstream resume from `cursor` is in flight. The reader answers
+   * `[replayed log frames…, resume_complete, snapshot]`; replayed frames carry
+   * no summary or open candle, which only the trailing snapshot holds.
+   */
   resuming?: boolean;
+  /** A replayed frame arrived: the trailing snapshot is a new fence. Otherwise it is dropped. */
+  resumeChanged?: boolean;
 };
 /** Options for a direct socket subscriber. SSE keeps its finite lifetime and never resumes. */
 export type MarketSubscribeOptions = Readonly<{
@@ -419,7 +425,8 @@ export class MarketStreamRelay {
         this.#pong(socket, frame);
         return true;
       case "resume_complete":
-        this.#resumed(this.#resumes.shift());
+        // The pool's trailing snapshot ends its resume (`#market`); its deadline runs until then.
+        this.#resumes.shift();
         return true;
       case "error":
         if (this.#feedPending) { this.#feedPending = false; return true; }
@@ -463,8 +470,12 @@ export class MarketStreamRelay {
     this.#hint(this.#hello);
     this.#reopenAttempt = 0;
     const fenced = [...this.#topics].filter(([, topic]) => topic.resuming && topic.cursor);
+    // Resumes go first: the reader answers in order, so an `error` while resumes are pending is a resume's.
+    for (const [pool, topic] of fenced) {
+      if (!this.#socket) return;
+      this.#resume(pool, topic);
+    }
     this.#subscribe("subscribe", [...this.#topics].filter(([, topic]) => !topic.resuming || !topic.cursor).map(([pool]) => pool), true);
-    for (const [pool, topic] of fenced) this.#resume(pool, topic);
     this.#ping();
   }
 
@@ -532,9 +543,16 @@ export class MarketStreamRelay {
     if (!topic) return;
     const cursor = validateEnvelope(frame, this.#expected);
     if (topic.resuming) {
-      // The reader re-sends state as a snapshot on resume; the browser already has it.
-      if (frame.type === "snapshot") return;
-      if (topic.cursor && compareEventCursors(cursor, topic.cursor) <= 0) return;
+      if (frame.type !== "snapshot") {
+        // Replayed frames lack their state; the browser gets them through the snapshot's new fence.
+        if (!topic.cursor || compareEventCursors(cursor, topic.cursor) > 0) topic.resumeChanged = true;
+        return;
+      }
+      const changed = topic.resumeChanged;
+      clearTimeout(topic.deadline);
+      Object.assign(topic, { deadline: undefined, resuming: false, resumeChanged: false });
+      // Nothing happened to the pool while upstream was away: browsers keep their fence and ring.
+      if (!changed) return;
     }
     if (topic.cursor && compareEventCursors(cursor, topic.cursor) < 0)
       throw new Error();
@@ -621,13 +639,6 @@ export class MarketStreamRelay {
     }
   }
 
-  #resumed(pool: string | undefined): void {
-    const topic = pool === undefined ? undefined : this.#topics.get(pool);
-    if (!topic) return;
-    clearTimeout(topic.deadline);
-    topic.deadline = undefined;
-    topic.resuming = false;
-  }
 
   /** A pool the reader cannot resume ends only its own clients, which reconnect and refetch history. */
   #resyncPool(pool: string, reason: string): void {
@@ -688,6 +699,7 @@ export class MarketStreamRelay {
       clearTimeout(topic.deadline);
       topic.deadline = undefined;
       topic.resuming = topic.fence !== undefined;
+      topic.resumeChanged = false;
     }
     this.#closeUpstream();
     const delay = Math.min(5_000, 250 * 2 ** this.#reopenAttempt++) * (1 + Math.random() / 2);

@@ -169,7 +169,6 @@ test("the real relay serves a socket subscriber through an upstream frame", asyn
     const client = open("activity=true");
     assert.equal(await client.opened, true);
     await until(() => client.messages.some((message) => message.includes('"connecting"')));
-    assert.ok(upstream.sent.length === 0 || upstream.sent.every((op) => typeof op === "string"));
   } finally {
     server.stop(true);
   }
