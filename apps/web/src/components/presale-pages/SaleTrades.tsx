@@ -319,6 +319,7 @@ const SaleTradeRow = memo(function SaleTradeRow({ row: { actor, event }, sale, e
     side={event.kind === "trade_buy" ? "buy" : "sell"}
     trader={actor.type === "address" ? <WalletAddress address={actor.address} label="trader address" onInspect={onInspect}>{actor.short}</WalletAddress> : actorName(actor)}
     profile={actor.type === "account" ? { callsign: actor.callsign, avatarUrl: actor.avatar_url } : null}
+    wallet={actor.type === "address" ? actor.address : null}
     timestampMs={event.occurred_at_ms}
     tokens={<ActivityAmount amount={event.tokens == null ? undefined : BigInt(event.tokens)} decimals={sale.sale_decimals ?? null} symbol={sale.symbol} coinType={sale.sale_token} iconUrl={sale.icon_url} compact iconOnly onInspect={onInspect} />}
     quote={payment}

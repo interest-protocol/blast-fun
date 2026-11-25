@@ -198,6 +198,19 @@
 .traderText { display: grid; gap: .25rem; min-width: 0; }
 .defaultAvatar { display: grid; place-items: center; flex-shrink: 0; width: 2.75rem; height: 2.75rem; border-radius: 50%; background: var(--raised); color: var(--muted); }
 .defaultAvatar svg { width: 1.5rem; height: 1.5rem; }
+/*
+ * A trader's face is a link to who they are (profile, or the wallet on the explorer).
+ * A round target; on a mouse, hover rings the face in ink instead of the square
+ * control fill, and the press snaps in through the shared control.
+ */
+.trader .traderFace { --control-radius: 50%; --control-hover: transparent; }
+.traderFace > * { outline: .125rem solid transparent; outline-offset: .125rem; border-radius: 50%; transition: outline-color var(--t1) var(--ease-std); }
+@media (hover: hover) and (pointer: fine) {
+  .traderFace:hover > * { outline-color: var(--ink); }
+}
+.walletFace { display: grid; place-items: center; inline-size: 2rem; block-size: 2rem; background: var(--raised); color: var(--muted); }
+.walletFace svg { inline-size: 1.25rem; block-size: 1.25rem; }
+.traderWallet { display: flex; align-items: center; justify-content: space-between; gap: .25rem; min-width: 0; }
 
 .walletIcons {
   display: inline-flex;

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Bar } from "./kline-model.ts";
-import { barPeople, layoutBubbles, MAX_PEOPLE, personIdentity, profileAt, rememberProfiles, STACK_LIMIT, type Person, type PersonTrade } from "./people-bubbles.ts";
+import { barPeople, layoutBubbles, MAX_PEOPLE, mousePress, personIdentity, profileAt, rememberProfiles, STACK_LIMIT, type Person, type PersonTrade } from "./people-bubbles.ts";
 
 const MINUTE = 60_000;
 const T0 = 1_795_188_300_000;
@@ -103,6 +103,15 @@ test("a stack that would run off the plot grows the other way instead of piling 
 test("no profile shows an anonymous circle and a short address", () => {
   assert.deepEqual(personIdentity(A, null), { anonymous: true, name: "0xaaaa…aaaa", callsign: null, avatarUrl: null });
   assert.deepEqual(personIdentity(A, { callsign: "pilot", avatarUrl: null }), { anonymous: false, name: "@pilot", callsign: "pilot", avatarUrl: null });
+});
+
+test("only a real mouse press follows a bubble's link; touch, pen and screen readers open the card", () => {
+  assert.equal(mousePress({ pointerType: "mouse", width: 1, height: 1, pressure: 0.5, buttons: 1 }), true);
+  // Some desktop mice report no pressure, but a held button.
+  assert.equal(mousePress({ pointerType: "mouse", width: 1, height: 1, pressure: 0, buttons: 1 }), true);
+  assert.equal(mousePress({ pointerType: "mouse", width: 1, height: 1, pressure: 0, buttons: 0 }), false);
+  assert.equal(mousePress({ pointerType: "touch", width: 20, height: 20, pressure: 0.5, buttons: 1 }), false);
+  assert.equal(mousePress({ pointerType: "pen", width: 1, height: 1, pressure: 0.5, buttons: 1 }), false);
 });
 
 test("profiles build up from the lookup's answers, from the earliest trade they were returned for", () => {

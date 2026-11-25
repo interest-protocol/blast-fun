@@ -22,6 +22,7 @@ import primitives from "../primitives/primitives.module.css";
 import { explorerTransactionUrl } from "../transaction/explorer";
 import { SmallTradeSwitch } from "./SmallTradeSwitch";
 import { useTradeSlide } from "./use-trade-slide";
+import { useWalletExplorer } from "./TraderWallet";
 import styles from "./Activity.module.css";
 
 export type TransactionExplorer = Readonly<{ environment: string; explorer: Readonly<{ baseUrl: string }> }>;
@@ -57,12 +58,18 @@ export function TradeListSkeleton({ count = RECENT_TRADES_LIMIT }: Readonly<{ co
   </SkeletonRows>;
 }
 
-function TraderAvatar({ profile }: Readonly<{ profile: TraderProfile | null }>) {
-  return profile ? (
-    <IconButtonLink size="touch" href={profilePagePath(profile.callsign)} aria-label={`View @${profile.callsign}’s Blast profile`}>
+/** A trader's face opens who they are: their Blast profile, or else their wallet on the viewer's explorer. */
+function TraderAvatar({ profile, wallet }: Readonly<{ profile: TraderProfile | null; wallet: string | null }>) {
+  const explorer = useWalletExplorer(profile ? null : wallet);
+  if (profile) {
+    return <IconButtonLink size="touch" className={styles.traderFace} href={profilePagePath(profile.callsign)} aria-label={`View @${profile.callsign}’s Blast profile`}>
       <ShellAvatar viewer={{ accountId: profile.callsign, callsign: profile.callsign, avatarUrl: profile.avatarUrl }} size={32} />
-    </IconButtonLink>
-  ) : <span className={styles.defaultAvatar} role="img" aria-label="Wallet trader"><UserIcon /></span>;
+    </IconButtonLink>;
+  }
+  if (!explorer) return <span className={styles.defaultAvatar} role="img" aria-label="Wallet trader"><UserIcon /></span>;
+  return <IconButtonLink size="touch" className={styles.traderFace} href={explorer.url} rel="noopener noreferrer" target="_blank" aria-label={explorer.label} title={explorer.label}>
+    <span className={styles.walletFace}><UserIcon /></span>
+  </IconButtonLink>;
 }
 
 const TradeInspectContext = createContext<(open: boolean) => void>(() => {});
@@ -179,11 +186,13 @@ function filteredTrades<Row extends { position: string }>(
 }
 
 export function CompactTradeRow({
-  side, trader, profile, timestampMs, tokens, quote, digest, explorer, entering, leaving, now,
+  side, trader, profile, wallet = null, timestampMs, tokens, quote, digest, explorer, entering, leaving, now,
 }: TradeRowState & Readonly<{
   side: "buy" | "sell";
   trader: ReactNode;
   profile: TraderProfile | null;
+  /** The trader's wallet, when the row knows it: a trader with no profile links to it on the explorer. */
+  wallet?: string | null;
   timestampMs: number;
   tokens: ReactNode;
   quote: ReactNode;
@@ -199,7 +208,7 @@ export function CompactTradeRow({
         triggerLabel={tradeTimeButtonLabel(age)} onInspect={onInspect} />
     </span>
     <span className={styles.trader}>
-      <TraderAvatar profile={profile} />
+      <TraderAvatar profile={profile} wallet={wallet} />
       <span className={styles.traderText}>{trader}</span>
     </span>
     <span className={styles.tradeAmount}>

@@ -9,6 +9,8 @@ import type { LaunchLifecycle } from "@blast/core/modules/launchpad-contract/dis
 import { parseInfraProvenance } from "@blast/core/modules/launchpad-contract/provenance.ts";
 import { parseTraderProfilesRequest, traderProfileKey, type TraderProfileRequest } from "@blast/core/modules/social/contracts/trader-profiles.ts";
 import { CREATE_QUOTE_TYPE } from "@blast/core/web/contracts/create.ts";
+import { explorerAccountUrl } from "@blast/core/lib/explorer.ts";
+import { shortAddress } from "@blast/core/lib/format.ts";
 import { createTestQueryClient, settleQueries, withQueryClient } from "#web/lib/query/test-client.ts";
 
 import { NON_PRODUCTION_MANIFEST } from "../../../../test/fixtures/launchpad/transaction/fixtures.ts";
@@ -510,9 +512,12 @@ test("recent trades link only named event-time profiles and retain wallet identi
   client.clear();
   assert.match(html, /href="\/@alice"/);
   assert.match(html, /View @alice/);
-  assert.equal((html.match(/aria-label="Wallet trader"/g) ?? []).length, 1);
-  assert.ok(html.includes(row.actor!));
+  // The same wallet at a time with no profile opens on the viewer's explorer (Suiscan by default).
+  assert.equal((html.match(/aria-label="Wallet trader"/g) ?? []).length, 0);
+  assert.equal(html.split(`href="${explorerAccountUrl("suiscan", row.actor!)}"`).length - 1, 1);
+  assert.match(html, new RegExp(`aria-label="View wallet ${shortAddress(row.actor!)} on Suiscan"`));
   assert.equal((html.match(/href="\/@/g) ?? []).length, 1);
+  assert.ok(text(html).includes(shortAddress(row.actor!)));
 });
 
 test("the trade address explains every matching wallet icon on buys and sells", () => {
