@@ -113,7 +113,6 @@ export function CoinChart({
   return (
     <ChartView
       compact={compact}
-      preview={preview}
       state={shown}
       currentPrice={currentPrice?.price ?? null}
       source={source}

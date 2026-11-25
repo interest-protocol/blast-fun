@@ -248,20 +248,6 @@
   --coin-readout-height: 2.75rem;
 }
 
-.preview {
-  display: block;
-  inline-size: 100%;
-  block-size: 100%;
-  color: var(--ink);
-}
-.previewCandle[data-direction="up"] { color: var(--coin-chart-up); }
-.previewCandle[data-direction="down"] { color: var(--coin-chart-down); }
-.previewVolume { fill: var(--muted); opacity: .35; }
-.previewClose { stroke-width: 1.5; }
-.previewMigration { stroke: var(--muted); stroke-dasharray: 4 4; }
-
-.preview[data-viewport="mobile"] { display: none; }
-
 @media (min-width: 761px) {
   .chart[data-compact-chart] {
     --coin-plot-height: clamp(15.25rem, 32vh, 23.5rem);
@@ -269,14 +255,13 @@
   }
 }
 
-/* Keep the mobile layout and its line preview stable before hydration. */
+/* Keep the mobile layout stable before hydration. */
 @media (max-width: 760px), (pointer: coarse) {
   .chart[data-compact-chart][data-chart-style] {
     --coin-plot-height: var(--coin-line-plot-height);
     --coin-readout-height: 2.75rem;
   }
-  .preview[data-viewport="mobile"] { display: block; }
-  .preview[data-viewport="desktop"], .compactTools .stylePicker { display: none; }
+  .compactTools .stylePicker { display: none; }
 }
 
 .chartState { min-block-size: calc(var(--coin-plot-height) + var(--coin-readout-height)); }

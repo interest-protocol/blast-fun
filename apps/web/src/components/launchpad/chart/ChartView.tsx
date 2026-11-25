@@ -1,6 +1,7 @@
 import { ChartLastTrade } from "./ChartLastTrade.tsx";
 import { useCandleTrade } from "./chart-trade-context.ts";
 import { PoolCandleChart } from "#web/components/charts/PoolCandleChart.tsx";
+import dynamic from "next/dynamic";
 import { SelectField } from "#web/components/blast-ui/TextField.tsx";
 import { poolPrices } from "#web/components/charts/candle-data.ts";
 import { SkeletonBox, SkeletonRegion } from "#web/components/blast-ui/Skeleton.tsx";
@@ -34,13 +35,19 @@ import type { SectionState } from "../primitives/data-state";
 import primitives from "../primitives/primitives.module.css";
 import type { ChartSource } from "./chart-client";
 import { chartGeometry, type DrawnSeries } from "./chart-geometry";
-import { ChartPreview } from "./ChartPreview";
 import { CHART_INTERVALS, LIVE_CHART_INTERVALS, CHART_RANGES, LIVE_CHART_CONTROLS, LIVE_CHART_SPAN_MS, candleGaps, chartLatestTimestamp, chartOpening, chartSources, pageTruncated, type ChartCandlePage, type ChartControls, type ChartRange, type ChartRequest, type ChartState, type CandleGap, type SourceState } from "./chart-model";
 import { useChartClock } from "./use-chart-clock.ts";
 import styles from "./Chart.module.css";
+import klineStyles from "#web/components/charts/kline/KLineCoinChart.module.css";
 import { HIDDEN_AMOUNT, NO_VALUE, venueName } from "@blast/core/lib/format.ts";
 
 export const PRICE_HISTORY_UNAVAILABLE = "Price history couldn’t load.";
+
+/** The coin page's chart library loads only when a chart is on screen. */
+const KLineCoinChart = dynamic(() => import("#web/components/charts/kline/KLineCoinChart.tsx"), {
+  ssr: false,
+  loading: () => <SkeletonBox className={klineStyles.loading} />,
+});
 
 export type ChartSourceName = "curve" | "venue";
 type ChartViewSource = Omit<ChartSource, "curvePoolKey"> & Readonly<{ curvePoolKey: string | null }>;
@@ -294,10 +301,10 @@ function priceSource(
   return { name, section: { ...read, data: { ...page, candles: [candle, ...candles.slice(1)] } }, opening, carriedClose };
 }
 
-export function ChartView(props: Parameters<typeof useChartViewControls>[0] & Readonly<{ compact?: boolean; preview?: boolean }>) {
+export function ChartView(props: Parameters<typeof useChartViewControls>[0] & Readonly<{ compact?: boolean }>) {
   const view = useChartViewControls(props);
   const { source, venuePoolKey, quoteUsd, controls, updates, migration, selectable, drawn, shown, geometry, missingPriceUnits, latest, latestAvailable } = view;
-  if (props.compact) return <CompactChart view={view} preview={props.preview} />;
+  if (props.compact) return <CompactChart view={view} />;
   return (
     <div className={styles.chart}>
       <ChartControlsPanel view={view} />
@@ -429,7 +436,7 @@ function SourceCandles({ name, section, label, source, quoteUsd, request, range,
   );
 }
 
-function ChartFigure({ drawn, migrationAt, venuePoolKey, geometry, latest, latestAvailable, source, controls, compact = false, presentation, quoteUsd, candleTrade, preview }: Readonly<{
+function ChartFigure({ drawn, migrationAt, venuePoolKey, geometry, latest, latestAvailable, source, controls, compact = false, presentation, quoteUsd, candleTrade }: Readonly<{
   drawn: readonly DrawnSeries[];
   migrationAt?: number;
   venuePoolKey: string | null;
@@ -442,7 +449,6 @@ function ChartFigure({ drawn, migrationAt, venuePoolKey, geometry, latest, lates
   presentation?: "line" | "candles";
   candleTrade?: ReturnType<typeof useCandleTrade>;
   quoteUsd?: string | null;
-  preview?: boolean;
 }>) {
   const deployer = useLaunchWallet();
   const activity = useWalletTrades();
@@ -471,17 +477,15 @@ function ChartFigure({ drawn, migrationAt, venuePoolKey, geometry, latest, lates
   const markerVisible = migrationAt !== undefined && migrationAt >= geometry.start && migrationAt <= geometry.end;
   const event = markerVisible ? ` ${graduation} on ${clock(migrationAt)}.` : "";
   const label = `${source.symbol} ${metric}. ${RANGE_WORDS[controls.range]}, ${controls.interval} intervals.${event}`;
-  const initialPlot = preview ? <>
-    {!line && <ChartPreview geometry={geometry} sources={drawn} migrationAt={migrationAt} line={false} viewport="desktop" />}
-    <ChartPreview geometry={geometry} sources={drawn} migrationAt={migrationAt} rolling={controls.range === "live"} line viewport={line ? undefined : "mobile"} />
-  </> : null;
   return (
     <figure className={styles.figure}>
       {compact ? null : <p className={styles.axis} aria-hidden="true">
         <>Last {tokenPrice(latestAvailable ? latest : null, source, quoteUsd)} · </>High {tokenPrice(geometry.highest, source, quoteUsd)} · Low {tokenPrice(geometry.lowest, source, quoteUsd)}
       </p>}
       <div className={compact ? styles.compactCanvas : styles.canvas}>
-        <PoolCandleChart latestAvailable={latestAvailable} walletTrades={walletTrades} ripple={ripple} trade={candleTrade} label={label} compact={compact} rollingWindow={controls.range === "live"} presentation={presentation} memeDecimals={source.memeDecimals} quoteDecimals={source.quoteDecimals} quoteUsd={quoteUsd} sources={drawn} migrationAt={migrationAt} migrationLabel={venue ? <>Graduated to <DexIdentity venue={venue} /></> : graduation} quoteSymbol={source.quoteSymbol} from={geometry.start} to={geometry.end} preview={initialPlot} />
+        {compact
+          ? <KLineCoinChart sources={drawn} interval={controls.interval} memeDecimals={source.memeDecimals} quoteDecimals={source.quoteDecimals} quoteUsd={quoteUsd ?? null} latestAvailable={latestAvailable} label={label} style={line ? "line" : "candles"} trade={candleTrade} walletTrades={walletTrades} />
+          : <PoolCandleChart latestAvailable={latestAvailable} walletTrades={walletTrades} ripple={ripple} trade={candleTrade} label={label} compact={compact} rollingWindow={controls.range === "live"} presentation={presentation} memeDecimals={source.memeDecimals} quoteDecimals={source.quoteDecimals} quoteUsd={quoteUsd} sources={drawn} migrationAt={migrationAt} migrationLabel={venue ? <>Graduated to <DexIdentity venue={venue} /></> : graduation} quoteSymbol={source.quoteSymbol} from={geometry.start} to={geometry.end} />}
       </div>
     </figure>
   );
@@ -535,7 +539,7 @@ function useChartStyle() {
   }] as const;
 }
 
-function CompactChart({ view, preview }: Readonly<{ view: ChartViewControls; preview?: boolean }>) {
+function CompactChart({ view }: Readonly<{ view: ChartViewControls }>) {
   const mobile = useMobileChartLayout();
   const [preferredStyle, setStyle] = useChartStyle();
   const live = view.controls.range === "live";
@@ -551,17 +555,17 @@ function CompactChart({ view, preview }: Readonly<{ view: ChartViewControls; pre
       </div>
     </div>
     <ChartLastTrade />
-    <CompactChartBody view={view} style={style} preview={preview} />
+    <CompactChartBody view={view} style={style} />
     {view.updates && (geometry || !live) && <p className={styles.note} role="status">{view.updates}</p>}
   </div>;
 }
 
-function CompactChartBody({ view, style, preview }: Readonly<{ view: ChartViewControls; style: ChartStyle; preview?: boolean }>) {
+function CompactChartBody({ view, style }: Readonly<{ view: ChartViewControls; style: ChartStyle }>) {
   const { source, quoteUsd, controls, migration, venuePoolKey, drawn, geometry, latest, latestAvailable } = view;
   const candleTrade = useCandleTrade();
   if (!geometry) return <CompactEmptyChart view={view} />;
   return <>
-    <ChartFigure compact candleTrade={candleTrade} presentation={style} quoteUsd={quoteUsd} drawn={drawn} migrationAt={migration?.timestampMs} venuePoolKey={venuePoolKey} geometry={geometry} latest={latest} latestAvailable={latestAvailable} source={source} controls={controls} preview={preview} />
+    <ChartFigure compact candleTrade={candleTrade} presentation={style} quoteUsd={quoteUsd} drawn={drawn} migrationAt={migration?.timestampMs} venuePoolKey={venuePoolKey} geometry={geometry} latest={latest} latestAvailable={latestAvailable} source={source} controls={controls} />
     <CompactSourceNotices view={view} />
   </>;
 }
