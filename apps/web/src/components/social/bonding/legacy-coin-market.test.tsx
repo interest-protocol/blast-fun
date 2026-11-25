@@ -244,6 +244,10 @@ test("the SUI page renders its chart, trades from both pools priced in USDC, and
   assert.doesNotMatch(text, /Graduated/);
   assert.equal(seen.some((path) => path.includes("/discovery")), false, "SUI reads no V1 discovery market");
   assert.ok(seen.some((path) => path.includes("/cetus/")) && seen.some((path) => path.includes("/bluefin/")));
-  const rows = [...container.querySelectorAll("[data-activity-row], li")].map((row) => row.textContent ?? "");
-  assert.ok(rows.length >= 2, `both pools' swaps are listed: ${text}`);
+  assert.ok(seen.some((path) => path.includes(sui.poolKeys[0].split(":")[1]!)) && seen.some((path) => path.includes(sui.poolKeys[1]!.split(":")[1]!)), "both allowlisted pools are read");
+  const rows = [...container.querySelectorAll('ol[aria-label="Recent trades"] li')];
+  assert.equal(rows.length, 2, `both pools' swaps are listed: ${text}`);
+  // Newest first across pools: the Bluefin swap (checkpoint 41) above the Cetus swap (40).
+  const times = rows.map((row) => row.querySelector("time")?.getAttribute("datetime"));
+  assert.deepEqual(times, [new Date(1790338175000 + 41_000).toISOString(), new Date(1790338175000 + 40_000).toISOString()]);
 });

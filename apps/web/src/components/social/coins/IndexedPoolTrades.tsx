@@ -52,6 +52,6 @@ export function IndexedPoolTrades({ poolKeys, units }: Readonly<{ poolKeys: read
     {rows.length
       ? <TradeList rows={rows.slice(0, RECENT_TRADES_LIMIT)} availableRows={rows}
         units={units} explorer={explorer} next={null} hold={(held) => setHeldRows(held ? rows : null)} />
-      : <EmptyState title="No swaps indexed yet">New swaps in this pool will appear here.</EmptyState>}
+      : <EmptyState title="No swaps indexed yet">New swaps will appear here.</EmptyState>}
   </>;
 }
