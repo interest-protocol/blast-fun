@@ -7,8 +7,6 @@ type Environment = Readonly<Record<string, string | undefined>>;
 export const LAUNCH_FLAG_VARIABLES = {
   social: "BLAST_SOCIAL_ENABLED",
   trading: "BLAST_TRADING_ENABLED",
-  /** The coin page's live trading screen: numbers from the market stream, no page refresh timer. */
-  liveScreen: "BLAST_LIVE_SCREEN_ENABLED",
 } as const;
 export type LaunchSurface = keyof typeof LAUNCH_FLAG_VARIABLES;
 export const LAUNCH_SURFACES = Object.keys(LAUNCH_FLAG_VARIABLES) as readonly LaunchSurface[];
@@ -19,7 +17,6 @@ export function launchFlagsFor(environment: Environment = process.env): LaunchFl
   return Object.freeze({
     social: isLaunchEnabled("social", environment),
     trading: isLaunchEnabled("trading", environment),
-    liveScreen: isLaunchEnabled("liveScreen", environment),
   });
 }
 

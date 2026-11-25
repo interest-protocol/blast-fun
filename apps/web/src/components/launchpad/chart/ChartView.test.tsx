@@ -239,7 +239,7 @@ test("compact chart exposes controls and history notices without a chart disclos
   assert.doesNotMatch(html, /Source details|type="checkbox"/);
   assert.equal(count(html, /aria-label="Chart range and interval: All · 1m"/g), 1);
   assert.doesNotMatch(html, /<select|>Refresh chart</);
-  assert.doesNotMatch(text(html), /Candles & volume/, "a handful of candles is drawn as a line, so no style picker");
+  assert.match(text(html), /Candles & volume/);
   assert.doesNotMatch(text(html), /Source Network|Show 4 bonding curve candles/);
 });
 

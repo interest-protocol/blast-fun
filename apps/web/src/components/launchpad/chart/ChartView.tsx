@@ -38,7 +38,6 @@ import { chartGeometry, type DrawnSeries } from "./chart-geometry";
 import { CHART_INTERVALS, LIVE_CHART_INTERVALS, CHART_RANGES, LIVE_CHART_CONTROLS, LIVE_CHART_SPAN_MS, candleGaps, chartLatestTimestamp, chartOpening, chartSources, pageTruncated, type ChartCandlePage, type ChartControls, type ChartRange, type ChartRequest, type ChartState, type CandleGap, type SourceState } from "./chart-model";
 import { useChartClock } from "./use-chart-clock.ts";
 import styles from "./Chart.module.css";
-import { forcesLine, klineBars } from "#web/components/charts/kline/kline-model.ts";
 import klineStyles from "#web/components/charts/kline/KLineCoinChart.module.css";
 import { HIDDEN_AMOUNT, NO_VALUE, venueName } from "@blast/core/lib/format.ts";
 
@@ -322,8 +321,7 @@ export function ChartView(props: Parameters<typeof useChartViewControls>[0] & Re
 
       {geometry && exactDecimal(quoteUsd) ? <p className={styles.note}>USD prices use the current {source.quoteSymbol} rate.</p> : null}
       {missingPriceUnits ? <p className={styles.note}>Price units couldn’t load.</p> : null}
-      {/* The status line keeps its height when empty, so the note coming and going never moves the page. */}
-      <p className={`${styles.note} ${styles.status}`} role="status">{updates}</p>
+      {updates ? <p className={styles.note} role="status">{updates}</p> : null}
 
       <ChartSourcePages view={view} />
     </div>
@@ -550,42 +548,24 @@ function useChartStyle() {
   }] as const;
 }
 
-/** The style the compact chart draws, and whether the viewer can choose it: Live, phones and a handful of trades are always a line. */
-function useCompactStyle(view: ChartViewControls) {
+function CompactChart({ view }: Readonly<{ view: ChartViewControls }>) {
   const mobile = useMobileChartLayout();
   const [preferredStyle, setStyle] = useChartStyle();
-  const { source, quoteUsd, geometry, drawn } = view;
   const live = view.controls.range === "live";
-  // The chart draws a line for a handful of trades, so the picker would offer a style it ignores.
-  const fewTrades = drawn.length > 0 && forcesLine(klineBars(drawn, source.memeDecimals, source.quoteDecimals, quoteUsd ?? null));
-  const fixed = mobile || live || fewTrades;
-  return { style: fixed ? "line" as const : preferredStyle, choosable: Boolean(geometry) && !fixed, setStyle };
-}
-
-function CompactChart({ view }: Readonly<{ view: ChartViewControls }>) {
-  const { style, choosable, setStyle } = useCompactStyle(view);
+  const style = mobile || live ? "line" : preferredStyle;
   const { source, quoteUsd, geometry } = view;
   const unit = geometry && (exactDecimal(quoteUsd) ? "USD" : source.quoteSymbol);
   return <div className={styles.chart} data-compact-chart="" data-chart-style={style}>
     <div className={styles.compactHead}>
       <h2>Price{unit ? <span> · {unit}</span> : null}</h2>
       <div className={styles.compactTools}>
-        {choosable && <Segmented className={styles.stylePicker} label="Chart style" size="touch" variant="outline" options={CHART_STYLES} value={style} onChange={setStyle} />}
+        {geometry && !live && !mobile && <Segmented className={styles.stylePicker} label="Chart style" size="touch" variant="outline" options={CHART_STYLES} value={style} onChange={setStyle} />}
         <ChartFilters view={view} style={style} />
       </div>
     </div>
     <ChartLastTrade />
     <CompactChartBody view={view} style={style} />
-    <CompactStatus view={view} />
-  </div>;
-}
-
-/** One slot, as tall as its Try again button, holds the delayed notice or the update line, so neither moves the page. */
-function CompactStatus({ view }: Readonly<{ view: ChartViewControls }>) {
-  const { geometry, updates } = view;
-  const live = view.controls.range === "live";
-  return <div className={`${styles.note} ${styles.status} ${styles.alertSlot}`} role="status">
-    {(geometry ? compactSourceAlert(view) : null) ?? (geometry || !live ? updates : null)}
+    {view.updates && (geometry || !live) && <p className={styles.note} role="status">{view.updates}</p>}
   </div>;
 }
 
@@ -634,19 +614,15 @@ function compactOpeningPrice({ migration, hasPriceUnits, source, controls, shown
   return source.opening?.price ?? null;
 }
 
-/** The first source whose history is delayed or failed, with its Try again; null when every source is current. */
-function compactSourceAlert(view: ReturnType<typeof useChartViewControls>) {
-  const alert = view.sources.find(({ section }) => section?.state === "unavailable" || section?.state === "stale");
-  if (!alert) return null;
-  return <>
-    {alert.section?.state === "stale" ? `${view.label(alert.name)} price updates delayed.` : `${view.label(alert.name)} price history couldn’t load.`}{" "}
-    <Button size="sm" variant="ghost" disabled={view.pending} onClick={view.onRefresh}>Try again</Button>
-    {view.diagnostic && <DiagnosticCode message={view.diagnostic} generic={PRICE_HISTORY_UNAVAILABLE} />}
-  </>;
-}
-
 function CompactSourceNotices({ view }: Readonly<{ view: ReturnType<typeof useChartViewControls> }>) {
   return <>{view.sources.map(({ name, section }) => {
+    if (section?.state === "unavailable" || section?.state === "stale") return (
+      <div key={name} className={styles.note} role="status">
+        {section.state === "stale" ? `${view.label(name)} price updates delayed.` : `${view.label(name)} price history couldn’t load.`}{" "}
+        <Button size="sm" variant="ghost" disabled={view.pending} onClick={view.onRefresh}>Try again</Button>
+        {view.diagnostic && <DiagnosticCode message={view.diagnostic} generic={PRICE_HISTORY_UNAVAILABLE} />}
+      </div>
+    );
     if (!hasData(section)) return null;
     const note = limitedNote(section.data, view.request, view.controls.range);
     return note ? <p className={styles.note} key={name}>{view.label(name)}: {note}</p> : null;
