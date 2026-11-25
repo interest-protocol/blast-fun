@@ -659,7 +659,10 @@ function poolChartModel({
     ? lines.flatMap((points) => points.flatMap((point) => point.price === null ? [] : [price(point.price)]))
     : sources.flatMap(({ page }) => page.candles.flatMap((candle) => [candle.open, candle.high, candle.low, candle.close].map(price)));
   const scale = exactChartScale(prices);
-  const autoscaleInfoProvider: AutoscaleInfoProvider = scale.flat
+  // Coordinates span 0-100 over every drawn price. Live fits all of them: a
+  // step held from left of the view still draws its run, which the native fit
+  // (points in view only) would push off the pane.
+  const autoscaleInfoProvider: AutoscaleInfoProvider = scale.flat || rollingWindow
     ? () => ({ priceRange: { minValue: 0, maxValue: 100 } })
     : (original) => original();
   const volumes = combinedVolumes(
