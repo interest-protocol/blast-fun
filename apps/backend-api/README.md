@@ -63,14 +63,16 @@ read and uses ordinary admission despite its 60-second budget. Other long
 workflows remain bounded until their owner costs are assessed; receipt rendering
 retains its existing four-workflow limit rather than changing its contention.
 
-`BLAST_BACKEND_MAX_HINT_STREAMS` is optional: default 200, integer range 1–512 per
-replica. The maximum derives from a 32 MiB application relay queue payload budget:
-512 clients × 64 queued chunks × at most 1 KiB per encoded chunk. Slow readers
-close before exceeding 64 chunks; every outgoing frame has the byte bound. This
-budget excludes JavaScript/runtime overhead, Bun/kernel socket and proxy buffers,
-and bandwidth. One upstream is shared per process. Configuring 512 permits 10,000
-simultaneous tabs across at least 20 replicas arithmetically; local connection
-checks do not establish production memory, egress, or 10,000-user latency.
+`BLAST_BACKEND_MAX_HINT_STREAMS` is optional: default 200, integer range 1–1,024
+per replica. Sockets and market SSE share the market relay at the configured
+value; activity SSE is admitted separately up to the same value, so one process
+can hold twice that many streams in total. The maximum derives from a 64 MiB
+queue payload budget per relay: 1,024 clients × 64 queued chunks × at most 1 KiB per encoded chunk. Slow readers close
+before exceeding 64 chunks; every outgoing frame has the byte bound. This budget
+excludes JavaScript/runtime overhead, Bun/kernel socket and proxy buffers, and
+bandwidth. One upstream is shared per process. A local check on 2026-11-25
+measured about 35 KB a socket idle and 60 KB under traffic, with CPU running out
+before memory; confirm on the deployed plan before raising the configured value.
 
 ## Source organization
 
@@ -240,11 +242,13 @@ Before deployment, require a verified reverse proxy with header/connection/rate
 limits and slow-client protection. Choose `BLAST_BACKEND_INGRESS_MODE=direct`
 for socket-address identity with forwarding headers ignored. In `trusted-proxy`
 mode, configure `BLAST_BACKEND_TRUSTED_PROXY_CIDRS` (at most 32 explicit IPv4 /24+
-or IPv6 /64+ ranges, or exact IPs). Only those peers may supply exactly one
-`X-Forwarded-For` address; unknown peers and absent/ambiguous addresses fail closed.
-IPv4-mapped IPv6 normalizes consistently. Private ranges are never auto-trusted.
-Render's actual proxy ownership and overwrite behavior remain an unverified
-hosted release prerequisite; do not invent ranges for it.
+ranges, /13+ inside 10.0.0.0/8, IPv6 /64+ ranges, or exact IPs). Only those peers
+are trusted, and the key is the **last** `X-Forwarded-For` entry: the one the proxy
+appended. Earlier entries come from the client and are ignored. Unknown peers and
+an absent or invalid last entry fail closed. IPv4-mapped IPv6 normalizes
+consistently. Private ranges are never auto-trusted. Measured on Render on
+2026-11-25: proxy peers sit in 10.24.0.0/13, and Render appends to a client-sent
+`X-Forwarded-For` rather than replacing it.
 
 `/v1/live` reports process liveness. `/v1/health` bounds and coalesces Redis and
 primary checks. Health is not proof of product readiness. Choose replica counts

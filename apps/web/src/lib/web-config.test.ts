@@ -87,7 +87,24 @@ test("outside production every value is optional and an unset one turns its feat
   assert.equal(config.expectedDeployment, null);
   assert.equal(config.signingChain, null);
   assert.equal(config.development, false);
+  assert.equal(config.liveSocket, null);
   assert.equal(parseWebConfig({ ...preview, PRIVY_APP_ID: "  " }).privyAppId, null);
+});
+
+// This fails if the direct socket can be configured without the secret its
+// tickets are signed with, on a plain ws:// host, or with a rollout outside 0–100.
+test("the live socket needs a wss:// /v1/socket URL, the hints upstream and a 0–100 rollout", () => {
+  const hints = { ...preview, BLAST_BACKEND_HINTS_ORIGIN: "https://hints.blast.test", BLAST_BACKEND_HINTS_GATEWAY_SECRET: "h".repeat(32) };
+  assert.deepEqual(parseWebConfig({ ...hints, BLAST_LIVE_SOCKET_URL: "wss://live.blast.test/v1/socket" }).liveSocket,
+    { url: "wss://live.blast.test/v1/socket", origin: "wss://live.blast.test", rolloutPercent: 0 });
+  assert.equal(parseWebConfig({ ...hints, BLAST_LIVE_SOCKET_URL: "wss://live.blast.test/v1/socket", BLAST_LIVE_SOCKET_ROLLOUT_PERCENT: "100" }).liveSocket?.rolloutPercent, 100);
+  const url = "BLAST_LIVE_SOCKET_URL must be a wss:// URL ending in /v1/socket.";
+  for (const [override, message] of [
+    [{ BLAST_LIVE_SOCKET_URL: "ws://live.blast.test/v1/socket" }, url],
+    [{ BLAST_LIVE_SOCKET_URL: "wss://live.blast.test/v1/socket?x=1" }, url],
+    [{ BLAST_LIVE_SOCKET_URL: "wss://live.blast.test/v1/socket", BLAST_LIVE_SOCKET_ROLLOUT_PERCENT: "101" }, "BLAST_LIVE_SOCKET_ROLLOUT_PERCENT must be an integer from 0 to 100."],
+  ] as const) assert.throws(() => parseWebConfig({ ...hints, ...override }), { message });
+  assert.throws(() => parseWebConfig({ ...preview, BLAST_LIVE_SOCKET_URL: "wss://live.blast.test/v1/socket" }), /needs BLAST_BACKEND_HINTS_ORIGIN/);
 });
 
 // This fails if `next dev` loses its per-process gate key (every API call would

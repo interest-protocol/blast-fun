@@ -114,4 +114,14 @@ test("curve targets: a walk that fails keeps nothing, and a slow walk never hold
   release();
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal((await slow(["s"])).get("s"), "1", "the walk finished on its own");
+
+  // A bonding curve is never seen, so a walk starts every interval: only the first one may hold a read.
+  let laterMs = 0;
+  let walks = 0;
+  const later = createCurveTargetReader(() => (walks += 1) === 1 ? Promise.resolve(answer([{ launchId: "g", target: 2n }], null)) : new Promise(() => {}), () => laterMs, 60_000);
+  assert.equal((await later(["g"])).get("g"), "2");
+  laterMs = CURVE_TARGET_REFRESH_MS;
+  const startedMs = Date.now();
+  assert.deepEqual([[...(await later(["g", "bonding"]))], walks], [[["g", "2"]], 2]);
+  assert.ok(Date.now() - startedMs < 1_000, "the refresh runs behind the read, not before it");
 });

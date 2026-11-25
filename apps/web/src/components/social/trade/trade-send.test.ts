@@ -24,7 +24,7 @@ import { sendTrade, WALLET_NOT_READY, type TradeSendDependencies } from "./trade
  * the quote's own token amount and minimum, and the fill is held to it.
  * AC-11: an embedded Blast wallet is sponsored (`Paid by Blast`) and executes
  * through the sponsor; a wallet session pays its own and executes on the
- * fullnode. The Feel layer's `land` and `error`, the toast and the balances.
+ * fullnode. The Feel layer's buy, sell and error cues, the toast and the balances.
  */
 
 const KSTL = fixtureCoinType("KSTL");
@@ -147,7 +147,7 @@ test("R3-55-AC-6: a sell submits the quote's token amount and minimum, and fills
     href: `https://suiscan.xyz/mainnet/tx/${built(quote, "blast", bytes).digest}`,
     link: "View on Suiscan",
   });
-  assert.deepEqual(h.played, ["land"]);
+  assert.deepEqual(h.played, ["sell"]);
   assert.equal(h.moved(), 1, "the balances read again");
 });
 
@@ -230,6 +230,22 @@ test("a refused trade plays the error cue and says the route's code (R3-27 logs 
   assert.deepEqual(h.toasts, []);
 });
 
+test("cancelling the wallet prompt gives text feedback without an error sound", async () => {
+  const quote = buyQuote("blast");
+  const h = setup({ fee: "sponsored", create: () => ({ status: 201, body: built(quote, "blast", bytesFor(ADDRESS, SPONSOR)) }) });
+  const result = await sendTrade({
+    ...h.deps,
+    embedded: () => ({
+      fee: "sponsored",
+      address: ADDRESS,
+      signTransaction: async () => { throw new Error("User rejected the request"); },
+    }),
+  }, { quote, coins: COINS_BUY });
+  assert.equal(result.status, "refused");
+  if (result.status === "refused") assert.equal(result.code, "rejected");
+  assert.deepEqual(h.played, []);
+});
+
 test("no signer for the wallet (no embedded key, an address that is not the wallet's): nothing is sent", async () => {
   const h = setup({ fee: "sponsored", create: () => ({ status: 201, body: {} }) });
   const result = await sendTrade({ ...h.deps, embedded: () => null }, { quote: buyQuote("blast"), coins: COINS_BUY });
@@ -240,7 +256,7 @@ test("no signer for the wallet (no embedded key, an address that is not the wall
   assert.equal(expired.status, "refused", "a quote that was never offered is not sent");
 });
 
-test("sent, and the chain does not show it yet: `Trade sent`, no fill claimed and no `land`, the balances read again", async () => {
+test("sent, and the chain does not show it yet: `Trade sent`, no fill claimed and no success cue, the balances read again", async () => {
   const quote = buyQuote("blast");
   const bytes = bytesFor(ADDRESS, SPONSOR);
   const pending = built(quote, "blast", bytes);
@@ -249,7 +265,7 @@ test("sent, and the chain does not show it yet: `Trade sent`, no fill claimed an
   assert.deepEqual(result, { status: "pending", title: "Trade sent" });
   assert.equal(h.toasts[0]!.title, "Trade sent");
   assert.equal((h.toasts[0]!.options as { sub?: string }).sub, "Your coins update when it lands");
-  assert.deepEqual(h.played, [], "no `land` for a fill nobody has seen");
+  assert.deepEqual(h.played, [], "no success cue for a fill nobody has seen");
   assert.equal(h.moved(), 1);
 });
 
@@ -315,7 +331,7 @@ test("sponsorship succeeds with zero native SUI", async () => {
   const result = await sendTrade({ ...h.deps, suiBalance: async () => assert.fail("a sponsored trade should not need a gas balance read") }, { quote, coins: CAPTURED_COINS });
   assert.equal(result.status, "traded");
   assert.equal(h.signed.length, 1);
-  assert.deepEqual(h.played, ["land"]);
+  assert.deepEqual(h.played, ["buy"]);
 });
 
 

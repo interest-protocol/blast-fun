@@ -8,7 +8,9 @@ import { normalizeStructTag } from "@mysten/sui/utils";
 
 import { parseChartFrame, type ChartFrame } from "./chart/chart-live-model.ts";
 import { publishChartRound } from "./chart/chart-live-round.ts";
+import { gatedEventSource } from "#web/lib/live-stream/gated-event-source.ts";
 import { beginMarketHints } from "#web/lib/live-stream/market-hints.ts";
+import { browserSocket, fetchLiveTicket, liveBucket, liveMarketSource, liveSourceState } from "#web/lib/live-stream/live-socket-source.ts";
 import { presaleMarketFrameSchema, type PresaleMarketFrame } from "@blast/core/modules/live/presale-market-frames.ts";
 
 /**
@@ -141,6 +143,8 @@ export class MarketStreamHub {
   private connection: Connection | null = null;
   private hints: ReturnType<typeof beginMarketHints> | null = null;
   private attempts = 0;
+  /** The stream was refused even after a gate refresh: no source and no timer until the tab returns or the pools change. */
+  private refused = false;
   private reconciling = false;
   private cancelHeartbeat: (() => void) | null = null;
   private cancelHello: (() => void) | null = null;
@@ -278,7 +282,10 @@ export class MarketStreamHub {
   private replay(subscriber: Subscriber): void {
     const connection = this.connection;
     if (!connection || !this.subscribers.includes(subscriber) || !this.covers(subscriber) || subscriber.state !== null) return;
-    if (!connection.source) return this.tell(subscriber, this.deps.visible() ? "connecting" : "paused");
+    if (!connection.source) {
+      if (this.refused) return this.tell(subscriber, "unavailable");
+      return this.tell(subscriber, this.deps.visible() ? "connecting" : "paused");
+    }
     this.tell(subscriber, connection.live ? "live" : "connecting");
     if (subscriber.request.presale && connection.presaleFence !== null)
       subscriber.request.listener.presaleReady?.(Math.max(connection.presaleFence, connection.presaleSeen));
@@ -372,6 +379,7 @@ export class MarketStreamHub {
   /** Ends the current EventSource and every timer that belongs to it; pools lose their fences. */
   private drop(): void {
     const connection = this.connection;
+    this.refused = false;
     this.cancelHello?.();
     this.cancelHello = null;
     this.cancelHeartbeat?.();
@@ -400,6 +408,7 @@ export class MarketStreamHub {
     for (const key of connection.pools.keys()) params.append("pool", key);
     for (const coin of connection.priceCoins) params.append("price_coin", coin);
     if (connection.presale) params.set("presale", connection.presale);
+    this.refused = false;
     const source = this.deps.createSource(`${MARKET_STREAM_PATH}?${params}`);
     connection.source = source;
     this.covered("connecting");
@@ -500,8 +509,17 @@ export class MarketStreamHub {
         }
       }
     });
-    // A refused stream (`503 Market streaming is busy`) ends here too: not live, retried with backoff.
+    // A drop after the stream opened: not live, retried with backoff.
     source.addEventListener("error", () => { if (current()) this.reconnect(); });
+    // Refused before it opened even after one gate refresh (a refused cookie, or any non-200 open such as
+    // `503 Market streaming is busy`): polls carry the page until the tab returns or the wanted pools change.
+    source.addEventListener("refused", () => {
+      if (!current()) return;
+      this.hints?.disconnected();
+      this.drop();
+      this.refused = true;
+      this.covered("unavailable");
+    });
     source.addEventListener("hint", (event) => {
       if (!current() || !event.data) return;
       try {
@@ -619,21 +637,34 @@ export class MarketStreamHub {
 
 let tab: MarketStreamHub | null = null;
 
+function eventSource(url: string): MarketEventSource {
+  const events = gatedEventSource(url);
+  return {
+    addEventListener: (type, receive) => events.addEventListener(type, (event) => receive("data" in event ? { data: String(event.data) } : {})),
+    close: () => events.close(),
+  };
+}
+
 /** The tab's hub; null outside a browser with EventSource. */
 export function tabMarketStream(): MarketStreamHub | null {
   if (typeof window === "undefined" || typeof EventSource === "undefined") return null;
-  return (tab ??= new MarketStreamHub({
-    createSource: (url) => {
-      const events = new EventSource(url);
-      return {
-        addEventListener: (type, receive) => events.addEventListener(type, (event) => receive("data" in event ? { data: String(event.data) } : {})),
-        close: () => events.close(),
-      };
-    },
-    schedule: (run, ms) => {
-      const timer = window.setTimeout(run, ms);
-      return () => window.clearTimeout(timer);
-    },
+  if (tab) return tab;
+  const live = liveSourceState();
+  const bucket = liveBucket();
+  const schedule = (run: () => void, ms: number) => {
+    const timer = window.setTimeout(run, ms);
+    return () => window.clearTimeout(timer);
+  };
+  return (tab = new MarketStreamHub({
+    createSource: (url) => liveMarketSource(url, live, {
+      fetchTicket: () => fetchLiveTicket(bucket),
+      openSocket: browserSocket,
+      openEventSource: eventSource,
+      schedule,
+      now: Date.now,
+      random: Math.random,
+    }),
+    schedule,
     defer: (run) => queueMicrotask(run),
     random: Math.random,
     visible: () => document.visibilityState === "visible",

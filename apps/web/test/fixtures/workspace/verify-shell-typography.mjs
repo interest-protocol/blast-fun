@@ -291,7 +291,7 @@ async function checkNavigation(width) {
   const names =
     width === 407
       ? ["Home", "Swap", "Presales", "Bonding", "More"]
-      : ["Home", "Swap", "Presales", "Bonding", "Portfolio", "More", "Create"];
+      : ["Home", "Swap", "Presales", "Bonding", "Portfolio", "Create"];
   const labels = [];
   for (const name of names) {
     const control = nav.getByRole(

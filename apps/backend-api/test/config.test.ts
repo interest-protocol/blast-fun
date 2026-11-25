@@ -211,7 +211,7 @@ test("public backend rejects signer material and implicit proxy trust", () => {
         BLAST_BACKEND_INGRESS_MODE: "trusted-proxy",
         BLAST_BACKEND_TRUSTED_PROXY_CIDRS: "10.0.0.0/8",
       }),
-    /narrow/,
+    /\/13\+ inside 10\.0\.0\.0\/8/,
   );
   assert.equal(
     backendConfig({
@@ -390,10 +390,10 @@ test("connected activity stream capacity is explicit and bounded by the relay bu
     200,
   );
   assert.equal(
-    backendConfig({ ...environment, BLAST_BACKEND_MAX_HINT_STREAMS: "512" }).maxHintStreams,
-    512,
+    backendConfig({ ...environment, BLAST_BACKEND_MAX_HINT_STREAMS: "1024" }).maxHintStreams,
+    1_024,
   );
-  for (const value of ["0", "513", "1.5", "NaN", "Infinity", ""]) {
+  for (const value of ["0", "1025", "1.5", "NaN", "Infinity", ""]) {
     assert.throws(
       () =>
         backendConfig({

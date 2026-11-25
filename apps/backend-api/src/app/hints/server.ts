@@ -38,7 +38,12 @@ export function createHintsServer(
           processSingleton(
             "launchpad.market-stream",
             () =>
-              new MarketStreamRelay(openActivitySocket, expected, committedDisplayPrices(expected)),
+              new MarketStreamRelay(
+                openActivitySocket,
+                expected,
+                committedDisplayPrices(expected),
+                config.maxHintStreams,
+              ),
           );
   const http = HttpRouter.toWebHandler(
     HttpApiBuilder.layer(HintsApi).pipe(
