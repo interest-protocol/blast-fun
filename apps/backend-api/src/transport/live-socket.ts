@@ -373,13 +373,13 @@ export function createLiveSocket(options: LiveSocketOptions) {
       }
       const client = attestClientAddress(ingressAddress(request, peer, options.ingress));
       if (!client) {
-        // Render's proxy ranges are unverified: this shows which peers and header shapes arrive, never a client address.
+        // Shows which proxy peers (their /24 or /64, the narrowest trusted range) and header shapes arrive, never a client address.
         observeMetric("live.socket.refused", {
           cause: "client-address",
           ingress: options.ingress.mode,
           peer_prefix: peer?.includes(".")
-            ? peer.split(".").slice(0, 2).join(".")
-            : (peer?.split(":").slice(0, 3).join(":") ?? null),
+            ? peer.split(".").slice(0, 3).join(".")
+            : (peer?.split(":").slice(0, 4).join(":") ?? null),
           forwarded_entries: request.headers.get("x-forwarded-for")?.split(",").length ?? 0,
         });
         return forbidden();
