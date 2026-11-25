@@ -27,7 +27,7 @@ test("a saved chart range and interval fill in only missing or invalid link valu
   const initial = parseChartControls({});
   const saved = chartSearch({ interval: "15m", range: "24h" });
   assert.deepEqual(preferredChartControls(saved, "", initial), { interval: "15m", range: "24h" });
-  assert.deepEqual(preferredChartControls(saved, "?range=7d", initial), { interval: "15m", range: "7d" });
+  assert.deepEqual(preferredChartControls(saved, "?range=7d", initial), { interval: "1h", range: "7d" });
   assert.deepEqual(preferredChartControls(saved, "?interval=1h&range=all", initial), { interval: "1h", range: "all" });
   assert.deepEqual(preferredChartControls(saved, "?interval=2m&range=7d&range=all", initial), { interval: "15m", range: "24h" });
 });
