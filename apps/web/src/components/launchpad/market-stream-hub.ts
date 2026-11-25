@@ -1,5 +1,5 @@
 import { EVENT_CURSOR, compareEventCursors } from "@blast/core/modules/launchpad-contract/cursor.ts";
-import { displayPriceCoinSchema, displayPriceFrameSchema, MARKET_STREAM_BUDGET, MARKET_STREAM_PATH, type DisplayPriceFrame } from "@blast/core/modules/launchpad-contract/market-stream.ts";
+import { coinStatsFrameSchema, displayPriceCoinSchema, displayPriceFrameSchema, MARKET_STREAM_BUDGET, MARKET_STREAM_PATH, type CoinStatsFrame, type DisplayPriceFrame } from "@blast/core/modules/launchpad-contract/market-stream.ts";
 import { deploymentMismatch, parseInfraProvenance, type ExpectedDeployment } from "@blast/core/modules/launchpad-contract/provenance.ts";
 import type { MigrationMarker, PoolTrade } from "@blast/core/modules/launchpad-contract/venue-history.ts";
 import { POOL_KEY } from "@blast/core/modules/launchpad-contract/venues.ts";
@@ -32,6 +32,8 @@ export type MarketStreamListener = Readonly<{
   frame?: (frame: ChartFrame, chars: number) => void;
   trade?: (trade: MarketTrade) => void;
   prices?: (frame: DisplayPriceFrame) => void;
+  /** The coin's latest market stats for a fenced pool; a later one replaces it, and a late subscriber gets the latest. */
+  stats?: (frame: CoinStatsFrame) => void;
   presale?: (frame: PresaleMarketFrame) => void;
   presaleReady?: (checkpoint: number | null) => void;
 }>;
@@ -79,10 +81,10 @@ export type MarketStreamDependencies = Readonly<{
 }>;
 
 /** `unserved`: the stream never fenced one of its pools, so it stays on its polls until the next retry or a new subscription. */
-type Subscriber = { request: MarketStreamRequest; state: MarketStreamState | null; unserved: boolean };
+type Subscriber = { request: MarketStreamRequest; pools: ReadonlySet<string>; state: MarketStreamState | null; unserved: boolean };
 type Observer = { coin: string; listener: CoinTradeListener; live: boolean | null };
 /** `coin` survives reconnects: it names the pool, not the connection's progress through it. */
-type Pool = { fence: number | null; seen: number; cursor: string | null; tradeCursor: string | null; summary: unknown; coin: string | null; priceMissing?: boolean };
+type Pool = { fence: number | null; seen: number; cursor: string | null; tradeCursor: string | null; summary: unknown; coin: string | null; priceMissing?: boolean; stats?: CoinStatsFrame };
 type Connection = { pools: Map<string, Pool>; priceCoins: Set<string>; presale?: string; presaleFence: number | null; presaleSeen: number; expected: ExpectedDeployment | null; source: MarketEventSource | null; live: boolean };
 
 const HELLO_DEADLINE_MS = 10_000;
@@ -166,7 +168,7 @@ export class MarketStreamHub {
       priceCoins.some((coin) => !displayPriceCoinSchema.safeParse(coin).success)) {
       throw new Error("Invalid subscription to market pools or coin prices.");
     }
-    const subscriber: Subscriber = { request, state: null, unserved: false };
+    const subscriber: Subscriber = { request, pools: new Set(request.pools), state: null, unserved: false };
     this.subscribers.unshift(subscriber);
     this.stopVisibility ??= this.deps.onVisibilityChange(() => this.visibility());
     if (this.connection) {
@@ -286,7 +288,9 @@ export class MarketStreamHub {
       subscriber.request.listener.presaleReady?.(Math.max(connection.presaleFence, connection.presaleSeen));
     for (const key of subscriber.request.pools) {
       const pool = connection.pools.get(key)!;
-      if (pool.fence !== null) this.notifyFence(subscriber, key, pool);
+      if (pool.fence === null) continue;
+      this.notifyFence(subscriber, key, pool);
+      if (pool.stats) subscriber.request.listener.stats?.(pool.stats);
     }
   }
 
@@ -390,7 +394,7 @@ export class MarketStreamHub {
     connection.live = false;
     this.presaleState(connection, null);
     connection.presaleSeen = 0;
-    for (const pool of connection.pools.values()) Object.assign(pool, { fence: null, seen: 0, cursor: null, tradeCursor: null, summary: null });
+    for (const pool of connection.pools.values()) Object.assign(pool, { fence: null, seen: 0, cursor: null, tradeCursor: null, summary: null, stats: undefined });
     this.observed();
   }
 
@@ -453,7 +457,7 @@ export class MarketStreamHub {
         if (BigInt(status.cursor.split(":")[0]) > BigInt(Number(status.checkpoint))) throw new Error("Cursor exceeds its fence");
         Object.assign(pool, { fence: Number(status.checkpoint), seen: Number(status.checkpoint), cursor: null, tradeCursor: null, priceMissing: status.price_missing === true });
         for (const subscriber of [...this.subscribers]) {
-          if (current() && this.covers(subscriber) && subscriber.request.pools.includes(key)) this.notifyFence(subscriber, key, pool);
+          if (current() && this.covers(subscriber) && subscriber.pools.has(key)) this.notifyFence(subscriber, key, pool);
         }
         ready();
       } catch {
@@ -483,6 +487,29 @@ export class MarketStreamHub {
         const requested = new Set(priceCoins);
         const prices = frame.prices.filter((price) => requested.has(price.coin_type));
         if (prices.length) listener.prices({ ...frame, prices });
+      }
+    });
+    source.addEventListener("stats", (event) => {
+      if (!current() || !event.data || event.data.length > MARKET_STREAM_BUDGET.maxChunkBytes) return;
+      let frame: CoinStatsFrame;
+      try {
+        frame = coinStatsFrameSchema.parse(JSON.parse(event.data));
+        const provenance = parseInfraProvenance(frame.provenance);
+        if (provenance.checkpoint !== frame.checkpoint || deploymentMismatch(provenance, connection.expected)) return;
+      } catch {
+        return;
+      }
+      const target = connection.pools.get(frame.pool_key);
+      if (target?.fence == null) return;
+      // One coin can span two pools (curve, then venue): only its newest stats count, from either pool.
+      const others = [...connection.pools.values()].filter((pool) => pool.stats?.coin === frame.coin);
+      const newer = ({ checkpoint, cursor }: CoinStatsFrame): boolean => checkpoint > frame.checkpoint || (checkpoint === frame.checkpoint && compareEventCursors(cursor, frame.cursor) > 0);
+      if (others.some((pool) => newer(pool.stats!))) return;
+      for (const pool of others) pool.stats = undefined;
+      target.stats = frame;
+      for (const subscriber of [...this.subscribers]) {
+        const { listener } = subscriber.request;
+        if (listener.stats && subscriber.pools.has(frame.pool_key) && this.covers(subscriber) && current()) listener.stats(frame);
       }
     });
     source.addEventListener("resync", () => { if (current()) this.reconnect(); });
@@ -535,7 +562,7 @@ export class MarketStreamHub {
     const pool = connection.pools.get(key);
     if (!pool || pool.fence === null) throw new Error("Frame before its subscription fence");
     if (wire.type === "opening_round") return round(parseChartFrame(wire, key, connection.expected, null));
-    const subscribers = this.subscribers.filter((subscriber) => this.covers(subscriber) && subscriber.request.pools.includes(key));
+    const subscribers = this.subscribers.filter((subscriber) => this.covers(subscriber) && subscriber.pools.has(key));
     const charts = subscribers.filter((subscriber) => subscriber.request.migration);
     // Trades and lifecycles never read the migration; a candle is checked against each chart's.
     const shared = wire.type === "candle_closed" ? null : parseChartFrame(wire, key, connection.expected, null);

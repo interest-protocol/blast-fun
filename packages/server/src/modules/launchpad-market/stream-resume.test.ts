@@ -158,3 +158,45 @@ test("a frame with engine hops reaches the browser with relay_ms added", (t) => 
   assert.equal(hops.arrived_ms, 11_000);
   assert.equal(typeof hops.relay_ms, "number");
 });
+
+// This fails if coin stats enter the cursor order or the resume ring, or if a stale one replaces a newer one.
+test("coin stats are state: latest wins, sent after each fence and to joiners, never replayed", (t) => {
+  t.mock.timers.enable({ apis: ["setInterval", "setTimeout"] });
+  const { sockets, join, hello } = harness();
+  const first = join(`pool=${POOL}`);
+  hello(sockets[0]!);
+  const stats = (checkpoint: number, holders: number) => ({ type: "coin_stats", coin: `0x${"4".repeat(64)}::meme::MEME`, pool_key: POOL, holders, ...envelope(checkpoint, `${checkpoint}:0:0:0`) });
+  sockets[0]!.receive(stats(9, 1)); // Before the fence: kept, not sent.
+  assert.equal(first.events.some(({ event }) => event === "stats"), false);
+  sockets[0]!.receive(snapshot(POOL, 10));
+  assert.deepEqual(first.events.slice(-2).map(({ event, data }) => [event, data.holders]), [["status", undefined], ["stats", 1]]);
+  sockets[0]!.receive(lifecycle(POOL, 12));
+  sockets[0]!.receive(stats(11, 2)); // Behind the trade cursor, still delivered: it is not log.
+  sockets[0]!.receive(stats(8, 0)); // Older than the stored one: dropped.
+  const delivered = first.events.filter(({ event }) => event === "stats");
+  assert.deepEqual(delivered.map(({ data, id }) => [data.holders, id]), [[1, undefined], [2, undefined]]);
+  const late = join(`pool=${POOL}`, { resume: new Map([[POOL, "10:0:0:0"]]) });
+  assert.deepEqual(late.events.filter(({ event }) => event === "stats").map(({ data }) => data.holders), [2]);
+  assert.equal(late.events.filter(({ event }) => event === "market").length, 1, "the ring replays the lifecycle only");
+});
+
+// This fails if stats that arrive while a pool resumes are lost when the resume finds no change.
+test("coin stats held during an unchanged resume reach connected browsers once it ends", (t) => {
+  t.mock.timers.enable({ apis: ["setInterval", "setTimeout", "Date"] });
+  const { sockets, join, hello } = harness();
+  const browser = join(`pool=${POOL}`);
+  hello(sockets[0]!);
+  sockets[0]!.receive(snapshot(POOL, 10));
+  sockets[0]!.receive(lifecycle(POOL, 11));
+  sockets[0]!.drop();
+  t.mock.timers.tick(400);
+  sockets[1]!.receive({ type: "hello", protocol: 1, provenance: provenance(1) });
+  sockets[1]!.receive({ type: "pong" });
+  const before = browser.events.length;
+  const stats = { type: "coin_stats", coin: `0x${"4".repeat(64)}::meme::MEME`, pool_key: POOL, holders: 250, ...envelope(15, "15:0:0:0") };
+  sockets[1]!.receive(stats);
+  assert.deepEqual(browser.events.slice(before), [], "held while resuming");
+  sockets[1]!.receive({ type: "resume_complete", cursor: "20:0:0:0" });
+  sockets[1]!.receive(snapshot(POOL, 20));
+  assert.deepEqual(browser.events.slice(before).map(({ event, data }) => [event, data.holders]), [["stats", 250]], "no new fence, only the held stats");
+});
