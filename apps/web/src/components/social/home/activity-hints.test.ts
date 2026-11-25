@@ -556,11 +556,12 @@ test("the same-origin SSE adapter shares the tab connection and delegates reconn
   const visibility = new EventTarget();
   let opened = 0;
   let closed = 0;
-  const sources: { onmessage: ((event: { data: string }) => void) | null; onerror: (() => void) | null }[] = [];
-  class FakeEventSource {
-    onmessage = null;
-    onerror = null;
+  const sources: FakeEventSource[] = [];
+  class FakeEventSource extends EventTarget {
+    // CONNECTING: the browser is retrying a dropped stream, which is not a refusal.
+    readyState = 0;
     constructor(url: string) {
+      super();
       assert.equal(url, "/api/social/activity/hints");
       opened += 1;
       sources.push(this);
@@ -575,11 +576,11 @@ test("the same-origin SSE adapter shares the tab connection and delegates reconn
     adapter.onmessage = (message) => frames.push(message.data);
     let disconnected = false;
     adapter.onclose = () => { disconnected = true; };
-    sources[0].onmessage?.({ data: JSON.stringify(HELLO) });
+    sources[0].dispatchEvent(new MessageEvent("message", { data: JSON.stringify(HELLO) }));
     assert.deepEqual(frames, [JSON.stringify(HELLO)]);
     visibility.dispatchEvent(new Event("visibilitychange"));
     assert.equal(JSON.parse(String(frames[1])).type, "resync_required", "returning to a tab recovers missed hints");
-    sources[0].onerror?.();
+    sources[0].dispatchEvent(new Event("error"));
     assert.equal(disconnected, true);
     assert.equal(closed, 1, "native reconnect stops so the existing backoff owns reconnects");
     visibility.dispatchEvent(new Event("visibilitychange"));

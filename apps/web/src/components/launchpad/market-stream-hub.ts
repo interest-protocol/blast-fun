@@ -8,6 +8,7 @@ import { normalizeStructTag } from "@mysten/sui/utils";
 
 import { parseChartFrame, type ChartFrame } from "./chart/chart-live-model.ts";
 import { publishChartRound } from "./chart/chart-live-round.ts";
+import { gatedEventSource } from "#web/lib/live-stream/gated-event-source.ts";
 import { beginMarketHints } from "#web/lib/live-stream/market-hints.ts";
 import { browserSocket, fetchLiveTicket, liveBucket, liveMarketSource, liveSourceState } from "#web/lib/live-stream/live-socket-source.ts";
 import { presaleMarketFrameSchema, type PresaleMarketFrame } from "@blast/core/modules/live/presale-market-frames.ts";
@@ -501,8 +502,16 @@ export class MarketStreamHub {
         }
       }
     });
-    // A refused stream (`503 Market streaming is busy`) ends here too: not live, retried with backoff.
+    // A drop after the stream opened: not live, retried with backoff.
     source.addEventListener("error", () => { if (current()) this.reconnect(); });
+    // Refused before it opened even after one gate refresh (a refused cookie, or `503 Market streaming is busy`):
+    // polls carry the page until the tab returns or a subscription changes.
+    source.addEventListener("refused", () => {
+      if (!current()) return;
+      this.hints?.disconnected();
+      this.drop();
+      this.covered("unavailable");
+    });
     source.addEventListener("hint", (event) => {
       if (!current() || !event.data) return;
       try {
@@ -621,7 +630,7 @@ export class MarketStreamHub {
 let tab: MarketStreamHub | null = null;
 
 function eventSource(url: string): MarketEventSource {
-  const events = new EventSource(url);
+  const events = gatedEventSource(url);
   return {
     addEventListener: (type, receive) => events.addEventListener(type, (event) => receive("data" in event ? { data: String(event.data) } : {})),
     close: () => events.close(),

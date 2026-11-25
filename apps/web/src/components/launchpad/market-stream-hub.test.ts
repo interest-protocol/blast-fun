@@ -278,7 +278,7 @@ test("without the hint handshake the deadline reconnects with backoff, as an ups
   assert.equal(s.sources.length, 2);
 });
 
-test("a refused stream (503 busy) is not live and retries with growing backoff", async () => {
+test("a dropped stream is not live and retries with growing backoff", async () => {
   const s = setup();
   const chart = watcher();
   s.hub.subscribe({ pools: chart.pools, expected, listener: chart.listener });
@@ -302,6 +302,20 @@ test("a refused stream (503 busy) is not live and retries with growing backoff",
   s.fire(STABLE_MS);
   s.source().emit("error");
   assert.ok(s.timers.some((timer) => timer.ms === 500), "a connection that stayed live resets the backoff");
+});
+
+test("a stream the gate still refuses after its refresh stops on polls until the tab returns", async () => {
+  const s = setup();
+  const chart = watcher();
+  s.hub.subscribe({ pools: chart.pools, expected, listener: chart.listener });
+  s.source().emit("refused");
+  assert.equal(s.source().closed, true);
+  assert.deepEqual(chart.states, ["connecting", "unavailable"]);
+  assert.equal(s.timers.length, 0, "no reconnect is scheduled, so a refused tab never loops");
+  s.setVisible(false);
+  s.setVisible(true);
+  assert.equal(s.sources.length, 2, "the tab's return tries once more");
+  assert.equal(chart.states.at(-1), "connecting");
 });
 
 test("a subscriber's restart drops the stream once and reconnects with backoff", async () => {

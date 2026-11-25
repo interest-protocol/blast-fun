@@ -23,11 +23,11 @@ const OTHER = `0x${"4e".repeat(32)}::toad::TOAD`;
 
 test("a coin page refreshes at once on its own coin's identity change, and on nothing else the stream hints", async () => {
   const beforeSource = globalThis.EventSource;
-  const sources: { onmessage: ((event: { data: string }) => void) | null; onerror: (() => void) | null }[] = [];
-  class FakeEventSource {
-    onmessage = null;
-    onerror = null;
+  const sources: FakeEventSource[] = [];
+  class FakeEventSource extends EventTarget {
+    readyState = 0;
     constructor(url: string) {
+      super();
       assert.equal(url, "/api/social/activity/hints");
       sources.push(this);
     }
@@ -35,7 +35,7 @@ test("a coin page refreshes at once on its own coin's identity change, and on no
   }
   let refreshes = 0;
   const router = { bfcacheId: "test", back() {}, forward() {}, refresh() { refreshes += 1; }, hmrRefresh() {}, push() {}, replace() {}, prefetch: async () => {} };
-  const receive = (frame: unknown) => sources[0]!.onmessage?.({ data: JSON.stringify(frame) });
+  const receive = (frame: unknown) => sources[0]!.dispatchEvent(new MessageEvent("message", { data: JSON.stringify(frame) }));
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);

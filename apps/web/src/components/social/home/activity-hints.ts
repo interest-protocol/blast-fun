@@ -47,6 +47,7 @@ import type { MetricFields } from "@blast/core/lib/metrics.ts";
 import { compareEventCursors } from "@blast/core/modules/launchpad-contract/cursor.ts";
 import { parseInfraProvenance } from "@blast/core/modules/launchpad-contract/provenance.ts";
 import { DEPLOYMENT_NETWORKS } from "@blast/core/web/launchpad-read.ts";
+import { gatedEventSource } from "#web/lib/live-stream/gated-event-source.ts";
 import { marketHintTransport } from "#web/lib/live-stream/market-hints.ts";
 import { hintOf, type Hint } from "@blast/core/modules/live/hint-frames.ts";
 
@@ -419,7 +420,7 @@ export function activityHints(surface: string, hints: ActivityHints, accepts?: H
 
 /** The relay subscribes and pings upstream; the browser transport is read-only. */
 export function hintEventStream(url: string): HintSocket {
-  const source = new EventSource(url);
+  const source = gatedEventSource(url);
   const socket: HintSocket = {
     send: () => undefined,
     close: () => {
@@ -434,11 +435,17 @@ export function hintEventStream(url: string): HintSocket {
     if (document.visibilityState !== "hidden") socket.onmessage?.({ data: JSON.stringify({ type: "resync_required" }) });
   };
   if (typeof document !== "undefined") document.addEventListener("visibilitychange", resume);
-  source.onmessage = (event) => socket.onmessage?.(event);
-  source.onerror = () => {
+  source.addEventListener("message", (event) => socket.onmessage?.(event as MessageEvent));
+  source.addEventListener("error", () => {
     socket.close();
     socket.onclose?.();
-  };
+  });
+  // Refused even after one gate refresh: the client stays on its poll until its surfaces start over.
+  source.addEventListener("refused", () => {
+    socket.unavailable = true;
+    socket.close();
+    socket.onclose?.();
+  });
   return socket;
 }
 

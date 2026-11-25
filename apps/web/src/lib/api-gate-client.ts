@@ -101,3 +101,19 @@ export function installGateAwareFetch(target: { fetch: Fetch } = globalThis): vo
   if ((target.fetch as GateAwareFetch)[WRAPPED]) return;
   target.fetch = createGateAwareFetch(target.fetch.bind(target));
 }
+
+let refreshingGate: Promise<boolean> | null = null;
+
+/**
+ * `GET /api/gate` once for every caller waiting on it now: true when a new
+ * cookie was issued. For streams, which cannot see a refusal's status.
+ */
+export function refreshGate(): Promise<boolean> {
+  return (refreshingGate ??= globalThis
+    .fetch(GATE_REFRESH_PATH, { method: "GET", credentials: "same-origin", cache: "no-store" })
+    .then((response) => response.ok)
+    .catch(() => false)
+    .finally(() => {
+      refreshingGate = null;
+    }));
+}
