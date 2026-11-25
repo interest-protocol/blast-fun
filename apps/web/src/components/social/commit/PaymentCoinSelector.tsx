@@ -4,7 +4,8 @@ import { DisclosureButton } from "#web/components/blast-ui/Button.tsx";
 import { useId, useState } from "react";
 import { Sheet, SheetClose, SheetHeading } from "#web/components/blast-ui/Sheet.tsx";
 import { useShellPrefs } from "#web/components/blast-ui/use-shell-prefs.ts";
-import { TOKEN_PICKER_SHEET, TokenPicker } from "../coins/TokenPicker";
+import pickerStyles from "../coins/coins.module.css";
+import { TokenPicker } from "../coins/TokenPicker";
 import { CoinIdentity } from "#web/components/social/coins/CoinIdentity.tsx";
 import { PUBLIC_BASE_COINS, type WalletCoinView } from "../coins/coin-model";
 import { useSwapPickerHoldings } from "../coins/use-wallet";
@@ -29,7 +30,7 @@ export function PaymentCoinSelector({ coins, busy, selected, accepted, onPick, p
   const choices = [...new Map([...PUBLIC_BASE_COINS, accepted, ...coins, selected].map(coin => [coin.coinType, coin])).values()];
   return <>
     <DisclosureButton data-layout={inField ? "field" : undefined} aria-label={`Pay with ${selected.symbol}`} aria-haspopup="dialog" aria-expanded={opened} className={purchase ? styles.currencyChoice : styles.paymentCoin} disabled={busy} onClick={() => setOpen(true)} type="button"><CoinIdentity coin={selected} compact={inField} showName={false} /></DisclosureButton>
-    <Sheet className={TOKEN_PICKER_SHEET} labelledBy={title} onRequestClose={() => setOpen(false)} open={opened}>
+    <Sheet className={pickerStyles.pickerSheet} labelledBy={title} onRequestClose={() => setOpen(false)} open={opened}>
       <SheetClose onClick={() => setOpen(false)} />
       <SheetHeading id={title} title="Select payment coin" />
       <p className={styles.context}>Sui mainnet</p>

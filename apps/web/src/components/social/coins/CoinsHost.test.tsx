@@ -16,6 +16,7 @@ const { createTestQueryClient, settleQueries, withQueryClient } = await import("
 const { TrendingCoinStripView } = await import("../happening/TrendingCoinStrip.tsx");
 const { fixtureDetail } = await import("../../../../../../packages/core/test/fixtures/presale-pages/presale-fixtures.ts");
 const { CoinsHost, DEPOSIT_POLL_MS } = await import("./CoinsHost.tsx");
+const { CoinsOverlay } = await import("./CoinsOverlay.tsx");
 const { FIXTURE_COINS, FIXTURE_WALLET_ADDRESS, DEFAULT_SWAP_MODE } = await import("../../../../test/fixtures/social/coins/coins-fixture-model.ts");
 const { fixtureQuote } = await import("../../../../test/fixtures/social/coins/swap-fixture.ts");
 const { SWAP_SUCCESS_MS } = await import("./SwapForm.tsx");
@@ -30,7 +31,7 @@ const graduated = { side: "buy" as const, coin: { coin_type: "0x123::graduated::
 
 function EntryPoints({ inline = false, showWalletCard = false }: Readonly<{ inline?: boolean | "graduated"; showWalletCard?: boolean }>) {
   const run = useShellActions();
-  return <><button onClick={() => run("openFund")} type="button">Header Fund</button><button onClick={() => run("openTrade")} type="button">Header Swap</button><button onClick={() => run("openCoin", WAL.coin_type)} type="button">Search WAL</button><TrendingCoinStripView coins={[trending]} onOpen={(key) => run("openCoin", key)} />{showWalletCard ? <SettingsWalletCard /> : null}<CoinsHost />{inline ? <section data-inline-trade=""><CoinsHost {...(inline === "graduated" ? { inlineTrade: graduated } : { inlineSale: sale })} /></section> : null}</>;
+  return <><button onClick={() => run("openFund")} type="button">Header Fund</button><button onClick={() => run("openTrade")} type="button">Header Swap</button><button onClick={() => run("openCoin", WAL.coin_type)} type="button">Search WAL</button><TrendingCoinStripView coins={[trending]} onOpen={(key) => run("openCoin", key)} />{showWalletCard ? <SettingsWalletCard /> : null}<CoinsOverlay />{inline ? <section data-inline-trade=""><CoinsHost {...(inline === "graduated" ? { inlineTrade: graduated } : { inlineSale: sale })} /></section> : null}</>;
 }
 
 function walletResponse(walletCardCoins: typeof FIXTURE_COINS | undefined, getInputAtoms: () => bigint | undefined) {

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState, type MouseEvent, type ReactNode } from "react";
 
-import { qty, quoteOf, readsInCoin, usd0 } from "@blast/core/web/format.ts";
+import { opensAt, qty, quoteOf, readsInCoin, usd0 } from "@blast/core/web/format.ts";
 import { bpsMultiple } from "@blast/core/lib/bps.ts";
 import { exactAtoms, groupedExact } from "@blast/core/lib/exact-amount.ts";
 import { AmountFit } from "#web/components/blast-ui/AmountFit.tsx";
@@ -31,7 +31,9 @@ import { vestingPath } from "@blast/core/modules/vesting/model.ts";
 import buyerStyles from "./buyer-vesting.module.css";
 import { heldTargetOfSale } from "./held-target";
 import { BellIcon } from "./icons";
-import { opensNote, SaleAccessContent, SignInToCheck, useSaleAccess } from "./SaleAccess";
+import { SaleAccessContent, SignInToCheck } from "./SaleAccess";
+import type { SaleAccess } from "./sale-access";
+import { useSaleAccess } from "./use-sale-access";
 import { claimableTokenText, fundingState, n, saleMoney } from "@blast/core/modules/presale/presentation.ts";
 import { useSaleDetail, useViewerPresalesRead } from "./presales-client";
 import { BlastButton, FriendsCard, SHOW_FOLLOWING_EVENT, TokenomicsCard, type SaleCommit } from "./SaleView";
@@ -183,6 +185,12 @@ function CommitSideBox({ detail, sale, mine, gate, noteId, now, commit, kit, onC
       {mine ? <div className={cx("side-pos")}>You&apos;ve committed <b><QuoteAmount atoms={mine.commitment_atoms} sale={sale} /></b></div> : null}
     </div>
   );
+}
+
+/** When a listed or open-sale viewer can buy; the countdown itself is the main card's. */
+function opensNote(access: SaleAccess, startMs: number): string | null {
+  if (access.kind !== "listed" && access.kind !== "open") return null;
+  return opensAt(startMs) === null ? "You can buy once the creator opens the sale." : "You can buy when the sale opens.";
 }
 
 function PendingSideBox({ sale, detail }: SideBoxContext) {

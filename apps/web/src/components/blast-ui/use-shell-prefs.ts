@@ -160,6 +160,7 @@ export function prefersReducedMotion(): boolean {
 export const THEME_FADE_MS = T2;
 /** The circular reveal of a new theme: on-screen movement, at the 300ms budget. */
 export const THEME_REVEAL_MS = T4;
+let themeTransition: ViewTransition | undefined;
 
 /**
  * Applies a theme with the design's circular reveal from `origin` (tokens.md
@@ -181,6 +182,7 @@ export function applyTheme(theme: ShellPrefs["theme"], origin?: Element | null):
   const reduced = prefersReducedMotion();
   const reveal = reduced ? null : circleFrom(origin);
   const transition = start(run);
+  themeTransition = transition;
   transition.ready
     .then(() =>
       reveal
@@ -192,7 +194,12 @@ export function applyTheme(theme: ShellPrefs["theme"], origin?: Element | null):
     )
     .catch(reportViewTransitionError);
   // An interrupted transition rejects `finished`; `.finally` would pass that on (`FEATURE-MAP-R3.md` §1).
-  transition.finished.finally(() => html.classList.remove("blast-theming")).catch(reportViewTransitionError);
+  transition.finished.finally(() => {
+    if (themeTransition === transition) {
+      themeTransition = undefined;
+      html.classList.remove("blast-theming");
+    }
+  }).catch(reportViewTransitionError);
 }
 
 /** The reveal's circle: centred on the pressed control, reaching the farthest corner of the viewport. */

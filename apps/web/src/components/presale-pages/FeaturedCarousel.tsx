@@ -1,7 +1,7 @@
 "use client";
 
-import { Children, isValidElement, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type AnimationEvent, type FocusEvent, type PointerEvent, type ReactNode, type RefObject, type TouchEvent } from "react";
-import { usePhoneLayout, useReducedMotion } from "#web/components/blast-ui/use-shell-prefs.ts";
+import { Children, isValidElement, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type AnimationEvent, type FocusEvent, type PointerEvent, type ReactNode, type RefObject } from "react";
+import { useReducedMotion } from "#web/components/blast-ui/use-shell-prefs.ts";
 import { IconButton } from "#web/components/blast-ui/Button.tsx";
 import { useHydrated } from "#web/components/ui-libraries/use-hydrated.tsx";
 import styles from "./FeaturedPresales.module.css";
@@ -17,15 +17,12 @@ const serverHidden = () => true;
 const slideLabels = { presales: "Presale", launches: "Launch", "bonding curves": "Bonding curve" } as const;
 const busyPurchase = '[data-kind="commit"] button[aria-busy="true"]:not([data-visual-copy] *)';
 
-function useCarouselPlayback({ box, track, playbackButton, hideControlsOnMobile, rememberActive }: Readonly<{
+function useCarouselPlayback({ box, track, playbackButton, rememberActive }: Readonly<{
   box: RefObject<HTMLDivElement | null>;
   track: RefObject<HTMLDivElement | null>;
   playbackButton: RefObject<HTMLButtonElement | null>;
-  hideControlsOnMobile: boolean;
   rememberActive: () => void;
 }>) {
-  const phone = usePhoneLayout();
-  const controlsHidden = hideControlsOnMobile && phone;
   const reduced = useReducedMotion();
   const hidden = useSyncExternalStore(watchVisibility, documentHidden, serverHidden);
   const [playing, setPlaying] = useState<boolean | null>(null);
@@ -33,15 +30,9 @@ function useCarouselPlayback({ box, track, playbackButton, hideControlsOnMobile,
   const [pending, setPending] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [inView, setInView] = useState(true);
-  const [touching, setTouching] = useState(false);
-  const [keyboardFocused, setKeyboardFocused] = useState(false);
-  const automatic = controlsHidden ? !reduced : playing ?? !reduced;
-  const paused = !automatic || hidden || hovered || !inView || pending || detailsOpen || (controlsHidden && (touching || keyboardFocused));
-  const stopPlayback = () => {
-    if (!controlsHidden) {
-      setPlaying(false);
-    }
-  };
+  const automatic = playing ?? !reduced;
+  const paused = !automatic || hidden || hovered || !inView || pending || detailsOpen;
+  const stopPlayback = () => setPlaying(false);
   useEffect(() => {
     const node = box.current;
     if (!node) return;
@@ -56,24 +47,19 @@ function useCarouselPlayback({ box, track, playbackButton, hideControlsOnMobile,
       const busy = !!node.querySelector(busyPurchase);
       setPending(busy);
       setDetailsOpen(!!node.querySelector('.' + styles.slide + ':not([inert]) details[open]'));
-      if (busy && !controlsHidden) setPlaying(false);
+      if (busy) setPlaying(false);
     };
     checkPending();
     const observer = new MutationObserver(checkPending);
     observer.observe(node, { subtree: true, childList: true, attributes: true, attributeFilter: ["aria-busy", "open", "inert"] });
     return () => observer.disconnect();
-  }, [controlsHidden, track]);
+  }, [track]);
 
   const onFocus = (event: FocusEvent<HTMLDivElement>) => {
     rememberActive();
-    if (controlsHidden) {
-      setKeyboardFocused(event.target.matches(":focus-visible"));
-    } else if (event.nativeEvent.target !== playbackButton.current) {
+    if (event.nativeEvent.target !== playbackButton.current) {
       stopPlayback();
     }
-  };
-  const onBlur = (event: FocusEvent<HTMLDivElement>) => {
-    if (!event.currentTarget.contains(event.relatedTarget)) setKeyboardFocused(false);
   };
   const onPointerEnter = (event: PointerEvent<HTMLDivElement>) => {
     if (event.pointerType === "mouse") {
@@ -82,12 +68,6 @@ function useCarouselPlayback({ box, track, playbackButton, hideControlsOnMobile,
     }
   };
   const onPointerLeave = () => setHovered(false);
-  const onTouchStart = () => {
-    rememberActive();
-    setTouching(controlsHidden);
-  };
-  const onTouchEnd = (event: TouchEvent<HTMLDivElement>) => setTouching(controlsHidden && event.touches.length > 0);
-  const onTouchCancel = () => setTouching(false);
 
   return {
     automatic, paused, pending, reduced,
@@ -99,7 +79,7 @@ function useCarouselPlayback({ box, track, playbackButton, hideControlsOnMobile,
       rememberActive();
       setPlaying(!automatic);
     },
-    onFocus, onBlur, onPointerEnter, onPointerLeave, onTouchStart, onTouchEnd, onTouchCancel,
+    onFocus, onPointerEnter, onPointerLeave,
   };
 }
 
@@ -112,15 +92,16 @@ function carouselSlot(track: HTMLDivElement, step: number, count: number) {
   return { slot, position: slot === 0 ? count : slot === count + 1 ? 1 : slot };
 }
 
-function useCarouselPosition(children: ReactNode, count: number) {
+function useCarouselPosition(children: ReactNode) {
   const track = useRef<HTMLDivElement>(null);
   const hydrated = useHydrated();
-  const looping = hydrated && count > 1;
   const [selected, setSelected] = useState<{ key: string; position: number } | null>(null);
   const slides = Children.toArray(children).map((card, index) => ({
     card,
     key: isValidElement(card) && card.key !== null ? card.key : `text:${index}`,
   }));
+  const count = slides.length;
+  const looping = hydrated && count > 1;
   const slideOrder = JSON.stringify(slides.map(({ key }) => key));
   const selectedIndex = slides.findIndex(({ key }) => key === selected?.key);
   const position = selectedIndex >= 0 ? selectedIndex + 1 : Math.max(1, Math.min(selected?.position ?? 1, count));
@@ -178,14 +159,14 @@ function useCarouselPosition(children: ReactNode, count: number) {
     if (slot !== position) node.scrollTo({ left: position * step, behavior: "instant" });
     node.scrollTo({ left: (position + direction) * step, behavior: instant ? "instant" : "smooth" });
   };
-  return { looping, measure, position, rememberActive, scroll, slides, track };
+  return { count, looping, measure, position, rememberActive, scroll, slides, track };
 }
 
-export function FeaturedCarousel({ children, count, hideControlsOnMobile = false, kind = "presales" }: Readonly<{ children: ReactNode; count: number; hideControlsOnMobile?: boolean; kind?: keyof typeof slideLabels }>) {
+export function FeaturedCarousel({ children, kind = "presales" }: Readonly<{ children: ReactNode; kind?: keyof typeof slideLabels }>) {
   const box = useRef<HTMLDivElement>(null);
   const playbackButton = useRef<HTMLButtonElement>(null);
-  const { looping, measure, position, rememberActive, scroll, slides, track } = useCarouselPosition(children, count);
-  const playback = useCarouselPlayback({ box, track, playbackButton, hideControlsOnMobile, rememberActive });
+  const { count, looping, measure, position, rememberActive, scroll, slides, track } = useCarouselPosition(children);
+  const playback = useCarouselPlayback({ box, track, playbackButton, rememberActive });
   const move = (direction: number, keyboard: boolean) => {
     playback.stopPlayback();
     scroll(direction, keyboard || playback.reduced);
@@ -198,11 +179,8 @@ export function FeaturedCarousel({ children, count, hideControlsOnMobile = false
   };
 
   return (
-    <div className={styles.carousel} data-hide-phone-controls={hideControlsOnMobile || undefined} data-paused={playback.paused || undefined} data-static={playback.reduced && !playback.automatic || undefined} onInputCapture={playback.stopPlayback} onFocusCapture={playback.onFocus} onBlurCapture={playback.onBlur} ref={box}>
+    <div className={styles.carousel} data-paused={playback.paused || undefined} data-static={playback.reduced && !playback.automatic || undefined} onInputCapture={playback.stopPlayback} onFocusCapture={playback.onFocus} ref={box}>
       <div aria-label={`Featured ${kind}`} aria-roledescription="carousel" className={styles.grid} onPointerDownCapture={playback.stopPlayback} onPointerEnter={playback.onPointerEnter} onPointerLeave={playback.onPointerLeave} onWheelCapture={playback.stopPlayback} onScroll={measure}
-        onTouchStart={playback.onTouchStart}
-        onTouchEnd={playback.onTouchEnd}
-        onTouchCancel={playback.onTouchCancel}
         onKeyDown={(event) => {
           if (event.target !== event.currentTarget || !["ArrowLeft", "ArrowRight"].includes(event.key)) return;
           event.preventDefault();
@@ -224,11 +202,11 @@ export function FeaturedCarousel({ children, count, hideControlsOnMobile = false
           <span className={`${styles.playbackStatus} sr-only`} role="status">{playback.paused ? "Paused" : ""}</span>
         </> : null}
         <span className={styles.arrows} hidden={count < 2}>
-          <IconButton aria-label={`Previous featured ${kind}`} className={styles.previous} onClick={(event) => move(-1, event.detail === 0)} variant="secondary"><ArrowUpIcon /></IconButton>
-          <IconButton aria-label={playback.automatic ? `Pause featured ${kind}` : `Play featured ${kind}`} disabled={playback.pending} onClick={playback.togglePlayback} ref={playbackButton} variant="secondary">
+          <IconButton aria-label={`Previous featured ${kind}`} className={styles.previous} onClick={(event) => move(-1, event.detail === 0)} size="touch" variant="secondary"><ArrowUpIcon /></IconButton>
+          <IconButton aria-label={playback.automatic ? `Pause featured ${kind}` : `Play featured ${kind}`} disabled={playback.pending} onClick={playback.togglePlayback} ref={playbackButton} size="touch" variant="secondary">
             <svg aria-hidden="true" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24"><path d={playback.automatic ? "M9 5V19M15 5V19" : "M8 5 19 12 8 19Z"} /></svg>
           </IconButton>
-          <IconButton aria-label={`Next featured ${kind}`} className={styles.next} onClick={(event) => move(1, event.detail === 0)} variant="secondary"><ArrowUpIcon /></IconButton>
+          <IconButton aria-label={`Next featured ${kind}`} className={styles.next} onClick={(event) => move(1, event.detail === 0)} size="touch" variant="secondary"><ArrowUpIcon /></IconButton>
         </span>
       </div>
     </div>

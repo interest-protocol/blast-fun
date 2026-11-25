@@ -67,7 +67,7 @@ export function PinnedLaunches({ now, nowMs, initialPinSeed, presales: seededPre
   if (slides.length === 0) return null;
   return (
     <section aria-label="Launch highlights" className={`${carousel.catalogFeatured} ${styles.bar}`}>
-      <FeaturedCarousel count={slides.length} hideControlsOnMobile kind="launches">
+      <FeaturedCarousel kind="launches">
         {slides.map((slide) => {
           if ("sale" in slide) {
             return <FeaturedSale className={styles.sale} key={slide.id} now={now} sale={slide.sale} viewer={null} />;

@@ -71,6 +71,7 @@
      (motion-tokens.ts carries the same values for script). `--ease` is an alias kept for older modules. */
   --ease-std: cubic-bezier(.23, 1, .32, 1); --ease-io: cubic-bezier(.77, 0, .175, 1); --ease-drawer: cubic-bezier(.32, .72, 0, 1); --ease: var(--ease-std);
   --t1: .12s; --t2: .2s; --t3: .28s; --t4: .3s;
+  --loading-delay: var(--t4);
   /* Shell geometry (Rail and Topbar boards): rail, right column, view-to-column gap, page gutter and width. */
   --rail: 15.5rem; --aside: 18.75rem; --gap: 1.25rem; --page-gutter: 2.5rem; --page-max: 73.75rem;
   /* The page title block (PageHeader): space above the title and between it and the first card. */

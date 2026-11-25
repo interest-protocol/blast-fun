@@ -46,7 +46,7 @@ import {
 } from "./swap-model";
 
 /** The pause in typing before the coins route is searched (the held coins filter at once). */
-export const PICKER_SEARCH_MS = 200;
+const PICKER_SEARCH_MS = 200;
 const compactAmount = new Intl.NumberFormat("en", {
   notation: "compact",
   maximumFractionDigits: 4,
@@ -187,9 +187,6 @@ function usePickerCatalog(listCoins: TokenPickerProps["listCoins"], term: string
 
   return { remote, loading, failed };
 }
-
-/** The class a `Sheet` holding only this picker takes, so filtering never moves its top (audit BM-06). */
-export const TOKEN_PICKER_SHEET = styles.pickerSheet;
 
 /**
  * The picker, rendered in the browser only: base-ui's Combobox writes a

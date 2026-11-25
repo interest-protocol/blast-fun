@@ -16,7 +16,7 @@ import { useCoinPins } from "./coin-pins";
 import { coinView } from "./coin-model";
 import { useDevicePrefs } from "#web/components/blast-ui/device-prefs.ts";
 import { EXPLORER_NAMES, explorerTransactionUrl } from "@blast/core/lib/explorer.ts";
-import { useShellAction, useShellActions } from "#web/components/blast-ui/shell-actions.tsx";
+import { useShellActions } from "#web/components/blast-ui/shell-actions.tsx";
 import { useToast } from "#web/components/blast-ui/Toasts.tsx";
 import { usePrivySessionMounted } from "#web/components/presale/providers/PrivySessionProvider.tsx";
 import { useAppQueryClient } from "#web/lib/query/provider.tsx";
@@ -29,7 +29,7 @@ import { useSocialViewer } from "../SignInGate";
 import { requestTradeQuote } from "../trades/trades-client";
 import { useBalancesContext } from "./balances";
 import { CoinSheet, type CoinSheetProps, type CoinSheetTrading, type CoinSheetWallet, type TradeAsk, type TradeOutcome, type WithdrawAsk } from "./CoinSheet";
-import { coinAmt, firstScreen, parseCoinScreen, walletCoinViews, type CoinScreen, type WalletCoinView } from "./coin-model";
+import { coinAmt, coinDraftKey, parseSavedCoinScreen, walletCoinViews, type CoinOpening, type CoinScreen, type WalletCoinView } from "./coin-model";
 import { useSignInDraft } from "../sign-in-draft";
 import { PrivyCoinSignerBridge, type PrivyCoinSigner } from "./signers";
 import { walletSessionSigner } from "./signers-model";
@@ -67,10 +67,6 @@ function initialCoinState(sale: SocialPresaleDetail["presale"] | undefined, trad
   };
 }
 
-function coinDraftKey(kind: "open" | "trade", owner: string | undefined) {
-  return owner ? `coins:page-${kind}:${owner}` : `coins:${kind}`;
-}
-
 function showsDepositAddress(screen: CoinScreen | null): boolean {
   return screen?.kind === "fund" || screen?.kind === "dep";
 }
@@ -86,6 +82,33 @@ function useCoinWalletRead(open: boolean, inline: boolean) {
   return [walletRead, setRead] as const;
 }
 
+function useCoinSheetState(initial: ReturnType<typeof initialCoinState>, active: boolean, opening?: CoinOpening) {
+  const [sheetOpen, setOpen] = useState(false);
+  const open = initial.inline ? active : sheetOpen;
+  const [walletRead, setRead] = useCoinWalletRead(open, initial.inline);
+  const [session, setSession] = useState(0);
+  const [first, setFirst] = useState<CoinScreen>(initial.first);
+  const [screen, setScreen] = useState<CoinScreen | null>(null);
+  const [extraCoins, setExtraCoins] = useState<readonly WalletCoinView[]>(initial.coins);
+  const [lastOpening, setLastOpening] = useState<CoinOpening>();
+
+  const show = useCallback((next: CoinScreen, coins?: readonly WalletCoinView[]) => {
+    if (coins) setExtraCoins(coins);
+    setFirst(next);
+    setScreen(next);
+    setSession((value) => value + 1);
+    setRead((current) => (current.status === "ready" ? current : { status: "loading", owner: null }));
+    setOpen(true);
+  }, [setRead]);
+
+  if (opening && opening !== lastOpening) {
+    setLastOpening(opening);
+    show(opening.screen, opening.coins);
+  }
+
+  return { open, setOpen, walletRead, setRead, session, first, screen, setScreen, extraCoins, show };
+}
+
 function walletReadFor(walletRead: ReturnType<typeof useCoinWalletRead>[0], owner: string | null) {
   return walletRead.owner === owner ? walletRead : { status: "loading" as const };
 }
@@ -95,10 +118,22 @@ function tradeWallet(read: ReturnType<typeof walletReadFor>, signedIn: boolean) 
   return { walletAddress: read.wallet.address, balanceKnown: read.wallet.coins !== null };
 }
 
+function useCoinNavigationDraft(
+  owner: string | undefined,
+  open: boolean,
+  signedIn: boolean,
+  screen: CoinScreen,
+  show: (screen: CoinScreen) => void,
+): void {
+  useSignInDraft(coinDraftKey("open", owner), open && !signedIn ? { screen: JSON.stringify(screen) } : null, (saved) => {
+    const next = parseSavedCoinScreen(saved.screen);
+    if (next) show(next);
+  });
+}
+
 /**
- * The coins sheet under the app shell (mounted in `SocialShell`'s overlays):
- * it registers the shell's `openFund`, `openDeposit`, `openWithdraw`, `openCoin` and `openTrade` (R3-34: a sale page's
- * Buy and Sell; with no argument the dock's plain swap), reads the Blast wallet when it opens, signs withdrawals and
+ * The wallet and transaction logic for the shell's coins sheet and inline tickets.
+ * It reads the Blast wallet when opened, signs withdrawals and
  * trades with the right wallet (Privy's embedded key, or Slush for a wallet
  * session), toasts the outcome and makes the balances move. A visitor can explore the same forms and quotes; signing requires a session.
  *
@@ -108,7 +143,7 @@ function tradeWallet(read: ReturnType<typeof walletReadFor>, signedIn: boolean) 
  * session alike (owner ruling 2026-11-20, reversing OA-17), and a wallet
  * session pays its own only for a trade past the day's cap.
  */
-export function CoinsHost({ inlineSale, inlineTrade, active = true }: Readonly<{ inlineSale?: SocialPresaleDetail["presale"]; inlineTrade?: TradeAction; active?: boolean }> = {}) {
+export function CoinsHost({ inlineSale, inlineTrade, opening, active = true }: Readonly<{ inlineSale?: SocialPresaleDetail["presale"]; inlineTrade?: TradeAction; opening?: CoinOpening; active?: boolean }>) {
   const { hideSmallBalances } = useShellPrefs();
   const pinnedKeys = JSON.stringify(useCoinPins());
   const viewer = useSocialViewer();
@@ -126,19 +161,12 @@ export function CoinsHost({ inlineSale, inlineTrade, active = true }: Readonly<{
   }, []);
 
   const client = useRef<SuiGrpcClient | null>(null);
-  const [sheetOpen, setOpen] = useState(false);
   const initial = initialCoinState(inlineSale, inlineTrade);
   const { inline, draftOwner } = initial;
-  const open = inline ? active : sheetOpen;
-  const [session, setSession] = useState(0);
-  const [first, setFirst] = useState<CoinScreen>(initial.first);
-  const [walletRead, setRead] = useCoinWalletRead(open, inline);
+  const { open, setOpen, walletRead, setRead, session, first, screen, setScreen, extraCoins, show } = useCoinSheetState(initial, active, opening);
   const read = walletReadFor(walletRead, accountId);
-  const [screen, setScreen] = useState<CoinScreen | null>(null);
   /** The withdrawal in flight per request: its id and digest survive a retry of the same ask. */
   const attempt = useRef<{ key: string; requestId: string; digest: string | null } | null>(null);
-  /** R3-34: a sale page's coin the wallet may not hold, for the trade it opened. */
-  const [extraCoins, setExtraCoins] = useState<readonly WalletCoinView[]>(initial.coins);
   const getAccessToken = viewer.getAccessToken;
   const api = useMemo(() => ({ getAccessToken: getAccessToken ?? (async () => null) }), [getAccessToken]);
 
@@ -204,14 +232,6 @@ export function CoinsHost({ inlineSale, inlineTrade, active = true }: Readonly<{
       return wallet;
     });
   }, [readWallet, accountId, identityOnly, queries, api, listing, setRead]);
-
-  const show = useCallback((next: CoinScreen) => {
-    setFirst(next);
-    setScreen(next);
-    setSession((value) => value + 1);
-    setRead((current) => (current.status === "ready" ? current : { status: "loading", owner: null }));
-    setOpen(true);
-  }, [setFirst, setScreen, setSession, setRead, setOpen]);
 
   useCoinNavigationDraft(draftOwner, open, viewer.signedIn, screen ?? first, show);
   // Sign-in updates balances in the existing sheet; it never starts a transaction or resets its inputs.
@@ -375,7 +395,6 @@ export function CoinsHost({ inlineSale, inlineTrade, active = true }: Readonly<{
 
   return (
     <>
-      {!inline ? <CoinOpeners show={show} onExtraCoins={setExtraCoins} /> : null}
       {privyMounted ? <PrivyCoinSignerBridge onChange={onPrivy} /> : null}
       <CoinSheet
         extraCoins={selectedCoin.data ? [...extraCoins, selectedCoin.data] : extraCoins}
@@ -401,22 +420,6 @@ export function CoinsHost({ inlineSale, inlineTrade, active = true }: Readonly<{
     </>
   );
 }
-
-function useCoinNavigationDraft(
-  owner: string | undefined,
-  open: boolean,
-  signedIn: boolean,
-  screen: CoinScreen,
-  show: (screen: CoinScreen) => void,
-) {
-  useSignInDraft(coinDraftKey("open", owner), open && !signedIn ? { screen: JSON.stringify(screen) } : null, (saved) => {
-    try {
-      const next = parseCoinScreen(JSON.parse(saved.screen ?? "null"));
-      if (next) show(next);
-    } catch { /* Ignore a corrupt navigation snapshot. */ }
-  });
-}
-
 function coinSheetWallet(
   viewer: Readonly<{ signedIn: boolean; sessionPending?: boolean }>,
   read: Readonly<{ status: "loading" | "error" | "creating"; message?: string }> | Readonly<{ status: "ready"; wallet: SocialWallet }>,
@@ -465,19 +468,4 @@ function walletListing(first: CoinScreen, screen: CoinScreen | null) {
   const mode = active.kind === "pick" || active.kind === "wd" ? "withdraw" :
     active.kind === "trade" || active.kind === "pickt" ? "swap" : "all";
   return { key: screenKey(active) || screenKey(first), mode };
-}
-
-function CoinOpeners({ show, onExtraCoins }: Readonly<{ show: (screen: CoinScreen) => void; onExtraCoins: (coins: readonly WalletCoinView[]) => void }>) {
-  useShellAction("openFund", () => show({ kind: "fund" }));
-  useShellAction("openDeposit", () => show(firstScreen("deposit", null)));
-  useShellAction("openWithdraw", () => show(firstScreen("withdraw", null)));
-  useShellAction("openCoin", (key) => show(firstScreen("coin", key ?? null)));
-  useShellAction("openAllCoins", () => show({ kind: "all" }));
-  useShellAction("openTrade", (argument) => {
-    const opening = tradeOpening(argument);
-    if (!opening) return;
-    onExtraCoins(opening.action ? [tradableCoinView(opening.action.coin)] : []);
-    show(opening.screen);
-  });
-  return null;
 }

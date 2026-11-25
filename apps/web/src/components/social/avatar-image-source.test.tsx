@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { ShellAvatar, ShellAvatarRenderer, type RenderAvatar } from "#web/components/blast-ui/ShellAvatar.tsx";
+import { ShellAvatar } from "#web/components/blast-ui/ShellAvatar.tsx";
+import { ShellAvatarRenderer, type RenderAvatar } from "#web/components/blast-ui/shell-avatar-renderer.ts";
 import { PersonAvatar } from "#web/components/social/PersonAvatar.tsx";
 
 import { AccountAvatar } from "./AccountAvatar";
