@@ -70,19 +70,37 @@ export function CoinPriceFigure({ price, tradeId, quoteSymbol, quoteMark }: Read
   </span>;
 }
 
-export function MarketPriceRow({ price, priceLabel = "Price", change, activity, showCurrency = true }: Readonly<{
-  price: ReactNode; priceLabel?: string; change?: Readonly<{ value: ReactNode; direction?: "up" | "down" }> | null;
+/** The last confirmed price, kept while the live price waits for a newer checkpoint. */
+export function useLastPrice(price: string | null | undefined): string | null {
+  const [last, setLast] = useState(price ?? null);
+  if (price != null && price !== last) setLast(price);
+  return price ?? last;
+}
+
+function PriceSlot({ price, reserve }: Readonly<{ price: ReactNode; reserve?: ReactNode }>) {
+  if (reserve == null) return <strong>{price}</strong>;
+  return <div className={styles.priceHold}><strong>{price}</strong><strong aria-hidden="true">{reserve}</strong></div>;
+}
+
+/**
+ * `reserve` is the last confirmed figure. While `price` waits with "—", the
+ * row keeps that figure's space, unseen, so the content below does not move.
+ */
+export function MarketPriceRow({ price, reserve, priceLabel = "Price", change, activity, showCurrency = true }: Readonly<{
+  price: ReactNode; reserve?: ReactNode; priceLabel?: string; change?: Readonly<{ value: ReactNode; direction?: "up" | "down" }> | null;
   activity?: ReactNode; showCurrency?: boolean;
 }>) {
   const { amountsHidden } = useShellPrefs();
   const displayCurrency = useCoinPriceCurrency();
   const currency = showCurrency ? displayCurrency : null;
   const hasPrice = price != null;
+  const held = reserve == null ? undefined : true;
   if (!hasPrice && !currency && !activity) return null;
   return <div className={styles.marketPriceRow}>
     {hasPrice || activity ? <div className={styles.marketPrice}>
-      {hasPrice && <><span>{priceLabel}</span><strong>{price}</strong></>}
-      {hasPrice && change && !amountsHidden && <span className={styles.priceChange} data-direction={change.direction}>{change.value}</span>}
+      {hasPrice && <><span>{priceLabel}</span><PriceSlot price={price} reserve={reserve} /></>}
+      {hasPrice && change && !amountsHidden && <span className={styles.priceChange} data-direction={change.direction}
+        data-held={held} aria-hidden={held}>{change.value}</span>}
       {activity}
     </div> : null}
     {currency && <div className={styles.priceControls}>

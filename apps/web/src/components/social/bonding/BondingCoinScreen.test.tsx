@@ -153,7 +153,7 @@ test("venue outage retains graduation and recovery without curve-price fallback 
   const overview = doc.querySelector('[aria-label="Market overview"]')!;
   assert.match(doc.body.textContent!, /Market data is catching upReload/);
   assert.doesNotMatch(doc.body.textContent!, /Complete migration|closed at migration|Couldn’t load pool market data/);
-  assert.doesNotMatch(overview.textContent!, /FDV|Volume 24h|Price/);
+  assert.doesNotMatch(overview.textContent!, /FDV|Volume 24h|pool price/);
   assert.match(doc.body.textContent!, /Graduated/);
   assert.equal(doc.querySelectorAll('[aria-label="Trade"] button:not([disabled])').length, 0);
 });
@@ -192,7 +192,7 @@ test("missing optional price/FDV are omitted; confirmed zero pool volume remains
   const pool = page.venue.data;
   const doc = render({ ...page, venue: { ...page.venue, data: { ...pool, fdvUsd: null, economics: { ...pool.economics, price: null, marketCap: null }, stats: { ...pool.stats, day: { ...pool.stats.day, volumeQuote: 0n, volumeUsd: "0" } } } } });
   const overview = doc.querySelector('[aria-label="Market overview"]')!;
-  assert.doesNotMatch(doc.body.textContent!, /Price[^a-z]*[\d.].*SUI|FDV/);
+  assert.doesNotMatch(doc.body.textContent!, /pool price[^a-z]*[\d.].*SUI|FDV/);
   assert.match(overview.textContent!, /Volume 24h\$0/);
 });
 

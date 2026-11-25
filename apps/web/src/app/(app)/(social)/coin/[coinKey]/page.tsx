@@ -7,7 +7,7 @@ import { Ticker } from "#web/components/blast-ui/Ticker.tsx";
 import { CoinTypeTag } from "#web/components/blast-ui/CoinTypeTag.tsx";
 
 import { BondingCoinScreen, LegacyCoinScreen } from "#web/components/social/bonding/BondingCoinScreen.tsx";
-import { LegacyCoinChart } from "#web/components/social/coins/LegacyCoinChart.tsx";
+import { PoolChart } from "#web/components/social/coins/PoolChart.tsx";
 import { allChartInterval, CHART_CONTROLS_COOKIE, LIVE_CHART_INTERVALS, DEFAULT_CHART_CONTROLS, parseChartControls, parseLiveChartControls, preferredChartControls } from "#web/components/launchpad/chart/chart-model.ts";
 import { CoinLive } from "#web/components/launchpad/coin/CoinLive.tsx";
 import { coinIdentity, pageLifecycle, venueRoute } from "#web/components/launchpad/coin/coin-view.ts";
@@ -120,7 +120,7 @@ async function renderGenericCoin(coin: Readonly<{ coinType: string; name: string
   return (
     <LegacyCoinScreen
       coinType={coinType} name={name} symbol={symbol} logoUrl={logoUrl} decimals={decimals} poolKey={poolKey} poolKeys={poolKeys} quote={quote} major={major}
-      chart={<LegacyCoinChart poolKey={poolKey} symbol={symbol} decimals={decimals} quote={quote} initialControls={controls} />}
+      chart={<PoolChart poolKey={poolKey} symbol={symbol} decimals={decimals} quote={quote} initialControls={controls} />}
       trade={trading ? <GraduatedCoinTrade coinType={coinType} name={name} symbol={symbol} decimals={decimals} iconUrl={logoUrl} /> : null}
       legacy={poolCoin.category === "Legacy"}
       verified={poolCoin.category === "Legacy" && poolCoin.verifiedTeam}

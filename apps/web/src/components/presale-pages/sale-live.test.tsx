@@ -113,11 +113,11 @@ test("infra hints move a closed sale through funding and migration through the s
   let opens = 0;
   let reads = 0;
   let phase: "closed" | "funded" | "trading" = "closed";
-  const sources: { onmessage: ((event: { data: string }) => void) | null; onerror: (() => void) | null }[] = [];
-  class FakeEventSource {
-    onmessage = null;
-    onerror = null;
+  const sources: FakeEventSource[] = [];
+  class FakeEventSource extends EventTarget {
+    readyState = 0;
     constructor(url: string) {
+      super();
       assert.equal(url, "/api/social/activity/hints");
       opens += 1;
       sources.push(this);
@@ -134,7 +134,7 @@ test("infra hints move a closed sale through funding and migration through the s
     const detail = useSaleDetail(served, now);
     return <b>{detail.presale.phase}</b>;
   }
-  const receive = (frame: unknown) => sources[0].onmessage?.({ data: JSON.stringify(frame) });
+  const receive = (frame: unknown) => sources[0].dispatchEvent(new MessageEvent("message", { data: JSON.stringify(frame) }));
   try {
     Date.now = () => now;
     Object.defineProperty(globalThis, "EventSource", { value: FakeEventSource, configurable: true, writable: true });
@@ -167,7 +167,7 @@ test("infra hints move a closed sale through funding and migration through the s
     }
     assert.equal(reads, 3, "one read per signal, shared by both columns");
     assert.deepEqual(client.getQueryData(queryKeys.me.wallet()), { untouched: true });
-    await act(async () => sources[0].onerror?.());
+    await act(async () => sources[0].dispatchEvent(new Event("error")));
     assert.equal(tabActivityHints()!.connected(), false);
     assert.equal(saleReadEveryMs(served.presale, now, false), 30_000, "disconnect restores the unfinished sale's fallback");
   } finally {

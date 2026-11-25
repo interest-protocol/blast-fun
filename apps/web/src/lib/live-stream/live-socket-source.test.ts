@@ -127,6 +127,18 @@ test("the tab uses the SSE relay while the socket is off, refused, or failing", 
   await settle();
   assert.deepEqual(hung.relays, [PATH], "three silent sockets closed by the hub");
 
+  // A pong answers the tab's own clock ping: a socket that only ever pongs is still silent.
+  const pongs = harness(async () => GRANT);
+  for (let i = 0; i < 3; i++) {
+    pongs.open();
+    await settle();
+    pongs.sockets.at(-1)!.onmessage!({ data: 'event: pong\ndata: {"t":1,"server_ms":2}\n\n' });
+    pongs.sockets.at(-1)!.onclose!({ code: 1006 });
+  }
+  pongs.open();
+  await settle();
+  assert.deepEqual(pongs.relays, [PATH], "pongs alone do not prove the stream");
+
   const throwing = harness(async () => GRANT, true);
   const { events } = throwing.open();
   await settle();
