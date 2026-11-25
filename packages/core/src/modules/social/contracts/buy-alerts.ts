@@ -89,5 +89,5 @@ export type SocialBuyAlert = z.infer<typeof socialBuyAlertSchema>;
 export const socialBuyAlertResponseSchema = z.xor([z.null(), socialBuyAlertSchema]).meta({
   title: "Buy alert response",
   description:
-    "GET /api/social/activity/{activity_id}/alert 200: the card, or null when the row has none (public, cached 10 s either way, so the edge coalesces every follower's read).",
+    "GET /api/social/activity/{activity_id}/alert 200: the card, or null when the row has none (public, cached 10 s either way, so the edge coalesces every follower's read). An id with no row yet is a 404 the edge never caches.",
 });

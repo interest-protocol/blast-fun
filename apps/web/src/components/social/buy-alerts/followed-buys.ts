@@ -10,8 +10,8 @@ import type { FreshnessHint } from "../home/feed-freshness";
  *
  * A kept hint waits a random share of `ALERT_SPREAD_MS` (one buy reaches
  * every follower's tab at once; the card reads then spread), then reads the
- * trade's public card. A `404` (a private account, a hidden sale, a wallet no
- * longer named) shows nothing. The card must name the hint's wallet.
+ * trade's public card. A `null` card (a private account, a hidden sale, a
+ * wallet no longer named) or a `404` (no row yet) shows nothing. The card must name the hint's wallet.
  */
 
 /** A kept hint's card read waits a uniform share of this long. */
@@ -81,7 +81,7 @@ export class FollowedBuys {
   }
 }
 
-/** The public card read: the edge may answer from cache (`s-maxage=10`); `null` when the row has no card. */
+/** The public card read: the edge may answer from cache (`s-maxage=10`); `null` when there is no card. */
 export async function readBuyAlertCard(activityId: string, fetchImpl: typeof fetch = fetch): Promise<SocialBuyAlert | null> {
   const response = await fetchImpl(socialBuyAlertPath(activityId), { headers: { accept: "application/json" } });
   if (!response.ok) return null;

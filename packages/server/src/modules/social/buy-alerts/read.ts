@@ -2,6 +2,7 @@ import { assertChainReadThroughViews } from "@blast/core/modules/database/module
 import type { ReadableDatabase } from "@blast/core/modules/database/transaction.ts";
 import { SOCIAL_FOLLOW_LIMIT } from "@blast/core/modules/social/contracts/follows.ts";
 import type { SocialBuyAlert, SocialFollowingWallets } from "@blast/core/modules/social/contracts/buy-alerts.ts";
+import { SocialRouteError } from "@blast/core/modules/social/route-kit/errors.ts";
 import { coinLabel } from "@blast/core/modules/social/contracts/financial-wire.ts";
 import { toUsd } from "@blast/core/modules/social/items/decimal.ts";
 import { namedWalletsOfSql, namedWalletsSql } from "@blast/core/modules/social/read-model/naming.ts";
@@ -63,13 +64,16 @@ type CoinRow = Readonly<{
 
 /**
  * One trade's buy card, or null when the row is not a named buy of a shown
- * coin (unknown id, a sell or a commit, a hidden sale, a wallet the naming
- * rule does not name, an account without a callsign).
+ * coin (a sell or a commit, a hidden sale, a wallet the naming rule does not
+ * name, an account without a callsign). An id with no row is `not_found`,
+ * never cached: the hint can reach a tab before the replica has the row, and a
+ * shared null would hide that buy from every follower.
  */
 export async function readBuyAlert(db: ReadableDatabase, activityId: string): Promise<SocialBuyAlert | null> {
   const key = activityId.split(":");
   const row = (await db.read<Row>(ROW_SQL, key)).rows[0];
-  if (!row || row.kind !== "trade_buy") return null;
+  if (!row) throw new SocialRouteError("not_found");
+  if (row.kind !== "trade_buy") return null;
   const coinKey = row.presale_id ?? row.coin_type;
   if (coinKey === null) return null;
   const coin = (await db.read<CoinRow>(row.presale_id ? SALE_COIN_SQL : TYPE_COIN_SQL, [coinKey, row.actor, row.timestamp_ms])).rows[0];
