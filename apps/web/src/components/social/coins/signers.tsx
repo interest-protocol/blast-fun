@@ -9,6 +9,9 @@ import { findEmbeddedSuiWallet } from "#web/components/mission-control/privy-emb
 
 import type { WithdrawSigner } from "./withdraw-flow";
 
+/** The key-format code (Privy's Sui signer), loaded at the first signature, not with the page. */
+const loadPrivyKey = () => import("#web/components/mission-control/privy-sui-wallet.ts");
+
 /** What the coins sheet needs from Privy: the embedded Sui wallet, creating it on demand, and signing with it. */
 export type PrivyCoinSigner = Readonly<{
   /** The signed-in user's embedded Sui address, or null without one. */
@@ -46,8 +49,7 @@ export function PrivyCoinSignerBridge({ onChange }: Readonly<{ onChange: (signer
           fee: "sponsored",
           address: wallet.address,
           async signTransaction(bytes) {
-            // The key-format code loads at the first signature, not with the page.
-            const { privySuiSigner } = await import("#web/components/mission-control/privy-sui-wallet.ts");
+            const { privySuiSigner } = await loadPrivyKey();
             const key = privySuiSigner(wallet, (input) => latest.current.signRawHash(input));
             return (await key.signTransaction(bytes)).signature;
           },

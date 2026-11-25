@@ -133,7 +133,7 @@ export function useTradeHost({ balances: shellBalances }: TradeHostOptions = {})
           {
             api,
             client: () => {
-              client.current ??= new SuiGrpcClient({ network: "mainnet", baseUrl: SUI_MAINNET_GRPC_URL });
+              if (client.current === null) client.current = new SuiGrpcClient({ network: "mainnet", baseUrl: SUI_MAINNET_GRPC_URL });
               return client.current;
             },
             wallet: async () => {

@@ -20,6 +20,9 @@ import type {
 } from "@blast/core/modules/vesting/model.ts";
 import { VestingReviewRequiredError } from "./vesting-errors";
 
+/** The send path (the node client, the sponsor), loaded at the first submission, not with the page. */
+const loadVestingSend = () => import("./execute-reviewed");
+
 export function useVestingWallet() {
   const viewer = useSocialViewer();
   const queries = useAppQueryClient();
@@ -74,8 +77,7 @@ export function useVestingWallet() {
     if (busy) throw new Error("A transaction is already awaiting your wallet.");
     setPhase("Checking transaction status…");
     setBusy(true);
-    // The send path (the node client, the sponsor) loads at the first submission, not with the page.
-    return import("./execute-reviewed").then(
+    return loadVestingSend().then(
       ({ executeReviewedVesting }) => executeReviewedVesting(attempt, {
         refresh,
         signTransaction,
