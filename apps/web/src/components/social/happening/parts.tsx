@@ -3,7 +3,7 @@
 import { hoverExcerpt } from "#web/lib/hover-text.ts";
 import clsx from "clsx";
 import { IntentLink as Link } from "#web/components/blast-ui/NavigationLink.tsx";
-import { useCallback, useLayoutEffect, useRef, type MouseEvent, type ReactNode } from "react";
+import { useCallback, type MouseEvent, type ReactNode } from "react";
 
 import { BellIcon } from "#web/components/blast-ui/Icons.tsx";
 import { useShellActions } from "#web/components/blast-ui/shell-actions.tsx";
@@ -13,7 +13,6 @@ import { TweenNum } from "#web/components/blast-ui/use-tween-num.tsx";
 import type { SocialHappeningResponse } from "@blast/core/web/contracts/happening.ts";
 import type { FeedItemPresale } from "@blast/core/web/contracts/items.ts";
 
-import { slideBarFill } from "../blast-mode/live/bar-slide";
 import { useFeedOverlays } from "../feed-ui/shell-bridge";
 import { presaleHref } from "../feed-ui/shell-bridge-model";
 import { Avatar } from "../post/PostMedia";
@@ -146,17 +145,3 @@ export function NotifyBell({ presale }: Readonly<{ presale: Pick<FeedItemPresale
   );
 }
 
-/**
- * A progress fill whose scale is set through the DOM (the page's CSP allows
- * no inline style attribute), growing in on first paint as the design's bars
- * do; later reads slide it to the new scale. `bar` names the sale whose raise
- * it draws (`data-bar`, the gate's own attribute): a held blast's ball lands
- * in it (R3-13, `feelBarFor`).
- */
-export function Fill({ pct, bar }: Readonly<{ pct: number; bar?: string }>) {
-  const ref = useRef<HTMLElement>(null);
-  useLayoutEffect(() => {
-    if (ref.current) slideBarFill(ref.current, pct);
-  }, [pct]);
-  return <i data-bar={bar} data-grow="" ref={ref} />;
-}

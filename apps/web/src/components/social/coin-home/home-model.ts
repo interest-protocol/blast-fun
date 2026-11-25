@@ -382,36 +382,6 @@ export function raiseFigures(coin: Pick<HomeCoin, "quote" | "sale">): Readonly<{
   };
 }
 
-/**
- * A sale's raise in full, in the coin it raises (the owner's rule: "show the
- * coin they are raising"): `312,400 USDC`, `91,280.5 SUI`. The raised figure
- * floors, so a raise never reads as its target before it gets there; null
- * when a figure is unreadable.
- */
-export function raiseAmounts(coin: Pick<HomeCoin, "quote" | "sale">): Readonly<{ raised: string | null; target: string | null }> {
-  if (coin.sale === null) return { raised: null, target: null };
-  const amount = (atoms: string, mode: "half-up" | "floor") => {
-    const value = exactAtoms(atoms, coin.quote.decimals);
-    return value === null ? null : `${groupedExact(value, 2, mode)} ${coin.quote.symbol}`;
-  };
-  return { raised: amount(coin.sale.raised, "floor"), target: amount(coin.sale.raise_target, "half-up") };
-}
-
-/** The lifecycle as the shared status chip tones it. */
-export function lifecycleTone(lifecycle: string): "trading" | "open" | "funded" | "pending" | "cancelled" {
-  switch (lifecycle) {
-    case "migrated":
-      return "trading";
-    case "open":
-    case "funded":
-    case "pending":
-    case "cancelled":
-      return lifecycle;
-    default:
-      return "pending";
-  }
-}
-
 /** The market facts, each with an explicit period and an honest absence (nothing, never 0). */
 export type MarketFacts = Readonly<{
   price: string | null;
