@@ -5,7 +5,7 @@ import { useCreateWallet, useSignRawHash } from "@privy-io/react-auth/extended-c
 
 import { useEffect, useRef } from "react";
 
-import { findEmbeddedSuiWallet, privySuiSigner } from "#web/components/mission-control/privy-sui-wallet.ts";
+import { findEmbeddedSuiWallet } from "#web/components/mission-control/privy-embedded-wallet.ts";
 
 import type { WithdrawSigner } from "./withdraw-flow";
 
@@ -42,11 +42,13 @@ export function PrivyCoinSignerBridge({ onChange }: Readonly<{ onChange: (signer
       signer() {
         const wallet = embedded();
         if (!wallet) return null;
-        const key = privySuiSigner(wallet, (input) => latest.current.signRawHash(input));
         return {
           fee: "sponsored",
           address: wallet.address,
           async signTransaction(bytes) {
+            // The key-format code loads at the first signature, not with the page.
+            const { privySuiSigner } = await import("#web/components/mission-control/privy-sui-wallet.ts");
+            const key = privySuiSigner(wallet, (input) => latest.current.signRawHash(input));
             return (await key.signTransaction(bytes)).signature;
           },
         };

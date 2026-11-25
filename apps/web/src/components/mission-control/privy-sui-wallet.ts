@@ -8,53 +8,15 @@ import {
 } from "@mysten/sui/utils";
 import { publicKeyFromRawBytes, publicKeyFromSuiBytes } from "@mysten/sui/verify";
 
-type LinkedAccountLike = Readonly<{
-  address?: string;
-  chainType?: string;
-  connectorType?: string;
-  id?: string | null;
-  imported?: boolean;
-  publicKey?: string;
-  recoveryMethod?: string;
-  type?: string;
-  walletClientType?: string;
-}>;
+import type { EmbeddedSuiWallet } from "./privy-embedded-wallet.ts";
 
-type UserWithLinkedAccounts = Readonly<{
-  linkedAccounts?: readonly LinkedAccountLike[];
-}>;
-
-export type EmbeddedSuiWallet = Readonly<{
-  address: string;
-  publicKey: string | null;
-}>;
+export { findEmbeddedSuiWallet, type EmbeddedSuiWallet } from "./privy-embedded-wallet.ts";
 
 export type SignRawHash = (input: Readonly<{
   address: string;
   chainType: "sui";
   hash: `0x${string}`;
 }>) => Promise<Readonly<{ signature: `0x${string}` }>>;
-
-export function findEmbeddedSuiWallet(
-  user: UserWithLinkedAccounts | null,
-): EmbeddedSuiWallet | null {
-  const wallet = user?.linkedAccounts?.find(
-    (account) =>
-      account.type === "wallet" &&
-      account.chainType === "sui" &&
-      account.connectorType === "embedded" &&
-      account.walletClientType === "privy" &&
-      account.imported === false &&
-      typeof account.id === "string" &&
-      account.recoveryMethod === "privy-v2",
-  );
-  if (!wallet?.address) return null;
-
-  return {
-    address: normalizeSuiAddress(wallet.address),
-    publicKey: wallet.publicKey ?? null,
-  };
-}
 
 // Privy sends Sui's flag-prefixed key as 66 hex characters with no 0x. Raw
 // keys are 64. Both are also valid base64, so hex must be tried first.

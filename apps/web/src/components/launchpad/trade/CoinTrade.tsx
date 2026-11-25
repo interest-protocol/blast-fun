@@ -6,6 +6,7 @@ import {
   defineBlastDeployment,
   deploymentFingerprint,
 } from "@interest-protocol/blast-sdk/deployments";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import {
   createContext,
@@ -24,7 +25,7 @@ import { EmptyState } from "#web/components/blast-ui/EmptyState.tsx";
 import { Button } from "#web/components/blast-ui/Button.tsx";
 
 import { CoinTradeVisibility } from "#web/components/social/coins/coin-trade-visibility.ts";
-import { CoinsHost } from "#web/components/social/coins/CoinsHost.tsx";
+import { SwapLoading } from "#web/components/social/coins/SwapLoading.tsx";
 import { coinIdentity, sectionData } from "../coin/coin-view";
 import { CoinTradeSignerProvider } from "./CoinTradeSignerProvider";
 import type { LaunchpadChain } from "../transaction/preflight";
@@ -401,6 +402,11 @@ function GraduatedSession({ page, active, children }: Readonly<{
   return <ExecutionOutlet rail={rail} recovery={false}>{children}</ExecutionOutlet>;
 }
 
+
+/** The graduated coin's swap panel, on its own chunk (the wallet kit and signers load with it, not with the page). */
+const CoinsHost = dynamic(() => import("#web/components/social/coins/CoinsHost.tsx").then((module) => module.CoinsHost), {
+  loading: () => <SwapLoading />,
+});
 
 export function GraduatedCoinTrade({ active = true, coinType, name, symbol, decimals, iconUrl }: Readonly<{
   active?: boolean; coinType: string; name: string; symbol: string; decimals: number; iconUrl: string | null;

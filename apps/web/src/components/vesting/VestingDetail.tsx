@@ -6,7 +6,7 @@ import { vestingEligibilitySchema } from "@blast/core/modules/vesting/responses.
 
 import { VestingCapabilityUnavailable, retryVestingRead } from "./read-availability";
 
-import { VestingSubmissionPendingError, VestingReviewRequiredError } from "./execute-reviewed";
+import { VestingSubmissionPendingError, VestingReviewRequiredError } from "./vesting-errors";
 import { useLayoutEffect, useRef, type ReactNode } from "react";
 import { Button } from "#web/components/blast-ui/Button.tsx";
 import { Disclosure } from "#web/components/blast-ui/Disclosure.tsx";

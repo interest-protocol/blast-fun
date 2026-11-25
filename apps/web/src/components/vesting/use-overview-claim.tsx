@@ -20,7 +20,7 @@ import { vestingFeedbackId } from "#web/components/social/portfolio/portfolio-mo
 import { TokenAmount, Identifier } from "./DetailValues";
 import { overviewSchedule } from "./overview-model";
 import { useVestingWallet } from "./use-vesting-wallet";
-import { VestingReviewRequiredError } from "./execute-reviewed";
+import { VestingReviewRequiredError } from "./vesting-errors";
 import { isSignatureRefusal } from "#web/lib/sui-signing.ts";
 import styles from "./VestingOverview.module.css";
 
