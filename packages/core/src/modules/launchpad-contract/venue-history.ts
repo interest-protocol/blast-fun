@@ -27,10 +27,9 @@ import { MIGRATOR_POOL_KEY, POOL_KEY, type Venue } from "./venues.ts";
  *   `Migrated` cursor and checkpoint time, the curve's pool key and the venue
  *   pool the migration recorded. A curve candle starts no later than the
  *   migration and holds only trades before it; a venue candle ends after it
- *   and holds only swaps after it. A venue page naming another pool is
- *   refused. A pool no curve fed (a Blast V1 pool, a graduated presale's pool)
- *   has its own native swap history and carries no V2 migration marker;
- *   `readMigratedChart` refuses a curve's venue page that lacks the curve's.
+ *   and holds only swaps after it. A venue page without the migration, or
+ *   naming another pool, is refused. The four Blast V1 pools have their own
+ *   native swap history and carry no V2 migration marker.
  * - Venue activity is the venue pool's own completed swaps, newest first.
  *   Only the trade's immutable whale flag is retained.
  *
@@ -313,8 +312,8 @@ export function parsePoolCandlePage(poolKey: string, interval: CandleInterval, b
   if (standalone && migration !== null) {
     throw new ContractViolation("migration", "a standalone pool has no V2 migration");
   }
-  if (source === "venue" && migration !== null && migration.venuePoolKey !== poolKey) {
-    throw new ContractViolation("migration", "a venue pool's chart names no migration but the one that recorded it");
+  if (source === "venue" && !standalone && migration?.venuePoolKey !== poolKey) {
+    throw new ContractViolation("migration", "a venue pool's chart names the migration that recorded it");
   }
   if (source === "curve" && migration !== null && migration.curvePoolKey !== poolKey) {
     throw new ContractViolation("migration.curve_pool_key", "must be the requested curve");
