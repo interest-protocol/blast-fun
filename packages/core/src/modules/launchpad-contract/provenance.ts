@@ -25,8 +25,10 @@ const WIRE_KEYS = ["network", "deployment_fingerprint", "checkpoint", "timestamp
 
 const fingerprintSchema = z.string().regex(FINGERPRINT);
 /** Optional engine hop stamps on live frames (`provenance.hops`): timing only, never read as data. */
-const hopsSchema = z.record(z.string().regex(/^[a-z0-9_]{1,32}$/), z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER))
-  .refine((hops) => Object.keys(hops).length <= 16);
+/** `null` (whole map or one hop) means "not stamped"; the cap keeps hello provenance inside the 1 KiB hint budget. */
+const hopsSchema = z.record(z.string().regex(/^[a-z0-9_]{1,24}$/), z.number().int().nonnegative().nullable())
+  .refine((hops) => Object.keys(hops).length <= 8);
+const WIRE_OPTIONAL = [...WIRE_KEYS, "hops"];
 
 function network(value: unknown, field: string): string {
   return contractValue(z.string().regex(NETWORK_NAME), value, field, "must be a network name");
@@ -58,8 +60,8 @@ function checkpointFields<T>(
 
 /** blast-infra's `provenance` object, exactly as its `common/provenance` schema allows. */
 export function parseInfraProvenance(value: unknown): Provenance {
-  const wire = contractObject(value, "provenance", WIRE_KEYS, [...WIRE_KEYS, "hops"]);
-  if (wire.hops !== undefined) contractValue(hopsSchema, wire.hops, "provenance.hops", "must map hop names to millisecond counts");
+  const wire = contractObject(value, "provenance", WIRE_KEYS, WIRE_OPTIONAL);
+  if (wire.hops != null) contractValue(hopsSchema, wire.hops, "provenance.hops", "must map hop names to millisecond counts");
   return {
     source: "blast-infra",
     network: network(wire.network, "provenance.network"),
