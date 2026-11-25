@@ -1,0 +1,80 @@
+// Pure helpers for the live market probe: SSE parsing, per-frame lag and percentiles.
+
+/** Splits SSE text into complete events; `rest` is the unfinished tail to prepend next time. */
+export function parseSse(text) {
+  const blocks = text.replace(/\r\n/g, "\n").split("\n\n");
+  const rest = blocks.pop() ?? "";
+  const events = [];
+  for (const block of blocks) {
+    const event = parseSseBlock(block);
+    if (event) events.push(event);
+  }
+  return { events, rest };
+}
+
+/** One SSE event block (also one direct-socket message) → `{ event, data, id }`, or null. */
+export function parseSseBlock(block) {
+  let event = "message";
+  let id = null;
+  const data = [];
+  for (const line of block.split("\n")) {
+    if (!line || line.startsWith(":")) continue;
+    const colon = line.indexOf(":");
+    const field = colon < 0 ? line : line.slice(0, colon);
+    const value = colon < 0 ? "" : line.slice(colon + 1).replace(/^ /, "");
+    if (field === "event") event = value;
+    else if (field === "data") data.push(value);
+    else if (field === "id") id = value;
+  }
+  return data.length ? { event, data: data.join("\n"), id } : null;
+}
+
+/**
+ * Lag of one event received at `receivedMs`: receipt minus the chain time the frame carries.
+ * Market frames carry `timestamp_ms`; price frames carry each price's `as_of_ms` (newest counts).
+ * Hop stamps found in `provenance` (`*_ms` fields) are returned as offsets from the chain time.
+ */
+export function frameLag(event, receivedMs) {
+  let frame;
+  try {
+    frame = JSON.parse(event.data);
+  } catch {
+    return null;
+  }
+  if (!frame || typeof frame !== "object") return null;
+  let chainMs = null;
+  let kind = event.event;
+  if (event.event === "market" && Number.isSafeInteger(frame.timestamp_ms)) {
+    chainMs = frame.timestamp_ms;
+    kind = `market:${frame.type}`;
+  } else if (event.event === "prices" && Array.isArray(frame.prices) && frame.prices.length) {
+    chainMs = Math.max(...frame.prices.map((price) => Number(price.as_of_ms)).filter(Number.isSafeInteger));
+    if (!Number.isFinite(chainMs)) return null;
+  } else return null;
+  const hops = {};
+  const provenance = frame.provenance && typeof frame.provenance === "object" ? frame.provenance : {};
+  for (const [key, value] of Object.entries(provenance)) {
+    if (key.endsWith("_ms") && key !== "timestamp_ms" && key !== "lag_ms" && Number.isSafeInteger(value)) hops[key] = value - chainMs;
+  }
+  return { kind, lag_ms: receivedMs - chainMs, chain_ms: chainMs, received_ms: receivedMs, cursor: frame.cursor ?? null, hops };
+}
+
+/** Nearest-rank percentile of `values` (0 < p ≤ 100); null when empty. */
+export function percentile(values, p) {
+  if (!values.length) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.min(sorted.length - 1, Math.max(0, Math.ceil((p / 100) * sorted.length) - 1))];
+}
+
+/** Count and p50/p95/p99 lag per kind, plus "all". */
+export function summarize(samples) {
+  const groups = new Map([["all", []]]);
+  for (const sample of samples) {
+    groups.get("all").push(sample.lag_ms);
+    if (!groups.has(sample.kind)) groups.set(sample.kind, []);
+    groups.get(sample.kind).push(sample.lag_ms);
+  }
+  return Object.fromEntries([...groups].map(([kind, lags]) => [kind, {
+    n: lags.length, p50: percentile(lags, 50), p95: percentile(lags, 95), p99: percentile(lags, 99),
+  }]));
+}
