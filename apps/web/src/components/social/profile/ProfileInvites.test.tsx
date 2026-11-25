@@ -120,7 +120,8 @@ test("reserved link stays bound to the X identity and exact 60% lifetime earning
   );
   assert.match(container.textContent!, /Referred volume100 SUI/);
   assert.match(container.textContent!, /Blast revenue1 SUI/);
-  assert.match(container.textContent!, /Earnings \(60%\)0.6 SUI/);
+  assert.match(container.textContent!, /Earnings0.6 SUI/);
+  assert.match(container.textContent!, /Current referral rate 60%/);
   assert.match(
     container.textContent!,
     /Manual payments each month/,

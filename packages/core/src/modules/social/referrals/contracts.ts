@@ -10,6 +10,8 @@ export const REFERRAL_INVITEES_PATH = `${REFERRALS_PATH}/invitees`;
 export const REFERRAL_PAGE_SIZE = 50;
 export const REFERRAL_COOKIE = "__Host-blast_referral";
 export const REFERRAL_MAX_AGE = 30 * 24 * 60 * 60;
+export const STANDARD_REFERRAL_SHARE_BPS = 3000;
+export const SPECIAL_REFERRAL_SHARE_BPS = 6000;
 
 const atomicTotal = z.string().regex(/^(0|[1-9][0-9]*)$/);
 export const referralAssetSchema = z.object({
@@ -22,7 +24,7 @@ export const referralAssetSchema = z.object({
 });
 export const referralAccountingSchema = z.object({
   assets: z.array(referralAssetSchema),
-  share_bps: z.literal(6000),
+  share_bps: z.union([z.literal(STANDARD_REFERRAL_SHARE_BPS), z.literal(SPECIAL_REFERRAL_SHARE_BPS)]),
   as_of_ms: z.number().int().nonnegative().nullable(),
   pending_events: socialCountSchema,
 });

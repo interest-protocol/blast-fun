@@ -32,10 +32,10 @@ export function ReferralFixture({
         decimals: 9,
         volume_atoms: "100000000000",
         revenue_atoms: "1000000000",
-        earnings_atoms: "600000000",
+        earnings_atoms: "300000000",
       },
     ],
-    share_bps: 6000 as const,
+    share_bps: 3000 as const,
     as_of_ms: 1790000000000,
     pending_events: 0,
   };
