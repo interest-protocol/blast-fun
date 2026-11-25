@@ -261,6 +261,12 @@ const MARKET_READS = [
     "private, no-store",
   ],
   [
+    `pools/blast_curve/${CURVE.id}/trades`,
+    `pools/blast_curve/${CURVE.id}/trades?limit=50`,
+    "launchpad_market_trades",
+    MARKET_CACHE_CONTROL,
+  ],
+  [
     `pools/cetus/${CETUS.id}/trades?before=1:2:3:0`,
     `pools/cetus/${CETUS.id}/trades?limit=50&before=1%3A2%3A3%3A0`,
     "launchpad_market_trades",
