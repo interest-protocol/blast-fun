@@ -2,7 +2,8 @@
 
 import { WalletTradesProvider } from "#web/components/launchpad/activity/wallet-trades.tsx";
 import { exactDecimal, exactText, multiplyExact } from "@blast/core/web/exact-amount.ts";
-import { SUI_COIN_TYPE } from "@blast/core/lib/sui/coin-types.ts";
+import { SUI_COIN_TYPE, USDC_COIN_TYPE } from "@blast/core/lib/sui/coin-types.ts";
+import { SUI_POOL_QUOTE, type PoolQuote } from "@blast/core/modules/social/portfolio/core-coins.ts";
 import { fdvInQuote } from "@blast/core/modules/social/prices/valuation.ts";
 import { NO_VALUE, shortAddress as shortId } from "@blast/core/web/format.ts";
 import { MEME_TOTAL_SUPPLY_WHOLE_TOKENS } from "@interest-protocol/blast-sdk/launchpad";
@@ -492,19 +493,21 @@ function LegacyMarketDetails({ market, decimals, symbol }: Readonly<{ market?: L
   </div>;
 }
 
-export function LegacyCoinScreen({ coinType, name, symbol, logoUrl, chart, decimals, poolKey, trade, legacy = true, verified = false, verifiedCommunity = false }: Readonly<{
+export function LegacyCoinScreen({ coinType, name, symbol, logoUrl, chart, decimals, poolKey, poolKeys = [poolKey], quote = SUI_POOL_QUOTE, trade, legacy = true, major = false, verified = false, verifiedCommunity = false }: Readonly<{
   coinType: string; name: string; symbol: string; logoUrl: string; chart: ReactNode; decimals: number;
-  poolKey: VenuePoolKey; trade: ReactNode; legacy?: boolean; verified?: boolean; verifiedCommunity?: boolean;
+  poolKey: VenuePoolKey; poolKeys?: readonly VenuePoolKey[]; quote?: PoolQuote; trade: ReactNode; legacy?: boolean; major?: boolean; verified?: boolean; verifiedCommunity?: boolean;
 }>) {
   const origin = useListOrigin(coinType);
+  const quoteKey = quote.coinType === SUI_COIN_TYPE ? "sui" : quote.coinType === USDC_COIN_TYPE ? "usdc" : quote.coinType;
   const units = {
     coinType, symbol, iconUrl: logoUrl, memeDecimals: decimals,
-    quoteType: SUI_COIN_TYPE, quoteSymbol: "SUI", quoteDecimals: 9,
-    quoteMark: <QuoteMark coinType={SUI_COIN_TYPE} coinKey="sui" symbol="SUI" />,
+    quoteType: quote.coinType, quoteSymbol: quote.symbol, quoteDecimals: quote.decimals,
+    quoteMark: <QuoteMark coinType={quote.coinType} coinKey={quoteKey} symbol={quote.symbol} />,
   };
   const price = useChartPrice(poolKey);
   const { data, isRefetchError } = useQuery({
     ...legacyCoinMarketQuery(),
+    enabled: !major,
     refetchInterval: (query) => pollInterval(60_000, query),
   }, useAppQueryClient());
   const market = data?.legacyMarket?.[coinType];
@@ -512,16 +515,16 @@ export function LegacyCoinScreen({ coinType, name, symbol, logoUrl, chart, decim
   const mark = <>{verified || verifiedCommunity ? <CoinVerifiedMark community={verifiedCommunity} /> : null}{legacy ? <CoinLegacyMark /> : null}</>;
   return <div className={styles.page} data-legacy-coin="">
     <CoinBackLink origin={origin} tradeJump={trade != null} />
-    <CoinIdentityHeader coin={{ key: coinType, coinType, iconUrl: logoUrl, round: false }} name={name} symbol={symbol} status="Graduated" graduated mark={mark} />
+    <CoinIdentityHeader coin={{ key: coinType, coinType, iconUrl: logoUrl, round: major }} name={name} symbol={symbol} status={major ? "" : "Graduated"} graduated={!major} mark={mark} />
     <div className={styles.layout} data-no-trade={trade == null || undefined}>
-      <CoinPriceCurrencyProvider quoteType={SUI_COIN_TYPE} quoteSymbol="SUI">
+      <CoinPriceCurrencyProvider quoteType={quote.coinType} quoteSymbol={quote.symbol}>
         <div className={styles.market}>
-          <MarketPrice units={units} price={price?.price} tradeId={price?.cursor} />
+          <MarketPrice units={units} price={price?.price} tradeId={price?.cursor} showCurrency={!major} />
           <ChartCard><SectionBoundary subject="chart">{chart}</SectionBoundary></ChartCard>
-          <MarketOverview fdv={isRefetchError ? undefined : fdvUsd} venue={poolKey.split(":")[0]} />
+          <MarketOverview fdv={isRefetchError ? undefined : fdvUsd} venue={major ? null : poolKey.split(":")[0]} />
           <Card title="Trades">
-            <SectionBoundary subject="trades" key={poolKey}>
-              <IndexedPoolTrades poolKey={poolKey} units={units} />
+            <SectionBoundary subject="trades" key={poolKeys.join()}>
+              <IndexedPoolTrades poolKeys={poolKeys} units={units} />
             </SectionBoundary>
           </Card>
         </div>

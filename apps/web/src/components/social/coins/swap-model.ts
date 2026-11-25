@@ -8,6 +8,7 @@ import { amtExact, divideExact, exactDecimal, fixedExact, groupDigits, pxNumExac
 import { atomsValue, HIDDEN_AMOUNT, NO_VALUE } from "@blast/core/web/format.ts";
 import { bpsPercent } from "@blast/core/lib/bps.ts";
 import type { SocialTransferFee } from "@blast/core/web/contracts/coins.ts";
+import { SUI_COIN_TYPE } from "@blast/core/lib/sui/coin-types.ts";
 import { TEST_SUI_COIN_TYPES } from "@blast/core/web/contracts/create.ts";
 import { normalizeTradeCoinQuery, SOCIAL_TRADE_DEFAULT_SLIPPAGE_BPS, type SocialTradeCoin, type SocialTradeQuote, type SocialTradeQuoteRequest } from "@blast/core/web/contracts/trades.ts";
 
@@ -528,7 +529,8 @@ export function decodeTradeAction(text: string | undefined): TradeAction | null 
 
 /** The pair a sale page's Buy or Sell opens: Buy spends USDC on the coin, Sell turns the coin into USDC (the gate's `openSaleTrade`). */
 export function salePair(action: TradeAction): SwapPair {
-  const key = action.coin.presale_id ?? action.coin.coin_type;
+  // SUI's wallet key is "sui", like its balance row, so the SUI page swaps against USDC.
+  const key = action.coin.presale_id ?? (action.coin.coin_type === SUI_COIN_TYPE ? "sui" : action.coin.coin_type);
   return action.side === "sell" ? { in: key, out: "usdc" } : { in: "usdc", out: key };
 }
 

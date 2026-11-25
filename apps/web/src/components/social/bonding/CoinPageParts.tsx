@@ -49,7 +49,7 @@ export function CoinIdentityHeader({ coin, name, symbol, status, graduated, mark
           </small>
         </span>}
         sub={<span className={styles.byline}>
-          <span className="status" data-tone={graduated ? "live" : "upcoming"}>{status}</span>
+          {status ? <span className="status" data-tone={graduated ? "live" : "upcoming"}>{status}</span> : null}
           {children}
           <CoinTypeTag coinType={coin.coinType} />
         </span>}

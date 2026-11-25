@@ -105,13 +105,13 @@ async function renderGenericCoin(coin: Readonly<{ coinType: string; name: string
     );
   }
 
-  const { coinType, name, symbol, decimals, logoUrl, poolKey } = poolCoin;
+  const { coinType, name, symbol, decimals, logoUrl, poolKey, poolKeys, quote, major } = poolCoin;
   const [{ trading }, search] = await Promise.all([requestLaunchFlags(), searchParams]);
   const controls = parseChartControls(search ?? {}, { ...DEFAULT_CHART_CONTROLS, range: "24h" });
   return (
     <LegacyCoinScreen
-      coinType={coinType} name={name} symbol={symbol} logoUrl={logoUrl} decimals={decimals} poolKey={poolKey}
-      chart={<LegacyCoinChart poolKey={poolKey} symbol={symbol} decimals={decimals} initialControls={controls} />}
+      coinType={coinType} name={name} symbol={symbol} logoUrl={logoUrl} decimals={decimals} poolKey={poolKey} poolKeys={poolKeys} quote={quote} major={major}
+      chart={<LegacyCoinChart poolKey={poolKey} symbol={symbol} decimals={decimals} quote={quote} initialControls={controls} />}
       trade={trading ? <GraduatedCoinTrade coinType={coinType} name={name} symbol={symbol} decimals={decimals} iconUrl={logoUrl} /> : null}
       legacy={poolCoin.category === "Legacy"}
       verified={poolCoin.category === "Legacy" && poolCoin.verifiedTeam}
