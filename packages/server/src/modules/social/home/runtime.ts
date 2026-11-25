@@ -55,8 +55,8 @@ function homeReadCaches() {
     activity: createReadCache<HomeActivityStreamPage>(HOME_PAGE_READ_TTL_MS, 64),
     thread: createReadCache<HomeThreadPage>(HOME_PAGE_READ_TTL_MS, 64),
     discover: createReadCache<HomeCoinsPage>(HOME_PAGE_READ_TTL_MS, 64),
-    // Each holds a whole window's rows: two windows times the few flag sets clients send.
-    discoverBase: createReadCache<HomeDiscoverBase>(HOME_PAGE_READ_TTL_MS, 6),
+    // Each holds a whole window's rows: two windows times the few flag sets clients send, and a small Almost graduated set beside each.
+    discoverBase: createReadCache<HomeDiscoverBase>(HOME_PAGE_READ_TTL_MS, 12),
     coins: createReadCache<HomeCoinsByIds>(HOME_PAGE_READ_TTL_MS, 64),
     portfolios: createReadCache<ReadonlyMap<string, TraderPortfolioRead>>(HOME_PAGE_READ_TTL_MS, 64),
     market: createReadCache<HomeCoinMarket>(HOME_PAGE_READ_TTL_MS, 256),

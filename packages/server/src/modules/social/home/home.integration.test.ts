@@ -564,18 +564,14 @@ test("Home volume and Trending share a committed, full-window Cetus and Bluefin 
     await admin.query("DROP VIEW chain_read_v1.dex_swap_volume_tracked_coverage");
     assert.deepEqual(await manifestVolume(), nativeVolume);
 
-    // A curve still filling trades on its curve, not a DEX: its curve trades stay its volume, with no DEX figure.
+    // A curve still filling trades on its curve, not a DEX: no DEX figure. Discover leaves it out (it lists only on Almost graduated); a saved read finds it.
     const filling = coinOf(hex("cf1"), "FILLING");
     await admin.query("INSERT INTO blast_infra_fixture.coin_metadata (coin_type,name,symbol,decimals) VALUES ($1,'FILLING','FILLING',9)", [filling]);
     await admin.query(`INSERT INTO pools (pool_key,venue,coin_type,quote_type,lifecycle,created_checkpoint,created_at_ms,quote_reserve,params)
       VALUES ($1,'blast_curve',$2,$3,'live',41000,$4,'5000000000',$5)`, [`blast_curve:${hex("cf10")}`, filling, SUI, now - DAY, { graduation_target: "8000000000000" }]);
     await seedChainRead(admin, { activity: [activity("trade_buy", W.anon, null, now - 2 * MINUTE, { checkpoint: 49999, coin_type: filling, coin_amount: "1000000000", quote_amount: "5000000000", usd_value: "5" })] });
     const listed = await ok<HomeCoinsPage>(await discover("?sort=trending&dex_volume=1&limit=50"), "home-coins-page");
-    const curve = listed.coins.find((coin) => coin.symbol === "FILLING");
-    assert.ok(curve, "the filling curve is listed");
-    assert.equal(curve.dex_volume, undefined);
-    // Its 5 USD of curve trades ranks it above BCAT's 0.77, so its volume was not overwritten with a DEX 0.
-    assert.ok(listed.coins.indexOf(curve) < listed.coins.findIndex((coin) => coin.symbol === "BCAT"));
+    assert.equal(listed.coins.some((coin) => coin.symbol === "FILLING"), false, "the default read stays off the live curves");
     const byId = await ok<HomeCoinsByIds>(await coins(`?presale=${encodeURIComponent(filling)}&dex_volume=1`), "home-coins-page");
     assert.deepEqual(byId.coins.map((coin) => [coin.symbol, coin.dex_volume]), [["FILLING", undefined]]);
   }));
@@ -1195,26 +1191,38 @@ test("Standalone Cetus and Bluefin coins use Discover, without a presale or dupl
     assert.deepEqual([coin.activity.events,coin.activity.buyers], [1,1]);
     assert.equal(coin.rank.why, "1 participant · 1 trade in the last 24h in its pool");
     assert.equal(page.coins.filter((coin) => coin.symbol === "AFTR").length, 1);
-    // Bonding curves still filling have no vault yet; Discover lists them from their curve pool.
-    const curveCoin = async (id: string, symbol: string, reserve: string, target: string | null) => {
+    // Bonding curves still filling have no vault yet; Almost graduated lists them from their curve pool.
+    const curveCoin = async (id: string, symbol: string, reserve: string, target: string | null, lifecycle = "live") => {
       const coinType = coinOf(hex(id), symbol);
       await admin.query("INSERT INTO blast_infra_fixture.coin_metadata (coin_type,name,symbol,decimals) VALUES ($1,$2,$2,9)", [coinType, symbol]);
       await admin.query(`INSERT INTO pools (pool_key,venue,coin_type,quote_type,lifecycle,created_checkpoint,created_at_ms,quote_reserve,params)
-        VALUES ($1,'blast_curve',$2,$3,'live',41000,$4,$5,$6)`, [`blast_curve:${hex(`${id}0`)}`, coinType, QUOTE, now - DAY, reserve, target === null ? null : { graduation_target: target }]);
+        VALUES ($1,'blast_curve',$2,$3,$7,41000,$4,$5,$6)`, [`blast_curve:${hex(`${id}0`)}`, coinType, QUOTE, now - DAY, reserve, target === null ? null : { graduation_target: target }, lifecycle]);
       return coinType;
     };
     // 5,600 of 8,000 USDC: 70%. 900 of 999 USDC is further along, but its target is dust. One target is unknown.
-    await curveCoin("c70", "SEVENTY", "5600000000", "8000000000");
+    const seventy = await curveCoin("c70", "SEVENTY", "5600000000", "8000000000");
+    // Ready to migrate counts whatever its reserve reads.
+    await curveCoin("c99", "READY", "100000000", "8000000000", "migration_ready");
+    // Almost graduated reads its curves' own trades.
+    await seedChainRead(admin, { activity: [activity("trade_buy", W.anon, null, now - 2 * MINUTE, { checkpoint: 49998, coin_type: seventy, coin_amount: "1000000000", quote_amount: "5000000", usd_value: "5" })] });
+    // A presale's token keeps its presale: a curve on it never makes it an Almost graduated curve.
+    const presaleToken = page.coins.find((coin) => coin.presale_id !== null)!.coin_type;
+    await admin.query("INSERT INTO blast_infra_fixture.coin_metadata (coin_type,name,symbol,decimals) VALUES ($1,'SALE','SALE',9) ON CONFLICT DO NOTHING", [presaleToken]);
+    await admin.query(`INSERT INTO pools (pool_key,venue,coin_type,quote_type,lifecycle,created_checkpoint,created_at_ms,quote_reserve,params)
+      VALUES ($1,'blast_curve',$2,$3,'live',41000,$4,'7000000000',$5)`, [`blast_curve:${hex("c5a0")}`, presaleToken, QUOTE, now - DAY, { graduation_target: "8000000000" }]);
     await curveCoin("c90", "DUSTY", "900000000", "999000000");
     await curveCoin("c0", "NOTARGET", "1", null);
     // NATIVE's Cetus pool opened two days ago: when it graduated.
     await admin.query(`INSERT INTO pools (pool_key,venue,coin_type,quote_type,lifecycle,created_checkpoint,created_at_ms)
       VALUES ($1,'cetus',$2,$3,'live',40000,$4)`, [`cetus:${hex("ca1")}`, native, QUOTE, now - 2 * DAY]);
     const almost = await ok<HomeCoinsPage>(await discover("?stage=almost&sort=progress&curve=1&limit=50"), "home-coins-page");
-    assert.deepEqual(almost.coins.map((coin) => [coin.symbol, coin.curve, coin.tradable, coin.graduated_ms]), [["SEVENTY", { lifecycle: "live", progress_bps: 7_000, quote_remaining: "2400000000" }, false, null]]);
+    assert.deepEqual(almost.coins.map((coin) => coin.symbol), ["READY", "SEVENTY"], "no presale token, dust target or unknown target");
+    const seventyCoin = almost.coins[1];
+    assert.deepEqual([seventyCoin?.curve, seventyCoin?.tradable, seventyCoin?.graduated_ms, seventyCoin?.activity.events], [{ lifecycle: "live", progress_bps: 7_000, quote_remaining: "2400000000" }, false, null, 1]);
+    assert.equal(almost.coins[0]?.curve?.lifecycle, "migration_ready");
+    // Every other stage leaves curves still filling out: about a thousand of them made the default read time out (#71).
     const all = await ok<HomeCoinsPage>(await discover("?sort=progress&limit=50"), "home-coins-page");
-    assert.equal(all.coins[0]?.symbol, "SEVENTY", "the only curve with a known progress leads");
-    assert.ok(all.coins.some((coin) => coin.symbol === "NOTARGET"), "a curve with an unknown target is listed, not dropped");
+    assert.equal(all.coins.some((coin) => ["SEVENTY", "READY", "NOTARGET"].includes(coin.symbol)), false, "no curve still filling outside Almost graduated");
     assert.ok(all.coins.every((coin) => !("curve" in coin)), "the curve fields are opt-in");
     const graduated = await ok<HomeCoinsPage>(await discover("?stage=graduated&sort=market_cap&curve=1&limit=50"), "home-coins-page");
     assert.ok(graduated.coins.every((coin) => coin.lifecycle === "migrated" && coin.curve?.lifecycle !== "live"), "no sale and no curve still filling");

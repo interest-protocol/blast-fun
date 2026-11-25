@@ -108,7 +108,7 @@ export function createSocialHomeRoutes(dependencies: SocialHomeRouteDependencies
       const baseCache = dependencies.caches?.discoverBase;
       const load = () => {
         const db = database();
-        const base = baseCache && (() => baseCache.read(homeDiscoverBaseKey(query.window, ctxRead), () => readHomeDiscoverBase(db, query.window, ctxRead)));
+        const base = baseCache && (() => baseCache.read(homeDiscoverBaseKey(query.window, query.stage, ctxRead), () => readHomeDiscoverBase(db, query.window, query.stage, ctxRead)));
         return readHomeDiscover(db, query, ctxRead, base);
       };
       return cachedResponse(ctx, dependencies.caches?.discover, JSON.stringify([query, ctxRead.hiddenKinds, ctxRead.includeMobileMarket, ctxRead.includeLiveInputs, ctxRead.includeRollingChange, ctxRead.includeDexVolume, ctxRead.includeCurve, ctxRead.includeRecentBuys, ctxRead.includeRecentBuyUsd]), load);

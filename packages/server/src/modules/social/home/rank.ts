@@ -29,8 +29,9 @@ import { decodeCursor, encodeCursor, invalidCursor } from "@blast/server/modules
  * cohort.
  *
  * **Candidate universe.** Shown migrated presales, standalone launch vault
- * coins, live bonding curves, and the tracked pool catalog
- * (`HOME_LIST_COIN_SOURCES`), less the
+ * coins and the tracked pool catalog (`HOME_DISCOVER_COIN_SOURCES`); on
+ * `stage=almost`, only the live bonding curves at 60% or more and those
+ * ready to migrate (`HOME_ALMOST_CURVE_SOURCES`). Both less the
  * Blast dust (`HOME_DUST_USD`): a Blast coin whose raise (a presale's, or a
  * curve's graduation target) or market cap is under $1,000. Catalog coins
  * are never dust.
@@ -83,8 +84,9 @@ import { decodeCursor, encodeCursor, invalidCursor } from "@blast/server/modules
  * breaks ties by coin type.
  *
  * **Stages.** `almost` keeps curves still filling at 60% or more
- * (`HOME_ALMOST_GRADUATED_BPS`); `graduated` keeps coins that trade on a
- * DEX (no sale and no curve still filling); `all` keeps everything.
+ * (`HOME_ALMOST_GRADUATED_BPS`) and curves ready to migrate; `graduated`
+ * keeps coins that trade on a DEX (no sale and no curve still filling); `all`
+ * keeps every candidate, which has no curve still filling.
  *
  * **Why shown vs why ranked.** Every coin carries `rank.why`: the inputs in
  * words ("4 participants · 8 trades in the last 24h"; a standalone vault coin
