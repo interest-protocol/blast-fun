@@ -11,7 +11,7 @@ import { quotePriceType } from "@blast/core/web/contracts/create.ts";
 import { compareExact, divideExact, exactDecimal, exactText, multiplyExact } from "@blast/core/web/exact-amount.ts";
 import { fieldNumber } from "@blast/core/web/format.ts";
 
-import { coinTextIssues } from "../coin-text-policy.ts";
+import { coinTextIssues } from "@blast/core/modules/social/create/coin-text-policy.ts";
 
 /**
  * `/launch`'s state: the account's draft as typed (saved after a pause), the

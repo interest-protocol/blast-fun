@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, type RefObject } from "react";
 import { useToast } from "#web/components/blast-ui/Toasts.tsx";
 import { useAppQueryClient } from "#web/lib/query/provider.tsx";
 import { invalidateAfter } from "#web/lib/query/invalidate.ts";
-import { coinTextIssues } from "../coin-text-policy.ts";
+import { coinTextIssues } from "@blast/core/modules/social/create/coin-text-policy.ts";
 import { usePublishConfirmationToast, type PublishConfirmation } from "../use-publish-confirmation-toast";
 import type { PrivyCoinSigner } from "../coins/signers.tsx";
 import type { CreateApiOptions } from "./create-client.ts";

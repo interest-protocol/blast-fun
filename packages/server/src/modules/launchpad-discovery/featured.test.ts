@@ -34,3 +34,27 @@ test("Home and Bonding tabs within the window share one composed carousel; a fai
   assert.equal((await failed()).status, 503);
   assert.equal(reads, 2, "the next asker reads again");
 });
+
+test("with no pins, the highlight skips a coin about the founder and shows the next closest curve", async () => {
+  const engine = discoveryFixtureEngine({ state: () => "serving" });
+  const highlight = async (market: typeof engine) => {
+    const body = await (await handleDiscoveryRequest(featured(), market, async () => [])).json();
+    return body.section.data.rows as { launchId: string }[];
+  };
+  const [closest] = await highlight(engine);
+  assert.ok(closest);
+
+  const renamed: typeof engine = {
+    ...engine,
+    fetch: async (input) => {
+      const response = await engine.fetch(input);
+      if (new URL(String(input)).pathname !== "/v1/bonding") return response;
+      const body = await response.json();
+      body.pools[0].metadata = { ...body.pools[0].metadata, name: "The Aden1yi" };
+      return Response.json(body);
+    },
+  };
+  const rows = await highlight(renamed);
+  assert.equal(rows.length, 1);
+  assert.notEqual(rows[0]!.launchId, closest.launchId);
+});
