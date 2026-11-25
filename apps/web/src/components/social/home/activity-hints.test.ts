@@ -296,6 +296,7 @@ test("R3-26-AC-4: a dropped socket reconnects with growing jittered waits, looks
   assert.deepEqual(waits, [999, 1_998, 3_996, 7_992, 15_984, 29_970, 29_970]);
   // Every (re)connect is a look: the topic has no resume.
   assert.equal(tape.looks.filter((look) => look.hint?.cause === "connect").length, 8);
+  assert.deepEqual(tape.looks.filter((look) => look.hint?.cause === "connect").map((look) => look.hint?.reconnect === true), [false, true, true, true, true, true, true, true], "only the first connect is not a reconnect");
   assert.deepEqual(w.events("connect").length, 1);
   assert.deepEqual(w.events("reconnect").map((line) => line.failures), [1, 2, 3, 4, 5, 6, 7]);
   // A socket live for STABLE_MS was healthy: the next drop waits under a second again.

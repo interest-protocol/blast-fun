@@ -36,8 +36,8 @@ async function mount(ageMs: number) {
   document.body.append(container);
   const root = createRoot(container);
   await act(async () => root.render(withQueryClient(client, <Live />)));
-  const connect = async () => {
-    signal({ atMs: Date.now(), cause: "connect" });
+  const connect = async (reconnect = false) => {
+    signal({ atMs: Date.now(), cause: "connect", ...(reconnect ? { reconnect: true as const } : {}) });
     await settleQueries(client);
     return reads;
   };
@@ -49,7 +49,7 @@ test("the hint stream's first connect does not repeat a fresh page read; a recon
   const fresh = await mount(1_000);
   try {
     assert.equal(await fresh.connect(), 0, "the server's read is younger than the poll: no second read on load");
-    assert.equal(await fresh.connect(), 1, "a reconnect may have missed hints, so it reads");
+    assert.equal(await fresh.connect(true), 1, "a reconnect may have missed hints, so it reads, even on a page that joined a live stream");
   } finally { await fresh.done(); }
 
   const old = await mount(31_000);

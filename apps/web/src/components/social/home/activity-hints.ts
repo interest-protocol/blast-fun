@@ -112,7 +112,7 @@ function hintKey(frame: Readonly<Record<string, unknown>>): string | null {
 }
 
 /** What of a hint selects reads. */
-type Selected = Pick<FreshnessHint, "presaleId" | "lifecycle" | "coinType" | "catchUp" | "trade">;
+type Selected = Pick<FreshnessHint, "presaleId" | "lifecycle" | "coinType" | "catchUp" | "reconnect" | "trade">;
 
 function selectedBy(hint: Hint | null): Selected {
   switch (hint?.type) {
@@ -300,12 +300,13 @@ export class ActivityHints {
   #live(): void {
     this.#phase = "live";
     this.#liveSince = this.#deps.now();
-    this.#metric(this.#connected ? { event: "reconnect", failures: this.#failures } : { event: "connect" });
+    const reconnect = this.#connected;
+    this.#metric(reconnect ? { event: "reconnect", failures: this.#failures } : { event: "connect" });
     this.#connected = true;
     this.#connectionChanged();
     const catchUp = this.#catchUp;
     this.#catchUp = false;
-    this.#look("connect", catchUp ? { catchUp: true } : {});
+    this.#look("connect", { ...(catchUp ? { catchUp: true } : {}), ...(reconnect ? { reconnect: true } : {}) });
   }
 
   #hint(frame: Readonly<Record<string, unknown>>): void {

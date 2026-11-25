@@ -36,6 +36,8 @@ export type FreshnessHint = Readonly<{
   coinType?: string;
   trade?: Readonly<{ presaleId?: string; coinType?: string; checkpoint: number; cursor: string; kind?: "trade_buy" | "trade_sell"; actor?: string }>;
   catchUp?: true;
+  /** A `connect` after an earlier live socket in this tab: hints may have been missed. */
+  reconnect?: true;
 }>;
 
 /** "Look now"; a live source passes why, the poll passes nothing. */
