@@ -1,7 +1,9 @@
 # Account referrals and revenue tracking
 
 `/invites` and the owner's profile show the invited people, their referred
-volume, Blast revenue and cumulative 60% earnings, separated by native coin.
+volume, Blast revenue and lifetime earnings by native coin, plus the current
+referral rate. The standard share is 30% after activation. Approved special
+referrers keep 60%.
 Both private APIs derive the owner from the authenticated session; per-person
 aggregates are visible only to that owner. No payout, paid/unpaid balance,
 wallet collection or transfer execution is implemented. Operators pay monthly
@@ -65,18 +67,28 @@ activity predating either signup attribution or wallet verification is excluded.
   pending instead of inheriting another claim's split. Missing launch metadata
   also stays pending. Complete attribution of those ambiguous cases requires an
   upstream transaction-order (`tx_slot`) surface; no split is guessed.
-- **60% earnings:** integer atoms throughout. Presale commitments are aggregated
-  per invitee/sale before allocation; proportional divisions floor to coin atoms.
-  Earnings floor once per invitee/coin from allocated revenue × 6000 / 10000.
-  Owner totals sum those same per-invitee amounts. Allocation dust is never
-  overpaid. The existing submission-time USD swap statistic remains in the API
-  for compatibility and is never used to calculate earnings.
+- **Earnings:** unpartnered curve revenue takes the rate at the trade, partnered
+  curve revenue at the treasury claim, and presale revenue at fee payment.
+  Revenue recognized before the change keeps its 60% share. Integer atoms are
+  allocated per invitee and asset. Earnings floor once after summing the weighted
+  revenue, and owner totals sum those per-invitee amounts. The submission-time
+  USD swap statistic is separate from earnings.
 
-Example: a follower commits 100 SUI, all 100 is accepted, and the successful
-sale pays 1 SUI to Blast: volume 100, revenue 1, earnings 0.6 SUI. If 80 SUI is
-accepted and 20 refunded, and Blast receives 0.8 SUI, earnings are 0.48 SUI.
+Example: if a sale pays Blast 1 SUI attributable to an invitee, a standard
+referrer earns 0.3 SUI after activation. At 60% that revenue earns 0.6 SUI.
 
 ## Rollout
+
+Deploy the web app and backend before activating the rate. Both can serve
+existing 60% accounting during rollout. Already-open tabs from the previous web
+release need a reload to read the 30% rate. To activate, insert the
+`referral_rate_policy` row in `social_config` with `effective_at_ms` as a UTC
+epoch in milliseconds, `special_account_ids` as an array of approved account
+UUIDs resolved from verified X identities, and `special_reservation_codes` as
+an array of approved codes tied to verified X identities. An approved
+reservation earns 60% from its link before and after claim. For other referral
+activity the reservation owner earns 60% from the recorded claim time.
+Keep the effective time and approved entries fixed after activation.
 
 Apply migration `0143` before deploying the APIs. Configure the existing social
 worker's `SOCIAL_REFERRAL_PROFILE` as a JSON object with `network` (`mainnet`),
