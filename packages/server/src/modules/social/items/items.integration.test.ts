@@ -413,10 +413,10 @@ test("T-005-AC-2: raising big_commit_usd and big_trade_usd turns big and presale
   });
 });
 
-test("T-005-AC-3: amounts.usd is the activity row's usd_value to two places, null when null", { skip }, async () => {
+test("T-005-AC-3: amounts.usd is the activity row's usd_value unrounded (at most 12 places), null when null", { skip }, async () => {
   await withFixture(async ({ admin, replica }) => {
     const stored = await admin.query<{ activity_id: string; usd: string | null; quote_amount: string; coin_amount: string | null }>(
-      "SELECT activity_id, round(usd_value, 2)::text AS usd, quote_amount::text, coin_amount::text FROM chain_read_v1.activity",
+      "SELECT activity_id, trim_scale(round(usd_value, 12))::text AS usd, quote_amount::text, coin_amount::text FROM chain_read_v1.activity",
     );
     const items = byEntry(await toItems(replica, await everyEntry(replica), { nowMs: NOW, config: SOCIAL_CONFIG_DEFAULTS }));
     let checked = 0;
@@ -432,7 +432,7 @@ test("T-005-AC-3: amounts.usd is the activity row's usd_value to two places, nul
       assert.deepEqual([item.amounts?.quote_symbol, item.amounts?.quote_decimals], named, row.activity_id);
     }
     assert.equal(checked, Object.values(EXPECTED_ACTOR).filter((actor) => actor !== "dropped").length);
-    assert.equal(items.get(id("novaEndedCommit"))?.amounts?.usd, "17.51");
+    assert.equal(items.get(id("novaEndedCommit"))?.amounts?.usd, "17.505");
     assert.equal(items.get(id("kaiNullUsdCommit"))?.amounts?.usd, null);
     assert.deepEqual(items.get(id("kaiClaim"))?.amounts, {
       quote: "0", quote_symbol: "USDC", quote_decimals: 6, usd: null, tokens: "250000000000", quote_refund: "0",
