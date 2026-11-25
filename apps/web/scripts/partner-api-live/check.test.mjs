@@ -6,6 +6,7 @@ import { once } from 'node:events';
 import { createCandidateFetch } from './runtime.mjs';
 import { frontendClientAddress } from '../../../../packages/core/src/modules/backend-api/frontend-ingress.ts';
 import { checkedFixtureId, checkedOrigin, createHttp, GateFailure, PARTNER, runCheck, validateRead } from './check.mjs';
+import { v1PresaleDetail } from '../../../../packages/server/src/modules/partner-api/v1/presales.ts';
 const fixtures = JSON.parse(readFileSync(new URL('./responses.fixture.json', import.meta.url)));
 const key = 'blast_pk_' + 'a'.repeat(43);
 const keyId = 'b9c905c7-de88-4bb4-8a7d-944c2b402937';
@@ -205,6 +206,13 @@ test('schema, freshness, version and caching regressions fail even with HTTP 200
   assert.throws(() => validateRead('status', response({ ...fixtures.status, lag_ms: 300001 })), /behind/);
   const search = structuredClone(fixtures.search); search.groups[0].section = { state: 'unavailable', reason: 'no-source' };
   assert.throws(() => validateRead('search', response(search)), /unavailable/);
+});
+test('the v1 projection keeps an activity row\'s unrounded first-party USD inside the pinned FeedItemUsd', () => {
+  // The first-party feed sends amounts.usd unrounded (at most 12 places); partners keep exactly two.
+  const detail = structuredClone(fixtures.presale);
+  detail.activity[0].amounts = { quote: '1000', quote_symbol: 'USDC', quote_decimals: 6, usd: '0.000999838', tokens: null, quote_refund: null };
+  assert.throws(() => validateRead('presale', response(detail)), /amounts/);
+  assert.doesNotThrow(() => validateRead('presale', response(v1PresaleDetail(detail))));
 });
 test('schema failures identify pinned rules without logging response values', () => {
   const invalid = structuredClone(fixtures.presale);

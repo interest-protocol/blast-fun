@@ -18,9 +18,14 @@
  * - the Graduated discovery catalog: `legacyMarket` and `legacyFdvUsd` (the website’s V1 pool figures);
  * - each discovery, pool and coin market summary: `fdv_usd` (the website's total-supply valuation).
  *
+ * One published field also keeps its v1 form: each detail activity row's `amounts.usd` is rounded
+ * to cents (`FeedItemUsd`), while the first-party feed carries it unrounded so dust prices stay real.
+ *
  * A new field reaches partners only with a new published contract, its pin and this adapter
  * together. Any other answer (an error, a refusal) passes through unchanged.
  */
+
+import { toUsd } from "@blast/core/modules/social/items/decimal.ts";
 
 import { partnerEndpointBucket, type PartnerV1Read } from "./paths.ts";
 
@@ -61,13 +66,25 @@ export function v1PresaleSummaries(body: unknown): unknown {
   return { ...page, presales: body.presales.map((summary) => v1Sale(without(summary, V1_UNPUBLISHED.summary))) };
 }
 
-/** The detail: its sale and its terms less what v1 does not publish. */
+/** An activity row's amounts with `usd` in its published v1 form, cents (`FeedItemUsd`). */
+function v1Amounts(amounts: unknown): unknown {
+  if (!isObject(amounts) || typeof amounts.usd !== "string") return amounts;
+  return { ...amounts, usd: toUsd(amounts.usd) };
+}
+
+/** A detail activity row less what v1 does not publish, its USD in cents. */
+function v1Activity(item: unknown): unknown {
+  if (!isObject(item)) return item;
+  const presale = isObject(item.presale) ? { presale: without(item.presale, V1_UNPUBLISHED.activity) } : {};
+  const amounts = "amounts" in item ? { amounts: v1Amounts(item.amounts) } : {};
+  return { ...item, ...presale, ...amounts };
+}
+
+/** The detail: its sale, its terms and its activity less what v1 does not publish. */
 export function v1PresaleDetail(body: unknown): unknown {
   if (!isObject(body)) return body;
   const terms = isObject(body.terms) ? without(body.terms, V1_UNPUBLISHED.terms) : body.terms;
-  const activity = Array.isArray(body.activity) ? body.activity.map((item: unknown) =>
-    isObject(item) && isObject(item.presale) ? { ...item, presale: without(item.presale, V1_UNPUBLISHED.activity) } : item,
-  ) : null;
+  const activity = Array.isArray(body.activity) ? body.activity.map(v1Activity) : null;
   return { ...body, presale: v1Sale(without(body.presale, V1_UNPUBLISHED.identity)), terms, ...(activity ? { activity } : {}) };
 }
 

@@ -71,3 +71,18 @@ test("canonical frontend coin identity stays outside the pinned partner v1 contr
     presale: { ...published, verified_team: true }, terms: null, activity: [{ presale: published }],
   });
 });
+
+test("v1 detail activity keeps amounts.usd at exactly two decimals; first-party keeps the unrounded value", () => {
+  const amounts = (usd: string | null) => ({ quote: "1000", quote_symbol: "USDC", quote_decimals: 6, usd, tokens: null, quote_refund: null });
+  const detail = {
+    presale: { presale_id: "0x1" },
+    terms: null,
+    activity: [{ amounts: amounts("0.000999838") }, { amounts: amounts("17.505") }, { amounts: amounts("10") }, { amounts: amounts(null) }, { amounts: null }],
+  };
+  assert.deepEqual(v1PresaleDetail(detail), {
+    presale: { presale_id: "0x1" },
+    terms: null,
+    activity: [{ amounts: amounts("0.00") }, { amounts: amounts("17.51") }, { amounts: amounts("10.00") }, { amounts: amounts(null) }, { amounts: null }],
+  });
+  assert.equal(detail.activity[0]!.amounts!.usd, "0.000999838", "first-party source data is preserved");
+});
