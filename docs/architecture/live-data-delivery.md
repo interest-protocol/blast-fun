@@ -51,7 +51,8 @@ Accepted cost: each browser stream holds one web-function invocation for up to
 its 270 s lifetime, so web-function concurrency equals visible subscribed tabs.
 If that concurrency or its cost becomes the binding limit, the next step is an
 authenticated direct connection from the browser to the hints process, after a
-security review. It is not built.
+security review. That review is the next section; the connection is being built
+behind a flag (2026-11-25).
 
 Retired on 2026-10-27, after the hints process went live on develop: the
 `live-hints` worker and its Render service, the ticket route
@@ -60,6 +61,87 @@ ticket client, the coin-topic `coin_market` hints only that worker produced
 (and the coin page's hint-driven reads of them), and the API process's own
 activity stream. Coin pages keep their 15 s poll; a chart's trades and its
 header price arrive on its market stream.
+
+## Direct browser socket: security review (2026-11-25)
+
+Proposal: a tab opens one WebSocket to the hints process at
+`wss://live.blast.fun/v1/socket` and receives the same events the SSE route
+sends, one SSE event block per message. The Vercel route stays for one release
+as the rollback. Wire details: `handoffs/realtime-tonight/protocol.md` in the
+workspace. Status: **awaiting Jose's sign-off**; the flag stays off until then.
+
+What changes: the hints service is already a public Render web service, but
+every route that does work needs the signed gateway proof. `/v1/socket` is its
+first unsigned route that does work. It must not become a free fan-out, an
+amplifier, a way to starve other tabs, or a way to read anything the public SSE
+stream does not already show.
+
+What it carries: only public market data (trades, candles, prices, presale
+fills, activity hints) for the pools the URL names. No account, no wallet, no
+write path. A leaked frame is not a confidentiality loss.
+
+### Admission, in this order
+
+Each step runs only if the one before it passed, so unauthenticated requests
+never write to Redis and a ticket is never burned on a refusal.
+
+1. `Host` is `live.blast.fun` (or the configured live host) and `Origin` is
+   exactly the site origin. Otherwise **403 before upgrade**. Only a
+   cross-site page or a script sees this, and neither needs a reason.
+2. Upgrade with `Sec-WebSocket-Protocol: blast-live.v1` set explicitly, so the
+   ticket entry is never echoed. Every later refusal **accepts and then closes**
+   with a code. A browser cannot read a pre-upgrade status or `Retry-After`; it
+   only sees `error` and 1006.
+3. Ticket HMAC and `exp` → close 4401.
+4. Query (same parsers as SSE, plus `resume`) → close 4400.
+5. Per-IP limits → close 4429.
+6. Global capacity → close 4503.
+7. Burn the ticket nonce in Redis → close 4401 if reused. Redis down → close
+   4503 (fail closed).
+
+Clients treat a handshake that never opens like 4503: wait a random 1–30 s.
+After 3 failures in a row, the tab uses SSE for 10 minutes.
+
+### Controls
+
+| Risk | Control |
+| --- | --- |
+| Anyone opens sockets | A **ticket** from `POST /api/launchpad/market/ticket`. The route is behind the first-party API gate. It has no per-IP quota: web routes carry no rate limits (founder ruling). The gate cookie costs one page GET, so the ticket is a **cost, not authentication**. The socket limits below are the real bound. Ticket: `key = HMAC(gateway secret, "blast-live-ticket-v1")`, then `HMAC(key, payload)`. The payload is `{v, exp, n, o}`. A ticket lives 60 s and is **single use**: its nonce is burned with `SET NX PX <remaining life>` under its own `live-ticket:` prefix in the private-replay Redis. |
+| Ticket leaks through logs, history or Referer | The ticket travels only in `Sec-WebSocket-Protocol`, never in the URL. Surfaces that must not record it: Render request logs (they record the path only), error and trace reporters, and refusal close reasons. A test checks that no refusal echoes it. |
+| Another site embeds the socket | Exact `Origin` match, and the ticket binds `o`. The server never reads `Cookie`. The gate cookie is `__Host-` (host-only); sign-off checks that no first-party cookie uses `Domain=blast.fun`. |
+| One client starves the shared tables | Limits per IP, per instance: **8 open sockets**, **20 opens a minute** (resumes count), **4 distinct pools** and **40 distinct price coins** across that IP's sockets. The key is `ClientAddress.rateKey`, a /64 for IPv6. With 2 instances the effective limit doubles. Global tables per process: 64 pool topics and 128 price coins (`MARKET_STREAM_BUDGET`). A socket whose new topics or coins would not fit is refused with 4503; tables never fill silently. A pool the engine never snapshots frees its slot after 10 s. |
+| Process exhaustion | Sockets and SSE streams share the relay's client ceiling, `ACTIVITY_HINT_STREAM_BUDGET.maxClients`, which is 512 per instance. Fleet capacity is instances × 512, so 2 starter instances give 1,024. The rollout percent keeps expected sockets under 70% of that. Going past it needs the load test (memory per socket) and Jose's go on the cap and the instance count. One upstream reader socket per process, never one per browser. |
+| Expensive subscriptions | Topics are fixed at connect, using the SSE parsers (`marketStreamPools`, `marketStreamPriceCoins`, `marketStreamPresale`, `marketStreamActivity`): ≤ 2 pools, ≤ 20 price coins, ≤ 1 presale. `resume=<pool>~<cursor>` is allowed at most 2 times. Its pool must match `POOL_KEY`, appear in `pool=` and not repeat; its cursor must match `EVENT_CURSOR`. Otherwise 4400. The browser cannot send subscribe messages. |
+| Client messages | The only accepted message is `{"op":"ping","t":<int>}`: at most 128 bytes and 1 a second. Anything else, binary or over the rate closes 1008. `maxPayloadLength` is 1 KiB and `perMessageDeflate` is off. |
+| Slow readers | The relay queue (64 KiB a client) is the control: overflow closes 4408. Bun's `backpressureLimit` is 256 KiB with `closeOnBackpressureLimit`, as a backstop only. |
+| Liveness | Heartbeat every 4 s, sent only while upstream is confirmed alive (PR #31). The hub watchdog clears prices after 9 s. Bun `idleTimeout` is 60 s and `sendPings` is on, so a socket stays open through an upstream reconnect; heartbeats are not what keeps it open. |
+| Resume ring | Per pool: the last 2 minutes, at most 256 frames and 64 KiB. A replay is at most 32 KiB, under the 64 KiB queue; anything larger gets a normal fence and the browser refetches. The ring dies with its topic when the last subscriber leaves, so it pins no topics or upstream subscriptions. |
+| Long-lived sockets | Each socket closes 1000 after a random 30–60 minutes and reconnects with a fresh ticket. So turning the flag off, rotating the secret, or changing a limit reaches every socket within an hour. |
+| Reconnect storms after a deploy | Drain closes with 1012, spread over 5 s. Clients wait a random 1–30 s before reconnecting. Prices may clear (9 s watchdog), and the screens' 15 s CDN poll covers the gap. A resume from the ring avoids a history refetch per tab. |
+| Data integrity | Frames are the reader's frames after the same checks: an explicit type allowlist with a validator per type, `parseInfraProvenance`, cursor and deployment fingerprint. New frame types (for example `coin_stats`) are added to the allowlist with a validator. The socket adds no data source. |
+| Spoofed client IP | The hints service runs `trusted-proxy` ingress, so `render.yaml` declares `BLAST_BACKEND_TRUSTED_PROXY_CIDRS`. `ingressAddress` accepts exactly one `X-Forwarded-For` address. Null means refuse; it never falls back to the peer address. Sign-off test: send `X-Forwarded-For: 1.2.3.4` from outside, to both `live.blast.fun` and the onrender.com host, and record what arrives. |
+| Transport | TLS ends at Render's proxy (managed certificate). `wss` only. CSP `connect-src` adds the live origin from configuration per environment, checked by `assertPlainSources`. `/v1/socket` is served only on the live host. |
+
+### Residual risks
+
+- A stolen, unused ticket gives one public market stream for up to 60 s,
+  nothing more.
+- A client with many IPs can still hold sockets up to the global cap. The cap
+  and the per-IP limits bound the cost, and Render's network is the DDoS
+  layer. Cloudflare is added only if a measurement shows the need.
+- Pre-existing: the global tables can already be exhausted through SSE by
+  scripts that hold a gate cookie. The per-IP pool and coin limits above
+  apply to sockets only.
+- Unsigned routes on the service: `/v1/socket`, plus the existing liveness
+  (`/v1/live`), `/v1/health` and readiness.
+  The last two are bounded by a 5 s cache and 8 requests in flight.
+
+### Sign-off
+
+- [ ] Jose: controls accepted, flag may go on.
+- [ ] Render `X-Forwarded-For` test recorded (see above).
+- [ ] No first-party cookie uses `Domain=blast.fun`.
+- [ ] Load test: memory per socket, the chosen cap and the instance count recorded here.
 
 ## Rollout on develop (applied 2026-10-27)
 

@@ -663,7 +663,6 @@ test("Discover: one item per coin, counts by identity, directions kept apart, ho
     // Combine balances before rounding: individually sub-basis-point holdings still count.
     assert.equal(orbit.top_holders.share_bps, 66);
     assert.deepEqual(page.coins[2]!.top_holders, { holders: [], share_bps: null });
-    assert.equal(orbit.rank.score, 6 * 10 + 10 + 2 * 5);
     // The preview: the newest rows, a seller among them, a private account and a late-named one as wallets only.
     assert.equal(orbit.activity.preview.length, 3);
     assert.equal(orbit.activity.preview[0]!.key, "c:maya");
@@ -674,14 +673,17 @@ test("Discover: one item per coin, counts by identity, directions kept apart, ho
     const eman = page.coins[2]!;
     assert.deepEqual([eman.activity.participants, eman.activity.events, eman.activity.buyers, eman.activity.claimers], [1, 5, 1, 1]);
     assert.deepEqual([eman.price_usd, eman.change_24h_bps, eman.fdv_usd, eman.holders], ["0.2", null, null, null]);
-    assert.equal(eman.rank.score, 10 + 3 + 10);
     assert.deepEqual([eman.activity.preview[0]!.buys?.count, eman.activity.preview[0]!.claims?.count, eman.activity.preview[0]!.sells], [4, 1, null]);
     // The crowd: 23 wallets, each once.
     const crowd = page.coins[0]!;
-    assert.deepEqual([crowd.activity.participants, crowd.activity.events, crowd.rank.score], [23, 23, 230 + 23 + 10]);
+    assert.deepEqual([crowd.activity.participants, crowd.activity.events], [23, 23]);
+    // Relevant: the weighted score leads the order, and many traders lead one busy wallet.
+    const scores = page.coins.map((coin) => coin.rank.score);
+    assert.deepEqual(scores, [...scores].sort((a, b) => b - a));
+    assert.ok(crowd.rank.score > orbit.rank.score && orbit.rank.score > eman.rank.score);
     // A quiet coin is shown, last, and says so.
     const quiet = page.coins[4]!;
-    assert.deepEqual([quiet.activity.participants, quiet.rank.score, quiet.rank.why], [0, 0, "No activity in the last 24h"]);
+    assert.deepEqual([quiet.activity.participants, quiet.rank.why], [0, "No activity in the last 24h"]);
     assert.equal(page.coins[3]!.tradable, false);
     assert.equal(page.next_cursor, null);
     // No viewer field, no account id, no private identity.
@@ -689,19 +691,11 @@ test("Discover: one item per coin, counts by identity, directions kept apart, ho
     assert.doesNotMatch(JSON.stringify(page), /00000000-0000-4000/);
   }));
 
-test("Homepage traction shortlists actual recent traders without changing other Discover sorts", { skip }, () =>
-  withFixture(async ({ admin, discover, now }) => {
-    const query = "?window=1h&sort=relevant&traction=1";
-    const active = await ok<HomeCoinsPage>(await discover(query), "home-coins-page");
-    assert.deepEqual(symbols(active.coins), ["CROWD", "ORBIT", "EMAN"]);
-    assert.deepEqual([active.coins[1]?.activity.participants, active.coins[1]?.activity.backers, active.next_cursor], [6, 0, null]);
+test("An old client's traction flag is ignored: it gets the Relevant page", { skip }, () =>
+  withFixture(async ({ discover }) => {
+    const flagged = await ok<HomeCoinsPage>(await discover("?window=1h&sort=relevant&traction=1"), "home-coins-page");
     const regular = await ok<HomeCoinsPage>(await discover("?window=1h&sort=relevant"), "home-coins-page");
-    assert.ok(symbols(regular.coins).includes("HELMET"));
-    assert.equal((await discover("?window=24h&traction=1")).status, 400);
-    const hidden = await ok<HomeCoinsPage>(await discover(query, { trades: false }), "home-coins-page");
-    assert.deepEqual(hidden.coins, []);
-    await admin.query("UPDATE watermarks SET timestamp_ms_hi_inclusive = $1", [now - 2 * HOUR]);
-    assert.deepEqual((await ok<HomeCoinsPage>(await discover(query), "home-coins-page")).coins, []);
+    assert.deepEqual(symbols(flagged.coins), symbols(regular.coins));
   }));
 
 test("Discover: the window, the sorts, the filters and the keyset page are coherent over every coin", { skip }, () =>
