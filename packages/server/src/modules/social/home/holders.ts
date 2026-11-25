@@ -67,7 +67,7 @@ export function parseHoldersLimit(params: URLSearchParams): number {
 }
 
 /** $1 coin type: the coin's identity and price. */
-const COIN_SQL = `SELECT c.presale_id, c.sale_token AS coin_type, c.sale_decimals::int AS sale_decimals, c.pool_id,
+const COIN_SQL = `SELECT c.presale_id, c.sale_token AS coin_type, c.sale_decimals::int AS sale_decimals, c.pool_id, c.tracked_pool_only,
     trim_scale(pr.usd_price)::text AS price_usd, pr.as_of_ms::text AS price_as_of_ms, cs.supply::text AS supply, lp.pool_id AS launch_id
   FROM ${HOME_COIN_SOURCES} c
   LEFT JOIN ${DISPLAY_PRICES} pr ON pr.coin_type = c.sale_token
@@ -77,7 +77,7 @@ const COIN_SQL = `SELECT c.presale_id, c.sale_token AS coin_type, c.sale_decimal
   LIMIT 1`;
 assertChainReadThroughViews(COIN_SQL);
 
-type CoinRow = Readonly<{ presale_id: string | null; coin_type: string; sale_decimals: number; pool_id: string | null; price_usd: string | null; price_as_of_ms: string | null; supply: string | null; launch_id: string | null }>;
+type CoinRow = Readonly<{ presale_id: string | null; coin_type: string; sale_decimals: number; pool_id: string | null; tracked_pool_only: boolean; price_usd: string | null; price_as_of_ms: string | null; supply: string | null; launch_id: string | null }>;
 
 /** $1 account ids: those that share their portfolio. */
 const SHARING_SQL = `SELECT a.account_id::text AS account_id FROM social_accounts a
@@ -203,7 +203,7 @@ export async function readHomeHolders(db: ReadableDatabase, coinType: string, li
   const coin = coins.rows[0];
   if (!coin) throw new SocialRouteError("not_found");
   const presaleId = coin.presale_id;
-  const facts = { presale_id: presaleId, pool_id: coin.pool_id, launch_id: coin.launch_id, coin_type: coin.coin_type };
+  const facts = { presale_id: presaleId, pool_id: coin.pool_id, launch_id: coin.launch_id, coin_type: coin.coin_type, tracked_pool_only: coin.tracked_pool_only };
   const [holders, terms] = await Promise.all([
     readTopHolders(db, [facts], bounds.clockMs, limit),
     presaleId !== null && context.terms ? context.terms(presaleId) : Promise.resolve(null),
