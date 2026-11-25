@@ -162,13 +162,14 @@ test("Curve trades sound in opposite directions and share a single burst limit",
   const { clock, record, gate, play } = rig();
   gate.gesture();
   play({ kind: "curve-buy" });
-  clock.now += 139;
+  clock.now += 1_199;
   assert.equal(gate.refusal({ kind: "curve-sell" }), "trade-rate");
   play({ kind: "curve-sell" });
   assert.equal(record.tones.length, 1);
   clock.now += 1;
   play({ kind: "curve-sell" });
   assert.deepEqual(record.tones.map(({ hz, glideTo }) => [hz, glideTo]), [[590, 590 * 1.32], [590, 590 * 0.72]]);
+  assert.ok(voicesFor({ kind: "curve-buy" })[0]!.gain < voicesFor({ kind: "tap" })[0]!.gain);
 });
 
 test("R3-12: one money sound per event — the same result reported twice sounds once; a different one, or a later one, sounds", () => {
@@ -218,6 +219,10 @@ test("R3-12-AC-2: each of the twelve sounds schedules the table's frequencies, d
     [{ kind: "tick", level: 3 }, [[784.875, 80, 0]]],
     [{ kind: "tick", level: 9 }, [[1046.5, 80, 0]]],
     [{ kind: "fire" }, [[260, 200, 0]]],
+    [{ kind: "buy" }, [[587.33, 140, 0], [880, 190, 65]]],
+    [{ kind: "sell" }, [[783.99, 140, 0], [587.33, 175, 65]]],
+    [{ kind: "navigate" }, [[330, 135, 0]]],
+    [{ kind: "notification" }, [[1046.5, 225, 0]]],
     [{ kind: "land" }, [[659.25, 240, 0], [987.77, 340, 45]]],
     [{ kind: "claim" }, [[523.25, 260, 0], [659.25, 260, 60], [783.99, 260, 120]]],
     [{ kind: "chord" }, [[523.25, 700, 0], [659.25, 700, 80], [783.99, 700, 160], [1046.5, 700, 240]]],

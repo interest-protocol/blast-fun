@@ -7,6 +7,7 @@ import { defineBlastDeployment, type BlastDeployment, type VenueAvailability } f
 import { createActionController, type ActionController } from "../transaction/controller";
 import { useAppQueryClient } from "#web/lib/query/provider.tsx";
 import { invalidateAfter } from "#web/lib/query/invalidate.ts";
+import { useFeelSound } from "#web/components/blast-feel/FeelProvider.tsx";
 import { useBalancesContext } from "#web/components/social/coins/balances.tsx";
 import { useCoinTradeWallet } from "./CoinTradeSignerProvider";
 import { useLaunchpadSigners } from "../transaction/LaunchpadSignerProvider";
@@ -81,6 +82,7 @@ export function VenueTradeProvider({
   now?: () => number;
   children: ReactNode;
 }>) {
+  const { play } = useFeelSound();
   const signers = useLaunchpadSigners();
   const queries = useAppQueryClient();
   const shellBalances = useBalancesContext();
@@ -183,6 +185,7 @@ export function VenueTradeProvider({
                   ? readRecordedSwap({ digest, status: transaction.status, events: transaction.events ?? [] }, read.recorded)
                   : null;
               setCompleted((entries) => ({ ...entries, [digest]: trade ?? "unavailable" }));
+              if (trade) play({ kind: key });
             })
             .catch(() => setCompleted((entries) => ({ ...entries, [digest]: "unavailable" })));
         }
@@ -192,7 +195,7 @@ export function VenueTradeProvider({
     const stopBuy = observe("buy");
     const stopSell = observe("sell");
     return () => { stopBuy(); stopSell(); };
-  }, [chain, controllers, refresh]);
+  }, [chain, controllers, play, refresh]);
 
   return (
     <Session value={{ chain, deployment, locator, route, availability, balances, balancesPending, refresh, direction, setDirection, controllers: gated, completed, now }}>

@@ -42,7 +42,7 @@ thirty-second polls from 10,000 visible tabs produce about 667 browser requests/
 before hints, navigation and quotes; edge hits determine origin demand.
 
 The backend defaults to 200 connected hint streams per process and permits at
-most 512. The existing partner-capacity contract permits at most 32 **API**
+most 1,024. The existing partner-capacity contract permits at most 32 **API**
 replicas. A separate hints role has its own maximum of 32 replicas and never
 participates in partner reservations. The 200-stream default cannot cover
 10,000 simultaneously subscribed visible tabs within either 32-process role:
@@ -51,9 +51,10 @@ participates in partner reservations. The 200-stream default cannot cover
 For a selected process stream limit `C`, replica count `R`, and planned maximum
 utilization `U`, require `(R - 1) × C × U >= visibleSubscribedTabs` to reserve one
 process failure, then verify actual routing skew. For illustration, 26 processes
-at the existing maximum 512 and 80% planned utilization cover 10,240 streams
-after losing one process. This is arithmetic, **not** a deployment recommendation
-or proof of memory, CPU, proxy, upstream or database capacity.
+at 512 and 80% planned utilization cover 10,240 streams after losing one process;
+14 processes at the maximum 1,024 cover 10,649. This is arithmetic, **not** a
+deployment recommendation or proof of memory, CPU, proxy, upstream or database
+capacity.
 
 API processes own database/Redis clients, partner reservations, ordinary work
 and quote workers. A hints-only process owns quota/replay Redis clients and at
@@ -124,7 +125,7 @@ limit is discovered or invented. Stream arithmetic must also cover the declared
 visible tabs after losing one hints process at the chosen utilization.
 
 The synthetic test fixture demonstrates 4 API + 26 hints processes at the
-existing 512-stream maximum and 80% utilization: 10,240 streams after one hints
+512-stream setting and 80% utilization: 10,240 streams after one hints
 process fails, 56 primary/40 replica clients, 60 quota/replay clients, 30 possible
 infra hint sockets and 8 quote workers before external reserves. This is a
 test of arithmetic, **not a deployment recommendation or measured envelope**.

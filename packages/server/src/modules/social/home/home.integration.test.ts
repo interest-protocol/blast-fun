@@ -31,6 +31,7 @@ import { homeCoinsPageReadSchema } from "@blast/core/modules/social/contracts/ho
 import type { HomeCoinMarket, HomeHoldersPage } from "@blast/core/modules/social/contracts/coin-market.ts";
 import { CREATE_TEST_SUI_QUOTE_TYPE } from "@blast/core/modules/social/contracts/create.ts";
 import { INDEXED_POOL_COINS } from "@blast/core/modules/social/portfolio/core-coins.ts";
+import { readCoinFacts, type HomeDiscoverBase } from "@blast/server/modules/social/home/coins.ts";
 import { createSocialHomeRoutes, type SocialHomeRouteDependencies } from "@blast/server/modules/social/home/route.ts";
 import { optionalSource } from "@blast/server/modules/social/optional-source.ts";
 import type { TraderPortfolioRead } from "@blast/server/modules/social/home/traders.ts";
@@ -226,6 +227,9 @@ async function withFixture(run: (fixture: Fixture) => Promise<void>, options: Re
     coin_holder_history: [
       { coin_type: coinOf(P.orbit, "ORBIT"), checkpoint: 40_002, timestamp_ms: now - 2 * DAY, holders: 10 },
       { coin_type: coinOf(P.orbit, "ORBIT"), checkpoint: 45_000, timestamp_ms: now - HOUR, holders: 42 },
+      // The crowd's 23 buyers are 23 new holders since yesterday.
+      { coin_type: coinOf(P.crowd, "CROWD"), checkpoint: 40_005, timestamp_ms: now - 5 * DAY, holders: 0 },
+      { coin_type: coinOf(P.crowd, "CROWD"), checkpoint: 45_001, timestamp_ms: now - MINUTE, holders: 23 },
     ],
     activity: rows,
   });
@@ -291,6 +295,7 @@ async function withFixture(run: (fixture: Fixture) => Promise<void>, options: Re
     const readNow = () => now + (options.elapsedMs?.() ?? 0);
     const caches = options.cached ? {
       discover: createReadCache<HomeCoinsPage>(10_000, 64, readNow),
+      discoverBase: createReadCache<HomeDiscoverBase>(10_000, 6, readNow),
       coins: createReadCache<HomeCoinsByIds>(10_000, 64, readNow),
       portfolios: createReadCache<ReadonlyMap<string, TraderPortfolioRead>>(10_000, 64, readNow),
     } : undefined;
@@ -347,6 +352,9 @@ test("Home origin cache spends the edge freshness budget and keeps trade-filtere
     const hidden = await ok<HomeCoinsPage>(await discover("", { trades: false }), "home-coins-page");
     assert.notDeepEqual(hidden.coins, first.coins, "Trade-hidden requests must not reuse visible trade results");
     await admin.query("UPDATE blast_infra_fixture.presales SET sale_symbol = 'REFRESHED' WHERE presale_id = $1", [P.orbit]);
+    // Another sort of the same window reuses the window read: same coins, no new read.
+    const volume = await ok<HomeCoinsPage>(await discover("?sort=trending"), "home-coins-page");
+    assert.equal(volume.coins.find((coin) => coin.presale_id === P.orbit)?.symbol, first.coins.find((coin) => coin.presale_id === P.orbit)?.symbol);
     elapsed = 11_000;
     const refreshed = await ok<HomeCoinsPage>(await discover(), "home-coins-page");
     assert.equal(refreshed.coins.find((coin) => coin.presale_id === P.orbit)?.symbol, "REFRESHED");
@@ -639,7 +647,7 @@ test("Sparse coins retain a full 24-hour comparison and Home labels shorter nati
   }));
 
 test("Discover: one item per coin, counts by identity, directions kept apart, honest market facts, the rank explained", { skip }, () =>
-  withFixture(async ({ discover, now }) => {
+  withFixture(async ({ discover, replica, now }) => {
     const page = await ok<HomeCoinsPage>(await discover(), "home-coins-page");
     assert.deepEqual(symbols(page.coins), ["CROWD", "ORBIT", "EMAN", "AFTR", "QUIET", ...TRACKED_SYMBOLS]);
     assert.equal(page.clock_ms, now);
@@ -682,6 +690,12 @@ test("Discover: one item per coin, counts by identity, directions kept apart, ho
     const scores = page.coins.map((coin) => coin.rank.score);
     assert.deepEqual(scores, [...scores].sort((a, b) => b - a));
     assert.ok(crowd.rank.score > orbit.rank.score && orbit.rank.score > eman.rank.score);
+    // New holders' baseline: the last count at or before the window's start (a change exactly on it counts), none before the first row.
+    const start = async (fromMs: number) => [...(await readCoinFacts(replica, { kind: "ids", presaleIds: [P.orbit, P.crowd, P.eman] }, { fromMs, toMs: now })).values()]
+      .map((row) => [row.symbol, row.holders, row.holders_at_start]);
+    assert.deepEqual(new Set(await start(now - DAY)), new Set([["ORBIT", "42", "10"], ["CROWD", "23", "0"], ["EMAN", null, null]]));
+    assert.deepEqual(new Set(await start(now - HOUR)), new Set([["ORBIT", "42", "42"], ["CROWD", "23", "0"], ["EMAN", null, null]]));
+    assert.deepEqual(new Set(await start(now - 6 * DAY)), new Set([["ORBIT", "42", null], ["CROWD", "23", null], ["EMAN", null, null]]));
     // A quiet coin is shown, last, and says so.
     const quiet = page.coins[4]!;
     assert.deepEqual([quiet.activity.participants, quiet.rank.why], [0, "No activity in the last 24h"]);
@@ -1002,11 +1016,11 @@ test("Discover and saved coins fill missing price and supply from tracked pools 
   let snapshots = 0;
   let poolPricesAvailable = true;
   return withFixture(async ({ admin, coins, discover, market, now }) => {
+    // The window read every sort shares fills catalog FDV from one snapshot read, and the page reuses it.
     await ok<HomeCoinsPage>(await discover("?page=1&limit=5&sort=newest"), "home-coins-page");
-    assert.equal(snapshots, 0);
-    // Relevant ranks idle catalog coins by FDV, so it reads the snapshot once and the page reuses it.
-    await ok<HomeCoinsPage>(await discover("?page=1&limit=5"), "home-coins-page");
     assert.equal(snapshots, 1);
+    await ok<HomeCoinsPage>(await discover("?page=1&limit=5"), "home-coins-page");
+    assert.equal(snapshots, 2);
     const page = await ok<HomeCoinsPage>(await discover("?page=2&limit=5&mobile_market=1&live_inputs=1&rolling_change=1&dex_volume=1"), "home-coins-page");
     // ONE's snapshot FDV ($12.50) lifts it to page 1, above the idle coins with no value.
     assert.deepEqual([page.page, page.pages, page.total, symbols(page.coins)], [2, 2, 10, ["QUIET", "HELMET", "BLAST", "Wheels", "MANIFEST"]]);
@@ -1025,7 +1039,7 @@ test("Discover and saved coins fill missing price and supply from tracked pools 
     assert.deepEqual([oneRow.live_inputs?.total_supply, oneRow.live_inputs?.circulating_supply], ["20000000000", "15000000000"]);
     assert.equal(oneRow.change_24h_bps, null);
     assert.equal(oneRow.live_inputs?.price_checkpoint, undefined);
-    assert.equal(snapshots, 3);
+    assert.equal(snapshots, 4);
     assert.deepEqual([manifestRow.presale_id, manifestRow.sale, manifestRow.launch_id, manifestRow.launched_ms], [null, null, null, null]);
     assert.deepEqual([manifestRow.price_usd, manifestRow.holders, manifestRow.fdv_usd, manifestRow.spark], [null, null, null, []]);
     assert.equal(manifestRow.dex_volume, undefined);

@@ -1,5 +1,5 @@
 import { COIN_TYPE, SUI_OBJECT_ID_PATTERN } from "@blast/core/lib/sui/ids.ts";
-import { MIGRATOR_VENUES, VENUES } from "@blast/core/modules/launchpad-contract/venues.ts";
+import { VENUES } from "@blast/core/modules/launchpad-contract/venues.ts";
 import { CANDLE_INTERVALS } from "@blast/core/modules/launchpad-contract/venue-history.ts";
 import * as Schema from "effect/Schema";
 
@@ -31,11 +31,6 @@ export const CoinParams = Schema.Struct({
 
 export const PoolParams = Schema.Struct({
   venue: Schema.Literals(VENUES),
-  poolId: ObjectId,
-});
-
-export const TradeParams = Schema.Struct({
-  venue: Schema.Literals(MIGRATOR_VENUES),
   poolId: ObjectId,
 });
 

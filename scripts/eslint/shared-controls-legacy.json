@@ -1,6 +1,5 @@
 {
   "apps/web/src/app/(mission-control)/card/[id]/page.tsx": 2,
-  "apps/web/src/components/blast-feel/FeelSoundSwitch.tsx": 2,
   "apps/web/src/components/blast-ui/AccountBalance.tsx": 0,
   "apps/web/src/components/blast-ui/AccountMenu.tsx": 5,
   "apps/web/src/components/blast-ui/AppShell.tsx": 8,

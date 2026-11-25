@@ -11,6 +11,7 @@ import type { OutcomeReport } from "@blast/core/modules/launchpad-telemetry/cont
 import type { ActionController } from "../transaction/controller";
 import { useAppQueryClient } from "#web/lib/query/provider.tsx";
 import { invalidateAfter } from "#web/lib/query/invalidate.ts";
+import { useFeelSound } from "#web/components/blast-feel/FeelProvider.tsx";
 import { hasActiveToast } from "#web/components/blast-ui/toast-actions.ts";
 import { useBalancesContext } from "#web/components/social/coins/balances.tsx";
 import { useCoinTradeWallet } from "./CoinTradeSignerProvider";
@@ -178,6 +179,7 @@ export function CurveTradeProvider({
 
   // Diagnostics from each controller's state changes; completion, and a completed Buy's verified
   // outcome, only from the completed event.
+  const { play } = useFeelSound();
   const reportRef = useRef(report);
   const outcomeRef = useRef(reportOutcome);
   useEffect(() => {
@@ -199,6 +201,7 @@ export function CurveTradeProvider({
       reportOutcome: (outcome) => outcomeRef.current(outcome),
       onRead: (digest, read) => {
         setCompleted((entries) => ({ ...entries, [digest]: read }));
+        if (read !== "unavailable") play({ kind: read.kind === "Bought" ? "buy" : "sell" });
         const show = confirmationToasts.get(digest);
         confirmationToasts.delete(digest);
         const id = `curve-trade:${digest}`;
@@ -215,7 +218,7 @@ export function CurveTradeProvider({
       refresh,
       onCompleted: readCompletion,
     });
-  }, [chain, coinIconUrl, confirmationToasts, controllers, deployment, launchId, refresh, signers, trades]);
+  }, [chain, coinIconUrl, confirmationToasts, controllers, deployment, launchId, play, refresh, signers, trades]);
 
   return (
     <Session

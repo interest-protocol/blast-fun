@@ -22,6 +22,7 @@ import { CelebrationHost } from "./celebration/CelebrationHost";
 import { LiveQueries } from "./LiveQueries";
 import { ShellPortfolioProvider } from "./shell-portfolio-context";
 import { signInHref } from "./sign-in-gate";
+import { useSoundSwitch } from "./settings/use-sound-switch";
 import { useAccountSettingsSync } from "./settings/use-account-settings-sync";
 import { useSocialViewer } from "./SignInGate";
 import { useSocialAccount } from "./use-social-account";
@@ -81,6 +82,7 @@ function SocialShellContent({
     viewerError: status === "error",
   }, viewer.signOut);
   useAccountSettingsSync(shellViewer?.accountId ?? null, viewer.getAccessToken);
+  const setSound = useSoundSwitch();
   const portfolio = useShellPortfolio({
     enabled: viewer.signedIn,
     accountId: shellViewer?.accountId ?? null,
@@ -118,6 +120,7 @@ function SocialShellContent({
       banner={banner}
       onRetryAccount={refreshAccount}
       onRetryPortfolio={portfolio.refresh}
+      onSoundToggle={setSound}
       overlays={
         <>
           <SignInSheet />

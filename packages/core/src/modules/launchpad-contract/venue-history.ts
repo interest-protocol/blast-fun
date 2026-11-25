@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { compareExact, exactDecimal } from "@blast/core/lib/exact-amount.ts";
 import { fdvInQuote } from "@blast/core/modules/social/prices/valuation.ts";
-import { INDEXED_POOL_COINS } from "@blast/core/modules/social/portfolio/core-coins.ts";
+import { isStandalonePool } from "@blast/core/modules/social/portfolio/core-coins.ts";
 import { marketCapUsd, quoteValueUsd } from "./market-cap-usd.ts";
 import { matchesSchema, listSchema, contractObject, contractValue, recordSchema, ContractViolation, parseAtomic, parseCount, parsePriceString, parseUsdString } from "@blast/core/modules/launchpad-contract/decimal.ts";
 import type { MarketDataDependencies } from "@blast/core/modules/read-routing/market-data.ts";
@@ -308,7 +308,7 @@ export function parsePoolCandlePage(poolKey: string, interval: CandleInterval, b
   exactKeys(answer, ["interval", "candles", "migration"], "body", ["provenance"]);
   if (answer.interval !== interval) throw new ContractViolation("interval", "must be the requested interval");
   const migration = parseMarker(answer.migration, "migration");
-  const standalone = INDEXED_POOL_COINS.some((coin) => coin.poolKey === poolKey);
+  const standalone = isStandalonePool(poolKey);
   if (standalone && migration !== null) {
     throw new ContractViolation("migration", "a standalone pool has no V2 migration");
   }
@@ -423,7 +423,7 @@ export function readPoolCandles(
   return readV1("market", poolCandlesPath(poolKey, request), (body) => parsePoolCandlePage(poolKey, request.interval, body), dependencies);
 }
 
-/** Reads one page of a pool's trades (a venue pool's: its venue activity), validated. */
+/** Reads one page of a pool's raw trades, on the curve or a venue, validated. */
 export function readPoolTrades(
   poolKey: string,
   request: TradeRequest,

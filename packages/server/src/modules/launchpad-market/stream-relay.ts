@@ -200,6 +200,8 @@ export class MarketStreamRelay {
   readonly #connect: () => RelaySocket;
   readonly #expected: ExpectedDeployment;
   readonly #prices?: DisplayPriceFeed;
+  /** SSE streams and sockets together; the process's configured stream count. */
+  readonly #maxClients: number;
   readonly #topics = new Map<string, Topic>();
   readonly #presales = new Map<string, Set<Client>>();
   readonly #clients = new Set<Client>();
@@ -218,8 +220,14 @@ export class MarketStreamRelay {
   /** Pools whose upstream resume is in flight, in the order the reader answers them. */
   #resumes: string[] = [];
 
-  constructor(connect: () => RelaySocket, expected: ExpectedDeployment, prices?: DisplayPriceReader) {
+  constructor(
+    connect: () => RelaySocket,
+    expected: ExpectedDeployment,
+    prices?: DisplayPriceReader,
+    maxClients: number = ACTIVITY_HINT_STREAM_BUDGET.maxClients,
+  ) {
     this.#connect = connect;
+    this.#maxClients = maxClients;
     this.#expected = expected;
     if (prices) this.#prices = new DisplayPriceFeed(prices);
   }
@@ -237,7 +245,7 @@ export class MarketStreamRelay {
   admits(pools: readonly string[], priceCoins: readonly string[]): boolean {
     const added = pools.filter((pool) => !this.#topics.has(pool)).length;
     return (
-      this.#clients.size < ACTIVITY_HINT_STREAM_BUDGET.maxClients &&
+      this.#clients.size < this.#maxClients &&
       this.#topics.size + added <= B.maxTopics &&
       (this.#prices?.admits(priceCoins) ?? true)
     );
@@ -261,7 +269,7 @@ export class MarketStreamRelay {
       );
     const added = pools.filter((pool) => !this.#topics.has(pool));
     if (
-      this.#clients.size >= ACTIVITY_HINT_STREAM_BUDGET.maxClients ||
+      this.#clients.size >= this.#maxClients ||
       this.#topics.size + added.length > B.maxTopics
     )
       return publicErrorResponse(

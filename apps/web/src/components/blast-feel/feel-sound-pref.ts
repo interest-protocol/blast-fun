@@ -8,18 +8,11 @@ import { deviceStore } from "#web/components/ui-libraries/device-store.ts";
  * The Feel layer's one live flag: whether sound is on, on this device.
  *
  * Kept under the gate's own key, `blast.sound`, as JSON, so a device that used
- * the prototype carries its choice over. Every surface reads this flag and
- * nothing else, so the Settings switch and the Blast mode button are always in
- * step.
+ * the prototype carries its choice over. Every surface reads this flag.
  *
- * **Off until the reader turns it on** (the owner, 2026-10-06, amending OA-25
- * Q3a; the gate defaults it on):
- *
- *  - with **no choice stored** the flag reads **off**, for a visitor and for
- *    an account alike: signing in never turns it on by itself;
- *  - a **choice** is made only by the reader flipping a switch (Settings →
- *    Feel → Sound, or the Blast mode speaker button). It is stored here at once
- *    and kept: a stored `true` or `false` is never replaced by a default;
+ *  - with no choice stored, sound is on by default;
+ *  - an explicit choice made in the shared header is stored here at once.
+ *    The default never replaces a stored `true` or `false`;
  *  - a signed-in account keeps the choice on the server
  *    (`social_accounts.sound`, `PUT /api/social/me/settings`), where **NULL
  *    means the account has not chosen** (migration 0099). When a session
@@ -32,7 +25,7 @@ import { deviceStore } from "#web/components/ui-libraries/device-store.ts";
  *  - the reader's own change on this device always beats an account read that
  *    was already in flight (`soundChangeMark`).
  *
- * The server snapshot is "off", so the server's HTML and the first client
+ * The server snapshot uses the default, so the server's HTML and the first client
  * render agree and the stored value arrives in the next render — no hydration
  * mismatch. Storage that is missing or refuses (a private window) keeps the
  * choice for the page's life. The page's copy of the choice is a zustand store
@@ -47,8 +40,7 @@ export const FEEL_SOUND_KEY = "blast.sound";
  */
 export const FEEL_SOUND_PENDING_KEY = "blast.soundPending";
 
-/** Off until the reader turns it on, signed in or not. */
-export const FEEL_SOUND_DEFAULT = false;
+export const FEEL_SOUND_DEFAULT = true;
 
 export type FeelPrefStorage = Pick<Storage, "getItem" | "setItem">;
 
@@ -68,7 +60,7 @@ export function readSoundChoice(storage: FeelPrefStorage | null): boolean | null
   return storedBoolean(storage, FEEL_SOUND_KEY);
 }
 
-/** The stored choice, or the default (off) when there is none. */
+/** The stored choice, or the default when there is none. */
 export function readSoundEnabled(storage: FeelPrefStorage | null): boolean {
   return readSoundChoice(storage) ?? FEEL_SOUND_DEFAULT;
 }
@@ -137,7 +129,7 @@ export function subscribeSoundEnabled(listener: () => void): () => void {
   };
 }
 
-/** Whether sound is on for this device (off while hydrating, and off by default). */
+/** Whether sound is on for this device. */
 export function useSoundEnabled(): boolean {
   return useSyncExternalStore(subscribeSoundEnabled, snapshot, () => FEEL_SOUND_DEFAULT);
 }
@@ -182,8 +174,7 @@ export function soundChangeMark(): number {
  *    choice wins, and is on its way to the account);
  *  - the account has a choice: it becomes this device's, and nothing is
  *    pending any more;
- *  - the account has none (null): this device keeps its own value — off when
- *    it has never chosen.
+ *  - the account has none (null): this device keeps its own choice or the default.
  *
  * Returns the choice the account should now keep — this device's own, when
  * the account has none and the reader made one here that no account has —

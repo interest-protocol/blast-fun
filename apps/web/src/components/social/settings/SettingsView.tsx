@@ -7,7 +7,6 @@ import { diagnosticMessage } from "#web/lib/errors.ts";
 import clsx from "clsx";
 import { useEffect, useRef, type ReactNode } from "react";
 
-import { FEEL_SETTINGS_ROW_DESCRIPTION, FEEL_SETTINGS_ROW_TITLE } from "#web/components/blast-feel/index.ts";
 import { EXPLORER_NAMES } from "@blast/core/lib/explorer.ts";
 import { usePhoneLayout } from "#web/components/blast-ui/use-shell-prefs.ts";
 import { Button, DisclosureSummary } from "#web/components/blast-ui/Button.tsx";
@@ -27,8 +26,7 @@ import { AddIcon, ChevronIcon, WalletIcon } from "./settings-icons";
 import { COPY, NOTIFICATION_ROWS, shortWallet, walletName, walletRows, walletSince } from "./settings-model";
 
 /**
- * Settings (FEATURE-MAP §7) as the Settings board draws it: Appearance (theme
- * and sound), Notifications (eight switches), Transactions, Privacy with its
+ * Settings (FEATURE-MAP §7) as the Settings board draws it: Appearance (theme), Notifications (eight switches), Transactions, Privacy with its
  * footnote, Wallets and Account. Presentational:
  * the screen (`SettingsScreen`) owns the data and the saves, and the
  * development fixture renders the same view with the design's sample account.
@@ -52,8 +50,6 @@ export type SettingsViewProps = Readonly<{
   wallets: readonly SocialAccountWallet[];
   callsign: string | null;
   celebrate: boolean;
-  /** The Feel layer's sound switch (R3-12): this device's live flag, which a signed-in account keeps too. */
-  sound: boolean;
   /** The explorer shown: the account's in `account` mode, else this device's. */
   explorer: SocialExplorer;
   /** The coins a hold may pay with: the wallet's held coins once read. */
@@ -62,7 +58,6 @@ export type SettingsViewProps = Readonly<{
   onHoldCoin?(coinType: string | null): void;
   onNotification(key: NotificationPreferenceKey, on: boolean): void;
   onCelebrate(on: boolean): void;
-  onSound(on: boolean): void;
   onBlastConfirmation(on: boolean): void;
   onPrivate(on: boolean): void;
   onPublicPortfolio(on: boolean): void;
@@ -237,11 +232,6 @@ export function SettingsView(input: SettingsViewProps) {
         <div className={styles.row}>
           <Text title={COPY.theme.title} />
           <ThemeControl />
-        </div>
-        <div className={styles.row}>
-          <Text title={FEEL_SETTINGS_ROW_TITLE} sub={FEEL_SETTINGS_ROW_DESCRIPTION} />
-          {/* `feelSound`: the layer's own switch cue skips it; turning it on is confirmed by one tap instead. */}
-          <Switch busy={false} feelSound label={FEEL_SETTINGS_ROW_TITLE} on={props.sound} onChange={props.onSound} />
         </div>
       </Group>
 
