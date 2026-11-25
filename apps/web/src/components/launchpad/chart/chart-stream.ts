@@ -92,7 +92,7 @@ export class ChartStream {
       this.acceptRead(key, answer.page, answer.section, checkpoint);
     }
     const hub = this.options.hub === undefined ? tabMarketStream() : this.options.hub;
-    // Without a stream (no EventSource) the chart stays on its HTTP polls.
+    // Without a socket (no WebSocket) the chart stays on its HTTP polls.
     if (hub) {
       this.subscription = hub.subscribe({
         pools: this.options.pools,
