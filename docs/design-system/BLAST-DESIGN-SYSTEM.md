@@ -67,14 +67,14 @@ Competitions, Swap, phones and the shared library sheet.
 - **Shell geometry** (Rail, Topbar and Mobile boards; tokens in `blast-ui.css`):
   - Rail: 248px (`--rail`; 88px collapsed), 20/16 padding, rows 4px apart. Rows
     are 42px with 12px padding and gap, 11px corners, 15px text at 500 (600
-    when current) and 20px icons; every icon and label shares one x, More's
-    disclosure included. The brand row is the helmet mark (36×24, never the bolt) and the 23/700 wordmark
+    when current) and 20px icons; every icon and label shares one x.
+    The brand row is the helmet mark (36×24, never the bolt) and the 23/700 wordmark
     beside the collapse button (`IconButton size="chip"`); Create is 44px, 18px
-    below More. The rail holds no account control (2026-11-20, owner): the
+    below Portfolio. The rail holds no account control (2026-11-20, owner): the
     account avatar sits in the top bar, where Sign in sits for a visitor.
   - Collapsed rail (2026-11-14, KA-5): every row keeps its name. Each row is a
     80 × 56px cell with the 20px icon over a 12px label, like the phone tab
-    bar. The wordmark and More's chevron hide. Every route uses this rail by
+    bar. The wordmark hides. Every route uses this rail by
     default below 1400px. The user's saved choice applies at every desktop
     width. The Blast links below show icons alone.
   - Blast links (2026-11-20, owner): the rail's foot holds four quiet icon
@@ -82,7 +82,7 @@ Competitions, Swap, phones and the shared library sheet.
     (docs.blast.fun), each `IconButtonLink variant="nav"`, opening a new tab and
     named in a tooltip. Full rail: one row of 44px links. Collapsed: a 2 × 2 grid
     of 28px links (one column of 44px on touch). Phones show none.
-  - The rail shows Home, Swap, Bonding, Presales, Portfolio and More.
+  - The rail shows Home, Swap, Bonding, Presales, Portfolio and Create.
     Presales uses the ticket icon and links to `/presale`. Bonding uses the
     curve icon and links to `/bonding`. Both pages have their own title.
     Bonding is also current on `/launch` and bonding coin pages. On a not-found page,
