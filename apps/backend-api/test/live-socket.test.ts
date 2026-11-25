@@ -25,9 +25,14 @@ type Sub = {
 };
 
 /** One Redis that every instance shares: burned tickets and the per-IP sets. */
-const store = () => ({ burned: new Set<string>(), ipSets: new Map<string, Set<string>>() });
+const store = () => ({
+  burned: new Set<string>(),
+  ipSets: new Map<string, Set<string>>(),
+  failedRemovals: 0,
+});
 
-function harness(relay?: LiveRelay, redisDown = false, { burned, ipSets } = store()) {
+function harness(relay?: LiveRelay, redisDown = false, shared = store()) {
+  const { burned, ipSets } = shared;
   const ipSet = (key: string) => ipSets.get(key) ?? ipSets.set(key, new Set()).get(key)!;
   const subs: Sub[] = [];
   const fake: LiveRelay = relay ?? {
@@ -54,7 +59,13 @@ function harness(relay?: LiveRelay, redisDown = false, { burned, ipSets } = stor
           throw new Error("down");
         }
         if (args[0] === "ZREM") {
-          ipSet(args[1]!).delete(args[2]!);
+          if (shared.failedRemovals > 0) {
+            shared.failedRemovals--;
+            throw new Error("deadline");
+          }
+          for (const id of args.slice(2)) {
+            ipSet(args[1]!).delete(id);
+          }
           return 1;
         }
         // EVALSHA admitScript: KEYS ticket, IP sockets, IP opens; ARGV ttl, id, socket cap, opens cap, life.
@@ -108,8 +119,8 @@ function harness(relay?: LiveRelay, redisDown = false, { burned, ipSets } = stor
   return { live, server, subs, open, url };
 }
 
-const until = async (check: () => boolean) => {
-  for (let i = 0; i < 200 && !check(); i++) {
+const until = async (check: () => boolean, ms = 1_000) => {
+  for (let i = 0; i < ms / 5 && !check(); i++) {
     await Bun.sleep(5);
   }
   assert.ok(check());
@@ -266,8 +277,15 @@ test("per-IP socket and open counts are shared by every instance", async () => {
       LIVE_CLOSE.perIp,
       "the ninth socket from one address, on either instance",
     );
+    // The first removal fails, as on a Redis stall: the retry still frees the slot.
+    shared.failedRemovals = 1;
     held.pop()!.ws.close();
-    await until(() => [...shared.ipSets.values()].some((set) => set.size === 7));
+    await Bun.sleep(50);
+    assert.ok(
+      [...shared.ipSets.values()].some((set) => set.size === 8),
+      "the failed removal",
+    );
+    await until(() => [...shared.ipSets.values()].some((set) => set.size === 7), 3_000);
     const again = a.open(`pool=${pool(1)}`);
     assert.equal(await again.opened, true);
     await Bun.sleep(20);

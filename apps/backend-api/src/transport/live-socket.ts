@@ -69,6 +69,7 @@ redis.call('PEXPIRE', KEYS[3], 60000)
 return 1
 `);
 /** Room past the longest socket life before a leaked slot frees itself. */
+const REMOVAL_RETRY_MS = 2_000;
 const SOCKET_ENTRY_MS = LIVE_SOCKET.lifetimeMs.max + 5 * 60_000;
 
 /** What the socket needs from the market relay. */
@@ -170,6 +171,11 @@ export function createLiveSocket(options: LiveSocketOptions) {
   const sockets = new Set<Socket>();
   const addresses = new Map<string, Address>();
   let draining = false;
+  // Socket ids to remove from the shared per-IP sets, by key. A failed removal is
+  // retried, so a Redis stall or a burst of closes never leaves a phantom slot.
+  const removals = new Map<string, Set<string>>();
+  let flushing: Promise<void> | undefined;
+  let retry: ReturnType<typeof setTimeout> | undefined;
 
   const ipKey = (rateKey: string, kind: "sockets" | "opens") =>
     `${options.namespace}:live-ip:${kind}:${rateKey}`;
@@ -194,6 +200,37 @@ export function createLiveSocket(options: LiveSocketOptions) {
   const distinct = (table: Map<string, number>, keys: readonly string[]) =>
     new Set([...table.keys(), ...keys]).size;
 
+  const flush = (): Promise<void> =>
+    (flushing ??= Promise.resolve().then(async () => {
+      const batch = [...removals];
+      removals.clear();
+      const failed = await Promise.all(
+        batch.map(([key, ids]) =>
+          options.redis.execute(["ZREM", key, ...ids]).then(
+            () => null,
+            () => [key, ids] as const,
+          ),
+        ),
+      );
+      flushing = undefined;
+      for (const [key, ids] of failed.filter((entry) => entry !== null)) {
+        forget(key, ...ids);
+      }
+      if (removals.size && !retry) {
+        retry = setTimeout(() => {
+          retry = undefined;
+          void flush();
+        }, REMOVAL_RETRY_MS);
+      }
+    }));
+
+  function forget(key: string, ...ids: readonly string[]) {
+    const set = removals.get(key) ?? removals.set(key, new Set()).get(key)!;
+    for (const id of ids) {
+      set.add(id);
+    }
+  }
+
   const release = (ws: Socket) => {
     const data = ws.data;
     if (!sockets.delete(ws)) {
@@ -212,8 +249,8 @@ export function createLiveSocket(options: LiveSocketOptions) {
       }
     }
     if (data.id) {
-      // Best effort: a missed removal frees itself when the entry expires.
-      void options.redis.execute(["ZREM", ipKey(data.rateKey, "sockets"), data.id]).catch(() => {});
+      forget(ipKey(data.rateKey, "sockets"), data.id);
+      void flush();
     }
   };
   const shut = (ws: Socket, code: number) => {
@@ -266,7 +303,7 @@ export function createLiveSocket(options: LiveSocketOptions) {
   };
   /** The fleet-wide part, in one Redis step: null admits, otherwise the close code. */
   const claim = async (data: LiveSocketData, ticket: { nonce: string; expiresAtMs: number }) => {
-    // Set before the call: a close while Redis answers sends its removal after the admit on the same connection.
+    // Set before the call: a close while Redis answers still removes the entry.
     data.id = randomUUID();
     const result = await admitScript(
       options.redis,
@@ -316,11 +353,15 @@ export function createLiveSocket(options: LiveSocketOptions) {
     } catch {
       return shut(ws, LIVE_CLOSE.busy);
     }
-    if (data.closing) {
-      return;
-    }
     if (refused) {
+      // Nothing was added for this socket: no removal to send.
+      data.id = "";
       return shut(ws, refused);
+    }
+    if (data.closing) {
+      // The removal sent at close can reach Redis before the add (NOSCRIPT falls back to EVAL).
+      forget(ipKey(data.rateKey, "sockets"), data.id);
+      return void flush();
     }
     const result = options.relay.subscribe(query.request, sink(ws), {
       resume: query.resume,
@@ -464,7 +505,13 @@ export function createLiveSocket(options: LiveSocketOptions) {
               ),
             ),
         ),
-      ).then(() => {});
+      )
+        .then(() => {
+          clearTimeout(retry);
+          retry = undefined;
+          return flush();
+        })
+        .then(() => (removals.size ? flush() : undefined));
     },
   };
 }
