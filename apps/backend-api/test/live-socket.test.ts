@@ -34,10 +34,10 @@ function harness(relay?: LiveRelay, redisDown = false) {
     relay: fake,
     redis: {
       async execute(args: string[]) {
-        if (redisDown) throw new Error("down");
+        if (redisDown) {throw new Error("down");}
         assert.equal(args[0], "SET");
         assert.match(args[1]!, /^test:live-ticket:/);
-        if (burned.has(args[1]!)) return null;
+        if (burned.has(args[1]!)) {return null;}
         burned.add(args[1]!);
         return "OK";
       },
@@ -72,7 +72,7 @@ function harness(relay?: LiveRelay, redisDown = false) {
 }
 
 const until = async (check: () => boolean) => {
-  for (let i = 0; i < 200 && !check(); i++) await Bun.sleep(5);
+  for (let i = 0; i < 200 && !check(); i++) {await Bun.sleep(5);}
   assert.ok(check());
 };
 
@@ -114,8 +114,8 @@ test("admission refuses in order: origin before upgrade, then ticket, query, per
     assert.equal((await open(`pool=${pool(1)}&cursor=1:0:0:0`).closed).code, LIVE_CLOSE.query);
     assert.equal((await open(`pool=${pool(1)}&resume=${pool(2)}~1:0:0:0`).closed).code, LIVE_CLOSE.query, "resume must name a subscribed pool");
     const sockets = [];
-    for (let i = 0; i < 4; i++) sockets.push(open(`pool=${pool(i + 1)}`));
-    for (const socket of sockets) assert.equal(await socket.opened, true);
+    for (let i = 0; i < 4; i++) {sockets.push(open(`pool=${pool(i + 1)}`));}
+    for (const socket of sockets) {assert.equal(await socket.opened, true);}
     assert.equal((await open(`pool=${pool(5)}`).closed).code, LIVE_CLOSE.perIp, "a fifth distinct pool from one address");
     const shared = open(`pool=${pool(1)}&${Array.from({ length: 20 }, (_, i) => `price_coin=${coin(i + 1)}`).join("&")}`);
     assert.equal(await shared.opened, true);
@@ -124,7 +124,7 @@ test("admission refuses in order: origin before upgrade, then ticket, query, per
     await Bun.sleep(20);
     const tooMany = open(`pool=${pool(1)}&price_coin=${coin(99)}`);
     assert.equal((await tooMany.closed).code, LIVE_CLOSE.perIp, "the 41st distinct coin");
-    for (const socket of [...sockets, shared, coins]) socket.ws.close();
+    for (const socket of [...sockets, shared, coins]) {socket.ws.close();}
   } finally {
     server.stop(true);
   }

@@ -37,13 +37,13 @@ if (process.argv[2] === "server") {
     port: 0, hostname: "127.0.0.1", websocket: live.websocket,
     fetch(request, native) {
       const path = new URL(request.url).pathname;
-      if (path === "/v1/socket") return live.upgrade(request, native, native.requestIP(request)?.address ?? null);
+      if (path === "/v1/socket") {return live.upgrade(request, native, native.requestIP(request)?.address ?? null);}
       if (path === "/hello") {
         receive({ type: "hello", protocol: 1, provenance: provenance(1) });
         receive({ type: "pong" });
-        for (const pool of POOLS) receive({ type: "snapshot", topic: `pool:${pool}`, ...envelope(checkpoint) });
+        for (const pool of POOLS) {receive({ type: "snapshot", topic: `pool:${pool}`, ...envelope(checkpoint) });}
       }
-      if (path === "/emit") for (const pool of POOLS) receive({ type: "lifecycle", pool_key: pool, ...envelope(++checkpoint) });
+      if (path === "/emit") {for (const pool of POOLS) {receive({ type: "lifecycle", pool_key: pool, ...envelope(++checkpoint) });}}
       Bun.gc(true);
       return Response.json({ rss: process.memoryUsage().rss, heap: process.memoryUsage().heapUsed, ...live.stats() });
     },
@@ -70,7 +70,7 @@ if (process.argv[2] === "server") {
     ws.onerror = () => reject(new Error(`socket ${index} failed`));
   });
   const clients: WebSocket[] = [];
-  for (let i = 0; i < sockets; i += 50) clients.push(...await Promise.all(Array.from({ length: Math.min(50, sockets - i) }, (_, j) => open(i + j))));
+  for (let i = 0; i < sockets; i += 50) {clients.push(...await Promise.all(Array.from({ length: Math.min(50, sockets - i) }, (_, j) => open(i + j))));}
   await Bun.sleep(500);
   await stats("/hello");
   await Bun.sleep(500);
@@ -81,7 +81,7 @@ if (process.argv[2] === "server") {
     const target = received + perFrame;
     const start = performance.now();
     await fetch(`http://127.0.0.1:${port}/emit`);
-    while (received < target) await Bun.sleep(1);
+    while (received < target) {await Bun.sleep(1);}
     times.push(performance.now() - start);
   }
   const after = await stats("/stats");
@@ -93,6 +93,6 @@ if (process.argv[2] === "server") {
     rss_mib: Math.round(after.rss / 2 ** 20),
     fanout_ms: { p50: Math.round(times[Math.floor(times.length / 2)]!), p95: Math.round(times[Math.floor(times.length * 0.95)]!) },
   }));
-  for (const ws of clients) ws.close();
+  for (const ws of clients) {ws.close();}
   child.kill();
 }
