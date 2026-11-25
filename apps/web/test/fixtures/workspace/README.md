@@ -38,6 +38,26 @@ OA-31/OA-32 and the OA-24/Mobile-board references stay with their replacements.
 The asset/axis/root wiring and display-selector inventory remain source guards.
 Numeric-figure and font-feature source contracts remain outside this check.
 
+## Coin price row after a trade
+
+`/price-row-proof` mounts the real `BondingCoinScreen` in `AppShell`. After a
+trade the page refreshes at a newer checkpoint than the chart's last live close,
+so the price waits with "—". The runner scrolls the reader down to the activity
+block, moves the page to the next checkpoint, and checks that the price row
+keeps its size, does not move the content below it or the scroll position, and
+keeps the last price unseen. It covers four widths and a short and a long price
+in quote-currency mode (the runner blocks the USD rate read). The chart,
+activity, holders and trade panels are fixed-height stand-ins. Compiling this page needs about 3.5 GiB of Node heap:
+start the server above with `--max-old-space-size=3584`.
+
+```bash
+agent-browser --session price-row open about:blank
+PRICE_ROW_CDP_URL="$(agent-browser --session price-row get cdp-url | sed -n '/^[[:space:]]*ws:\/\//p')" \
+PRICE_ROW_EVIDENCE_DIR=/absolute/task-owned/evidence \
+npm run test:coin-price-row -w @blast/web
+agent-browser --session price-row close
+```
+
 ## Repeatable workspace layout check (#799)
 
 The bounded `layout/` fixture mounts the real `WorkspaceHost`, header, discovery
