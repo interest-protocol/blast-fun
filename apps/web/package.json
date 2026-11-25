@@ -28,6 +28,7 @@
     "typecheck": "tsc --noEmit",
     "check:partner-v1": "env -i PATH=\"$PATH\" node --no-warnings --import ../../scripts/test-tsx-hooks.mjs --test --test-concurrency=1 --experimental-strip-types src/modules/partner-api/v1/*.test.ts ../../packages/server/src/modules/partner-api/v1/route.test.ts ../../packages/server/src/modules/partner-api/v1/runtime.test.ts",
     "check:partner-live": "node scripts/partner-api-live/run.mjs",
+    "test:live-probe": "node --test scripts/live-probe/*.test.mjs",
     "test:partner-live": "node --test --test-concurrency=1 scripts/partner-api-live/*.test.mjs",
     "defillama:publish": "node --env-file-if-exists=.env.local --no-warnings --experimental-strip-types scripts/defillama-publish.ts"
   },
