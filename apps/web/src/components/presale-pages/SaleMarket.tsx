@@ -23,6 +23,7 @@ import { readableUsd, subscriptZeros } from "#web/lib/market-format.ts";
 import { PUBLIC_STALE_MS } from "#web/lib/query/client.ts";
 import { queryKeys } from "#web/lib/query/keys.ts";
 import { useAppQueryClient } from "#web/lib/query/provider.tsx";
+import { POOL_KEY } from "@blast/core/modules/launchpad-contract/venues.ts";
 import type { HomeCoinMarket } from "@blast/core/web/contracts/coin-market.ts";
 import {
   HOME_MAX_HOLDERS,
@@ -457,9 +458,13 @@ function SalePoolChart({ sale, market, pool }: Readonly<{
   market: HomeCoinMarket;
   pool: NonNullable<HomeCoinMarket["pool"]>;
 }>) {
+  const poolKey = `${pool.venue}:${pool.id}`;
+  const earlier = <PresalePoolChart sale={sale} market={market} pool={pool} />;
+  // The shared feed keys pools by the venues it indexes: a pool on any other venue has only the earlier chart.
+  if (!POOL_KEY.test(poolKey)) return earlier;
   return <PoolChart
     key={pool.id}
-    poolKey={`${pool.venue}:${pool.id}`}
+    poolKey={poolKey}
     coinType={sale.sale_token}
     symbol={sale.symbol}
     decimals={market.decimals}
@@ -467,7 +472,7 @@ function SalePoolChart({ sale, market, pool }: Readonly<{
     initialControls={POOL_CHART_CONTROLS}
     market={{ launchAt: sale.launched_ms ?? undefined }}
     checkpoint={market.as_of.checkpoint}
-    uncovered={<PresalePoolChart sale={sale} market={market} pool={pool} />}
+    uncovered={earlier}
   />;
 }
 

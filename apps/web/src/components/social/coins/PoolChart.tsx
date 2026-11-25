@@ -94,8 +94,8 @@ export function PoolChart({ poolKey, coinType, symbol, decimals, quote = SUI_POO
     stream.current = client;
     client.start();
     return () => {
-      client.stop();
       if (stream.current === client) stream.current = null;
+      client.stop();
     };
   }, [poolKey, coinType, controls, key, ready, streams, unknown]);
 

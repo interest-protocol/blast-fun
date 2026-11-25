@@ -341,13 +341,16 @@ test("a graduated pool shows a dash until its current close is confirmed", () =>
   client.clear();
 });
 
-test("a graduated sale charts its verified pool on the shared market read, and keeps its earlier chart only when that read does not know the pool", async (t) => {
+const EARLIER_CHART = "/api/social/prices?source=pool_swaps";
+
+/** A graduated sale's market on a pool of `venue`, with every read answering not found. */
+async function mountGraduatedSale(t: test.TestContext, venue: string) {
   class QuietStream { close() {} addEventListener() {} }
   const source = Object.getOwnPropertyDescriptor(globalThis, "EventSource");
   Object.defineProperty(globalThis, "EventSource", { configurable: true, value: QuietStream });
   const client = createTestQueryClient();
   const detail = fixtureDetail("kstl");
-  const pool = { id: `0x${"9".repeat(64)}`, venue: "bluefin", coin_atoms: "1", quote_atoms: "1", as_of_ms: FIXTURE_NOW };
+  const pool = { id: `0x${"9".repeat(64)}`, venue, coin_atoms: "1", quote_atoms: "1", as_of_ms: FIXTURE_NOW };
   client.setQueryData([...queryKeys.home.all, "market", detail.presale.sale_token], fixtureCoinMarket({ pool }));
   const asked: string[] = [];
   t.mock.method(globalThis, "fetch", async (input: RequestInfo | URL) => {
@@ -366,10 +369,18 @@ test("a graduated sale charts its verified pool on the shared market read, and k
     else Reflect.deleteProperty(globalThis, "EventSource");
   });
   await act(async () => root.render(withQueryClient(client, <SaleMarket nowMs={FIXTURE_NOW} sale={detail.presale} terms={detail.terms} />)));
-  const shared = `/api/launchpad/market/pools/bluefin/${pool.id}/candles`;
-  const earlier = "/api/social/prices?source=pool_swaps";
-  await waitFor(() => asked.includes(earlier), "the earlier chart to read after the shared read answers not found", 5_000);
+  await waitFor(() => asked.includes(EARLIER_CHART), "the earlier chart to read", 5_000);
+  return { asked, shared: `/api/launchpad/market/pools/${venue}/${pool.id}/candles` };
+}
+
+test("a graduated sale charts its verified pool on the shared market read, and keeps its earlier chart only when that read does not know the pool", async (t) => {
+  const { asked, shared } = await mountGraduatedSale(t, "bluefin");
   assert.ok(asked.includes(shared), "the verified venue and pool id select the candles");
-  assert.ok(asked.indexOf(shared) < asked.indexOf(earlier), "the earlier chart reads only after the shared read answered not found");
+  assert.ok(asked.indexOf(shared) < asked.indexOf(EARLIER_CHART), "the earlier chart reads only after the shared read answered not found");
   assert.equal(asked.filter((path) => path === shared).length, 1);
+});
+
+test("a graduated sale on a venue the shared market feed does not index keeps its earlier chart", async (t) => {
+  const { asked, shared } = await mountGraduatedSale(t, "aftermath");
+  assert.ok(!asked.includes(shared), "the shared read is never asked for a pool it cannot key");
 });
