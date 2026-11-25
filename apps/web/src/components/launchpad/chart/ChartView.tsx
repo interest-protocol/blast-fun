@@ -184,6 +184,7 @@ function useChartViewControls({
   hidden,
   pending,
   updates,
+  streamCurrent = false,
   emptyMessage,
   livePreset = false,
   currentPrice,
@@ -203,6 +204,8 @@ function useChartViewControls({
   pending: boolean;
   /** Current streaming/recovery state, or null for a static chart. */
   updates: string | null;
+  /** The update stream has fenced and is delivering every trade, so Live holds prices to the clock. */
+  streamCurrent?: boolean;
   emptyMessage?: string;
   livePreset?: boolean;
   currentPrice?: string | null;
@@ -214,9 +217,9 @@ function useChartViewControls({
 }>) {
   const live = controls.range === "live";
   const now = useChartClock(1_000, live);
-  const drawing = chartDrawing({ state, source, omitCurve, historyRequest, hidden, live, now, marketChart, currentPrice, streamCurrent: !updates });
+  const drawing = chartDrawing({ state, source, omitCurve, historyRequest, hidden, live, now, marketChart, currentPrice, streamCurrent });
   const delayed = live && drawing.sources.some(({ section }) => !section || section.state === "stale" || section.state === "unavailable");
-  return { source, quoteUsd, controls, pending, updates: updates ?? (delayed ? "Trade updates delayed." : null), emptyMessage, livePreset, diagnostic, marketChart, onControls, onToggle, onRefresh, ...drawing };
+  return { source, quoteUsd, controls, pending, streamCurrent, updates: updates ?? (delayed ? "Trade updates delayed." : null), emptyMessage, livePreset, diagnostic, marketChart, onControls, onToggle, onRefresh, ...drawing };
 }
 
 function chartDrawing({ state, source, omitCurve, historyRequest, hidden, live, now, marketChart, currentPrice, streamCurrent }: Readonly<{
@@ -672,7 +675,7 @@ function LiveTradeStatus({ view }: Readonly<{ view: ChartViewControls }>) {
       {lastTrade.price === null ? "Last trade · price unavailable" : `Last traded price ${amountsHidden ? HIDDEN_AMOUNT : tokenPrice(lastTrade.price, source, quoteUsd)}`}
       {" · "}<time dateTime={at}>{at.slice(0, 10)} · {at.slice(11, 19)} UTC</time>
     </p>}
-    {view.geometry && !view.hasLiveTrades && !updates && !liveIncomplete && <p className={styles.note} role="status">No trades in the last 5 min</p>}
+    {view.streamCurrent && view.geometry && !view.hasLiveTrades && !updates && !liveIncomplete && <p className={styles.note} role="status">{`No trades in the last ${LIVE_CHART_SPAN_MS / 60_000} min`}</p>}
     {updates && <p className={styles.note} role="status">{updates}</p>}
     {liveIncomplete && <p className={styles.note} role="status">Partial trade history in this window.</p>}
   </>;

@@ -62,6 +62,13 @@ test("resizing keeps the live gutter and leaves a history range alone", () => {
   assert.equal(atLiveEdge(pinned, 1201, 282), true);
   const slid = resizedLiveChartRange({ from: 185, to: 1566.28 }, 1201, 0, 282, true)!;
   assert.deepEqual([slid.from, atLiveEdge(slid, 1201, 282)], [0, true], "a fit the pinned edge slid right returns to every bar");
+  // Two trades in one slot leave the window: the pinned view loses a bar and must keep exactly one gutter.
+  const times = Array.from({ length: 1201 }, (_, index) => index * 250 + (index === 1 ? 100 : 0));
+  let shrunk = pinned;
+  for (let lost = 1; lost <= 6; lost++) shrunk = rebaseCoinChartRange(shrunk, times.slice(lost - 1), times.slice(lost), 282);
+  assert.equal(shrunk.from, 0, "a shrinking timeline stays pinned at its first bar");
+  assert.ok(Math.abs((shrunk.to - 1194) / ((shrunk.to - shrunk.from + 1) / 282) - 32) < 1e-6, "the gutter stays exactly 32 px");
+  assert.equal(atLiveEdge(shrunk, 1195, 282), true);
 });
 
 test("a refreshed fallback time grid keeps both historical time bounds", () => {

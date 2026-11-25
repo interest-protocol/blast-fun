@@ -380,7 +380,7 @@ test("Live holds the confirmed price as steps through quiet seconds and joins th
   const container = dom.document.createElement("div");
   const root = createRoot(container);
   t.after(() => act(async () => root.unmount()));
-  const render = (updates: string | null, liveTrades: readonly ReturnType<typeof trade>[], observedAt = now) => {
+  const render = (updates: string | null, liveTrades: readonly ReturnType<typeof trade>[], observedAt = now, current = updates === null) => {
     const provenance = { source: "blast-infra" as const, network: "localnet" as const, deployment: "fixture", checkpoint: 2, timestampMs: observedAt, observedAt, lagMs: 0 };
     const page = {
       poolKey, source: "curve" as const, venue: "blast_curve" as const, interval: "1s" as const, migration: null,
@@ -390,7 +390,7 @@ test("Live holds the confirmed price as steps through quiet seconds and joins th
       compact marketChart livePreset
       source={{ expected: null, curvePoolKey: poolKey, venuePoolKey: null, migration: null, symbol: "PIP", quoteSymbol: "SUI", memeDecimals: 9, quoteDecimals: 9 }}
       state={{ key: "1s|live", curve: { state: "available", data: page, provenance }, venue: null, migration: null }}
-      controls={controls} request={chartRequest(controls, now)} hidden={[]} updates={updates} pending={false}
+      controls={controls} request={chartRequest(controls, now)} hidden={[]} updates={updates} streamCurrent={current} pending={false}
       onControls={() => {}} onToggle={() => {}} onRefresh={() => {}}
     />));
   };
@@ -417,6 +417,11 @@ test("Live holds the confirmed price as steps through quiet seconds and joins th
     assert.equal(dateTime(), new Date(active.timestampMs).toISOString(), "heartbeats keep the real execution time");
   }
 
+  // Before the stream fences, a snapshot holds only to its read and makes no quiet claim.
+  await render(null, [prior, active], now - 30_000, false);
+  assert.match(points() ?? "", new RegExp(`,${at(now - 30_000)}:92$`), "a snapshot holds only to its read");
+  assert.doesNotMatch(container.textContent ?? "", /No trades in the last 5 min/);
+
   // Delayed: the line stops at the last observed time and the quiet claim is withdrawn.
   await render("Trade updates delayed.", [prior, active], now - 30_000);
   assert.match(points() ?? "", new RegExp(`,${at(now - 30_000)}:92$`), "no price is drawn past confirmed coverage");
@@ -427,7 +432,7 @@ test("Live holds the confirmed price as steps through quiet seconds and joins th
   await render("Trade updates delayed.", [prior, active], now - 310_000);
   assert.equal(plot(), null);
 
-  // The next trade joins the line once, even when delivered twice.
+  // The next trade joins the line once; a repeated execution collapses to one point (frame dedup is in chart-live-model.test.ts).
   now = next.timestampMs + 1_000;
   await render(null, [prior, active, next, next]);
   assert.equal(plot()?.getAttribute("data-line"), "step");

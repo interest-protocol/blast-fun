@@ -69,7 +69,9 @@ export function rebaseCoinChartRange(range: IRange<number>, before: readonly num
   if (regridded) return following ? liveChartRange(regridded, after.length, width) : regridded;
   if (following) {
     const shift = after.length - before.length;
-    return { from: range.from + shift, to: range.to + shift };
+    const shifted = { from: range.from + shift, to: range.to + shift };
+    // The coin chart pins its first bar; a view shifted before it would gain gutter and leave the live edge.
+    return shifted.from < 0 ? liveChartRange(shifted, after.length, width) : shifted;
   }
   const left = Math.max(0, Math.min(before.length - 1, Math.floor(range.from)));
   const available = new Set(after);

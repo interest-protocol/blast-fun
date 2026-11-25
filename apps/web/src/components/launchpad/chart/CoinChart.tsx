@@ -134,6 +134,7 @@ export function CoinChart({
         hidden={hidden}
         pending={pending}
         updates={updates}
+        streamCurrent={streamStatus === "streaming"}
         livePreset={livePreset}
         onControls={change}
         onToggle={(name, shown) => setHidden((current) => (shown ? current.filter((item) => item !== name) : [...current, name]))}
