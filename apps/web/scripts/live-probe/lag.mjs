@@ -35,29 +35,40 @@ export function parseSseBlock(block) {
  * Hop stamps in `provenance.hops` are returned as offsets from the chain time.
  */
 export function frameLag(event, receivedMs) {
-  let frame;
+  const frame = parseFrame(event.data);
+  const chain = frame && chainTime(event.event, frame);
+  if (!chain) return null;
+  const { chainMs, kind } = chain;
+  return { kind, lag_ms: receivedMs - chainMs, chain_ms: chainMs, received_ms: receivedMs, cursor: frame.cursor ?? null, hops: hopOffsets(frame, chainMs) };
+}
+
+function parseFrame(data) {
   try {
-    frame = JSON.parse(event.data);
+    const frame = JSON.parse(data);
+    return frame && typeof frame === "object" ? frame : null;
   } catch {
     return null;
   }
-  if (!frame || typeof frame !== "object") return null;
-  let chainMs = null;
-  let kind = event.event;
-  if (event.event === "market" && Number.isSafeInteger(frame.timestamp_ms)) {
-    chainMs = frame.timestamp_ms;
-    kind = `market:${frame.type}`;
-  } else if (event.event === "prices" && Array.isArray(frame.prices) && frame.prices.length) {
-    chainMs = Math.max(...frame.prices.map((price) => Number(price.as_of_ms)).filter(Number.isSafeInteger));
-    if (!Number.isFinite(chainMs)) return null;
-  } else return null;
-  // `provenance.hops` holds engine wall-clock stamps; `r2_put_ms` is a duration, kept as is.
+}
+
+/** The chain time a frame carries and the kind it is counted under, or null. */
+function chainTime(event, frame) {
+  if (event === "market" && Number.isSafeInteger(frame.timestamp_ms)) {
+    return { chainMs: frame.timestamp_ms, kind: `market:${frame.type}` };
+  }
+  if (event !== "prices" || !Array.isArray(frame.prices) || !frame.prices.length) return null;
+  const chainMs = Math.max(...frame.prices.map((price) => Number(price.as_of_ms)).filter(Number.isSafeInteger));
+  return Number.isFinite(chainMs) ? { chainMs, kind: event } : null;
+}
+
+/** `provenance.hops` holds engine wall-clock stamps; `r2_put_ms` is a duration, kept as is. */
+function hopOffsets(frame, chainMs) {
   const hops = {};
   const raw = frame.provenance?.hops && typeof frame.provenance.hops === "object" ? frame.provenance.hops : {};
   for (const [key, value] of Object.entries(raw)) {
     if (Number.isSafeInteger(value)) hops[key] = key === "r2_put_ms" ? value : value - chainMs;
   }
-  return { kind, lag_ms: receivedMs - chainMs, chain_ms: chainMs, received_ms: receivedMs, cursor: frame.cursor ?? null, hops };
+  return hops;
 }
 
 /** Nearest-rank percentile of `values` (0 < p ≤ 100); null when empty. */
