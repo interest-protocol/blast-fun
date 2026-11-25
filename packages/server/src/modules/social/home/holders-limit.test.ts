@@ -36,7 +36,6 @@ test("the holder query keeps account grouping and deterministic balance order wh
     presale_id: "sale",
     pool_id: "pool",
     launch_id: null,
-    tracked_pool_only: false,
   } as FactsRow;
   const calls: unknown[][] = [];
   const db = {
@@ -44,7 +43,7 @@ test("the holder query keeps account grouping and deterministic balance order wh
       sql: string,
       params: readonly unknown[] = [],
     ) => {
-      assert.match(sql, /sum\(cb.balance\)/);
+      assert.match(sql, /ORDER BY cb.balance DESC, cb.owner\s+LIMIT \$5::int/);
       assert.match(sql, /ORDER BY h.balance DESC, h.who/);
       calls.push([...params]);
       return {
@@ -58,23 +57,10 @@ test("the holder query keeps account grouping and deterministic balance order wh
   };
   await readTopHolders(db, [fact], 123);
   await readTopHolders(db, [fact], 123, 100);
+  await readTopHolders(db, [fact, { ...fact, coin_type: "other", presale_id: null, pool_id: null }], 123);
   assert.deepEqual(calls, [
-    [["coin"], ["sale", "pool"], 123, 10],
-    [["coin"], ["sale", "pool"], 123, 100],
+    [["coin"], ["sale", "pool"], 123, 10, 1000],
+    [["coin"], ["sale", "pool"], 123, 100, 1000],
+    [["coin", "other"], ["sale", "pool"], 123, 10, 60],
   ]);
-});
-
-test("a tracked pool coin skips the top-holders read and a launch coin still gets it", async () => {
-  const launch = { coin_type: "launch", presale_id: null, pool_id: "launch-pool", launch_id: "curve", tracked_pool_only: false } as FactsRow;
-  const tracked = { coin_type: "tracked", presale_id: null, pool_id: "tracked-pool", launch_id: null, tracked_pool_only: true } as FactsRow;
-  const calls: unknown[][] = [];
-  const db = {
-    read: async <T extends object>(_sql: string, params: readonly unknown[] = []) => {
-      calls.push([...params]);
-      return { rows: [] as T[], command: "SELECT", rowCount: 0, oid: 0, fields: [] };
-    },
-  };
-  assert.equal((await readTopHolders(db, [tracked], 123)).size, 0);
-  await readTopHolders(db, [launch, tracked], 123);
-  assert.deepEqual(calls, [[["launch"], ["launch-pool", "curve"], 123, 10]]);
 });
