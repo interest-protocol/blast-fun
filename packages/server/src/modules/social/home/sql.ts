@@ -124,8 +124,9 @@ export function scopedHomeCoinsSql(scope: SaleScope, params: Params): string {
  * Columns of `home_who`: the activity row's, plus `sale` (the
  * presale id or standalone coin type), `account_id` (null when unnamed) and `who` (`a:<account id>`
  * or `w:<wallet>`), with the sale's quote and decimals beside it.
+ * Aggregates keep only the columns they need in the shared window and rows.
  */
-export function rowsWithSql(request: RowsRequest, params: Params): string {
+export function rowsWithSql(request: RowsRequest, params: Params, projection: "activity" | "sides" | "participants" = "activity"): string {
   const { span, bounds, kinds, sales, actors } = request;
   const from = params.add(span.fromMs);
   const to = params.add(span.toMs);
@@ -144,14 +145,25 @@ export function rowsWithSql(request: RowsRequest, params: Params): string {
     ? `home_named AS MATERIALIZED (${namedWalletsOfSql("ARRAY(SELECT DISTINCT r.actor FROM home_rows r)")}),`
     : "";
   const source = scopedHomeCoinsSql(sales, params);
+  const fields = [
+    "checkpoint", "tx_slot", "event_slot", "part", "kind", "timestamp_ms", "actor",
+    ...(projection === "activity" ? ["activity_id", "digest", "quote_refund"] : []),
+    ...(projection === "participants" ? [] : ["quote_type", "quote_amount", "coin_amount", "usd_value"]),
+  ];
+  const saleCoin = projection === "activity" ? ", c.coin_type AS sale_coin" : "";
+  const saleQuote = projection === "participants" ? "" : `, c.quote_type AS sale_quote, c.quote_symbol AS sale_quote_symbol,
+      c.quote_decimals AS sale_quote_decimals${projection === "activity" ? ", c.sale_decimals" : ""}`;
+  const activity = projection === "activity" ? "w.*" : fields.map((field) => `w.${field}`).join(", ");
+  const attributed = `SELECT c.source_id AS sale${saleCoin}${saleQuote}, ${activity}`;
+  // On ID reads, let each attribution branch use its own activity index.
+  const inline = sales.kind === "ids" && projection !== "activity" ? "NOT MATERIALIZED " : "";
   return `WITH home_sales AS (
     SELECT p.source_id, p.presale_id, p.sale_token AS coin_type, p.quote_type, p.quote_symbol, p.quote_decimals, p.sale_decimals
     FROM ${source} p
   ),
   ${followed}
-  home_window AS (
-    SELECT a.activity_id, a.checkpoint, a.tx_slot, a.event_slot, a.part, a.kind, a.timestamp_ms, a.digest, a.actor,
-      a.presale_id, a.coin_type, a.quote_type, a.quote_amount, a.coin_amount, a.quote_refund, a.usd_value
+  home_window AS ${inline}(
+    SELECT a.presale_id, a.coin_type, ${fields.map((field) => `a.${field}`).join(", ")}
     FROM chain_read_v1.activity a
     ${winJoin}
     WHERE a.timestamp_ms > ${from}::bigint AND a.timestamp_ms <= ${to}::bigint
@@ -159,11 +171,10 @@ export function rowsWithSql(request: RowsRequest, params: Params): string {
       AND a.checkpoint <= CASE WHEN a.kind IN ('presale_commit', 'presale_claim') THEN ${presaleCp}::bigint ELSE ${marketCp}::bigint END
   ),
   home_rows AS (
-    SELECT c.source_id AS sale, c.coin_type AS sale_coin, c.quote_type AS sale_quote, c.quote_symbol AS sale_quote_symbol,
-      c.quote_decimals AS sale_quote_decimals, c.sale_decimals, w.*
+    ${attributed}
     FROM home_window w JOIN home_sales c ON c.presale_id = w.presale_id
     UNION ALL
-    SELECT c.source_id, c.coin_type, c.quote_type, c.quote_symbol, c.quote_decimals, c.sale_decimals, w.*
+    ${attributed}
     FROM home_window w JOIN home_sales c ON c.coin_type = w.coin_type WHERE w.presale_id IS NULL
   ),
   ${namedAfter}
