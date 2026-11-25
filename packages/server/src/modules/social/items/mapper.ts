@@ -18,6 +18,7 @@ import { namedWalletsOfSql, TRADE_ENTRY_KINDS } from "@blast/core/modules/social
 import { compareDecimal, toUsd } from "@blast/core/modules/social/items/decimal.ts";
 import { doTheSameDescriptor } from "@blast/core/modules/social/items/do-the-same.ts";
 import { SHOWN_PRESALES } from "@blast/core/modules/social/read-model/chain-presales.ts";
+import { settledAll } from "@blast/server/lib/settled-all.ts";
 
 /**
  * The item mapper: a page of read-model entries (`personEntriesOf`,
@@ -352,7 +353,7 @@ export async function readItemLookups(db: ReadableDatabase, entries: readonly Fe
   const presaleIds = [...new Set(entries.flatMap((entry) => (entry.presaleId === null ? [] : [entry.presaleId])))];
   const accountIds = [...new Set(entries.flatMap((entry) => (entry.namedAccountId === null ? [] : [entry.namedAccountId])))];
   const newsPresaleIds = [...new Set(entries.flatMap((entry) => (isPresaleNewsEntry(entry) ? [entry.presaleId!] : [])))];
-  const [presales, identities, whys, reactions, through, backers] = await Promise.all([
+  const [presales, identities, whys, reactions, through, backers] = await settledAll([
     presaleIds.length ? db.read<PresaleRow>(PRESALES_SQL, [presaleIds]) : null,
     accountIds.length ? db.read<IdentityRow>(IDENTITIES_SQL, [accountIds]) : null,
     db.read<{ entry_id: string; why_id: string; text: string }>(WHYS_SQL, [entryIds]),
