@@ -13,15 +13,15 @@ const { usePresaleNotify } = await import("./parts");
 const { SABL } = await import("../../../../test/fixtures/social/happening/happening-fixtures.ts");
 
 for (const outcome of ["success", "rejection"] as const) {
-  test(`presale notifications clear busy after ${outcome} and retain rejection`, async (t) => {
+  test(`presale notifications never lock the bell and retain a ${outcome}`, async (t) => {
     const pending = Promise.withResolvers<FollowWriteResult>();
     const failures: unknown[] = [];
     const failure = new Error("Follow write failed");
-    t.mock.method(ViewerStateStore.prototype, "setFollowing", () => pending.promise);
+    const writes = t.mock.method(ViewerStateStore.prototype, "setFollowing", () => pending.promise);
     t.mock.method(globalThis, "fetch", async () => new Response("{}", { status: 503 }));
     function Notify() {
-      const { busy, toggle } = usePresaleNotify(SABL.presale);
-      return <button aria-busy={busy} onClick={() => void toggle().catch((error) => failures.push(error))} type="button">Notify</button>;
+      const { toggle } = usePresaleNotify(SABL.presale);
+      return <button onClick={() => void toggle().catch((error) => failures.push(error))} type="button">Notify</button>;
     }
     const container = document.createElement("div");
     document.body.appendChild(container);
@@ -33,13 +33,14 @@ for (const outcome of ["success", "rejection"] as const) {
     await act(async () => root.render(<SocialViewerProvider callsign="kaimoreno" signedIn><Notify /></SocialViewerProvider>));
     const button = container.querySelector("button")!;
     await act(async () => void button.dispatchEvent(testEvent("click")));
-    assert.equal(button.getAttribute("aria-busy"), "true");
+    // A second tap while the first write is pending still reaches the store.
+    await act(async () => void button.dispatchEvent(testEvent("click")));
+    assert.equal(writes.mock.callCount(), 2);
     await act(async () => {
       if (outcome === "success") pending.resolve({ status: "ok" });
       else pending.reject(failure);
       await pending.promise.catch(() => undefined);
     });
-    assert.equal(button.getAttribute("aria-busy"), "false");
-    assert.deepEqual(failures, outcome === "success" ? [] : [failure]);
+    assert.deepEqual(failures, outcome === "success" ? [] : [failure, failure]);
   });
 }

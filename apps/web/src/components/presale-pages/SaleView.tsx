@@ -155,7 +155,6 @@ function FollowSale({ detail }: Readonly<{ detail: SocialPresaleDetail }>) {
   const target = { kind: "presale", presale_id: sale.presale_id } as const;
   const on = useViewerFollow(target) === true;
   const toast = useToast();
-  const [busy, setBusy] = useState(false);
   const label = (
     <>
       <span className={cx("l-off")}>Follow</span>
@@ -174,17 +173,14 @@ function FollowSale({ detail }: Readonly<{ detail: SocialPresaleDetail }>) {
     <button
       aria-pressed={on}
       className={cx("btn btn-ink follow", on && "on")}
-      disabled={busy}
       onClick={async () => {
-        if (busy || !store) return;
-        setBusy(true);
-        // The button frees itself even when the write throws.
+        if (!store) return;
+        // Shown at once; a refusal puts the button back.
         await store.setFollowing(target, !on)
           .then((result) => {
             if (result.status !== "ok") toast("That didn't save", { sub: "Nothing changed. Try again in a moment." });
           })
-          .catch(() => toast("That didn't save", { sub: "Nothing changed. Try again in a moment." }))
-          .finally(() => setBusy(false));
+          .catch(() => toast("That didn't save", { sub: "Nothing changed. Try again in a moment." }));
       }}
       type="button"
     >

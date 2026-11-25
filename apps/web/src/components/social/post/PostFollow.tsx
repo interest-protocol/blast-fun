@@ -24,23 +24,21 @@ export function PostFollow({ callsign }: Readonly<{ callsign: string }>) {
   const following = useViewerFollow({ kind: "account", callsign });
   const toast = useToast();
   const [shown, setShown] = useState(false);
-  const [busy, setBusy] = useState(false);
   // Derived while rendering: the button appears the first time the viewer is known not to follow.
   if (!shown && following === false) setShown(true);
   if (!viewer.signedIn || !store || !shown || viewer.callsign === callsign) return null;
 
   const on = following === true;
   async function toggle() {
-    if (busy || !store) return;
+    if (!store) return;
     const next = !on;
-    setBusy(true);
-    const result = await store.setFollowing({ kind: "account", callsign }, next).catch(() => ({ status: "error" as const })).finally(() => setBusy(false));
+    // Shown at once; a refusal puts the button back.
+    const result = await store.setFollowing({ kind: "account", callsign }, next).catch(() => ({ status: "error" as const }));
     if (result.status !== "ok") toast(followErrorMessage(result, next));
   }
 
   return (
     <button
-      aria-busy={busy || undefined}
       aria-label={on ? `Following @${callsign}. Unfollow` : `Follow @${callsign}`}
       aria-pressed={on}
       className={clsx(styles.follow, on && styles.on)}

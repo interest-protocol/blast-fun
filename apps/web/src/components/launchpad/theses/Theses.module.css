@@ -284,3 +284,7 @@
 .status[data-tone="problem"] {
   color: var(--lp-down);
 }
+
+.post[data-pending] {
+  opacity: 0.72;
+}

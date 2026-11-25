@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { ClientAddress } from "@blast/core/lib/web-security/client-address.ts";
 
 import type { LaunchpadActor } from "@blast/server/modules/launchpad-identity/contracts.ts";
@@ -32,6 +32,7 @@ import {
   readRecord,
   removeSearchDocument,
   type AuthorIdentity,
+  type NewPost,
   type PostRecord,
   type SocialTransaction,
 } from "@blast/server/modules/launchpad-social/repository.ts";
@@ -51,6 +52,20 @@ export type PostMutationDependencies = Readonly<{
 }>;
 
 const REVISION_TAKEN = "mission_control_launchpad_theses_revision_of_key";
+const RECORD_TAKEN = "mission_control_launchpad_theses_pkey";
+
+/**
+ * The record ID of a post sent with a client retry key: a UUID (version 8)
+ * from a hash of the author, the launch and the key, so a retry of the same
+ * post finds the record the first try wrote instead of writing a second one.
+ */
+export function keyedRecordId(authorIdentityId: string, launchId: string, key: string): string {
+  const bytes = createHash("sha256").update(`launchpad-post\0${authorIdentityId}\0${launchId}\0${key}`).digest().subarray(0, 16);
+  bytes[6] = (bytes[6]! & 0x0f) | 0x80;
+  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+  const hex = bytes.toString("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
 
 function identityOf(actor: LaunchpadActor): AuthorIdentity {
   return actor.method === "privy"
@@ -70,9 +85,44 @@ function ownsDisclosedWallet(actor: LaunchpadActor, input: PostInput): boolean {
   );
 }
 
-function isRevisionTaken(error: unknown): boolean {
+/**
+ * The record a retry key already wrote, or null: a retry of a post that was
+ * written is answered with it and writes nothing. The key sent again with other
+ * content is refused, never answered with the old post.
+ */
+async function retriedPost(social: SocialTransaction, recordId: string, input: PostInput): Promise<PostRecord | null> {
+  const earlier = await readRecord(social, recordId);
+  if (earlier && !isSamePost(earlier, input)) throw new LaunchpadMutationError("LAUNCHPAD_CONFLICT");
+  return earlier;
+}
+
+/** Whether a retried input is the post `record` holds (its kind may have been stored as a community thesis). */
+function isSamePost(record: PostRecord, input: PostInput): boolean {
+  return (
+    record.body === input.body &&
+    record.stance === input.stance &&
+    record.revisionOf === input.revisionOf &&
+    record.disclosure.text === input.disclosure.text &&
+    record.disclosure.walletAddress === input.disclosure.walletAddress &&
+    record.evidenceLinks.length === input.evidenceLinks.length &&
+    record.evidenceLinks.every((link, index) => link === input.evidenceLinks[index])
+  );
+}
+
+function isTaken(error: unknown, constraint: string): boolean {
   const pg = error as { code?: unknown; constraint?: unknown } | null;
-  return pg?.code === "23505" && pg.constraint === REVISION_TAKEN;
+  return pg?.code === "23505" && pg.constraint === constraint;
+}
+
+/** Inserts the record; a revision already taken, or the same retry key racing itself, is a conflict. */
+async function insertNewPost(social: SocialTransaction, post: NewPost): Promise<PostRecord> {
+  try {
+    return await insertPost(social, post);
+  } catch (error) {
+    if (isTaken(error, REVISION_TAKEN) || isTaken(error, RECORD_TAKEN))
+      throw new LaunchpadMutationError("LAUNCHPAD_CONFLICT");
+    throw error;
+  }
 }
 
 async function revisionKind(
@@ -153,7 +203,7 @@ export function postMutation(
       return { ...input, holderProof };
     },
     authorize: async ({ actor, input }) => ownsDisclosedWallet(actor, input),
-    async write({ actor, input, transaction }) {
+    async write({ actor, input, transaction, idempotencyKey }) {
       const social = transaction.forModule("launchpad-social");
       const check = await checkLaunch(social, input.launchId);
       if (check.kind === "unindexed")
@@ -180,6 +230,11 @@ export function postMutation(
         identityOf(actor),
         createId,
       );
+      const recordId = idempotencyKey === null
+        ? createId()
+        : keyedRecordId(authorIdentityId, input.launchId, idempotencyKey);
+      const earlier = idempotencyKey === null ? null : await retriedPost(social, recordId, input);
+      if (earlier) return earlier;
       kind = await revisionKind(
         social,
         input,
@@ -198,21 +253,14 @@ export function postMutation(
           ? { verification: "unavailable" }
           : proof;
 
-      let record: PostRecord;
-      try {
-        record = await insertPost(social, {
-          recordId: createId(),
-          revisionOf: input.revisionOf,
-          authorIdentityId,
-          input: { ...input, kind },
-          holderProof,
-          launch,
-        });
-      } catch (error) {
-        if (isRevisionTaken(error))
-          throw new LaunchpadMutationError("LAUNCHPAD_CONFLICT");
-        throw error;
-      }
+      const record = await insertNewPost(social, {
+        recordId,
+        revisionOf: input.revisionOf,
+        authorIdentityId,
+        input: { ...input, kind },
+        holderProof,
+        launch,
+      });
       if (input.revisionOf !== null)
         await removeSearchDocument(social, input.revisionOf);
       await materializeSearchDocument(social, record, limits);

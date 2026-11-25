@@ -30,23 +30,17 @@ export function NotifyBell({ presale }: Readonly<{ presale: Pick<WatchlistRow, "
   const store = useViewerStateStore();
   const following = useViewerFollow({ kind: "presale", presale_id: presale.presale_id }) === true;
   const toast = useToast();
-  const [busy, setBusy] = useState(false);
   return (
     <IconButton
       aria-label={`${following ? "Notifications on" : "Notify me"} for ${presale.name}`}
       aria-pressed={following}
       className={styles.notify}
       data-on={following || undefined}
-      disabled={busy}
       onClick={async () => {
         if (!store) return;
-        setBusy(true);
-        return await (async () => {
-          const result = await store.setFollowing({ kind: "presale", presale_id: presale.presale_id }, !following);
-          if (result.status !== "ok") toast("Notifications could not be saved", { sub: diagnosticMessage(publicErrorCopy(result.code), result) });
-        })().finally(() => {
-          setBusy(false);
-        });
+        // Shown at once; a refusal puts the bell back.
+        const result = await store.setFollowing({ kind: "presale", presale_id: presale.presale_id }, !following);
+        if (result.status !== "ok") toast("Notifications could not be saved", { sub: diagnosticMessage(publicErrorCopy(result.code), result) });
       }}
       size="xs"
       title={following ? "You’ll be notified" : "Notify me"}

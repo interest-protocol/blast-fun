@@ -12,7 +12,7 @@ const { SocialViewerProvider } = await import("../SignInGate");
 const { ViewerStateStore } = await import("../viewer-state-store");
 const { ProfileFollow } = await import("./IdentityCard");
 
-test("a rejected follow clears its busy state, shows an error, and can be retried", async (t) => {
+test("a follow never locks the button; a rejected one shows an error and can be retried", async (t) => {
   const rejected = Promise.withResolvers<never>();
   const write = t.mock.method(ViewerStateStore.prototype, "setFollowing", () => rejected.promise);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
@@ -34,7 +34,7 @@ test("a rejected follow clears its busy state, shows an error, and can be retrie
   const button = container.querySelector("button")!;
   await act(async () => button.click());
   assert.equal(write.mock.callCount(), 1);
-  assert.equal(button.getAttribute("aria-busy"), "true");
+  assert.equal(button.hasAttribute("aria-busy"), false, "no busy lock while the write is on its way");
   await act(async () => rejected.reject(new Error("Unexpected write failure")));
   assert.equal(button.hasAttribute("aria-busy"), false);
   assert.ok(container.querySelector('[role="alert"]'));

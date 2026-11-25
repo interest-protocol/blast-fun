@@ -25,12 +25,15 @@ export async function postThesis({
   launchId,
   signer: kind,
   signers,
+  idempotencyKey,
   publish = publishThesis,
 }: Readonly<{
   draft: ComposerDraft;
   launchId: string;
   signer: SignerKind;
   signers: SignerSource;
+  /** Kept for one draft, so Retry cannot post it twice. */
+  idempotencyKey?: string;
   publish?: typeof publishThesis;
 }>): Promise<PostAttempt> {
   const checked = draftInput(draft, launchId, null);
@@ -57,7 +60,7 @@ export async function postThesis({
 
   const { input } = draftInput(draft, launchId, address);
   if (!input) return problem(`The post could not be prepared. ${NOTHING}`, "invalid_request");
-  const outcome = await publish({ input, credential });
+  const outcome = await publish({ input, credential, idempotencyKey });
   if (outcome.status !== "published") return problem(outcome.message);
   return { problems: [], published: true, result: { tone: "ok", message: publishedNote(draft.kind, outcome.post) } };
 }

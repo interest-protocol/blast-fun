@@ -16,12 +16,15 @@ const { toast } = await import("sonner");
 
 for (const Follow of [ProfileFollow, PostFollow]) {
   test(`${Follow.name}: successful follow and unfollow update the button without toasts`, async (t) => {
-    let following = false;
-    t.mock.method(ViewerStateStore.prototype, "want", () => undefined);
-    t.mock.method(ViewerStateStore.prototype, "following", () => following);
-    const write = t.mock.method(ViewerStateStore.prototype, "setFollowing", async (_target: Parameters<typeof ViewerStateStore.prototype.setFollowing>[0], next: boolean) => {
-      following = next;
-      return { status: "ok" as const };
+    // The real store, over a network that reads "not following" and accepts every follow write.
+    const writes: string[] = [];
+    t.mock.method(globalThis, "fetch", async (url: unknown, init?: RequestInit) => {
+      if (String(url) === "/api/social/viewer-state") {
+        const request = JSON.parse(String(init?.body)) as { callsigns?: string[] };
+        return Response.json({ reactions: {}, follows: { accounts: Object.fromEntries((request.callsigns ?? []).map((c) => [c, false])), presales: {} }, backers: {}, follows_you: {} });
+      }
+      writes.push(init?.method ?? "GET");
+      return new Response(null, { status: 204 });
     });
     const showToast = t.mock.method(toast, "custom", () => 0);
     const client = createTestQueryClient();
@@ -40,15 +43,17 @@ for (const Follow of [ProfileFollow, PostFollow]) {
         </ToastProvider>
       </QueryProvider>,
     ));
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 50)));
     const button = container.querySelector("button")!;
     assert.equal(button.getAttribute("aria-pressed"), "false");
     for (const next of [true, false]) {
       await act(async () => button.click());
-      assert.equal(write.mock.calls.at(-1)!.arguments[1], next);
+      assert.equal(writes.at(-1), next ? "PUT" : "DELETE");
       assert.equal(button.getAttribute("aria-pressed"), String(next));
       assert.equal(button.getAttribute("aria-busy"), null);
       assert.equal(showToast.mock.callCount(), 0);
     }
+    assert.deepEqual(writes, ["PUT", "DELETE"], "one write per tap");
   });
 }
 

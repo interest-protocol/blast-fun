@@ -70,12 +70,6 @@ export function useViewerFollow(target: SocialFollowTarget): boolean | undefined
   return useSyncExternalStore(store?.subscribe ?? subscribeNothing, read, () => undefined);
 }
 
-/** Pending is shared by every control for the same account, including Undo. */
-export function useViewerFollowPending(target: SocialFollowTarget): boolean {
-  const store = useViewerStateStore();
-  return useSyncExternalStore(store?.subscribe ?? subscribeNothing, () => store?.followPending(target) ?? false, () => false);
-}
-
 /** A failed relationship read is unknown, never an instruction to follow. */
 export function useViewerFollowReadFailed(target: SocialFollowTarget): boolean {
   const store = useViewerStateStore();
