@@ -46,7 +46,7 @@ test("V1 discovery reads refresh FDV and details while the price waits for its s
   assert.doesNotMatch(container.textContent ?? "", /\$24K/);
 
   await act(async () => { market.resolve(); await settleQueries(client); });
-  assert.match(container.textContent ?? "", /Price—.*FDV\$24K/);
+  assert.match(container.textContent ?? "", /Current pool price—.*FDV\$24K/);
   assert.match(container.textContent ?? "", /The Blast Bots coin\..*Total supply1,000,000,000.*Pool trading fee0\.3%/);
 
   assert.equal(reads, 1);
@@ -61,7 +61,7 @@ test("V1 discovery reads refresh FDV and details while the price waits for its s
   price = "0.000017";
   fdv = "34000.00";
   await refresh();
-  assert.match(container.textContent ?? "", /Price—.*FDV\$34K/);
+  assert.match(container.textContent ?? "", /Current pool price—.*FDV\$34K/);
 });
 
 test("JustOneSui shows its on-chain description and project links with the shared market header", async (t) => {
@@ -87,7 +87,7 @@ test("JustOneSui shows its on-chain description and project links with the share
     <LegacyCoinScreen {...coin} chart={null} trade={null} legacy={false} verifiedCommunity />,
   )));
   await act(async () => settleQueries(client));
-  assert.match(container.textContent ?? "", /Price—.*FDV\$240K/);
+  assert.match(container.textContent ?? "", /Current pool price—.*FDV\$240K/);
   const about = [...container.querySelectorAll("section")].find((section) => section.querySelector("h2")?.textContent === "About");
   assert.equal(about?.querySelector("p")?.textContent, "Just One Sui, the community coin of Sui");
   assert.deepEqual([...about?.querySelectorAll("a") ?? []].map((link) => [link.textContent, link.href]), [

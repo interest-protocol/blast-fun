@@ -2,7 +2,7 @@
 
 import type { DrawnSeries } from "#web/components/launchpad/chart/chart-geometry.ts";
 
-import type { AutoscaleInfoProvider } from "lightweight-charts";
+import type { AutoscaleInfoProvider, LineType } from "lightweight-charts";
 import { shortUtcDate } from "#web/components/blast-ui/date-label.ts";
 
 import { useCallback, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
@@ -36,7 +36,7 @@ import { useChartInspection } from "./use-chart-inspection";
 import { useMobileChartLayout } from "./use-mobile-chart-layout";
 
 import { saveChartPreference, useChartPreference } from "#web/components/launchpad/chart/chart-preferences.ts";
-import { walletMarkerBadges, walletMarkers, type PlottedWalletMarker, type WalletChartTrade, type WalletRipple } from "./wallet-markers";
+import { liveWalletMarkers, walletMarkerBadges, walletMarkers, type PlottedWalletMarker, type WalletChartTrade, type WalletRipple } from "./wallet-markers";
 import { WalletChartMarkers, WalletMarkerRipple } from "./WalletChartMarkers";
 
 const NO_WALLET_TRADES: readonly WalletChartTrade[] = [];
@@ -55,7 +55,7 @@ function poolTimeline(sources: readonly Source[], intervalMs: number, from?: num
   );
   const start = from ?? Math.min(...timestamps);
   const end = to ?? Math.max(...timestamps);
-  const step = Math.max(intervalMs, (end - start) / 4000);
+  const step = intervalMs * Math.max(1, Math.ceil((end - start) / (4000 * intervalMs)));
   const timeline: number[] = [];
   if (Number.isFinite(start) && Number.isFinite(end))
     for (let at = start; at <= end; at += step) timeline.push(at);
@@ -64,12 +64,37 @@ function poolTimeline(sources: readonly Source[], intervalMs: number, from?: num
   return timeline;
 }
 
+/**
+ * Keep a time slot during quiet seconds. An execution replaces its slot's
+ * whitespace and keeps its raw time for crosshair and wallet alignment.
+ */
+function liveTimeline(sources: readonly Source[], from: number, to: number, migrationAt?: number) {
+  const step = 250;
+  const occupied = new Set(sources.flatMap(({ liveLine }) =>
+    liveLine?.map(({ timestampMs }) => Math.floor(timestampMs / step)) ?? [],
+  ));
+  if (migrationAt !== undefined) occupied.add(Math.floor(migrationAt / step));
+  const timeline = [from];
+  for (let at = Math.ceil(from / step) * step; at < to; at += step) {
+    if (!occupied.has(at / step) && at > from) timeline.push(at);
+  }
+  if (migrationAt !== undefined && migrationAt > from && migrationAt < to) timeline.push(migrationAt);
+  timeline.push(to);
+  return timeline.sort((a, b) => a - b);
+}
+
+/** `LineType.WithSteps`; the library loads lazily, so its enum is not imported. */
+const STEP_LINE = 1 as LineType;
+
 const CHART_STYLES = [["line", "Line"], ["candles", "Candles"]] as const;
 export function PoolCandleChart({
   sources,
   compact = false,
   rollingWindow,
   latestAvailable = true,
+  marketChart,
+  discontinuous,
+  gapStatus,
   presentation,
   migrationAt,
   migrationLabel = "Migration",
@@ -92,6 +117,9 @@ export function PoolCandleChart({
   compact?: boolean;
   rollingWindow?: boolean;
   latestAvailable?: boolean;
+  marketChart?: boolean;
+  discontinuous?: boolean;
+  gapStatus?: (at: number) => string;
   /** A compact host owns its single visible style control. */
   presentation?: "line" | "candles";
   migrationAt?: number;
@@ -115,13 +143,13 @@ export function PoolCandleChart({
   const { priceAt, observe } = useChartInspection();
   const labels = usePoolLabels(compact, showVolume, migrationAt);
   const model = useMemo(
-    () => poolChartModel({ sources, migrationAt, from, to, rollingWindow, memeDecimals, quoteDecimals, quoteUsd, mode, showVolume, compact, walletTrades: walletTrades ?? NO_WALLET_TRADES }),
-    [sources, migrationAt, from, to, rollingWindow, memeDecimals, quoteDecimals, quoteUsd, mode, showVolume, compact, walletTrades],
+    () => poolChartModel({ sources, migrationAt, from, to, rollingWindow, marketChart, discontinuous, memeDecimals, quoteDecimals, quoteUsd, mode, showVolume, compact, walletTrades: walletTrades ?? NO_WALLET_TRADES }),
+    [sources, migrationAt, from, to, rollingWindow, marketChart, discontinuous, memeDecimals, quoteDecimals, quoteUsd, mode, showVolume, compact, walletTrades],
   );
   const plottedSeries = useMemo(() => latestAvailable || compact ? model.series : model.series.map((series) => ({
     ...series, options: { ...series.options, lastValueVisible: false },
   })), [compact, latestAvailable, model.series]);
-  const inspectedPrice = priceAt(model.pointPrices, model.pointVolumes, mode, amountsHidden);
+  const inspectedPrice = priceAt(model.pointPrices, model.pointVolumes, mode, amountsHidden, gapStatus, rollingWindow);
   const guide = inspectedPrice?.guide;
   const tradeLabel = candleTradeLabel(trade, sources, memeDecimals, amountsHidden);
   const tradeAt = tradeLabel ? tradePlotTime(sources[tradeLabel.index]!, tradeLabel.bucketStart, mode, migrationAt) : undefined;
@@ -134,7 +162,7 @@ export function PoolCandleChart({
     projectTrade(handle, model.series, settled);
   };
   const walletToggle = <WalletTagsToggle available={Boolean(walletTrades)} checked={showWalletTags} onChange={setWalletTags} />;
-  const readout = { latestAvailable, compact, plotMode: mode, hidden: amountsHidden, inspected: inspectedPrice, model, quoteSymbol, walletToggle };
+  const readout = { latestAvailable, compact, rollingWindow, plotMode: mode, hidden: amountsHidden, inspected: inspectedPrice, model, quoteSymbol, walletToggle };
   return (
     <>
       <PoolChartControls compact={compact} mobile={mobile} mode={mode} onModeChange={setMode} showVolume={showVolume} onToggleVolume={() => setShowVolume((value) => !value)} />
@@ -280,6 +308,7 @@ function useTradeOverlay(tradeLabel: ReturnType<typeof candleTradeLabel>, at?: n
 
 function PoolReadout({ compact, plotMode, preview, walletToggle, inspected, ...values }: PoolReadoutValuesProps & Readonly<{
   compact: boolean;
+  rollingWindow?: boolean;
   plotMode: "line" | "candles";
   preview?: ReactNode;
   walletToggle: ReactNode;
@@ -295,26 +324,32 @@ function PoolReadout({ compact, plotMode, preview, walletToggle, inspected, ...v
 type PoolReadoutValuesProps = Readonly<{
   latestAvailable: boolean;
   hidden: boolean;
-  inspected?: { at: number; value?: string; candle?: ExactCandle; volume?: string };
+  rollingWindow?: boolean;
+  inspected?: { at: number; value?: string; candle?: ExactCandle; volume?: string; gap?: string };
   model: ReturnType<typeof poolChartModel>;
   mode: "line" | "candles";
   quoteSymbol?: string;
 }>;
 
-function PoolReadoutValues({ latestAvailable, hidden, inspected, model, mode, quoteSymbol }: PoolReadoutValuesProps) {
+function PoolReadoutValues({ latestAvailable, hidden, inspected, model, mode, quoteSymbol, rollingWindow }: PoolReadoutValuesProps) {
+  if (inspected?.gap) return <div className={styles.lineContext}>
+    <span className={styles.inspectionContext}>{inspected.gap}</span>
+    <ChartTime at={inspected.at} />
+  </div>;
   if (hidden) return null;
   const unit = model.usd ? "USD" : quoteSymbol;
   if (!latestAvailable && inspected?.value === undefined && !inspected?.candle) return <PriceReadout value={null} at={null} inspected={false} />;
-  if (mode === "candles") {
-    const candle = inspected ? inspected.candle : model.latestCandle;
-    const at = inspected?.at ?? model.latest?.bucket;
-    const volume = inspected?.volume ?? candle?.volume;
-    return at !== undefined && volume !== undefined
-      ? <CandleReadout candle={candle} volume={volume} at={at} inspected={!!inspected} unit={unit} volumeUnit={quoteSymbol} />
-      : null;
-  }
+  if (mode === "candles") return <LatestCandleReadout inspected={inspected} model={model} unit={unit} quoteSymbol={quoteSymbol} />;
   if (inspected?.value !== undefined) return <PriceReadout at={inspected.at} value={inspected.value} inspected unit={unit} />;
-  return model.latest && <PriceReadout {...model.latest} inspected={false} unit={unit} />;
+  return !rollingWindow && model.latest && <PriceReadout {...model.latest} inspected={false} unit={unit} />;
+}
+
+function LatestCandleReadout({ inspected, model, unit, quoteSymbol }: Pick<PoolReadoutValuesProps, "inspected" | "model" | "quoteSymbol"> & { unit?: string }) {
+  const candle = inspected ? inspected.candle : model.latestCandle;
+  const at = inspected?.at ?? model.latest?.bucket;
+  const volume = inspected?.volume ?? candle?.volume;
+  if (at === undefined || volume === undefined) return null;
+  return <CandleReadout candle={candle} volume={volume} at={at} inspected={!!inspected} unit={unit} volumeUnit={quoteSymbol} />;
 }
 
 function ChartTime({ at, prefix }: Readonly<{ at: number; prefix?: string }>) {
@@ -332,7 +367,7 @@ function PriceReadout({ value, at, inspected, unit }: Readonly<{ value: string |
         <span className={styles.inspectionContext}>{inspected ? "Price" : "Last close"}</span>
         <span data-chart-inspected-price={inspected ? "" : undefined} data-chart-latest-price={inspected ? undefined : ""}>{price}</span>
       </span>
-      {at !== null && <ChartTime at={at} prefix={inspected ? undefined : "As of "} />}
+      {at !== null && <ChartTime at={at} />}
     </div>
     {value !== null && <ExactValues label="price" at={at} entries={[["Price", withUnit(value, unit)]]} />}
   </>;
@@ -397,8 +432,7 @@ function latestPrice(source: Source | undefined, price: (raw: string) => string)
   const close = candle?.close ?? carried?.price;
   const bucket = candle?.bucketStart ?? carried?.timestampMs;
   if (close === undefined || bucket === undefined) return undefined;
-  const observedAt = source?.observedAt;
-  return { at: observedAt == null ? null : chartTimestamp(observedAt), bucket: chartTimestamp(bucket), value: price(close) };
+  return { at: chartTimestamp(bucket), bucket: chartTimestamp(bucket), value: price(close) };
 }
 
 function usePoolLabels(compact: boolean, showVolume: boolean, migrationAt?: number) {
@@ -431,7 +465,8 @@ function usePoolLabels(compact: boolean, showVolume: boolean, migrationAt?: numb
 function scaledWalletMarkers(trades: readonly WalletChartTrade[], history: Source, mode: "line" | "candles", seriesIndex: number,
   interval: number, priceFrom: number, priceThrough: number, coordinate: (raw: string) => number): PlottedWalletMarker[] {
   if (!trades.length) return [];
-  const { page, opening } = history;
+  const { page, opening, liveTrades } = history;
+  if (liveTrades) return liveWalletMarkers(trades, liveTrades, page.poolKey, seriesIndex, coordinate);
   const markers = walletMarkers(trades, page, bucket => mode === "candles" ? bucket :
     lineCloseTime(bucket, bucket === page.candles[0]?.bucketStart ? opening?.timestampMs : undefined, interval, priceFrom, priceThrough));
   return markers.map(marker => {
@@ -450,55 +485,37 @@ function latestPoolMarker(latest: ReturnType<typeof latestPrice>, points: readon
   };
 }
 
-function poolChartModel({
-  sources, migrationAt, from, to, rollingWindow, memeDecimals, quoteDecimals, quoteUsd, mode, showVolume, compact, walletTrades,
-}: Readonly<{
-  walletTrades: readonly WalletChartTrade[];
+function candleClosePoints(sources: readonly Source[], migrationAt?: number) {
+  return sources.map(history => {
+    const { page } = history;
+    const { priceFrom } = sourceLineBounds(history, migrationAt);
+    return page.candles.map(candle => ({ timestampMs: Math.max(candle.bucketStart, priceFrom), price: candle.close }));
+  });
+}
+
+type LinePoint = Readonly<{ timestampMs: number; price: string | null }>;
+
+function poolPriceSeries({ sources, lines, compact, mode, migrationAt, walletTrades, price, quantity, scale, autoscaleInfoProvider, pointsOnly, stepped }: Readonly<{
   sources: readonly Source[];
-  migrationAt?: number;
-  from?: number;
-  to?: number;
-  rollingWindow?: boolean;
-  memeDecimals: number | null;
-  quoteDecimals: number | null;
-  quoteUsd: string | null;
-  mode: "candles" | "line";
-  showVolume: boolean;
+  lines: readonly (readonly LinePoint[])[];
   compact: boolean;
+  mode: "line" | "candles";
+  migrationAt?: number;
+  walletTrades: readonly WalletChartTrade[];
+  price: (raw: string) => string;
+  quantity: (raw: bigint) => string;
+  scale: ReturnType<typeof exactChartScale>;
+  autoscaleInfoProvider: AutoscaleInfoProvider;
+  pointsOnly: boolean;
+  /** Live: the price holds until the next execution changes it. */
+  stepped: boolean;
 }>) {
-  const { usd, price } = poolPrices(memeDecimals, quoteDecimals, quoteUsd);
-  const quantity = (value: bigint) =>
-    shiftDecimal(value.toString(), -(quoteDecimals ?? 0));
-  const lines = mode === "line" ? poolLinePoints(sources, migrationAt, to, rollingWindow) : [];
-  const prices = mode === "line"
-    ? lines.flatMap((points) => points.map((point) => price(point.price)))
-    : sources.flatMap(({ page }) => page.candles.flatMap((candle) => [candle.open, candle.high, candle.low, candle.close].map(price)));
-  const scale = exactChartScale(prices);
-  const autoscaleInfoProvider: AutoscaleInfoProvider = scale.flat
-    ? () => ({ priceRange: { minValue: 0, maxValue: 100 } })
-    : (original) => original();
-  const volumes = combinedVolumes(
-    sources.flatMap(({ page }) =>
-      page.candles.map((candle) => ({
-        at: candle.bucketStart,
-        volume: quantity(candle.volumeQuote),
-        down: comparePrices(candle.close, candle.open) < 0,
-      })),
-    ),
-  );
-  const volume = exactChartScale([
-    "0",
-    ...volumes.map((point) => point.volume),
-  ]);
-  const intervalMs = candleIntervalMs(sources[0]?.page.interval ?? "1m");
-  const timeline = poolTimeline(sources, intervalMs, from, to, migrationAt);
   const pointPrices: ExactSeries[] = [];
   const up = compact ? "var(--coin-chart-up)" : "var(--up)";
   const down = compact ? "var(--coin-chart-down)" : "var(--down)";
-  const lineStyle = compact ? { lineColor: "var(--ink)", topColor: "transparent", bottomColor: "transparent" } : {};
+  const lineStyle = compact || pointsOnly || stepped ? { lineColor: "var(--ink)", topColor: "transparent", bottomColor: "transparent" } : {};
   // The newest source owns the latest readout (after migration, the venue).
   const tagged = sources.findLastIndex(({ page, carriedClose }) => page.candles.length > 0 || carriedClose);
-  const latest = latestPrice(sources[tagged], price);
   const markers: PlottedWalletMarker[] = [];
   let seriesIndex = 0;
   const series: ChartSeries[] = sources.flatMap((history, sourceIndex) => {
@@ -513,26 +530,26 @@ function poolChartModel({
       if (compact) points.set(chartTimestamp(at), value);
       return scale.coordinate(value);
     };
-    const hollow = !compact && source === "venue";
+    const bodyColor = !compact && source === "venue" ? { upColor: "transparent", downColor: "transparent" } : { upColor: up, downColor: down };
     // Only opt out. A tagged series still follows the chart's hidden-amounts rule.
     const tag = compact || sourceIndex !== tagged ? { lastValueVisible: false } : {};
     const line = lines[sourceIndex];
+    if (mode === "line" && !line.length) return [];
     const priceSeries: ChartSeries[] =
       mode === "line"
-        ? !line?.length ? [] : [
+        ? [
             {
               type: "Area" as const,
-              data: chartData(
-                line.map(({ timestampMs, price: raw }) => ({
-                  time: chartTimestamp(timestampMs),
-                  value: pointValue(timestampMs, raw),
-                })),
-              ),
+              data: chartData(stepped ? steppedLineData(line, pointValue) : line.map(({ timestampMs, price: raw }) => raw === null
+                ? { time: chartTimestamp(timestampMs) }
+                : { time: chartTimestamp(timestampMs), value: pointValue(timestampMs, raw) })),
               options: {
                 priceLineVisible: false,
                 ...tag,
                 ...lineStyle,
-                pointMarkersVisible: line.length === 1,
+                ...(stepped ? { lineType: STEP_LINE } : {}),
+                lineVisible: !pointsOnly,
+                pointMarkersVisible: pointsOnly || (!stepped && line.length === 1),
                 autoscaleInfoProvider,
               },
             },
@@ -552,8 +569,7 @@ function poolChartModel({
                 }),
               ),
               options: {
-                upColor: hollow ? "transparent" : up,
-                downColor: hollow ? "transparent" : down,
+                ...bodyColor,
                 borderUpColor: up,
                 borderDownColor: down,
                 wickUpColor: up,
@@ -564,12 +580,116 @@ function poolChartModel({
               },
             },
           ];
-    if (compact && priceSeries[0]) {
+    if (compact) {
       pointPrices.push({ values: points, candles, times: priceSeries[0].data.map((point) => Number(point.time)) });
     }
     seriesIndex += priceSeries.length;
     return priceSeries;
   });
+  // Live dots each priced execution on its step trace. They come after every
+  // price series so indices (wallet markers, exact prices) stay on the trace,
+  // and one exists with each trace, even when empty, so a trade entering a
+  // quiet window does not remount the chart.
+  if (stepped && mode === "line") {
+    series.push(...sources.flatMap((history, sourceIndex): ChartSeries[] => lines[sourceIndex].length ? [{
+      type: "Line" as const,
+      data: chartData((history.liveTrades ?? []).flatMap(({ timestampMs, price: raw }) =>
+        raw === null ? [] : [{ time: chartTimestamp(timestampMs), value: scale.coordinate(price(raw)) }])),
+      options: {
+        color: "var(--ink)", lineVisible: false, pointMarkersVisible: true, pointMarkersRadius: 2.5,
+        priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, autoscaleInfoProvider,
+      },
+    }] : []));
+  }
+  return { series, pointPrices, markers, tagged, up, down };
+}
+
+const HIDDEN_RUN = { lineColor: "transparent" } as const;
+
+/**
+ * A step trace with real breaks. The chart drops gap rows and joins their
+ * neighbours, and a step takes its flat run from the earlier point and its
+ * rise from the later one. So the run into an unpriced execution is hidden,
+ * and a hidden point just before the next price hides the rise into it. Gap
+ * rows stay, so an inspected time inside the break reads no price. Rows in
+ * the same millisecond collapse to the last first, as the chart would, so a
+ * break shares its time with a price only as the break.
+ */
+function steppedLineData(trace: readonly LinePoint[], pointValue: (at: number, raw: string) => number) {
+  const line = [...new Map(trace.map((point) => [point.timestampMs, point])).values()];
+  return line.flatMap(({ timestampMs, price: raw }, index) => {
+    const time = chartTimestamp(timestampMs);
+    if (raw === null) return [{ time }];
+    const value = pointValue(timestampMs, raw);
+    const point = line[index + 1]?.price === null ? { time, value, ...HIDDEN_RUN } : { time, value };
+    if (index === 0 || line[index - 1]?.price !== null) return [point];
+    return [{ time: chartTimestamp(timestampMs - 0.5), value, ...HIDDEN_RUN }, point];
+  });
+}
+
+function priceLines(sources: readonly Source[], options: Readonly<{
+  mode: "line" | "candles"; rollingWindow?: boolean; marketChart?: boolean; migrationAt?: number; to?: number;
+}>) {
+  if (options.mode === "candles") return [];
+  if (options.rollingWindow) return sources.map(({ liveLine }) => liveLine ?? []);
+  if (options.marketChart) return candleClosePoints(sources, options.migrationAt);
+  return poolLinePoints(sources, options.migrationAt, options.to);
+}
+
+function poolChartModel({
+  sources, migrationAt, from, to, rollingWindow, marketChart, discontinuous, memeDecimals, quoteDecimals, quoteUsd, mode, showVolume, compact, walletTrades,
+}: Readonly<{
+  walletTrades: readonly WalletChartTrade[];
+  sources: readonly Source[];
+  migrationAt?: number;
+  from?: number;
+  to?: number;
+  rollingWindow?: boolean;
+  marketChart?: boolean;
+  discontinuous?: boolean;
+  memeDecimals: number | null;
+  quoteDecimals: number | null;
+  quoteUsd: string | null;
+  mode: "candles" | "line";
+  showVolume: boolean;
+  compact: boolean;
+}>) {
+  const { usd, price } = poolPrices(memeDecimals, quoteDecimals, quoteUsd);
+  const quantity = (value: bigint) =>
+    shiftDecimal(value.toString(), -(quoteDecimals ?? 0));
+  const lines = priceLines(sources, { mode, rollingWindow, marketChart, migrationAt, to });
+  const prices = mode === "line"
+    ? lines.flatMap((points) => points.flatMap((point) => point.price === null ? [] : [price(point.price)]))
+    : sources.flatMap(({ page }) => page.candles.flatMap((candle) => [candle.open, candle.high, candle.low, candle.close].map(price)));
+  const scale = exactChartScale(prices);
+  // Coordinates span 0-100 over every drawn price. Live fits all of them: a
+  // step held from left of the view still draws its run, which the native fit
+  // (points in view only) would push off the pane.
+  const autoscaleInfoProvider: AutoscaleInfoProvider = scale.flat || rollingWindow
+    ? () => ({ priceRange: { minValue: 0, maxValue: 100 } })
+    : (original) => original();
+  const volumes = combinedVolumes(
+    sources.flatMap(({ page }) =>
+      page.candles.map((candle) => ({
+        at: candle.bucketStart,
+        volume: quantity(candle.volumeQuote),
+        down: comparePrices(candle.close, candle.open) < 0,
+      })),
+    ),
+  );
+  const volume = exactChartScale([
+    "0",
+    ...volumes.map((point) => point.volume),
+  ]);
+  const intervalMs = candleIntervalMs(sources[0]?.page.interval ?? "1m");
+  const timeline = rollingWindow && from !== undefined && to !== undefined
+    ? liveTimeline(sources, from, to, migrationAt)
+    : poolTimeline(sources, intervalMs, from, to, migrationAt);
+  const { series, pointPrices, markers, tagged, up, down } = poolPriceSeries({
+    sources, lines, compact, mode, migrationAt, walletTrades, price, quantity, scale, autoscaleInfoProvider,
+    pointsOnly: !rollingWindow && Boolean(discontinuous), stepped: Boolean(rollingWindow),
+  });
+  const latest = rollingWindow ? undefined : latestPrice(sources[tagged], price);
   if (showVolume)
     series.push({
       type: "Histogram",

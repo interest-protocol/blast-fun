@@ -214,6 +214,7 @@ function chartSource(page: CoinPage, market: BrowserMarket | null): (ChartSource
     symbol: identity.symbol,
     quoteSymbol: identity.quoteSymbol,
     quoteType: identity.quoteType,
+    launchAt: curve?.launch.createdAtMs,
     opening: curve && opening ? { timestampMs: curve.launch.createdAtMs, price: formatPrice(opening) } : undefined,
     memeDecimals: identity.memeDecimals,
     quoteDecimals: identity.quoteDecimals,
@@ -234,7 +235,7 @@ export function coinChartOptions(page: CoinPage, market: BrowserMarket | null, c
     ? chart.venuePoolKey !== null && MIGRATOR_POOL_KEY.test(chart.venuePoolKey)
     : page.source.kind === "curve";
   const initialControls: ChartControls = controls.range === "live" && !livePreset
-    ? { ...DEFAULT_CHART_CONTROLS, range: graduated ? "24h" : "all" }
+    ? graduated ? { interval: "15m", range: "24h" } : DEFAULT_CHART_CONTROLS
     : controls;
   return { coinType, source: chart, livePreset, initialControls };
 }

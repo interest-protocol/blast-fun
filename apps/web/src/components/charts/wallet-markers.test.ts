@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { PoolCandlePage } from "@blast/core/modules/launchpad-contract/venue-history.ts";
 import { lineCloseTime } from "./candle-data.ts";
-import { walletMarkerBadges, walletMarkers, type WalletChartTrade } from "./wallet-markers.ts";
+import { liveWalletMarkers, walletMarkerBadges, walletMarkers, type WalletChartTrade } from "./wallet-markers.ts";
 
 const page: PoolCandlePage = {
   source: "venue", venue: "cetus", poolKey: "cetus:0x1", interval: "1m", migration: null,
@@ -72,4 +72,18 @@ test("opposite trades at the chart edge have separate badges and visible price a
       assert.ok(y < badge.top || y > badge.top + badge.badgeHeight, "the badge leaves the price anchor visible");
     }
   }
+});
+
+test("Live markers use the price of each matched execution even within the same millisecond", () => {
+  const timestampMs = 91_375;
+  const executions = trades.slice(0, 3).map((trade, index) => ({
+    cursor: trade.cursor, side: trade.side, timestampMs, price: ["3", "2", null][index],
+    kind: "swap", trader: null, digest: "1".repeat(32), quoteAmount: 10n, memeAmount: 20n,
+    volumeUsd: null, venueSwap: null,
+  }));
+  const marks = liveWalletMarkers([...trades, trades[0]!], executions, page.poolKey, 0, Number);
+  assert.deepEqual(marks.map(({ key, time, price }) => [key, time, price]), [
+    [`${page.poolKey}:3`, 91.375, 3],
+    [`${page.poolKey}:2`, 91.375, 2],
+  ]);
 });

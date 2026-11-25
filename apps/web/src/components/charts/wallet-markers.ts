@@ -1,5 +1,5 @@
 import type { ChartCandlePage } from "#web/components/launchpad/chart/chart-model.ts";
-import { candleBucketStart } from "@blast/core/modules/launchpad-contract/venue-history.ts";
+import { candleBucketStart, type PoolTrade } from "@blast/core/modules/launchpad-contract/venue-history.ts";
 import { chartTimestamp } from "./tradingview-model.ts";
 import { WALLET_LABELS, type WalletLabel } from "#web/components/launchpad/activity/wallet-labels.ts";
 
@@ -60,14 +60,36 @@ export function walletMarkers(
 }
 
 type WalletMarker = ReturnType<typeof walletMarkers>[number];
-export type PlottedWalletMarker = WalletMarker & { seriesIndex: number; price: number };
+type WalletMarkerAnchor = Omit<WalletMarker, "candle">;
+export type PlottedWalletMarker = WalletMarkerAnchor & { seriesIndex: number; price: number };
+
+export function liveWalletMarkerKey(trade: WalletChartTrade) {
+  return `${trade.poolKey}:${trade.cursor}`;
+}
+
+export function liveWalletMarkers(trades: readonly WalletChartTrade[], executions: readonly PoolTrade[], poolKey: string, seriesIndex: number, coordinate: (raw: string) => number): PlottedWalletMarker[] {
+  const priced = new Map(executions.map(trade => [trade.cursor, trade]));
+  const marks: PlottedWalletMarker[] = [];
+  for (const trade of trades) {
+    if (trade.poolKey !== poolKey || !trade.labels.length) continue;
+    const execution = priced.get(trade.cursor);
+    if (!execution?.price || execution.side !== trade.side) continue;
+    priced.delete(trade.cursor);
+    marks.push({
+      key: liveWalletMarkerKey(trade), time: chartTimestamp(execution.timestampMs), side: execution.side,
+      count: 1, labels: orderedLabels.filter(label => trade.labels.includes(label)), wallets: new Map([[trade.address, execution.timestampMs]]),
+      seriesIndex, price: coordinate(execution.price),
+    });
+  }
+  return marks;
+}
 type Point = { x: number; y: number };
 type Group = { side: "buy" | "sell"; slot: number; count: number; labels: Set<WalletLabel>; points: (Point & { key: string })[]; wallets: Map<string, number> };
 
 const clamp = (value: number, low: number, high: number) => Math.max(low, Math.min(high, value));
 
 /** Badges share a column only across sides. Their dots stay on the actual price series. */
-export function walletMarkerBadges<T extends WalletMarker>(
+export function walletMarkerBadges<T extends WalletMarkerAnchor>(
   markers: readonly T[], width: number, height: number, rem: number,
   coordinate: (marker: T) => Point | null,
   touch = false,
