@@ -11,7 +11,7 @@ const OTHER = `blast_curve:0x${"33".repeat(32)}`;
 const DEPLOYMENT = "ab".repeat(32);
 const NOW = 1_790_000_000_000;
 const expected = { network: "mainnet" as const, deployment: DEPLOYMENT };
-const wireProvenance = (checkpoint: number) => ({ network: "mainnet", deployment_fingerprint: DEPLOYMENT, checkpoint, timestamp_ms: NOW + checkpoint, observed_ms: NOW + checkpoint + 20, lag_ms: 20 });
+const wireProvenance = (checkpoint: number) => ({ network: "mainnet", deployment_fingerprint: DEPLOYMENT, checkpoint, timestamp_ms: NOW + checkpoint, observed_ms: NOW + checkpoint + 20, lag_ms: 20, hops: { arrived_ms: NOW + checkpoint + 5, r2_put_ms: 38, written_ms: NOW + checkpoint + 15, picked_ms: NOW + checkpoint + 20 } });
 
 function trade(checkpoint: number, part = 2, summary: unknown = { holders: checkpoint }) {
   return { type: "trade", cursor: `${checkpoint}:1:0:${part}`, checkpoint, timestamp_ms: NOW + checkpoint, provenance: wireProvenance(checkpoint), summary, trade: { cursor: `${checkpoint}:1:0:${part}`, timestamp_ms: NOW + checkpoint, digest: "1".repeat(32), pool_key: CURVE, venue: "blast_curve", trader: null, side: "buy", kind: "buy", quote_amount: "5", meme_amount: "3", price: "2", volume_usd: null, venue_swap: null } };
