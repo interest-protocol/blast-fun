@@ -1,8 +1,8 @@
 import { coinPagePath } from "@blast/core/modules/launchpad-coin/page-key.ts";
 import { ago, bxSigned, qs, qsRaised, qm, raisedShort, short, shortAddress, signPct, usd0 } from "@blast/core/web/format.ts";
-import { compareExact, exactAtoms, exactDecimal, groupedExact, numShortExact } from "@blast/core/web/exact-amount.ts";
+import { amtExact, atLeastPow10, bxUsdExact, compareExact, exactAtoms, exactDecimal, groupedExact, numShortExact, shortQtyExact } from "@blast/core/web/exact-amount.ts";
 import type { FeedItemActor } from "@blast/core/web/contracts/items.ts";
-import type { HomeTapeEvent, HomeActivity, HomeAmount, HomeCoin, HomeEvent, HomeKind, HomeParticipant, HomeSide, HomeWindow } from "@blast/core/web/contracts/home.ts";
+import type { HomeTapeEvent, HomeActivity, HomeAmount, HomeCoin, HomeEvent, HomeKind, HomeParticipant, HomeRecentBuy, HomeSide, HomeWindow } from "@blast/core/web/contracts/home.ts";
 import type { DiscoveryResponse, DiscoveryRow } from "@blast/core/modules/launchpad-discovery/rows.ts";
 import { HOME_BONDING_ROWS } from "@blast/core/modules/launchpad-discovery/bonding.ts";
 import { BLAST_V1_COINS } from "@blast/core/modules/social/portfolio/core-coins.ts";
@@ -86,6 +86,33 @@ export function amountShort(amount: HomeAmount): string {
   const coin = COIN(amount.quote_symbol, amount.quote_decimals);
   const value = coin && exactAtoms(amount.atoms, coin.decimals);
   return coin && value ? `${numShortExact(value)} ${coin.symbol}` : "an unlisted coin";
+}
+
+/** How loud a buy lands on its row: a quiet figure, a filled one from $100, and an icon that pops from $1,000. */
+export type HomeBuyTier = "small" | "big" | "huge";
+export type HomeBuyCue = Readonly<{ text: string; tier: HomeBuyTier }>;
+
+/**
+ * A live buy as its row flashes it, short enough to read in a glance: dollars
+ * when the indexer priced it (`+$0.42`, `+$13`, `+$1.2K`), else the coin it
+ * was paid in (`+13.5 SUI`). Null for an amount the web cannot read.
+ */
+export function buyCueOf(buy: Pick<HomeRecentBuy, "quote_atoms" | "quote_decimals" | "quote_symbol" | "usd">): HomeBuyCue | null {
+  const usd = exactDecimal(buy.usd);
+  if (usd) {
+    const text = atLeastPow10(usd, 1) ? `$${numShortExact(usd)}` : bxUsdExact(usd);
+    if (atLeastPow10(usd, 3)) return { text: `+${text}`, tier: "huge" };
+    return { text: `+${text}`, tier: atLeastPow10(usd, 2) ? "big" : "small" };
+  }
+  const paid = exactAtoms(buy.quote_atoms, buy.quote_decimals);
+  if (!paid) return null;
+  return { text: `+${atLeastPow10(paid, 0) ? shortQtyExact(paid) : amtExact(paid)} ${buy.quote_symbol}`, tier: "small" };
+}
+
+/** The buy worth showing from one read: the most dollars, the newest among equals; an unpriced buy only when none is priced. */
+export function biggestBuy(buys: readonly HomeRecentBuy[]): HomeRecentBuy | undefined {
+  const usd = (buy: HomeRecentBuy) => exactDecimal(buy.usd) ?? { n: 0n, scale: 0 };
+  return [...buys].sort((a, b) => compareExact(usd(b), usd(a)) || b.occurred_at_ms - a.occurred_at_ms)[0];
 }
 
 /**

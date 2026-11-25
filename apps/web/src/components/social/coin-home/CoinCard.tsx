@@ -26,7 +26,7 @@ import { saleLifecycleAt } from "@blast/core/web/contracts/presales.ts";
 import styles from "./CoinHome.module.css";
 import { HomeSpark } from "./HomeSpark";
 import { homeAnalytics } from "./home-analytics";
-import { homeCoinHref, homeCoinKey, lifecycleTone, marketFacts, marketVolume, raiseFigures, shareText } from "./home-model";
+import { homeCoinHref, homeCoinKey, lifecycleTone, marketFacts, marketVolume, raiseFigures, shareText, type HomeBuyCue } from "./home-model";
 import { Unknown } from "./MetricHelp";
 import { homeTablePrice } from "#web/lib/market-format.ts";
 import type { DisplayPrice } from "@blast/core/modules/launchpad-contract/market-stream.ts";
@@ -38,7 +38,8 @@ export type CoinCardProps = Readonly<{
   rank?: number;
   marketLoading?: boolean;
   livePrice?: DisplayPrice;
-  buyAmount?: string;
+  /** A buy that just landed on this coin. */
+  buy?: HomeBuyCue;
   window: HomeWindow;
   nowMs: number;
   /** The trading flag: without it no trade control is drawn. */
@@ -47,7 +48,7 @@ export type CoinCardProps = Readonly<{
 }>;
 
 /** The ticker link covers the row. Buy has its own target above the link. */
-export function CoinCard({ coin, rank, window, nowMs, trading, watchlist = false, marketLoading = false, livePrice, buyAmount }: CoinCardProps) {
+export function CoinCard({ coin, rank, window, nowMs, trading, watchlist = false, marketLoading = false, livePrice, buy }: CoinCardProps) {
   const marketCoin = useMemo(() => coinAtPrice(coin, livePrice), [coin, livePrice]);
   const valuationAt = livePrice && !coin.live_inputs ? coin.price_as_of_ms : marketCoin.price_as_of_ms;
   const id = useId();
@@ -58,11 +59,12 @@ export function CoinCard({ coin, rank, window, nowMs, trading, watchlist = false
       <article
         aria-labelledby={id}
         className={clsx(styles.row, styles.cols, styles.coinRow)}
+        data-buy={buy && buy.tier !== "small" ? buy.tier : undefined}
         data-sale={tradingCoin ? undefined : ""}
         data-surface=""
       >
         {rank === undefined ? null : <span className={clsx("num", styles.rank)}>{rank.toLocaleString("en-US")}</span>}
-        <CoinIdentity coin={coin} id={id} buyAmount={buyAmount} />
+        <CoinIdentity coin={coin} id={id} buy={buy} />
         {tradingCoin ? <MarketCells window={window} coin={marketCoin} nowMs={nowMs} loading={marketLoading} valuationAt={valuationAt} /> : <SaleCells coin={coin} nowMs={nowMs} />}
         {canBuy || watchlist ? <span className={styles.rowActions}>
           {canBuy ? <RowBuy coin={coin} /> : null}
@@ -106,7 +108,7 @@ function tradeCoinOf(coin: HomeCoin): SocialTradeCoin {
 }
 
 /** The identity: the coin icon, linked symbol, name and the venue's logo (its name for assistive technology and on hover). */
-function CoinIdentity({ coin, id, buyAmount }: Readonly<{ coin: HomeCoin; id: string; buyAmount?: string }>) {
+function CoinIdentity({ coin, id, buy }: Readonly<{ coin: HomeCoin; id: string; buy?: HomeBuyCue }>) {
   const venue = coin.venue && coin.lifecycle !== "cancelled" ? coin.venue : null;
   const href = homeCoinHref(coin) ?? coinPagePath(coin.coin_type);
   const distinct = coin.name.trim().toLowerCase() !== coin.symbol.trim().toLowerCase();
@@ -114,8 +116,8 @@ function CoinIdentity({ coin, id, buyAmount }: Readonly<{ coin: HomeCoin; id: st
     <span className={styles.ident}>
       <PresaleMark coinType={coin.coin_type} presaleId={homeCoinKey(coin)} size={44} src={coin.icon_url} />
       <span className={styles.identText}>
-        {buyAmount ? <span aria-hidden="true" className={styles.buyAnchor}>
-          <span className={clsx("num", styles.buyCue)} data-home-buy="">+{buyAmount}</span>
+        {buy ? <span aria-hidden="true" className={styles.buyAnchor}>
+          <span className={clsx("num", styles.buyCue)} data-home-buy={buy.tier}>{buy.text}</span>
         </span> : null}
         <span className="coinNamed">
           <Link aria-label={distinct ? `Open ${coin.name} (${coin.symbol})` : `Open ${coin.symbol}`} className={styles.symbol} href={href} id={id} prefetch={false}>

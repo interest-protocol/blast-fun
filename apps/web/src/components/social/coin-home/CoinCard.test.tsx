@@ -8,6 +8,7 @@ import { AppRouterContext } from "next/dist/shared/lib/app-router-context.shared
 import { QueryProvider } from "#web/lib/query/provider.tsx";
 import type { HomeCoin, HomeWindow } from "@blast/core/modules/social/contracts/home.ts";
 import { CoinCard } from "./CoinCard";
+import type { HomeBuyCue } from "./home-model";
 import { CoinList, type ListProps } from "./sources";
 import { installTestDom, recordAnimations } from "../../../../test/fixtures/social/test-dom.ts";
 
@@ -106,11 +107,11 @@ test("streamed prices update the existing row without reordering it or changing 
   assert.equal(streams.length, 1);
 });
 
-function render(value: HomeCoin, loading = false, nowMs = 1, window: HomeWindow = "24h") {
+function render(value: HomeCoin, loading = false, nowMs = 1, window: HomeWindow = "24h", buy?: HomeBuyCue) {
   const client = new QueryClient();
   try {
     return new JSDOM(renderToStaticMarkup(<AppRouterContext value={router}><QueryProvider client={client}>
-      <CoinCard coin={value} marketLoading={loading} window={window} nowMs={nowMs} trading />
+      <CoinCard buy={buy} coin={value} marketLoading={loading} window={window} nowMs={nowMs} trading />
     </QueryProvider></AppRouterContext>));
   } finally { client.clear(); }
 }
@@ -295,4 +296,19 @@ test("a newer Home price revalues each supply independently, preserves missing v
   assert.deepEqual(sparkAtPrice(history, 500, "2"), [[100, 0.5], [500, 2]]);
   assert.equal(sparkAtPrice(history, 499, "2"), history);
   assert.equal(sparkAtPrice(null, 600, "2"), null);
+});
+
+// Fails if a small buy lights the row, or a large one lands as quietly as a small one.
+test("a buy shows its figure, and only a large one lights the row", () => {
+  const cue = (buy?: HomeBuyCue) => {
+    const dom = render(coin, false, 1, "24h", buy);
+    try {
+      const figure = dom.window.document.querySelector("[data-home-buy]");
+      return [figure?.textContent, figure?.getAttribute("data-home-buy"), dom.window.document.querySelector("article")?.getAttribute("data-buy")];
+    } finally { dom.window.close(); }
+  };
+  assert.deepEqual(cue(), [undefined, undefined, null]);
+  assert.deepEqual(cue({ text: "+$13", tier: "small" }), ["+$13", "small", null]);
+  assert.deepEqual(cue({ text: "+$420", tier: "big" }), ["+$420", "big", "big"]);
+  assert.deepEqual(cue({ text: "+$1.2K", tier: "huge" }), ["+$1.2K", "huge", "huge"]);
 });
