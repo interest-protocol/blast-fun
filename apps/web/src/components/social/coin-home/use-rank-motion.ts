@@ -7,10 +7,14 @@ import { useLayoutEffect, useRef } from "react";
 
 type RowPosition = Readonly<{ id: string; top: number }>;
 
-/** Animate only incoming rank changes, in layout coordinates so scrolling never looks like a rank change. */
-export function useRankMotion(view: string) {
+/**
+ * Animate rank changes, in layout coordinates so scrolling never looks like a rank change.
+ * Rows slide when the same list re-ranks (`view` changes within one `group`, such as a new sort);
+ * a new `group` (another source or page) starts without motion.
+ */
+export function useRankMotion(view: string, group: string = view) {
   const root = useRef<HTMLOListElement>(null);
-  const previous = useRef<{ view: string; rows: RowPosition[] } | null>(null);
+  const previous = useRef<{ view: string; group: string; rows: RowPosition[] } | null>(null);
   const restoring = useRef(false);
   const animations = useRef(new Map<HTMLElement, Animation>());
 
@@ -21,12 +25,12 @@ export function useRankMotion(view: string) {
     // Read all layout before writing animations. offsetTop excludes the running transform.
     const positions = rows.map(row => ({ id: row.dataset.listRow ?? "", top: row.offsetTop }));
     const before = previous.current;
-    previous.current = { view, rows: positions };
+    previous.current = { view, group, rows: positions };
     const changed = before && (before.rows.length !== positions.length || positions.some((row, index) => row.id !== before.rows[index]?.id));
     const reduce = instantFeedback();
     const restored = restoring.current;
     restoring.current = false;
-    if (!before || before.view !== view || reduce || restored) {
+    if (!before || before.group !== group || reduce || restored) {
       animations.current.forEach(animation => animation.cancel());
       animations.current.clear();
       return;
@@ -45,7 +49,7 @@ export function useRankMotion(view: string) {
       if (typeof row.animate !== "function" || delta === 0) continue;
       const animation = row.animate(
         delta === null ? [{ opacity: 0 }, { opacity: 1 }] : [{ transform: `translateY(${delta}px)` }, { transform: "translateY(0)" }],
-        { duration: 180, easing: delta === null ? EASE_OUT : EASE_IN_OUT },
+        { duration: before.view === view ? 180 : 240, easing: delta === null ? EASE_OUT : EASE_IN_OUT },
       );
       animations.current.set(row, animation);
       animation.onfinish = () => animations.current.delete(row);
