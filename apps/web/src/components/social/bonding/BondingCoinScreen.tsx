@@ -548,7 +548,7 @@ export function LegacyCoinScreen({ coinType, name, symbol, logoUrl, chart, decim
   };
   const price = useChartPrice(poolKey);
   const liveScreen = useLiveScreen();
-  const live = useLiveCoin({ coin: coinType, pools: poolKeys, expected: null, enabled: liveScreen });
+  const live = useLiveCoin({ coin: coinType, pools: [poolKey], expected: null, enabled: liveScreen });
   const { market, fdvUsd: readFdvUsd } = useLegacyMarket(coinType, !major, liveScreen);
   const fdvUsd = live.stats?.fdvUsd ?? readFdvUsd;
   const mark = <>{verified || verifiedCommunity ? <CoinVerifiedMark community={verifiedCommunity} /> : null}{legacy ? <CoinLegacyMark /> : null}</>;

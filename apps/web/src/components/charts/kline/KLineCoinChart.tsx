@@ -15,7 +15,7 @@ import { poolPrices } from "../candle-data.ts";
 import type { CandleTrade } from "../candle-trade.ts";
 import type { WalletChartTrade } from "../wallet-markers.ts";
 import {
-  barChanges, foldTrades, klineBars, MAIN_INDICATORS, PANE_INDICATORS, pricePrecision, readChartSettings, toggleIndicator,
+  barChanges, fillGaps, foldTrades, klineBars, MAIN_INDICATORS, PANE_INDICATORS, pricePrecision, readChartSettings, toggleIndicator,
   type Bar, type ChartSettings, type IndicatorName,
 } from "./kline-model.ts";
 import { subscriptZeros } from "#web/lib/market-format.ts";
@@ -184,7 +184,7 @@ function useLiveBars(sources: readonly DrawnSeries[], interval: CandleInterval, 
     if (trade?.trade.price) setPending((held) => [...held.filter((item) => item.trade.cursor !== trade.trade.cursor), trade].slice(-MAX_PENDING_TRADES));
   }
   return useMemo(() => {
-    if (memeDecimals === null) return history;
+    if (memeDecimals === null) return fillGaps(history, interval);
     const shown = poolPrices(memeDecimals, quoteDecimals, quoteUsd);
     const quote = poolPrices(memeDecimals, quoteDecimals);
     const unseen = pending.flatMap(({ poolKey, trade: { timestampMs, price, memeAmount } }) => {
@@ -194,7 +194,7 @@ function useLiveBars(sources: readonly DrawnSeries[], interval: CandleInterval, 
       const volume = Number(shiftDecimal(memeAmount.toString(), -memeDecimals)) * Number(quote.price(price));
       return [{ timestampMs, price: Number(shown.price(price)), volume }];
     });
-    return foldTrades(history, interval, unseen);
+    return fillGaps(foldTrades(history, interval, unseen), interval);
   }, [history, interval, memeDecimals, quoteDecimals, quoteUsd, sources, pending]);
 }
 

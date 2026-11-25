@@ -47,7 +47,8 @@ export function withLiveRows(rows: readonly ActivityRow[], fresh: readonly Activ
 
 /**
  * The live screen's trades: the first read, then each trade the tab's stream brings for these pools.
- * The list re-reads on a timer only while the stream is not live.
+ * The list re-reads on a timer only while the stream is not live. The screen streams its main pool
+ * only, so a list over several pools (SUI) keeps its timer for the others.
  */
 function useLiveTrades(client: QueryClient, queryKey: readonly unknown[], coinType: string | null, poolKeys: readonly VenuePoolKey[], enabled: boolean) {
   const [live, setLive] = useState(false);
@@ -66,7 +67,7 @@ function useLiveTrades(client: QueryClient, queryKey: readonly unknown[], coinTy
     // `poolKeys` and `queryKey` are keyed by `pools`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client, coinType, pools, enabled]);
-  return enabled && live;
+  return enabled && live && poolKeys.length === 1;
 }
 
 export function IndexedPoolTrades({ poolKeys, units }: Readonly<{ poolKeys: readonly VenuePoolKey[]; units: ActivityUnits }>) {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { DrawnSeries } from "#web/components/launchpad/chart/chart-geometry.ts";
-import { barChanges, foldTrade, foldTrades, klineBars, pricePrecision, readChartSettings, toggleIndicator, DEFAULT_CHART_SETTINGS, type Bar } from "./kline-model.ts";
+import { barChanges, fillGaps, foldTrade, foldTrades, MAX_FILLED_BARS, klineBars, pricePrecision, readChartSettings, toggleIndicator, DEFAULT_CHART_SETTINGS, type Bar } from "./kline-model.ts";
 
 const MINUTE = 60_000;
 const T0 = 1_795_188_300_000; // a 5-minute boundary
@@ -82,4 +82,12 @@ test("settings survive a reload and ignore anything unknown", () => {
   const on = toggleIndicator(DEFAULT_CHART_SETTINGS, "BOLL");
   assert.deepEqual(on.indicators, ["MA", "BOLL", "VOL"]);
   assert.deepEqual(toggleIndicator(on, "MA").indicators, ["BOLL", "VOL"]);
+});
+
+test("a quiet coin's empty buckets become flat bars at the previous close, up to the bar cap", () => {
+  const bar = (minute: number, close: number, volume = 1): Bar => ({ timestamp: minute * 60_000, open: close, high: close, low: close, close, volume });
+  assert.deepEqual(fillGaps([bar(0, 2), bar(3, 5)], "1m"), [bar(0, 2), bar(1, 2, 0), bar(2, 2, 0), bar(3, 5)]);
+  assert.deepEqual(fillGaps([], "1m"), []);
+  const sparse = [bar(0, 1), bar(MAX_FILLED_BARS, 2)];
+  assert.equal(fillGaps(sparse, "1m"), sparse);
 });

@@ -1,4 +1,4 @@
-import { candleBucketStart, type CandleInterval } from "@blast/core/modules/launchpad-contract/venue-history.ts";
+import { candleBucketStart, candleIntervalMs, type CandleInterval } from "@blast/core/modules/launchpad-contract/venue-history.ts";
 import { shiftDecimal } from "#web/components/launchpad/coin/coin-format.ts";
 import type { DrawnSeries } from "#web/components/launchpad/chart/chart-geometry.ts";
 import { poolPrices } from "../candle-data.ts";
@@ -39,6 +39,31 @@ export function klineBars(sources: readonly DrawnSeries[], memeDecimals: number 
     byStart.set(bar.timestamp, held ? joinBars(held, bar) : bar);
   }
   return [...byStart.values()].sort((a, b) => a.timestamp - b.timestamp);
+}
+
+/** Above this many bars the chart shows the trades it has and leaves quiet buckets out. */
+export const MAX_FILLED_BARS = 2_000;
+
+/**
+ * KLineCharts spaces bars by index, so a bucket without trades becomes a flat bar at the
+ * previous close with no volume; the time axis then keeps its pace on a quiet coin.
+ * A range that would pass `MAX_FILLED_BARS` stays unfilled.
+ */
+export function fillGaps(bars: readonly Bar[], interval: CandleInterval): readonly Bar[] {
+  const first = bars[0];
+  const last = bars.at(-1);
+  if (!first || !last) return bars;
+  const step = candleIntervalMs(interval);
+  if ((last.timestamp - first.timestamp) / step + 1 > MAX_FILLED_BARS) return bars;
+  const filled: Bar[] = [];
+  for (const bar of bars) {
+    const previous = filled.at(-1);
+    if (previous) for (let at = previous.timestamp + step; at < bar.timestamp; at += step) {
+      filled.push({ timestamp: at, open: previous.close, high: previous.close, low: previous.close, close: previous.close, volume: 0 });
+    }
+    filled.push(bar);
+  }
+  return filled;
 }
 
 function joinBars(earlier: Bar, later: Bar): Bar {
