@@ -1,5 +1,4 @@
 import { MarketCoinChart } from "./MarketCoinChart";
-import { TradeCoinChart } from "./TradeCoinChart";
 import { useId, useMemo, type ReactNode } from "react";
 import { Popover, PopoverSurface } from "#web/components/blast-ui/Popover.tsx";
 import { BlastMenu, BlastMenuTrigger, BlastMenuCheckboxItem, BlastMenuCheckboxItemIndicator, BlastMenuRadioGroup, BlastMenuRadioItem, BlastMenuRadioItemIndicator } from "#web/components/blast-ui/BlastMenu.tsx";
@@ -96,7 +95,7 @@ function ResolvedCoinHistory({
   "history" | "chart" | "onChart" | "retry"
 >) {
   if (history && "kind" in history)
-    return history.kind === "trades" ? <TradeCoinChart history={history} chart={chart} retry={retry} /> : history.kind === "market" ? (
+    return history.kind === "market" ? (
       <MarketCoinChart history={history} chart={chart} />
     ) : (
       <NativeCoinChart history={history} chart={chart} onChart={onChart} />
@@ -142,7 +141,7 @@ function priceControls(
     ? CANDLE_INTERVALS
     : PRICE_TIERS.slice(minimum);
   const automaticInterval =
-    history && "kind" in history && (history.kind === "market" || history.kind === "trades")
+    history && "kind" in history && history.kind === "market"
       ? history.page.interval
       : native
         ? "1m"

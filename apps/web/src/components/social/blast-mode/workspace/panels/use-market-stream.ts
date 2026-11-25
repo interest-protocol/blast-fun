@@ -6,18 +6,17 @@ import { tabMarketStream, type MarketStreamHub, type MarketStreamState } from "#
 import { useQuoteUsd } from "#web/components/social/prices/use-quote-usd.ts";
 import { useWorkspaceLiveClock } from "../live-clock";
 import { applyMarketFrame, estimateUsdPrice, tradeQuote, type MarketCoinHistory, type TradeQuote } from "./coin-market-history";
-import { applyStreamedFill, tradePoolKey, type StreamedFill, type TradeCoinHistory } from "./trade-coin-history";
 
-/** The chart reads that stream: the market service's candles, or a migrated coin's pool swap candles. */
-export type StreamedChart = MarketCoinHistory | TradeCoinHistory;
+/** The chart reads that stream: the market service's candles of a coin or of a sale's pool. */
+export type StreamedChart = MarketCoinHistory;
 
 /** The newest trade the stream carried for the coin's pool, with what prices it in USD. */
 type StreamedTrade = Readonly<{ checkpoint: number; timestampMs: number; price: string; quote: TradeQuote | null }>;
 /**
- * `frames` move market candles; `fills` move swap candles. `floor` is the newest checkpoint a read had
- * shown when either was pruned: a read older than it misses trades.
+ * `frames` move the candles. `floor` is the newest checkpoint a read had shown when they were pruned:
+ * a read older than it misses trades.
  */
-type Stream = Readonly<{ poolKey: string; state: MarketStreamState | null; fence: number | null; floor: number; frames: readonly ChartFrame[]; fills: readonly StreamedFill[]; trade: StreamedTrade | null }>;
+type Stream = Readonly<{ poolKey: string; state: MarketStreamState | null; fence: number | null; floor: number; frames: readonly ChartFrame[]; trade: StreamedTrade | null }>;
 
 /** The header's price from the stream: newer than the coin read once `observedAt` passes its observation. */
 export type StreamedPrice = Readonly<{ usd: string; observedAt: number; checkpoint: number; paused: boolean }>;
@@ -27,19 +26,9 @@ const MAX_FRAMES = 512;
 /** First wait before reading history again when it does not reach the stream; doubles to 30 s. */
 const BEHIND_MS = 1_000;
 
-/** The pool a chart read streams from, or null when it names none the stream serves. */
-function chartPool(history: StreamedChart): string | null {
-  return history.kind === "market" ? history.poolKey : tradePoolKey(history);
-}
-
-/** The newest checkpoint a chart read includes. */
-function chartCheckpoint(history: StreamedChart): number | null {
-  return history.kind === "market" ? history.provenance.checkpoint : history.page.as_of.checkpoint;
-}
-
 /**
  * The focused coin's candles and header price from the tab's market stream hub (the coin page's
- * `ChartStream` rules): frames, or for swap candles the pool's swaps, after the stream's fence go on
+ * `ChartStream` rules): frames after the stream's fence go on
  * top of the last history read that reaches it; a frame that needs history, or a read behind the
  * fence, asks `refresh` for another read. `live` is true while the hub is live for the coin's pool:
  * its polls may then slow to 30 s.
@@ -51,7 +40,7 @@ export function useMarketStream(
   refresh: () => void,
   hub?: MarketStreamHub | null,
 ) {
-  const { target, candles } = useChartStreamTarget(coinType, history, enabled);
+  const target = useChartStreamTarget(coinType, history, enabled);
   const [stream, setStream] = useState<Stream | null>(null);
   // Listeners read the newest history without resubscribing on each read. An empty read keeps the last
   // one: a venue pool's candle frames are checked against its migration, and null would fail them.
@@ -67,10 +56,9 @@ export function useMarketStream(
     let frames: ChartFrame[] = [];
     // The newest checkpoint a read has shown; a later read that answers older does not bring pruned frames back.
     let shown = 0;
-    let fills: StreamedFill[] = [];
     const update = (change: (stream: Stream) => Partial<Stream>) =>
       setStream((previous) => {
-        const current = previous?.poolKey === target ? previous : { poolKey: target, state: null, fence: null, floor: 0, frames: [], fills: [], trade: null };
+        const current = previous?.poolKey === target ? previous : { poolKey: target, state: null, fence: null, floor: 0, frames: [], trade: null };
         return { ...current, ...change(current) };
       });
     const subscription = source.subscribe({
@@ -79,18 +67,17 @@ export function useMarketStream(
       expected: null,
       // Screens that only watch this coin (its Trades list) follow the stream from its first frame.
       coin: coinType,
-      ...(candles ? { migration: () => (latest.current?.kind === "market" ? latest.current.page.migration : null) } : {}),
+      migration: () => latest.current?.page.migration ?? null,
       listener: {
         // Out of live, the candles keep the frames they had (the header shows "Updates paused");
         // the next fence replaces them.
         state: (state) => update(() => ({ state })),
         fence: (_, checkpoint) => {
           frames = [];
-          fills = [];
-          update(() => ({ fence: checkpoint, frames, fills }));
+          update(() => ({ fence: checkpoint, frames }));
         },
         frame: (frame) => {
-          shown = Math.max(shown, (latest.current && chartCheckpoint(latest.current)) ?? 0);
+          shown = Math.max(shown, latest.current?.provenance.checkpoint ?? 0);
           frames = [...frames.filter((item) => item.checkpoint > shown), frame];
           if (frames.length > MAX_FRAMES) {
             frames = [];
@@ -101,20 +88,10 @@ export function useMarketStream(
         },
         trade: ({ trade, checkpoint, summary }) => {
           if (trade.kind === "opening_round_fill") return;
+          const { price } = trade;
+          if (price === null) return;
           const quote = tradeQuote(summary);
-          let swaps: Partial<Stream> = {};
-          if (!candles) {
-            shown = Math.max(shown, (latest.current && chartCheckpoint(latest.current)) ?? 0);
-            fills = [...fills.filter((item) => item.checkpoint > shown), { checkpoint, timestampMs: trade.timestampMs, quoteAmount: trade.quoteAmount, memeAmount: trade.memeAmount, quote }];
-            if (fills.length > MAX_FRAMES) {
-              fills = [];
-              subscription.restart();
-              return;
-            }
-            swaps = { fills, floor: shown };
-          }
-          const price = trade.price === null ? {} : { trade: { checkpoint, timestampMs: trade.timestampMs, price: trade.price, quote } };
-          update(() => ({ ...swaps, ...price }));
+          update(() => ({ trade: { checkpoint, timestampMs: trade.timestampMs, price, quote } }));
         },
       },
     });
@@ -122,7 +99,7 @@ export function useMarketStream(
       subscription.stop();
       setStream(null);
     };
-  }, [target, coinType, hub, candles]);
+  }, [target, coinType, hub]);
 
   const current = stream?.poolKey === target ? stream : null;
   const live = current?.state === "live";
@@ -148,17 +125,12 @@ export function useMarketStream(
 
 function useChartStreamTarget(coinType: string, history: StreamedChart | null, enabled: boolean) {
   // The coin's pool outlives each read: a window change or a failed poll empties the read, not the stream.
-  const [known, setKnown] = useState<Readonly<{ coinType: string; poolKey: string; kind: StreamedChart["kind"] }> | null>(null);
-  const pool = history ? chartPool(history) : null;
-  if (history && pool && history.coin_type === coinType && (known?.coinType !== coinType || known.poolKey !== pool || known.kind !== history.kind)) {
-    setKnown({ coinType, poolKey: pool, kind: history.kind });
+  const [known, setKnown] = useState<Readonly<{ coinType: string; poolKey: string }> | null>(null);
+  const pool = history?.poolKey ?? null;
+  if (history && pool && history.coin_type === coinType && (known?.coinType !== coinType || known.poolKey !== pool)) {
+    setKnown({ coinType, poolKey: pool });
   }
-  // Swap candles from a pool the stream does not serve (Aftermath, or none) stay on polls.
-  const unserved = history?.kind === "trades" && pool === null;
-  const target = enabled && !unserved && known?.coinType === coinType ? known.poolKey : null;
-  // Market candles take the pool's candle frames; swap candles take its swaps and never parse a candle.
-  const candles = known?.kind === "market";
-  return { target, candles };
+  return enabled && known?.coinType === coinType ? known.poolKey : null;
 }
 
 function useStreamedPrice(trade: StreamedTrade | null, live: boolean): StreamedPrice | null {
@@ -173,21 +145,16 @@ function useStreamedPrice(trade: StreamedTrade | null, live: boolean): StreamedP
   }, [trade, quoteUsd, live]);
 }
 
-/** The history with the stream's frames or swaps on top; `behind` when only a newer read can continue it. */
+/** The history with the stream's frames on top; `behind` when only a newer read can continue it. */
 export function streamedHistory(
   history: StreamedChart | null,
-  stream: Pick<Stream, "fence" | "floor" | "frames" | "fills"> | null,
+  stream: Pick<Stream, "fence" | "floor" | "frames"> | null,
 ): Readonly<{ history: StreamedChart | null; behind: boolean }> {
-  const poolKey = history && chartPool(history);
+  const poolKey = history?.poolKey;
   if (!history || !poolKey || !stream || stream.fence === null) return { history, behind: false };
-  const shown = chartCheckpoint(history);
+  const shown = history.provenance.checkpoint;
   // Older than the fence, or than a read whose trades were pruned: only a newer read continues it.
   if (shown === null || shown < stream.fence || shown < stream.floor) return { history, behind: true };
-  if (history.kind === "trades") {
-    let next = history;
-    for (const fill of stream.fills) if (fill.checkpoint > shown) next = applyStreamedFill(next, fill);
-    return { history: next, behind: false };
-  }
   return streamedFrames({ ...history, poolKey }, stream.frames, shown);
 }
 

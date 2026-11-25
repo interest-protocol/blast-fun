@@ -1,5 +1,6 @@
 import {
   readCoinCandles,
+  readPoolCandles,
   type CoinCandlePage,
 } from "@blast/core/modules/launchpad-contract/venue-history.ts";
 import { POOL_KEY, type Venue } from "@blast/core/modules/launchpad-contract/venues.ts";
@@ -35,14 +36,8 @@ export type MarketCoinHistory = Readonly<{
   poolKey: string | null;
 }>;
 
-export async function coinMarketHistory(
-  asset: CoinAsset,
-  window: PriceWindow,
-  signal: AbortSignal,
-  interval?: CandleInterval,
-): Promise<MarketCoinHistory | null> {
-  signal.throwIfAborted();
-  const request = chartRequest(
+function historyRequest(window: PriceWindow, interval: CandleInterval | undefined): ChartRequest {
+  return chartRequest(
     {
       interval:
         interval ??
@@ -55,12 +50,26 @@ export async function coinMarketHistory(
     },
     Date.now(),
   );
-  const dependencies = browserMarketDependencies(null, (input, init) =>
+}
+
+function gatedDependencies(signal: AbortSignal) {
+  return browserMarketDependencies(null, (input, init) =>
     gatedFetch(input, {
       ...init,
       signal: AbortSignal.any([signal, ...(init?.signal ? [init.signal] : [])]),
     }),
   );
+}
+
+export async function coinMarketHistory(
+  asset: CoinAsset,
+  window: PriceWindow,
+  signal: AbortSignal,
+  interval?: CandleInterval,
+): Promise<MarketCoinHistory | null> {
+  signal.throwIfAborted();
+  const request = historyRequest(window, interval);
+  const dependencies = gatedDependencies(signal);
   const answer = await readCoinCandles(asset.coin_type, request, dependencies);
   if (signal.aborted) throw signal.reason;
   if (
@@ -88,6 +97,38 @@ export async function coinMarketHistory(
     decimals: metadata?.decimals ?? null,
     quoteDecimals: metadata?.quoteDecimals ?? null,
     poolKey: metadata?.currentPool ?? null,
+  };
+}
+
+/**
+ * A graduated sale's candles from its pool's own market read. The coin read does not carry sale
+ * pools, so the sale's market (its pool, the coin's and the quote's decimals) names the pool.
+ */
+export async function poolMarketHistory(
+  asset: CoinAsset,
+  pool: Readonly<{ poolKey: string; decimals: number; quoteDecimals: number }>,
+  window: PriceWindow,
+  signal: AbortSignal,
+  interval?: CandleInterval,
+): Promise<MarketCoinHistory | null> {
+  signal.throwIfAborted();
+  const request = historyRequest(window, interval);
+  const answer = await readPoolCandles(pool.poolKey, request, gatedDependencies(signal));
+  if (signal.aborted) throw signal.reason;
+  // A failed read is retried by the next poll; only a pool the service does not cover is null.
+  if (answer.status === "unavailable") throw new Error("Price history couldn’t load.");
+  if (answer.provenance.network !== asset.network || answer.data.kind !== "answer") return null;
+  const { interval: pageInterval, candles, migration } = answer.data.value;
+  return {
+    kind: "market",
+    coin_type: asset.coin_type,
+    page: { coinType: asset.coin_type, interval: pageInterval, candles, migration },
+    request,
+    stale: answer.status === "stale",
+    provenance: answer.provenance,
+    decimals: pool.decimals,
+    quoteDecimals: pool.quoteDecimals,
+    poolKey: pool.poolKey,
   };
 }
 
