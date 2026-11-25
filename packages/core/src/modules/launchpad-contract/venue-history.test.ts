@@ -110,8 +110,7 @@ test("a chart that conceals the migration, mixes sources or fills a gap is refus
   refuses(CETUS_KEY, withCandles(CETUS, [{ ...candles[0], bucket_start: early }]), /candles\[0\]/);
   const curve = candlesOf(CURVE);
   refuses(CURVE_KEY, withCandles(CURVE, [...curve, { ...curve.at(-1)!, bucket_start: at - (at % 60_000) + 60_000, open: curve.at(-1)!.close }]), /candles\[\d+\]/);
-  // A venue page without its migration, or naming another pool, and a page of another pool's chart.
-  refuses(CETUS_KEY, { ...CETUS, migration: null }, /migration/);
+  // A venue page naming another pool, and a page of another pool's chart.
   refuses(BLUEFIN_KEY, CETUS, /migration/);
   refuses(CURVE_KEY, BLUEFIN, /migration/);
   refuses(CETUS_KEY, { ...CETUS, extra: 1 }, /extra/);
@@ -136,6 +135,14 @@ test("the pool reader accepts legacy candles and empty legacy pages without a mi
   assert.equal(empty.data.kind, "answer");
   assert.deepEqual(empty.data.value.candles, []);
   assert.throws(() => parsePoolCandlePage(poolKey, "1m", CETUS), ContractViolation);
+});
+
+test("a pool no curve fed, such as a graduated presale's, reads its swaps without a migration", () => {
+  const candles = candlesOf(CETUS);
+  const page = parsePoolCandlePage(CETUS_KEY, "1m", { ...CETUS, migration: null });
+  assert.equal(page.migration, null);
+  assert.equal(page.source, "venue");
+  assert.equal(page.candles.length, candles.length);
 });
 
 test("the JustOneSui candle feed accepts an empty page before the first swap", () => {
@@ -253,6 +260,12 @@ test("a venue page about another migration of its pool is a route mismatch, and 
     assert.equal(chart.curve.state, "available");
     assert.deepEqual(chart.venue?.state === "unavailable" && chart.venue.reason, "route-mismatch");
     assert.equal(chart.migration?.cursor, marker(CURVE).cursor, "the curve's marker stands");
+  }
+  // A curve's venue page that names no migration is not that curve's chart, with the curve up or down.
+  const unmarked = { ...CETUS, migration: null };
+  for (const curve of [() => Response.json(fresh(CURVE)), notReady]) {
+    const chart = await readMigratedChart(route, { interval: "1m" }, blastInfra((path) => (path.includes("/cetus/") ? Response.json(fresh(unmarked)) : curve())));
+    assert.deepEqual(chart.venue?.state === "unavailable" && chart.venue.reason, "route-mismatch");
   }
   // The reverse outage: the curve is down, the venue answers and names the route's curve.
   const reverse = await readMigratedChart(route, { interval: "1m" }, blastInfra((path) => (path.includes("/cetus/") ? Response.json(fresh(CETUS)) : notReady())));
