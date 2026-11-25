@@ -11,12 +11,12 @@ import { SearchIcon } from "#web/components/blast-ui/Icons.tsx";
 import { Segmented } from "#web/components/blast-ui/Segmented.tsx";
 import { useShellActions } from "#web/components/blast-ui/shell-actions.tsx";
 
-import { HOME_AGES, HOME_ROWS_CHOICES, HOME_SOURCES, HOME_WINDOWS, type HomeSource } from "@blast/core/web/contracts/home.ts";
+import { HOME_AGES, HOME_SORTS, HOME_ROWS_CHOICES, HOME_SOURCES, HOME_WINDOWS, type HomeSource } from "@blast/core/web/contracts/home.ts";
 
 import styles from "./CoinHome.module.css";
 import { HOME_SECTIONS_MENU_ID, type SectionChange } from "./HomeSections";
 import { HOME_SECTIONS_DEFAULT, moveHomeSection, HOME_SECTION_TITLES, isHomeSectionShown, setHomeSectionShown, shownHomeSections, type HomeSectionPrefs } from "./home-sections";
-import { AGE_LABELS, HOME_VIEW_SORTS, SORT_HINTS, SORT_LABELS, HOME_DEFAULT_FEED, activeFilterCount, MIN_PARTICIPANT_CHOICES, SOURCE_LABELS, WINDOW_LABELS, controlsApply, type HomeViewState } from "./home-state";
+import { AGE_LABELS, SORT_HINTS, SORT_LABELS, HOME_DEFAULT_FEED, activeFilterCount, MIN_PARTICIPANT_CHOICES, SOURCE_LABELS, WINDOW_LABELS, controlsApply, type HomeViewState } from "./home-state";
 
 const SOURCE_OPTIONS = HOME_SOURCES.map((key) => [key, SOURCE_LABELS[key]] as const);
 
@@ -119,7 +119,7 @@ export function CoinsListControls({ state, onChange }: ViewProps) {
   const label = ["Filters", discover ? SORT_LABELS[state.sort] : null, WINDOW_LABELS[state.window], changed ? "active" : null].filter(Boolean).join(", ");
   return <FilterMenu active={changed} label={label}>
     {discover ? <label>View<SelectField aria-label="View" value={state.sort} onChange={event => onChange({ ...state, sort: event.target.value as HomeViewState["sort"] })}>
-      {HOME_VIEW_SORTS.map(key => <option key={key} title={SORT_HINTS[key]} value={key}>{SORT_LABELS[key]}</option>)}
+      {HOME_SORTS.map(key => <option key={key} title={SORT_HINTS[key]} value={key}>{SORT_LABELS[key]}</option>)}
     </SelectField></label> : null}
     <label>Activity window<SelectField aria-label="Activity window" value={state.window} onChange={event => onChange({ ...state, window: event.target.value as HomeViewState["window"] })}>
       {HOME_WINDOWS.map(key => <option key={key} value={key}>{WINDOW_LABELS[key]}</option>)}

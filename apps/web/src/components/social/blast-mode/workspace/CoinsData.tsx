@@ -27,6 +27,7 @@ import { DiscoverEmpty } from "../../coin-home/sources";
 import {
   HOME_COINS_MAX_IDS,
   HOME_DEFAULT_WINDOW,
+  HOME_SORTS,
   type HomeCoin,
   type HomeCoinsByIds,
   type HomeCoinsPage,
@@ -53,8 +54,6 @@ import {
   AGE_LABELS,
   controlsApply,
   HOME_DEFAULT_VIEW,
-  HOME_VIEW_SORTS,
-  isHomeViewSort,
   MIN_PARTICIPANT_CHOICES,
   BLAST_MODE_SORT_LABELS,
   SOURCE_LABELS,
@@ -132,8 +131,7 @@ function CoinsContent() {
     dispatch.patchDataControls("Coins", {
       ...controls,
       source: next.source,
-      // Blast mode's saved setup keeps the four orders it offers.
-      sort: isHomeViewSort(next.sort) ? next.sort : controls.sort,
+      sort: next.sort,
       window: next.window,
       min_participants: next.minParticipants as 0 | 2 | 5 | 10,
       age: next.age,
@@ -246,7 +244,7 @@ function DiscoveryFilterTray({ state, change, ecosystem, showEcosystem }: Readon
           <Pick
             label="Sort"
             value={state.sort}
-            options={HOME_VIEW_SORTS}
+            options={HOME_SORTS}
             labels={BLAST_MODE_SORT_LABELS}
             onPick={(sort) => change({ ...state, sort })}
           />

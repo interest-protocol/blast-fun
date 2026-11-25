@@ -144,6 +144,7 @@ async function withFixture(run: (fixture: Fixture) => Promise<void>, options: Re
   elapsedMs?: () => number;
   cached?: boolean;
   trackedPoolMarket?: (now: number) => ReturnType<NonNullable<SocialHomeRouteDependencies["trackedPoolMarket"]>>;
+  curveTargets?: SocialHomeRouteDependencies["curveTargets"];
 }> = {}): Promise<void> {
   const database = await freshTestDatabase();
   const admin = createPool(database.url, { max: 4 });
@@ -298,8 +299,8 @@ async function withFixture(run: (fixture: Fixture) => Promise<void>, options: Re
       coins: createReadCache<HomeCoinsByIds>(10_000, 64, readNow),
       portfolios: createReadCache<ReadonlyMap<string, TraderPortfolioRead>>(10_000, 64, readNow),
     } : undefined;
-    const { trackedPoolMarket } = options;
-    const common = { database: () => replica, ledgerDatabase: () => autocommitReader(webPool, "social"), wallets: accounts, config: reader.getSocialConfig, now: readNow, terms, caches, trackedPoolMarket: trackedPoolMarket && (() => trackedPoolMarket(now)) };
+    const { trackedPoolMarket, curveTargets } = options;
+    const common = { database: () => replica, ledgerDatabase: () => autocommitReader(webPool, "social"), wallets: accounts, config: reader.getSocialConfig, now: readNow, terms, caches, trackedPoolMarket: trackedPoolMarket && (() => trackedPoolMarket(now)), curveTargets };
     const all = createSocialHomeRoutes({ ...common, kit: kitWith(true) });
     const hidden = createSocialHomeRoutes({ ...common, kit: kitWith(false) });
     const get = (path: string, headers: Record<string, string> = {}) => new Request(`${ORIGIN}${path}`, { headers: { "x-forwarded-for": "203.0.113.7", ...headers } });
@@ -563,21 +564,6 @@ test("Home volume and Trending share a committed, full-window Cetus and Bluefin 
     assert.deepEqual(await manifestVolume(), nativeVolume);
     await admin.query("DROP VIEW chain_read_v1.dex_swap_volume_tracked_coverage");
     assert.deepEqual(await manifestVolume(), nativeVolume);
-
-    // A curve still filling trades on its curve, not a DEX: its curve trades stay its volume, with no DEX figure.
-    const filling = coinOf(hex("cf1"), "FILLING");
-    await admin.query("INSERT INTO blast_infra_fixture.coin_metadata (coin_type,name,symbol,decimals) VALUES ($1,'FILLING','FILLING',9)", [filling]);
-    await admin.query(`INSERT INTO pools (pool_key,venue,coin_type,quote_type,lifecycle,created_checkpoint,created_at_ms,quote_reserve,params)
-      VALUES ($1,'blast_curve',$2,$3,'live',41000,$4,'5000000000',$5)`, [`blast_curve:${hex("cf10")}`, filling, SUI, now - DAY, { graduation_target: "8000000000000" }]);
-    await seedChainRead(admin, { activity: [activity("trade_buy", W.anon, null, now - 2 * MINUTE, { checkpoint: 49999, coin_type: filling, coin_amount: "1000000000", quote_amount: "5000000000", usd_value: "5" })] });
-    const listed = await ok<HomeCoinsPage>(await discover("?sort=trending&dex_volume=1&limit=50"), "home-coins-page");
-    const curve = listed.coins.find((coin) => coin.symbol === "FILLING");
-    assert.ok(curve, "the filling curve is listed");
-    assert.equal(curve.dex_volume, undefined);
-    // Its 5 USD of curve trades ranks it above BCAT's 0.77, so its volume was not overwritten with a DEX 0.
-    assert.ok(listed.coins.indexOf(curve) < listed.coins.findIndex((coin) => coin.symbol === "BCAT"));
-    const byId = await ok<HomeCoinsByIds>(await coins(`?presale=${encodeURIComponent(filling)}&dex_volume=1`), "home-coins-page");
-    assert.deepEqual(byId.coins.map((coin) => [coin.symbol, coin.dex_volume]), [["FILLING", undefined]]);
   }));
 
 test("Sparse coins retain a full 24-hour comparison and Home labels shorter native and legacy comparisons", { skip }, () =>
@@ -1130,6 +1116,9 @@ test("Discover and saved coins fill missing price and supply from tracked pools 
   });
 });
 
+// blast-infra's graduated curves' raise targets, as the standalone test sets them.
+const curveTargets = new Map<string, string>();
+
 test("Standalone Cetus and Bluefin coins use Discover, without a presale or duplicate coin rows", { skip }, () =>
   withFixture(async ({ admin, discover, coins, thread, market, holders, now }) => {
     const native = coinOf(hex("ca7"), "NATIVE");
@@ -1158,7 +1147,6 @@ test("Standalone Cetus and Bluefin coins use Discover, without a presale or dupl
       VALUES ($1,9,$2,$2,'{}',$3,39000,$4,13000000000000,3000000000000)`, [native, W.anon, `blast_curve:${launch}`, now - 3 * DAY]);
     await admin.query(`INSERT INTO pools (pool_key,venue,coin_type,quote_type,lifecycle,created_checkpoint,created_at_ms)
       VALUES ($1,'blast_curve',$2,$3,'migrated',39000,$4)`, [`blast_curve:${launch}`, native, QUOTE, now - 3 * DAY]);
-    const setTarget = (target: string) => admin.query("UPDATE pools SET params=jsonb_build_object('graduation_target',$2::text) WHERE pool_key=$1", [`blast_curve:${launch}`, target]);
     await seedChainRead(admin, {
       prices: [{ coin_type: native, usd_price: "0.1", as_of_ms: now, source: "pool" }],
       activity: [activity("trade_buy", W.anon, null, now - MINUTE, { checkpoint: 49999, coin_type: native, coin_amount: "1000000000", quote_amount: "20000", usd_value: "0.02" })],
@@ -1171,10 +1159,10 @@ test("Standalone Cetus and Bluefin coins use Discover, without a presale or dupl
       coin_holder_history: [{ coin_type: native, checkpoint: 45_000, timestamp_ms: now - HOUR, holders: 7 }],
     });
     // NATIVE's curve had to raise 999 USDC ($999) to graduate: dust, off Home and out of the count.
-    await setTarget("999000000");
+    curveTargets.set(launch, "999000000");
     const withoutNative = await ok<HomeCoinsPage>(await discover("?limit=50"), "home-coins-page");
     assert.equal(withoutNative.coins.some((coin) => coin.coin_type === native), false);
-    await setTarget("8000000000");
+    curveTargets.set(launch, "8000000000");
     const page = await ok<HomeCoinsPage>(await discover("?limit=50"), "home-coins-page");
     assert.equal(page.total, withoutNative.total + 1);
     const standalone = page.coins.filter((coin) => coin.presale_id === null && !TRACKED_SYMBOLS.includes(coin.symbol));
@@ -1195,37 +1183,6 @@ test("Standalone Cetus and Bluefin coins use Discover, without a presale or dupl
     assert.deepEqual([coin.activity.events,coin.activity.buyers], [1,1]);
     assert.equal(coin.rank.why, "1 participant · 1 trade in the last 24h in its pool");
     assert.equal(page.coins.filter((coin) => coin.symbol === "AFTR").length, 1);
-    // Bonding curves still filling have no vault yet; Discover lists them from their curve pool.
-    const curveCoin = async (id: string, symbol: string, reserve: string, target: string | null) => {
-      const coinType = coinOf(hex(id), symbol);
-      await admin.query("INSERT INTO blast_infra_fixture.coin_metadata (coin_type,name,symbol,decimals) VALUES ($1,$2,$2,9)", [coinType, symbol]);
-      await admin.query(`INSERT INTO pools (pool_key,venue,coin_type,quote_type,lifecycle,created_checkpoint,created_at_ms,quote_reserve,params)
-        VALUES ($1,'blast_curve',$2,$3,'live',41000,$4,$5,$6)`, [`blast_curve:${hex(`${id}0`)}`, coinType, QUOTE, now - DAY, reserve, target === null ? null : { graduation_target: target }]);
-      return coinType;
-    };
-    // 5,600 of 8,000 USDC: 70%. 900 of 999 USDC is further along, but its target is dust. One target is unknown.
-    await curveCoin("c70", "SEVENTY", "5600000000", "8000000000");
-    await curveCoin("c90", "DUSTY", "900000000", "999000000");
-    await curveCoin("c0", "NOTARGET", "1", null);
-    // NATIVE's Cetus pool opened two days ago: when it graduated.
-    await admin.query(`INSERT INTO pools (pool_key,venue,coin_type,quote_type,lifecycle,created_checkpoint,created_at_ms)
-      VALUES ($1,'cetus',$2,$3,'live',40000,$4)`, [`cetus:${hex("ca1")}`, native, QUOTE, now - 2 * DAY]);
-    const almost = await ok<HomeCoinsPage>(await discover("?stage=almost&sort=progress&curve=1&limit=50"), "home-coins-page");
-    assert.deepEqual(almost.coins.map((coin) => [coin.symbol, coin.curve, coin.tradable, coin.graduated_ms]), [["SEVENTY", { lifecycle: "live", progress_bps: 7_000, quote_remaining: "2400000000" }, false, null]]);
-    const all = await ok<HomeCoinsPage>(await discover("?sort=progress&limit=50"), "home-coins-page");
-    assert.equal(all.coins[0]?.symbol, "SEVENTY", "the only curve with a known progress leads");
-    assert.ok(all.coins.some((coin) => coin.symbol === "NOTARGET"), "a curve with an unknown target is listed, not dropped");
-    assert.ok(all.coins.every((coin) => !("curve" in coin)), "the curve fields are opt-in");
-    const graduated = await ok<HomeCoinsPage>(await discover("?stage=graduated&sort=market_cap&curve=1&limit=50"), "home-coins-page");
-    assert.ok(graduated.coins.every((coin) => coin.lifecycle === "migrated" && coin.curve?.lifecycle !== "live"), "no sale and no curve still filling");
-    assert.deepEqual(graduated.coins.find((coin) => coin.coin_type === native)?.curve, { lifecycle: "migrated", progress_bps: 10_000, quote_remaining: "0" });
-    assert.equal(graduated.coins.find((coin) => coin.coin_type === native)?.graduated_ms, now - 2 * DAY);
-    assert.equal(graduated.coins.find((coin) => coin.symbol === "BLUE")?.curve, null, "a coin that never had a curve");
-    // Dust stays hidden on every stage and every order.
-    for (const stage of ["all", "almost", "graduated"]) for (const sort of ["relevant", "progress", "market_cap", "last_trade"]) {
-      const listed = await ok<HomeCoinsPage>(await discover(`?stage=${stage}&sort=${sort}&limit=50`), "home-coins-page");
-      assert.equal(listed.coins.some((coin) => coin.symbol === "DUSTY"), false, `${stage} ${sort}`);
-    }
     const sales = await ok<HomeCoinsByIds>(await coins(`?presale=${P.halo}&presale=${P.after}`), "home-coins-page");
     assert.deepEqual(symbols(sales.coins), ["HALO", "AFTR"]);
     assert.ok(sales.coins.every((coin) => coin.presale_id !== null && coin.sale !== null));
@@ -1243,4 +1200,4 @@ test("Standalone Cetus and Bluefin coins use Discover, without a presale or dupl
     assert.deepEqual([nativeMarket.supply, nativeMarket.fdv_usd, nativeMarket.market_cap_usd], [{ total: "13000000000000", escrowed: "0", circulating: "10000000000000" }, "1300.00", "1000.00"]);
     const nativeHolders = await ok<HomeHoldersPage>(await holders(`?coin=${encodeURIComponent(native)}&limit=10`), "home-holders-page", "public, s-maxage=10");
     assert.deepEqual(nativeHolders.holders.map((holder) => holder.share_bps), [2500, 500]);
-  }));
+  }, { curveTargets: async () => curveTargets }));

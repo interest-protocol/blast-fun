@@ -6,7 +6,6 @@ import { SocialRouteError } from "@blast/core/modules/social/route-kit/errors.ts
 
 import {
   HOME_AGE_MS,
-  HOME_ALMOST_GRADUATED_BPS,
   HOME_DEFAULT_QUERY,
   HOME_PAGE_LAST,
   HOME_PAGE_MAX,
@@ -14,7 +13,6 @@ import {
   HOME_WINDOW_MS,
   isHomeAge,
   isHomeSort,
-  isHomeStage,
   isHomeWindow,
   type HomeActivity,
   type HomeQuery,
@@ -29,8 +27,7 @@ import { decodeCursor, encodeCursor, invalidCursor } from "@blast/server/modules
  * cohort.
  *
  * **Candidate universe.** Shown migrated presales, standalone launch vault
- * coins, live bonding curves, and the tracked pool catalog
- * (`HOME_LIST_COIN_SOURCES`), less the
+ * coins, and the tracked pool catalog (`HOME_LIST_COIN_SOURCES`), less the
  * Blast dust (`HOME_DUST_USD`): a Blast coin whose raise (a presale's, or a
  * curve's graduation target) or market cap is under $1,000. Catalog coins
  * are never dust.
@@ -76,15 +73,6 @@ import { decodeCursor, encodeCursor, invalidCursor } from "@blast/server/modules
  * **Other sorts.** `trending`: the Volume column's priced dollars in the window, then breadth, then activity, then recency,
  * then (for idle coins, which tie on all of those) FDV and holders, same
  * ties. `newest`: launch time (newest first), then coin type.
- * `progress`: curves still filling by progress (basis points, highest
- * first), every other coin after them by market cap. `market_cap`: market
- * cap, highest first, a coin without one last. `last_trade`: the window's
- * newest buy or sell first, coins without one after by launch time. Each
- * breaks ties by coin type.
- *
- * **Stages.** `almost` keeps curves still filling at 60% or more
- * (`HOME_ALMOST_GRADUATED_BPS`); `graduated` keeps coins that trade on a
- * DEX (no sale and no curve still filling); `all` keeps everything.
  *
  * **Why shown vs why ranked.** Every coin carries `rank.why`: the inputs in
  * words ("4 participants · 8 trades in the last 24h"; a standalone vault coin
@@ -183,15 +171,7 @@ export function whyShown(activity: Pick<HomeActivity, "participants" | "events" 
 }
 
 /** What the orders compare: every candidate carries these (`holders`: blast-infra's count now, `fdvUsd`: its FDV now; null without one). */
-export type Rankable = Readonly<{
-  coinType: string; score: number; inputs: RankInputs; latestMs: number | null; launchedMs: number | null; holders?: number | null; fdvUsd?: number | null;
-  /** A curve still filling: its progress in basis points; null for any other coin, or while its target is unknown. */
-  progressBps?: number | null;
-  /** Market cap now in USD; null when unknown. */
-  marketCapUsd?: number | null;
-  /** The window's newest buy or sell; null without one. */
-  lastTradeMs?: number | null;
-}>;
+export type Rankable = Readonly<{ coinType: string; score: number; inputs: RankInputs; latestMs: number | null; launchedMs: number | null; holders?: number | null; fdvUsd?: number | null }>;
 
 const text = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 const newestFirst = (a: number | null, b: number | null) => (b ?? -1) - (a ?? -1);
@@ -222,13 +202,6 @@ export function homeOrder(sort: HomeSort): (a: Rankable, b: Rankable) => number 
       // The most holders first, a coin without a count last; the window's dollars, then the newest launch, break ties.
       return (a, b) => (b.holders ?? -1) - (a.holders ?? -1) || b.inputs.volume - a.inputs.volume
         || newestFirst(a.launchedMs, b.launchedMs) || text(a.coinType, b.coinType);
-    case "progress":
-      // A percent, never atoms: a SUI curve and a USDC curve compare fairly.
-      return (a, b) => mostFirst(a.progressBps, b.progressBps) || mostFirst(a.marketCapUsd, b.marketCapUsd) || text(a.coinType, b.coinType);
-    case "market_cap":
-      return (a, b) => mostFirst(a.marketCapUsd, b.marketCapUsd) || text(a.coinType, b.coinType);
-    case "last_trade":
-      return (a, b) => newestFirst(a.lastTradeMs ?? null, b.lastTradeMs ?? null) || newestFirst(a.launchedMs, b.launchedMs) || text(a.coinType, b.coinType);
   }
 }
 
@@ -236,8 +209,7 @@ export function homeOrder(sort: HomeSort): (a: Rankable, b: Rankable) => number 
  * Whether a candidate has data on its sort's keys. Each order puts the
  * candidates without it last, so the ones with it are a prefix: Trending's
  * window dollars, breadth, activity or recency; New's launch time; Relevant's
- * activity, or for an idle coin its FDV or a holder; Most held's holder count;
- * progress, market cap and last trade their own value.
+ * activity, or for an idle coin its FDV or a holder; Most held's holder count.
  */
 export function hasSortData(sort: HomeSort, candidate: Rankable): boolean {
   switch (sort) {
@@ -249,34 +221,19 @@ export function hasSortData(sort: HomeSort, candidate: Rankable): boolean {
       return !isIdle(candidate) || candidate.fdvUsd != null || (candidate.holders ?? 0) > 0;
     case "held":
       return candidate.holders != null;
-    case "progress":
-      return candidate.progressBps != null;
-    case "market_cap":
-      return candidate.marketCapUsd != null;
-    case "last_trade":
-      return candidate.lastTradeMs != null;
   }
 }
 
 /** A keyset position in a sort's order: the last candidate of the previous page. */
-export type HomeCursor = Readonly<{
-  sort: HomeSort; coinType: string; score: number; breadth: number; activity: number; recency: number; volume: number; latestMs: number | null; launchedMs: number | null;
-  holders?: number | null; fdvUsd?: number | null; progressBps?: number | null; marketCapUsd?: number | null; lastTradeMs?: number | null;
-}>;
+export type HomeCursor = Readonly<{ sort: HomeSort; coinType: string; score: number; breadth: number; activity: number; recency: number; volume: number; latestMs: number | null; launchedMs: number | null; holders?: number | null; fdvUsd?: number | null }>;
 
-/**
- * Version 5 adds progress, market cap and the last trade (their orders);
- * version 4 added the FDV (idle coins' order); version 3 the holder count
- * (`held`). Older cursors read with the missing fields null.
- */
-const VERSION = 5;
-const VERSION_WITHOUT_PROGRESS = 4;
+/** Version 4 adds the FDV (idle coins' order); version 3 added the holder count (`held`). Older cursors read with the missing fields null. */
+const VERSION = 4;
 const VERSION_WITHOUT_FDV = 3;
 const VERSION_WITHOUT_HOLDERS = 2;
 
 export function encodeHomeCursor(position: HomeCursor): string {
-  return encodeCursor("discover", [VERSION, position.sort, position.coinType, position.score, position.breadth, position.activity, position.recency, position.volume, position.latestMs, position.launchedMs, position.holders ?? null, position.fdvUsd ?? null,
-    position.progressBps ?? null, position.marketCapUsd ?? null, position.lastTradeMs ?? null]);
+  return encodeCursor("discover", [VERSION, position.sort, position.coinType, position.score, position.breadth, position.activity, position.recency, position.volume, position.latestMs, position.launchedMs, position.holders ?? null, position.fdvUsd ?? null]);
 }
 
 /** The position a cursor names; `invalid_parameter` (`cursor`) for anything `encodeHomeCursor` did not produce, or for another sort. */
@@ -287,16 +244,9 @@ export function decodeHomeCursor(cursor: string, sort: HomeSort): HomeCursor {
     z.number().nonnegative(), socialCountSchema.nullable(), socialCountSchema.nullable(),
   ] as const;
   const decoded = decodeCursor("discover", cursor);
-  const money = z.number().nonnegative().nullable();
-  const current = z.tuple([z.literal(VERSION), ...common, socialCountSchema.nullable(), money,
-    socialCountSchema.max(10_000).nullable(), money, socialCountSchema.nullable()]).safeParse(decoded);
+  const current = z.tuple([z.literal(VERSION), ...common, socialCountSchema.nullable(), z.number().nonnegative().nullable()]).safeParse(decoded);
   if (current.success) {
-    const [, , coinType, score, breadth, activity, recency, volume, latestMs, launchedMs, holders, fdvUsd, progressBps, marketCapUsd, lastTradeMs] = current.data;
-    return { sort, coinType, score, breadth, activity, recency, volume, latestMs, launchedMs, holders, fdvUsd, progressBps, marketCapUsd, lastTradeMs };
-  }
-  const withoutProgress = z.tuple([z.literal(VERSION_WITHOUT_PROGRESS), ...common, socialCountSchema.nullable(), money]).safeParse(decoded);
-  if (withoutProgress.success) {
-    const [, , coinType, score, breadth, activity, recency, volume, latestMs, launchedMs, holders, fdvUsd] = withoutProgress.data;
+    const [, , coinType, score, breadth, activity, recency, volume, latestMs, launchedMs, holders, fdvUsd] = current.data;
     return { sort, coinType, score, breadth, activity, recency, volume, latestMs, launchedMs, holders, fdvUsd };
   }
   const withoutFdv = z.tuple([z.literal(VERSION_WITHOUT_FDV), ...common, socialCountSchema.nullable()]).safeParse(decoded);
@@ -312,13 +262,11 @@ export function decodeHomeCursor(cursor: string, sort: HomeSort): HomeCursor {
 
 /** The cursor's candidate, as the order compares it. */
 export function rankableOfCursor(cursor: HomeCursor): Rankable {
-  return { coinType: cursor.coinType, score: cursor.score, inputs: { breadth: cursor.breadth, activity: cursor.activity, recency: cursor.recency, volume: cursor.volume }, latestMs: cursor.latestMs, launchedMs: cursor.launchedMs, holders: cursor.holders ?? null, fdvUsd: cursor.fdvUsd ?? null,
-    progressBps: cursor.progressBps ?? null, marketCapUsd: cursor.marketCapUsd ?? null, lastTradeMs: cursor.lastTradeMs ?? null };
+  return { coinType: cursor.coinType, score: cursor.score, inputs: { breadth: cursor.breadth, activity: cursor.activity, recency: cursor.recency, volume: cursor.volume }, latestMs: cursor.latestMs, launchedMs: cursor.launchedMs, holders: cursor.holders ?? null, fdvUsd: cursor.fdvUsd ?? null };
 }
 
 export function cursorOf(sort: HomeSort, last: Rankable): string {
-  return encodeHomeCursor({ sort, coinType: last.coinType, score: last.score, breadth: last.inputs.breadth, activity: last.inputs.activity, recency: last.inputs.recency, volume: last.inputs.volume, latestMs: last.latestMs, launchedMs: last.launchedMs, holders: last.holders ?? null, fdvUsd: last.fdvUsd ?? null,
-    progressBps: last.progressBps ?? null, marketCapUsd: last.marketCapUsd ?? null, lastTradeMs: last.lastTradeMs ?? null });
+  return encodeHomeCursor({ sort, coinType: last.coinType, score: last.score, breadth: last.inputs.breadth, activity: last.inputs.activity, recency: last.inputs.recency, volume: last.inputs.volume, latestMs: last.latestMs, launchedMs: last.launchedMs, holders: last.holders ?? null, fdvUsd: last.fdvUsd ?? null });
 }
 
 /**
@@ -352,18 +300,11 @@ export function pageOf<Candidate extends Rankable>(
   };
 }
 
-/**
- * Whether a candidate passes the query's filters and stage. Unknown is never
- * a pass: a coin with no launch time fails an age filter, a curve with no
- * known progress is not almost graduated.
- */
+/** Whether a candidate passes the query's filters. Unknown is never a pass: a coin with no launch time fails an age filter. */
 export function passesFilters(
-  query: Pick<HomeQuery, "minParticipants" | "age" | "tradable" | "stage">,
-  candidate: Readonly<{ participants: number; launchedMs: number | null; tradable: boolean; listed: boolean; progressBps: number | null; nowMs: number }>,
+  query: Pick<HomeQuery, "minParticipants" | "age" | "tradable">,
+  candidate: Readonly<{ participants: number; launchedMs: number | null; tradable: boolean; nowMs: number }>,
 ): boolean {
-  // Only a curve still filling has a progress; one with an unknown target is never "almost".
-  if (query.stage === "almost" && (candidate.progressBps ?? -1) < HOME_ALMOST_GRADUATED_BPS) return false;
-  if (query.stage === "graduated" && !candidate.listed) return false;
   if (candidate.participants < query.minParticipants) return false;
   if (query.tradable && !candidate.tradable) return false;
   const span = HOME_AGE_MS[query.age];
@@ -422,7 +363,6 @@ export function parseHomeQuery(params: URLSearchParams): HomeQuery {
   return {
     window,
     sort,
-    stage: parseChoice(single(params, "stage"), HOME_DEFAULT_QUERY.stage, isHomeStage, "stage"),
     minParticipants: parseMinParticipants(single(params, "min_participants")),
     age: parseChoice(single(params, "age"), HOME_DEFAULT_QUERY.age, isHomeAge, "age"),
     tradable: parseFlag(single(params, "tradable"), "tradable"),
