@@ -210,6 +210,22 @@ test("an unknown market cap or holder count reads as a dash, a pending read show
   } finally { dom.window.close(); }
 });
 
+test("the age joins the name and the top 10's share sits under the holders, both absent when unknown", () => {
+  const now = Date.UTC(2026, 10, 25, 12);
+  const known = render({ ...coin, holders: 412, launched_ms: now - 2 * 3_600_000, top_holders: { holders: [], share_bps: 3800 } }, false, now);
+  try {
+    const { document } = known.window;
+    assert.equal(document.querySelector(".coinMeta")?.textContent, "A long fixture token name· Age 2h");
+    assert.equal(document.querySelector(".holders")?.textContent, "412top 10 · 38%");
+  } finally { known.window.close(); }
+  const unknown = render({ ...coin, holders: 412 }, false, now);
+  try {
+    const { document } = unknown.window;
+    assert.equal(document.querySelector(".coinMeta")?.textContent, "A long fixture token name");
+    assert.equal(document.querySelector(".holders")?.textContent, "412");
+  } finally { unknown.window.close(); }
+});
+
 test("the Status cell names where each coin is in its life", () => {
   const day = 86_400_000;
   const now = 10 * day;

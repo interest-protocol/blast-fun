@@ -13,7 +13,7 @@ import { coinAtPrice } from "./live-market";
 import { DexIdentity } from "#web/components/blast-ui/DexIdentity.tsx";
 import { CoinVerifiedMark, CloseIcon } from "#web/components/blast-ui/Icons.tsx";
 import { useShellActions } from "#web/components/blast-ui/shell-actions.tsx";
-import { NO_VALUE, signPct, utc } from "@blast/core/web/format.ts";
+import { bxAgo, NO_VALUE, signPct, utc } from "@blast/core/web/format.ts";
 import type { HomeCoin, HomeWindow } from "@blast/core/web/contracts/home.ts";
 import type { SocialTradeCoin } from "@blast/core/web/contracts/trades.ts";
 
@@ -22,7 +22,7 @@ import { useWatchStar } from "../watchlist/Watchlist";
 import { PresaleMark } from "../post/PostMedia";
 import styles from "./CoinHome.module.css";
 import { homeAnalytics } from "./home-analytics";
-import { homeCoinHref, homeCoinKey, homeStatus, marketVolume, type HomeBuyCue, type HomeStatus } from "./home-model";
+import { homeCoinHref, homeCoinKey, homeStatus, marketVolume, shareText, type HomeBuyCue, type HomeStatus } from "./home-model";
 import { readableUsd } from "#web/lib/market-format.ts";
 import type { DisplayPrice } from "@blast/core/modules/launchpad-contract/market-stream.ts";
 import { coinPagePath } from "@blast/core/modules/launchpad-coin/page-key.ts";
@@ -58,14 +58,14 @@ export function CoinCard({ coin, window, nowMs, trading, watchlist = false, mark
   return (
     <li className={styles.item} data-lifecycle={coin.lifecycle} data-list-row={homeCoinKey(coin)} role="none">
       <div aria-labelledby={id} className={clsx(styles.row, styles.cols, styles.coinRow)} data-surface="" role="row">
-        <CoinIdentity buy={buy} coin={coin} id={id} venue={status.venue || filling ? null : coin.venue} />
+        <CoinIdentity buy={buy} coin={coin} id={id} nowMs={nowMs} venue={status.venue || filling ? null : coin.venue} />
         <MarketCap amount={marketCoin.mobile_market?.market_cap_usd ?? null} at={valuationAt} loading={marketLoading} nowMs={nowMs} />
         <PriceChange coin={marketCoin} window={window} />
         <span className={clsx("num", styles.vol)} role="cell">
           <span aria-hidden="true">{volume ?? NO_VALUE}</span>
           <span className="sr-only">{volumeLabel}</span>
         </span>
-        <span className={clsx("num", styles.holders)} role="cell">{coin.holders === null ? <Missing what="Holders" /> : coin.holders.toLocaleString("en-US")}</span>
+        <HoldersCell coin={coin} />
         <StatusCell status={status} />
         <span className={styles.rowActions} role="cell">
           {canBuy ? <RowBuy coin={coin} /> : null}
@@ -113,11 +113,24 @@ function tradeCoinOf(coin: HomeCoin): SocialTradeCoin {
   return { coin_type: coin.coin_type, symbol: coin.symbol, name: coin.name, decimals: coin.decimals, icon_url: coin.icon_url, usd_price: coin.price_usd, presale_id: coin.presale_id };
 }
 
-/** The identity: the coin icon, linked symbol, name and the venue's logo (its name for assistive technology and on hover) when the Status cell does not name it. */
-function CoinIdentity({ coin, id, buy, venue }: Readonly<{ coin: HomeCoin; id: string; buy?: HomeBuyCue; venue: string | null }>) {
+/** Holders, with the top 10's share as a quiet second line when it is known (phones drop it). */
+function HoldersCell({ coin }: Readonly<{ coin: HomeCoin }>) {
+  if (coin.holders === null) return <span className={clsx("num", styles.holders)} role="cell"><Missing what="Holders" /></span>;
+  const topTen = shareText(coin.top_holders.share_bps);
+  return (
+    <span className={clsx("num", styles.holders)} role="cell">
+      {coin.holders.toLocaleString("en-US")}
+      {topTen === null ? null : <span className={styles.topTen}>top 10 · {topTen}</span>}
+    </span>
+  );
+}
+
+/** The identity: the coin icon, linked symbol, name, age and the venue's logo (its name for assistive technology and on hover) when the Status cell does not name it. */
+function CoinIdentity({ coin, id, nowMs, buy, venue }: Readonly<{ coin: HomeCoin; id: string; nowMs: number; buy?: HomeBuyCue; venue: string | null }>) {
   const shownVenue = venue && coin.lifecycle !== "cancelled" ? venue : null;
   const href = homeCoinHref(coin) ?? coinPagePath(coin.coin_type);
   const distinct = coin.name.trim().toLowerCase() !== coin.symbol.trim().toLowerCase();
+  const age = coin.launched_ms === null ? null : bxAgo(coin.launched_ms, nowMs);
   return (
     <span className={styles.ident} role="cell">
       <PresaleMark coinType={coin.coin_type} presaleId={homeCoinKey(coin)} size={44} src={coin.icon_url} />
@@ -131,8 +144,14 @@ function CoinIdentity({ coin, id, buy, venue }: Readonly<{ coin: HomeCoin; id: s
           </Link>
           {coin.verified_team ? <CoinVerifiedMark /> : null}
         </span>
-        <span className={clsx(styles.coinName, styles.coinMeta)}>
+        <span className={clsx(styles.coinName, styles.coinMeta)} data-age={age === null ? undefined : ""}>
           {distinct ? <span className={styles.coinNameText} title={hoverExcerpt(coin.name)}>{coin.name}</span> : null}
+          {age === null ? null : (
+            <span className={clsx("num", styles.coinAge)}>
+              {distinct ? <span aria-hidden="true" className={styles.ageDot}>· </span> : null}
+              <span className="sr-only">Age </span>{age}
+            </span>
+          )}
           {shownVenue ? <span className={styles.coinVenue}><DexIdentity iconOnly venue={shownVenue} /></span> : null}
         </span>
       </span>

@@ -27,19 +27,19 @@ const curve = (lifecycle: NonNullable<HomeCoin["curve"]>["lifecycle"], progress_
   ({ launch_id: id(0x1a),  lifecycle: "open" as const, venue: "blast_curve", tradable: false, curve: { lifecycle, progress_bps, quote_remaining } });
 
 export const POPULATED: readonly HomeCoin[] = [
-  coin(1, "KSTL", "Kestrel", { ...curve("live", 7250, "310000000000"), price_usd: "0.0021", change_24h_bps: 1840, holders: 412, mobile_market: market("21000", 300), dex_volume: volume("8400") }),
-  coin(2, "MOTH", "Night Moth", { ...curve("live", 9410, "52000000"), quote: USDC, price_usd: "0.0040", change_24h_bps: -420, holders: 1290, mobile_market: market("40000", null), dex_volume: volume("31000") }),
-  coin(3, "FERN", "Fern", { ...curve("migration_ready", 10_000, "0"), price_usd: "0.0052", change_24h_bps: 0, holders: 2004, mobile_market: market("52000", 0), dex_volume: volume("51000") }),
-  coin(4, "ORCA", "Orca Pod", { ...curve("migrated", 10_000, "0"), lifecycle: "migrated", venue: "cetus", tradable: true, graduated_ms: NOW - 3 * DAY, price_usd: "0.091", change_24h_bps: 2210, holders: 5120, mobile_market: market("910000", 120), dex_volume: volume("204000") }),
-  coin(5, "LUMA", "Luma Labs", { presale_id: id(0x5a1), launched_ms: NOW - 3 * DAY, price_usd: "0.31", change_24h_bps: -1290, holders: 880, mobile_market: market("3100000", -50), dex_volume: volume("96000") }),
+  coin(1, "KSTL", "Kestrel", { ...curve("live", 7250, "310000000000"), launched_ms: NOW - 2 * HOUR, top_holders: { holders: [], share_bps: 3800 }, price_usd: "0.0021", change_24h_bps: 1840, holders: 412, mobile_market: market("21000", 300), dex_volume: volume("8400") }),
+  coin(2, "MOTH", "Night Moth", { ...curve("live", 9410, "52000000"), launched_ms: NOW - 18 * 60_000, top_holders: { holders: [], share_bps: 2150 }, quote: USDC, price_usd: "0.0040", change_24h_bps: -420, holders: 1290, mobile_market: market("40000", null), dex_volume: volume("31000") }),
+  coin(3, "FERN", "Fern", { ...curve("migration_ready", 10_000, "0"), launched_ms: NOW - DAY, price_usd: "0.0052", change_24h_bps: 0, holders: 2004, mobile_market: market("52000", 0), dex_volume: volume("51000") }),
+  coin(4, "ORCA", "Orca Pod", { ...curve("migrated", 10_000, "0"), lifecycle: "migrated", venue: "cetus", tradable: true, graduated_ms: NOW - 3 * DAY, launched_ms: NOW - 6 * DAY, top_holders: { holders: [], share_bps: 1240 }, price_usd: "0.091", change_24h_bps: 2210, holders: 5120, mobile_market: market("910000", 120), dex_volume: volume("204000") }),
+  coin(5, "LUMA", "Luma Labs", { presale_id: id(0x5a1), launched_ms: NOW - 3 * DAY, top_holders: { holders: [], share_bps: 4100 }, price_usd: "0.31", change_24h_bps: -1290, holders: 880, mobile_market: market("3100000", -50), dex_volume: volume("96000") }),
   coin(6, "TIDE", "Tide", { presale_id: id(0x5a2), lifecycle: "open", tradable: false, venue: "cetus", sale: { start_ms: NOW - DAY, end_ms: NOW + 3 * HOUR, raise_target: "1000000000000", raised: "420000000000", participants: 61 } }),
   coin(7, "SUI", "Sui", { venue: "bluefin", price_usd: "3.42", change_24h_bps: 310, holders: null, mobile_market: market("11200000000", 40), dex_volume: volume("48000000") }),
   coin(8, "NEW", "New coin", { ...curve("opening_round", null, null) }),
 ];
 
 export const WORST: readonly HomeCoin[] = [
-  coin(11, "WrappedStakedInstitutionalSUI", "Wrapped Staked Institutional Sui Treasury", { ...curve("live", 9999, "999999999999999999"), price_usd: "0.0000000000168", change_24h_bps: 9_999_999, holders: 12_345_678, mobile_market: market("999999999999999", 99999), dex_volume: volume("999999999999") }),
-  coin(12, "社区共建生态基金", "社区共建生态基金 · Nguyễn Thị Minh", { ...curve("migrated", 10_000, "0"), lifecycle: "migrated", venue: "bluefin", tradable: true, graduated_ms: NOW - 400 * DAY, price_usd: "12345.678901", change_24h_bps: -9999, holders: 1, mobile_market: market("0", -9999), dex_volume: volume("0") }),
+  coin(11, "WrappedStakedInstitutionalSUI", "Wrapped Staked Institutional Sui Treasury", { ...curve("live", 9999, "999999999999999999"), launched_ms: NOW - 2 * 365 * DAY, top_holders: { holders: [], share_bps: 10000 }, price_usd: "0.0000000000168", change_24h_bps: 9_999_999, holders: 12_345_678, mobile_market: market("999999999999999", 99999), dex_volume: volume("999999999999") }),
+  coin(12, "社区共建生态基金", "社区共建生态基金 · Nguyễn Thị Minh", { ...curve("migrated", 10_000, "0"), lifecycle: "migrated", venue: "bluefin", tradable: true, graduated_ms: NOW - 400 * DAY, launched_ms: NOW - 20_000, top_holders: { holders: [], share_bps: 5 }, price_usd: "12345.678901", change_24h_bps: -9999, holders: 1, mobile_market: market("0", -9999), dex_volume: volume("0") }),
   coin(13, "J", "Jo", { presale_id: id(0x5a3), lifecycle: "open", tradable: false, venue: "cetus", sale: { start_ms: NOW + 39 * 60_000, end_ms: NOW + 30 * DAY, raise_target: "1000000000000", raised: "0", participants: 0 } }),
   coin(14, "🚀MOON", "Moon & Stars <Community>", { venue: "an_unlisted_exchange_with_a_long_name" }),
   coin(15, "BRIDGE_USDC", "Bridged USD Coin (Wormhole Portal)", { presale_id: id(0x5a4), launched_ms: null, price_usd: "1", holders: 999_999_999, mobile_market: market(null, null) }),
