@@ -68,8 +68,9 @@ redis.call('ZADD', KEYS[3], now, ARGV[2])
 redis.call('PEXPIRE', KEYS[3], 60000)
 return 1
 `);
+/** Removal retry pace and bounds: at most 8 entries can exist per address. */
+const REMOVAL = { retryMs: 2_000, idsPerKey: 32, keys: 4_096, batchKeys: 64 } as const;
 /** Room past the longest socket life before a leaked slot frees itself. */
-const REMOVAL_RETRY_MS = 2_000;
 const SOCKET_ENTRY_MS = LIVE_SOCKET.lifetimeMs.max + 5 * 60_000;
 
 /** What the socket needs from the market relay. */
@@ -176,6 +177,7 @@ export function createLiveSocket(options: LiveSocketOptions) {
   const removals = new Map<string, Set<string>>();
   let flushing: Promise<void> | undefined;
   let retry: ReturnType<typeof setTimeout> | undefined;
+  let stopped = false;
 
   const ipKey = (rateKey: string, kind: "sockets" | "opens") =>
     `${options.namespace}:live-ip:${kind}:${rateKey}`;
@@ -200,36 +202,59 @@ export function createLiveSocket(options: LiveSocketOptions) {
   const distinct = (table: Map<string, number>, keys: readonly string[]) =>
     new Set([...table.keys(), ...keys]).size;
 
-  const flush = (): Promise<void> =>
-    (flushing ??= Promise.resolve().then(async () => {
-      const batch = [...removals];
-      removals.clear();
-      const failed = await Promise.all(
-        batch.map(([key, ids]) =>
-          options.redis.execute(["ZREM", key, ...ids]).then(
-            () => null,
-            () => [key, ids] as const,
-          ),
-        ),
+  /** Send queued removals in batches; a failed batch waits for the retry timer. */
+  async function sendRemovals() {
+    while (removals.size) {
+      const batch = [...removals].slice(0, REMOVAL.batchKeys);
+      for (const [key] of batch) {
+        removals.delete(key);
+      }
+      const results = await Promise.allSettled(
+        batch.map(async ([key, ids]) => options.redis.execute(["ZREM", key, ...ids])),
       );
-      flushing = undefined;
-      for (const [key, ids] of failed.filter((entry) => entry !== null)) {
+      const failed = batch.filter((_, index) => results[index]!.status === "rejected");
+      for (const [key, ids] of failed) {
         forget(key, ...ids);
       }
-      if (removals.size && !retry) {
-        retry = setTimeout(() => {
-          retry = undefined;
-          void flush();
-        }, REMOVAL_RETRY_MS);
+      if (failed.length) {
+        if (!retry && !stopped) {
+          retry = setTimeout(() => {
+            retry = undefined;
+            void flush();
+          }, REMOVAL.retryMs);
+          retry.unref();
+        }
+        return;
       }
-    }));
-
-  function forget(key: string, ...ids: readonly string[]) {
-    const set = removals.get(key) ?? removals.set(key, new Set()).get(key)!;
-    for (const id of ids) {
-      set.add(id);
     }
   }
+
+  const flush = (): Promise<void> =>
+    (flushing ??= sendRemovals().finally(() => {
+      flushing = undefined;
+    }));
+
+  // Bounded while Redis is down: anything dropped frees itself when its entry expires.
+  function forget(key: string, ...ids: readonly string[]) {
+    let set = removals.get(key);
+    if (!set) {
+      if (removals.size >= REMOVAL.keys) {
+        return;
+      }
+      removals.set(key, (set = new Set()));
+    }
+    for (const id of ids) {
+      set.add(id);
+      if (set.size > REMOVAL.idsPerKey) {
+        set.delete(set.values().next().value!);
+      }
+    }
+  }
+
+  const unclaim = (data: LiveSocketData) => {
+    forget(ipKey(data.rateKey, "sockets"), data.id);
+    void flush();
+  };
 
   const release = (ws: Socket) => {
     const data = ws.data;
@@ -249,8 +274,7 @@ export function createLiveSocket(options: LiveSocketOptions) {
       }
     }
     if (data.id) {
-      forget(ipKey(data.rateKey, "sockets"), data.id);
-      void flush();
+      unclaim(data);
     }
   };
   const shut = (ws: Socket, code: number) => {
@@ -305,24 +329,34 @@ export function createLiveSocket(options: LiveSocketOptions) {
   const claim = async (data: LiveSocketData, ticket: { nonce: string; expiresAtMs: number }) => {
     // Set before the call: a close while Redis answers still removes the entry.
     data.id = randomUUID();
-    const result = await admitScript(
-      options.redis,
-      [
-        `${options.namespace}:live-ticket:${ticket.nonce}`,
-        ipKey(data.rateKey, "sockets"),
-        ipKey(data.rateKey, "opens"),
-      ],
-      [
-        String(Math.max(1, ticket.expiresAtMs - Date.now())),
-        data.id,
-        String(LIVE_SOCKET.perIp.sockets),
-        String(LIVE_SOCKET.perIp.opensPerMinute),
-        String(SOCKET_ENTRY_MS),
-      ],
-    );
+    let result: unknown;
+    try {
+      result = await admitScript(
+        options.redis,
+        [
+          `${options.namespace}:live-ticket:${ticket.nonce}`,
+          ipKey(data.rateKey, "sockets"),
+          ipKey(data.rateKey, "opens"),
+        ],
+        [
+          String(Math.max(1, ticket.expiresAtMs - Date.now())),
+          data.id,
+          String(LIVE_SOCKET.perIp.sockets),
+          String(LIVE_SOCKET.perIp.opensPerMinute),
+          String(SOCKET_ENTRY_MS),
+        ],
+      );
+    } catch {
+      // A deadline can fire after the script ran: remove the entry it may have added.
+      unclaim(data);
+      data.id = "";
+      return LIVE_CLOSE.busy;
+    }
     if (result === 1) {
       return null;
     }
+    // Both refusals happen before the add: nothing to remove.
+    data.id = "";
     return result === 2 ? LIVE_CLOSE.perIp : LIVE_CLOSE.ticket;
   };
 
@@ -347,21 +381,13 @@ export function createLiveSocket(options: LiveSocketOptions) {
     }
     // Hold this address's pools and coins while Redis answers, so parallel opens cannot overrun them.
     hold(data, query);
-    let refused: number | null;
-    try {
-      refused = await claim(data, ticket);
-    } catch {
-      return shut(ws, LIVE_CLOSE.busy);
-    }
+    const refused = await claim(data, ticket);
     if (refused) {
-      // Nothing was added for this socket: no removal to send.
-      data.id = "";
       return shut(ws, refused);
     }
     if (data.closing) {
       // The removal sent at close can reach Redis before the add (NOSCRIPT falls back to EVAL).
-      forget(ipKey(data.rateKey, "sockets"), data.id);
-      return void flush();
+      return unclaim(data);
     }
     const result = options.relay.subscribe(query.request, sink(ws), {
       resume: query.resume,
@@ -511,7 +537,11 @@ export function createLiveSocket(options: LiveSocketOptions) {
           retry = undefined;
           return flush();
         })
-        .then(() => (removals.size ? flush() : undefined));
+        .then(() => (removals.size ? flush() : undefined))
+        .finally(() => {
+          stopped = true;
+          clearTimeout(retry);
+        });
     },
   };
 }
