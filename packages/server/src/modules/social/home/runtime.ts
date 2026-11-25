@@ -14,6 +14,7 @@ import { createReadCache } from "@blast/server/modules/social/read-cache.ts";
 import type { TraderPortfolioRead } from "@blast/server/modules/social/home/traders.ts";
 import type { HomeChartTradesPage, HomeCoinMarket, HomeHoldersPage } from "@blast/core/modules/social/contracts/coin-market.ts";
 import { readTrackedPoolMarket } from "@blast/server/modules/launchpad-market/legacy-fdv.ts";
+import { createCurveTargetReader } from "@blast/server/modules/social/home/curve-targets.ts";
 
 /**
  * The process's Home routes: the public reads on the replica (like the
@@ -37,6 +38,7 @@ export function socialHomeRoutes(): ReturnType<typeof createSocialHomeRoutes> {
     config: getSocialConfig,
     terms: readHomeTerms,
     trackedPoolMarket: readTrackedPoolMarket,
+    curveTargets: processSingleton("social.home-curve-targets", () => createCurveTargetReader()),
     caches: homeReadCaches(),
   }));
 }

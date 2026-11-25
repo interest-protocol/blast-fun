@@ -66,7 +66,7 @@ function bearer(subject: string): string {
 const presale: ChainPresaleRow = {
   presale_id: ORBIT_ID, sale_token: ORBIT, quote_type: QUOTE, sale_symbol: "ORBIT", sale_name: "Orbit",
   sale_icon_url: "https://cdn.blast.fun/ORBIT.png", sale_decimals: 9, quote_symbol: "USDC", quote_decimals: 6, lifecycle: "migrated",
-  start_ms: 0, end_ms: 0, raise_target: "100000000000", min_commitment: "10000000", wallet_cap: null, total_commitments: "0",
+  start_ms: 0, end_ms: 0, raise_target: "100000000000", min_commitment: "10000000", wallet_cap: null, total_commitments: "100000000000",
   participants: 0, venue: "cetus", pool_id: POOL_ID, updated_checkpoint: 1,
 };
 
