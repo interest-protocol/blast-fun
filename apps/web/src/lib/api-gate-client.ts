@@ -103,8 +103,8 @@ export function installGateAwareFetch(target: { fetch: Fetch } = globalThis): vo
 }
 
 let refreshingGate: Promise<boolean> | null = null;
-/** A hung refresh counts as failed, so a waiting stream stops instead of hanging. */
-const GATE_REFRESH_TIMEOUT_MS = 10_000;
+/** A hung refresh counts as failed, so a waiting stream stops; shorter than the market hub's 10 s hello deadline. */
+const GATE_REFRESH_TIMEOUT_MS = 5_000;
 
 /**
  * `GET /api/gate` once for every caller waiting on it now: true when a new

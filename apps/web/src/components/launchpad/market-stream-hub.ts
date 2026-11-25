@@ -379,6 +379,7 @@ export class MarketStreamHub {
   /** Ends the current EventSource and every timer that belongs to it; pools lose their fences. */
   private drop(): void {
     const connection = this.connection;
+    this.refused = false;
     this.cancelHello?.();
     this.cancelHello = null;
     this.cancelHeartbeat?.();
