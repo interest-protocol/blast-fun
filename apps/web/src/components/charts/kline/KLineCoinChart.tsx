@@ -15,9 +15,10 @@ import { poolPrices } from "../candle-data.ts";
 import type { CandleTrade } from "../candle-trade.ts";
 import type { WalletChartTrade } from "../wallet-markers.ts";
 import {
-  barChanges, CHART_SETTINGS_KEY, foldTrade, klineBars, MAIN_INDICATORS, PANE_INDICATORS, pricePrecision, readChartSettings, toggleIndicator,
+  barChanges, foldTrades, klineBars, MAIN_INDICATORS, PANE_INDICATORS, pricePrecision, readChartSettings, toggleIndicator,
   type Bar, type ChartSettings, type IndicatorName,
 } from "./kline-model.ts";
+import { subscriptZeros } from "#web/lib/market-format.ts";
 import styles from "./KLineCoinChart.module.css";
 
 const PERIODS: Readonly<Record<CandleInterval, Period>> = {
@@ -30,6 +31,9 @@ const INDICATOR_NAMES: Readonly<Record<IndicatorName, string>> = { MA: "Moving a
 const MAX_WALLET_TAGS = 60;
 const DRAWING_GROUP = "drawings";
 const WALLET_GROUP = "wallet-tags";
+const GRADUATION_GROUP = "graduation";
+/** Trades the history has not caught up with yet; older ones are dropped. */
+const MAX_PENDING_TRADES = 500;
 
 export type KLineCoinChartProps = Readonly<{
   sources: readonly DrawnSeries[];
@@ -44,15 +48,19 @@ export type KLineCoinChartProps = Readonly<{
   style: "candles" | "line";
   trade?: CandleTrade | null;
   walletTrades?: readonly WalletChartTrade[];
+  /** When the coin left its curve for a pool, marked with a line. */
+  migrationAt?: number;
 }>;
 
 /** The coin page's chart (KLineCharts): candles or line, indicators, drawings and wallet tags, live to the last trade. */
-export default function KLineCoinChart({ sources, interval, memeDecimals, quoteDecimals, quoteUsd, latestAvailable, label, style, trade, walletTrades }: KLineCoinChartProps) {
+export default function KLineCoinChart({ sources, interval, memeDecimals, quoteDecimals, quoteUsd, latestAvailable, label, style, trade, walletTrades, migrationAt }: KLineCoinChartProps) {
   const host = useRef<HTMLDivElement>(null);
   const chart = useRef<Chart | null>(null);
   const shown = useRef<readonly Bar[]>([]);
   const push = useRef<((bar: KLineData) => void) | null>(null);
-  const [settings, setSettings] = useState(loadSettings);
+  const savedIndicators = useChartPreference("indicators");
+  const [chosen, setChosen] = useState<ChartSettings>();
+  const settings = chosen ?? readChartSettings(savedIndicators || null);
   const mobile = useMobileChartLayout();
   const walletPreference = useChartPreference("wallet-tags");
   const [walletChoice, setWalletChoice] = useState<boolean>();
@@ -63,7 +71,7 @@ export default function KLineCoinChart({ sources, interval, memeDecimals, quoteD
   useEffect(() => {
     const element = host.current;
     if (!element) return;
-    const created = init(element, { timezone: "UTC", decimalFold: { threshold: 4 }, styles: themeStyles(element) });
+    const created = init(element, { timezone: "UTC", decimalFold: { threshold: 4, format: (value) => subscriptZeros(String(value)) }, styles: themeStyles(element) });
     if (!created) return;
     chart.current = created;
     created.setDataLoader({
@@ -73,13 +81,16 @@ export default function KLineCoinChart({ sources, interval, memeDecimals, quoteD
     });
     const retheme = () => created.setStyles(themeStyles(element));
     const scheme = matchMedia("(prefers-color-scheme: dark)");
+    const phone = matchMedia("(max-width: 760px)");
     scheme.addEventListener("change", retheme);
+    phone.addEventListener("change", retheme);
     const themeObserver = new MutationObserver(retheme);
     themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "class"] });
     const resize = new ResizeObserver(() => created.resize());
     resize.observe(element);
     return () => {
       scheme.removeEventListener("change", retheme);
+      phone.removeEventListener("change", retheme);
       themeObserver.disconnect();
       resize.disconnect();
       chart.current = null;
@@ -105,6 +116,7 @@ export default function KLineCoinChart({ sources, interval, memeDecimals, quoteD
     if (symbolChanged) current.setSymbol({ ticker: "coin", pricePrecision: precision, volumePrecision: 2 });
     if (periodChanged) current.setPeriod(period);
     if (!symbolChanged && !periodChanged) current.resetData();
+    fitBars(current, host.current, bars.length);
   }, [bars, precision, interval]);
 
   useEffect(() => {
@@ -117,20 +129,34 @@ export default function KLineCoinChart({ sources, interval, memeDecimals, quoteD
     for (const name of [...MAIN_INDICATORS, ...PANE_INDICATORS]) current.removeIndicator({ id: name });
     for (const name of settings.indicators)
       current.createIndicator((MAIN_INDICATORS as readonly string[]).includes(name) ? { name, id: name, paneId: "candle_pane" } : { name, id: name, paneId: `pane_${name}` }, true);
+    // Headroom above the highest value keeps the readouts off the bars.
+    current.overrideYAxis({ paneId: "candle_pane", gap: { top: 0.3 } });
+    for (const name of settings.indicators) if ((PANE_INDICATORS as readonly string[]).includes(name)) current.overrideYAxis({ paneId: `pane_${name}`, gap: { top: 0.4 } });
   }, [settings.indicators]);
 
+  // Tags move only when the tagged trades or their bars change, not on every tick.
+  const tags = useMemo(() => showWalletTags && walletTrades?.length ? walletTags(walletTrades, bars) : [], [showWalletTags, walletTrades, bars]);
+  const tagKey = tags.map((tag) => `${tag.timestamp}:${tag.value}:${tag.text}`).join("|");
   useEffect(() => {
     const current = chart.current;
     if (!current) return;
     current.removeOverlay({ groupId: WALLET_GROUP });
-    if (!showWalletTags || !walletTrades?.length) return;
-    for (const tag of walletTags(walletTrades, bars))
+    for (const tag of tags)
       current.createOverlay({ name: "simpleAnnotation", groupId: WALLET_GROUP, lock: true, points: [{ timestamp: tag.timestamp, value: tag.value }], extendData: tag.text });
-  }, [showWalletTags, walletTrades, bars]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- tagKey is the content of tags
+  }, [tagKey]);
+
+  const graduationAt = migrationAt === undefined ? undefined : bars.findLast((bar) => bar.timestamp <= migrationAt)?.timestamp;
+  useEffect(() => {
+    const current = chart.current;
+    if (!current) return;
+    current.removeOverlay({ groupId: GRADUATION_GROUP });
+    if (graduationAt !== undefined) current.createOverlay({ name: "verticalStraightLine", groupId: GRADUATION_GROUP, lock: true, points: [{ timestamp: graduationAt }] });
+  }, [graduationAt]);
 
   const update = (next: ChartSettings) => {
-    setSettings(next);
-    try { localStorage.setItem(CHART_SETTINGS_KEY, JSON.stringify(next)); } catch { /* private mode keeps it for this visit */ }
+    setChosen(next);
+    saveChartPreference("indicators", JSON.stringify(next));
   };
 
   return (
@@ -148,36 +174,47 @@ export default function KLineCoinChart({ sources, interval, memeDecimals, quoteD
   );
 }
 
-function loadSettings(): ChartSettings {
-  try { return readChartSettings(localStorage.getItem(CHART_SETTINGS_KEY)); } catch { return readChartSettings(null); }
-}
-
-/** History bars plus the newest trade the history has not seen yet, folded into its open bar. */
+/** History bars with every live trade it has not seen yet folded into the open bars. */
 function useLiveBars(sources: readonly DrawnSeries[], interval: CandleInterval, memeDecimals: number | null, quoteDecimals: number | null, quoteUsd: string | null, trade?: CandleTrade | null) {
   const history = useMemo(() => klineBars(sources, memeDecimals, quoteDecimals, quoteUsd), [sources, memeDecimals, quoteDecimals, quoteUsd]);
+  const [pending, setPending] = useState<readonly CandleTrade[]>([]);
+  const [seen, setSeen] = useState(trade);
+  if (trade !== seen) {
+    setSeen(trade);
+    if (trade?.trade.price) setPending((held) => [...held.filter((item) => item.trade.cursor !== trade.trade.cursor), trade].slice(-MAX_PENDING_TRADES));
+  }
   return useMemo(() => {
-    if (!trade?.trade.price || memeDecimals === null) return history;
-    const pool = sources.find(({ page }) => page.poolKey === trade.poolKey);
-    if (!pool || (pool.observedAt != null && trade.trade.timestampMs <= pool.observedAt)) return history;
-    const shownPrice = Number(poolPrices(memeDecimals, quoteDecimals, quoteUsd).price(trade.trade.price));
-    const quotePrice = Number(poolPrices(memeDecimals, quoteDecimals).price(trade.trade.price));
-    const volume = Number(shiftDecimal(trade.trade.memeAmount.toString(), -memeDecimals)) * quotePrice;
-    const open = foldTrade(history, interval, trade.trade.timestampMs, shownPrice, volume);
-    if (!open) return history;
-    return history.at(-1)?.timestamp === open.timestamp ? [...history.slice(0, -1), open] : [...history, open];
-  }, [history, interval, memeDecimals, quoteDecimals, quoteUsd, sources, trade]);
+    if (memeDecimals === null) return history;
+    const shown = poolPrices(memeDecimals, quoteDecimals, quoteUsd);
+    const quote = poolPrices(memeDecimals, quoteDecimals);
+    const unseen = pending.flatMap(({ poolKey, trade: { timestampMs, price, memeAmount } }) => {
+      if (!price) return [];
+      const pool = sources.find(({ page }) => page.poolKey === poolKey);
+      if (!pool || (pool.observedAt != null && timestampMs <= pool.observedAt)) return [];
+      const volume = Number(shiftDecimal(memeAmount.toString(), -memeDecimals)) * Number(quote.price(price));
+      return [{ timestampMs, price: Number(shown.price(price)), volume }];
+    });
+    return foldTrades(history, interval, unseen);
+  }, [history, interval, memeDecimals, quoteDecimals, quoteUsd, sources, pending]);
 }
 
 /** One tag per labelled trade, newest first up to a cap, on its bar's close. */
 function walletTags(trades: readonly WalletChartTrade[], bars: readonly Bar[]) {
   const closes = new Map(bars.map((bar) => [bar.timestamp, bar.close]));
-  const first = bars[0]?.timestamp ?? Infinity;
   return [...trades].sort((a, b) => b.timestampMs - a.timestampMs).slice(0, MAX_WALLET_TAGS).flatMap((trade) => {
     const bucket = bars.findLast((bar) => bar.timestamp <= trade.timestampMs)?.timestamp;
-    if (bucket === undefined || trade.timestampMs < first) return [];
+    if (bucket === undefined) return [];
     const name = trade.labels.map((key) => WALLET_LABELS[key].name).join(" · ");
     return [{ timestamp: bucket, value: closes.get(bucket)!, text: `${name} ${trade.side === "buy" ? "bought" : "sold"}` }];
   });
+}
+
+/** The chosen range fills the plot; a range too long for 3 px a bar scrolls from its newest bar. */
+function fitBars(chart: Chart, element: HTMLElement | null, count: number) {
+  if (!element || count === 0) return;
+  const plot = element.clientWidth - 72;
+  chart.setOffsetRightDistance(12);
+  chart.setBarSpace(Math.min(12, Math.max(3, (plot - 12) / count)));
 }
 
 /** The page's tokens resolved to colours the canvas can use. */
@@ -188,22 +225,31 @@ function themeStyles(element: HTMLElement): DeepPartial<Styles> {
     probe.style.color = `var(${token})`;
     return getComputedStyle(probe).color;
   };
-  const [up, down, ink, muted, hair, card] = ["--coin-chart-up", "--coin-chart-down", "--ink", "--muted", "--hair", "--card"].map(resolve) as [string, string, string, string, string, string];
+  const [up, down, ink, muted, hair, card, ink2, tint1, tint2, tint3] = ["--coin-chart-up", "--coin-chart-down", "--ink", "--muted", "--hair", "--card", "--ink-2", "--ink-tint-1", "--ink-tint-2", "--ink-tint-3"].map(resolve) as [string, string, string, string, string, string, string, string, string, string];
   probe.remove();
-  const text = { color: muted, size: 11 };
+  const family = getComputedStyle(element).fontFamily;
+  const text = { color: muted, size: 11, family };
+  const legend = { color: muted, family };
+  const label = { color: card, family };
+  // A phone's plot is too short for the readouts: they show while a finger is on the chart.
+  const showRule = matchMedia("(max-width: 760px)").matches ? "follow_cross" as const : "always" as const;
   return {
     grid: { horizontal: { color: hair }, vertical: { show: false } },
     candle: {
       bar: { upColor: up, downColor: down, noChangeColor: muted, upBorderColor: up, downBorderColor: down, noChangeBorderColor: muted, upWickColor: up, downWickColor: down, noChangeWickColor: muted },
       area: { lineColor: ink, backgroundColor: [{ offset: 0, color: "rgba(0,0,0,0)" }, { offset: 1, color: "rgba(0,0,0,0)" }] },
-      priceMark: { high: { color: muted }, low: { color: muted }, last: { upColor: up, downColor: down, noChangeColor: muted, text: { color: card } } },
-      tooltip: { title: { show: false }, legend: { color: muted } },
+      priceMark: { high: { color: muted, textFamily: family }, low: { color: muted, textFamily: family }, last: { upColor: up, downColor: down, noChangeColor: muted, text: label } },
+      // Volume has its own pane, so the price readout leaves it out.
+      tooltip: { showRule, title: { show: false }, legend: { ...legend, template: ["time", "open", "high", "low", "close"].map((key) => ({ title: key, value: `{${key}}` })) } },
     },
-    indicator: { tooltip: { title: { color: muted }, legend: { color: muted } } },
+    indicator: { ohlc: { upColor: up, downColor: down, noChangeColor: muted }, bars: [{ upColor: up, downColor: down, noChangeColor: muted }],
+      // Indicator lines are greys under the ink price line; the menu names them, so the pane titles stay off.
+      lines: [tint1, tint2, tint3, ink2, tint2].map((color) => ({ color, size: 1 })),
+      tooltip: { showRule, title: { ...legend, show: false }, legend } },
     xAxis: { axisLine: { color: hair }, tickLine: { color: hair }, tickText: text },
     yAxis: { axisLine: { color: hair }, tickLine: { color: hair }, tickText: text },
     separator: { color: hair },
-    crosshair: { horizontal: { line: { color: muted }, text: { backgroundColor: ink, color: card, borderColor: ink } }, vertical: { line: { color: muted }, text: { backgroundColor: ink, color: card, borderColor: ink } } },
+    crosshair: { horizontal: { line: { color: muted }, text: { ...label, backgroundColor: ink, borderColor: ink } }, vertical: { line: { color: muted }, text: { ...label, backgroundColor: ink, borderColor: ink } } },
   };
 }
 

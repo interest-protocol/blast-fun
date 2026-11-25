@@ -1,4 +1,4 @@
-import { candleBucketStart, candleIntervalMs, type CandleInterval } from "@blast/core/modules/launchpad-contract/venue-history.ts";
+import { candleBucketStart, type CandleInterval } from "@blast/core/modules/launchpad-contract/venue-history.ts";
 import { shiftDecimal } from "#web/components/launchpad/coin/coin-format.ts";
 import type { DrawnSeries } from "#web/components/launchpad/chart/chart-geometry.ts";
 import { poolPrices } from "../candle-data.ts";
@@ -10,11 +10,22 @@ export type Bar = Readonly<{ timestamp: number; open: number; high: number; low:
  * Every source's candles as one series, oldest first, priced per whole token in the shown
  * unit (USD when `quoteUsd` is known). A bucket both sources hold (the migration bucket)
  * becomes one bar: the curve's open, the venue's close, the wider range, both volumes.
+ * Live carries the last close from before its window as a flat bar at the window start,
+ * so a quiet coin still shows its price.
  */
 export function klineBars(sources: readonly DrawnSeries[], memeDecimals: number | null, quoteDecimals: number | null, quoteUsd: string | null): Bar[] {
   const { price } = poolPrices(memeDecimals, quoteDecimals, quoteUsd);
   const volume = (atoms: bigint) => Number(shiftDecimal(atoms.toString(), -(quoteDecimals ?? 0)));
   const byStart = new Map<number, Bar>();
+  for (const { page, carriedClose } of sources) {
+    const first = page.candles[0]?.bucketStart ?? Infinity;
+    if (carriedClose && carriedClose.timestampMs < first) {
+      const close = Number(price(carriedClose.price));
+      const bar = { timestamp: carriedClose.timestampMs, open: close, high: close, low: close, close, volume: 0 };
+      const held = byStart.get(bar.timestamp);
+      byStart.set(bar.timestamp, held ? joinBars(held, bar) : bar);
+    }
+  }
   for (const { page } of sources) for (const candle of page.candles) {
     const bar = {
       timestamp: candle.bucketStart,
@@ -89,26 +100,17 @@ export function foldTrade(bars: readonly Bar[], interval: CandleInterval, timest
   return { timestamp: start, open, high: Math.max(open, price), low: Math.min(open, price), close: price, volume };
 }
 
-/**
- * Finer bars rolled up into `interval` (5m–4h from 1m, 1w from 1d), oldest first. The
- * stream sends 1m and 1d frames; the browser builds every other open bar from them.
- */
-export function rollUp(bars: readonly Bar[], interval: CandleInterval): Bar[] {
-  const rolled: Bar[] = [];
-  for (const bar of bars) {
-    const start = candleBucketStart(interval, bar.timestamp);
-    const last = rolled.at(-1);
-    if (last && last.timestamp === start) rolled[rolled.length - 1] = joinBars(last, { ...bar, timestamp: start });
-    else rolled.push({ ...bar, timestamp: start });
+/** History with every live trade it has not seen yet folded in, oldest trade first. */
+export function foldTrades(history: readonly Bar[], interval: CandleInterval, trades: ReadonlyArray<Readonly<{ timestampMs: number; price: number; volume: number }>>): readonly Bar[] {
+  if (!trades.length) return history;
+  const bars = [...history];
+  for (const trade of [...trades].sort((a, b) => a.timestampMs - b.timestampMs)) {
+    const open = foldTrade(bars, interval, trade.timestampMs, trade.price, trade.volume);
+    if (!open) continue;
+    if (bars.at(-1)?.timestamp === open.timestamp) bars[bars.length - 1] = open;
+    else bars.push(open);
   }
-  return rolled;
-}
-
-/** The finer interval a coarser one is rolled up from, if any. */
-export function rollUpSource(interval: CandleInterval): CandleInterval | null {
-  if (interval === "1w") return "1d";
-  if (interval === "1s" || interval === "1m" || interval === "1d") return null;
-  return candleIntervalMs(interval) < candleIntervalMs("1d") ? "1m" : null;
+  return bars;
 }
 
 export const MAIN_INDICATORS = ["MA", "EMA", "BOLL"] as const;
@@ -118,7 +120,6 @@ const INDICATORS: readonly IndicatorName[] = [...MAIN_INDICATORS, ...PANE_INDICA
 
 export type ChartSettings = Readonly<{ indicators: readonly IndicatorName[] }>;
 export const DEFAULT_CHART_SETTINGS: ChartSettings = { indicators: ["MA", "VOL"] };
-export const CHART_SETTINGS_KEY = "blast:coin-chart:v1";
 
 /** Saved settings, keeping only known indicators; anything unreadable is the default. */
 export function readChartSettings(text: string | null): ChartSettings {

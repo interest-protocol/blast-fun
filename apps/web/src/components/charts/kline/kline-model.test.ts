@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { DrawnSeries } from "#web/components/launchpad/chart/chart-geometry.ts";
-import { barChanges, foldTrade, klineBars, pricePrecision, readChartSettings, rollUp, rollUpSource, toggleIndicator, DEFAULT_CHART_SETTINGS, type Bar } from "./kline-model.ts";
+import { barChanges, foldTrade, foldTrades, klineBars, pricePrecision, readChartSettings, toggleIndicator, DEFAULT_CHART_SETTINGS, type Bar } from "./kline-model.ts";
 
 const MINUTE = 60_000;
 const T0 = 1_795_188_300_000; // a 5-minute boundary
@@ -27,6 +27,13 @@ test("a coin's bars are priced per whole token, in USD when the quote rate is kn
     series("venue", [[T0, "2", "4", "0.5", "3", 2_000_000_000n], [T0 + MINUTE, "3", "3", "3", "3", 0n]]),
   ], 9, 9, null);
   assert.deepEqual(joined, [bar(T0, 1, 4, 0.5, 3, 3), bar(T0 + MINUTE, 3, 3, 3, 3, 0)]);
+});
+
+test("Live shows a quiet coin's last close from before the window as a flat bar at its start", () => {
+  const quiet = { ...series("curve", []), carriedClose: { timestampMs: T0, price: "2" } };
+  assert.deepEqual(klineBars([quiet], 9, 9, null), [bar(T0, 2, 2, 2, 2, 0)]);
+  const traded = { ...series("curve", [[T0 + 5_000, "2", "3", "2", "3", 1_000_000_000n]]), carriedClose: { timestampMs: T0, price: "2" } };
+  assert.deepEqual(klineBars([traded], 9, 9, null), [bar(T0, 2, 2, 2, 2, 0), bar(T0 + 5_000, 2, 3, 2, 3, 1)]);
 });
 
 test("precision keeps four significant digits of the smallest price, from dollars to 1e-12", () => {
@@ -60,10 +67,12 @@ test("a trade extends its open bar or opens the next one at the previous close",
   assert.equal(foldTrade(bars, "1m", T0 + 1, 0, 1), null);
 });
 
-test("5m–4h roll up from 1m and 1w from 1d", () => {
-  assert.deepEqual(rollUp([bar(T0, 1, 2, 1, 2, 1), bar(T0 + MINUTE, 2, 5, 0.5, 4, 2), bar(T0 + 5 * MINUTE, 4, 4, 4, 4, 1)], "5m"),
-    [bar(T0, 1, 5, 0.5, 4, 3), bar(T0 + 5 * MINUTE, 4, 4, 4, 4, 1)]);
-  assert.deepEqual(["1s", "1m", "5m", "15m", "1h", "4h", "1d", "1w"].map((interval) => rollUpSource(interval as never)), [null, null, "1m", "1m", "1m", "1m", null, "1d"]);
+test("every trade history has not caught up with stays on the open bars, in time order", () => {
+  const history = [bar(T0, 1, 2, 1, 2, 10)];
+  const trades = [{ timestampMs: T0 + 2_500, price: 1.5, volume: 2 }, { timestampMs: T0 + 1_200, price: 3, volume: 1 }];
+  assert.deepEqual(foldTrades(history, "1s", trades), [history[0]!, bar(T0 + 1_000, 2, 3, 2, 3, 1), bar(T0 + 2_000, 3, 3, 1.5, 1.5, 2)]);
+  assert.deepEqual(foldTrades(history, "1m", trades), [bar(T0, 1, 3, 1, 1.5, 13)]);
+  assert.equal(foldTrades(history, "1m", []), history);
 });
 
 test("settings survive a reload and ignore anything unknown", () => {

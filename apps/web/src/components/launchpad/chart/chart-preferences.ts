@@ -4,7 +4,7 @@ import { CHART_CONTROLS_COOKIE, chartSearch, DEFAULT_CHART_CONTROLS, preferredCh
 
 import { listOriginHistoryState } from "#web/components/blast-ui/list-restoration.ts";
 
-type Preference = "controls" | "style" | "wallet-tags";
+type Preference = "controls" | "style" | "wallet-tags" | "indicators";
 
 function snapshot(name: Preference): string {
   try {

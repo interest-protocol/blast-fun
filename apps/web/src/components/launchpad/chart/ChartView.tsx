@@ -468,7 +468,6 @@ function ChartFigure({ drawn, migrationAt, venuePoolKey, geometry, latest, lates
         return [];
     }
   }), [activity, deployer, source.curvePoolKey]);
-  const ripple = walletRipple(walletTrades, liveTrade, controls.interval);
   const line = presentation === "line";
   const unit = exactDecimal(quoteUsd) ? "USD" : source.quoteSymbol;
   const metric = line || !compact ? `price in ${unit}` : `price in ${unit} and volume in ${source.quoteSymbol}`;
@@ -484,8 +483,8 @@ function ChartFigure({ drawn, migrationAt, venuePoolKey, geometry, latest, lates
       </p>}
       <div className={compact ? styles.compactCanvas : styles.canvas}>
         {compact
-          ? <KLineCoinChart sources={drawn} interval={controls.interval} memeDecimals={source.memeDecimals} quoteDecimals={source.quoteDecimals} quoteUsd={quoteUsd ?? null} latestAvailable={latestAvailable} label={label} style={line ? "line" : "candles"} trade={candleTrade} walletTrades={walletTrades} />
-          : <PoolCandleChart latestAvailable={latestAvailable} walletTrades={walletTrades} ripple={ripple} trade={candleTrade} label={label} compact={compact} rollingWindow={controls.range === "live"} presentation={presentation} memeDecimals={source.memeDecimals} quoteDecimals={source.quoteDecimals} quoteUsd={quoteUsd} sources={drawn} migrationAt={migrationAt} migrationLabel={venue ? <>Graduated to <DexIdentity venue={venue} /></> : graduation} quoteSymbol={source.quoteSymbol} from={geometry.start} to={geometry.end} />}
+          ? <KLineCoinChart sources={drawn} interval={controls.interval} memeDecimals={source.memeDecimals} quoteDecimals={source.quoteDecimals} quoteUsd={quoteUsd ?? null} latestAvailable={latestAvailable} label={label} style={line ? "line" : "candles"} trade={candleTrade} walletTrades={walletTrades} migrationAt={migrationAt} />
+          : <PoolCandleChart latestAvailable={latestAvailable} walletTrades={walletTrades} ripple={walletRipple(walletTrades, liveTrade, controls.interval)} trade={candleTrade} label={label} compact={compact} rollingWindow={controls.range === "live"} presentation={presentation} memeDecimals={source.memeDecimals} quoteDecimals={source.quoteDecimals} quoteUsd={quoteUsd} sources={drawn} migrationAt={migrationAt} migrationLabel={venue ? <>Graduated to <DexIdentity venue={venue} /></> : graduation} quoteSymbol={source.quoteSymbol} from={geometry.start} to={geometry.end} />}
       </div>
     </figure>
   );
