@@ -33,12 +33,16 @@ export function panChartRange(range: IRange<number>, pixels: number, width: numb
 
 export function liveChartRange(range: IRange<number>, pointCount: number, width: number) {
   const to = pointCount - 1 + LIVE_GUTTER_PX * barsPerPixel(range, width);
-  return { from: to - (range.to - range.from), to };
+  const from = to - (range.to - range.from);
+  if (from >= 0 || width <= LIVE_GUTTER_PX) return { from, to };
+  // The coin chart pins its left edge at the first bar, so a wider view fits every bar plus the gutter.
+  const gutter = LIVE_GUTTER_PX / width;
+  return { from: 0, to: (pointCount - 1 + gutter) / (1 - gutter) };
 }
 
 export function resizedLiveChartRange(range: IRange<number>, pointCount: number, before: number, after: number, initialFit = false) {
-  // A native fit can gain extra gutter when the price axis settles on a narrow plot.
-  if (initialFit && after && Math.abs(range.from) < 0.001 && range.to >= pointCount - 1) {
+  // A native fit can gain extra gutter, or slide right of the pinned first bar, when the price axis settles on a narrow plot.
+  if (initialFit && after && range.from > -0.001 && range.to >= pointCount - 1) {
     return liveChartRange(range, pointCount, after);
   }
   if (!before || !after || before === after || !atLiveEdge(range, pointCount, before)) return null;
@@ -65,7 +69,9 @@ export function rebaseCoinChartRange(range: IRange<number>, before: readonly num
   if (regridded) return following ? liveChartRange(regridded, after.length, width) : regridded;
   if (following) {
     const shift = after.length - before.length;
-    return { from: range.from + shift, to: range.to + shift };
+    const shifted = { from: range.from + shift, to: range.to + shift };
+    // The coin chart pins its first bar; a view shifted before it would gain gutter and leave the live edge.
+    return shifted.from < 0 ? liveChartRange(shifted, after.length, width) : shifted;
   }
   const left = Math.max(0, Math.min(before.length - 1, Math.floor(range.from)));
   const available = new Set(after);
