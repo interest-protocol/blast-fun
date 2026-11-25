@@ -6,6 +6,10 @@ type Network = readonly [Address, number];
 export type IngressTrust = Readonly<{ mode: "direct" }> | Readonly<{ mode: "trusted-proxy"; networks: readonly Network[] }>;
 type Environment = Readonly<Record<string, string | undefined>>;
 
+/** Render's edge proxies sit in 10.24.0.0/13 and move between /24s, so ranges inside 10/8 may be as wide as /13. */
+const PRIVATE_PROXY_SPACE = ipaddr.parseCIDR("10.0.0.0/8");
+const PRIVATE_PROXY_MIN_PREFIX = 13;
+
 /** One address, never a forwarded chain, zone identifier or permissively parsed IPv4. */
 export function canonicalAddress(value: string | null): string | null {
   if (!value || value.includes("%") || !isIP(value)) return null;
@@ -23,9 +27,12 @@ function proxyNetwork(value: string): Network {
   const parsed = ipaddr.parse(canonical);
   const maximum = parsed.kind() === "ipv4" ? 32 : 128;
   const prefix = width === undefined ? maximum : Number(width) - (mapped ? 96 : 0);
-  // Wide internal/platform ranges would trust unrelated tenants. Deployment must
-  // supply the narrow actual ingress ranges; nothing implicitly trusts private IPs.
-  if (prefix < (maximum === 32 ? 24 : 64) || prefix > maximum) throw new Error("Trusted proxy CIDRs must be narrow IPv4 /24+ or IPv6 /64+ ranges.");
+  // A trusted range can set any client key, so deployment supplies the actual ingress ranges and
+  // nothing implicitly trusts private IPs. A /13 inside 10/8 assumes that space carries only the
+  // platform's edge proxies; the Render probe saw nothing else there (live-data-delivery.md).
+  let minimum = 64;
+  if (parsed.kind() === "ipv4") minimum = parsed.match(PRIVATE_PROXY_SPACE) ? PRIVATE_PROXY_MIN_PREFIX : 24;
+  if (prefix < minimum || prefix > maximum) throw new Error("Trusted proxy CIDRs must be IPv4 /24+ (/13+ inside 10.0.0.0/8) or IPv6 /64+ ranges.");
   return [parsed, prefix];
 }
 
@@ -39,12 +46,16 @@ export function ingressTrust(environment: Environment): IngressTrust {
   return { mode, networks: values.map(proxyNetwork) };
 }
 
-/** A trusted proxy must overwrite X-Forwarded-For with exactly one address. */
+/**
+ * The trusted proxy appends the client it saw as the last X-Forwarded-For entry.
+ * Earlier entries come from the client and are ignored, so they cannot change the key.
+ */
 export function ingressAddress(request: Request, peer: string | null, trust: IngressTrust): string | null {
   const canonical = canonicalAddress(peer);
   if (!canonical) return null;
   if (trust.mode === "direct") return canonical;
   const address = ipaddr.parse(canonical);
   if (!trust.networks.some(([network, prefix]) => address.kind() === network.kind() && address.match(network, prefix))) return null;
-  return canonicalAddress(request.headers.get("x-forwarded-for"));
+  const last = request.headers.get("x-forwarded-for")?.split(",").at(-1)?.trim() ?? null;
+  return canonicalAddress(last);
 }
