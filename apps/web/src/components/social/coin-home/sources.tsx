@@ -103,17 +103,24 @@ export function ListHead({ sort, defaultSort = "relevant", onSort, window }: Pic
 }
 
 /**
+ * A new sort or filter re-ranks the same list (same `group`), so its rows slide; another source or page starts fresh.
+ * `motionVersion` is in both keys: a blur or keyboard update makes the next reorder land without motion.
+ */
+function motionKeys(props: ListProps, viewKey: string | undefined, motionVersion: unknown): Readonly<{ view: string; group: string }> {
+  return {
+    view: JSON.stringify([viewKey ?? [props.source, props.window, props.sort, props.page, props.rows], motionVersion]),
+    group: JSON.stringify([props.source, props.page, props.rows, motionVersion]),
+  };
+}
+
+/**
  * Live rows under one header; only background rank changes move into place.
  * With no rows (a `result` in their place) the pager, count go;
  * a settled `empty` result drops the column header and its sorts too.
  */
 export function CoinList({ coins, props, result, empty = false, end, viewKey, rankings, checkpoint = 0, buy, swapping = false }: Readonly<{ coins: readonly RankedCoin[]; props: ListProps; result?: ReactNode; empty?: boolean; end?: ReactNode; viewKey?: string; rankings?: Rankings; checkpoint?: number; buy?: Readonly<{ coinKey: string; amount: string }>; /** The previous view's rows, held while the new view loads. */ swapping?: boolean }>) {
-  // A new sort or filter re-ranks the same list, so its rows slide; another source or page starts fresh.
-  // `motionVersion` is in both keys: a blur or keyboard update makes the next reorder land without motion.
-  const list = useRankMotion(JSON.stringify([viewKey ?? [props.source, props.window, props.sort, props.page, props.rows], rankings?.motionVersion]), {
-    group: JSON.stringify([props.source, props.page, props.rows, rankings?.motionVersion]),
-    holding: swapping,
-  });
+  const motion = motionKeys(props, viewKey, rankings?.motionVersion);
+  const list = useRankMotion(motion.view, { group: motion.group, holding: swapping });
   const hasResult = Boolean(result);
   const latest = useHomePrices(coins, props.streamPrices === true && !hasResult);
   // Home shows new-coin admissions in the Coins header.
@@ -130,24 +137,28 @@ export function CoinList({ coins, props, result, empty = false, end, viewKey, ra
       {controls}
       {coins.length > 0 ? <span className={styles.phoneWindow}>{props.window === "1h" ? "1 hour" : "24 hours"}</span> : null}
       {header}
-      <ol aria-busy={swapping || undefined} className={clsx(styles.list, styles.rankedList)} data-swapping={swapping || undefined} data-volume-sort={props.source === "discover" && props.sort === "trending" || undefined} ref={list} {...rankings?.interactionProps}>
-        {coins.map((coin, index) => (
-          <CoinCard
-            key={homeCoinKey(coin)}
-            coin={coin}
-            buyAmount={buy?.coinKey === homeCoinKey(coin) ? buy.amount : undefined}
-            rank={(props.page - 1) * props.rows + index + 1}
-            livePrice={props.streamPrices ? newerHomePrice(latest, coin, coin.readCheckpoint ?? checkpoint) : undefined}
-            nowMs={props.nowMs}
-            trading={props.trading}
-            watchlist={props.source === "watchlist"}
-            window={props.window}
-          />
-        ))}
-      </ol>
+      <CoinRows buy={buy} checkpoint={checkpoint} coins={coins} latest={latest} list={list} props={props} rankings={rankings} swapping={swapping} />
       <div data-table-end="">{end}</div>
     </>
   );
+}
+
+function CoinRows({ coins, props, latest, checkpoint, buy, list, rankings, swapping }: Readonly<{ coins: readonly RankedCoin[]; props: ListProps; latest: ReturnType<typeof useHomePrices>; checkpoint: number; buy?: Readonly<{ coinKey: string; amount: string }>; list: ReturnType<typeof useRankMotion>; rankings?: Rankings; swapping: boolean }>) {
+  return <ol aria-busy={swapping || undefined} className={clsx(styles.list, styles.rankedList)} data-swapping={swapping || undefined} data-volume-sort={props.source === "discover" && props.sort === "trending" || undefined} ref={list} {...rankings?.interactionProps}>
+    {coins.map((coin, index) => (
+    <CoinCard
+      key={homeCoinKey(coin)}
+      coin={coin}
+      buyAmount={buy?.coinKey === homeCoinKey(coin) ? buy.amount : undefined}
+      rank={(props.page - 1) * props.rows + index + 1}
+      livePrice={props.streamPrices ? newerHomePrice(latest, coin, coin.readCheckpoint ?? checkpoint) : undefined}
+      nowMs={props.nowMs}
+      trading={props.trading}
+      watchlist={props.source === "watchlist"}
+      window={props.window}
+    />
+    ))}
+  </ol>;
 }
 
 function listReadError(read: Pick<UseQueryResult, "error" | "isError" | "isFetching">, loaded: boolean, onRetry: () => void): ReactNode {

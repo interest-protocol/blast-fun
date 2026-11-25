@@ -40,12 +40,11 @@ async function loadHome(state: HomeViewState, sections: HomeSectionPrefs, rows: 
     : null;
   const traders = shown("traders") ? readHomeTradersFromBackend(HOME_DEFAULT_WINDOW).catch(failed("traders")) : null;
   const posts = shown("posts") ? readFeedPageFromBackend().catch(failed("posts")) : null;
-  const [pinnedPresales, pinnedCurves] = await Promise.all([
+  // Once the highlights land, a ready coins result can paint directly; an unfinished read streams into the card.
+  const [pinnedPresales, pinnedCurves, initial] = await Promise.all([
     readFeaturedPresalesFromBackend().catch(failed("pinned-presales")),
     readBondingHeroFromBackend().then((seed) => seed ?? failed("pinned-curves")()),
-  ]);
-  // A ready result can paint directly. An unfinished read streams into the card.
-  const initial = await Promise.race([coins, coinsPending] as const);
+  ]).then(async ([presales, curves]) => [presales, curves, await Promise.race([coins, coinsPending] as const)] as const);
   return {
     coins: initial === coinsPending ? coins : initial,
     happening: happening?.then(({ read }) => read) ?? null, presales, traders, posts,
