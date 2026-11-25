@@ -8,7 +8,7 @@ import { accountId, activityAssets, activityOrigin, activityRow, activityWallets
 
 const databaseUrl = process.env.MISSION_CONTROL_TEST_DATABASE_URL;
 
-test("followed buy alerts: a named buy of a shown coin has a card; everything else is a cached null; followed wallets stay private", { skip: !databaseUrl }, async () => {
+test("followed buy alerts: a named buy of a shown coin has a card; a missing row or coin is an uncached 404; everything else is a cached null; followed wallets stay private", { skip: !databaseUrl }, async () => {
   const fixture = await createActivityStreamFixture(databaseUrl!, Date.now());
   try {
     const { admin, now } = fixture;
@@ -48,18 +48,21 @@ test("followed buy alerts: a named buy of a shown coin has a card; everything el
     assert.equal(curveBody.usd, null);
     assert.equal(curveBody.market_cap_usd, null);
 
-    // A private account's buy, a hidden sale, a sell, and any id while trades are hidden: no card,
-    // as a null the edge shares too, so every follower's read of it coalesces.
-    const misses = [...["150:2:3:0", "301:0:0:0", "302:0:0:0"].map((id) => card(id)), card("300:0:0:0", false)];
+    // A private account's buy, a sell, and any id while trades are hidden: no card, as a null the
+    // edge shares too, so every follower's read of it coalesces.
+    const misses = [...["150:2:3:0", "302:0:0:0"].map((id) => card(id)), card("300:0:0:0", false)];
     for (const missing of await Promise.all(misses)) {
       assert.equal(missing.status, 200);
       assert.equal(missing.headers.get("cache-control"), "public, s-maxage=10");
       assert.equal(await missing.json(), null);
     }
-    // An id with no row yet (the replica behind the hint) is a 404 the edge never caches.
-    const unknown = await card("999:0:0:0");
-    assert.equal(unknown.status, 404);
-    assert.match(unknown.headers.get("cache-control") ?? "", /no-store/);
+    // An id with no row yet, or a buy of a coin Home does not show (not indexed yet, or hidden):
+    // a 404 the edge never caches, so a lagging replica cannot hide the buy from every follower.
+    for (const id of ["999:0:0:0", "301:0:0:0"]) {
+      const unknown = await card(id);
+      assert.equal(unknown.status, 404, id);
+      assert.match(unknown.headers.get("cache-control") ?? "", /no-store/, id);
+    }
     // A malformed id, or a checkpoint past a bigint, is a bad request and never reaches the database.
     for (const id of ["not-an-id", "9999999999999999999:0:0:0"]) {
       const bad = await card(id);

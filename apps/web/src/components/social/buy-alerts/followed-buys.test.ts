@@ -114,6 +114,7 @@ test("the card read: a card parses; no card, an error or a malformed answer is n
   assert.deepEqual(await readBuyAlertCard(ID, answer(200, card())), card());
   assert.equal(urls[0], "/api/social/activity/1200%3A3%3A1%3A0/alert");
   assert.equal(await readBuyAlertCard(ID, answer(200, null)), null, "no card");
+  assert.equal(await readBuyAlertCard(ID, answer(404, { code: "not_found" })), null, "no row or coin yet");
   assert.equal(await readBuyAlertCard(ID, answer(503, { code: "service_unavailable" })), null);
   assert.equal(await readBuyAlertCard(ID, answer(200, { ...card(), extra: 1 })), null);
 });

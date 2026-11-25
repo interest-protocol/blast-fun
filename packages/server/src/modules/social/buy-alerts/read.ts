@@ -64,9 +64,10 @@ type CoinRow = Readonly<{
 
 /**
  * One trade's buy card, or null when the row is not a named buy of a shown
- * coin (a sell or a commit, a hidden sale, a wallet the naming rule does not
- * name, an account without a callsign). An id with no row is `not_found`,
- * never cached: the hint can reach a tab before the replica has the row, and a
+ * coin (a sell or a commit, a wallet the naming rule does not name, an
+ * account without a callsign). An id with no row, or a buy of a coin Home does
+ * not show (not indexed yet, or a hidden sale), is `not_found`, never cached:
+ * the hint can reach a tab before the replica has the row or the coin, and a
  * shared null would hide that buy from every follower.
  */
 export async function readBuyAlert(db: ReadableDatabase, activityId: string): Promise<SocialBuyAlert | null> {
@@ -77,7 +78,8 @@ export async function readBuyAlert(db: ReadableDatabase, activityId: string): Pr
   const coinKey = row.presale_id ?? row.coin_type;
   if (coinKey === null) return null;
   const coin = (await db.read<CoinRow>(row.presale_id ? SALE_COIN_SQL : TYPE_COIN_SQL, [coinKey, row.actor, row.timestamp_ms])).rows[0];
-  if (!coin || coin.account_id === null) return null;
+  if (!coin) throw new SocialRouteError("not_found");
+  if (coin.account_id === null) return null;
   const identity = (await db.read<IdentityRow>(IDENTITY_SQL, [coin.account_id])).rows[0];
   if (!identity) return null;
   const actor = actorOf({ account_id: identity.account_id, wallet: row.actor }, new Map([[identity.account_id, identity]]));

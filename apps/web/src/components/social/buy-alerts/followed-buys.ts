@@ -10,8 +10,9 @@ import type { FreshnessHint } from "../home/feed-freshness";
  *
  * A kept hint waits a random share of `ALERT_SPREAD_MS` (one buy reaches
  * every follower's tab at once; the card reads then spread), then reads the
- * trade's public card. A `null` card (a private account, a hidden sale, a
- * wallet no longer named) or a `404` (no row yet) shows nothing. The card must name the hint's wallet.
+ * trade's public card. A `null` card (a private account, a wallet no longer
+ * named) or a `404` (no row or coin yet, a hidden sale) shows nothing. The
+ * card must name the hint's wallet.
  */
 
 /** A kept hint's card read waits a uniform share of this long. */

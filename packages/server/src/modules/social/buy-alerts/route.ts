@@ -42,7 +42,7 @@ export function alertActivityId(request: Request): string {
  * The followed buy alert routes (contract in `contracts/buy-alerts.ts`):
  * the caller's followed wallets (private) and one trade's card (public,
  * cached 10 s; `null` unless a named buy of a shown coin, and while trades are
- * hidden, so misses coalesce at the edge too; an id with no row yet is a
+ * hidden, so misses coalesce at the edge too; a missing row or coin is a
  * no-store 404).
  */
 export function createSocialBuyAlertRoutes(dependencies: SocialBuyAlertRouteDependencies) {

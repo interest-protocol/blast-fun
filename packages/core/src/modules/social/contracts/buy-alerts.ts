@@ -21,12 +21,14 @@ import { COIN_TYPE, SUI_OBJECT_ID_PATTERN } from "@blast/core/lib/sui/ids.ts";
  *   `following-wallets-response`.
  * - `GET /api/social/activity/{activity_id}/alert`: one trade's card. Public,
  *   no authentication, bucket `social_read`, `public-fresh` (`public,
- *   s-maxage=10`). The card, or `null` unless the row is a named buy of a
- *   coin the web shows (a sale in `SHOWN_PRESALES` or a launch's curve coin),
- *   and `null` while trades are hidden. The null answer is a cached 200, not a
- *   no-store 404, so every follower tab that reads a buy without a card still
- *   coalesces at the edge; a privacy change reaches the edge within 10 s.
- *   `400` for a malformed id. Schema `buy-alert-response`.
+ *   s-maxage=10`). The card, or `null` unless the row is a named buy, and
+ *   `null` while trades are hidden. The null answer is a cached 200, so every
+ *   follower tab that reads a buy without a card coalesces at the edge; a
+ *   privacy change reaches the edge within 10 s. `404`, never cached, when the
+ *   row is missing or its coin is not one the web shows (a sale in
+ *   `SHOWN_PRESALES` or a launch's curve coin): the replica can trail the
+ *   hint, and a shared miss would hide the buy from every follower. `400` for
+ *   a malformed id. Schema `buy-alert-response`.
  */
 export const SOCIAL_FOLLOWING_WALLETS_PATH = "/api/social/me/following/wallets";
 export const SOCIAL_FOLLOWING_WALLETS_ROUTE = `GET ${SOCIAL_FOLLOWING_WALLETS_PATH}`;
@@ -89,5 +91,5 @@ export type SocialBuyAlert = z.infer<typeof socialBuyAlertSchema>;
 export const socialBuyAlertResponseSchema = z.xor([z.null(), socialBuyAlertSchema]).meta({
   title: "Buy alert response",
   description:
-    "GET /api/social/activity/{activity_id}/alert 200: the card, or null when the row has none (public, cached 10 s either way, so the edge coalesces every follower's read). An id with no row yet is a 404 the edge never caches.",
+    "GET /api/social/activity/{activity_id}/alert 200: the card, or null when the row has none (public, cached 10 s either way, so the edge coalesces every follower's read). An id with no row yet, or a buy of a coin Home does not show, is a 404 the edge never caches.",
 });

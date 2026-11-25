@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Buy alert response",
-  "description": "GET /api/social/activity/{activity_id}/alert 200: the card, or null when the row has none (public, cached 10 s either way, so the edge coalesces every follower's read). An id with no row yet is a 404 the edge never caches.",
+  "description": "GET /api/social/activity/{activity_id}/alert 200: the card, or null when the row has none (public, cached 10 s either way, so the edge coalesces every follower's read). An id with no row yet, or a buy of a coin Home does not show, is a 404 the edge never caches.",
   "$id": "https://blast-v2.invalid/social/contracts/buy-alert-response.schema.json",
   "oneOf": [
     {
