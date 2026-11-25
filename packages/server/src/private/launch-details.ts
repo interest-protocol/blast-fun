@@ -3,6 +3,7 @@ import { LAUNCH_DETAILS_PATH } from "@blast/core/modules/backend-api/private/coi
 import { parseLaunchId } from "@blast/core/lib/launchpad/launch-id.ts";
 import { readLaunchDetails } from "@blast/server/modules/social/launch/details.ts";
 import { publicReadCache } from "@blast/server/modules/public-reads/shared-runtime.ts";
+import { SOCIAL_PUBLIC_CACHE_CONTROL } from "@blast/server/modules/social/route-kit/route.ts";
 import type { PrivateHandlers } from "./handler.ts";
 
 /** Every Home and Bonding render reads the pinned curves' details, and a publication's words change rarely: one read serves them all this long. */
@@ -18,7 +19,12 @@ async function sharedLaunchDetails(launchId: string) {
   return details;
 }
 
-/** A public projection carried by the signed first-party transport, independently of market reads. */
+/**
+ * A public projection carried by the signed first-party transport, independently of market reads.
+ * It never reads the caller, so a 200 is shared at the edge like any public social read
+ * (10 s, then up to 20 s stale while it revalidates): publication text may lag about 40 s
+ * behind with the server's own `DETAILS_SHARE_MS`. Errors stay `private, no-store`.
+ */
 export function launchDetailsHandler(read = sharedLaunchDetails) {
   return async (request: Request): Promise<Response> => {
     const headers = { "Cache-Control": "private, no-store" };
@@ -31,7 +37,10 @@ export function launchDetailsHandler(read = sharedLaunchDetails) {
         { status: 400, headers },
       );
     try {
-      return Response.json({ details: await read(launchId) }, { headers });
+      return Response.json(
+        { details: await read(launchId) },
+        { headers: { "Cache-Control": SOCIAL_PUBLIC_CACHE_CONTROL } },
+      );
     } catch {
       return Response.json(
         { error: { code: "launch_details_unavailable" } },
