@@ -7,13 +7,9 @@ import { useTradeReads } from "../trade-reads";
 import { readHoldersPage, type HoldersSource } from "./holders-client";
 import { afterMore, afterRefresh, INITIAL_HOLDERS, showNewer, type HoldersOutcome } from "./holders-model";
 import { HoldersView } from "./HoldersView";
-import { useLiveScreen } from "../coin/LiveScreen";
 
 const HOLDERS_GAP_MS = 15_000;
 const HOLDERS_FALLBACK_MS = { live: 30_000, idle: 15_000 } as const;
-/** The live screen's header counts holders from the stream; the full list re-reads on this timer only. */
-const LIVE_SCREEN_HOLDERS_MS = { live: 30_000, idle: 30_000 } as const;
-const NO_TRADES = () => false;
 
 /**
  * The coin page's Holders destination in the browser. It reads the native
@@ -26,7 +22,6 @@ const NO_TRADES = () => false;
 export function CoinHolders({ source, compact }: Readonly<{ source: HoldersSource; compact?: boolean }>) {
   const [state, setState] = useState(INITIAL_HOLDERS);
   const [pending, setPending] = useState<"refresh" | "more" | null>(null);
-  const liveScreen = useLiveScreen();
   const network = source.expected?.network ?? null;
   const deployment = source.expected?.deployment ?? null;
   const dependencies = useMemo(
@@ -57,8 +52,7 @@ export function CoinHolders({ source, compact }: Readonly<{ source: HoldersSourc
   useTradeReads({
     coinType: source.coinType,
     minGapMs: HOLDERS_GAP_MS,
-    fallbackMs: liveScreen ? LIVE_SCREEN_HOLDERS_MS : HOLDERS_FALLBACK_MS,
-    accept: liveScreen ? NO_TRADES : undefined,
+    fallbackMs: HOLDERS_FALLBACK_MS,
     initial: true,
     read: (at) => void refresh(false, at),
   });

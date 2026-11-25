@@ -35,7 +35,7 @@ class Source implements MarketEventSource {
 }
 const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
 
-function setup(pools = [CURVE], requestFrom?: number, migration: MigrationMarker | null = null, livePolls?: boolean) {
+function setup(pools = [CURVE], requestFrom?: number, migration: MigrationMarker | null = null) {
   let now = NOW;
   const sources: Source[] = [];
   const urls: string[] = [];
@@ -53,7 +53,7 @@ function setup(pools = [CURVE], requestFrom?: number, migration: MigrationMarker
     pools, expected, migration: () => migration, request: () => ({ ...chartRequest({ interval: "1s", range: "all" }, NOW), ...(requestFrom === undefined ? {} : { from: requestFrom }) }),
     load: (pool) => new Promise<ChartPoolRead>((resolve) => loads.push({ pool, resolve })),
     onSection: (pool, section) => sections.push({ pool, section }), onStatus: (status) => statuses.push(status),
-    hub, visible: () => true, schedule, now: () => now, ...(livePolls === undefined ? {} : { livePolls }),
+    hub, visible: () => true, schedule, now: () => now,
     publish: (run) => { publications.push(run); return () => { const index = publications.indexOf(run); if (index >= 0) publications.splice(index, 1); }; }, random: () => 0,
   });
   return { client, sources, urls, loads, sections, statuses, timers, publications, source: () => sources.at(-1)!, advance: (ms: number) => { now += ms; }, flush: () => publications.splice(0).forEach((run) => run()) };
@@ -418,25 +418,6 @@ test("a migrated coin's curve history is read once, then only its venue pool is 
   await settle();
   poll();
   assert.deepEqual(s.loads.map((load) => load.pool), [VENUE]);
-  s.client.stop();
-});
-
-test("the live screen reads no history on the poll while the stream is live, and polls again once it drops", async () => {
-  const s = setup([CURVE], undefined, null, false);
-  s.client.start();
-  s.source().ready(10);
-  s.source().emit("hint", { type: "hello", provenance: wireProvenance(10) });
-  s.loads.shift()!.resolve(answer(10));
-  await settle();
-  const poll = () => s.timers.find((timer) => timer.ms === 15_000)!.run();
-  poll();
-  poll();
-  assert.equal(s.loads.length, 0);
-  s.source().emit("error");
-  await settle();
-  s.loads.splice(0);
-  poll();
-  assert.deepEqual(s.loads.map((load) => load.pool), [CURVE]);
   s.client.stop();
 });
 

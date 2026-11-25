@@ -20,12 +20,10 @@ export const LIVE_POLL_MS = 30_000;
 export function useMarketPoll(options: Readonly<{
   key?: string;
   live?: boolean;
-  /** No timed read while `live`: the stream brings every change (the live screen). */
-  stopWhileLive?: boolean;
   onRefresh: (at: number | null) => void;
   onInitialRefresh?: () => void;
 }>): void {
-  const { key = "", live = false, stopWhileLive = false, onRefresh, onInitialRefresh } = options;
+  const { key = "", live = false, onRefresh, onInitialRefresh } = options;
   const initialize = useEffectEvent(() => onInitialRefresh ? onInitialRefresh() : onRefresh(null));
   const refresh = useEffectEvent((at: number | null) => onRefresh(at));
   const poll = useEffectEvent(() => {
@@ -46,8 +44,7 @@ export function useMarketPoll(options: Readonly<{
     return () => document.removeEventListener("visibilitychange", onVisibility);
   }, [key]);
   useEffect(() => {
-    if (live && stopWhileLive) return;
     const timer = setInterval(poll, spreadMs(live ? LIVE_POLL_MS : POLL_MS, Date.now()));
     return () => clearInterval(timer);
-  }, [key, live, stopWhileLive]);
+  }, [key, live]);
 }
