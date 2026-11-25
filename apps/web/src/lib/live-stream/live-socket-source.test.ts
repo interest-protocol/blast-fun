@@ -79,7 +79,9 @@ test("the tab uses the SSE relay while the socket is off, refused, or failing", 
   const refused = harness(async () => GRANT);
   refused.open();
   await settle();
-  refused.sockets[0]!.onclose!({ code: 4429 });
+  // Through Render's edge the code arrives in the last frame; the close itself says 1005.
+  refused.sockets[0]!.onmessage!({ data: 'event: close\ndata: {"code":4429}\n\n' });
+  refused.sockets[0]!.onclose!({ code: 1005 });
   refused.open();
   await settle();
   assert.deepEqual(refused.relays, [PATH], "a per-address refusal falls back at once");
@@ -99,6 +101,19 @@ test("the tab uses the SSE relay while the socket is off, refused, or failing", 
   failing.open();
   await settle();
   assert.equal(failing.sockets.length, 4, "the socket is tried again after the fallback window");
+
+  // A named refusal is no first frame: three framed 4401s still fall back, and the frame never reaches listeners.
+  const named = harness(async () => GRANT);
+  for (let i = 0; i < 3; i++) {
+    const { events } = named.open();
+    await settle();
+    named.sockets.at(-1)!.onmessage!({ data: 'event: close\ndata: {"code":4401}\n\n' });
+    named.sockets.at(-1)!.onclose!({ code: 1005 });
+    assert.deepEqual(events, [["error", undefined]]);
+  }
+  named.open();
+  await settle();
+  assert.deepEqual(named.relays, [PATH], "three named refusals before a frame");
 
   // A hung network: the hub's hello deadline closes sockets that never spoke.
   const hung = harness(async () => GRANT);
@@ -138,7 +153,8 @@ test("after a drain close the next ticket waits a random 1–9 s", async () => {
   open();
   await settle();
   sockets[0]!.onmessage!({ data: "event: status\ndata: {}\n\n" });
-  sockets[0]!.onclose!({ code: 1012 });
+  sockets[0]!.onmessage!({ data: 'event: close\ndata: {"code":1012}\n\n' });
+  sockets[0]!.onclose!({ code: 1005 });
   open();
   await settle();
   assert.equal(asked, 1);
