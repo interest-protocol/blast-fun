@@ -10,6 +10,7 @@ import { UserIcon } from "#web/components/blast-ui/Icons.tsx";
 import { Popover, PopoverSurface } from "#web/components/blast-ui/Popover.tsx";
 import { dyn } from "#web/components/blast-ui/csp-style.ts";
 import { WalletLabelIcon } from "#web/components/launchpad/activity/WalletLabelIcon.tsx";
+import { TraderWallet, useWalletExplorer } from "#web/components/launchpad/activity/TraderWallet.tsx";
 import { TRADER_PROFILES_QUERY } from "#web/components/launchpad/activity/trader-profiles.ts";
 import { WALLET_LABELS } from "#web/components/launchpad/activity/wallet-labels.ts";
 import { useLaunchWallet, useWalletTrades } from "#web/components/launchpad/activity/wallet-trades.tsx";
@@ -17,7 +18,7 @@ import { SocialAccountContext } from "#web/components/social/use-social-account.
 import { useAppQueryClient } from "#web/lib/query/provider.tsx";
 import { readableUsd } from "#web/lib/market-format.ts";
 import type { Bar } from "./kline-model.ts";
-import { barPeople, layoutBubbles, personIdentity, personTrades, profileAt, rememberProfiles, type Bubble, type Person, type SeenProfile } from "./people-bubbles.ts";
+import { barPeople, layoutBubbles, mousePress, personIdentity, personTrades, profileAt, rememberProfiles, type Bubble, type Person, type SeenProfile } from "./people-bubbles.ts";
 import styles from "./PeopleBubbles.module.css";
 
 /** Bubble size in px; phones get smaller ones so the price stays readable. */
@@ -155,18 +156,35 @@ function useBubbleLayout(chart: RefObject<Chart | null>, layer: RefObject<HTMLEl
 
 const PersonBubble = memo(function PersonBubble({ person, x, y, size, profile }: Readonly<{ person: Person; x: number; y: number; size: number; profile: TraderProfile | null }>) {
   const who = personIdentity(person.address, profile);
+  const explorer = useWalletExplorer(who.anonymous ? person.address : null);
   const badge = person.labels[0];
+  // A mouse click opens who the trader is; a tap, a key or a screen reader opens the card, which holds the same links.
+  const href = who.anonymous ? explorer?.url : profilePagePath(who.callsign);
+  const mouse = useRef(false);
+  let page = <span />;
+  if (href && !who.anonymous) page = <Link href={href} prefetch={false} />;
+  else if (href) page = <a href={href} rel="noopener noreferrer" target="_blank" />;
   return <Popover.Root>
     <Popover.Trigger
       openOnHover
       delay={80}
       nativeButton={false}
-      render={<span />}
+      render={page}
+      onPointerDown={(event) => { mouse.current = mousePress(event); }}
+      onClick={(event) => {
+        if (!href) return;
+        const followLink = mouse.current && event.detail > 0;
+        mouse.current = false;
+        if (followLink) event.preventBaseUIHandler();
+        else event.preventDefault();
+      }}
       className={styles.bubble}
       data-side={person.side}
       data-own={person.own || undefined}
       data-anonymous={who.anonymous || undefined}
+      data-page={href ? "" : undefined}
       aria-label={who.name}
+      title={explorer?.label}
       {...dyn({ left: x - size / 2, top: y - size / 2, width: size, height: size })}
     >
       {who.anonymous
@@ -175,10 +193,11 @@ const PersonBubble = memo(function PersonBubble({ person, x, y, size, profile }:
       {badge && <span className={styles.badge}><WalletLabelIcon label={badge} /></span>}
     </Popover.Trigger>
     <PopoverSurface positioner={{ side: person.side === "buy" ? "bottom" : "top", sideOffset: 6, collisionPadding: 12, className: styles.cardLayer }} popup={{ className: styles.card }}>
-      <Popover.Title className={styles.cardName}>
-        {who.anonymous ? who.name : <Link href={profilePagePath(who.callsign)}>{who.name}</Link>}
+      <Popover.Title className={who.anonymous && !person.own ? "sr-only" : styles.cardName}>
+        {who.anonymous ? <span className={person.own ? "sr-only" : undefined}>{who.name}</span> : <Link href={profilePagePath(who.callsign)}>{who.name}</Link>}
         {person.own && <span className={styles.you}>You</span>}
       </Popover.Title>
+      <TraderWallet address={person.address} />
       <dl className={styles.cardFigures}>
         {person.buys > 0 && <div><dt>Bought</dt><dd data-side="buy">{usd(person.bought)}</dd></div>}
         {person.sells > 0 && <div><dt>Sold</dt><dd data-side="sell">{usd(person.sold)}</dd></div>}

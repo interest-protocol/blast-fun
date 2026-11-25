@@ -11,8 +11,25 @@
   box-sizing: border-box;
   border-radius: 50%;
   pointer-events: auto;
-  cursor: pointer;
   box-shadow: 0 0 0 .125rem var(--card);
+}
+/*
+ * A bubble with a page (profile or explorer) is a link: the hand, and on a mouse a
+ * hover that grows the face and thickens its ring, eased out; the press snaps back in.
+ * Touch never sees hover; a tap opens the card.
+ */
+.bubble[data-page] {
+  cursor: pointer;
+  transition: transform var(--t1) var(--ease-std), outline-width var(--t1) var(--ease-std);
+}
+@media (hover: hover) and (pointer: fine) {
+  .bubble[data-page]:hover { z-index: 2; transform: scale(1.15); outline-width: .1875rem; }
+}
+.bubble[data-page]:active { transform: scale(.95); transition-duration: 0s; }
+@media (prefers-reduced-motion: reduce) {
+  .bubble[data-page] { transition: none; }
+  .bubble[data-page]:hover, .bubble[data-page]:active { transform: none; }
+  .bubble[data-page]:active { opacity: .7; }
 }
 .bubble[data-side="buy"] { outline: 1.5px solid var(--coin-chart-up); }
 .bubble[data-side="sell"] { outline: 1.5px solid var(--coin-chart-down); }

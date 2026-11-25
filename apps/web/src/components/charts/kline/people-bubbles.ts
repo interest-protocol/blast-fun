@@ -171,6 +171,14 @@ export function personIdentity(address: string, profile: TraderProfile | null | 
     : { anonymous: true as const, name: shortAddress(address), callsign: null, avatarUrl: null };
 }
 
+/**
+ * A press from a real mouse, which follows the bubble's link. Touch and keyboard open its card instead,
+ * and so do screen readers, which press as a 1 x 1 mouse with no pressure.
+ */
+export function mousePress(press: Readonly<{ pointerType: string; width: number; height: number; pressure: number; buttons: number }>): boolean {
+  return press.pointerType === "mouse" && !(press.width <= 1 && press.height <= 1 && press.pressure === 0 && press.buttons === 0);
+}
+
 /** A profile the lookup returned for a wallet, true from `sinceMs` (the earliest trade it was asked about) on. */
 export type SeenProfile = Readonly<{ profile: TraderProfile; sinceMs: number }>;
 

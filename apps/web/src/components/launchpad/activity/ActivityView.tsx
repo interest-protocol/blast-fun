@@ -484,6 +484,7 @@ const LaunchTradeRow = memo(function LaunchTradeRow({ row, units, explorer, prof
     side={row.kind === "curve_sell" || row.kind === "venue_sell" ? "sell" : "buy"}
     trader={row.actor ? <WalletAddress address={row.actor} row={row} label="trader address" onInspect={onInspect} /> : <span>Unknown trader</span>}
     profile={profile}
+    wallet={row.actor}
     timestampMs={row.timestampMs}
     tokens={<ActivityAmount amount={row.amounts.meme} {...unitOf(units, "meme")} compact iconOnly onInspect={onInspect} />}
     quote={<ActivityAmount amount={row.amounts.quote} {...unitOf(units, "quote")} compact iconOnly onInspect={onInspect} />}
