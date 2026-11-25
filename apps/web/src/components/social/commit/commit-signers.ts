@@ -2,11 +2,13 @@ import { fromBase64, normalizeSuiAddress, toBase64 } from "@mysten/sui/utils";
 
 import type { SocialWallet } from "@blast/core/web/contracts/coins.ts";
 
-import { suiSigningAccount, socialDAppKit } from "#web/components/sign-in/sui-wallet-signer.ts";
 import { sponsoredWalletSigner } from "#web/lib/sui-signing.ts";
 import type { SponsoredSigner } from "#web/components/social/sponsored-transaction.ts";
 
 import type { CommitSigner } from "./commit-flow";
+
+/** The Sui wallet kit (dApp Kit, Slush, the node client), loaded when a wallet session signs, not with the page. */
+const loadWalletKit = () => import("#web/components/sign-in/sui-wallet-signer.ts");
 
 /**
  * A wallet session's commit signer (Sui wallets, OA-16). It signs only, like the
@@ -21,6 +23,7 @@ export function walletCommitSigner(address: string): CommitSigner {
     fee: "wallet",
     address: normalizeSuiAddress(address),
     async signTransaction(bytes: Uint8Array) {
+      const { socialDAppKit, suiSigningAccount } = await loadWalletKit();
       const kit = socialDAppKit();
       const account = await suiSigningAccount(address);
       const signed = await kit.signTransaction({ transaction: toBase64(bytes), account });

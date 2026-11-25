@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, useSyncExternalStore, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useSyncExternalStore, type ReactNode } from "react";
 
 import {
   endWalletSession,
@@ -62,6 +62,10 @@ const loadWalletSigner = () => import("#web/components/sign-in/sui-wallet-signer
 /** Provides the wallet session to the viewer, the `me` read, the sign-in sheet and sign-out. */
 export function WalletSessionProvider({ children }: Readonly<{ children: ReactNode }>) {
   const active = useSyncExternalStore(subscribe, hintSnapshot, noHint);
+  // A wallet session signs in its wallet: its kit (code only) loads now, so the first signature's popup opens without waiting for it.
+  useEffect(() => {
+    if (active) void loadWalletSigner().catch(() => undefined);
+  }, [active]);
   const signIn = useCallback(async (signer: WalletSigner) => {
     const result = await signInWithWallet(signer);
     changed();

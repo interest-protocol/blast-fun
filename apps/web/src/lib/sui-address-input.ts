@@ -2,7 +2,7 @@
 
 import { isWholeSuiAddressInput } from "@blast/core/lib/sui/ids.ts";
 import { SUI_MAINNET_GRPC_URL } from "@blast/core/lib/sui-mainnet.ts";
-import { SuiGrpcClient } from "@mysten/sui/grpc";
+import type { SuiGrpcClient } from "@mysten/sui/grpc";
 import { isValidSuiNSName, normalizeSuiNSName } from "@mysten/sui/utils";
 import { useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 
@@ -15,7 +15,19 @@ export const SUI_NAME_LOOKUP_LABEL = "Looking up SuiNS name…";
 export const SUI_NAME_LOOKUP_ERROR_CODE = "service_unavailable";
 
 const inFlight = new Map<string, Promise<string | null>>();
-let client: SuiGrpcClient | undefined;
+let client: Promise<SuiGrpcClient> | undefined;
+
+/** Mainnet's node client, loaded at the first name lookup (its gRPC code stays out of the page); a failed load is tried again next time. */
+function nameClient(): Promise<SuiGrpcClient> {
+  client ??= import("@mysten/sui/grpc").then(
+    ({ SuiGrpcClient: Client }) => new Client({ network: "mainnet", baseUrl: SUI_MAINNET_GRPC_URL }),
+    (error: unknown) => {
+      client = undefined;
+      throw error;
+    },
+  );
+  return client;
+}
 
 function suiName(value: string): string | null {
   const name = value.trim();
@@ -28,8 +40,7 @@ export async function resolveSuiName(value: string): Promise<string | null> {
   const pending = inFlight.get(name);
   if (pending) return pending;
 
-  client ??= new SuiGrpcClient({ network: "mainnet", baseUrl: SUI_MAINNET_GRPC_URL });
-  const lookup = client.resolveNameServiceAddress({ name, signal: AbortSignal.timeout(5_000) }).then(({ address }) => {
+  const lookup = nameClient().then((node) => node.resolveNameServiceAddress({ name, signal: AbortSignal.timeout(5_000) })).then(({ address }) => {
     if (address === null) return null;
     const target = address.trim().toLowerCase();
     if (!isWholeSuiAddressInput(target) || /^0x0{64}$/.test(target)) throw new Error("Invalid SuiNS target address");

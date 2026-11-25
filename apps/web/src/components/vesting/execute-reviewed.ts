@@ -3,6 +3,9 @@ import { fromBase64 } from "@mysten/sui/utils";
 import { createMainnetClient, executeSponsored } from "#web/components/social/sponsored-transaction.ts";
 import type { SocialApiOptions } from "#web/components/social/social-api.ts";
 import type { VestingAttempt } from "@blast/core/modules/vesting/model.ts";
+import { VestingReviewRequiredError, VestingSubmissionPendingError } from "./vesting-errors.ts";
+
+export { VestingReviewRequiredError, VestingSubmissionPendingError };
 
 const client = createMainnetClient();
 
@@ -11,11 +14,6 @@ const SPONSOR_PRE_SUBMISSION_REFUSALS = new Set([
   "not_found", "invalid_parameter", "invalid_request", "origin_invalid", "body_too_large",
 ]);
 
-/** Execution stopped before submission; a fresh review can safely replace these bytes. */
-export class VestingReviewRequiredError extends Error {}
-
-/** Submission may have reached the network. Only reconcile the original digest. */
-export class VestingSubmissionPendingError extends Error {}
 
 /** Reconcile the recorded digest before signing or retrying; only a sponsored review is signed and sent. */
 export async function executeReviewedVesting(
