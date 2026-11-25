@@ -20,6 +20,23 @@ import { useSocialAccount } from "./use-social-account";
 const noToken = async () => null;
 
 /**
+ * The owner's saved details over the server's profile, and over those a
+ * save's details shown before the server answers (taken back on a refusal).
+ */
+function useEditedProfile(profile: ProfileScreenProfile, own: boolean): {
+  confirmed: ProfileScreenProfile;
+  shown: ProfileScreenProfile;
+  setEdited: (edited: Pick<SocialProfileEdit, "display_name" | "avatar_url" | "bio">) => void;
+  setPreview: (preview: ProfilePreview | null) => void;
+} {
+  const [edited, setEdited] = useState<Pick<SocialProfileEdit, "display_name" | "avatar_url" | "bio"> | null>(null);
+  const [preview, setPreview] = useState<ProfilePreview | null>(null);
+  const confirmed = edited && own ? { ...profile, ...edited } : profile;
+  const shown = preview && own ? { ...confirmed, ...preview } : confirmed;
+  return { confirmed, shown, setEdited, setPreview };
+}
+
+/**
  * `/@<callsign>`: public identity and calls arrive from the server. Keep the
  * page's shared skeleton while the browser restores the viewer, then choose
  * the owner layout (profile actions and Created) or the visitor layout
@@ -43,12 +60,8 @@ export function ProfileView({
   }, [client, profile]);
   const account = useSocialAccount();
   const { own, pending } = useProfileOwnership(profile.callsign);
-  const [edited, setEdited] = useState<Pick<SocialProfileEdit, "display_name" | "avatar_url" | "bio"> | null>(null);
   const [editing, setEditing] = useState(false);
-  /** A save's details shown before the server answers (taken back on a refusal). */
-  const [preview, setPreview] = useState<ProfilePreview | null>(null);
-  const confirmed: ProfileScreenProfile = edited && own ? { ...profile, ...edited } : profile;
-  const shown: ProfileScreenProfile = preview && own ? { ...confirmed, ...preview } : confirmed;
+  const { confirmed, shown, setEdited, setPreview } = useEditedProfile(profile, own);
   const calls = useProfileCalls(profile.callsign, initialCalls);
   const mePresales = useMePresales(own, true);
   const mutuals = useMutuals(profile.callsign, own);
