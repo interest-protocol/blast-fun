@@ -107,6 +107,6 @@ test("the account menu ends in an 18px faint chevron", () => {
 
 test("Mobile board (#594): a visitor's top bar stays one 52px row at 320px: Sign in takes the chip's 12px sides, flush after the bell", () => {
   has(find(shell, ".shell .topbar .topbarSignin:global(.btn)", "(max-width: 360px)"), "margin-left: 0; padding-inline: 12px;");
-  // The service-status icon takes another 44px: the wordmark gives way, so the row still fits.
-  has(find(shell, '.shell .topbar:has([aria-label^="Service status"]) .brand b', "(max-width: 360px)"), "display: none;");
+  // Search, Audio and the service-status icon need the wordmark space on narrow phones.
+  has(find(shell, '.shell .topbar:has([aria-label^="Service status"]) .brand b', "(max-width: 390px)"), "display: none;");
 });

@@ -33,6 +33,7 @@ function browserSecurityHeaders(nonce: string | null): Readonly<Record<string, s
     development: webConfig().development,
     // Every page carries them, so a client-side navigation into the presale keeps working.
     presaleConnectSources: presaleConnectSources(webConfig().presale),
+    liveSocketOrigin: webConfig().liveSocket?.origin ?? null,
   });
 }
 

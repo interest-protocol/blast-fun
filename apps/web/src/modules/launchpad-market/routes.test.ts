@@ -76,6 +76,7 @@ const ROUTES: readonly [MarketRouteName, string, string][] = [
   ["pool", `/pools/blast_curve/${LAUNCH}`, `/v1/pools/blast_curve/${LAUNCH}`],
   ["pool", `/pools/cetus/${POOL}`, `/v1/pools/cetus/${POOL}`],
   ["candles", `/pools/blast_curve/${LAUNCH}/candles?interval=1m&limit=2000`, `/v1/pools/blast_curve/${LAUNCH}/candles?interval=1m&limit=2000`],
+  ["trades", `/pools/blast_curve/${LAUNCH}/trades?limit=50`, `/v1/pools/blast_curve/${LAUNCH}/trades?limit=50`],
   ["trades", `/pools/bluefin/${POOL}/trades?limit=50&before=326274000:1:1:1`, `/v1/pools/bluefin/${POOL}/trades?limit=50&before=326274000%3A1%3A1%3A1`],
   ["status", "/status", "/v1/status"],
   ["rewards", `/launches/${LAUNCH}/rewards`, `/v1/launches/${LAUNCH}/rewards`],
@@ -206,7 +207,7 @@ test("parameters are strict: only the page's query keys, once each, canonical ID
   }
   for (const path of [
     `/pools/uniswap/${POOL}`,
-    `/pools/blast_curve/${LAUNCH}/trades`,
+    `/pools/uniswap/${POOL}/trades`,
     `/pools/bluefin/${POOL}/holders`,
     `/coins/${COIN}/pools`,
     `/launches/${LAUNCH}`,

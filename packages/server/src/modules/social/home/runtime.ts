@@ -6,6 +6,7 @@ import { blastInfraFetch } from "@blast/core/modules/read-routing/blast-infra.ts
 import { getSocialConfig } from "@blast/core/modules/social/config/reader.ts";
 
 import type { HomeActivityStreamPage, HomeCoinsByIds, HomeCoinsPage, HomeThreadPage } from "@blast/core/modules/social/contracts/home.ts";
+import type { HomeDiscoverBase } from "@blast/server/modules/social/home/coins.ts";
 import { socialFeedDatabase } from "@blast/server/modules/social/feed/runtime.ts";
 import { socialPortfolioDatabase } from "@blast/server/modules/social/portfolio/runtime.ts";
 import { sharedSocialRouteKit, socialAccounts } from "@blast/server/modules/social/route-kit/shared-runtime.ts";
@@ -14,6 +15,7 @@ import { createReadCache } from "@blast/server/modules/social/read-cache.ts";
 import type { TraderPortfolioRead } from "@blast/server/modules/social/home/traders.ts";
 import type { HomeChartTradesPage, HomeCoinMarket, HomeHoldersPage } from "@blast/core/modules/social/contracts/coin-market.ts";
 import { readTrackedPoolMarket } from "@blast/server/modules/launchpad-market/legacy-fdv.ts";
+import { createCurveTargetReader } from "@blast/server/modules/social/home/curve-targets.ts";
 
 /**
  * The process's Home routes: the public reads on the replica (like the
@@ -37,6 +39,7 @@ export function socialHomeRoutes(): ReturnType<typeof createSocialHomeRoutes> {
     config: getSocialConfig,
     terms: readHomeTerms,
     trackedPoolMarket: readTrackedPoolMarket,
+    curveTargets: processSingleton("social.home-curve-targets", () => createCurveTargetReader()),
     caches: homeReadCaches(),
   }));
 }
@@ -54,6 +57,8 @@ function homeReadCaches() {
     activity: createReadCache<HomeActivityStreamPage>(HOME_PAGE_READ_TTL_MS, 64),
     thread: createReadCache<HomeThreadPage>(HOME_PAGE_READ_TTL_MS, 64),
     discover: createReadCache<HomeCoinsPage>(HOME_PAGE_READ_TTL_MS, 64),
+    // Each holds a whole window's rows: two windows times the few flag sets clients send.
+    discoverBase: createReadCache<HomeDiscoverBase>(HOME_PAGE_READ_TTL_MS, 6),
     coins: createReadCache<HomeCoinsByIds>(HOME_PAGE_READ_TTL_MS, 64),
     portfolios: createReadCache<ReadonlyMap<string, TraderPortfolioRead>>(HOME_PAGE_READ_TTL_MS, 64),
     market: createReadCache<HomeCoinMarket>(HOME_PAGE_READ_TTL_MS, 256),

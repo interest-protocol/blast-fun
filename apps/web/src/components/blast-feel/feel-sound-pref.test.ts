@@ -17,12 +17,8 @@ import {
 } from "./feel-sound-pref.ts";
 
 /**
- * Sound is off until the reader turns it on (the owner, 2026-10-06, amending
- * OA-25 Q3a). The device's flag is the live one: off with nothing stored, a
- * stored choice kept. A signed-in session adopts the account's choice only
- * when the account has one (`sound` non-null) — never turning sound on by
- * itself — unless the reader changed the flag on this device while the read
- * was in flight. An account with no choice is handed the one the reader made
+ * Sound is on with nothing stored. A signed-in session adopts the account's
+ * explicit choice unless the reader changed the flag while the read was in flight. An account with no choice is handed the one the reader made
  * on this device, but never one this device copied from another account.
  */
 
@@ -55,16 +51,16 @@ test.after(() => {
   delete (globalThis as { window?: unknown }).window;
 });
 
-test("OA-33: with nothing stored the flag is off — for a visitor, and after a sign-in whose account has not chosen", () => {
+test("OA-33: with nothing stored the flag is on for a visitor, and after a sign-in whose account has not chosen", () => {
   const { storage, values } = memoryStorage();
   device(storage);
-  assert.equal(FEEL_SOUND_DEFAULT, false);
+  assert.equal(FEEL_SOUND_DEFAULT, true);
   assert.equal("FEEL_SOUND_ACCOUNT_DEFAULT" in pref, false, "no account default exists any more");
   assert.equal(readSoundChoice(storage), null, "no choice stored");
-  assert.equal(soundEnabledNow(), false);
+  assert.equal(soundEnabledNow(), true);
   // The first sign-in: the account's read answers `sound: null`.
   assert.equal(adoptAccountSound(null, soundChangeMark()), null, "nothing to hand over: nobody chose");
-  assert.equal(soundEnabledNow(), false, "signing in never turns sound on");
+  assert.equal(soundEnabledNow(), true);
   assert.equal(values.has(FEEL_SOUND_KEY), false, "and nothing was written as if it were a choice");
 });
 
@@ -83,7 +79,7 @@ test("OA-33: a stored choice is the reader's and is kept, whatever an account wi
     const { storage } = memoryStorage({ [FEEL_SOUND_KEY]: raw });
     device(storage);
     assert.equal(readSoundChoice(storage), null, raw);
-    assert.equal(soundEnabledNow(), false, raw);
+    assert.equal(soundEnabledNow(), true, raw);
   }
 });
 
@@ -156,11 +152,11 @@ test("OA-33: a choice copied from one account is never handed to another that si
 
 test("storage that refuses (a private window) keeps the choice, and what is pending, for the page's life", () => {
   device("refusing");
-  assert.equal(soundEnabledNow(), false);
-  setSoundEnabled(true);
   assert.equal(soundEnabledNow(), true);
-  assert.equal(adoptAccountSound(null, soundChangeMark()), true);
-  markSoundSaved(true);
+  setSoundEnabled(false);
+  assert.equal(soundEnabledNow(), false);
+  assert.equal(adoptAccountSound(null, soundChangeMark()), false);
+  markSoundSaved(false);
   assert.equal(adoptAccountSound(null, soundChangeMark()), null);
 });
 

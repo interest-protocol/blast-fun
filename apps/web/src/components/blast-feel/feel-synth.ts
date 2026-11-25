@@ -83,11 +83,12 @@ export class FeelSynth {
   }
 
   /**
-   * Turning sound off never tears the context down (a reader may turn it back
-   * on in the same breath); it only stops new notes. `dispose()` closes it.
+   * Silence the current phrase and suppress new notes while muted.
+   * Keep the context available for the next gesture.
    */
   setEnabled(enabled: boolean): void {
     this.#enabled = enabled;
+    if (this.#master) this.#master.gain.value = enabled ? FEEL_MASTER_GAIN : 0;
   }
 
   /** Plays one signal. A no-op while sound is off, after `dispose`, or with no audio available. */

@@ -17,7 +17,6 @@ import {
   PageQuery,
   PartnerParams,
   PoolParams,
-  TradeParams,
   TradesQuery,
   WalletParams,
 } from "./schemas.ts";
@@ -77,7 +76,7 @@ export const MarketApi = HttpApiGroup.make("market")
     }),
     HttpApiEndpoint.get("trades", "/api/launchpad/market/pools/:venue/:poolId/trades", {
       ...relayContract,
-      params: TradeParams,
+      params: PoolParams,
       query: TradesQuery,
     }),
     HttpApiEndpoint.get("rewards", "/api/launchpad/market/launches/:launchId/rewards", {

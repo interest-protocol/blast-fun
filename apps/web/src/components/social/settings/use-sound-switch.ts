@@ -67,19 +67,17 @@ export async function keepDeviceSound(getAccessToken: TokenSource, on: boolean, 
 }
 
 /**
- * The Feel layer's sound switch for a surface under the social session — the
- * Settings row and the Blast mode header button (R3-12):
+ * The header's site-wide sound control under the social session:
  *
  *  - the device's live flag flips at once (and turning it on plays its one
  *    confirming tap), so nothing waits on a request;
  *  - a signed-in account also keeps the choice (`saveAccountSound`), so it
  *    follows the account to its next device and session; a visitor's choice
  *    stays on this device until they sign in to an account that has not
- *    chosen (`keepDeviceSound`). Sound is off until the reader turns it on
- *    with one of these two switches.
+ *    chosen (`keepDeviceSound`).
  */
-export function useSoundSwitch(): Readonly<{ on: boolean; set: (on: boolean) => void }> {
-  const { soundEnabled, setSoundEnabled } = useFeelSound();
+export function useSoundSwitch(): (on: boolean) => void {
+  const { setSoundEnabled } = useFeelSound();
   const viewer = useSocialViewer();
   const toast = useToast();
   const client = useAppQueryClient();
@@ -89,7 +87,7 @@ export function useSoundSwitch(): Readonly<{ on: boolean; set: (on: boolean) => 
     latest.current = { signedIn: viewer.signedIn, hasAccount: viewer.callsign !== null, getAccessToken: viewer.getAccessToken };
   });
 
-  const set = useCallback(
+  return useCallback(
     (on: boolean) => {
       setSoundEnabled(on);
       const { signedIn, hasAccount, getAccessToken } = latest.current;
@@ -102,6 +100,4 @@ export function useSoundSwitch(): Readonly<{ on: boolean; set: (on: boolean) => 
     },
     [client, setSoundEnabled, toast],
   );
-
-  return { on: soundEnabled, set };
 }

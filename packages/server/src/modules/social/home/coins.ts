@@ -38,6 +38,7 @@ import { latestWindowPriceSql, rollingPriceAtSql } from "@blast/server/modules/s
 import { PRICE_TIER_SPAN_MS, type PricePoint } from "@blast/core/modules/social/contracts/prices.ts";
 import type { readTrackedPoolMarket, TrackedPoolMarket } from "@blast/server/modules/launchpad-market/legacy-fdv.ts";
 import { optionalSource } from "@blast/server/modules/social/optional-source.ts";
+import type { CurveTargets } from "@blast/server/modules/social/home/curve-targets.ts";
 import {
   activityOf,
   actorOf,
@@ -52,7 +53,7 @@ import {
 } from "@blast/server/modules/social/home/aggregate.ts";
 import { readDexVolumes } from "@blast/server/modules/social/home/dex-volume.ts";
 import { fdvOf, outstandingSaleTokensSql, presaleTotalSupply, readSupplies, supplyOf } from "@blast/server/modules/social/home/fdv.ts";
-import { decodeHomeCursor, pageOf, passesFilters, rankInputs, relevanceScore, whyShown, type Rankable, type TradeCoverage } from "@blast/server/modules/social/home/rank.ts";
+import { decodeHomeCursor, HOME_DUST_USD, pageOf, passesFilters, rankInputs, relevanceScore, whyShown, type Rankable, type TradeCoverage } from "@blast/server/modules/social/home/rank.ts";
 import {
   GROUPED_GROUP,
   GROUPED_SELECT,
@@ -76,6 +77,8 @@ import {
 } from "@blast/server/modules/social/home/sql.ts";
 import { COIN_TYPE, SUI_OBJECT_ID_PATTERN } from "@blast/core/lib/sui/ids.ts";
 
+type TrackedMarkets = Awaited<ReturnType<typeof readTrackedPoolMarket>>;
+
 /**
  * The coin items of Home (contract in `contracts/home.ts`): Discover's page
  * over every trading coin, and the same items by id for the Watchlist.
@@ -85,8 +88,9 @@ import { COIN_TYPE, SUI_OBJECT_ID_PATTERN } from "@blast/core/lib/sui/ids.ts";
  * 1. the watermark's bounds and `as_of`;
  * 2. the candidates' facts: every shown trading coin, the price
  *    now and at the 24 h cutoff (indexed reads with a fallback for sparse history), the
- *    latest holder count (`coin_holder_history` by key) and its lifecycle
- *    times;
+ *    latest holder count and the count at the window's start
+ *    (`coin_holder_history` by key, the second scanning back through the
+ *    window's changes) and its lifecycle times;
  * 3. the window's sums per (sale, identity, kind, quote asset) over the
  *    window's activity rows (`sql.ts`), from which the counts and the totals
  *    of every coin follow without a second scan;
@@ -139,13 +143,20 @@ export type FactsRow = Readonly<{
   change_24h_from_ms: string | null;
   holders: string | null;
   holders_as_of_ms: string | null;
+  /** The holder count at the window's start: the last change at or before it; null when none is indexed by then. */
+  holders_at_start: string | null;
+  /** USD per whole quote coin now, to value a sale's raise or a curve's target. */
+  quote_price_usd: string | null;
+  /** A sale's tokens still held in vesting, in atoms; outside its market cap. */
+  escrowed: string | null;
 }>;
 
 type HomePriceOptions = Pick<HomeReadContext, "includeLiveInputs" | "includeRollingChange">;
 
-/** $1 clock (the 24 h move's end), then the scope's own parameters. */
+/** $1 clock (the 24 h move's end), $2 the window's start (new holders' baseline), then the scope's own parameters. */
 function factsSql(scope: SaleScope, params: Params, options: HomePriceOptions = {}): string {
   const clock = `${params.add(0)}::bigint`;
+  const windowFrom = `${params.add(0)}::bigint`;
   const cutoff = `${clock} - ${HOME_WINDOW_MS["24h"]}`;
   const source = scopedHomeCoinsSql(scope, params);
   const shorter = options.includeRollingChange ? clock : undefined;
@@ -172,7 +183,9 @@ function factsSql(scope: SaleScope, params: Params, options: HomePriceOptions = 
     ${options.includeLiveInputs ? "(SELECT market_checkpoint::text FROM chain_read_v1.watermark)" : "NULL::text"} AS price_checkpoint,
     trim_scale(open_24h.usd_price)::text AS price_24h_usd, open_24h.as_of_ms::text AS open_24h_as_of_ms,
     CASE WHEN open_24h.as_of_ms > ${cutoff} THEN open_24h.as_of_ms::text END AS change_24h_from_ms,
-    h.holders::text AS holders, h.timestamp_ms::text AS holders_as_of_ms
+    h.holders::text AS holders, h.timestamp_ms::text AS holders_as_of_ms, h0.holders::text AS holders_at_start,
+    trim_scale(qp.usd_price)::text AS quote_price_usd,
+    CASE WHEN p.presale_id IS NOT NULL THEN (${outstandingSaleTokensSql("p.presale_id")}) END AS escrowed
   FROM ${source} p
   LEFT JOIN LATERAL (
     SELECT max(l.timestamp_ms) FILTER (WHERE l.state = 'opened') AS opened_ms,
@@ -183,12 +196,17 @@ function factsSql(scope: SaleScope, params: Params, options: HomePriceOptions = 
   LEFT JOIN chain_read_v1.coins cs ON p.presale_id IS NULL AND cs.coin_type = p.sale_token
   LEFT JOIN chain_read_v1.presale_coin_supply ps ON p.presale_id IS NOT NULL AND ps.coin_type = p.sale_token
   LEFT JOIN ${DISPLAY_PRICES} pr ON pr.coin_type = p.sale_token
+  LEFT JOIN ${DISPLAY_PRICES} qp ON qp.coin_type = p.quote_type
   LEFT JOIN LATERAL (${rollingPriceAtSql("p.sale_token", cutoff, shorter)}) open_24h ON TRUE
   ${lastPrice}
   LEFT JOIN LATERAL (
     SELECT ch.holders, ch.timestamp_ms FROM chain_read_v1.coin_holder_history ch
     WHERE ch.coin_type = p.sale_token ORDER BY ch.checkpoint DESC LIMIT 1
-  ) h ON TRUE`;
+  ) h ON TRUE
+  LEFT JOIN LATERAL (
+    SELECT ch.holders FROM chain_read_v1.coin_holder_history ch
+    WHERE ch.coin_type = p.sale_token AND ch.timestamp_ms <= ${windowFrom} ORDER BY ch.checkpoint DESC LIMIT 1
+  ) h0 ON TRUE`;
 }
 
 assertChainReadThroughViews(factsSql({ kind: "discover" }, new Params(), {
@@ -196,12 +214,13 @@ assertChainReadThroughViews(factsSql({ kind: "discover" }, new Params(), {
   includeRollingChange: true,
 }));
 
-/** The facts of every sale in `scope`, keyed by presale id. */
-export async function readCoinFacts(db: ReadableDatabase, scope: SaleScope, clockMs: number, options: HomePriceOptions = {}): Promise<ReadonlyMap<string, FactsRow>> {
+/** The facts of every sale in `scope`, keyed by presale id; `span` dates the price clock and the new holders' baseline. */
+export async function readCoinFacts(db: ReadableDatabase, scope: SaleScope, span: Pick<HomeSpan, "fromMs" | "toMs">, options: HomePriceOptions = {}): Promise<ReadonlyMap<string, FactsRow>> {
   if (scope.kind === "ids" && scope.presaleIds.length === 0) return new Map();
   const params = new Params();
   const text = factsSql(scope, params, options);
-  params.values[0] = clockMs;
+  params.values[0] = span.toMs;
+  params.values[1] = span.fromMs;
   const { rows } = await db.read<FactsRow>(text, params.values);
   return new Map(rows.map((row) => [row.presale_id ?? row.coin_type, row]));
 }
@@ -479,21 +498,73 @@ export function coinOf(input: CoinInputs): HomeCoin {
   };
 }
 
-type Candidate = Rankable & Readonly<{ facts: FactsRow; counts: WindowCountsRow | undefined }>;
+type Candidate = Rankable & Readonly<{ facts: FactsRow; counts: WindowCountsRow | undefined; marketCapUsd: number | null; netInflow: number; newHolders: number }>;
+
+/**
+ * Holders gained in the window: the count now less the count at its start,
+ * 0 when negative. A coin launched inside the window started from none; any
+ * other coin without both counts gains 0, never a guess.
+ */
+export function newHoldersOf(facts: Pick<FactsRow, "holders" | "holders_at_start" | "launched_ms">, span: Pick<HomeSpan, "fromMs">): number {
+  if (facts.holders === null) return 0;
+  const launchedInWindow = facts.launched_ms !== null && Number(facts.launched_ms) > span.fromMs;
+  const start = facts.holders_at_start ?? (launchedInWindow ? "0" : null);
+  return start === null ? 0 : Math.max(0, Number(facts.holders) - Number(start));
+}
+
+/** The coin's FDV now in USD from its indexed price and supply, as a number for ordering; null without either. */
+function fdvNumber(price: string | null, totalSupply: string | null, decimals: number): number | null {
+  const fdv = fdvOf(price, totalSupply, decimals);
+  return fdv === null ? null : Number(fdv);
+}
+
+type RaiseFacts = Pick<FactsRow, "presale_id" | "raised" | "quote_decimals" | "quote_price_usd">;
+
+/**
+ * A Blast coin's raise in USD at the quote's price now: what a sale raised,
+ * or the target (quote atoms) its curve had to reach to graduate. Null
+ * without a price or a target.
+ */
+export function raiseUsdOf(facts: RaiseFacts, graduationTarget: string | null): number | null {
+  const atoms = facts.presale_id === null ? graduationTarget : facts.raised;
+  if (facts.quote_price_usd === null || atoms === null || !/^(0|[1-9][0-9]*)$/.test(atoms)) return null;
+  return Number(atoms) / 10 ** facts.quote_decimals * Number(facts.quote_price_usd);
+}
+
+/**
+ * Blast dust: a coin whose raise (a sale's, or a curve's graduation target)
+ * or market cap is under `HOME_DUST_USD`. Catalog coins are never dust, and
+ * a value we cannot compute does not count: unknown is not small.
+ */
+export function isBlastDust(
+  facts: RaiseFacts & Pick<FactsRow, "tracked_pool_only">,
+  values: Readonly<{ marketCapUsd: number | null; graduationTarget: string | null }>,
+): boolean {
+  if (facts.tracked_pool_only) return false;
+  return [raiseUsdOf(facts, values.graduationTarget), values.marketCapUsd].some((value) => value !== null && value < HOME_DUST_USD);
+}
 
 function candidateOf(facts: FactsRow, counts: WindowCountsRow | undefined, span: HomeSpan): Candidate {
   const latestMs = counts?.latest_ms === null || counts?.latest_ms === undefined ? null : Number(counts.latest_ms);
   const inputs = rankInputs({ participants: Number(counts?.participants ?? 0), events: Number(counts?.events ?? 0), latest_ms: latestMs, window: span.window, to_ms: span.toMs, volume_usd: counts?.volume_usd ?? null });
   const holders = facts.holders === null ? null : Number(facts.holders);
+  const netInflow = Math.max(0, Number(counts?.net_inflow_usd ?? 0)) || 0;
+  const newHolders = newHoldersOf(facts, span);
+  const price = observedHomePrice(facts.price_usd, facts.price_as_of_ms, span.toMs)?.price ?? null;
   return {
     facts,
     counts,
     coinType: facts.coin_type,
-    score: relevanceScore({ inputs, latestMs, holders }, span.window, span.toMs),
+    score: relevanceScore({ inputs, latestMs, holders, netInflow, newHolders }, span.window, span.toMs),
+    netInflow,
+    newHolders,
     inputs,
     latestMs,
     launchedMs: facts.launched_ms === null ? null : Number(facts.launched_ms),
     holders,
+    fdvUsd: fdvNumber(price, facts.total_supply, facts.sale_decimals),
+    // As the item's market cap: a curve coin's live supply, a sale's supply less its vesting.
+    marketCapUsd: fdvNumber(price, supplyOf(facts.supply ?? facts.total_supply, facts.escrowed)?.circulating ?? null, facts.sale_decimals),
   };
 }
 
@@ -504,6 +575,8 @@ export type HomeReadContext = Readonly<{
   /** The sales' terms, for FDV; null when the projection is not configured. */
   terms: PresaleTermsReader | null;
   trackedPoolMarket?: typeof readTrackedPoolMarket;
+  /** Graduated curves' raise targets, for the dust rule (`curve-targets.ts`). */
+  curveTargets?: CurveTargets;
   signal?: AbortSignal;
   holderLimit?: number;
   includeMobileMarket?: boolean;
@@ -556,6 +629,8 @@ export async function assembleCoins(
     scope: HomeActivity["scope"];
     context: HomeReadContext;
     dexVolumes?: ReadonlyMap<string, HomeDexVolume>;
+    /** The tracked pool snapshot this request already read, if any. */
+    trackedMarkets?: TrackedMarkets;
   }>,
 ): Promise<HomeCoin[]> {
   const { candidates, span, bounds, kinds, actors, context } = input;
@@ -568,9 +643,9 @@ export async function assembleCoins(
     (context.includeMobileMarket && facts.supply === null) ||
     !observedHomePrice(facts.price_usd, facts.price_as_of_ms, context.nowMs)
   ));
-  const trackedMarketRead = needsTrackedMarket && context.trackedPoolMarket
+  const trackedMarketRead = input.trackedMarkets ?? (needsTrackedMarket && context.trackedPoolMarket
     ? optionalSource("tracked_pool_market", context.trackedPoolMarket, {})
-    : null;
+    : null);
   const [grouped, holders, dexVolumes] = await Promise.all([
     readTopParticipants(db, { span, bounds, kinds, sales: { kind: "ids", presaleIds: ids, includeStandalone: candidates.some(({ facts }) => facts.presale_id === null) }, actors }, HOME_PREVIEW_ROWS * 2),
     readTopHolders(db, trading, bounds.clockMs, context.holderLimit),
@@ -660,40 +735,102 @@ function recentPageBuys(sides: readonly SideRow[], coins: readonly HomeCoin[]): 
   return [...buys.values()];
 }
 
-/** One Discover page (contract in `contracts/home.ts`). */
-export async function readHomeDiscover(db: ReadableDatabase, query: HomeQuery, context: HomeReadContext): Promise<HomeCoinsPage> {
-  const cursor = query.cursor === null ? null : decodeHomeCursor(query.cursor, query.sort);
+/**
+ * Idle coins order by FDV (`rank.ts`); a catalog coin's supply lives outside
+ * the chain views, so those orders read the shared tracked pool snapshot
+ * (one process-cached read for every catalog coin).
+ */
+async function withTrackedFdv(candidates: readonly Candidate[], context: HomeReadContext): Promise<{ candidates: readonly Candidate[]; markets?: TrackedMarkets }> {
+  const missing = candidates.some((candidate) => candidate.facts.tracked_pool_only && candidate.fdvUsd === null);
+  if (!missing || !context.trackedPoolMarket) return { candidates };
+  const markets = await optionalSource("tracked_pool_market", context.trackedPoolMarket, {});
+  return { markets, candidates: candidates.map((candidate) => {
+    const market = candidate.facts.tracked_pool_only && candidate.fdvUsd === null ? markets[candidate.coinType] : undefined;
+    if (!market) return candidate;
+    const price = observedHomePrice(candidate.facts.price_usd, candidate.facts.price_as_of_ms, context.nowMs)?.price ?? market.price?.priceUsd ?? null;
+    return { ...candidate, fdvUsd: fdvNumber(price, candidate.facts.total_supply ?? market.totalSupplyAtoms ?? null, candidate.facts.sale_decimals) };
+  }) };
+}
+
+/**
+ * Everything a Discover page needs that does not depend on its sort, filters
+ * or page: the window's facts, sides, counts and every non-dust candidate,
+ * already scored (DEX volume and tracked FDV folded in). Switching between
+ * Trending, Volume, New and Held reuses one of these per window instead of
+ * reading the window again, so a switch costs one in-memory sort plus the
+ * page's own details.
+ */
+export type HomeDiscoverBase = Readonly<{
+  asOf: NonNullable<Awaited<ReturnType<typeof readAsOf>>>;
+  bounds: HomeBounds;
+  span: HomeSpan;
+  kinds: readonly string[];
+  sides: readonly SideRow[];
+  candidates: readonly Candidate[];
+  dexVolumes?: ReadonlyMap<string, HomeDexVolume>;
+  trackedMarkets?: TrackedMarkets;
+}>;
+
+/** The key a {@link HomeDiscoverBase} is shared under: only what changes its contents. */
+export function homeDiscoverBaseKey(window: HomeWindow, context: HomeReadContext): string {
+  return JSON.stringify([window, context.hiddenKinds, Boolean(context.includeDexVolume), Boolean(context.includeRecentBuys),
+    // The facts read's prices change with these (`factsSql`).
+    Boolean(context.includeLiveInputs), Boolean(context.includeRollingChange)]);
+}
+
+export async function readHomeDiscoverBase(db: ReadableDatabase, window: HomeWindow, context: HomeReadContext): Promise<HomeDiscoverBase> {
   const [bounds, asOf] = await Promise.all([readHomeBounds(db, context.nowMs), readAsOf(db)]);
   if (!asOf) throw new SocialRouteError("service_unavailable");
-  const span = homeSpan(query.window, bounds);
+  const span = homeSpan(window, bounds);
   const kinds = visibleKinds(context.hiddenKinds);
   const scope: SaleScope = { kind: "discover" };
-  const actors: ActorScope = { kind: "everyone" };
-  const [facts, sides] = await Promise.all([
-    readCoinFacts(db, scope, bounds.clockMs, context),
-    readSides(db, { span, bounds, kinds, sales: scope, actors }, context.includeRecentBuys ? context.nowMs - HOME_RECENT_BUY_MS : undefined),
+  const factsRead = readCoinFacts(db, scope, span, context);
+  // Curve targets need only the facts, so they load while the sides still scan.
+  const targetsRead = factsRead.then((facts) => {
+    const launchIds = [...facts.values()].flatMap((row) => row.presale_id === null && row.launch_id !== null ? [row.launch_id] : []);
+    return launchIds.length > 0 && context.curveTargets ? context.curveTargets(launchIds) : new Map<string, string>();
+  });
+  const [facts, sides, targets] = await Promise.all([
+    factsRead,
+    readSides(db, { span, bounds, kinds, sales: scope, actors: { kind: "everyone" } }, context.includeRecentBuys ? context.nowMs - HOME_RECENT_BUY_MS : undefined),
+    targetsRead,
   ]);
   const counts = countsOf(sides);
-  const candidates = [...facts.values()]
+  const live = [...facts.values()]
     .map((row) => candidateOf(row, counts.get(row.presale_id ?? row.coin_type), span))
-    .filter((candidate) => passesFilters(query, {
-      participants: candidate.inputs.breadth,
-      launchedMs: candidate.launchedMs,
-      tradable: tradesInApp(candidate.facts.venue) && (candidate.facts.venue.toLowerCase() !== "aftermath" || candidate.facts.pool_id !== null),
-      nowMs: bounds.clockMs,
+    .filter((candidate) => !isBlastDust(candidate.facts, {
+      marketCapUsd: candidate.marketCapUsd,
+      graduationTarget: candidate.facts.launch_id === null ? null : targets.get(candidate.facts.launch_id) ?? null,
     }));
-  // Volume-based sorts (Relevant weighs volume too) need the same aggregate as the cell for all eligible candidates.
-  const dexVolumes = context.includeDexVolume && query.sort !== "newest"
-    ? await readDexVolumes(db, candidates.map(({ facts }) => facts), span.window, bounds, kinds)
-    : undefined;
-  const rankedCandidates = candidates.map(candidate => {
+  const [{ candidates, markets: trackedMarkets }, dexVolumes] = await Promise.all([
+    withTrackedFdv(live, context),
+    context.includeDexVolume ? readDexVolumes(db, live.map(({ facts }) => facts), span.window, bounds, kinds) : undefined,
+  ]);
+  // Volume (and Relevant, which weighs it) ranks by the same aggregate the cell shows.
+  const scored = candidates.map((candidate) => {
     const volume = dexVolumes?.get(candidate.coinType);
     if (!volume) return candidate;
     const inputs = { ...candidate.inputs, volume: Number(volume.usd ?? 0) };
     return { ...candidate, inputs, score: relevanceScore({ ...candidate, inputs }, span.window, span.toMs) };
   });
-  const { page, nextCursor, pageNumber, pages, total, ranked } = pageOf(rankedCandidates, query.sort, cursor, query.limit, query.page);
-  const coins = await assembleCoins(db, { candidates: page, sides, span, bounds, kinds, actors, scope: "pool", context, dexVolumes });
+  return { asOf, bounds, span, kinds, sides, candidates: scored, dexVolumes, trackedMarkets };
+}
+
+/**
+ * One Discover page (contract in `contracts/home.ts`), from a shared window
+ * read when one is given. A bad cursor fails before any read starts.
+ */
+export async function readHomeDiscover(db: ReadableDatabase, query: HomeQuery, context: HomeReadContext, base?: () => Promise<HomeDiscoverBase>): Promise<HomeCoinsPage> {
+  const cursor = query.cursor === null ? null : decodeHomeCursor(query.cursor, query.sort);
+  const { asOf, bounds, span, kinds, sides, candidates, dexVolumes, trackedMarkets } = await (base ? base() : readHomeDiscoverBase(db, query.window, context));
+  const eligible = candidates.filter((candidate) => passesFilters(query, {
+    participants: candidate.inputs.breadth,
+    launchedMs: candidate.launchedMs,
+    tradable: tradesInApp(candidate.facts.venue) && (candidate.facts.venue.toLowerCase() !== "aftermath" || candidate.facts.pool_id !== null),
+    nowMs: bounds.clockMs,
+  }));
+  const { page, nextCursor, pageNumber, pages, total, ranked } = pageOf(eligible, query.sort, cursor, query.limit, query.page);
+  const coins = await assembleCoins(db, { candidates: page, sides, span, bounds, kinds, actors: { kind: "everyone" }, scope: "pool", context, dexVolumes, trackedMarkets });
   const recentBuys = context.includeRecentBuys ? recentPageBuys(sides, coins) : [];
   return { coins, page: pageNumber, pages, total, ...(query.ranked ? { ranked } : {}), next_cursor: nextCursor, window: query.window, clock_ms: bounds.clockMs, as_of: asOf,
     ...(recentBuys.length > 0 && { recent_buys: recentBuys }) };
@@ -723,7 +860,7 @@ export async function readHomeCoinsByIds(
   const scope: SaleScope = { kind: "ids", presaleIds, includeStandalone: presaleIds.some((id) => id.includes("::")) };
   const actors: ActorScope = { kind: "everyone" };
   const [facts, sides] = await Promise.all([
-    readCoinFacts(db, scope, bounds.clockMs, context),
+    readCoinFacts(db, scope, span, context),
     readSides(db, { span, bounds, kinds, sales: scope, actors }),
   ]);
   const counts = countsOf(sides);

@@ -16,10 +16,8 @@ import {
 import type { FeelAudioContext, FeelAudioParam } from "./feel-synth.ts";
 
 /**
- * Sound is off until the reader turns it on (the owner, 2026-10-06, amending
- * OA-25 Q3a), and while it is off nothing plays and **no audio context is
- * created or resumed** — on the first paint, after a sign-in whose account
- * has not chosen, and under reduced motion.
+ * Sound defaults to on, but waits for a gesture. While muted, nothing plays
+ * and no audio context is created or resumed, including under reduced motion.
  *
  * Proved over the provider's own audio path (`startFeelAudio`: the synth
  * following the flag, the gate, the delegated listeners) with a recording
@@ -33,6 +31,10 @@ import type { FeelAudioContext, FeelAudioParam } from "./feel-synth.ts";
 const EVERY_SIGNAL: readonly FeelSignal[] = [
   { kind: "curve-buy" },
   { kind: "curve-sell" },
+  { kind: "buy" },
+  { kind: "sell" },
+  { kind: "navigate" },
+  { kind: "notification" },
   { kind: "tap" },
   { kind: "tick", level: 0 },
   { kind: "tick", level: 5 },
@@ -198,15 +200,17 @@ async function everyCue(rig: ReturnType<typeof page>): Promise<void> {
   }
 }
 
-test("OA-33: on the first paint with no choice stored, nothing sounds and no AudioContext is created", async () => {
+test("with no choice stored, the first press can play and initial rendering stays silent", () => {
   const rig = page();
-  await everyCue(rig);
-  assert.deepEqual(rig.log, { built: 0, resumed: 0, notes: 0, state: "running" });
+  rig.audio.play({ kind: "navigate" });
+  assert.deepEqual([rig.log.built, rig.log.notes], [0, 0]);
+  rig.events.emit("pointerdown", { button: 0, target: node(["button"]) });
+  assert.deepEqual([rig.log.built, rig.log.notes], [1, 1]);
   rig.close();
 });
 
-test("OA-33: after a sign-in whose account has not chosen, sound stays off and nothing is built", async () => {
-  const rig = page();
+test("OA-33: signing in to an account without a choice preserves a local mute", async () => {
+  const rig = page({ [FEEL_SOUND_KEY]: "false" });
   assert.equal(adoptAccountSound(null, soundChangeMark()), null);
   await everyCue(rig);
   assert.equal(rig.log.built, 0);
@@ -223,7 +227,7 @@ test("OA-33: a stored off is kept, under reduced motion too — motion is never 
 });
 
 test("OA-33: turned on with a switch, it plays from then on (under reduced motion too); turned off, nothing new plays and the context is never resumed", async () => {
-  const rig = page({}, true);
+  const rig = page({ [FEEL_SOUND_KEY]: "false" }, true);
   // The switch: its press is the reader's gesture, and turning it on confirms with one tap (the provider's `set`).
   rig.events.emit("pointerdown", { button: 0, target: node(["button", '[role="switch"]'], { "aria-checked": "false" }) });
   setSoundEnabled(true);

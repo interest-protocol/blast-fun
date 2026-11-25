@@ -27,8 +27,9 @@ import { sentToast, tradedToast } from "./trade-result";
  * fee — then `runTrade` builds, signs, executes and settles **the quote on
  * screen**: its `quote_id`, its `amount_in` (for a sell, the token amount, not
  * the dollars typed) and its `min_out`, so the fill is held to what the
- * person saw. A fill plays `land` and toasts what filled; a refusal plays
- * `error`; either way the balances are read again.
+ * person saw. A fill plays the buy or sell cue and toasts what filled. A
+ * refusal other than a cancelled signature plays `error`. Either way the
+ * balances are read again.
  */
 
 export const WALLET_NOT_READY = "Your Blast wallet is not ready. Reload and try again.";
@@ -51,7 +52,7 @@ export type TradeSendDependencies = Readonly<{
   flow: () => Promise<Readonly<{ runTrade: typeof RunTrade }>>;
   /** A fresh UUID v4 per trade the person asked for. */
   key: () => string;
-  play: (cue: Readonly<{ kind: "land" | "error" }>) => void;
+  play: (cue: Readonly<{ kind: "buy" | "sell" | "error" }>) => void;
   toast: (title: string, options?: ToastOptions) => void;
   explorer: SocialExplorer;
   /** The balances moved (or may have): every balance reads again. */
@@ -77,7 +78,7 @@ function walletFeeOffer(result: TradeFeeRequired, available: bigint | null, inpu
 export async function sendTrade(deps: TradeSendDependencies, input: TradeSendInput): Promise<TradeSendResult> {
   const { quote, coins } = input;
   const refuse = (code: string | null, message: string): TradeSendResult => {
-    deps.play({ kind: "error" });
+    if (code !== "rejected") deps.play({ kind: "error" });
     return { status: "refused", code, message };
   };
   if (quote.quote_id === null || quote.amount_in === null || quote.min_out === null) return refuse("quote_expired", diagnosticMessage("The quote expired. Refresh it and retry.", { code: "quote_expired" }));
@@ -104,7 +105,7 @@ export async function sendTrade(deps: TradeSendDependencies, input: TradeSendInp
   const fill = result.status === "traded" ? tradedToast(result.trade, coins) : null;
   const words = fill ?? sentToast();
   const href = result.trade.digest === null ? null : explorerTransactionUrl(deps.explorer, result.trade.digest);
-  try { if (result.status === "traded") deps.play({ kind: "land" }); } catch { /* Feedback is best effort. */ }
+  try { if (result.status === "traded") deps.play({ kind: result.trade.side }); } catch { /* Feedback is best effort. */ }
   try { deps.toast(words.title, {
     ...(fill ? { titleContent: createElement(TradeFill, { verb: "Traded", first: fill.first, second: fill.second }) } : {}),
     ...(words.sub === null ? {} : { sub: words.sub }),

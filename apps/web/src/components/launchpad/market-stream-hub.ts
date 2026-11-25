@@ -9,6 +9,7 @@ import { normalizeStructTag } from "@mysten/sui/utils";
 import { parseChartFrame, type ChartFrame } from "./chart/chart-live-model.ts";
 import { publishChartRound } from "./chart/chart-live-round.ts";
 import { beginMarketHints } from "#web/lib/live-stream/market-hints.ts";
+import { browserSocket, fetchLiveTicket, liveBucket, liveMarketSource, liveSourceState } from "#web/lib/live-stream/live-socket-source.ts";
 import { presaleMarketFrameSchema, type PresaleMarketFrame } from "@blast/core/modules/live/presale-market-frames.ts";
 
 /**
@@ -619,21 +620,34 @@ export class MarketStreamHub {
 
 let tab: MarketStreamHub | null = null;
 
+function eventSource(url: string): MarketEventSource {
+  const events = new EventSource(url);
+  return {
+    addEventListener: (type, receive) => events.addEventListener(type, (event) => receive("data" in event ? { data: String(event.data) } : {})),
+    close: () => events.close(),
+  };
+}
+
 /** The tab's hub; null outside a browser with EventSource. */
 export function tabMarketStream(): MarketStreamHub | null {
   if (typeof window === "undefined" || typeof EventSource === "undefined") return null;
-  return (tab ??= new MarketStreamHub({
-    createSource: (url) => {
-      const events = new EventSource(url);
-      return {
-        addEventListener: (type, receive) => events.addEventListener(type, (event) => receive("data" in event ? { data: String(event.data) } : {})),
-        close: () => events.close(),
-      };
-    },
-    schedule: (run, ms) => {
-      const timer = window.setTimeout(run, ms);
-      return () => window.clearTimeout(timer);
-    },
+  if (tab) return tab;
+  const live = liveSourceState();
+  const bucket = liveBucket();
+  const schedule = (run: () => void, ms: number) => {
+    const timer = window.setTimeout(run, ms);
+    return () => window.clearTimeout(timer);
+  };
+  return (tab = new MarketStreamHub({
+    createSource: (url) => liveMarketSource(url, live, {
+      fetchTicket: () => fetchLiveTicket(bucket),
+      openSocket: browserSocket,
+      openEventSource: eventSource,
+      schedule,
+      now: Date.now,
+      random: Math.random,
+    }),
+    schedule,
     defer: (run) => queueMicrotask(run),
     random: Math.random,
     visible: () => document.visibilityState === "visible",

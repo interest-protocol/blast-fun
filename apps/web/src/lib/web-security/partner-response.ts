@@ -13,6 +13,7 @@ export function applyPartnerBrowserHeaders<T extends Response>(
     nonce: refused ? crypto.randomUUID().replaceAll("-", "") : null,
     development: webConfig().development,
     presaleConnectSources: presaleConnectSources(webConfig().presale),
+    liveSocketOrigin: webConfig().liveSocket?.origin ?? null,
   });
   for (const [name, value] of Object.entries(browserHeaders)) response.headers.set(name, value);
   for (const [name, value] of accessHeaders) {

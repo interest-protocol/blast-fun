@@ -171,6 +171,8 @@ export type WindowCountsRow = Readonly<{
   latest_ms: string | null;
   /** The window's priced dollars, every direction, two places (`0.00` when nothing was priced). */
   volume_usd: string;
+  /** Priced dollars bought and committed, less dollars sold, two places; may be negative. Claims are not money in. */
+  net_inflow_usd: string;
 }>;
 
 /** The totals of one direction across a sale: the side rows summed per quote asset. */
@@ -264,13 +266,19 @@ export function previewOf(participants: readonly HomeParticipant[], rows = HOME_
   return [...kept.slice(0, Math.max(0, rows - 1)), seller];
 }
 
+/** How each kind moves money into a coin: buys and commits in, sells out, claims neither. */
+const NET_INFLOW_SIGN: Partial<Record<string, number>> = { trade_buy: 1, presale_commit: 1, trade_sell: -1 };
+
 /** The window's counts per sale from its side rows: distinct identities overall and per direction, events and the latest time. */
 export function countsOf(sides: readonly SideRow[]): ReadonlyMap<string, WindowCountsRow> {
-  const perSale = new Map<string, { who: Set<string>; byKind: Map<string, Set<string>>; events: number; latest: number; volume: string }>();
+  const perSale = new Map<string, { who: Set<string>; byKind: Map<string, Set<string>>; events: number; latest: number; volume: string; netInflow: number }>();
   for (const row of sides) {
-    const sale = perSale.get(row.sale) ?? { who: new Set(), byKind: new Map(), events: 0, latest: 0, volume: "0.00" };
+    const sale = perSale.get(row.sale) ?? { who: new Set(), byKind: new Map(), events: 0, latest: 0, volume: "0.00", netInflow: 0 };
     sale.who.add(row.who);
-    if (row.usd !== null) sale.volume = addDecimal(sale.volume, row.usd);
+    if (row.usd !== null) {
+      sale.volume = addDecimal(sale.volume, row.usd);
+      sale.netInflow += (NET_INFLOW_SIGN[row.kind] ?? 0) * Number(row.usd);
+    }
     const kind = sale.byKind.get(row.kind) ?? new Set<string>();
     kind.add(row.who);
     sale.byKind.set(row.kind, kind);
@@ -289,5 +297,7 @@ export function countsOf(sides: readonly SideRow[]): ReadonlyMap<string, WindowC
     claimers: size(sale, "presale_claim"),
     latest_ms: sale.events === 0 ? null : String(sale.latest),
     volume_usd: sale.volume,
+    // Cents, and never "-0.00": the rank only needs the sign and the size.
+    net_inflow_usd: (Math.round(sale.netInflow * 100) / 100 || 0).toFixed(2),
   }]));
 }

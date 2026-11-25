@@ -22,7 +22,7 @@ import {
   walletLaunchRewardsPath,
 } from "@blast/core/modules/launchpad-contract/rewards.ts";
 import { COIN_TYPE, SUI_OBJECT_ID_PATTERN } from "@blast/core/lib/sui/ids.ts";
-import { isMigratorVenue, isVenue, type Venue } from "@blast/core/modules/launchpad-contract/venues.ts";
+import { isVenue, type Venue } from "@blast/core/modules/launchpad-contract/venues.ts";
 
 /**
  * The launchpad's market reads, same-origin (WP2). The browser never talks
@@ -40,7 +40,7 @@ import { isMigratorVenue, isVenue, type Venue } from "@blast/core/modules/launch
  * | `GET /launches/{launch_id}/activity`          | `/v1/launches/{launch_id}/activity`        | `launchpad_market_activity` |
  * | `GET /pools/{blast_curve, cetus or bluefin}/{pool_id}` | `/v1/pools/{venue}/{pool_id}`     | `launchpad_market_pool`     |
  * | `GET /pools/{venue}/{pool_id}/candles`        | `/v1/pools/{venue}/{pool_id}/candles`      | `launchpad_market_candles`  |
- * | `GET /pools/{cetus or bluefin}/{pool_id}/trades` | `/v1/pools/{venue}/{pool_id}/trades`    | `launchpad_market_trades`   |
+ * | `GET /pools/{blast_curve, cetus or bluefin}/{pool_id}/trades` | `/v1/pools/{venue}/{pool_id}/trades`    | `launchpad_market_trades`   |
  * | `GET /status`                                 | `/v1/status`                               | `launchpad_market_status`   |
  * | `GET /launches/{launch_id}/rewards`           | `/v1/launches/{launch_id}/rewards`         | `launchpad_market_rewards`  |
  * | `GET /launches/{launch_id}/reward-rounds`     | `/v1/launches/{launch_id}/reward-rounds`   | `launchpad_market_reward_rounds` |
@@ -400,7 +400,7 @@ export function marketPoolPath(venue: Venue, poolId: string): string {
   return `/v1/pools/${venue}/${poolId}`;
 }
 
-/** A pool's routes: a launch's own pool summaries, a pool's candles, a venue pool's trades. */
+/** A pool's routes: a launch's own pool summaries, a pool's candles, a pool's trades. */
 function poolRoute(venue: string, poolId: string, sub: string | undefined, params: URLSearchParams): Matched | null {
   switch (sub) {
   case undefined:
@@ -414,8 +414,8 @@ function poolRoute(venue: string, poolId: string, sub: string | undefined, param
   case "candles":
     return candleRoute(params, (request) => poolCandlesPath(`${venue}:${poolId}`, request));
   case "trades":
-    // Only a venue pool's trades: the curve's activity is the classified list.
-    if (!isMigratorVenue(venue)) return null;
+    // Live's trace reads a pool's raw executions, on the curve and on a venue.
+    if (!isVenue(venue)) return null;
     return {
       route: "trades",
       path: () => {
