@@ -113,14 +113,19 @@ function tradeCoinOf(coin: HomeCoin): SocialTradeCoin {
   return { coin_type: coin.coin_type, symbol: coin.symbol, name: coin.name, decimals: coin.decimals, icon_url: coin.icon_url, usd_price: coin.price_usd, presale_id: coin.presale_id };
 }
 
-/** Holders, with the top 10's share as a quiet second line when it is known (phones drop it). */
+/**
+ * Holders, over the top 10's share when it is known (phones drop it). The line is kept even when empty, so every
+ * known count sits at the same height.
+ */
 function HoldersCell({ coin }: Readonly<{ coin: HomeCoin }>) {
   if (coin.holders === null) return <span className={clsx("num", styles.holders)} role="cell"><Missing what="Holders" /></span>;
   const topTen = shareText(coin.top_holders.share_bps);
   return (
     <span className={clsx("num", styles.holders)} role="cell">
       {coin.holders.toLocaleString("en-US")}
-      {topTen === null ? null : <span className={styles.topTen}>top 10 · {topTen}</span>}
+      <span className={styles.topTen}>
+        {topTen === null ? null : <><span aria-hidden="true">top 10 · {topTen}</span><span className="sr-only">, top 10 hold {topTen}</span></>}
+      </span>
     </span>
   );
 }
@@ -148,7 +153,7 @@ function CoinIdentity({ coin, id, nowMs, buy, venue }: Readonly<{ coin: HomeCoin
           {distinct ? <span className={styles.coinNameText} title={hoverExcerpt(coin.name)}>{coin.name}</span> : null}
           {age === null ? null : (
             <span className={clsx("num", styles.coinAge)}>
-              {distinct ? <span aria-hidden="true" className={styles.ageDot}>· </span> : null}
+              {distinct ? <span aria-hidden="true" className={styles.ageDot}>·</span> : null}
               <span className="sr-only">Age </span>{age}
             </span>
           )}

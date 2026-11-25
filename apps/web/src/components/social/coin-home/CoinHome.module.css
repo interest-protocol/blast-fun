@@ -152,6 +152,7 @@
 .coinVenue { flex: none; display: inline-flex; align-items: center; }
 /* The coin's age follows its name: "Kestrel · 2h". */
 .coinAge { flex: none; }
+.ageDot { margin-inline-end: 0.375rem; }
 .coinName img { width: 0.875rem; height: 0.875rem; }
 /* The figures: tabular, right-aligned, never wrapped, uncoloured: the row's one colour is its progress bar (Shibui). */
 .mcap, .change, .vol, .holders { white-space: nowrap; font-variant-numeric: tabular-nums; }
@@ -162,7 +163,7 @@
 .vol, .holders { color: var(--muted); }
 /* The top 10's share, a quiet line under the holders. */
 .holders { text-align: end; }
-.topTen { display: block; font-size: 0.75rem; line-height: 1.3; }
+.topTen { display: block; min-height: 0.975rem; font-size: 0.75rem; line-height: 1.3; }
 /* Status: one short line, over the curve's or sale's fill. */
 .status { min-width: 0; display: flex; flex-direction: column; gap: 0.3125rem; font-size: 0.8125rem; color: var(--muted); }
 .statusText { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
@@ -439,8 +440,10 @@ a.saleCard:focus-visible { outline: 0.125rem solid var(--focus-color, var(--ink)
   .identText > .coinName { display: none; }
   /* One line: the ticker, then its age; the name, venue and top 10 leave (the status sits under the ticker). */
   .coinRow .identText { flex-direction: row; align-items: baseline; }
+  /* The buy cue's anchor has no baseline: it keeps to the top so the cue rises above the ticker. */
+  .coinRow .identText > .buyAnchor { align-self: flex-start; }
   .coinRow .identText > .coinName[data-age] { display: flex; flex: none; margin-inline-start: 0.375rem; font-size: 0.75rem; }
-  .coinNameText, .ageDot, .coinVenue, .topTen { display: none; }
+  .coinRow :is(.coinNameText, .ageDot, .coinVenue, .topTen) { display: none; }
   .identText .symbol { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; overflow-wrap: normal; }
   .status { grid-column: 2; grid-row: 2; padding-inline-start: 0; flex-direction: row-reverse; justify-content: flex-end; align-items: center; gap: 0.5rem; font-size: 0.75rem; line-height: 1.3; }
   .fill { width: 2.5rem; flex: none; }
