@@ -70,10 +70,14 @@ export function createContentSecurityPolicy(input: {
   development?: boolean;
   /** The presale's origins for the configured network (`presaleConnectSources`), while it is on. */
   presaleConnectSources?: readonly string[];
+  /** The direct market socket's origin (`wss://…`), while it is configured. */
+  liveSocketOrigin?: string | null;
 }): string {
   if (input.nonce !== null) assertNonce(input.nonce);
   const presaleSources = input.presaleConnectSources ?? [];
   assertPlainSources(presaleSources);
+  const liveSources = input.liveSocketOrigin ? [input.liveSocketOrigin] : [];
+  assertPlainSources(liveSources);
   const inline = input.nonce === null ? "'unsafe-inline'" : `'nonce-${input.nonce}'`;
   const script = ["'self'", inline];
   if (input.nonce !== null) script.push("'strict-dynamic'");
@@ -107,6 +111,7 @@ export function createContentSecurityPolicy(input: {
         ...PRIVY_CONNECT_SOURCES,
         TURNSTILE_ORIGIN,
         ...presaleSources,
+        ...liveSources,
       ]),
     ].join(" "),
     `frame-src ${PRIVY_FRAME_SOURCES.join(" ")}`,
@@ -126,6 +131,7 @@ export function securityHeaders(input: {
   nonce: string | null;
   development?: boolean;
   presaleConnectSources?: readonly string[];
+  liveSocketOrigin?: string | null;
 }): Readonly<Record<string, string>> {
   return {
     "Content-Security-Policy": createContentSecurityPolicy(input),
