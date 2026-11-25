@@ -27,14 +27,14 @@ const history: SocialPriceHistory = {
   day_open_ms: null,
 };
 const chart = (data: SocialPriceHistory | null | undefined, loading = false) => renderToStaticMarkup(
-  <SalePriceChartView history={data} loading={loading} onWindow={() => {}} priceUsd={data?.price_usd} trade={<button>Trade KSTL</button>} window="24h" />,
+  <SalePriceChartView history={data} loading={loading} onWindow={() => {}} trade={<button>Trade KSTL</button>} window="24h" />,
 );
 
-test("unpriced pool quotes are clearly denominated and an opening observation stays chartless", () => {
+test("quote history draws without supplying a current price", () => {
   const quote = { coin_type: "test::sui::TSUI", symbol: "TSUI", price: "0.000088098231292", as_of_ms: FIXTURE_NOW, points: history.points, change_24h_bps: null };
   const data = { ...history, price_usd: null, points: [], quote };
   const html = chart(data);
-  assert.match(html, /marketPrice[^"]*"><span>Price<\/span><strong>.*0\.0₄881<span>TSUI<\/span>/, "the price names its quote coin in the boards' subscript form, without e-notation");
+  assert.match(html, /<span>Price<\/span><strong>—<\/strong>/);
   assert.match(html, /data-price-history="available"/);
   assert.doesNotMatch(html, /USD price unavailable/);
   assert.doesNotMatch(html, /Last observation|Last checked/);
@@ -42,10 +42,10 @@ test("unpriced pool quotes are clearly denominated and an opening observation st
   const opening = chart({ ...data, quote: { ...quote, points: [quote.points[0]!] } });
   assert.doesNotMatch(opening, /data-price-history="available"/);
   assert.match(opening, /Waiting for more indexed prices/);
-  assert.match(chart({ ...data, price_usd: "0.0021" }), /marketPrice[^"]*"><span>Price<\/span><strong>.*\$0\.0021/, "a genuine USD price takes priority");
+  assert.doesNotMatch(chart({ ...data, price_usd: "0.0021" }), /data-price-history="available"/, "the USD series takes priority");
 });
 
-test("old TSUI observations remain inspectable without claiming a recent comparison, while a measured flat USD return stays zero", () => {
+test("old quote observations stay in the historical range", () => {
   const oldPoints = [[FIXTURE_NOW - 172_800_000, "0.000088"], [FIXTURE_NOW - 129_600_000, "0.000088"]] as const;
   const quote = { coin_type: "test::sui::TSUI", symbol: "TSUI", price: "0.000088", as_of_ms: oldPoints[1][0], points: oldPoints, change_24h_bps: null };
   const oldHistory = { ...history, price_usd: null, price_24h_usd: null, change_24h_bps: null, points: [], quote };
@@ -53,36 +53,32 @@ test("old TSUI observations remain inspectable without claiming a recent compari
   assert.match(recent, /No recorded prices in this period/);
   assert.doesNotMatch(recent, /today/, "an unmeasured change is left out with its label");
   assert.doesNotMatch(recent, /0\.00%|data-price-history="available"/);
-  const all = renderToStaticMarkup(<SalePriceChartView history={oldHistory} loading={false} onWindow={() => {}} priceUsd={null} trade={null} window="launch" />);
+  const all = renderToStaticMarkup(<SalePriceChartView history={oldHistory} loading={false} onWindow={() => {}} trade={null} window="launch" />);
   assert.match(all, /data-price-history="available"/);
-  assert.match(all, /marketPrice[^"]*"><span>Price<\/span><strong>.*TSUI/);
+  assert.match(all, /<span>Price<\/span><strong>—<\/strong>/);
   assert.doesNotMatch(all, /USD price unavailable/);
   assert.doesNotMatch(all, /0\.00%|\$|converted to USD/);
   const opening = chart({ ...oldHistory, quote: { ...quote, points: [oldPoints[0]] } });
   assert.match(opening, /Waiting for more indexed prices/);
   assert.doesNotMatch(opening, /today/);
   assert.doesNotMatch(opening, /0\.00%|data-price-history="available"/);
-  assert.match(chart({ ...history, price_usd: "0.002", change_24h_bps: 0, points: [[history.points[0]![0], "0.002"], [FIXTURE_NOW, "0.002"]] }), /0\.00%/);
 });
 
-test("a priced SUI-quoted sale keeps its USD history and measured change", () => {
+test("a SUI-quoted sale keeps its USD history while current price is unconfirmed", () => {
   const suiSale = fixtureDetail("drft").presale;
   const client = createTestQueryClient();
   client.setQueryData(queryKeys.prices.history(`presale:${suiSale.presale_id}`, "24h"), { ...history, coin_type: suiSale.sale_token, presale_id: suiSale.presale_id });
   const html = renderToStaticMarkup(withQueryClient(client, <SalePriceChart sale={suiSale} trade={<button>Trade DRFT</button>} />));
   assert.match(html, /data-price-history="available"/);
-  assert.match(html, /class="[^"]*marketPrice[^"]*"/);
-  assert.match(html, /\$0\.0021/);
-  assert.match(html, /\+5\.00%/);
+  assert.match(html, /<span>Price<\/span><strong>—<\/strong>/);
+  assert.doesNotMatch(html, /today|\$0\.0021/);
   assert.doesNotMatch(html, /USD price unavailable|Not enough history/);
   client.clear();
 });
 
-test("the chart shows indexed prices and change, and never draws a missing or single-point history", () => {
+test("the chart draws indexed history when at least two points are available", () => {
   const real = chart(history);
   assert.match(real, /data-price-history="available"/);
-  assert.match(real, /\$0\.0021/);
-  assert.match(real, /\+5\.00%/);
   for (const data of [undefined, null, { ...history, points: [] }, { ...history, points: [history.points[0]!] }]) {
     const html = chart(data);
     assert.doesNotMatch(html, /data-price-history="available"/);
@@ -133,12 +129,13 @@ test("aggregate vesting dates do not imply a shared recipient schedule", () => {
   client.clear();
 });
 
-test("an indexed summary price stays visible even when its chart history is absent", () => {
+test("the coin page shows a dash while the pool and current price are unconfirmed", () => {
   const client = createTestQueryClient();
   client.setQueryData(queryKeys.prices.history(`presale:${sale.presale.presale_id}`, "24h"), null);
   const html = renderToStaticMarkup(withQueryClient(client, <SaleView detail={sale} nowMs={FIXTURE_NOW} viewerEntry={null} />));
   const market = html.slice(html.indexOf("data-sale-market"), html.indexOf('id="presaleHistory"'));
-  assert.match(market, /\$0\.0021/);
+  assert.match(market, /<span>Price<\/span><strong>—<\/strong>/);
+  assert.doesNotMatch(market, /\$0\.0021/);
   assert.match(market, /No price history yet/);
   assert.doesNotMatch(market, /data-price-history="available"/);
   client.clear();
@@ -201,49 +198,19 @@ test("quote history takes precedence over an untimestamped USD summary", () => {
     quote: { coin_type: "test::sui::TSUI", symbol: "TSUI", price: "0.000088098231292", as_of_ms: FIXTURE_NOW, points: history.points, change_24h_bps: null },
   });
   const html = renderToStaticMarkup(withQueryClient(client, <SaleView detail={sale} nowMs={FIXTURE_NOW} viewerEntry={null} />));
-  assert.match(html, /marketPrice[^"]*"><span>Price<\/span><strong>.*TSUI/);
+  assert.match(html, /data-price-history="available"/);
+  assert.match(html, /<span>Price<\/span><strong>—<\/strong>/);
   assert.doesNotMatch(html, /Last observation|Last checked/);
   client.clear();
 });
 
 test("chart timestamps and explanatory captions are omitted while empty and failed states remain", () => {
   const render = (data: SocialPriceHistory | null, failed = false) => renderToStaticMarkup(
-    <SalePriceChartView failed={failed} history={data} loading={false} onWindow={() => {}} priceUsd={data?.price_usd} trade={null} window="24h" />,
+    <SalePriceChartView failed={failed} history={data} loading={false} onWindow={() => {}} trade={null} window="24h" />,
   );
   for (const data of [history, { ...history, points: [] }, null]) {
     assert.doesNotMatch(render(data), /Last observation|Last checked|Observation time unavailable|Indexed pool prices|executable quotes|Refreshes every/);
   }
   assert.match(render(null), /No price history yet/);
   assert.match(render(history, true), /Price history could not load/);
-});
-
-test("the last price shows its readable amount and denomination as plain text", () => {
-  const price = "0.000199795432711782189195387208639779";
-  const quote = { coin_type: "test::sui::TSUI", symbol: "TSUI", price, as_of_ms: FIXTURE_NOW, points: history.points, change_24h_bps: null };
-  const html = chart({ ...history, price_usd: null, points: [], quote });
-  assert.match(html, /0\.0002<span>TSUI<\/span>/, "a readable price, never e-notation");
-  assert.doesNotMatch(html, /Inspect full coin price/);
-  assert.doesNotMatch(html, /USD price unavailable/);
-  assert.doesNotMatch(html, /today/);
-});
-
-test("Coin board: the day's move reads in dollars and percent from the market read, beside a dollar price only", () => {
-  const view = (data: SocialPriceHistory, move: { usd: string; bps: number } | null) => renderToStaticMarkup(
-    <SalePriceChartView history={data} loading={false} move={move} onWindow={() => {}} priceUsd={data.price_usd} trade={null} window="24h" />,
-  );
-  // "+$0.0137 (3.42%) today": the market read's pair replaces the history's percentage, so both come from one opening price.
-  const up = view({ ...history, price_usd: "0.4127" }, { usd: "0.0137", bps: 342 });
-  assert.match(up, /data-direction="up">\+\$0\.0137 \(3\.42%\) <span>today<\/span>/);
-  assert.doesNotMatch(up, /\+5\.00%/);
-  assert.match(view(history, { usd: "-0.0137", bps: -342 }), /data-direction="down">-\$0\.0137 \(3\.42%\) /);
-  assert.match(view(history, { usd: "0.000000001", bps: 5 }), /\+\$0\.0₈1 \(0\.05%\)/, "a tiny move keeps subscript zeros, never e-notation");
-  assert.match(view(history, { usd: "0", bps: 0 }), /class="priceChange">\$0 \(0\.00%\) /);
-  // Without the market read's pair, the history's percentage stays alone.
-  assert.match(view(history, null), /data-direction="up">\+5\.00% <span>today/);
-  // A price in the quote coin never takes a dollar move.
-  const quote = { coin_type: "test::sui::TSUI", symbol: "TSUI", price: "0.000088", as_of_ms: FIXTURE_NOW, points: history.points, change_24h_bps: null };
-  const quoted = renderToStaticMarkup(
-    <SalePriceChartView history={{ ...history, price_usd: null, quote }} loading={false} move={{ usd: "0.0137", bps: 342 }} onWindow={() => {}} priceUsd={null} trade={null} window="24h" />,
-  );
-  assert.doesNotMatch(quoted, /\$0\.0137|today/);
 });

@@ -24,6 +24,7 @@ import { Segmented } from "#web/components/blast-ui/Segmented.tsx";
 import { NO_VALUE } from "@blast/core/web/format.ts";
 import { comparePrices } from "@blast/core/modules/launchpad-contract/venue-history.ts";
 import { dyn } from "#web/components/blast-ui/csp-style.ts";
+import { readablePrice } from "#web/lib/market-format.ts";
 import { shiftDecimal } from "#web/components/launchpad/coin/coin-format.ts";
 import { chartPrice } from "./chart-price";
 import styles from "./PoolCandleChart.module.css";
@@ -324,7 +325,7 @@ function ChartTime({ at, prefix }: Readonly<{ at: number; prefix?: string }>) {
 }
 
 function PriceReadout({ value, at, inspected, unit }: Readonly<{ value: string | null; at: number | null; inspected: boolean; unit?: string }>) {
-  const price = value === null ? NO_VALUE : withUnit(chartPrice(value, 3), unit);
+  const price = value === null ? NO_VALUE : withUnit(inspected ? chartPrice(value, 3) : readablePrice(value), unit);
   return <>
     <div className={styles.lineContext}>
       <span className={styles.inspectionAmount}>
@@ -342,6 +343,7 @@ const candlePrices = [["close", "Close"], ["open", "Open"], ["high", "High"], ["
 function CandleReadout({ candle, volume, at, inspected, unit, volumeUnit }: Readonly<{
   candle?: ExactCandle; volume: string; at: number; inspected: boolean; unit?: string; volumeUnit?: string;
 }>) {
+  const price = inspected ? (value: string) => chartPrice(value, 3) : readablePrice;
   return <>
     <div className={styles.candleContext}>
       {inspected && <span className={styles.inspectionContext}><ChartTime at={at} />{unit && ` · ${unit}`}</span>}
@@ -355,7 +357,7 @@ function CandleReadout({ candle, volume, at, inspected, unit, volumeUnit }: Read
       {candlePrices.map(([key, name]) => <div key={key}>
         <dt>{name}</dt>
         <dd data-chart-inspected-price={inspected && key === "close" ? "" : undefined}
-          data-chart-latest-price={!inspected && key === "close" ? "" : undefined}>{candle ? chartPrice(candle[key], 3) : "—"}</dd>
+          data-chart-latest-price={!inspected && key === "close" ? "" : undefined}>{candle ? price(candle[key]) : "—"}</dd>
       </div>)}
     </dl>
   </>;
@@ -444,7 +446,7 @@ function latestPoolMarker(latest: ReturnType<typeof latestPrice>, points: readon
   if (!latest || seriesIndex === -1) return {};
   return {
     latestCandle: points[seriesIndex]?.candles?.get(latest.bucket),
-    latestTag: { seriesIndex, price: coordinate(latest.value), label: `${usd ? "$" : ""}${chartPrice(latest.value, 3)}` },
+    latestTag: { seriesIndex, price: coordinate(latest.value), label: `${usd ? "$" : ""}${readablePrice(latest.value)}` },
   };
 }
 
