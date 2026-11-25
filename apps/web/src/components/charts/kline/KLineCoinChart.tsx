@@ -254,11 +254,12 @@ function themeStyles(element: HTMLElement): DeepPartial<Styles> {
 }
 
 function IndicatorMenu({ settings, onToggle }: Readonly<{ settings: ChartSettings; onToggle: (name: IndicatorName) => void }>) {
+  const on = new Set(settings.indicators);
   return <Popover.Root>
     <Popover.Trigger render={<Button variant="ghost" size="sm" />}>Indicators</Popover.Trigger>
     <PopoverSurface positioner={{ side: "bottom", align: "start", sideOffset: 4, className: styles.layer }} popup={{ className: styles.menu, "aria-label": "Indicators" }}>
       {[...MAIN_INDICATORS, ...PANE_INDICATORS].map((name) => <label key={name} className={styles.menuItem}>
-        <Checkbox checked={settings.indicators.includes(name)} onChange={() => onToggle(name)} />
+        <Checkbox checked={on.has(name)} onChange={() => onToggle(name)} />
         {INDICATOR_NAMES[name]}
       </label>)}
     </PopoverSurface>

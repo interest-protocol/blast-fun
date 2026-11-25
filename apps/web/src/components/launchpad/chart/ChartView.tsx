@@ -453,29 +453,11 @@ function ChartFigure({ drawn, migrationAt, venuePoolKey, geometry, latest, lates
   const deployer = useLaunchWallet();
   const activity = useWalletTrades();
   const liveTrade = useCandleTrade();
-  const walletTrades = useMemo(() => activity.flatMap((row): WalletChartTrade[] => {
-    const labels = tradeWalletLabels(row, deployer);
-    if (!row.actor || !labels.length) return [];
-    const trade = { cursor: row.position, address: row.actor, timestampMs: row.timestampMs, labels };
-    switch (row.kind) {
-      case "curve_buy":
-      case "curve_sell":
-        return source.curvePoolKey ? [{ ...trade, poolKey: source.curvePoolKey, side: row.kind === "curve_buy" ? "buy" : "sell" }] : [];
-      case "venue_buy":
-      case "venue_sell":
-        return row.source ? [{ ...trade, poolKey: row.source, side: row.kind === "venue_buy" ? "buy" : "sell" }] : [];
-      default:
-        return [];
-    }
-  }), [activity, deployer, source.curvePoolKey]);
+  const walletTrades = useMemo(() => chartWalletTrades(activity, deployer, source.curvePoolKey), [activity, deployer, source.curvePoolKey]);
   const line = presentation === "line";
-  const unit = exactDecimal(quoteUsd) ? "USD" : source.quoteSymbol;
-  const metric = line || !compact ? `price in ${unit}` : `price in ${unit} and volume in ${source.quoteSymbol}`;
   const venue = venuePoolKey?.split(":")[0];
   const graduation = venue ? `Graduated to ${venueName(venue)}` : "Graduated";
-  const markerVisible = migrationAt !== undefined && migrationAt >= geometry.start && migrationAt <= geometry.end;
-  const event = markerVisible ? ` ${graduation} on ${clock(migrationAt)}.` : "";
-  const label = `${source.symbol} ${metric}. ${RANGE_WORDS[controls.range]}, ${controls.interval} intervals.${event}`;
+  const label = figureLabel(source, controls, geometry, { line, compact, quoteUsd, graduation, migrationAt });
   return (
     <figure className={styles.figure}>
       {compact ? null : <p className={styles.axis} aria-hidden="true">
@@ -488,6 +470,34 @@ function ChartFigure({ drawn, migrationAt, venuePoolKey, geometry, latest, lates
       </div>
     </figure>
   );
+}
+
+/** The tagged wallets' trades (deployer, top traders…) the chart marks, each on its own pool. */
+function chartWalletTrades(activity: ReturnType<typeof useWalletTrades>, deployer: ReturnType<typeof useLaunchWallet>, curvePoolKey: string | null): WalletChartTrade[] {
+  return activity.flatMap((row): WalletChartTrade[] => {
+    const labels = tradeWalletLabels(row, deployer);
+    if (!row.actor || !labels.length) return [];
+    const trade = { cursor: row.position, address: row.actor, timestampMs: row.timestampMs, labels };
+    switch (row.kind) {
+      case "curve_buy":
+      case "curve_sell":
+        return curvePoolKey ? [{ ...trade, poolKey: curvePoolKey, side: row.kind === "curve_buy" ? "buy" : "sell" }] : [];
+      case "venue_buy":
+      case "venue_sell":
+        return row.source ? [{ ...trade, poolKey: row.source, side: row.kind === "venue_buy" ? "buy" : "sell" }] : [];
+      default:
+        return [];
+    }
+  });
+}
+
+/** The figure's accessible name: what is plotted, over which range, and the graduation when it is in view. */
+function figureLabel(source: ChartViewSource, controls: ChartControls, geometry: NonNullable<ReturnType<typeof chartGeometry>>, { line, compact, quoteUsd, graduation, migrationAt }: Readonly<{ line: boolean; compact: boolean; quoteUsd?: string | null; graduation: string; migrationAt?: number }>): string {
+  const unit = exactDecimal(quoteUsd) ? "USD" : source.quoteSymbol;
+  const metric = line || !compact ? `price in ${unit}` : `price in ${unit} and volume in ${source.quoteSymbol}`;
+  const markerVisible = migrationAt !== undefined && migrationAt >= geometry.start && migrationAt <= geometry.end;
+  const event = markerVisible ? ` ${graduation} on ${clock(migrationAt)}.` : "";
+  return `${source.symbol} ${metric}. ${RANGE_WORDS[controls.range]}, ${controls.interval} intervals.${event}`;
 }
 
 function walletRipple(trades: readonly WalletChartTrade[], live: ReturnType<typeof useCandleTrade>, interval: ChartControls["interval"]): WalletRipple | null {
