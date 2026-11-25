@@ -40,7 +40,22 @@ type Topic = {
   cursor?: string;
   priceMissing?: boolean;
   deadline?: ReturnType<typeof setTimeout>;
+  /** Recent frames for browser resume; every frame after `floor` is here. */
+  ring: { cursor: string; bytes: Uint8Array; at: number }[];
+  ringBytes: number;
+  floor?: string;
+  /** An upstream resume from `cursor` is in flight: its snapshot is not a new fence. */
+  resuming?: boolean;
 };
+/** Options for a direct socket subscriber. SSE keeps its finite lifetime and never resumes. */
+export type MarketSubscribeOptions = Readonly<{
+  resume?: ReadonlyMap<string, string>;
+  lifetime?: boolean;
+}>;
+/** How long, and how many frames, each pool keeps for browser resume. */
+export const RESUME_RING = Object.freeze({ ms: 120_000, frames: 256, bytes: 65_536, replayBytes: 32_768 });
+/** Upstream losses that keep browsers connected while the relay reconnects. */
+const UPSTREAM_LOSS = new Set(["upstream-unavailable", "upstream-silent", "upstream-resync", "handshake-timeout"]);
 const encoder = new TextEncoder();
 export const MARKET_STREAM_HEADERS = {
   "content-type": "text/event-stream",
@@ -170,6 +185,10 @@ export class MarketStreamRelay {
   #handshake?: ReturnType<typeof setTimeout>;
   #heartbeat?: ReturnType<typeof setInterval>;
   #ending = false;
+  #reopen?: ReturnType<typeof setTimeout>;
+  #reopenAttempt = 0;
+  /** Pools whose upstream resume is in flight, in the order the reader answers them. */
+  #resumes: string[] = [];
 
   constructor(connect: () => RelaySocket, expected: ExpectedDeployment, prices?: DisplayPriceReader) {
     this.#connect = connect;
@@ -186,7 +205,7 @@ export class MarketStreamRelay {
     );
   }
 
-  subscribe(request: Request, sink?: HintSink): HintSubscription {
+  subscribe(request: Request, sink?: HintSink, options: MarketSubscribeOptions = {}): HintSubscription {
     let pools: readonly string[];
     let priceCoins: readonly string[];
     let presale: string | null;
@@ -226,7 +245,7 @@ export class MarketStreamRelay {
       sink,
       stop: () => stop(),
     };
-    const deadline = setTimeout(() => stop(), B.lifetimeMs);
+    const deadline = options.lifetime === false ? undefined : setTimeout(() => stop(), B.lifetimeMs);
     const stopPrices = this.#prices?.subscribe(priceCoins, (frame) => this.#send(client, event("prices", frame)));
     const stop = () => {
       if (!this.#clients.delete(client)) return;
@@ -251,26 +270,32 @@ export class MarketStreamRelay {
       this.#send(client, event("resync", { reason: "rest-recovery-required" }));
     }
     this.#send(client, event("status", { state: "connecting" }));
-    this.#joinTopics(client);
+    this.#joinTopics(client, options.resume);
     if (client.activity && this.#hello) {
       this.#send(client, event("hint", this.#hello));
       if (this.#hintReady) this.#send(client, event("hint", this.#hintPong(client.presale !== null)));
     }
     if (!this.#heartbeat) this.#heartbeat = setInterval(() => this.#beat(), B.heartbeatMs);
-    if (!this.#socket) this.#open();
+    if (!this.#socket && !this.#reopen) this.#open();
     else if (this.#ready && added.length) this.#subscribe("subscribe", added);
     return stop;
   }
 
-  #joinTopics(client: Client): void {
+  #joinTopics(client: Client, resume?: ReadonlyMap<string, string>): void {
     for (const pool of client.pools) {
       let topic = this.#topics.get(pool);
       if (!topic) {
-        topic = { clients: new Set() };
+        topic = { clients: new Set(), ring: [], ringBytes: 0 };
         this.#topics.set(pool, topic);
       }
       topic.clients.add(client);
-      if (topic.fence) this.#send(client, event("status", topic.fence));
+      if (!topic.fence) continue;
+      const missed = this.#missed(topic, resume?.get(pool));
+      if (missed) {
+        // The ring holds every frame after the browser's cursor: keep its state, send only what it missed.
+        this.#send(client, event("status", { ...topic.fence, cursor: missed.from, resumed: true }));
+        for (const frame of missed.frames) this.#send(client, frame.bytes);
+      } else this.#send(client, event("status", topic.fence));
     }
   }
 
@@ -384,12 +409,21 @@ export class MarketStreamRelay {
         this.#pong(socket, frame);
         return true;
       case "resume_complete":
+        this.#resumed(this.#resumes.shift());
         return true;
       case "error":
         if (this.#feedPending) { this.#feedPending = false; return true; }
+        if (this.#resumes.length) { this.#resyncPool(this.#resumes.shift()!, "resume-failed"); return true; }
         this.#end("upstream-resync");
         return true;
       case "resync_required":
+        // `too_old` answers one resume; the connection stays open.
+        if (frame.reason === "too_old" && this.#resumes.length) {
+          this.#resyncPool(this.#resumes.shift()!, "too_old");
+          return true;
+        }
+        this.#end("upstream-resync");
+        return true;
       case "reconnect":
         this.#end("upstream-resync");
         return true;
@@ -417,7 +451,10 @@ export class MarketStreamRelay {
     this.#ready = true;
     this.#hello = { type: "hello", provenance: frame.provenance, heartbeat: true, heartbeat_ms: B.heartbeatMs };
     this.#hint(this.#hello);
-    this.#subscribe("subscribe", [...this.#topics.keys()], true);
+    this.#reopenAttempt = 0;
+    const fenced = [...this.#topics].filter(([, topic]) => topic.resuming && topic.cursor);
+    this.#subscribe("subscribe", [...this.#topics].filter(([, topic]) => !topic.resuming || !topic.cursor).map(([pool]) => pool), true);
+    for (const [pool, topic] of fenced) this.#resume(pool, topic);
     this.#ping();
   }
 
@@ -484,6 +521,11 @@ export class MarketStreamRelay {
     // An unsubscribe can race with already queued, still valid upstream frames.
     if (!topic) return;
     const cursor = validateEnvelope(frame, this.#expected);
+    if (topic.resuming) {
+      // The reader re-sends state as a snapshot on resume; the browser already has it.
+      if (frame.type === "snapshot") return;
+      if (topic.cursor && compareEventCursors(cursor, topic.cursor) <= 0) return;
+    }
     if (topic.cursor && compareEventCursors(cursor, topic.cursor) < 0)
       throw new Error();
     if (frame.type !== "snapshot" && !topic.fence) throw new Error();
@@ -520,13 +562,75 @@ export class MarketStreamRelay {
     if (frame.type === "snapshot") {
       clearTimeout(topic.deadline);
       topic.deadline = undefined;
+      topic.ring = [];
+      topic.ringBytes = 0;
+      topic.floor = cursor;
       for (const client of topic.clients)
         this.#send(client, event("status", topic.fence));
     } else {
       const bytes = event("market", withoutLabels(frame), cursor);
       if (bytes.byteLength > B.maxChunkBytes)
         return this.#end("frame-too-large");
+      this.#remember(topic, cursor, bytes);
       for (const client of topic.clients) this.#send(client, bytes);
+    }
+  }
+
+  #remember(topic: Topic, cursor: string, bytes: Uint8Array): void {
+    const now = Date.now();
+    topic.ring.push({ cursor, bytes, at: now });
+    topic.ringBytes += bytes.byteLength;
+    while (
+      topic.ring.length > RESUME_RING.frames ||
+      topic.ringBytes > RESUME_RING.bytes ||
+      topic.ring[0]!.at < now - RESUME_RING.ms
+    ) {
+      const dropped = topic.ring.shift()!;
+      topic.ringBytes -= dropped.bytes.byteLength;
+      topic.floor = dropped.cursor;
+    }
+  }
+
+  /** The frames after `from` if the ring holds all of them and they fit one replay; else null. */
+  #missed(topic: Topic, from: string | undefined) {
+    if (!from || !topic.floor || !topic.cursor) return null;
+    if (compareEventCursors(from, topic.floor) < 0 || compareEventCursors(from, topic.cursor) > 0) return null;
+    const frames = topic.ring.filter((frame) => compareEventCursors(frame.cursor, from) > 0);
+    const bytes = frames.reduce((total, frame) => total + frame.bytes.byteLength, 0);
+    return bytes > RESUME_RING.replayBytes ? null : { from, frames };
+  }
+
+  /** Resume one fenced pool from its cursor; the reader answers each cursor subscribe in order. */
+  #resume(pool: string, topic: Topic): void {
+    try {
+      this.#socket?.send(JSON.stringify({ op: "subscribe", topics: [`pool:${pool}`], cursor: topic.cursor }));
+      this.#resumes.push(pool);
+      topic.deadline = setTimeout(() => this.#resyncPool(pool, "resume-timeout"), 10_000);
+    } catch {
+      this.#end("upstream-unavailable");
+    }
+  }
+
+  #resumed(pool: string | undefined): void {
+    const topic = pool === undefined ? undefined : this.#topics.get(pool);
+    if (!topic) return;
+    clearTimeout(topic.deadline);
+    topic.deadline = undefined;
+    topic.resuming = false;
+  }
+
+  /** A pool the reader cannot resume ends only its own clients, which reconnect and refetch history. */
+  #resyncPool(pool: string, reason: string): void {
+    const index = this.#resumes.indexOf(pool);
+    if (index >= 0) this.#resumes.splice(index, 1);
+    const topic = this.#topics.get(pool);
+    if (!topic) return;
+    clearTimeout(topic.deadline);
+    topic.deadline = undefined;
+    const bytes = event("resync", { reason, pool_key: pool });
+    for (const client of [...topic.clients]) {
+      this.#send(client, bytes);
+      client.stop();
     }
   }
 
@@ -553,6 +657,7 @@ export class MarketStreamRelay {
   }
 
   #end(reason: string): void {
+    if (UPSTREAM_LOSS.has(reason) && this.#clients.size) return this.#lose();
     this.#ending = true;
     for (const client of [...this.#clients]) {
       this.#send(client, event("resync", { reason }));
@@ -562,13 +667,43 @@ export class MarketStreamRelay {
     this.#ending = false;
   }
 
+  /**
+   * The upstream dropped: browsers stay connected and quiet (no heartbeat, so their watchdog
+   * runs) while the relay reconnects and resumes every fenced pool from its cursor.
+   */
+  #lose(): void {
+    clearInterval(this.#heartbeat);
+    this.#heartbeat = undefined;
+    for (const topic of this.#topics.values()) {
+      clearTimeout(topic.deadline);
+      topic.deadline = undefined;
+      topic.resuming = topic.fence !== undefined;
+    }
+    this.#closeUpstream();
+    const delay = Math.min(5_000, 250 * 2 ** this.#reopenAttempt++) * (1 + Math.random() / 2);
+    this.#reopen = setTimeout(() => {
+      this.#reopen = undefined;
+      if (!this.#clients.size) return;
+      this.#heartbeat ??= setInterval(() => this.#beat(), B.heartbeatMs);
+      this.#open();
+    }, delay);
+  }
+
   #disconnect(): void {
     clearInterval(this.#heartbeat);
-    clearTimeout(this.#handshake);
+    clearTimeout(this.#reopen);
     this.#heartbeat = undefined;
-    this.#handshake = undefined;
+    this.#reopen = undefined;
+    this.#reopenAttempt = 0;
     for (const topic of this.#topics.values()) clearTimeout(topic.deadline);
     this.#topics.clear();
+    this.#closeUpstream();
+  }
+
+  #closeUpstream(): void {
+    clearTimeout(this.#handshake);
+    this.#handshake = undefined;
+    this.#resumes = [];
     const socket = this.#socket;
     this.#socket = null;
     this.#ready = false;
