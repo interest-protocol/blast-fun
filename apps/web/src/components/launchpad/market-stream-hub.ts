@@ -1,5 +1,5 @@
 import { EVENT_CURSOR, compareEventCursors } from "@blast/core/modules/launchpad-contract/cursor.ts";
-import { displayPriceCoinSchema, displayPriceFrameSchema, MARKET_STREAM_BUDGET, MARKET_STREAM_PATH, type DisplayPriceFrame } from "@blast/core/modules/launchpad-contract/market-stream.ts";
+import { coinStatsFrameSchema, displayPriceCoinSchema, displayPriceFrameSchema, MARKET_STREAM_BUDGET, MARKET_STREAM_PATH, type CoinStatsFrame, type DisplayPriceFrame } from "@blast/core/modules/launchpad-contract/market-stream.ts";
 import { deploymentMismatch, parseInfraProvenance, type ExpectedDeployment } from "@blast/core/modules/launchpad-contract/provenance.ts";
 import type { MigrationMarker, PoolTrade } from "@blast/core/modules/launchpad-contract/venue-history.ts";
 import { POOL_KEY } from "@blast/core/modules/launchpad-contract/venues.ts";
@@ -32,6 +32,8 @@ export type MarketStreamListener = Readonly<{
   frame?: (frame: ChartFrame, chars: number) => void;
   trade?: (trade: MarketTrade) => void;
   prices?: (frame: DisplayPriceFrame) => void;
+  /** The coin's latest market stats for a fenced pool; a later one replaces it, none is replayed. */
+  stats?: (frame: CoinStatsFrame) => void;
   presale?: (frame: PresaleMarketFrame) => void;
   presaleReady?: (checkpoint: number | null) => void;
 }>;
@@ -483,6 +485,21 @@ export class MarketStreamHub {
         const requested = new Set(priceCoins);
         const prices = frame.prices.filter((price) => requested.has(price.coin_type));
         if (prices.length) listener.prices({ ...frame, prices });
+      }
+    });
+    source.addEventListener("stats", (event) => {
+      if (!current() || !event.data || event.data.length > MARKET_STREAM_BUDGET.maxChunkBytes) return;
+      let frame: CoinStatsFrame;
+      try {
+        frame = coinStatsFrameSchema.parse(JSON.parse(event.data));
+        if (deploymentMismatch(parseInfraProvenance(frame.provenance), connection.expected)) return;
+      } catch {
+        return;
+      }
+      if (connection.pools.get(frame.pool_key)?.fence == null) return;
+      for (const subscriber of [...this.subscribers]) {
+        const { pools, listener } = subscriber.request;
+        if (listener.stats && pools.includes(frame.pool_key) && this.covers(subscriber) && current()) listener.stats(frame);
       }
     });
     source.addEventListener("resync", () => { if (current()) this.reconnect(); });

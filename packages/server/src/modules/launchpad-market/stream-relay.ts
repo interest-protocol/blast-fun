@@ -192,6 +192,16 @@ function parseSubscription(request: Request): { pools: readonly string[]; priceC
   }
 }
 
+/** Whether the frame's latest trade lacks a price; undefined when the frame says nothing about it. */
+function priceMissing(frame: Frame): boolean | undefined {
+  if (frame.type === "snapshot" && Array.isArray(frame.trades)) {
+    const latest = frame.trades.map(object).find((trade) => trade.kind !== "opening_round_fill");
+    return latest !== undefined && latest.price == null;
+  }
+  if (frame.type === "trade") return object(frame.trade).price === null;
+  return undefined;
+}
+
 function validateMarketBody(frame: Frame): void {
   if (frame.type === "trade") validateTrade(frame);
   if (frame.type === "candle_closed") validateCandle(frame);
@@ -605,13 +615,7 @@ export class MarketStreamRelay {
   }
 
   #deliver(pool: string, topic: Topic, frame: Frame, cursor: string): void {
-    if (frame.type === "snapshot" && Array.isArray(frame.trades)) {
-      const latest = frame.trades.map(object).find((trade) => trade.kind !== "opening_round_fill");
-      topic.priceMissing = latest !== undefined && latest.price == null;
-    } else if (frame.type === "trade") {
-      const trade = object(frame.trade);
-      topic.priceMissing = trade.price === null;
-    }
+    topic.priceMissing = priceMissing(frame) ?? topic.priceMissing;
     topic.cursor = cursor;
     topic.fence = {
       state: "live",

@@ -44,6 +44,7 @@ export const coinStatsFrameSchema = z.object({
   checkpoint: z.number().int().nonnegative(),
   timestamp_ms: z.number().int().nonnegative(),
   cursor: z.string().regex(EVENT_CURSOR),
+  provenance: z.unknown(),
   lifecycle: z.string().max(32).nullable(),
   price: decimal,
   market_cap: decimal,
