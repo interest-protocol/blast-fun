@@ -1,11 +1,11 @@
-import { candleBucketStart, readMigratedChart, readPoolCandles, type ChartRoute, type MigratedChart, type MigrationMarker, type PoolCandlePage } from "@blast/core/modules/launchpad-contract/venue-history.ts";
+import { candleBucketStart, readMigratedChart, readPoolCandles, readPoolTrades, TRADE_PAGE, type ChartRoute, type MigratedChart, type MigrationMarker, type PoolCandlePage } from "@blast/core/modules/launchpad-contract/venue-history.ts";
 import type { ExpectedDeployment } from "@blast/core/modules/launchpad-contract/provenance.ts";
 import type { MarketDataDependencies } from "@blast/core/modules/read-routing/market-data.ts";
 import { sectionFromRead, type Section } from "@blast/core/modules/launchpad-contract/section.ts";
 
-import { afterChartSourceRead, chartKey, chartRequest, initialChart, type ChartControls } from "./chart-model";
+import { afterChartSourceRead, chartKey, chartRequest, initialChart, type ChartCandlePage, type ChartControls } from "./chart-model";
 import { MIGRATOR_POOL_KEY } from "@blast/core/modules/launchpad-contract/venues.ts";
-import { sameChartMigration } from "./chart-live-model";
+import { candlesFromTrades, sameChartMigration } from "./chart-live-model";
 
 /**
  * Which pools the browser charts (through this app's `/api/launchpad/market`
@@ -24,6 +24,7 @@ export type ChartSource = Readonly<{
   symbol: string;
   quoteSymbol: string;
   quoteType?: string | null;
+  launchAt?: number;
   /** Immutable curve price at launch, in quote atoms per meme atom. */
   opening?: Readonly<{ timestampMs: number; price: string }>;
   /** An unknown scale prevents plotting prices in whole tokens. */
@@ -40,7 +41,8 @@ function chartRoute(source: ChartPools, migration: MigrationMarker | null): Char
 }
 
 /** One independently fenced pool read for a streaming chart's recovery. */
-export type ChartPoolRead = Readonly<{ section: Section<PoolCandlePage>; page: PoolCandlePage | null }>;
+export type ChartPoolRead = Readonly<{ section: Section<StreamChartPage>; page: StreamChartPage | null }>;
+export type StreamChartPage = PoolCandlePage & Pick<ChartCandlePage, "liveTrades" | "truncated">;
 
 export type ChartSnapshot = Readonly<{
   key: string;
@@ -60,7 +62,7 @@ export function chartPoolKeys(source: ChartPools, controls: ChartControls, now: 
 
 export async function readChartSnapshot(source: ChartSource, controls: ChartControls, dependencies: MarketDataDependencies, now: number): Promise<ChartSnapshot> {
   const reads = await Promise.all(chartPoolKeys(source, controls, now).map(async (pool) => {
-    const read = await readChartPool(pool, controls, dependencies, now);
+    const read = await readChartPool(pool, controls, dependencies, now, source.migration);
     if (source.migration && read.page && !sameChartMigration(source.migration, read.page.migration)) {
       return [pool, { section: { state: "unavailable", reason: "migration-history-mismatch" }, page: null }] as const;
     }
@@ -85,11 +87,28 @@ export function chartTailRequest(controls: ChartControls, now: number) {
   return { interval, limit, capped };
 }
 
-export async function readChartPool(poolKey: string, controls: ChartControls, dependencies: MarketDataDependencies, now: number): Promise<ChartPoolRead> {
+export async function readChartPool(poolKey: string, controls: ChartControls, dependencies: MarketDataDependencies, now: number, migration: MigrationMarker | null = null): Promise<ChartPoolRead> {
+  if (controls.range === "live") return readLiveTrades(poolKey, dependencies, migration);
   const read = await readPoolCandles(poolKey, chartTailRequest(controls, now), dependencies);
   if (read.status === "unavailable") return { section: sectionFromRead(read, () => false), page: null };
   if (read.data.kind === "refused") return { section: { state: "unavailable", reason: `refused:${read.data.error.code}`, provenance: read.provenance }, page: null };
   return { section: sectionFromRead({ ...read, data: read.data.value }, (page) => page.candles.length === 0), page: read.data.value };
+}
+
+/** The bounded tape gives Live real timestamps and the last observed trade even after a quiet spell. */
+async function readLiveTrades(poolKey: string, dependencies: MarketDataDependencies, migration: MigrationMarker | null): Promise<ChartPoolRead> {
+  const read = await readPoolTrades(poolKey, { limit: TRADE_PAGE.max }, dependencies);
+  if (read.status === "unavailable") return { section: sectionFromRead(read, () => false), page: null };
+  if (read.data.kind === "refused") return { section: { state: "unavailable", reason: `refused:${read.data.error.code}`, provenance: read.provenance }, page: null };
+  const tape = read.data.value.trades;
+  const liveTrades = tape.slice().reverse();
+  const venue = poolKey.split(":")[0] as PoolCandlePage["venue"];
+  const page: StreamChartPage = {
+    poolKey, venue, source: venue === "blast_curve" ? "curve" : "venue",
+    interval: "1s", migration, liveTrades, candles: candlesFromTrades(liveTrades),
+    truncated: tape.length === TRADE_PAGE.max,
+  };
+  return { section: sectionFromRead({ ...read, data: page }, (page) => page.liveTrades?.length === 0), page };
 }
 
 /**

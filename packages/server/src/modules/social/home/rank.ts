@@ -16,7 +16,6 @@ import {
   isHomeWindow,
   type HomeActivity,
   type HomeQuery,
-  type HomeRank,
   type HomeSort,
   type HomeWindow,
 } from "@blast/core/modules/social/contracts/home.ts";
@@ -28,28 +27,41 @@ import { decodeCursor, encodeCursor, invalidCursor } from "@blast/server/modules
  * cohort.
  *
  * **Candidate universe.** Shown migrated presales, standalone launch vault
- * coins, and the tracked pool catalog (`HOME_LIST_COIN_SOURCES`).
+ * coins, and the tracked pool catalog (`HOME_LIST_COIN_SOURCES`), less the
+ * Blast dust (`HOME_DUST_USD`): a Blast coin whose raise (a presale's, or a
+ * curve's graduation target) or market cap is under $1,000. Catalog coins
+ * are never dust.
  *
- * **Inputs**, all over the chosen window and all from `HomeActivity`:
+ * **Inputs**, all over the chosen window:
  * - `breadth`: distinct participants (accounts and unlinked wallets, each
  *   once). One actor is one, whatever it did: a whale is never breadth.
+ * - `volume`: the Volume column's priced dollars (DEX pools included when
+ *   the read asks for them).
+ * - freshness: how little of the window has passed since the latest event.
+ * - `holders`: blast-infra's holder count now, or 0 without one.
  * - `activity`: confirmed events, capped at three per participant
- *   (`min(events, 3 × breadth)`), so repeated trades by one actor count at
- *   most three.
+ *   (`min(events, 3 × breadth)`); a Volume tie-break, not a Relevant input.
  * - `recency`: 2 when the latest event is within a tenth of the window
- *   (6 min of an hour, 2.4 h of a day), 1 within half of it, else 0.
+ *   (6 min of an hour, 2.4 h of a day), 1 within half of it, else 0; a
+ *   Volume tie-break.
  *
- * **Score** `breadth × 10 + activity + recency × 5`. Missing data is 0: a coin
- * with no window activity scores 0 and is admitted anyway (Discover works
- * without a network), after every active coin, newest launch first. Follower
- * counts, posts, likes and market figures are not inputs. Selling counts
- * exactly like buying: a sold-off coin ranks by its breadth too, and its
- * summary says who sold.
+ * **Relevant score**, out of 100 (stored ×100 as an integer):
+ * `40 × breadth + 30 × volume + 20 × freshness + 10 × holders`, each input
+ * scaled 0–1 on a log curve that stops at its cap (`RELEVANCE_CAPS`), so
+ * neither one wallet's churn nor one large order can lead. Breadth weighs
+ * most: many people beat big money. Freshness falls from 1 for a trade this
+ * minute to 0 at the window's start, on a clock that ticks once a minute. Missing data is 0.
+ * Selling counts exactly like buying.
+ *
+ * **Idle coins.** A coin with no participants and no dollars in the window
+ * ranks after every active one, by market value: FDV (a coin without one
+ * last), then holders. A dead $3 coin never sits above a $200K coin.
  *
  * **Ties** break by the latest event (newest first), then by coin type
  * (bytewise), so two reads of the same data give one order.
  *
- * **Other sorts.** `trending`: the Volume column's priced dollars in the window, then breadth, then activity, then recency, same
+ * **Other sorts.** `trending`: the Volume column's priced dollars in the window, then breadth, then activity, then recency,
+ * then (for idle coins, which tie on all of those) FDV and holders, same
  * ties. `newest`: launch time (newest first), then coin type.
  *
  * **Why shown vs why ranked.** Every coin carries `rank.why`: the inputs in
@@ -93,8 +105,37 @@ export function rankInputs(activity: Pick<HomeActivity, "participants" | "events
   };
 }
 
-export function relevanceScore(inputs: RankInputs): number {
-  return inputs.breadth * 10 + inputs.activity + inputs.recency * 5;
+/** A Blast coin whose raise (a presale's, or a curve's graduation target) or market cap is under this, in USD, stays off Home. */
+export const HOME_DUST_USD = 1_000;
+
+/** Relevant's weights, out of 100: who joined counts most, then dollars, then how recent, then how widely held. */
+export const RELEVANCE_WEIGHTS = { breadth: 40, volume: 30, freshness: 20, holders: 10 } as const;
+/** Where each input stops adding: past these, more of the same no longer lifts a coin. */
+export const RELEVANCE_CAPS = {
+  breadth: { "1h": 10, "24h": 50 },
+  volume: { "1h": 2_000, "24h": 20_000 },
+  holders: 1_000,
+} as const satisfies Readonly<{ breadth: Record<HomeWindow, number>; volume: Record<HomeWindow, number>; holders: number }>;
+
+const MINUTE_MS = 60_000;
+const saturating = (value: number, cap: number) => Math.log1p(Math.min(cap, Math.max(0, value))) / Math.log1p(cap);
+
+/** The Relevant score (see the ranking notes above), ×100 and rounded so cursors carry an integer. */
+export function relevanceScore(
+  candidate: Readonly<{ inputs: Pick<RankInputs, "breadth" | "volume">; latestMs: number | null; holders?: number | null }>,
+  window: HomeWindow,
+  toMs: number,
+): number {
+  const { inputs, latestMs, holders } = candidate;
+  // The clock moves in whole minutes, the same step for every coin: scores hold still within a minute and never swap order on their own.
+  // It rounds up, so a trade this minute is never later than the clock (the clamp only catches clock skew).
+  const nowMs = Math.ceil(toMs / MINUTE_MS) * MINUTE_MS;
+  const freshness = latestMs === null ? 0 : Math.min(1, Math.max(0, 1 - (nowMs - latestMs) / HOME_WINDOW_MS[window]));
+  const score = RELEVANCE_WEIGHTS.breadth * saturating(inputs.breadth, RELEVANCE_CAPS.breadth[window])
+    + RELEVANCE_WEIGHTS.volume * saturating(inputs.volume, RELEVANCE_CAPS.volume[window])
+    + RELEVANCE_WEIGHTS.freshness * freshness
+    + RELEVANCE_WEIGHTS.holders * saturating(holders ?? 0, RELEVANCE_CAPS.holders);
+  return Math.round(score * 100);
 }
 
 /**
@@ -115,26 +156,32 @@ export function whyShown(activity: Pick<HomeActivity, "participants" | "events" 
   return `${people} · ${trades}${sold} in the ${window}${where}`;
 }
 
-export function rankOf(activity: HomeActivity, coverage: TradeCoverage): HomeRank {
-  return { score: relevanceScore(rankInputs({ ...activity, volume_usd: volumeOf(activity) })), why: whyShown(activity, coverage) };
-}
-
-/** What the orders compare: every candidate carries these (`holders`: blast-infra's count now, null without one). */
-export type Rankable = Readonly<{ coinType: string; score: number; inputs: RankInputs; latestMs: number | null; launchedMs: number | null; holders?: number | null }>;
+/** What the orders compare: every candidate carries these (`holders`: blast-infra's count now, `fdvUsd`: its FDV now; null without one). */
+export type Rankable = Readonly<{ coinType: string; score: number; inputs: RankInputs; latestMs: number | null; launchedMs: number | null; holders?: number | null; fdvUsd?: number | null }>;
 
 const text = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 const newestFirst = (a: number | null, b: number | null) => (b ?? -1) - (a ?? -1);
+const mostFirst = (a: number | null | undefined, b: number | null | undefined) => (b ?? -1) - (a ?? -1);
+
+/** No participants and no dollars in the window. */
+export const isIdle = (candidate: Pick<Rankable, "inputs">) => candidate.inputs.breadth === 0 && candidate.inputs.volume === 0;
+
+/** Market value: FDV first, then holders, a coin without either last. */
+const byValue = (a: Rankable, b: Rankable) => mostFirst(a.fdvUsd, b.fdvUsd) || mostFirst(a.holders, b.holders);
 
 /** The comparator of a sort: a total order over every candidate. */
 export function homeOrder(sort: HomeSort): (a: Rankable, b: Rankable) => number {
   switch (sort) {
     case "relevant":
-      return (a, b) => b.score - a.score || newestFirst(a.latestMs, b.latestMs) || newestFirst(a.launchedMs, b.launchedMs) || text(a.coinType, b.coinType);
+      // Active coins by score; idle ones after them by market value (a holder-only score would put dust above real coins).
+      return (a, b) => Number(isIdle(a)) - Number(isIdle(b))
+        || (isIdle(a) ? byValue(a, b) : b.score - a.score)
+        || newestFirst(a.latestMs, b.latestMs) || newestFirst(a.launchedMs, b.launchedMs) || text(a.coinType, b.coinType);
     case "trending":
       // The most dollars moved in the window first (the owner's "trending means volume"); breadth breaks ties, so one wallet's churn ranks below many people's.
       return (a, b) =>
         b.inputs.volume - a.inputs.volume || b.inputs.breadth - a.inputs.breadth || b.inputs.activity - a.inputs.activity || b.inputs.recency - a.inputs.recency
-        || newestFirst(a.latestMs, b.latestMs) || text(a.coinType, b.coinType);
+        || byValue(a, b) || newestFirst(a.latestMs, b.latestMs) || text(a.coinType, b.coinType);
     case "newest":
       return (a, b) => newestFirst(a.launchedMs, b.launchedMs) || text(a.coinType, b.coinType);
     case "held":
@@ -148,7 +195,7 @@ export function homeOrder(sort: HomeSort): (a: Rankable, b: Rankable) => number 
  * Whether a candidate has data on its sort's keys. Each order puts the
  * candidates without it last, so the ones with it are a prefix: Trending's
  * window dollars, breadth, activity or recency; New's launch time; Relevant's
- * score; Most held's holder count.
+ * activity, or for an idle coin its FDV or a holder; Most held's holder count.
  */
 export function hasSortData(sort: HomeSort, candidate: Rankable): boolean {
   switch (sort) {
@@ -157,22 +204,22 @@ export function hasSortData(sort: HomeSort, candidate: Rankable): boolean {
     case "newest":
       return candidate.launchedMs !== null;
     case "relevant":
-      return candidate.score > 0;
+      return !isIdle(candidate) || candidate.fdvUsd != null || (candidate.holders ?? 0) > 0;
     case "held":
       return candidate.holders != null;
   }
 }
 
 /** A keyset position in a sort's order: the last candidate of the previous page. */
-export type HomeCursor = Readonly<{ sort: HomeSort; coinType: string; score: number; breadth: number; activity: number; recency: number; volume: number; latestMs: number | null; launchedMs: number | null; holders?: number | null }>;
+export type HomeCursor = Readonly<{ sort: HomeSort; coinType: string; score: number; breadth: number; activity: number; recency: number; volume: number; latestMs: number | null; launchedMs: number | null; holders?: number | null; fdvUsd?: number | null }>;
 
-/** Version 3 adds the holder count (`held`); a version 2 cursor of another sort still reads. */
-const VERSION = 3;
+/** Version 4 adds the FDV (idle coins' order); version 3 added the holder count (`held`). Older cursors read with the missing fields null. */
+const VERSION = 4;
+const VERSION_WITHOUT_FDV = 3;
 const VERSION_WITHOUT_HOLDERS = 2;
 
-
 export function encodeHomeCursor(position: HomeCursor): string {
-  return encodeCursor("discover", [VERSION, position.sort, position.coinType, position.score, position.breadth, position.activity, position.recency, position.volume, position.latestMs, position.launchedMs, position.holders ?? null]);
+  return encodeCursor("discover", [VERSION, position.sort, position.coinType, position.score, position.breadth, position.activity, position.recency, position.volume, position.latestMs, position.launchedMs, position.holders ?? null, position.fdvUsd ?? null]);
 }
 
 /** The position a cursor names; `invalid_parameter` (`cursor`) for anything `encodeHomeCursor` did not produce, or for another sort. */
@@ -183,24 +230,29 @@ export function decodeHomeCursor(cursor: string, sort: HomeSort): HomeCursor {
     z.number().nonnegative(), socialCountSchema.nullable(), socialCountSchema.nullable(),
   ] as const;
   const decoded = decodeCursor("discover", cursor);
-  const current = z.tuple([z.literal(VERSION), ...common, socialCountSchema.nullable()]).safeParse(decoded);
-  const older = sort === "held" ? null : z.tuple([z.literal(VERSION_WITHOUT_HOLDERS), ...common]).safeParse(decoded);
+  const current = z.tuple([z.literal(VERSION), ...common, socialCountSchema.nullable(), z.number().nonnegative().nullable()]).safeParse(decoded);
   if (current.success) {
-    const [, , coinType, score, breadth, activity, recency, volume, latestMs, launchedMs, holders] = current.data;
-    return { sort, coinType, score, breadth, activity, recency, volume, latestMs, launchedMs, holders };
+    const [, , coinType, score, breadth, activity, recency, volume, latestMs, launchedMs, holders, fdvUsd] = current.data;
+    return { sort, coinType, score, breadth, activity, recency, volume, latestMs, launchedMs, holders, fdvUsd };
   }
+  const withoutFdv = z.tuple([z.literal(VERSION_WITHOUT_FDV), ...common, socialCountSchema.nullable()]).safeParse(decoded);
+  if (withoutFdv.success) {
+    const [, , coinType, score, breadth, activity, recency, volume, latestMs, launchedMs, holders] = withoutFdv.data;
+    return { sort, coinType, score, breadth, activity, recency, volume, latestMs, launchedMs, holders, fdvUsd: null };
+  }
+  const older = sort === "held" ? null : z.tuple([z.literal(VERSION_WITHOUT_HOLDERS), ...common]).safeParse(decoded);
   if (!older?.success) throw invalidCursor();
   const [, , coinType, score, breadth, activity, recency, volume, latestMs, launchedMs] = older.data;
-  return { sort, coinType, score, breadth, activity, recency, volume, latestMs, launchedMs, holders: null };
+  return { sort, coinType, score, breadth, activity, recency, volume, latestMs, launchedMs, holders: null, fdvUsd: null };
 }
 
 /** The cursor's candidate, as the order compares it. */
 export function rankableOfCursor(cursor: HomeCursor): Rankable {
-  return { coinType: cursor.coinType, score: cursor.score, inputs: { breadth: cursor.breadth, activity: cursor.activity, recency: cursor.recency, volume: cursor.volume }, latestMs: cursor.latestMs, launchedMs: cursor.launchedMs, holders: cursor.holders ?? null };
+  return { coinType: cursor.coinType, score: cursor.score, inputs: { breadth: cursor.breadth, activity: cursor.activity, recency: cursor.recency, volume: cursor.volume }, latestMs: cursor.latestMs, launchedMs: cursor.launchedMs, holders: cursor.holders ?? null, fdvUsd: cursor.fdvUsd ?? null };
 }
 
 export function cursorOf(sort: HomeSort, last: Rankable): string {
-  return encodeHomeCursor({ sort, coinType: last.coinType, score: last.score, breadth: last.inputs.breadth, activity: last.inputs.activity, recency: last.inputs.recency, volume: last.inputs.volume, latestMs: last.latestMs, launchedMs: last.launchedMs, holders: last.holders ?? null });
+  return encodeHomeCursor({ sort, coinType: last.coinType, score: last.score, breadth: last.inputs.breadth, activity: last.inputs.activity, recency: last.inputs.recency, volume: last.inputs.volume, latestMs: last.latestMs, launchedMs: last.launchedMs, holders: last.holders ?? null, fdvUsd: last.fdvUsd ?? null });
 }
 
 /**
@@ -269,7 +321,7 @@ function parsePage(raw: string | null): number {
 
 /** `tradable`: absent is false; `1` true; `0` false; anything else refused. */
 /** `1` or `0`, absent meaning `0`. */
-function parseFlag(raw: string | null, parameter: "tradable" | "ranked" | "traction"): boolean {
+function parseFlag(raw: string | null, parameter: "tradable" | "ranked"): boolean {
   socialParameter(z.enum(["1", "0"]).nullable(), raw, parameter);
   return raw === "1";
 }
@@ -294,8 +346,6 @@ export function parseHomeQuery(params: URLSearchParams): HomeQuery {
   if (cursor !== null && page > 1) throw invalid("page");
   const window = parseChoice(single(params, "window"), HOME_DEFAULT_QUERY.window, isHomeWindow, "window");
   const sort = parseChoice(single(params, "sort"), HOME_DEFAULT_QUERY.sort, isHomeSort, "sort");
-  const traction = parseFlag(single(params, "traction"), "traction");
-  if (traction && (window !== "1h" || sort !== "relevant" || page !== 1 || cursor !== null)) throw invalid("traction");
   return {
     window,
     sort,
@@ -306,6 +356,5 @@ export function parseHomeQuery(params: URLSearchParams): HomeQuery {
     page,
     cursor,
     ...(parseFlag(single(params, "ranked"), "ranked") ? { ranked: true } : {}),
-    ...(traction ? { traction: true } : {}),
   };
 }

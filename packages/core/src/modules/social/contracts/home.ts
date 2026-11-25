@@ -137,8 +137,12 @@ export function isHomeWindow(value: unknown): value is HomeWindow {
  * (`home/rank.ts`); `trending` is the most distinct participants in the
  * window; `newest` is the latest launch; `held` is the most holders now
  * (`HomeCoin.holders`, blast-infra's count; a coin without one comes last),
- * the redesign's "Most held". Market cap is not offered: the chain views
- * carry no supply, so no order over every coin could be true.
+ * the redesign's "Most held". In `relevant` and `trending`, coins with no
+ * trades in the window follow the active ones, by FDV, then holders. A Blast
+ * coin whose raise or market cap is under $1,000 (`HOME_DUST_USD`) is left
+ * out of every order.
+ * Market cap is not offered as an order: a sale's supply can come from its
+ * terms, read for the page only, so no order over every coin could be true.
  */
 export const HOME_SORTS = ["relevant", "trending", "newest", "held"] as const;
 export type HomeSort = (typeof HOME_SORTS)[number];
@@ -333,8 +337,6 @@ export type HomeQuery = Readonly<{
   cursor: string | null;
   /** Also answer `ranked` (`ranked=1`). Only Blast mode Discover asks, so a client loaded before the field never receives it. */
   ranked?: boolean;
-  /** Home Discover's first-page one-hour trade candidates, selected by traction. */
-  traction?: boolean;
 }>;
 
 export const HOME_DEFAULT_QUERY: HomeQuery = Object.freeze({
@@ -373,7 +375,6 @@ function setPageParams(params: URLSearchParams, query: Partial<HomeQuery>) {
     params.set("page", String(query.page));
   if (query.cursor) params.set("cursor", query.cursor);
   if (query.ranked) params.set("ranked", "1");
-  if (query.traction) params.set("traction", "1");
 }
 
 /** `GET /api/social/home/coins` for these sales (order kept). */

@@ -89,7 +89,7 @@ function presale(id: string, symbol: string, lifecycle: ChainPresaleRow["lifecyc
   return {
     presale_id: id, sale_token: coinOf(id, symbol), quote_type: QUOTE, sale_symbol: symbol, sale_name: `Sale ${symbol}`,
     sale_icon_url: `https://cdn.blast.fun/${symbol}.png`, sale_decimals: 9, quote_symbol: "USDC", quote_decimals: 6, lifecycle,
-    start_ms: 0, end_ms: 0, raise_target: "100000000000", min_commitment: "10000000", wallet_cap: null, total_commitments: "0",
+    start_ms: 0, end_ms: 0, raise_target: "100000000000", min_commitment: "10000000", wallet_cap: null, total_commitments: "100000000000",
     participants: 0, venue: "cetus", pool_id: hex("9001"), updated_checkpoint: 1, ...row,
   };
 }
@@ -143,6 +143,7 @@ async function withFixture(run: (fixture: Fixture) => Promise<void>, options: Re
   elapsedMs?: () => number;
   cached?: boolean;
   trackedPoolMarket?: (now: number) => ReturnType<NonNullable<SocialHomeRouteDependencies["trackedPoolMarket"]>>;
+  curveTargets?: SocialHomeRouteDependencies["curveTargets"];
 }> = {}): Promise<void> {
   const database = await freshTestDatabase();
   const admin = createPool(database.url, { max: 4 });
@@ -293,8 +294,8 @@ async function withFixture(run: (fixture: Fixture) => Promise<void>, options: Re
       coins: createReadCache<HomeCoinsByIds>(10_000, 64, readNow),
       portfolios: createReadCache<ReadonlyMap<string, TraderPortfolioRead>>(10_000, 64, readNow),
     } : undefined;
-    const { trackedPoolMarket } = options;
-    const common = { database: () => replica, ledgerDatabase: () => autocommitReader(webPool, "social"), wallets: accounts, config: reader.getSocialConfig, now: readNow, terms, caches, trackedPoolMarket: trackedPoolMarket && (() => trackedPoolMarket(now)) };
+    const { trackedPoolMarket, curveTargets } = options;
+    const common = { database: () => replica, ledgerDatabase: () => autocommitReader(webPool, "social"), wallets: accounts, config: reader.getSocialConfig, now: readNow, terms, caches, trackedPoolMarket: trackedPoolMarket && (() => trackedPoolMarket(now)), curveTargets };
     const all = createSocialHomeRoutes({ ...common, kit: kitWith(true) });
     const hidden = createSocialHomeRoutes({ ...common, kit: kitWith(false) });
     const get = (path: string, headers: Record<string, string> = {}) => new Request(`${ORIGIN}${path}`, { headers: { "x-forwarded-for": "203.0.113.7", ...headers } });
@@ -663,7 +664,6 @@ test("Discover: one item per coin, counts by identity, directions kept apart, ho
     // Combine balances before rounding: individually sub-basis-point holdings still count.
     assert.equal(orbit.top_holders.share_bps, 66);
     assert.deepEqual(page.coins[2]!.top_holders, { holders: [], share_bps: null });
-    assert.equal(orbit.rank.score, 6 * 10 + 10 + 2 * 5);
     // The preview: the newest rows, a seller among them, a private account and a late-named one as wallets only.
     assert.equal(orbit.activity.preview.length, 3);
     assert.equal(orbit.activity.preview[0]!.key, "c:maya");
@@ -674,14 +674,17 @@ test("Discover: one item per coin, counts by identity, directions kept apart, ho
     const eman = page.coins[2]!;
     assert.deepEqual([eman.activity.participants, eman.activity.events, eman.activity.buyers, eman.activity.claimers], [1, 5, 1, 1]);
     assert.deepEqual([eman.price_usd, eman.change_24h_bps, eman.fdv_usd, eman.holders], ["0.2", null, null, null]);
-    assert.equal(eman.rank.score, 10 + 3 + 10);
     assert.deepEqual([eman.activity.preview[0]!.buys?.count, eman.activity.preview[0]!.claims?.count, eman.activity.preview[0]!.sells], [4, 1, null]);
     // The crowd: 23 wallets, each once.
     const crowd = page.coins[0]!;
-    assert.deepEqual([crowd.activity.participants, crowd.activity.events, crowd.rank.score], [23, 23, 230 + 23 + 10]);
+    assert.deepEqual([crowd.activity.participants, crowd.activity.events], [23, 23]);
+    // Relevant: the weighted score leads the order, and many traders lead one busy wallet.
+    const scores = page.coins.map((coin) => coin.rank.score);
+    assert.deepEqual(scores, [...scores].sort((a, b) => b - a));
+    assert.ok(crowd.rank.score > orbit.rank.score && orbit.rank.score > eman.rank.score);
     // A quiet coin is shown, last, and says so.
     const quiet = page.coins[4]!;
-    assert.deepEqual([quiet.activity.participants, quiet.rank.score, quiet.rank.why], [0, 0, "No activity in the last 24h"]);
+    assert.deepEqual([quiet.activity.participants, quiet.rank.why], [0, "No activity in the last 24h"]);
     assert.equal(page.coins[3]!.tradable, false);
     assert.equal(page.next_cursor, null);
     // No viewer field, no account id, no private identity.
@@ -689,19 +692,11 @@ test("Discover: one item per coin, counts by identity, directions kept apart, ho
     assert.doesNotMatch(JSON.stringify(page), /00000000-0000-4000/);
   }));
 
-test("Homepage traction shortlists actual recent traders without changing other Discover sorts", { skip }, () =>
-  withFixture(async ({ admin, discover, now }) => {
-    const query = "?window=1h&sort=relevant&traction=1";
-    const active = await ok<HomeCoinsPage>(await discover(query), "home-coins-page");
-    assert.deepEqual(symbols(active.coins), ["CROWD", "ORBIT", "EMAN"]);
-    assert.deepEqual([active.coins[1]?.activity.participants, active.coins[1]?.activity.backers, active.next_cursor], [6, 0, null]);
+test("An old client's traction flag is ignored: it gets the Relevant page", { skip }, () =>
+  withFixture(async ({ discover }) => {
+    const flagged = await ok<HomeCoinsPage>(await discover("?window=1h&sort=relevant&traction=1"), "home-coins-page");
     const regular = await ok<HomeCoinsPage>(await discover("?window=1h&sort=relevant"), "home-coins-page");
-    assert.ok(symbols(regular.coins).includes("HELMET"));
-    assert.equal((await discover("?window=24h&traction=1")).status, 400);
-    const hidden = await ok<HomeCoinsPage>(await discover(query, { trades: false }), "home-coins-page");
-    assert.deepEqual(hidden.coins, []);
-    await admin.query("UPDATE watermarks SET timestamp_ms_hi_inclusive = $1", [now - 2 * HOUR]);
-    assert.deepEqual((await ok<HomeCoinsPage>(await discover(query), "home-coins-page")).coins, []);
+    assert.deepEqual(symbols(flagged.coins), symbols(regular.coins));
   }));
 
 test("Discover: the window, the sorts, the filters and the keyset page are coherent over every coin", { skip }, () =>
@@ -1007,15 +1002,22 @@ test("Discover and saved coins fill missing price and supply from tracked pools 
   let snapshots = 0;
   let poolPricesAvailable = true;
   return withFixture(async ({ admin, coins, discover, market, now }) => {
-    await ok<HomeCoinsPage>(await discover("?page=1&limit=5"), "home-coins-page");
+    await ok<HomeCoinsPage>(await discover("?page=1&limit=5&sort=newest"), "home-coins-page");
     assert.equal(snapshots, 0);
+    // Relevant ranks idle catalog coins by FDV, so it reads the snapshot once and the page reuses it.
+    await ok<HomeCoinsPage>(await discover("?page=1&limit=5"), "home-coins-page");
+    assert.equal(snapshots, 1);
     const page = await ok<HomeCoinsPage>(await discover("?page=2&limit=5&mobile_market=1&live_inputs=1&rolling_change=1&dex_volume=1"), "home-coins-page");
-    assert.deepEqual([page.page, page.pages, page.total, symbols(page.coins)], [2, 2, 10, TRACKED_SYMBOLS]);
-    assert.deepEqual(page.coins.map((coin) => [coin.coin_type, coin.venue, coin.decimals, coin.verified_team]), [
+    // ONE's snapshot FDV ($12.50) lifts it to page 1, above the idle coins with no value.
+    assert.deepEqual([page.page, page.pages, page.total, symbols(page.coins)], [2, 2, 10, ["QUIET", "HELMET", "BLAST", "Wheels", "MANIFEST"]]);
+    assert.deepEqual(page.coins.slice(1).map((coin) => [coin.coin_type, coin.venue, coin.decimals, coin.verified_team]), [
       [helmet.coinType, "cetus", 9, true], [blast.coinType, "bluefin", 9, true], [wheels.coinType, "bluefin", 9, true],
-      [one.coinType, "cetus", 6, undefined], [manifest.coinType, "cetus", 9, true],
+      [manifest.coinType, "cetus", 9, true],
     ]);
-    const [, , wheelsRow, oneRow, manifestRow] = page.coins;
+    const first = await ok<HomeCoinsPage>(await discover("?page=1&limit=5&mobile_market=1&live_inputs=1&rolling_change=1&dex_volume=1"), "home-coins-page");
+    const oneRow = first.coins.find((coin) => coin.coin_type === one.coinType);
+    assert.deepEqual([oneRow?.coin_type, oneRow?.venue, oneRow?.decimals, oneRow?.verified_team], [one.coinType, "cetus", 6, undefined]);
+    const [, , , wheelsRow, manifestRow] = page.coins;
     assert.ok(wheelsRow && oneRow && manifestRow);
     assert.deepEqual([wheelsRow.price_usd, wheelsRow.fdv_usd, wheelsRow.mobile_market?.market_cap_usd], ["0.01", null, null]);
     assert.deepEqual([oneRow.price_usd, oneRow.price_as_of_ms, oneRow.fdv_usd], ["0.000625", now - MINUTE, "12.50"]);
@@ -1023,7 +1025,7 @@ test("Discover and saved coins fill missing price and supply from tracked pools 
     assert.deepEqual([oneRow.live_inputs?.total_supply, oneRow.live_inputs?.circulating_supply], ["20000000000", "15000000000"]);
     assert.equal(oneRow.change_24h_bps, null);
     assert.equal(oneRow.live_inputs?.price_checkpoint, undefined);
-    assert.equal(snapshots, 1);
+    assert.equal(snapshots, 3);
     assert.deepEqual([manifestRow.presale_id, manifestRow.sale, manifestRow.launch_id, manifestRow.launched_ms], [null, null, null, null]);
     assert.deepEqual([manifestRow.price_usd, manifestRow.holders, manifestRow.fdv_usd, manifestRow.spark], [null, null, null, []]);
     assert.equal(manifestRow.dex_volume, undefined);
@@ -1087,6 +1089,9 @@ test("Discover and saved coins fill missing price and supply from tracked pools 
   });
 });
 
+// blast-infra's graduated curves' raise targets, as the standalone test sets them.
+const curveTargets = new Map<string, string>();
+
 test("Standalone Cetus and Bluefin coins use Discover, without a presale or duplicate coin rows", { skip }, () =>
   withFixture(async ({ admin, discover, coins, thread, market, holders, now }) => {
     const native = coinOf(hex("ca7"), "NATIVE");
@@ -1116,7 +1121,7 @@ test("Standalone Cetus and Bluefin coins use Discover, without a presale or dupl
     await admin.query(`INSERT INTO pools (pool_key,venue,coin_type,quote_type,lifecycle,created_checkpoint,created_at_ms)
       VALUES ($1,'blast_curve',$2,$3,'migrated',39000,$4)`, [`blast_curve:${launch}`, native, QUOTE, now - 3 * DAY]);
     await seedChainRead(admin, {
-      prices: [{ coin_type: native, usd_price: "0.02", as_of_ms: now, source: "pool" }],
+      prices: [{ coin_type: native, usd_price: "0.1", as_of_ms: now, source: "pool" }],
       activity: [activity("trade_buy", W.anon, null, now - MINUTE, { checkpoint: 49999, coin_type: native, coin_amount: "1000000000", quote_amount: "20000", usd_value: "0.02" })],
       coin_balances: [
         { coin_type: native, owner: W.anon, balance: "2500000000000", updated_checkpoint: 45_000 },
@@ -1126,7 +1131,13 @@ test("Standalone Cetus and Bluefin coins use Discover, without a presale or dupl
       ],
       coin_holder_history: [{ coin_type: native, checkpoint: 45_000, timestamp_ms: now - HOUR, holders: 7 }],
     });
+    // NATIVE's curve had to raise 999 USDC ($999) to graduate: dust, off Home and out of the count.
+    curveTargets.set(launch, "999000000");
+    const withoutNative = await ok<HomeCoinsPage>(await discover("?limit=50"), "home-coins-page");
+    assert.equal(withoutNative.coins.some((coin) => coin.coin_type === native), false);
+    curveTargets.set(launch, "8000000000");
     const page = await ok<HomeCoinsPage>(await discover("?limit=50"), "home-coins-page");
+    assert.equal(page.total, withoutNative.total + 1);
     const standalone = page.coins.filter((coin) => coin.presale_id === null && !TRACKED_SYMBOLS.includes(coin.symbol));
     assert.deepEqual(standalone.map((coin) => coin.symbol).sort(), ["BLUE", "NATIVE"]);
     const coin = standalone.find((coin) => coin.coin_type === native)!;
@@ -1134,9 +1145,9 @@ test("Standalone Cetus and Bluefin coins use Discover, without a presale or dupl
     assert.equal(coin.venue, "cetus");
     assert.equal(coin.lifecycle, "migrated");
     assert.equal(coin.tradable, true);
-    assert.equal(coin.price_usd, "0.02");
-    // A curve coin has no sale terms: its FDV is the price times its total supply ($0.02 × 13,000 whole coins).
-    assert.equal(coin.fdv_usd, "260.00");
+    assert.equal(coin.price_usd, "0.1");
+    // A curve coin has no sale terms: its FDV is the price times its total supply ($0.10 × 13,000 whole coins), above the dust line.
+    assert.equal(coin.fdv_usd, "1300.00");
     // The curve coin's card: its launch page, age, holders and top 10 against live supply.
     assert.deepEqual([coin.launch_id, coin.launched_ms, coin.holders], [launch, now - 3 * DAY, 7]);
     assert.deepEqual(coin.top_holders.holders.map((holder) => [holder.actor.type === "account" ? holder.actor.callsign : "wallet", holder.share_bps]), [["wallet", 2500], ["jules", 500]]);
@@ -1159,7 +1170,7 @@ test("Standalone Cetus and Bluefin coins use Discover, without a presale or dupl
     for (const bad of ["?coin=abc", `?coin=${encodeURIComponent(native)}&presale=${P.orbit}`]) assert.equal((await thread(bad)).status, 400, bad);
     // Its coin page separates total supply for FDV from the live supply for holder shares.
     const nativeMarket = await ok<HomeCoinMarket>(await market(`?coin=${encodeURIComponent(native)}`), "home-coin-market");
-    assert.deepEqual([nativeMarket.supply, nativeMarket.fdv_usd, nativeMarket.market_cap_usd], [{ total: "13000000000000", escrowed: "0", circulating: "10000000000000" }, "260.00", "200.00"]);
+    assert.deepEqual([nativeMarket.supply, nativeMarket.fdv_usd, nativeMarket.market_cap_usd], [{ total: "13000000000000", escrowed: "0", circulating: "10000000000000" }, "1300.00", "1000.00"]);
     const nativeHolders = await ok<HomeHoldersPage>(await holders(`?coin=${encodeURIComponent(native)}&limit=10`), "home-holders-page", "public, s-maxage=10");
     assert.deepEqual(nativeHolders.holders.map((holder) => holder.share_bps), [2500, 500]);
-  }));
+  }, { curveTargets: async () => curveTargets }));

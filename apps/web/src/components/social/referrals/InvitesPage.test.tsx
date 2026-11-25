@@ -34,7 +34,7 @@ test("referral amounts hide unavailable figures and copy readable amounts with t
     if (clipboard) Object.defineProperty(navigator, "clipboard", clipboard);
     else Reflect.deleteProperty(navigator, "clipboard");
   });
-  const accounting = { assets: [usd, other, missing], as_of_ms: 1, share_bps: 6000 as const, pending_events: 0 };
+  const accounting = { assets: [usd, other, missing], as_of_ms: 1, share_bps: 3000 as const, pending_events: 0 };
   await act(async () => root.render(<ReferralAccounting accounting={accounting} compact />));
   const first = container.querySelector<HTMLButtonElement>('button[aria-label="Inspect 1.234567 USD. 0xaaaa…aaaa::usd::USD"]')!;
   assert.ok(first);
@@ -53,6 +53,12 @@ test("referral amounts hide unavailable figures and copy readable amounts with t
   for (const button of container.querySelectorAll("button[aria-label]")) {
     assert.ok(button.getAttribute("aria-label")!.split(/\s+/).length <= 6);
   }
+  assert.doesNotMatch(container.textContent!, /Current referral rate/);
+  await act(async () => root.render(<ReferralAccounting accounting={accounting} />));
+  assert.match(container.textContent!, /Current referral rate 30%/);
+  await act(async () => root.render(<ReferralAccounting accounting={{ ...accounting, share_bps: 6000 }} />));
+  assert.match(container.textContent!, /Current referral rate 60%/);
+  assert.ok([...container.querySelectorAll("dt")].some((label) => label.textContent === "Earnings"));
 });
 
 test("session pending retains the invite list heading and section spacing without private rows", async (t) => {

@@ -142,8 +142,25 @@ test("ranking: breadth first, one actor capped at three events, recency in steps
   assert.equal(rankInputs({ ...activity({ participants: 1, events: 1, latest_ms: 1 }), volume_usd: "1234.50" }).volume, 1234.5);
   // A whale's 40 trades count as three; its breadth is one.
   assert.deepEqual(rankInputs(activity({ participants: 1, events: 40, latest_ms: 86_400_000 - 10 * 3_600_000 })), { breadth: 1, activity: 3, recency: 1, volume: 0 });
-  assert.equal(relevanceScore(rankInputs(activity({}))), 0);
-  assert.equal(relevanceScore({ breadth: 4, activity: 8, recency: 2, volume: 900 }), 58);
+  const day = 86_400_000;
+  assert.equal(relevanceScore({ inputs: rankInputs(activity({})), latestMs: null }, "24h", day), 0);
+  // Every input at its cap, traded this moment: the full 100, stored ×100.
+  assert.equal(relevanceScore({ inputs: { breadth: 50, volume: 20_000 }, latestMs: day, holders: 1_000 }, "24h", day), 10_000);
+  assert.equal(relevanceScore({ inputs: { breadth: 500, volume: 1e9 }, latestMs: day + 5, holders: 1e6 }, "24h", day), 10_000);
+  // Ten traders with $500 between them beat one wallet's $20,000 at the same moment.
+  const crowd = relevanceScore({ inputs: { breadth: 10, volume: 500 }, latestMs: day, holders: 0 }, "24h", day);
+  const whaleOnly = relevanceScore({ inputs: { breadth: 1, volume: 20_000 }, latestMs: day, holders: 0 }, "24h", day);
+  assert.ok(crowd > whaleOnly, `${crowd} > ${whaleOnly}`);
+  // Freshness halves at half the window; a coin with no window activity ranks by holders alone.
+  assert.equal(relevanceScore({ inputs: { breadth: 0, volume: 0 }, latestMs: day / 2, holders: 0 }, "24h", day), 1_000);
+  assert.equal(relevanceScore({ inputs: { breadth: 0, volume: 0 }, latestMs: null, holders: 1_000 }, "24h", day), 1_000);
+  // The clock ticks once a minute for every coin: within a minute a score holds still, and two coins
+  // keep the same gap across ticks, even while one traded within the current minute, so they never swap on their own.
+  const at = 36_000_000;
+  const fresh = (latestMs: number, toMs: number) => relevanceScore({ inputs: { breadth: 0, volume: 0 }, latestMs, holders: 0 }, "1h", toMs);
+  const gaps = [95_000, 110_000, 130_000, 185_000].map(offset => fresh(at + 90_000, at + offset) - fresh(at + 36_000, at + offset));
+  assert.deepEqual(gaps, [30, 30, 30, 30]);
+  assert.equal(fresh(at, at + 120_001), fresh(at, at + 180_000));
   assert.equal(recencyOf(null, "1h", 10_000_000), 0);
   assert.equal(recencyOf(10_000_000 - 300_000, "1h", 10_000_000), 2);
   assert.equal(recencyOf(10_000_000 - 1_500_000, "1h", 10_000_000), 1);

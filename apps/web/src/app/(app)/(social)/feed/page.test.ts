@@ -8,10 +8,9 @@ const requests: string[] = [];
 let homeSections: string;
 let holdPosts: Promise<void> | null = null;
 let holdMarket: Promise<void> | null = null;
-let holdActivity: Promise<void> | null = null;
 let bondingFails = false;
 const fixture = "blast.test.homeRequest";
-const state = { requests, sections: () => homeSections, holdPosts: () => holdPosts, holdMarket: () => holdMarket, holdActivity: () => holdActivity, bondingFails: () => bondingFails };
+const state = { requests, sections: () => homeSections, holdPosts: () => holdPosts, holdMarket: () => holdMarket, bondingFails: () => bondingFails };
 
 function localModule(source: string) {
   return { shortCircuit: true, url: `data:text/javascript,${encodeURIComponent(source)}` };
@@ -44,7 +43,6 @@ test("Home starts visible reads, uses the 24-hour leaderboard, and can render wh
           const state = globalThis[${JSON.stringify(fixture)}];
           state.requests.push(path);
           if (path === "/api/social/feed") await state.holdPosts();
-          if (path.startsWith("/api/social/happening?")) await state.holdActivity();
           if (path.startsWith("/api/social/home?")) {
             await state.holdMarket();
             return Response.json({ coins: [{ name: "Ready coin", quote: { type: "0x2::sui::SUI" } }] });
@@ -72,29 +70,22 @@ test("Home starts visible reads, uses the 24-hour leaderboard, and can render wh
 
     homeSections = "coins.-presales.-posts.-traders";
     const market = Promise.withResolvers<void>();
-    const activity = Promise.withResolvers<void>();
     holdMarket = market.promise;
-    holdActivity = activity.promise;
-    const mixed = Home({ searchParams: Promise.resolve({}) });
+    const relevant = Home({ searchParams: Promise.resolve({}) });
     try {
       const shell = await Promise.race([
-        mixed,
+        relevant,
         new Promise<null>((resolve) => setImmediate(() => resolve(null))),
       ]);
-      assert.ok(shell, "Home can return its shell before market and activity resolve");
-      assert.equal(requests.some((path) => path.startsWith("/api/social/home?")), true);
-      assert.equal(requests.includes(SOCIAL_HAPPENING_DISCOVER_PATH), true);
+      assert.ok(shell, "Home can return its shell before the market resolves");
+      assert.deepEqual(requests.map((path) => path.split("?")[0]), ["/api/social/home"], "the default Relevant view reads only the market");
       assert.ok(shell.props.initial instanceof Promise, "the shell streams before the market is ready");
       market.resolve();
-      await shell.props.initial;
-      activity.resolve();
-      const seed = await shell.props.mixedInitial;
-      assert.equal(seed.market.coins[0].name, "Ready coin", "market rows that arrive before activity can render on the server");
+      const seed = await shell.props.initial;
+      assert.equal(seed.coins[0].name, "Ready coin");
     } finally {
       market.resolve();
-      activity.resolve();
       holdMarket = null;
-      holdActivity = null;
     }
     requests.length = 0;
 

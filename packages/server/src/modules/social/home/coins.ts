@@ -6,7 +6,6 @@ import { compareEventCursors } from "@blast/core/modules/launchpad-contract/curs
 import { assertChainReadThroughViews } from "@blast/core/modules/database/modules.ts";
 import type { ReadableDatabase } from "@blast/core/modules/database/transaction.ts";
 import { coinLabel } from "@blast/core/modules/social/contracts/financial-wire.ts";
-import { tradingRelevance } from "@blast/core/modules/social/discovery/relevance.ts";
 import type { PresaleTermsReader } from "@blast/core/modules/presale/terms/index.ts";
 import { blastV1Coin } from "@blast/core/modules/social/portfolio/core-coins.ts";
 import { namedWalletsSql } from "@blast/core/modules/social/read-model/naming.ts";
@@ -39,6 +38,7 @@ import { latestWindowPriceSql, rollingPriceAtSql } from "@blast/server/modules/s
 import { PRICE_TIER_SPAN_MS, type PricePoint } from "@blast/core/modules/social/contracts/prices.ts";
 import type { readTrackedPoolMarket, TrackedPoolMarket } from "@blast/server/modules/launchpad-market/legacy-fdv.ts";
 import { optionalSource } from "@blast/server/modules/social/optional-source.ts";
+import type { CurveTargets } from "@blast/server/modules/social/home/curve-targets.ts";
 import {
   activityOf,
   actorOf,
@@ -53,7 +53,7 @@ import {
 } from "@blast/server/modules/social/home/aggregate.ts";
 import { readDexVolumes } from "@blast/server/modules/social/home/dex-volume.ts";
 import { fdvOf, outstandingSaleTokensSql, presaleTotalSupply, readSupplies, supplyOf } from "@blast/server/modules/social/home/fdv.ts";
-import { decodeHomeCursor, pageOf, passesFilters, rankInputs, rankOf, relevanceScore, type Rankable, type TradeCoverage } from "@blast/server/modules/social/home/rank.ts";
+import { decodeHomeCursor, HOME_DUST_USD, pageOf, passesFilters, rankInputs, relevanceScore, whyShown, type Rankable, type TradeCoverage } from "@blast/server/modules/social/home/rank.ts";
 import {
   GROUPED_GROUP,
   GROUPED_SELECT,
@@ -76,6 +76,8 @@ import {
   type SideRow,
 } from "@blast/server/modules/social/home/sql.ts";
 import { COIN_TYPE, SUI_OBJECT_ID_PATTERN } from "@blast/core/lib/sui/ids.ts";
+
+type TrackedMarkets = Awaited<ReturnType<typeof readTrackedPoolMarket>>;
 
 /**
  * The coin items of Home (contract in `contracts/home.ts`): Discover's page
@@ -140,6 +142,10 @@ export type FactsRow = Readonly<{
   change_24h_from_ms: string | null;
   holders: string | null;
   holders_as_of_ms: string | null;
+  /** USD per whole quote coin now, to value a sale's raise or a curve's target. */
+  quote_price_usd: string | null;
+  /** A sale's tokens still held in vesting, in atoms; outside its market cap. */
+  escrowed: string | null;
 }>;
 
 type HomePriceOptions = Pick<HomeReadContext, "includeLiveInputs" | "includeRollingChange">;
@@ -173,7 +179,9 @@ function factsSql(scope: SaleScope, params: Params, options: HomePriceOptions = 
     ${options.includeLiveInputs ? "(SELECT market_checkpoint::text FROM chain_read_v1.watermark)" : "NULL::text"} AS price_checkpoint,
     trim_scale(open_24h.usd_price)::text AS price_24h_usd, open_24h.as_of_ms::text AS open_24h_as_of_ms,
     CASE WHEN open_24h.as_of_ms > ${cutoff} THEN open_24h.as_of_ms::text END AS change_24h_from_ms,
-    h.holders::text AS holders, h.timestamp_ms::text AS holders_as_of_ms
+    h.holders::text AS holders, h.timestamp_ms::text AS holders_as_of_ms,
+    trim_scale(qp.usd_price)::text AS quote_price_usd,
+    CASE WHEN p.presale_id IS NOT NULL THEN (${outstandingSaleTokensSql("p.presale_id")}) END AS escrowed
   FROM ${source} p
   LEFT JOIN LATERAL (
     SELECT max(l.timestamp_ms) FILTER (WHERE l.state = 'opened') AS opened_ms,
@@ -184,6 +192,7 @@ function factsSql(scope: SaleScope, params: Params, options: HomePriceOptions = 
   LEFT JOIN chain_read_v1.coins cs ON p.presale_id IS NULL AND cs.coin_type = p.sale_token
   LEFT JOIN chain_read_v1.presale_coin_supply ps ON p.presale_id IS NOT NULL AND ps.coin_type = p.sale_token
   LEFT JOIN ${DISPLAY_PRICES} pr ON pr.coin_type = p.sale_token
+  LEFT JOIN ${DISPLAY_PRICES} qp ON qp.coin_type = p.quote_type
   LEFT JOIN LATERAL (${rollingPriceAtSql("p.sale_token", cutoff, shorter)}) open_24h ON TRUE
   ${lastPrice}
   LEFT JOIN LATERAL (
@@ -211,7 +220,7 @@ export async function readCoinFacts(db: ReadableDatabase, scope: SaleScope, cloc
 export async function readSides(db: ReadableDatabase, request: RowsRequest, recentBuyFromMs?: number): Promise<readonly SideRow[]> {
   if (request.sales.kind === "ids" && request.sales.presaleIds.length === 0) return [];
   const params = new Params();
-  const rows = rowsWithSql(request, params);
+  const rows = rowsWithSql(request, params, "sides");
   // Keep one event's fields together, ordered by timestamp and cursor, in the existing aggregate.
   const recentBuy = recentBuyFromMs === undefined ? "" : `,
     (max(ARRAY[w.timestamp_ms, w.checkpoint, w.tx_slot, w.event_slot, w.part, w.quote_amount]::numeric[])
@@ -227,7 +236,7 @@ export async function readTopParticipants(db: ReadableDatabase, request: RowsReq
   if (request.sales.kind === "ids" && request.sales.presaleIds.length === 0) return [];
   const params = new Params();
   const limit = params.add(perSale);
-  const text = selectHome(`${rowsWithSql(request, params)},
+  const text = selectHome(`${rowsWithSql(request, params, "participants")},
   home_grouped AS (${GROUPED_SELECT} ${GROUPED_GROUP})`, `SELECT ranked.sale, ranked.who, ranked.account_id, ranked.wallet, ranked.events_total, ranked.latest_ms, ranked.latest_kind
   FROM (SELECT g.*, row_number() OVER (PARTITION BY g.sale ORDER BY g.latest_ms::bigint DESC, g.who) AS rn FROM home_grouped g) ranked
   WHERE ranked.rn <= ${limit}::int`);
@@ -375,6 +384,8 @@ async function readMobileMarket(db: ReadableDatabase, trading: readonly FactsRow
 export type CoinInputs = Readonly<{
   facts: FactsRow;
   activity: HomeActivity;
+  /** The Relevant score the read ranked it by (`rank.ts`). */
+  score: number;
   nowMs: number;
   supply: string | null;
   totalSupply: string | null;
@@ -474,24 +485,61 @@ export function coinOf(input: CoinInputs): HomeCoin {
     activity,
     discussion: { posts: input.posts },
     top_holders: input.top_holders,
-    rank: rankOf(activity, tradeCoverageOf(facts)),
+    rank: { score: input.score, why: whyShown(activity, tradeCoverageOf(facts)) },
   };
 }
 
-type Candidate = Rankable & Readonly<{ facts: FactsRow; counts: WindowCountsRow | undefined }>;
+type Candidate = Rankable & Readonly<{ facts: FactsRow; counts: WindowCountsRow | undefined; marketCapUsd: number | null }>;
+
+/** The coin's FDV now in USD from its indexed price and supply, as a number for ordering; null without either. */
+function fdvNumber(price: string | null, totalSupply: string | null, decimals: number): number | null {
+  const fdv = fdvOf(price, totalSupply, decimals);
+  return fdv === null ? null : Number(fdv);
+}
+
+type RaiseFacts = Pick<FactsRow, "presale_id" | "raised" | "quote_decimals" | "quote_price_usd">;
+
+/**
+ * A Blast coin's raise in USD at the quote's price now: what a sale raised,
+ * or the target (quote atoms) its curve had to reach to graduate. Null
+ * without a price or a target.
+ */
+export function raiseUsdOf(facts: RaiseFacts, graduationTarget: string | null): number | null {
+  const atoms = facts.presale_id === null ? graduationTarget : facts.raised;
+  if (facts.quote_price_usd === null || atoms === null || !/^(0|[1-9][0-9]*)$/.test(atoms)) return null;
+  return Number(atoms) / 10 ** facts.quote_decimals * Number(facts.quote_price_usd);
+}
+
+/**
+ * Blast dust: a coin whose raise (a sale's, or a curve's graduation target)
+ * or market cap is under `HOME_DUST_USD`. Catalog coins are never dust, and
+ * a value we cannot compute does not count: unknown is not small.
+ */
+export function isBlastDust(
+  facts: RaiseFacts & Pick<FactsRow, "tracked_pool_only">,
+  values: Readonly<{ marketCapUsd: number | null; graduationTarget: string | null }>,
+): boolean {
+  if (facts.tracked_pool_only) return false;
+  return [raiseUsdOf(facts, values.graduationTarget), values.marketCapUsd].some((value) => value !== null && value < HOME_DUST_USD);
+}
 
 function candidateOf(facts: FactsRow, counts: WindowCountsRow | undefined, span: HomeSpan): Candidate {
   const latestMs = counts?.latest_ms === null || counts?.latest_ms === undefined ? null : Number(counts.latest_ms);
   const inputs = rankInputs({ participants: Number(counts?.participants ?? 0), events: Number(counts?.events ?? 0), latest_ms: latestMs, window: span.window, to_ms: span.toMs, volume_usd: counts?.volume_usd ?? null });
+  const holders = facts.holders === null ? null : Number(facts.holders);
+  const price = observedHomePrice(facts.price_usd, facts.price_as_of_ms, span.toMs)?.price ?? null;
   return {
     facts,
     counts,
     coinType: facts.coin_type,
-    score: relevanceScore(inputs),
+    score: relevanceScore({ inputs, latestMs, holders }, span.window, span.toMs),
     inputs,
     latestMs,
     launchedMs: facts.launched_ms === null ? null : Number(facts.launched_ms),
-    holders: facts.holders === null ? null : Number(facts.holders),
+    holders,
+    fdvUsd: fdvNumber(price, facts.total_supply, facts.sale_decimals),
+    // As the item's market cap: a curve coin's live supply, a sale's supply less its vesting.
+    marketCapUsd: fdvNumber(price, supplyOf(facts.supply ?? facts.total_supply, facts.escrowed)?.circulating ?? null, facts.sale_decimals),
   };
 }
 
@@ -502,6 +550,8 @@ export type HomeReadContext = Readonly<{
   /** The sales' terms, for FDV; null when the projection is not configured. */
   terms: PresaleTermsReader | null;
   trackedPoolMarket?: typeof readTrackedPoolMarket;
+  /** Graduated curves' raise targets, for the dust rule (`curve-targets.ts`). */
+  curveTargets?: CurveTargets;
   signal?: AbortSignal;
   holderLimit?: number;
   includeMobileMarket?: boolean;
@@ -554,6 +604,8 @@ export async function assembleCoins(
     scope: HomeActivity["scope"];
     context: HomeReadContext;
     dexVolumes?: ReadonlyMap<string, HomeDexVolume>;
+    /** The tracked pool snapshot this request already read, if any. */
+    trackedMarkets?: TrackedMarkets;
   }>,
 ): Promise<HomeCoin[]> {
   const { candidates, span, bounds, kinds, actors, context } = input;
@@ -566,9 +618,9 @@ export async function assembleCoins(
     (context.includeMobileMarket && facts.supply === null) ||
     !observedHomePrice(facts.price_usd, facts.price_as_of_ms, context.nowMs)
   ));
-  const trackedMarketRead = needsTrackedMarket && context.trackedPoolMarket
+  const trackedMarketRead = input.trackedMarkets ?? (needsTrackedMarket && context.trackedPoolMarket
     ? optionalSource("tracked_pool_market", context.trackedPoolMarket, {})
-    : null;
+    : null);
   const [grouped, holders, dexVolumes] = await Promise.all([
     readTopParticipants(db, { span, bounds, kinds, sales: { kind: "ids", presaleIds: ids, includeStandalone: candidates.some(({ facts }) => facts.presale_id === null) }, actors }, HOME_PREVIEW_ROWS * 2),
     readTopHolders(db, trading, bounds.clockMs, context.holderLimit),
@@ -606,7 +658,7 @@ export async function assembleCoins(
       : presaleTotalSupply(candidate.facts.total_supply, terms);
     const supply = candidate.facts.supply ?? totalSupply ?? terms?.supply.total ?? null;
     const indexed = coinOf({
-      facts: candidate.facts, activity, nowMs: context.nowMs, supply, totalSupply, posts: posts.get(id) ?? 0, spark: sparks.get(id) ?? [],
+      facts: candidate.facts, activity, score: candidate.score, nowMs: context.nowMs, supply, totalSupply, posts: posts.get(id) ?? 0, spark: sparks.get(id) ?? [],
       top_holders: topHoldersOf(holders.get(candidate.facts.coin_type) ?? [], supply, people.identities),
       mobileMarket: mobileMarket?.get(id),
       includeLiveInputs: context.includeLiveInputs,
@@ -658,16 +710,30 @@ function recentPageBuys(sides: readonly SideRow[], coins: readonly HomeCoin[]): 
   return [...buys.values()];
 }
 
+/**
+ * Idle coins order by FDV (`rank.ts`); a catalog coin's supply lives outside
+ * the chain views, so those orders read the shared tracked pool snapshot
+ * (one process-cached read for every catalog coin).
+ */
+async function withTrackedFdv(candidates: readonly Candidate[], query: HomeQuery, context: HomeReadContext): Promise<{ candidates: readonly Candidate[]; markets?: TrackedMarkets }> {
+  const missing = candidates.some((candidate) => candidate.facts.tracked_pool_only && candidate.fdvUsd === null);
+  if (!missing || !context.trackedPoolMarket || (query.sort !== "relevant" && query.sort !== "trending")) return { candidates };
+  const markets = await optionalSource("tracked_pool_market", context.trackedPoolMarket, {});
+  return { markets, candidates: candidates.map((candidate) => {
+    const market = candidate.facts.tracked_pool_only && candidate.fdvUsd === null ? markets[candidate.coinType] : undefined;
+    if (!market) return candidate;
+    const price = observedHomePrice(candidate.facts.price_usd, candidate.facts.price_as_of_ms, context.nowMs)?.price ?? market.price?.priceUsd ?? null;
+    return { ...candidate, fdvUsd: fdvNumber(price, candidate.facts.total_supply ?? market.totalSupplyAtoms ?? null, candidate.facts.sale_decimals) };
+  }) };
+}
+
 /** One Discover page (contract in `contracts/home.ts`). */
 export async function readHomeDiscover(db: ReadableDatabase, query: HomeQuery, context: HomeReadContext): Promise<HomeCoinsPage> {
   const cursor = query.cursor === null ? null : decodeHomeCursor(query.cursor, query.sort);
   const [bounds, asOf] = await Promise.all([readHomeBounds(db, context.nowMs), readAsOf(db)]);
   if (!asOf) throw new SocialRouteError("service_unavailable");
-  const windowSpan = homeSpan(query.window, bounds);
-  const now = context.nowMs;
-  const floor = now - HOME_WINDOW_MS["1h"];
-  const span = query.traction ? { ...windowSpan, fromMs: floor, toMs: Math.max(floor, windowSpan.toMs) } : windowSpan;
-  const kinds = visibleKinds(context.hiddenKinds).filter(kind => !query.traction || kind === "trade_buy" || kind === "trade_sell");
+  const span = homeSpan(query.window, bounds);
+  const kinds = visibleKinds(context.hiddenKinds);
   const scope: SaleScope = { kind: "discover" };
   const actors: ActorScope = { kind: "everyone" };
   const [facts, sides] = await Promise.all([
@@ -675,35 +741,34 @@ export async function readHomeDiscover(db: ReadableDatabase, query: HomeQuery, c
     readSides(db, { span, bounds, kinds, sales: scope, actors }, context.includeRecentBuys ? context.nowMs - HOME_RECENT_BUY_MS : undefined),
   ]);
   const counts = countsOf(sides);
-  const candidates = [...facts.values()]
+  const launchIds = [...facts.values()].flatMap((row) => row.presale_id === null && row.launch_id !== null ? [row.launch_id] : []);
+  const targets = launchIds.length > 0 && context.curveTargets ? await context.curveTargets(launchIds) : new Map<string, string>();
+  const eligible = [...facts.values()]
     .map((row) => candidateOf(row, counts.get(row.presale_id ?? row.coin_type), span))
-    .filter((candidate) => passesFilters(query, {
+    .filter((candidate) => !isBlastDust(candidate.facts, {
+      marketCapUsd: candidate.marketCapUsd,
+      graduationTarget: candidate.facts.launch_id === null ? null : targets.get(candidate.facts.launch_id) ?? null,
+    }) && passesFilters(query, {
       participants: candidate.inputs.breadth,
       launchedMs: candidate.launchedMs,
       tradable: tradesInApp(candidate.facts.venue) && (candidate.facts.venue.toLowerCase() !== "aftermath" || candidate.facts.pool_id !== null),
       nowMs: bounds.clockMs,
     }));
-  // Volume-based sorts need the same aggregate as the cell for all eligible candidates.
-  const dexVolumes = context.includeDexVolume && (query.traction || query.sort === "trending" || query.sort === "held")
-    ? await readDexVolumes(db, candidates.map(({ facts }) => facts), span.window, bounds, kinds, query.traction ? floor : undefined)
+  const { candidates, markets: trackedMarkets } = await withTrackedFdv(eligible, query, context);
+  // Volume-based sorts (Relevant weighs volume too) need the same aggregate as the cell for all eligible candidates.
+  const dexVolumes = context.includeDexVolume && query.sort !== "newest"
+    ? await readDexVolumes(db, candidates.map(({ facts }) => facts), span.window, bounds, kinds)
     : undefined;
-  const rankedCandidates = candidates.flatMap(candidate => {
+  const rankedCandidates = candidates.map(candidate => {
     const volume = dexVolumes?.get(candidate.coinType);
-    if (query.traction) {
-      const score = tradingRelevance({
-        volumeUsd: Number(volume?.usd) || candidate.inputs.volume,
-        traders: candidate.inputs.breadth,
-        lastTradeMs: candidate.latestMs,
-        now,
-      });
-      return score > 0 ? [{ ...candidate, score: Math.round(score * 1_000) }] : [];
-    }
-    return [volume ? { ...candidate, inputs: { ...candidate.inputs, volume: Number(volume.usd ?? 0) } } : candidate];
+    if (!volume) return candidate;
+    const inputs = { ...candidate.inputs, volume: Number(volume.usd ?? 0) };
+    return { ...candidate, inputs, score: relevanceScore({ ...candidate, inputs }, span.window, span.toMs) };
   });
   const { page, nextCursor, pageNumber, pages, total, ranked } = pageOf(rankedCandidates, query.sort, cursor, query.limit, query.page);
-  const coins = await assembleCoins(db, { candidates: page, sides, span, bounds, kinds, actors, scope: "pool", context, dexVolumes });
+  const coins = await assembleCoins(db, { candidates: page, sides, span, bounds, kinds, actors, scope: "pool", context, dexVolumes, trackedMarkets });
   const recentBuys = context.includeRecentBuys ? recentPageBuys(sides, coins) : [];
-  return { coins, page: pageNumber, pages: query.traction ? 1 : pages, total, ...(query.ranked ? { ranked } : {}), next_cursor: query.traction ? null : nextCursor, window: query.window, clock_ms: bounds.clockMs, as_of: asOf,
+  return { coins, page: pageNumber, pages, total, ...(query.ranked ? { ranked } : {}), next_cursor: nextCursor, window: query.window, clock_ms: bounds.clockMs, as_of: asOf,
     ...(recentBuys.length > 0 && { recent_buys: recentBuys }) };
 }
 

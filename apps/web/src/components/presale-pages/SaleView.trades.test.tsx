@@ -94,6 +94,7 @@ test("confirmed presale trades update the list and headline without a read, incl
   const reads: string[] = [];
   t.mock.method(globalThis, "fetch", async (input: RequestInfo | URL) => {
     const path = String(input);
+    if (path === "/api/launchpad/market/ticket") return new Response(null, { status: 204 });
     if (!path.startsWith(activityPath)) return new Response(null, { status: 404 });
     reads.push(path);
     const target = Number(path.match(/&at=(\d+)$/)?.[1] ?? 100);
