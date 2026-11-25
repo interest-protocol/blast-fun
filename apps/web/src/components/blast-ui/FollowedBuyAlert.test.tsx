@@ -8,7 +8,8 @@ import { installTestDom } from "../../../test/fixtures/social/test-dom.ts";
 const { document } = installTestDom();
 const { act } = await import("react");
 const { createRoot } = await import("react-dom/client");
-const { ALERT_LIFE_MS, FollowedBuyAlert, buyAlertText } = await import("./FollowedBuyAlert");
+const { FollowedBuyAlert } = await import("./FollowedBuyAlert");
+const { ALERT_LIFE_MS, buyAlertText } = await import("./followed-buy-alert-model");
 
 function alert(overrides: Partial<SocialBuyAlert> = {}): SocialBuyAlert {
   return {

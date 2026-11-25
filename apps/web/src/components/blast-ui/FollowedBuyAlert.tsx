@@ -4,33 +4,18 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 
 import type { SocialBuyAlert } from "@blast/core/modules/social/contracts/buy-alerts.ts";
-import { readableUsd } from "#web/lib/market-format.ts";
 
 import { Avatar } from "./Avatar";
 import { IconButton } from "./Button";
 import { CoinMark } from "./CoinMark";
 import { CloseIcon } from "./Icons";
+import { ALERT_LIFE_MS, SWIPE_DISTANCE_PX, SWIPE_VELOCITY, buyAlertText } from "./followed-buy-alert-model";
 import styles from "./FollowedBuyAlert.module.css";
 
-/** How long a card stays, not counting time hovered, focused, dragged or in a hidden tab. */
-export const ALERT_LIFE_MS = 5_000;
-/** An upward drag this far, or a flick faster than `SWIPE_VELOCITY` px/ms, dismisses. */
-export const SWIPE_DISTANCE_PX = 36;
-export const SWIPE_VELOCITY = 0.11;
 /** A press that moves less than this is a click, not a drag. */
 const DRAG_SLOP_PX = 4;
 /** The exit's length in CSS; a fallback ends it when no transition runs. */
 const EXIT_MS = 160;
-
-/** The card's line: who, what, how much, and the cap when known. */
-export function buyAlertText(alert: SocialBuyAlert): Readonly<{ name: string; amount: string | null; symbol: string; cap: string | null }> {
-  return {
-    name: alert.actor.display_name ?? alert.actor.callsign,
-    amount: alert.usd === null ? null : readableUsd(alert.usd),
-    symbol: alert.coin.symbol,
-    cap: alert.market_cap_usd === null ? null : readableUsd(alert.market_cap_usd),
-  };
-}
 
 /**
  * Counts the card's life down only while nobody is looking closer: hover,

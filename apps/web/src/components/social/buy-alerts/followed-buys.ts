@@ -1,5 +1,8 @@
+import { coinPagePath } from "@blast/core/modules/launchpad-coin/page-key.ts";
 import { socialBuyAlertPath, socialBuyAlertResponseSchema, type SocialBuyAlert } from "@blast/core/modules/social/contracts/buy-alerts.ts";
 
+
+import { presaleHref } from "../feed-ui/shell-bridge-model";
 import type { FreshnessHint } from "../home/feed-freshness";
 
 /**
@@ -14,6 +17,14 @@ import type { FreshnessHint } from "../home/feed-freshness";
  * named) or a `404` (no row or coin yet, a hidden sale) shows nothing. The
  * card must name the hint's wallet.
  */
+
+/** The followed wallets are read once and stay fresh this long; a follow or unfollow here reads them again. */
+export const FOLLOWING_WALLETS_STALE_MS = 10 * 60_000;
+
+/** The card's coin link: the sale's page, or a curve coin's own page. */
+export function buyAlertCoinHref(coin: SocialBuyAlert["coin"]): string {
+  return coin.presale_id === null ? coinPagePath(coin.coin_type) : presaleHref(coin.presale_id);
+}
 
 /** A kept hint's card read waits a uniform share of this long. */
 export const ALERT_SPREAD_MS = 2_000;

@@ -3,26 +3,17 @@
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { coinPagePath } from "@blast/core/modules/launchpad-coin/page-key.ts";
 import { SOCIAL_FOLLOWING_WALLETS_PATH, socialFollowingWalletsSchema, type SocialBuyAlert } from "@blast/core/modules/social/contracts/buy-alerts.ts";
 import { FollowedBuyAlert } from "#web/components/blast-ui/FollowedBuyAlert.tsx";
 import { useDevicePrefs } from "#web/components/blast-ui/device-prefs.ts";
 import { queryKeys } from "#web/lib/query/keys.ts";
 import { useAppQueryClient } from "#web/lib/query/provider.tsx";
 
-import { presaleHref } from "../feed-ui/shell-bridge-model";
 import { activityHints, tabActivityHints } from "../home/activity-hints";
 import { callSocialApi, type TokenSource } from "../social-api";
-import { FollowedBuys, followedBuyOf, readBuyAlertCard } from "./followed-buys";
+import { FOLLOWING_WALLETS_STALE_MS, FollowedBuys, buyAlertCoinHref, followedBuyOf, readBuyAlertCard } from "./followed-buys";
 
-/** The followed wallets are read once and stay fresh this long; a follow or unfollow here reads them again. */
-export const FOLLOWING_WALLETS_STALE_MS = 10 * 60_000;
 const SURFACE = "followed-buys";
-
-/** The card's coin link: the sale's page, or a curve coin's own page. */
-export function buyAlertCoinHref(coin: SocialBuyAlert["coin"]): string {
-  return coin.presale_id === null ? coinPagePath(coin.coin_type) : presaleHref(coin.presale_id);
-}
 
 /**
  * The shell's followed buy host, mounted once for a signed-in viewer with an
