@@ -14,6 +14,8 @@ export type ChartStreamStatus = "connecting" | "streaming" | "recovering" | "rec
 const PRICE_RENEW_MS = 20_000;
 type Pool = {
   fence: number | null;
+  /** The checkpoint a history read must reach to start the stream: after it, every pool event arrives as a frame. */
+  reach: number | null;
   cutoff: number | null;
   priceMissing: boolean;
   cancelPriceExpiry: (() => void) | null;
@@ -36,6 +38,7 @@ type Options = Readonly<{
   expected: ExpectedDeployment | null;
   migration: () => MigrationMarker | null;
   request: () => ChartRequest;
+  /** `recoveryCheckpoint`: the checkpoint a read must reach to start the stream, or null when none is due. */
   load: (poolKey: string, recoveryCheckpoint: number | null) => Promise<ChartPoolRead>;
   pollMs?: () => number | false;
   /** False: no history poll while the stream is live on the chart's pools; the stream brings every change. */
@@ -77,7 +80,7 @@ export class ChartStream {
 
   constructor(options: Options) {
     this.options = options;
-    for (const pool of options.pools) this.pools.set(pool, { fence: null, cutoff: null, priceMissing: false, cancelPriceExpiry: null, priceProofEnds: null, page: null, section: null, loading: false, buffered: [], retryAttempts: 0, cancelRetry: null, inflight: null, untouched: null });
+    for (const pool of options.pools) this.pools.set(pool, { fence: null, reach: null, cutoff: null, priceMissing: false, cancelPriceExpiry: null, priceProofEnds: null, page: null, section: null, loading: false, buffered: [], retryAttempts: 0, cancelRetry: null, inflight: null, untouched: null });
   }
 
   start(initial?: readonly (readonly [string, ChartPoolRead])[]): void {
@@ -98,7 +101,7 @@ export class ChartStream {
         ...(this.options.coin ? { coin: this.options.coin } : {}),
         listener: {
           state: (state) => this.state(state),
-          fence: (key, checkpoint, priceMissing) => this.fence(key, checkpoint, priceMissing === true),
+          fence: (key, checkpoint, { lastEvent, priceMissing }) => this.fence(key, checkpoint, lastEvent, priceMissing === true),
           frame: (frame, chars) => this.frame(frame, chars),
         },
       });
@@ -178,19 +181,21 @@ export class ChartStream {
     if (resumed) void this.refresh();
   }
 
-  private fence(key: string, checkpoint: number, priceMissing: boolean): void {
+  private fence(key: string, checkpoint: number, reach: number, priceMissing: boolean): void {
     const pool = this.pools.get(key);
     if (this.stopped || !pool) return;
     try {
       pool.fence = checkpoint;
+      pool.reach = reach;
       pool.priceMissing = priceMissing;
       pool.cutoff = null;
       pool.buffered = [];
       this.options.onStatus("recovering");
-      // A history read that already reaches this fence is the stream's start: no second read
-      // (the chart opened, or its interval changed, and the read beat the stream's fence).
+      // A history read that already holds the pool's last event before this fence is the stream's
+      // start: no second read (the chart opened, or its interval changed, and the read beat the
+      // fence, or the pool did not trade between the read and the fence).
       const read = pool.loading ? null : pool.untouched;
-      if (read !== null && read >= pool.fence && pool.page && pool.section) this.acceptRead(key, pool.page, pool.section, read);
+      if (read !== null && read >= reach && pool.page && pool.section) this.acceptRead(key, pool.page, pool.section, read);
       // An already-running pre-fence read is validated against this fence when it settles. Until a
       // read reaches the fence, the shown price is the best one known, unless the stream says the
       // latest trade has none.
@@ -219,6 +224,7 @@ export class ChartStream {
   private dropFences(): void {
     for (const pool of this.pools.values()) {
       pool.fence = null;
+      pool.reach = null;
       pool.cutoff = null;
       pool.buffered = [];
     }
@@ -233,6 +239,7 @@ export class ChartStream {
     this.cancelPublish = null;
     for (const [key, pool] of this.pools) {
       pool.fence = null;
+      pool.reach = null;
       pool.cutoff = null;
       pool.untouched = null;
       pool.loading = false;
@@ -269,11 +276,11 @@ export class ChartStream {
     pool.cancelRetry?.();
     pool.cancelRetry = null;
     const generation = this.generation;
-    const required = Math.max(pool.fence ?? 0, pool.section?.provenance?.checkpoint ?? 0);
+    const required = Math.max(pool.reach ?? 0, pool.section?.provenance?.checkpoint ?? 0);
     try {
-      const answer = await this.options.load(key, pool.cutoff === null ? pool.fence : null);
+      const answer = await this.options.load(key, pool.cutoff === null ? pool.reach : null);
       if (this.stopped || generation !== this.generation) return;
-      this.adoptRead(key, answer, Math.max(required, pool.fence ?? 0));
+      this.adoptRead(key, answer, Math.max(required, pool.reach ?? 0));
     } catch {
       if (this.stopped || generation !== this.generation) return;
       // Shown history follows the stream, which keeps it current: a failed read changes nothing, and
@@ -427,6 +434,7 @@ export class ChartStream {
     } catch {
       pool.cutoff = null;
       pool.fence = Math.max(pool.fence ?? 0, frame.checkpoint);
+      pool.reach = Math.max(pool.reach ?? 0, frame.checkpoint);
       this.invalidatePrice(key);
       if (pool.section.state === "available" || pool.section.state === "stale") {
         pool.section = { ...pool.section, state: "stale", reason: "stream-recovery" };
