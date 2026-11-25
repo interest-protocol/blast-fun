@@ -135,11 +135,11 @@ test("the view state round-trips through the URL, with defaults left out and unk
   const defaultQuery = discoverQueryOf(viewStateOf(new URLSearchParams("")));
   assert.equal(defaultQuery.sort, "relevant");
   assert.equal(defaultQuery.window, "1h");
-  assert.equal(defaultQuery.traction, true);
-  assert.equal(discoverQueryOf(HOME_DEFAULT_FEED, 5).limit, 20);
+  assert.equal(discoverQueryOf(HOME_DEFAULT_FEED, 5).limit, 5);
   assert.equal(viewStateOf(new URLSearchParams("w=24h")).window, "24h");
   assert.equal(viewSearchOf(viewStateOf(new URLSearchParams("w=1h"))), "");
-  assert.equal(viewSearchOf(viewStateOf(new URLSearchParams("sort=relevant"))), "?sort=relevant");
+  // Relevant is the default view, so its old explicit link folds to the plain address.
+  assert.equal(viewSearchOf(viewStateOf(new URLSearchParams("sort=relevant"))), "");
   const state = { source: "following", sort: "newest", window: "24h", minParticipants: 5, age: "7d", tradable: true, page: 3 } as const;
   assert.equal(viewSearchOf(state), "?src=following&sort=newest&w=24h&min=5&age=7d&tradable=1&page=3");
   assert.deepEqual(viewStateOf(new URLSearchParams(viewSearchOf(state))), state);

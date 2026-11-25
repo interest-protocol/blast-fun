@@ -9,7 +9,7 @@ import { CoinHome } from "#web/components/social/coin-home/CoinHome.tsx";
 import { HOME_ROWS_COOKIE, parseHomeRows } from "#web/components/social/coin-home/home-rows.ts";
 import { HOME_SECTIONS_COOKIE, isHomeSectionShown, parseHomeSections, type HomeSectionPrefs } from "#web/components/social/coin-home/home-sections.ts";
 import { presaleIdsOf } from "#web/components/social/coin-home/presale-ids.ts";
-import { discoverQueryOf, viewStateOf, type HomeFeedState } from "#web/components/social/coin-home/home-state.ts";
+import { discoverQueryOf, viewStateOf, type HomeViewState } from "#web/components/social/coin-home/home-state.ts";
 import { recordMetric } from "@blast/core/lib/metrics.ts";
 import { HOME_DEFAULT_WINDOW } from "@blast/core/web/contracts/home.ts";
 import { requestLaunchFlags } from "#web/lib/launch-flags.server.ts";
@@ -30,33 +30,24 @@ const coinsPending = Symbol("coins pending");
 const failed = (read: string) => () => { recordMetric("social.home", { outcome: "error", read }); return null; };
 
 /** Start visible reads together. Only the launch highlights gate the first paint. */
-async function loadHome(state: HomeFeedState, sections: HomeSectionPrefs, rows: number) {
+async function loadHome(state: HomeViewState, sections: HomeSectionPrefs, rows: number) {
   await connection();
   const shown = (key: Parameters<typeof isHomeSectionShown>[1]) => isHomeSectionShown(sections, key);
-  const discover = shown("coins") && state.source === "discover";
-  const mixed = discover && state.sort === "mixed";
-  const coins = discover ? readHomeFromBackend(discoverQueryOf(state, rows)).catch(failed("discover")) : null;
-  const happening = shown("presales") || mixed ? homeHappening() : null;
+  const coins = shown("coins") && state.source === "discover" ? readHomeFromBackend(discoverQueryOf(state, rows)).catch(failed("discover")) : null;
+  const happening = shown("presales") ? homeHappening() : null;
   const presales = shown("presales") && happening
     ? happening.then(({ read, nowMs }) => readHomeCoinsFromBackend(presaleIdsOf(read, nowMs).ids, state.window)).catch(failed("presales"))
     : null;
   const traders = shown("traders") ? readHomeTradersFromBackend(HOME_DEFAULT_WINDOW).catch(failed("traders")) : null;
   const posts = shown("posts") ? readFeedPageFromBackend().catch(failed("posts")) : null;
-  const [pinnedPresales, pinnedCurves] = await Promise.all([
+  // Once the highlights land, a ready coins result can paint directly; an unfinished read streams into the card.
+  const [pinnedPresales, pinnedCurves, initial] = await Promise.all([
     readFeaturedPresalesFromBackend().catch(failed("pinned-presales")),
     readBondingHeroFromBackend().then((seed) => seed ?? failed("pinned-curves")(), failed("pinned-curves")),
-  ]);
-  const marketSeed = async () => {
-    const initial = await Promise.race([coins, coinsPending] as const);
-    return { market: initial === coinsPending ? coins : initial };
-  };
-  const activity = happening?.then(({ read }) => read) ?? null;
-  // Pass ready market rows when activity streams in without waiting for a slow market read.
-  const mixedInitial = mixed && activity ? activity.then(async (read) => ({ activity: read, ...await marketSeed() })) : null;
-  const { market: initial } = await marketSeed();
+  ]).then(async ([presales, curves]) => [presales, curves, await Promise.race([coins, coinsPending] as const)] as const);
   return {
-    coins: initial,
-    happening: activity, mixedInitial, presales, traders, posts,
+    coins: initial === coinsPending ? coins : initial,
+    happening: happening?.then(({ read }) => read) ?? null, presales, traders, posts,
     pinned: { presales: pinnedPresales, curves: pinnedCurves, seed: crypto.randomUUID() },
   };
 }
@@ -88,7 +79,6 @@ export default async function SocialHomePage({ searchParams }: Readonly<{ search
       initial={loaded.coins}
       initialRows={rows}
       initialState={state}
-      mixedInitial={loaded.mixedInitial}
       nowMs={requestNow()}
       pinned={loaded.pinned}
       presales={loaded.presales}

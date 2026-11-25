@@ -76,7 +76,9 @@
 .sortHead[data-on] { color: var(--ink); font-weight: 600; }
 @media (hover: hover) and (pointer: fine) { .sortHead:hover { color: var(--ink); } }
 .list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; }
-.rankedList { position: relative; overflow-anchor: none; }
+.rankedList { position: relative; overflow-anchor: none; transition: opacity 150ms var(--ease); }
+/* While a new view loads, the previous rows stay put and dim; the new order then slides in (use-rank-motion.ts). */
+.rankedList[data-swapping] { opacity: 0.55; }
 
 /* The coin columns (the board's): # · coin · price · 24h · volume · FDV · top 10 · age · 7d · Buy. */
 .cols { grid-template-columns: 2rem minmax(11.25rem, 1.6fr) minmax(0, 1fr) minmax(0, .8fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, .8fr) minmax(0, .6fr) 7.5rem auto; column-gap: 0.75rem; }
@@ -568,85 +570,4 @@ a.saleCard:focus-visible { outline: 0.125rem solid var(--focus-color, var(--ink)
   .home .row.cols:not([data-sale]) { grid-template-columns: 2.5rem minmax(0, 1fr) minmax(0, auto); }
   .home .row.cols:not([data-sale]) > .week { display: none; }
   .home .row.cols:not([data-sale]) > :is(.marketQuote, .mobileChange, .expand) { grid-column: 3; }
-}
-.discoveryList {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.discoveryRow {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) minmax(0, min(35%, 11rem));
-  align-items: center;
-  gap: 0.625rem;
-  min-block-size: 3.25rem;
-  padding: 0.375rem 0.625rem;
-  border-radius: var(--r-sm);
-  color: var(--ink);
-  text-decoration: none;
-}
-
-.discoveryRow:active {
-  background: var(--raised);
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .discoveryRow:hover {
-    background: var(--raised);
-    color: var(--ink);
-    text-decoration: none;
-  }
-}
-
-.discoveryIdentity,
-.discoveryMetric {
-  display: grid;
-  min-inline-size: 0;
-  gap: 0.125rem;
-}
-
-.discoveryIdentity > strong,
-.discoveryTicker {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.discoveryIdentity > strong {
-  font-size: 0.9375rem;
-}
-
-.discoveryIdentity .discoveryDetail > :not(.discoveryTicker) {
-  flex-shrink: 0;
-  white-space: nowrap;
-}
-
-.discoveryMetric {
-  text-align: end;
-  overflow-wrap: anywhere;
-  line-height: 1.25;
-}
-
-.discoveryDetail {
-  color: var(--muted);
-  font-size: 0.75rem;
-  line-height: 1.25;
-}
-
-.discoveryFooter {
-  display: flex;
-  justify-content: flex-end;
-  padding-inline: 0.625rem;
-}
-
-@container home (max-width: 27rem) {
-  .discoverySeparator { display: none; }
-}
-
-@container home (max-width: 22rem) {
-  .discoveryRow {
-    gap: 0.5rem;
-    padding-inline: 0.5rem;
-  }
 }
