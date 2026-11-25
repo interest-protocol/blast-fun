@@ -44,6 +44,17 @@ test("blast-infra's provenance becomes the section's network, deployment, checkp
   );
 });
 
+test("live frames' engine hop stamps are accepted and never become data", () => {
+  const hops = { arrived_ms: 1, r2_put_ms: 38, intake_committed_ms: 2, written_ms: 3, picked_ms: 4, relay_ms: 5 };
+  for (const ok of [hops, {}, null, { r2_put_ms: null, picked_ms: 4 }]) {
+    assert.deepEqual(parseInfraProvenance({ ...WIRE, hops: ok }), parseInfraProvenance(WIRE), JSON.stringify(ok));
+  }
+  const tooMany = Object.fromEntries(Array.from({ length: 9 }, (_, index) => [`h${index}`, 1]));
+  for (const bad of [[], { picked_ms: -1 }, { picked_ms: 1.5 }, { "Bad-Key": 1 }, { picked_ms: "1" }, { [`${"a".repeat(25)}`]: 1 }, tooMany]) {
+    assert.throws(() => parseInfraProvenance({ ...WIRE, hops: bad }), ContractViolation, JSON.stringify(bad));
+  }
+});
+
 test("a provenance that breaks the contract is refused, never defaulted", () => {
   for (const bad of [
     undefined,
