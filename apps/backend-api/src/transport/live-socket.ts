@@ -205,6 +205,8 @@ export function createLiveSocket(options: LiveSocketOptions) {
     ws.data.closing = true;
     release(ws);
     observeMetric("live.socket.close", { code });
+    // Render's edge delivers custom close codes as 1005: the last frame names the code for the browser.
+    ws.send(`event: close\ndata: {"code":${code}}\n\n`);
     ws.close(code);
   };
 
