@@ -56,6 +56,7 @@ test("a matching trade hint updates the migration pool's candles in the open cha
   const reads: URLSearchParams[] = [];
   t.mock.method(globalThis, "fetch", async (input: RequestInfo | URL) => {
     const url = new URL(String(input), "https://blast.test");
+    if (url.pathname === "/api/launchpad/market/ticket") return new Response(null, { status: 204 });
     assert.equal(url.pathname, "/api/social/prices");
     reads.push(url.searchParams);
     const tail = url.searchParams.get("window") === "1h";

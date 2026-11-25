@@ -25,7 +25,6 @@ import { TOASTS } from "./settings-model";
 import { SettingsView, type SettingsMode } from "./SettingsView";
 import { useSettingsRecord, type SettingsRecord } from "./use-settings-record.ts";
 import { useSettingsSaver } from "./use-settings-saver";
-import { useSoundSwitch } from "./use-sound-switch";
 
 const zeroAtoms = 0n;
 const loadLinkWalletDappKit = () => import("./link-wallet-dapp-kit");
@@ -56,7 +55,6 @@ export function SettingsScreen() {
   const client = useAppQueryClient();
   const link = useLinkWalletSession();
   const [loggingOut, setLoggingOut] = useState(false);
-  const sound = useSoundSwitch();
   const account = viewer.signedIn ? liveAccount : null;
   const accountId = account?.account_id ?? null;
   const { current, setStored, retry, tokens } = useSettingsRecord(client, accountId, viewer.getAccessToken);
@@ -120,7 +118,6 @@ export function SettingsScreen() {
         onCelebrate={(on) => {
           setDevicePref("celebrate", on);
         }}
-        onSound={sound.set}
         onBlastConfirmation={(on) => saver.change({ patch: { blast_mode_confirm_actions: on } })}
         holdCoins={holdCoins}
         onHoldCoin={(coinType) => saver.change({ patch: { commit_too_coin_type: coinType === null ? null : normalizeStructTag(coinType) } })}
@@ -142,7 +139,6 @@ export function SettingsScreen() {
           if (!run("openSignIn")) router.push(signInHref(window.location.pathname));
         }}
         settings={settings}
-        sound={sound.on}
         wallets={account?.wallets ?? []}
       />
       {link.session !== null ? (

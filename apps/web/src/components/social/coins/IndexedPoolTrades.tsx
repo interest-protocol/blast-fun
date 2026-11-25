@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { ActivityRow } from "@blast/core/modules/launchpad-contract/activity.ts";
 import { useQuery } from "@tanstack/react-query";
+import { compareEventCursors } from "@blast/core/modules/launchpad-contract/cursor.ts";
 import { readPoolTrades } from "@blast/core/modules/launchpad-contract/venue-history.ts";
 import { RECENT_TRADES_LIMIT } from "@blast/core/modules/social/contracts/trader-profiles.ts";
 import { Button } from "#web/components/blast-ui/Button.tsx";
@@ -20,19 +21,23 @@ import { indexedPoolPolling, readIndexedPool } from "./indexed-pool-query.ts";
 const UNAVAILABLE = "Trades couldn’t load";
 const POOL_TRADES_LOOKBACK = 20;
 
-async function recentPoolTrades(poolKey: VenuePoolKey, signal: AbortSignal) {
-  const read = await readIndexedPool(UNAVAILABLE, signal, (market) => readPoolTrades(poolKey, { limit: POOL_TRADES_LOOKBACK }, market));
-  if (read.status === "unavailable" || read.data.kind === "refused") throw new PublicError(UNAVAILABLE, { code: "service_unavailable" });
-  const rows = read.data.value.trades.map((trade) => venueTradeRow(trade, poolKey));
-  return { stale: read.status === "stale", rows };
+/** The newest swaps across a coin's pools, newest first; one pool's outage fails the list rather than hide its swaps. */
+async function recentPoolTrades(poolKeys: readonly VenuePoolKey[], signal: AbortSignal) {
+  const reads = await Promise.all(poolKeys.map(async (poolKey) => {
+    const read = await readIndexedPool(UNAVAILABLE, signal, (market) => readPoolTrades(poolKey, { limit: POOL_TRADES_LOOKBACK }, market));
+    if (read.status === "unavailable" || read.data.kind === "refused") throw new PublicError(UNAVAILABLE, { code: "service_unavailable" });
+    return { stale: read.status === "stale", rows: read.data.value.trades.map((trade) => venueTradeRow(trade, poolKey)) };
+  }));
+  const rows = reads.flatMap((read) => read.rows).sort((a, b) => compareEventCursors(b.position, a.position));
+  return { stale: reads.some((read) => read.stale), rows: rows.slice(0, POOL_TRADES_LOOKBACK) };
 }
 
-export function IndexedPoolTrades({ poolKey, units }: Readonly<{ poolKey: VenuePoolKey; units: ActivityUnits }>) {
+export function IndexedPoolTrades({ poolKeys, units }: Readonly<{ poolKeys: readonly VenuePoolKey[]; units: ActivityUnits }>) {
   const { explorer } = useDevicePrefs();
   const [heldRows, setHeldRows] = useState<readonly ActivityRow[] | null>(null);
   const query = useQuery({
-    queryKey: ["indexed-pool-trades", poolKey],
-    queryFn: ({ signal }) => recentPoolTrades(poolKey, signal),
+    queryKey: ["indexed-pool-trades", ...poolKeys],
+    queryFn: ({ signal }) => recentPoolTrades(poolKeys, signal),
     ...indexedPoolPolling(LIVE_POLL_MS),
   }, useAppQueryClient());
   const rows = heldRows ?? query.data?.rows;
@@ -47,6 +52,6 @@ export function IndexedPoolTrades({ poolKey, units }: Readonly<{ poolKey: VenueP
     {rows.length
       ? <TradeList rows={rows.slice(0, RECENT_TRADES_LIMIT)} availableRows={rows}
         units={units} explorer={explorer} next={null} hold={(held) => setHeldRows(held ? rows : null)} />
-      : <EmptyState title="No swaps indexed yet">New swaps in this pool will appear here.</EmptyState>}
+      : <EmptyState title="No swaps indexed yet">New swaps will appear here.</EmptyState>}
   </>;
 }

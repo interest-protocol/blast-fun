@@ -122,7 +122,7 @@ test("every published route consumes exactly its pre-admitted endpoint bucket", 
     `market/launches/${id}/activity`,
     `market/pools/blast_curve/${id}`,
     ...["blast_curve", "cetus", "bluefin"].map((venue) => `market/pools/${venue}/${id}/candles`),
-    ...["cetus", "bluefin"].map((venue) => `market/pools/${venue}/${id}/trades`),
+    ...["blast_curve", "cetus", "bluefin"].map((venue) => `market/pools/${venue}/${id}/trades`),
     ...["metadata", "metrics", "contracts"].map((read) => `defillama/${read}`),
     ...["rewards", "reward-rounds"].map((read) => `market/launches/${id}/${read}`),
     ...["launches", "launch-rewards", "launch-holder-rewards"].map(
@@ -134,7 +134,7 @@ test("every published route consumes exactly its pre-admitted endpoint bucket", 
     "market/launchpad/policy",
     "market/launchpad/daily-stats",
   ];
-  assert.equal(paths.length, 33);
+  assert.equal(paths.length, 34);
   for (const suffix of paths) {
     const path = "/api/v1/" + suffix;
     const route = partnerV1Route(path)!;

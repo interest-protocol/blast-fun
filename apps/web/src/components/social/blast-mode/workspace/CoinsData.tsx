@@ -55,7 +55,7 @@ import {
   controlsApply,
   HOME_DEFAULT_VIEW,
   MIN_PARTICIPANT_CHOICES,
-  SORT_LABELS,
+  BLAST_MODE_SORT_LABELS,
   SOURCE_LABELS,
   type HomeViewState,
 } from "../../coin-home/home-state";
@@ -245,7 +245,7 @@ function DiscoveryFilterTray({ state, change, ecosystem, showEcosystem }: Readon
             label="Sort"
             value={state.sort}
             options={HOME_SORTS}
-            labels={SORT_LABELS}
+            labels={BLAST_MODE_SORT_LABELS}
             onPick={(sort) => change({ ...state, sort })}
           />
         </div>

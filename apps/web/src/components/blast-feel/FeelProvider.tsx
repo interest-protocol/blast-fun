@@ -20,9 +20,8 @@ import { browserAudioContext, type FeelAudioContextFactory } from "./feel-synth.
  *    134 opt-ins could not be finished or kept finished.
  *  - **There must be exactly one audio context.** Browsers cap them, and the
  *    gate's phrases all share one master gain. A provider owns one, creates it
- *    lazily on the first cue after the reader's first gesture **and only once
- *    the reader has turned sound on** (it is off until they do), and closes it
- *    on unmount.
+ *    lazily on the first cue after the reader's first gesture while sound is
+ *    enabled, and closes it on unmount.
  *  - **One gate** (`feel-gate.ts`) in front of it: nothing before the first
  *    gesture, nothing while the tab is hidden, one press tap per 60 ms and one
  *    money sound per event.
@@ -40,7 +39,7 @@ import { browserAudioContext, type FeelAudioContextFactory } from "./feel-synth.
  */
 
 export type FeelContextValue = Readonly<{
-  /** Whether sound is on for this device. Off by default and while hydrating. */
+  /** Whether sound is on for this device. */
   soundEnabled: boolean;
   /** Turns sound on or off and remembers it. Turning it on confirms with one tap. */
   setSoundEnabled: (enabled: boolean) => void;
@@ -137,6 +136,7 @@ export function FeelProvider({
     if (shownPath.current === pathname) return;
     shownPath.current = pathname;
     scopeRef.current?.releaseNodes();
+    audioRef.current?.play({ kind: "navigate" });
   }, [pathname]);
 
   const play = useCallback((signal: FeelSignal, options?: FeelPlayOptions) => {

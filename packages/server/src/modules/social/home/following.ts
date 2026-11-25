@@ -147,7 +147,7 @@ async function readFollowingCoins(
   ]);
   const counts = countsOf(sides);
   const discussedOf = new Map(discussed.rows.map((row) => [row.sale, row]));
-  const facts = await readCoinFacts(db, { kind: "ids", presaleIds: [...new Set([...counts.keys(), ...discussedOf.keys()])] }, bounds.clockMs, context);
+  const facts = await readCoinFacts(db, { kind: "ids", presaleIds: [...new Set([...counts.keys(), ...discussedOf.keys()])] }, span, context);
   const ordered = qualifiedOf(facts, counts, discussedOf, span).sort(byFollowedRecency);
   const after = cursor === null ? ordered : ordered.filter((candidate) => byFollowedRecency(candidate, { ...candidate, orderMs: cursor.latestMs, coinType: cursor.coinType }) > 0);
   const pageNumber = cursor === null ? request.page ?? 1 : 1;

@@ -146,7 +146,7 @@ After 3 failures in a row, the tab uses SSE for 10 minutes.
 ## Rollout on develop (applied 2026-10-27)
 
 1. **Hints process** `blast-backend-hints`: the backend image, Docker
-   command `bun run src/hints-main.ts`, two starter instances, shutdown
+   command `bun run src/hints-main.ts`, seven starter instances, shutdown
    allowance 20 s, environment per `apps/backend-api/hints.env.example` plus
    `BLAST_BACKEND_MARKET_STREAM_ENABLED=true`, `BLAST_NETWORK=mainnet` and
    `BLAST_DEPLOYMENT_FINGERPRINT`.

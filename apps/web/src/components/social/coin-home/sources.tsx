@@ -26,6 +26,7 @@ import { TableFooter } from "./TableFooter";
 import { countWords } from "@blast/core/web/format.ts";
 import type { FeedFreshnessSource } from "../home/feed-freshness";
 import { useHomeLive } from "./use-home-live";
+import { useSortPrefetch } from "./use-sort-prefetch";
 import { newerHomePrice, useHomePrices } from "./use-home-prices";
 import { useLiveCoins, type RankedCoin } from "./use-live-coins";
 import { useRankMotion } from "./use-rank-motion";
@@ -245,6 +246,7 @@ export function DiscoverList({ query, initial, props, freshness }: Readonly<{ qu
   const client = useAppQueryClient();
   const read = useQuery({ ...discoverQuery(query, true), initialData: initial ?? undefined }, client);
   const settled = settledHomePage(read);
+  useSortPrefetch(query, settled !== undefined);
   // Keep populated rows during a view change, but only show an empty message for the current view.
   const previous = read.isPlaceholderData && read.data?.coins.length ? read.data : undefined;
   const data = settled ?? previous;

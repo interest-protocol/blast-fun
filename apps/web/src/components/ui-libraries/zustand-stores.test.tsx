@@ -106,14 +106,15 @@ test("device prefs: one key written per change, the other left alone; defaults o
   assert.equal(values.size, 2, "an unchanged value writes nothing");
 });
 
-test("sound (OA-33): off on the server; the choice is in storage before the synth's switch hears it, in the same call", () => {
+test("sound (OA-33): on by default on the server; the choice is in storage before the synth's switch hears it, in the same call", () => {
   const values = page();
   resetSoundEnabledCache();
   function Sound() {
     return <i>{String(useSoundEnabled())}</i>;
   }
+  setSoundEnabled(false);
+  assert.equal(renderToString(<Sound />), "<i>true</i>", "the server snapshot uses the default");
   setSoundEnabled(true);
-  assert.equal(renderToString(<Sound />), "<i>false</i>", "the server snapshot stays off");
   const seen: (string | undefined)[] = [];
   const off = subscribeSoundEnabled(() => void seen.push(values.get(FEEL_SOUND_KEY)));
   const heard: boolean[] = [];

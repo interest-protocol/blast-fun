@@ -41,6 +41,8 @@ test("streamed prices update the existing row without reordering it or changing 
   }
   const original = Object.getOwnPropertyDescriptor(globalThis, "EventSource");
   Object.defineProperty(globalThis, "EventSource", { value: Events, configurable: true });
+  // The live socket is off: the ticket answers 204 and the tab uses the SSE relay.
+  t.mock.method(globalThis, "fetch", async () => new Response(null, { status: 204 }));
   t.after(async () => {
     await act(() => root.unmount());
     host.remove();
@@ -66,6 +68,7 @@ test("streamed prices update the existing row without reordering it or changing 
   assert.equal(host.querySelector(".hPrice")?.textContent, "Price");
   assert.equal(host.querySelector('[aria-label="Refresh market prices"]'), null);
   const rows = [...host.querySelectorAll("[data-list-row]")];
+  await act(async () => {});
   assert.equal(streams.length, 1);
   const stream = streams[0]!;
   assert.deepEqual(new URL(stream.url, "https://blast.test").searchParams.getAll("price_coin"), coins.map((row) => row.coin_type));

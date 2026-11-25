@@ -26,7 +26,7 @@ import {
   SOCIAL_HOME_ROUTE,
   isHomeWindow,
 } from "@blast/core/modules/social/contracts/home.ts";
-import { parseHolderLimit, parsePresaleIds, readHomeCoinsByIds, readHomeDiscover, type HomeReadContext } from "@blast/server/modules/social/home/coins.ts";
+import { homeDiscoverBaseKey, parseHolderLimit, parsePresaleIds, readHomeCoinsByIds, readHomeDiscover, readHomeDiscoverBase, type HomeDiscoverBase, type HomeReadContext } from "@blast/server/modules/social/home/coins.ts";
 import { parseDiscussionQuery, readHomeDiscussion } from "@blast/server/modules/social/home/discussion.ts";
 import { readHomeFollowing } from "@blast/server/modules/social/home/following.ts";
 import { readFollowingRequest } from "@blast/server/modules/social/home/following-request.ts";
@@ -66,6 +66,8 @@ export type SocialHomeRouteDependencies = Readonly<{
   now?: () => number;
   caches?: Readonly<{
     discover?: ReadCache<HomeCoinsPage>;
+    /** One window read shared by every sort, filter and page of that window. */
+    discoverBase?: ReadCache<HomeDiscoverBase>;
     coins?: ReadCache<HomeCoinsByIds>;
     portfolios?: TraderLedger["cache"];
     activity?: ReadCache<HomeActivityStreamPage>;
@@ -102,7 +104,12 @@ export function createSocialHomeRoutes(dependencies: SocialHomeRouteDependencies
       const recentBuys = params.get(HOME_RECENT_BUYS_PARAM);
       const includeRecentBuyUsd = recentBuys === HOME_RECENT_BUYS_WITH_USD;
       const ctxRead = { ...context(ctx), ...marketOptions(params), trackedPoolMarket, curveTargets, includeRecentBuys: recentBuys === "1" || includeRecentBuyUsd, includeRecentBuyUsd };
-      const load = () => readHomeDiscover(database(), query, ctxRead);
+      const baseCache = dependencies.caches?.discoverBase;
+      const load = () => {
+        const db = database();
+        const base = baseCache && (() => baseCache.read(homeDiscoverBaseKey(query.window, ctxRead), () => readHomeDiscoverBase(db, query.window, ctxRead)));
+        return readHomeDiscover(db, query, ctxRead, base);
+      };
       return cachedResponse(ctx, dependencies.caches?.discover, JSON.stringify([query, ctxRead.hiddenKinds, ctxRead.includeMobileMarket, ctxRead.includeLiveInputs, ctxRead.includeRollingChange, ctxRead.includeDexVolume, ctxRead.includeRecentBuys, ctxRead.includeRecentBuyUsd]), load);
     }),
     COINS: kit.route({ name: SOCIAL_HOME_COINS_ROUTE, ...publicRead }, async (ctx) => {
