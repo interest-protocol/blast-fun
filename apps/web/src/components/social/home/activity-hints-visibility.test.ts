@@ -243,12 +243,11 @@ test("resume replaces an in-flight lifecycle read; another resume keeps the five
 test("the browser factory closes EventSource while hidden and removes visibility ownership", async () => {
   const previous = Object.fromEntries(["window", "document", "EventSource"].map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   const document = Object.assign(new EventTarget(), { visibilityState: "hidden" });
-  const sources: { closed: boolean; onmessage: ((event: { data: string }) => void) | null; onerror: (() => void) | null }[] = [];
-  class EventSource {
+  const sources: EventSource[] = [];
+  class EventSource extends EventTarget {
     closed = false;
-    onmessage = null;
-    onerror = null;
-    constructor() { sources.push(this); }
+    readyState = 0;
+    constructor() { super(); sources.push(this); }
     close() { this.closed = true; }
   }
   try {
@@ -262,8 +261,8 @@ test("the browser factory closes EventSource while hidden and removes visibility
     document.dispatchEvent(new Event("visibilitychange"));
     await Promise.resolve(); // with no market stream starting, the legacy stream opens after the current task
     assert.equal(sources.length, 1);
-    sources[0]!.onmessage?.({ data: JSON.stringify(HELLO) });
-    sources[0]!.onmessage?.({ data: JSON.stringify({ type: "pong" }) });
+    sources[0]!.dispatchEvent(new MessageEvent("message", { data: JSON.stringify(HELLO) }));
+    sources[0]!.dispatchEvent(new MessageEvent("message", { data: JSON.stringify({ type: "pong" }) }));
     document.visibilityState = "hidden";
     document.dispatchEvent(new Event("visibilitychange"));
     assert.equal(sources[0]!.closed, true);

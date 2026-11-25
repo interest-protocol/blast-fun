@@ -77,7 +77,8 @@ export function useCoinChartControls(compact: boolean | undefined, initialContro
     () => {
       const initial = { interval: initialInterval, range: initialRange };
       // A legacy local-only choice is mirrored for the next entry. Keep the current server plot intact.
-      return !seeded && compact && saved && typeof window !== "undefined"
+      // An empty store still leaves the link's own controls to honor.
+      return !seeded && compact && saved !== null && typeof window !== "undefined"
         ? preferredChartControls(saved, window.location.search, initial, live, livePreset)
         : initial;
     },

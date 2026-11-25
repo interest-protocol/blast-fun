@@ -31,6 +31,31 @@ export const displayPriceFrameSchema = z.object({
   prices: z.array(displayPriceSchema).max(MARKET_STREAM_BUDGET.maxPriceCoinsPerClient),
 });
 export type DisplayPriceFrame = Readonly<z.infer<typeof displayPriceFrameSchema>>;
+const decimal = z.string().max(80).regex(/^-?\d+(\.\d+)?$/).nullable();
+const count = z.number().int().nonnegative().nullable();
+/**
+ * `coin_stats` (protocol.md section 4): a coin's numbers after a checkpoint. State, not log:
+ * the latest wins, it is never replayed, and the relay sends it outside the cursor order.
+ */
+export const coinStatsFrameSchema = z.object({
+  type: z.literal("coin_stats"),
+  coin: displayPriceCoinSchema,
+  pool_key: z.string().regex(POOL_KEY),
+  checkpoint: z.number().int().nonnegative(),
+  timestamp_ms: z.number().int().nonnegative(),
+  cursor: z.string().regex(EVENT_CURSOR),
+  provenance: z.unknown(),
+  lifecycle: z.string().max(32).nullable(),
+  price: decimal,
+  market_cap: decimal,
+  market: z.object({ market_cap_usd: decimal, fdv_usd: decimal, change_24h_bps: z.number().int().nullable() }).partial().nullable(),
+  quote_usd: z.record(z.string().max(64), z.unknown()).nullable(),
+  window_24h: z.object({ volume_quote: decimal, volume_usd: decimal, buys: count, sells: count, trades: count }).partial().nullable(),
+  holders: count,
+  progress_bps: z.number().int().min(0).max(10_000).nullable(),
+  liquidity_quote: decimal,
+}).partial({ lifecycle: true, price: true, market_cap: true, market: true, quote_usd: true, window_24h: true, holders: true, progress_bps: true, liquidity_quote: true });
+export type CoinStatsFrame = Readonly<z.infer<typeof coinStatsFrameSchema>>;
 export const displayPriceSnapshotSchema = z.object({
   prices: z.array(z.unknown()).max(MARKET_STREAM_BUDGET.maxPriceCoins),
   provenance: z.unknown(),

@@ -121,8 +121,11 @@ export function liveMarketSource(path: string, state: LiveSourceState, deps: Liv
           named = closeCode(block.data);
           continue;
         }
-        silent = false;
-        state.failures = 0;
+        // A pong answers our own clock ping before admission ends: it proves nothing about the stream.
+        if (block.event !== "pong") {
+          silent = false;
+          state.failures = 0;
+        }
         emit(block.event, { data: block.data });
       }
     };
@@ -174,9 +177,15 @@ function closeCode(data: string): number | null {
 }
 
 /** The browser's WebSocket behind the two handlers the source sets. */
-export function browserSocket(url: string, protocols: string[]): LiveSocketLike {
+export function browserSocket(url: string, protocols: string[]): LiveSocketLike & { send(text: string): boolean } {
   const ws = new WebSocket(url, protocols);
-  const socket: LiveSocketLike = { onmessage: null, onclose: null, close: () => ws.close() };
+  const socket = {
+    onmessage: null,
+    onclose: null,
+    close: () => ws.close(),
+    /** False unless the socket is open; the clock pings stop on false. */
+    send: (text: string) => ws.readyState === WebSocket.OPEN && (ws.send(text), true),
+  } as LiveSocketLike & { send(text: string): boolean };
   ws.onmessage = (event) => socket.onmessage?.(event);
   ws.onclose = (event) => socket.onclose?.(event);
   return socket;

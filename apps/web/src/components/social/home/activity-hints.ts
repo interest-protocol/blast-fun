@@ -47,6 +47,7 @@ import type { MetricFields } from "@blast/core/lib/metrics.ts";
 import { compareEventCursors } from "@blast/core/modules/launchpad-contract/cursor.ts";
 import { parseInfraProvenance } from "@blast/core/modules/launchpad-contract/provenance.ts";
 import { DEPLOYMENT_NETWORKS } from "@blast/core/web/launchpad-read.ts";
+import { gatedEventSource } from "#web/lib/live-stream/gated-event-source.ts";
 import { marketHintTransport } from "#web/lib/live-stream/market-hints.ts";
 import { hintOf, type Hint } from "@blast/core/modules/live/hint-frames.ts";
 
@@ -162,6 +163,8 @@ export class ActivityHints {
   #catchUp = false;
   /** The engine refused (not mainnet, no topic) or the browser did: no reconnect until the surfaces start over. */
   #refused = false;
+  /** The refusal came from the socket closing as unavailable (a gate refusal or a busy relay): the tab's return tries once more. */
+  #socketRefused = false;
   readonly #seen = new Set<string>();
   readonly #connectionListeners = new Set<() => void>();
 
@@ -185,6 +188,7 @@ export class ActivityHints {
     this.#surfaces.add(surface);
     if (this.#surfaces.size === 1) {
       this.#refused = false;
+      this.#socketRefused = false;
       this.#catchUp = this.#deps.onVisibilityChange !== undefined && !this.#deps.visible();
       this.#offVisibility = this.#deps.onVisibilityChange?.(() => this.#visibilityChanged()) ?? null;
       this.#connect();
@@ -234,6 +238,7 @@ export class ActivityHints {
     this.#connectionChanged();
     if (socket.unavailable && !this.#refused) {
       this.#refused = true;
+      this.#socketRefused = true;
       this.#metric({ event: "unavailable", reason: "socket" });
     }
     if (this.#surfaces.size === 0 || this.#refused || !this.#deps.visible()) return;
@@ -361,6 +366,7 @@ export class ActivityHints {
   /** The engine or the browser refused: close, and stay on the poll until the surfaces start over. */
   #refuse(reason: "socket" | "hello" | "network" | "subscribe"): void {
     this.#refused = true;
+    this.#socketRefused = false;
     this.#metric({ event: "unavailable", reason });
     const socket = this.#socket;
     this.#socket = null;
@@ -373,6 +379,7 @@ export class ActivityHints {
 
   #visibilityChanged(): void {
     if (this.#deps.visible()) {
+      if (this.#socketRefused) this.#refused = this.#socketRefused = false;
       if (this.#retry === null) this.#connect();
       return;
     }
@@ -419,7 +426,7 @@ export function activityHints(surface: string, hints: ActivityHints, accepts?: H
 
 /** The relay subscribes and pings upstream; the browser transport is read-only. */
 export function hintEventStream(url: string): HintSocket {
-  const source = new EventSource(url);
+  const source = gatedEventSource(url);
   const socket: HintSocket = {
     send: () => undefined,
     close: () => {
@@ -434,11 +441,17 @@ export function hintEventStream(url: string): HintSocket {
     if (document.visibilityState !== "hidden") socket.onmessage?.({ data: JSON.stringify({ type: "resync_required" }) });
   };
   if (typeof document !== "undefined") document.addEventListener("visibilitychange", resume);
-  source.onmessage = (event) => socket.onmessage?.(event);
-  source.onerror = () => {
+  source.addEventListener("message", (event) => socket.onmessage?.(event as MessageEvent));
+  source.addEventListener("error", () => {
     socket.close();
     socket.onclose?.();
-  };
+  });
+  // Refused even after one gate refresh: the client stays on its poll until its surfaces start over.
+  source.addEventListener("refused", () => {
+    socket.unavailable = true;
+    socket.close();
+    socket.onclose?.();
+  });
   return socket;
 }
 

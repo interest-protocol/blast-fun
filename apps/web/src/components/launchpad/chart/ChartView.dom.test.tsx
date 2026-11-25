@@ -82,6 +82,41 @@ test("changing the interval leaves an untouched range at its coin default", asyn
   }
 });
 
+test("a link's range and interval open the chart when nothing is saved", async (t) => {
+  const { useCoinChartControls } = await import("./chart-preferences.ts");
+  const key = "blast.coin-chart.controls";
+  const original = window.location.href;
+  const node = dom.document.createElement("div");
+  dom.document.body.append(node);
+  const root = createRoot(node);
+  t.after(async () => {
+    await act(async () => root.unmount());
+    node.remove();
+    window.localStorage.removeItem(key);
+    window.history.replaceState(null, "", original);
+  });
+  function Probe() {
+    const { controls, ready } = useCoinChartControls(true, { range: "24h", interval: "5m" }, false);
+    return <p>{ready ? `${controls.range} / ${controls.interval}` : "waiting"}</p>;
+  }
+  for (const [search, shown] of [
+    ["?interval=5m&range=all", "all / 5m"],
+    ["?interval=15m&range=all", "all / 15m"],
+    ["?interval=5m&range=24h", "24h / 5m"],
+    ["", "24h / 5m"],
+  ] as const) {
+    window.localStorage.removeItem(key);
+    window.history.replaceState(null, "", search || window.location.pathname);
+    await act(async () => root.render(<Probe key={search} />));
+    assert.equal(node.textContent, shown, search);
+  }
+  // The link still wins over a saved choice.
+  window.localStorage.setItem(key, "interval=1h&range=7d");
+  window.history.replaceState(null, "", "?interval=15m&range=all");
+  await act(async () => root.render(<Probe key="saved" />));
+  assert.equal(node.textContent, "all / 15m");
+});
+
 test("compact style controls keep one chart and the trade cue above it", async () => {
   const poolKey = "blast_curve:0x1";
   const venuePoolKey = `bluefin:0x${"a7".repeat(32)}`;
