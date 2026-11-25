@@ -15,7 +15,7 @@ import {
 const PATH = "/api/launchpad/market/stream?activity=true&pool=p";
 const GRANT: LiveGrant = { url: "wss://live.blast.test/v1/socket", ticket: "t" };
 
-function harness(tickets: () => Promise<LiveGrant | null>) {
+function harness(tickets: () => Promise<LiveGrant | null>, throwOnOpen = false) {
   let now = 1_000;
   const sockets: (LiveSocketLike & { url: string; protocols: string[]; closed: boolean })[] = [];
   const relays: string[] = [];
@@ -23,6 +23,7 @@ function harness(tickets: () => Promise<LiveGrant | null>) {
   const deps = {
     fetchTicket: tickets,
     openSocket: (url: string, protocols: string[]) => {
+      if (throwOnOpen) throw new SyntaxError("bad protocol");
       const socket = { url, protocols, closed: false, onmessage: null, onclose: null, close() { this.closed = true; } };
       sockets.push(socket);
       return socket;
@@ -98,10 +99,28 @@ test("the tab uses the SSE relay while the socket is off, refused, or failing", 
   failing.open();
   await settle();
   assert.equal(failing.sockets.length, 4, "the socket is tried again after the fallback window");
+
+  // A hung network: the hub's hello deadline closes sockets that never spoke.
+  const hung = harness(async () => GRANT);
+  for (let i = 0; i < 3; i++) {
+    const { source } = hung.open();
+    await settle();
+    source.close();
+    hung.sockets.at(-1)!.onclose?.({ code: 1006 });
+  }
+  hung.open();
+  await settle();
+  assert.deepEqual(hung.relays, [PATH], "three silent sockets closed by the hub");
+
+  const throwing = harness(async () => GRANT, true);
+  const { events } = throwing.open();
+  await settle();
+  assert.deepEqual(events, [["error", undefined]], "a socket that cannot be built is an error, not silence");
+  assert.equal(throwing.state.failures, 1);
 });
 
 // This fails if drained or full processes get every tab back at once.
-test("after a drain close the next ticket waits a random 1–30 s", async () => {
+test("after a drain close the next ticket waits a random 1–9 s", async () => {
   let asked = 0;
   const { open, sockets, timers } = harness(async () => { asked++; return GRANT; });
   open();
@@ -111,7 +130,7 @@ test("after a drain close the next ticket waits a random 1–30 s", async () => 
   open();
   await settle();
   assert.equal(asked, 1);
-  assert.deepEqual(timers.map(({ ms }) => ms), [15_500]);
+  assert.deepEqual(timers.map(({ ms }) => ms), [5_000]);
   timers[0]!.run();
   await settle();
   assert.equal(asked, 2);

@@ -10,7 +10,7 @@ export const LIVE_FALLBACK_MS = 10 * 60_000;
 /** While the socket is off for this browser (204), the tab asks again after this long: one small request per tab per half hour. */
 export const LIVE_OFF_MS = 30 * 60_000;
 export const LIVE_MAX_FAILURES = 3;
-/** Drain (1012) and a full process (4503): the next ticket waits a random 1–30 s so tabs do not return together. */
+/** Drain (1012) and a full process (4503): the next ticket waits a random 1–9 s so tabs do not return together (under the hub's 10 s hello deadline). */
 const SPREAD_CLOSES = new Set([1012, 4503]);
 const PER_ADDRESS_REFUSAL = 4429;
 
@@ -41,7 +41,7 @@ export function liveSourceState(): LiveSourceState {
 
 type Listener = (event: { data?: string }) => void;
 
-/** Splits SSE blocks (`event:` and `data:` lines) as EventSource would; comments and empty blocks are skipped. */
+/** Splits the relay's own SSE blocks (`event: ` and `data: ` lines, `\n` endings); other lines and empty blocks are skipped. */
 export function parseSseBlocks(text: string): { event: string; data: string }[] {
   const blocks: { event: string; data: string }[] = [];
   for (const block of text.split("\n\n")) {
@@ -70,6 +70,8 @@ export function liveMarketSource(path: string, state: LiveSourceState, deps: Liv
   let socket: LiveSocketLike | null = null;
   let cancelWait: (() => void) | null = null;
   let closed = false;
+  /** The socket opened but sent nothing yet: a close now, by either side, counts as a failure. */
+  let silent = false;
 
   const emit = (type: string, event: { data?: string }) => {
     for (const listener of [...listeners.get(type) ?? []]) listener(event);
@@ -101,12 +103,18 @@ export function liveMarketSource(path: string, state: LiveSourceState, deps: Liv
       state.fallbackUntil = deps.now() + LIVE_OFF_MS;
       return openRelay();
     }
-    let delivered = false;
-    const current = deps.openSocket(`${grant.url}${path.slice(path.indexOf("?"))}`, [LIVE_PROTOCOL, `blast-ticket.${grant.ticket}`]);
+    let current: LiveSocketLike;
+    try {
+      current = deps.openSocket(`${grant.url}${path.slice(path.indexOf("?"))}`, [LIVE_PROTOCOL, `blast-ticket.${grant.ticket}`]);
+    } catch {
+      fail();
+      return emit("error", {});
+    }
     socket = current;
+    silent = true;
     current.onmessage = ({ data }) => {
       if (closed || typeof data !== "string") return;
-      delivered = true;
+      silent = false;
       state.failures = 0;
       for (const block of parseSseBlocks(data)) emit(block.event, { data: block.data });
     };
@@ -114,9 +122,10 @@ export function liveMarketSource(path: string, state: LiveSourceState, deps: Liv
       if (socket !== current) return;
       socket = null;
       if (closed) return;
-      if (SPREAD_CLOSES.has(code)) state.notBefore = deps.now() + 1_000 + Math.round(deps.random() * 29_000);
+      if (SPREAD_CLOSES.has(code)) state.notBefore = deps.now() + 1_000 + Math.round(deps.random() * 8_000);
       if (code === PER_ADDRESS_REFUSAL) fail(true);
-      else if (!delivered) fail();
+      else if (silent) fail();
+      silent = false;
       emit("error", {});
     };
   };
@@ -133,6 +142,9 @@ export function liveMarketSource(path: string, state: LiveSourceState, deps: Liv
       fallback?.addEventListener(type, listener);
     },
     close() {
+      // The hub gave up on a socket that never spoke (its hello deadline): a hung network must reach the relay too.
+      if (silent && !closed) fail();
+      silent = false;
       closed = true;
       cancelWait?.();
       fallback?.close();
