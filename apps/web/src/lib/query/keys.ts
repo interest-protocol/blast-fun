@@ -103,7 +103,8 @@ export const queryKeys = {
     discover: (query: string) => [ROOT, "public", "home", "discover", query] as const,
     coins: (window: string, ids: readonly string[], holderLimit?: number) => [ROOT, "public", "home", "coins", window, sortedIds(ids), ...(holderLimit === undefined ? [] : [holderLimit])] as const,
     threads: [ROOT, "public", "home", "thread"] as const,
-    presaleTrades: (presaleId: string) => [ROOT, "public", "home", "presale-trades", presaleId] as const,
+    /** `minUsd`: the read leaves trades proven under it out (the small-trade filter); null keeps every trade. */
+    presaleTrades: (presaleId: string, minUsd: number | null) => [ROOT, "public", "home", "presale-trades", presaleId, minUsd] as const,
     thread: (presaleId: string, window: string) => [ROOT, "public", "home", "thread", presaleId, window] as const,
     discussion: (presaleId: string) => [ROOT, "public", "home", "discussion", presaleId] as const,
     traders: (window: string) => [ROOT, "public", "home", "traders", window] as const,

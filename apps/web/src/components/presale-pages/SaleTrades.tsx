@@ -1,12 +1,13 @@
 "use client";
 
-import { hashKey, replaceEqualDeep, useQuery, type QueryClient } from "@tanstack/react-query";
-import { createContext, memo, useContext, useEffect, useMemo, useRef, useSyncExternalStore, type ReactNode } from "react";
+import { hashKey, keepPreviousData, replaceEqualDeep, useQuery, type QueryClient } from "@tanstack/react-query";
+import { createContext, memo, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 
 import { compareEventCursors } from "@blast/core/modules/launchpad-contract/cursor.ts";
 import type { PresaleMarketTrade } from "@blast/core/modules/live/presale-market-frames.ts";
 import { n } from "@blast/core/modules/presale/presentation.ts";
 import { activityEntryId } from "@blast/core/modules/social/contracts/feed-entries.ts";
+import { SMALL_TRADE_USD } from "@blast/core/web/contracts/coin-market.ts";
 import { createQuoteOf } from "@blast/core/web/contracts/create.ts";
 import type { HomeThreadPage } from "@blast/core/web/contracts/home.ts";
 import type { SocialPresaleDetail } from "@blast/core/web/contracts/presales.ts";
@@ -51,6 +52,8 @@ type TradeRead = Readonly<{
   checkpoint: number;
   receivedAt: number | null;
   streamed?: string;
+  /** Whether the window holds any trade at all, dust included: the totals are never filtered. */
+  traded: boolean;
 }>;
 
 function streamedRow(frame: PresaleMarketTrade, sale: SocialPresaleDetail["presale"]): TradeRead["rows"][number] {
@@ -114,10 +117,12 @@ function createSaleTape(client: QueryClient, key: ReturnType<typeof queryKeys.ho
   }, LIMIT);
 }
 
-function useSaleTradeFeed(sale: SocialPresaleDetail["presale"]) {
+function useSaleTradeFeed(sale: SocialPresaleDetail["presale"], hideSmallTrades: boolean) {
   const { presale_id: presaleId, coin_type: coinType } = sale;
   const client = useAppQueryClient();
-  const key = useMemo(() => queryKeys.home.presaleTrades(presaleId), [presaleId]);
+  // With the filter on, the server leaves dust out, so a burst of it cannot crowd the page's real trades off.
+  const minUsd = hideSmallTrades ? SMALL_TRADE_USD : null;
+  const key = useMemo(() => queryKeys.home.presaleTrades(presaleId, minUsd), [presaleId, minUsd]);
   const pending = useRef<FreshnessHint | undefined>(undefined);
   const hiddenAt = useRef(-Infinity);
   const { data, isPending, refetch } = useQuery<TradeRead>({
@@ -134,11 +139,13 @@ function useSaleTradeFeed(sale: SocialPresaleDetail["presale"]) {
       const page = await fetchHomeThread(presaleId, "24h", null, signal, {
         at: checkpoint >= 0 ? checkpoint : undefined,
         exactTradeUsd: true,
+        minTradeUsd: minUsd ?? undefined,
       });
       if (!signal.aborted && pending.current === target) pending.current = undefined;
       const rows = tradeRows(page);
       const visibleHint = target && target.atMs > hiddenAt.current ? target : undefined;
-      return { rows, clockMs: page.clock_ms, checkpoint: page.as_of.checkpoint, receivedAt: tradeArrival(previous, rows, visibleHint) };
+      const traded = page.totals.buyers + page.totals.sellers > 0;
+      return { rows, clockMs: page.clock_ms, checkpoint: page.as_of.checkpoint, receivedAt: tradeArrival(previous, rows, visibleHint), traded };
     },
     structuralSharing(oldData, newData) {
       const previous = oldData as TradeRead | undefined;
@@ -162,6 +169,8 @@ function useSaleTradeFeed(sale: SocialPresaleDetail["presale"]) {
           : next.receivedAt,
       });
     },
+    // Switching the filter keeps the list on screen until the other read answers.
+    placeholderData: keepPreviousData,
     refetchOnReconnect: false,
     refetchInterval: false,
     retryDelay: NEW_POSTS_MIN_GAP_MS,
@@ -174,12 +183,17 @@ function useSaleTradeFeed(sale: SocialPresaleDetail["presale"]) {
       if ((previous && checkpointOf(frame.cursor) <= previous.checkpoint) || known.some((row) => row.position === frame.cursor)) return previous;
       const newer = !known[0] || compareEventCursors(frame.cursor, known[0].position) > 0;
       const streamed = previous?.streamed;
+      const latest = !streamed || compareEventCursors(frame.cursor, streamed) > 0 ? frame.cursor : streamed;
+      const row = streamedRow(frame, sale);
+      // Filtered, dust never takes a row: it only marks the trade seen, so its hint asks for no read.
+      if (minUsd !== null && isHomeTradeUnderDollar(row.event.quote)) return previous && { ...previous, streamed: latest, traded: true };
       return {
-        rows: [streamedRow(frame, sale), ...known].sort((a, b) => compareEventCursors(b.position, a.position)).slice(0, Math.max(LIMIT, known.length)),
+        rows: [row, ...known].sort((a, b) => compareEventCursors(b.position, a.position)).slice(0, Math.max(LIMIT, known.length)),
         clockMs: previous?.clockMs ?? 0,
         checkpoint: previous?.checkpoint ?? -1,
         receivedAt: newer ? performance.now() : previous?.receivedAt ?? null,
-        streamed: !streamed || compareEventCursors(frame.cursor, streamed) > 0 ? frame.cursor : streamed,
+        streamed: latest,
+        traded: true,
       };
     });
   });
@@ -223,13 +237,17 @@ function useSaleTradeFeed(sale: SocialPresaleDetail["presale"]) {
     };
   }, [client, coinType, key, presaleId, refetch]);
 
-  return useMemo(() => ({ data, isPending, refetch }), [data, isPending, refetch]);
+  return useMemo(() => ({ data, isPending, refetch, key }), [data, isPending, refetch, key]);
 }
 
-const SaleTradeRead = createContext<ReturnType<typeof useSaleTradeFeed> | null>(null);
+const SaleTradeRead = createContext<(ReturnType<typeof useSaleTradeFeed> & Readonly<{ filter: readonly [boolean, (hide: boolean) => void] }>) | null>(null);
+
+const NO_FILTER = [true, () => {}] as const;
 
 export function SaleTradeFeed({ sale, children }: Readonly<{ sale: SocialPresaleDetail["presale"]; children: ReactNode }>) {
-  const read = useSaleTradeFeed(sale);
+  const [hideSmallTrades, setHideSmallTrades] = useState(true);
+  const feed = useSaleTradeFeed(sale, hideSmallTrades);
+  const read = useMemo(() => ({ ...feed, filter: [hideSmallTrades, setHideSmallTrades] as const }), [feed, hideSmallTrades]);
   const { data } = read;
   const chart = useMemo(() => {
     // The Last-trade pill skips dust, as the trades list does.
@@ -264,20 +282,21 @@ export function SaleTradeFeed({ sale, children }: Readonly<{ sale: SocialPresale
 export const SaleTrades = memo(function SaleTrades({ sale }: Readonly<{ sale: SocialPresaleDetail["presale"] }>) {
   const read = useContext(SaleTradeRead);
   const client = useAppQueryClient();
-  const key = useMemo(() => queryKeys.home.presaleTrades(sale.presale_id), [sale.presale_id]);
-  const tape = useMemo(() => createSaleTape(client, key), [client, key]);
+  const key = read?.key;
+  const tape = useMemo(() => createSaleTape(client, key ?? queryKeys.home.presaleTrades(sale.presale_id, null)), [client, key, sale.presale_id]);
   const { rows: recent, entering, leaving, slide } = useSyncExternalStore(tape.subscribe, tape.snapshot, tape.serverSnapshot);
   const { hold } = tape;
   const { explorer } = useDevicePrefs();
   const data = read?.data;
   const rows = recent.length ? recent : data?.rows.slice(0, LIMIT) ?? [];
-  const visibility = useTradeVisibility(rows, data?.rows, (row) => isHomeTradeUnderDollar(row.event.quote));
+  const visibility = useTradeVisibility(rows, data?.rows, (row) => isHomeTradeUnderDollar(row.event.quote), read?.filter ?? NO_FILTER);
 
   if (!read) return null;
   const { isPending, refetch } = read;
   if (isPending) return <TradeListSkeleton count={LIMIT} />;
   if (!data) return <EmptyState action={<Button onClick={() => void refetch()} size="sm">Try again</Button>} role="alert" title="Trades couldn’t load" />;
-  if (!rows.length) return <EmptyState title="No trades in the last 24 hours" />;
+  // Filtered, a window of only small trades still shows the switch, so they are one tap away.
+  if (!rows.length && (!visibility.hideSmallTrades || !data.traded)) return <EmptyState title="No trades in the last 24 hours" />;
 
   return <CompactTradeList visibility={visibility} entering={entering} leaving={leaving} slide={slide} hold={hold}>
     {(row, state) => <SaleTradeRow key={row.position} row={row} sale={sale} explorer={explorer} {...state} />}

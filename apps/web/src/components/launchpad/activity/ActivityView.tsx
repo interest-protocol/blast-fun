@@ -16,7 +16,7 @@ import { Disclosure } from "#web/components/blast-ui/Disclosure.tsx";
 import { EmptyState } from "#web/components/blast-ui/EmptyState.tsx";
 import { InspectValue } from "#web/components/blast-ui/InspectValue.tsx";
 import { SkeletonText } from "#web/components/blast-ui/Skeleton.tsx";
-import { memo, type ReactNode } from "react";
+import { memo, useState, type ReactNode } from "react";
 
 import { Fact, Facts } from "../coin/Facts";
 import { useCoinPriceCurrency } from "../chart/CoinPriceCurrency";
@@ -458,8 +458,10 @@ export const TradeList = memo(function TradeList({ rows, availableRows, units, e
 }>) {
   const currency = useCoinPriceCurrency();
   const quoteUsd = dustQuoteUsd(units.quoteType, currency, units.quoteUsd);
+  const filter = useState(true);
   const visibility = useTradeVisibility(rows, availableRows,
     (row) => isTradeUnderDollar({ usd: row.volumeUsd, quote: row.amounts.quote, decimals: units.quoteDecimals, quoteUsd }),
+    filter,
   );
   const profiles = useTraderProfiles(profileSource?.launchId ?? "", profileSource?.activity ?? NO_CONFIRMED_ACTIVITY, profileSource !== undefined, visibility.rows, leaving);
   if (!rows.length) return <EmptyState title={next ? "No trades in this page of activity" : "No trades in the loaded activity"} />;

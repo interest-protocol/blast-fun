@@ -18,6 +18,8 @@ const ID = "0xeb9dce118d582bb2ed3e5cb7da316ed0afc6365a5eeb0e20184fb32d3f533944";
 const address = "0x" + "1".repeat(64);
 const digest = "B".repeat(44);
 const activityPath = socialHomeActivityPath(ID, "24h", null, undefined, true);
+// "Hide trades under $1" starts on: the read asks the server to leave dust out.
+const filteredPath = socialHomeActivityPath(ID, "24h", null, undefined, true, 1);
 
 function tradePage(checkpoint: number): HomeThreadPage {
   const at = FIXTURE_NOW + (checkpoint - 100) * 1_000;
@@ -45,7 +47,7 @@ function tradePage(checkpoint: number): HomeThreadPage {
         digest: checkpoint > 100 ? digest : null,
         quote: checkpoint > 100 ? {
           quote_type: "0x2::sui::SUI", quote_symbol: "SUI", quote_decimals: 9,
-          atoms: "1234567890", usd: checkpoint === 101 ? "1000.00" : checkpoint === 105 ? "0.999" : "2.00", usd_complete: true,
+          atoms: "1234567890", usd: checkpoint === 101 ? "1000.00" : checkpoint >= 105 ? "0.999" : "2.00", usd_complete: true,
         } : null,
         tokens: "1000000000",
         refund: null,
@@ -64,7 +66,7 @@ function tradePage(checkpoint: number): HomeThreadPage {
   };
 }
 
-test("confirmed presale trades update the list and headline without a read, including with Holders selected", { timeout: 8_000 }, async (t) => {
+test("confirmed presale trades update the list and headline without a read, including with Holders selected", { timeout: 20_000 }, async (t) => {
   t.mock.method(Math, "random", () => 0);
   let now = Date.now();
   t.mock.method(Date, "now", () => now);
@@ -98,7 +100,10 @@ test("confirmed presale trades update the list and headline without a read, incl
     if (!path.startsWith(activityPath)) return new Response(null, { status: 404 });
     reads.push(path);
     const target = Number(path.match(/&at=(\d+)$/)?.[1] ?? 100);
-    return Response.json(tradePage(pollCanSeeLatest ? latestCheckpoint : Math.min(target, latestCheckpoint)));
+    const page = tradePage(pollCanSeeLatest ? latestCheckpoint : Math.min(target, latestCheckpoint));
+    // The server leaves trades under the floor out of the participants, never the totals.
+    const dust = Number(page.participants[0]!.events![0]!.quote?.usd ?? 1) < 1;
+    return Response.json(path.includes("min_trade_usd=1") && dust ? { ...page, participants: [] } : page);
   });
 
   const client = createTestQueryClient();
@@ -194,7 +199,7 @@ test("confirmed presale trades update the list and headline without a read, incl
       source?.receive({ type: "activity", activity_id: "103:0:4294967295:0", kind: "trade_buy", presale_id: ID });
     });
     await settle();
-    assert.equal(reads.at(-1), `${activityPath}&at=103`, "a hint without a trade frame still fetches");
+    assert.equal(reads.at(-1), `${filteredPath}&at=103`, "a hint without a trade frame still fetches");
     assert.equal(chartCues().length, 3, "the hint-only fallback still cues the buy");
 
     now += 6_000;
@@ -225,11 +230,24 @@ test("confirmed presale trades update the list and headline without a read, incl
       resumed.receive({ type: "pong", presale_checkpoint: 105 });
     });
     await settle();
-    assert.equal(reads.at(-1), `${activityPath}&at=105`, "the history read includes the sub-dollar trade");
-    assert.match(panel() ?? "", /No trades match this filter/, "a history read retains the exact dollar threshold");
+    assert.equal(reads.at(-1), `${filteredPath}&at=104`, "the history read asks for trades of a dollar or more, pinned to the newest one shown");
+    assert.match(panel() ?? "", /No trades match this filter/, "a window of only small trades keeps the switch");
+    // A burst of dust neither takes the list nor costs a read.
+    const readsBeforeDust = reads.length;
+    now += 6_000;
+    const history = await historyStream;
+    await emitTrade(106, ID, CREATE_SUI_QUOTE_TYPE, history);
+    await act(async () => {
+      history.receive({ type: "activity", activity_id: "106:0:4294967295:0", kind: "trade_buy", presale_id: ID });
+    });
+    await settle();
+    assert.equal(reads.length, readsBeforeDust, "a dust trade's hint asks for no read");
+    assert.match(panel() ?? "", /No trades match this filter/);
     const filter = container.querySelector<HTMLButtonElement>('button[role="switch"]');
     assert.ok(filter);
     await act(async () => filter.click());
+    await settle();
+    assert.ok(!reads.at(-1)?.includes("min_trade_usd"), "turning the filter off reads every trade");
     assert.equal(container.querySelector('ol[aria-label="Recent trades"] > li [data-side]')?.getAttribute("data-side"), "buy", "the switch reveals the small trade");
   } finally {
     await act(async () => root.unmount());
