@@ -115,6 +115,7 @@ test("compact style controls update a single plot and show trades on its live ca
   const container = dom.document.createElement("div");
   dom.document.body.append(container);
   const root = createRoot(container);
+  const router = { push() {} };
   try {
     const controls = { interval: "1m", range: "all" } as const;
     const buy = { cursor: "1:0:1:0", side: "buy" as const, timestampMs: 1_790_337_600_000, price: "2", memeAmount: 9_631_238_640_097n, quoteAmount: 100_000_000n };
@@ -134,6 +135,7 @@ test("compact style controls update a single plot and show trades on its live ca
       return receipts.get(cursor)!;
     };
     const compactChart = (hidden: readonly "curve"[], trade: Omit<typeof buy, "side"> & { side: "buy" | "sell" } = buy, market = poolKey, close = "2", empty = false) => (
+      <AppRouterContext value={router as never}>
       <WalletTradesProvider deployer={actor}><Tape /><ChartTradeContext value={{ trade, poolKey: market, receivedAt: receivedAt(trade.cursor), decimals: 9, symbol: "SUI" }}>
       <ChartView
         compact
@@ -155,11 +157,9 @@ test("compact style controls update a single plot and show trades on its live ca
         onToggle={() => {}}
         onRefresh={() => {}}
       /></ChartTradeContext></WalletTradesProvider>
+      </AppRouterContext>
     );
-    const router = { push: t.mock.fn() };
-    const render = (...args: Parameters<typeof compactChart>) => act(async () => {
-      root.render(<AppRouterContext value={router as never}>{compactChart(...args)}</AppRouterContext>);
-    });
+    const render = (...args: Parameters<typeof compactChart>) => act(async () => root.render(compactChart(...args)));
     const initial = renderToStaticMarkup(compactChart([]));
     assert.match(initial, /<svg[^>]*data-chart-preview=""[^>]*>.*<path d="M\d+/);
     assert.doesNotMatch(renderToStaticMarkup(compactChart([], buy, poolKey, "2", true)), /data-chart-preview/);
