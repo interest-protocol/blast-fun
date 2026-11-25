@@ -49,13 +49,25 @@ export function socialHomeRoutes(): ReturnType<typeof createSocialHomeRoutes> {
  * burst of page views shares one read per distinct view instead of each
  * scanning the window's activity rows again on the replica. In-flight reads
  * are shared too. A failed read is not kept. Bounded; the oldest entries go.
+ * Discover alone also serves its last good page while it refreshes
+ * (`HOME_DISCOVER_STALE_MS`).
  */
 export const HOME_PAGE_READ_TTL_MS = 10_000;
+/**
+ * How much longer than its TTL a Discover page may be served while it
+ * refreshes: the twenty seconds of stale revalidation public discovery already
+ * permits (`docs/architecture/latency-and-capacity.md`), so no answer is older than 30 s.
+ */
+export const HOME_DISCOVER_STALE_MS = 20_000;
 function homeReadCaches() {
   return processSingleton("social.home-read-caches", () => ({
     activity: createReadCache<HomeActivityStreamPage>(HOME_PAGE_READ_TTL_MS, 64),
     thread: createReadCache<HomeThreadPage>(HOME_PAGE_READ_TTL_MS, 64),
-    discover: createReadCache<HomeCoinsPage>(HOME_PAGE_READ_TTL_MS, 64),
+    // Every Home tab reads this. Past ten seconds the last good page goes out
+    // (no-store) while one load replaces it, so a slow or failed refresh
+    // (57014 at the 2 s statement timeout) does not reach readers while that
+    // page is under 30 s old.
+    discover: createReadCache<HomeCoinsPage>(HOME_PAGE_READ_TTL_MS, 64, Date.now, { ms: HOME_DISCOVER_STALE_MS, label: "social.home.discover" }),
     // Each holds a whole window's rows: two windows times the few flag sets clients send, and a small Almost graduated set beside each.
     discoverBase: createReadCache<HomeDiscoverBase>(HOME_PAGE_READ_TTL_MS, 12),
     coins: createReadCache<HomeCoinsByIds>(HOME_PAGE_READ_TTL_MS, 64),
