@@ -143,7 +143,7 @@ test("compact style controls keep one chart and the trade cue above it", async (
       if (!receipts.has(cursor)) receipts.set(cursor, performance.now());
       return receipts.get(cursor)!;
     };
-    const compactChart = (hidden: readonly "curve"[], trade: Omit<typeof buy, "side"> & { side: "buy" | "sell" } = buy, market = poolKey, close = "2", empty = false) => (
+    const compactChart = (hidden: readonly "curve"[], trade: Omit<typeof buy, "side"> & { side: "buy" | "sell" } = buy, market = poolKey, close = "2", traded = 1) => (
       <AppRouterContext value={router as never}>
       <WalletTradesProvider deployer={actor}><Tape /><ChartTradeContext value={{ trade, poolKey: market, receivedAt: receivedAt(trade.cursor), decimals: 9, symbol: "SUI" }}>
       <ChartView
@@ -152,7 +152,7 @@ test("compact style controls keep one chart and the trade cue above it", async (
         quoteUsd="0.70"
         state={{
           key: "1m|all",
-          curve: { state: "available", data: { ...page, candles: empty ? [] : page.candles.map(c => ({ ...c, close })) }, provenance: { source: "blast-infra", network: "localnet", deployment: "fixture", checkpoint: 1, timestampMs: 1_790_337_631_000, observedAt: 1_790_337_631_000, lagMs: 0 } },
+          curve: { state: "available", data: { ...page, candles: Array.from({ length: traded }, (_, i) => ({ ...page.candles[0]!, bucketStart: page.candles[0]!.bucketStart - (traded - 1 - i) * 60_000, close })) }, provenance: { source: "blast-infra", network: "localnet", deployment: "fixture", checkpoint: 1, timestampMs: 1_790_337_631_000, observedAt: 1_790_337_631_000, lagMs: 0 } },
           venue: { state: "loading" },
           migration: null,
         }}
@@ -169,7 +169,7 @@ test("compact style controls keep one chart and the trade cue above it", async (
     );
     const render = (...args: Parameters<typeof compactChart>) => act(async () => root.render(compactChart(...args)));
     assert.doesNotMatch(renderToStaticMarkup(compactChart([])), /data-kline-plot/, "the chart loads in the browser only");
-    await render([], buy, poolKey, "2", true);
+    await render([], buy, poolKey, "2", 0);
     const cue = container.querySelector("[data-trade-cue]");
     assert.equal(cue?.textContent, "Buy · 0.1\u00a0SUI", "an observed trade remains readable without plotted geometry");
     assert.equal(container.querySelector("[data-kline-plot]"), null);
@@ -177,6 +177,9 @@ test("compact style controls keep one chart and the trade cue above it", async (
     assert.equal(container.querySelector("[data-trade-cue]"), cue, "showing the plot retains the original cue");
     assert.ok(container.querySelector("[data-chart-last-trade]")?.nextElementSibling?.querySelector("[data-kline-plot]"), "the readout sits immediately above the real chart figure");
     assert.equal(container.querySelectorAll("[data-kline-plot]").length, 1);
+    assert.equal(container.querySelector('[aria-label="Chart style"]'), null, "a handful of trades is drawn as a line, so no style picker offers candles");
+    assert.equal(container.querySelector("[data-compact-chart]")?.getAttribute("data-chart-style"), "line");
+    await render([], buy, poolKey, "2", 10);
     const plot = () => container.querySelector("[data-kline-plot]")!;
     const button = (name: string) => [...container.querySelectorAll("button")].find(b => b.textContent === name)!;
     const toggle = container.querySelector<HTMLButtonElement>('button[role="switch"]')!;

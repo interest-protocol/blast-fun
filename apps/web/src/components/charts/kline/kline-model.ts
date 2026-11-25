@@ -84,6 +84,14 @@ export function tradedBars(bars: readonly Bar[]): number {
   return count;
 }
 
+/** Below this many traded buckets the chart draws a line, whatever the style. */
+const FEW_TRADED_BARS = 10;
+
+/** A handful of trades reads better as a line than as a row of flat candles. */
+export function forcesLine(bars: readonly Bar[]): boolean {
+  return tradedBars(bars) < FEW_TRADED_BARS;
+}
+
 function joinBars(earlier: Bar, later: Bar): Bar {
   return {
     timestamp: earlier.timestamp,

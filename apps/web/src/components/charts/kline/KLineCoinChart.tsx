@@ -15,7 +15,7 @@ import { poolPrices } from "../candle-data.ts";
 import type { CandleTrade } from "../candle-trade.ts";
 import type { WalletChartTrade } from "../wallet-markers.ts";
 import {
-  barChanges, fillGaps, foldTrades, klineBars, MAIN_INDICATORS, PANE_INDICATORS, pricePrecision, readChartSettings, toggleIndicator, tradedBars,
+  barChanges, fillGaps, foldTrades, klineBars, MAIN_INDICATORS, PANE_INDICATORS, pricePrecision, readChartSettings, toggleIndicator, forcesLine,
   type Bar, type ChartSettings, type IndicatorName,
 } from "./kline-model.ts";
 import { subscriptZeros } from "#web/lib/market-format.ts";
@@ -34,8 +34,6 @@ const WALLET_GROUP = "wallet-tags";
 const GRADUATION_GROUP = "graduation";
 /** Trades the history has not caught up with yet; older ones are dropped. */
 const MAX_PENDING_TRADES = 500;
-/** Below this many traded buckets the chart draws a line, whatever the style. */
-const FEW_TRADED_BARS = 10;
 
 export type KLineCoinChartProps = Readonly<{
   sources: readonly DrawnSeries[];
@@ -69,8 +67,7 @@ export default function KLineCoinChart({ sources, interval, memeDecimals, quoteD
   const showWalletTags = walletChoice ?? walletPreference !== "hidden";
   const bars = useLiveBars(sources, interval, memeDecimals, quoteDecimals, quoteUsd, trade);
   const precision = pricePrecision(bars);
-  // A handful of trades reads better as a line than as a row of flat candles.
-  const drawn = style === "line" || tradedBars(bars) < FEW_TRADED_BARS ? "line" : "candles";
+  const drawn = style === "line" || forcesLine(bars) ? "line" : "candles";
 
   useEffect(() => {
     const element = host.current;

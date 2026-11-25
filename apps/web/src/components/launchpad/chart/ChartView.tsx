@@ -38,6 +38,7 @@ import { chartGeometry, type DrawnSeries } from "./chart-geometry";
 import { CHART_INTERVALS, LIVE_CHART_INTERVALS, CHART_RANGES, LIVE_CHART_CONTROLS, LIVE_CHART_SPAN_MS, candleGaps, chartLatestTimestamp, chartOpening, chartSources, pageTruncated, type ChartCandlePage, type ChartControls, type ChartRange, type ChartRequest, type ChartState, type CandleGap, type SourceState } from "./chart-model";
 import { useChartClock } from "./use-chart-clock.ts";
 import styles from "./Chart.module.css";
+import { forcesLine, klineBars } from "#web/components/charts/kline/kline-model.ts";
 import klineStyles from "#web/components/charts/kline/KLineCoinChart.module.css";
 import { HIDDEN_AMOUNT, NO_VALUE, venueName } from "@blast/core/lib/format.ts";
 
@@ -553,14 +554,16 @@ function CompactChart({ view }: Readonly<{ view: ChartViewControls }>) {
   const mobile = useMobileChartLayout();
   const [preferredStyle, setStyle] = useChartStyle();
   const live = view.controls.range === "live";
-  const style = mobile || live ? "line" : preferredStyle;
-  const { source, quoteUsd, geometry } = view;
+  const { source, quoteUsd, geometry, drawn } = view;
+  // The chart draws a line for a handful of trades, so the picker would offer a style it ignores.
+  const fewTrades = forcesLine(klineBars(drawn, source.memeDecimals, source.quoteDecimals, quoteUsd ?? null));
+  const style = mobile || live || fewTrades ? "line" : preferredStyle;
   const unit = geometry && (exactDecimal(quoteUsd) ? "USD" : source.quoteSymbol);
   return <div className={styles.chart} data-compact-chart="" data-chart-style={style}>
     <div className={styles.compactHead}>
       <h2>Price{unit ? <span> · {unit}</span> : null}</h2>
       <div className={styles.compactTools}>
-        {geometry && !live && !mobile && <Segmented className={styles.stylePicker} label="Chart style" size="touch" variant="outline" options={CHART_STYLES} value={style} onChange={setStyle} />}
+        {geometry && !live && !mobile && !fewTrades && <Segmented className={styles.stylePicker} label="Chart style" size="touch" variant="outline" options={CHART_STYLES} value={style} onChange={setStyle} />}
         <ChartFilters view={view} style={style} />
       </div>
     </div>
