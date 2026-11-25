@@ -8,6 +8,7 @@ const dom = installTestDom();
 const { act } = await import("react");
 const { createRoot } = await import("react-dom/client");
 const { renderToStaticMarkup } = await import("react-dom/server");
+const { AppRouterContext } = await import("next/dist/shared/lib/app-router-context.shared-runtime");
 const hook = registerHooks({ resolve(specifier, context, next) {
   if (specifier === "./TradingViewChart" && context.parentURL?.endsWith("/charts/PoolCandleChart.tsx")) return {
     shortCircuit: true,
@@ -155,7 +156,10 @@ test("compact style controls update a single plot and show trades on its live ca
         onRefresh={() => {}}
       /></ChartTradeContext></WalletTradesProvider>
     );
-    const render = (...args: Parameters<typeof compactChart>) => act(async () => root.render(compactChart(...args)));
+    const router = { push: t.mock.fn() };
+    const render = (...args: Parameters<typeof compactChart>) => act(async () => {
+      root.render(<AppRouterContext value={router as never}>{compactChart(...args)}</AppRouterContext>);
+    });
     const initial = renderToStaticMarkup(compactChart([]));
     assert.match(initial, /<svg[^>]*data-chart-preview=""[^>]*>.*<path d="M\d+/);
     assert.doesNotMatch(renderToStaticMarkup(compactChart([], buy, poolKey, "2", true)), /data-chart-preview/);
