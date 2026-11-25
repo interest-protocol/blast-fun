@@ -174,15 +174,6 @@ function trackListeners(target: EventTarget): void {
 }
 
 /** Install before importing react-dom/client; Node runs each test file in its own process. */
-/** jsdom has no canvas; the coin chart (KLineCharts) draws into this no-op 2D context. */
-export function installNoopCanvas(dom: Pick<TestDom, "window">): void {
-  const context2d: object = new Proxy({}, {
-    get: (_, key) => key === "measureText" ? () => ({ width: 8 }) : key === "canvas" ? undefined : key === "createLinearGradient" ? () => ({ addColorStop() {} }) : () => context2d,
-    set: () => true,
-  });
-  dom.window.HTMLCanvasElement.prototype.getContext = (() => context2d) as never;
-}
-
 export function installTestDom(): TestDom {
   const { window } = new JSDOM("<!doctype html><html><head></head><body></body></html>", {
     url: "http://127.0.0.1/",
