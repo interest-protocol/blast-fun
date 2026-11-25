@@ -67,6 +67,13 @@ type Topic = {
   resuming?: boolean;
   /** A replayed frame arrived: the trailing snapshot is a new fence. Otherwise it is dropped. */
   resumeChanged?: boolean;
+  /**
+   * A pool the reader streams but never snapshots (a tracked venue pool): the last frame seen
+   * before its fence. The first frame of a later checkpoint fences the pool at this one.
+   */
+  unfenced?: FencePoint & { checkpoint: number };
+  /** Fenced at a checkpoint boundary, not a snapshot: an upstream resume would wait for a snapshot that never comes. */
+  snapshotless?: boolean;
   /** The latest `coin_stats` (state, not log): sent after each fence, never in the ring. */
   stats?: { checkpoint: number; bytes: Uint8Array; unsent?: boolean };
 };
@@ -209,6 +216,20 @@ function priceMissing(frame: Frame): boolean | undefined {
   }
   if (frame.type === "trade") return object(frame.trade).price === null;
   return undefined;
+}
+
+type FencePoint = Readonly<{ checkpoint: unknown; cursor: string; provenance: unknown }>;
+
+/** The `status: live` block a pool's browsers get: every later frame follows this cursor. */
+function fenceStatus(pool: string, at: FencePoint, priceMissing?: boolean): Frame {
+  return {
+    state: "live",
+    pool_key: pool,
+    checkpoint: at.checkpoint,
+    cursor: at.cursor,
+    provenance: at.provenance,
+    ...(priceMissing ? { price_missing: true } : {}),
+  };
 }
 
 function validateMarketBody(frame: Frame): void {
@@ -585,9 +606,9 @@ export class MarketStreamRelay {
     const cursor = validateEnvelope(frame, this.#expected);
     if (frame.type === "coin_stats") return this.#stats(topic, frame);
     if (topic.resuming && !this.#endResume(topic, frame, cursor)) return;
+    if (frame.type !== "snapshot" && !topic.fence) return this.#fenceUnsnapshotted(pool, topic, frame, cursor);
     if (topic.cursor && compareEventCursors(cursor, topic.cursor) < 0)
       throw new Error();
-    if (frame.type !== "snapshot" && !topic.fence) throw new Error();
     validateMarketBody(frame);
     if (
       topic.cursor &&
@@ -615,29 +636,57 @@ export class MarketStreamRelay {
     return false;
   }
 
+  /**
+   * A frame for a pool without a fence. The reader snapshots launch pools, but streams tracked
+   * venue pools (SUI/USDC) with no snapshot. Such a frame's body never ends the relay (a bad envelope still does, as for every pool): once a later
+   * checkpoint begins, every event of the earlier one has arrived, so the pool is fenced there
+   * (a browser's history read at that checkpoint holds them all) and this frame streams after it.
+   * A malformed or out-of-order frame is dropped; a pool that stays quiet still stalls.
+   */
+  #fenceUnsnapshotted(pool: string, topic: Topic, frame: Frame, cursor: string): void {
+    try {
+      validateMarketBody(frame);
+    } catch {
+      return;
+    }
+    const seen = topic.unfenced;
+    if (seen && compareEventCursors(cursor, seen.cursor) <= 0) return;
+    const checkpoint = frame.checkpoint as number;
+    if (!seen || checkpoint === seen.checkpoint) {
+      topic.priceMissing = priceMissing(frame) ?? topic.priceMissing;
+      topic.unfenced = { checkpoint, cursor, provenance: frame.provenance };
+      return;
+    }
+    this.#fence(pool, topic, seen);
+    topic.snapshotless = true;
+    this.#deliver(pool, topic, frame, cursor);
+  }
+
+  /** Fences the pool at a snapshot's (or a whole checkpoint's) cursor and tells its clients. */
+  #fence(pool: string, topic: Topic, at: FencePoint): void {
+    topic.unfenced = undefined;
+    topic.snapshotless = undefined;
+    topic.cursor = at.cursor;
+    topic.fence = fenceStatus(pool, at, topic.priceMissing);
+    clearTimeout(topic.deadline);
+    topic.deadline = undefined;
+    topic.ring = [];
+    topic.ringBytes = 0;
+    topic.floor = at.cursor;
+    if (topic.stats) topic.stats.unsent = false;
+    for (const client of topic.clients) {
+      this.#send(client, event("status", topic.fence));
+      if (topic.stats) this.#send(client, topic.stats.bytes);
+    }
+  }
+
   #deliver(pool: string, topic: Topic, frame: Frame, cursor: string): void {
     topic.priceMissing = priceMissing(frame) ?? topic.priceMissing;
-    topic.cursor = cursor;
-    topic.fence = {
-      state: "live",
-      pool_key: pool,
-      checkpoint: frame.checkpoint,
-      cursor,
-      provenance: frame.provenance,
-      ...(topic.priceMissing ? { price_missing: true } : {}),
-    };
-    if (frame.type === "snapshot") {
-      clearTimeout(topic.deadline);
-      topic.deadline = undefined;
-      topic.ring = [];
-      topic.ringBytes = 0;
-      topic.floor = cursor;
-      if (topic.stats) topic.stats.unsent = false;
-      for (const client of topic.clients) {
-        this.#send(client, event("status", topic.fence));
-        if (topic.stats) this.#send(client, topic.stats.bytes);
-      }
-    } else {
+    const at = { checkpoint: frame.checkpoint, cursor, provenance: frame.provenance };
+    if (frame.type === "snapshot") this.#fence(pool, topic, at);
+    else {
+      topic.cursor = cursor;
+      topic.fence = fenceStatus(pool, at, topic.priceMissing);
       const bytes = event("market", stampRelay(withoutLabels(frame), Date.now()), cursor);
       if (bytes.byteLength > B.maxChunkBytes)
         return this.#end("frame-too-large");
@@ -706,8 +755,8 @@ export class MarketStreamRelay {
   }
 
   /**
-   * A pool the market engine never snapshots (it may not index that coin) fails only its own
-   * clients: every other pool on this process keeps streaming.
+   * A pool with no fence 10 s after its subscribe (no snapshot, and no frames in two checkpoints)
+   * fails only its own clients: every other pool on this process keeps streaming.
    */
   #stall(pool: string): void {
     const topic = this.#topics.get(pool);
@@ -740,8 +789,15 @@ export class MarketStreamRelay {
     for (const topic of this.#topics.values()) {
       clearTimeout(topic.deadline);
       topic.deadline = undefined;
-      topic.resuming = topic.fence !== undefined;
       topic.resumeChanged = false;
+      // Frames lost with the upstream may sit between the last one seen and the next.
+      topic.unfenced = undefined;
+      if (topic.snapshotless) {
+        // No snapshot ends its resume: subscribe fresh and fence again at the next checkpoint
+        // boundary (browsers refetch history on a new fence); a quiet pool stalls as on subscribe.
+        Object.assign(topic, { fence: undefined, cursor: undefined, floor: undefined, ring: [], ringBytes: 0, snapshotless: undefined });
+      }
+      topic.resuming = topic.fence !== undefined;
     }
     this.#closeUpstream();
     const delay = Math.min(5_000, 250 * 2 ** this.#reopenAttempt++) * (1 + Math.random() / 2);
