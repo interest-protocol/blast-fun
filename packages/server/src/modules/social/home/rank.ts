@@ -46,9 +46,10 @@ import { decodeCursor, encodeCursor, invalidCursor } from "@blast/server/modules
  * `40 × breadth + 30 × volume + 20 × freshness + 10 × holders`, each input
  * scaled 0–1 on a log curve that stops at its cap (`RELEVANCE_CAPS`), so
  * neither one wallet's churn nor one large order can lead. Breadth weighs
- * most: many people beat big money. Freshness falls from 1 at a trade this
- * moment to 0 at the window's start. Missing data is 0; a coin with nothing
- * in the window ranks by its holders alone. Selling counts exactly like buying.
+ * most: many people beat big money. Freshness falls, in whole minutes, from 1
+ * for a trade this minute to 0 at the window's start. Missing data is 0; a coin
+ * with nothing in the window ranks by its holders alone. Selling counts exactly
+ * like buying.
  *
  * **Ties** break by the latest event (newest first), then by coin type
  * (bytewise), so two reads of the same data give one order.
@@ -106,6 +107,7 @@ export const RELEVANCE_CAPS = {
   holders: 1_000,
 } as const satisfies Readonly<{ breadth: Record<HomeWindow, number>; volume: Record<HomeWindow, number>; holders: number }>;
 
+const MINUTE_MS = 60_000;
 const saturating = (value: number, cap: number) => Math.log1p(Math.min(cap, Math.max(0, value))) / Math.log1p(cap);
 
 /** The Relevant score (see the ranking notes above), ×100 and rounded so cursors carry an integer. */
@@ -115,7 +117,9 @@ export function relevanceScore(
   toMs: number,
 ): number {
   const { inputs, latestMs, holders } = candidate;
-  const freshness = latestMs === null ? 0 : Math.min(1, Math.max(0, 1 - (toMs - latestMs) / HOME_WINDOW_MS[window]));
+  // Age in whole minutes, so a score holds still between refreshes and a cursor's position does not drift.
+  const ageMs = latestMs === null ? null : Math.floor(Math.max(0, toMs - latestMs) / MINUTE_MS) * MINUTE_MS;
+  const freshness = ageMs === null ? 0 : Math.max(0, 1 - ageMs / HOME_WINDOW_MS[window]);
   const score = RELEVANCE_WEIGHTS.breadth * saturating(inputs.breadth, RELEVANCE_CAPS.breadth[window])
     + RELEVANCE_WEIGHTS.volume * saturating(inputs.volume, RELEVANCE_CAPS.volume[window])
     + RELEVANCE_WEIGHTS.freshness * freshness
@@ -140,7 +144,6 @@ export function whyShown(activity: Pick<HomeActivity, "participants" | "events" 
   const sold = activity.sellers > 0 ? ` · ${activity.sellers.toLocaleString("en-US")} sold` : "";
   return `${people} · ${trades}${sold} in the ${window}${where}`;
 }
-
 
 /** What the orders compare: every candidate carries these (`holders`: blast-infra's count now, null without one). */
 export type Rankable = Readonly<{ coinType: string; score: number; inputs: RankInputs; latestMs: number | null; launchedMs: number | null; holders?: number | null }>;
@@ -192,7 +195,6 @@ export type HomeCursor = Readonly<{ sort: HomeSort; coinType: string; score: num
 /** Version 3 adds the holder count (`held`); a version 2 cursor of another sort still reads. */
 const VERSION = 3;
 const VERSION_WITHOUT_HOLDERS = 2;
-
 
 export function encodeHomeCursor(position: HomeCursor): string {
   return encodeCursor("discover", [VERSION, position.sort, position.coinType, position.score, position.breadth, position.activity, position.recency, position.volume, position.latestMs, position.launchedMs, position.holders ?? null]);

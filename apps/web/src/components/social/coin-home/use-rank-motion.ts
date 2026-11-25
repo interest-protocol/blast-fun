@@ -7,12 +7,17 @@ import { useLayoutEffect, useRef } from "react";
 
 type RowPosition = Readonly<{ id: string; top: number }>;
 
+function reordered(before: readonly RowPosition[], after: readonly RowPosition[]): boolean {
+  return before.length !== after.length || after.some((row, index) => row.id !== before[index]?.id);
+}
+
 /**
  * Animate rank changes, in layout coordinates so scrolling never looks like a rank change.
  * Rows slide when the same list re-ranks (`view` changes within one `group`, such as a new sort);
- * a new `group` (another source or page) starts without motion.
+ * a new `group` (another source or page) starts without motion. While `holding` (the previous
+ * view's rows shown during a load), a Back/Forward restore stays motionless until the new rows land.
  */
-export function useRankMotion(view: string, group: string = view) {
+export function useRankMotion(view: string, { group = view, holding = false }: Readonly<{ group?: string; holding?: boolean }> = {}) {
   const root = useRef<HTMLOListElement>(null);
   const previous = useRef<{ view: string; group: string; rows: RowPosition[] } | null>(null);
   const restoring = useRef(false);
@@ -25,17 +30,17 @@ export function useRankMotion(view: string, group: string = view) {
     // Read all layout before writing animations. offsetTop excludes the running transform.
     const positions = rows.map(row => ({ id: row.dataset.listRow ?? "", top: row.offsetTop }));
     const before = previous.current;
-    previous.current = { view, group, rows: positions };
-    const changed = before && (before.rows.length !== positions.length || positions.some((row, index) => row.id !== before.rows[index]?.id));
+    // Held rows still belong to the old view: keep its name so the landing reads as a view change.
+    previous.current = { view: holding && before ? before.view : view, group, rows: positions };
     const reduce = instantFeedback();
     const restored = restoring.current;
-    restoring.current = false;
+    if (!holding) restoring.current = false;
     if (!before || before.group !== group || reduce || restored) {
       animations.current.forEach(animation => animation.cancel());
       animations.current.clear();
       return;
     }
-    if (!changed) return;
+    if (!reordered(before.rows, positions)) return;
     const oldPositions = new Map(before.rows.map(row => [row.id, row.top]));
     const moves = rows.map((row, index) => {
       const oldTop = oldPositions.get(positions[index]!.id);
