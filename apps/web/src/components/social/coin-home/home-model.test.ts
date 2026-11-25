@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type { HomeActivity, HomeAmount, HomeCoin, HomeEvent, HomeParticipant, HomeSide } from "@blast/core/modules/social/contracts/home.ts";
+import { socialHomePath, type HomeActivity, type HomeAmount, type HomeCoin, type HomeEvent, type HomeParticipant, type HomeSide } from "@blast/core/modules/social/contracts/home.ts";
+
+import { workspaceDiscoverQuery } from "../blast-mode/workspace/coin-row-model";
 
 import {
   activeFilterCount,
@@ -10,10 +12,13 @@ import {
   withView,
   HOME_DEFAULT_FEED,
   HOME_DEFAULT_VIEW,
+  HOME_TAB_KEYS,
+  HOME_TABS,
   resultsAnnouncement,
   tabOf,
   viewSearchOf,
   viewStateOf,
+  type HomeViewState,
 } from "./home-state";
 import {
   amountShort,
@@ -153,15 +158,35 @@ test("the Status cell says where a coin is in one line: its curve, its sale, its
   assert.deepEqual(homeStatus({ ...base, presale_id: "0xsale", launch_id: null }, NOW), { text: "Listed 3d ago" });
   assert.deepEqual(homeStatus({ ...base, launch_id: null, venue: "cetus" }, NOW), { text: "", venue: "cetus" });
   const sale = { ...base, presale_id: "0xsale", launch_id: null, lifecycle: "open", sale: { start_ms: NOW - DAY, end_ms: NOW + 3 * 3_600_000, raise_target: "100", raised: "42", participants: 3 } } satisfies HomeCoin;
-  assert.deepEqual(homeStatus(sale, NOW), { text: "42% · closes in 3h", fill: 42 });
-  assert.deepEqual(homeStatus({ ...sale, lifecycle: "pending", sale: { ...sale.sale, start_ms: NOW + 39 * 60_000 + 5_000 } }, NOW), { text: "Opens in 39m" });
-  assert.deepEqual(homeStatus({ ...sale, lifecycle: "pending", sale: { ...sale.sale, start_ms: NOW + 20_000 } }, NOW), { text: "Opens in <1m" });
+  assert.deepEqual(homeStatus(sale, NOW), { text: "Live · ends in 3h", fill: 42 });
+  assert.deepEqual(homeStatus({ ...sale, sale: { ...sale.sale, end_ms: NOW } }, NOW), { text: "Ended", fill: 42 }, "time is up, the chain has not settled it yet");
+  const upcoming = (over: Partial<NonNullable<HomeCoin["sale"]>>, lifecycle = "pending") => homeStatus({ ...sale, lifecycle, sale: { ...sale.sale, raised: "0", ...over } }, NOW);
+  assert.deepEqual(upcoming({ start_ms: NOW + 39 * 60_000 + 5_000 }), { text: "Opens in 39m" });
+  assert.deepEqual(upcoming({ start_ms: NOW + 20_000 }), { text: "Opens in <1m" });
+  assert.deepEqual(upcoming({ start_ms: NOW + 3 * 3_600_000, savers: 12 }), { text: "Opens in 3h · 12 saved" });
+  assert.deepEqual(upcoming({ start_ms: NOW + 3 * 3_600_000, savers: 1_204 }, "open"), { text: "Opens in 3h · 1,204 saved" }, "an open sale whose start is ahead is upcoming");
+  assert.deepEqual(upcoming({ start_ms: NOW + 3 * 3_600_000, savers: 0 }), { text: "Opens in 3h" }, "nobody saved it: no count");
+  assert.deepEqual(upcoming({ start_ms: NOW - DAY, savers: 4 }), { text: "Upcoming · 4 saved" }, "pending past its start: no time to show");
+  assert.deepEqual(homeStatus({ ...sale, lifecycle: "funded" }, NOW), { text: "Funded", fill: 100 });
+  assert.deepEqual(homeStatus({ ...sale, lifecycle: "cancelled" }, NOW), { text: "Cancelled" });
 });
 
 test("a sale opens its presale page, a curve coin its coin page, and a coin with neither has no link", () => {
   assert.equal(homeCoinHref({ coin_type: "0x1::coin::COIN", presale_id: "0xsale", launch_id: null }), "/presale/0xsale");
   assert.equal(homeCoinHref({ coin_type: "0x1::coin::COIN", presale_id: null, launch_id: "0xlaunch" }), "/coin/0x1%3A%3Acoin%3A%3ACOIN");
   assert.equal(homeCoinHref({ coin_type: "0x1::coin::COIN", presale_id: null, launch_id: null }), null);
+});
+
+test("Home's Trending asks for presales; every other tab's URL is unchanged, and Blast mode never asks", () => {
+  const path = (state: HomeViewState) => socialHomePath(discoverQueryOf(state));
+  assert.equal(path(HOME_DEFAULT_FEED), "/api/social/home?window=1h&presales=1");
+  assert.equal(path({ ...HOME_DEFAULT_FEED, window: "24h", page: 2 }), "/api/social/home?presales=1&page=2");
+  for (const key of HOME_TAB_KEYS.filter((tab) => tab !== "trending")) {
+    const { stage, sort } = HOME_TABS[key];
+    assert.doesNotMatch(path({ ...HOME_DEFAULT_FEED, stage, sort }), /presales/, key);
+  }
+  assert.doesNotMatch(path({ ...HOME_DEFAULT_FEED, sort: "held" }), /presales/, "a header sort");
+  assert.equal(socialHomePath(workspaceDiscoverQuery(HOME_DEFAULT_FEED, 10)), "/api/social/home?window=1h");
 });
 
 test("the view state round-trips through the URL, with defaults left out and unknown values read as defaults", () => {
@@ -195,7 +220,7 @@ test("the view state round-trips through the URL, with defaults left out and unk
   for (const bad of ["page=0", "page=1.5", "page=two", "page=10000", "page=-2"]) assert.equal(viewStateOf(new URLSearchParams(bad)).page, 1, bad);
   assert.equal(activeFilterCount(state), 3);
   assert.equal(activeFilterCount(HOME_DEFAULT_VIEW), 0);
-  assert.deepEqual(discoverQueryOf(state), { window: "24h", sort: "newest", stage: "all", minParticipants: 5, age: "7d", tradable: true, limit: 10, page: 3, cursor: null });
+  assert.deepEqual(discoverQueryOf(state), { window: "24h", sort: "newest", stage: "all", minParticipants: 5, age: "7d", tradable: true, limit: 10, page: 3, cursor: null, presales: true });
   assert.equal(discoverQueryOf(state, 20).limit, 20);
   assert.equal(resultsAnnouncement(state, 3), "Following · 3 coins · last 24 hours");
   assert.equal(resultsAnnouncement(state, 47, 5), "Following · 47 coins · page 3 of 5 · last 24 hours");

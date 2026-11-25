@@ -559,11 +559,20 @@ function coarseUntil(ms: number, nowMs: number): string {
   return ms - nowMs < 60_000 ? "<1m" : timeUntil(ms, nowMs).replace(/ (\d+s|0[mh])$/, "");
 }
 
+/**
+ * A sale's line. Upcoming: when it opens and how many saved it ("Opens in 3h ·
+ * 12 saved"; the count only comes with Trending's presales and only when
+ * someone saved it). Live: when it ends, the bar giving the fill. Then
+ * Ended (time is up, not settled yet), Funded or Cancelled.
+ */
 function saleStatus(coin: HomeCoin, sale: NonNullable<HomeCoin["sale"]>, nowMs: number): HomeStatus {
   const fill = Math.min(100, fillPercent(Number(sale.raised), Number(sale.raise_target)));
   const lifecycle = saleLifecycleAt(coin.lifecycle, sale.start_ms, nowMs);
-  if (lifecycle === "pending") return { text: sale.start_ms > nowMs ? `Opens in ${coarseUntil(sale.start_ms, nowMs)}` : "Upcoming" };
-  if (lifecycle === "open") return { text: sale.end_ms > nowMs ? `${fill}% · closes in ${coarseUntil(sale.end_ms, nowMs)}` : `${fill}% · closing`, fill };
+  if (lifecycle === "pending") {
+    const saved = sale.savers ? ` · ${sale.savers.toLocaleString("en-US")} saved` : "";
+    return { text: `${sale.start_ms > nowMs ? `Opens in ${coarseUntil(sale.start_ms, nowMs)}` : "Upcoming"}${saved}` };
+  }
+  if (lifecycle === "open") return { text: sale.end_ms > nowMs ? `Live · ends in ${coarseUntil(sale.end_ms, nowMs)}` : "Ended", fill };
   if (lifecycle === "funded") return { text: "Funded", fill: 100 };
   if (lifecycle === "cancelled") return { text: "Cancelled" };
   return { text: lifecycle.charAt(0).toUpperCase() + lifecycle.slice(1) };

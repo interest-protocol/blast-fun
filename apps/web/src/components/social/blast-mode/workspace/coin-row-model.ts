@@ -47,9 +47,12 @@ export function ecosystemSlot(
   return read.page === page ? Math.min(before - (page - 1) * limit, count) : null;
 }
 
-/** Blast mode Discover's read. Trending also asks for `ranked` (`ecosystemSlot`); the collapsed rail reads the same query, so both share one cache entry. */
+/**
+ * Blast mode Discover's read. Trending also asks for `ranked` (`ecosystemSlot`); the collapsed rail reads the same query, so both share one cache entry.
+ * Presales not trading yet stay out: Blast mode lists them in its own Presales panel.
+ */
 export function workspaceDiscoverQuery(state: HomeViewState, rows: number): HomeQuery {
-  const query = discoverQueryOf(state, rows);
+  const query: HomeQuery = { ...discoverQueryOf(state, rows), presales: false };
   return query.sort === "trending" ? { ...query, ranked: true } : query;
 }
 

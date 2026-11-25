@@ -393,6 +393,8 @@ export type HomeQuery = Readonly<{
   cursor: string | null;
   /** Also answer `ranked` (`ranked=1`). Only Blast mode Discover asks, so a client loaded before the field never receives it. */
   ranked?: boolean;
+  /** Let Trending list presales not trading yet (`HOME_PRESALES_PARAM`). Only Home asks; the path carries it on `sort=relevant` only, so other orders keep one URL. */
+  presales?: boolean;
 }>;
 
 export const HOME_DEFAULT_QUERY: HomeQuery = Object.freeze({
@@ -414,6 +416,16 @@ export function socialHomePath(query: Partial<HomeQuery>): string {
     params.set("window", query.window);
   if (query.sort !== undefined && query.sort !== HOME_DEFAULT_SORT)
     params.set("sort", query.sort);
+  setFilterParams(params, query);
+  if (query.limit !== undefined && query.limit !== HOME_PAGE_DEFAULT)
+    params.set("limit", String(query.limit));
+  setPageParams(params, query);
+  const text = params.toString();
+  return text ? `${SOCIAL_HOME_PATH}?${text}` : SOCIAL_HOME_PATH;
+}
+
+/** The stage, the filters and, on Trending only, the presales flag, in `socialHomePath`'s order. */
+function setFilterParams(params: URLSearchParams, query: Partial<HomeQuery>) {
   if (query.stage !== undefined && query.stage !== "all")
     params.set("stage", query.stage);
   if (query.minParticipants !== undefined && query.minParticipants > 0)
@@ -421,11 +433,8 @@ export function socialHomePath(query: Partial<HomeQuery>): string {
   if (query.age !== undefined && query.age !== "all")
     params.set("age", query.age);
   if (query.tradable) params.set("tradable", "1");
-  if (query.limit !== undefined && query.limit !== HOME_PAGE_DEFAULT)
-    params.set("limit", String(query.limit));
-  setPageParams(params, query);
-  const text = params.toString();
-  return text ? `${SOCIAL_HOME_PATH}?${text}` : SOCIAL_HOME_PATH;
+  if (query.presales && (query.sort ?? HOME_DEFAULT_SORT) === "relevant")
+    params.set(HOME_PRESALES_PARAM, "1");
 }
 
 /** The page, cursor and `ranked` flag, last in `socialHomePath`'s order. */

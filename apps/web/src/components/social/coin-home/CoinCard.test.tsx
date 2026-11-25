@@ -261,7 +261,7 @@ test("the Status cell names where each coin is in its life", () => {
     sale: { start_ms: start, end_ms: start + 3 * day, raise_target: "1000000000000", raised: "0", participants: 0 },
   };
   assert.deepEqual(status(sale, start - 39 * 60_000), ["Opens in 39m", null]);
-  assert.deepEqual(status(sale, start), ["0% · closes in 3d", "0"]);
+  assert.deepEqual(status(sale, start), ["Live · ends in 3d", "0"]);
   const before = render(sale, false, start);
   try {
     assert.equal(before.window.document.querySelector("a")?.getAttribute("href"), "/presale/0xsale");
