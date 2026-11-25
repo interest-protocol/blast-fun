@@ -236,6 +236,10 @@ export const homeCoinSchema = z.strictObject({
       raise_target: z.string().regex(/^(0|[1-9][0-9]*)$/),
       raised: z.string().regex(/^(0|[1-9][0-9]*)$/),
       participants: homeIntegerSchema.min(0),
+      savers: homeIntegerSchema
+        .min(0)
+        .optional()
+        .describe("Accounts with a verified X link that have the sale saved now. Present only on a Discover read that asks for presales (`presales=1`)."),
     })
     .nullable(),
   top_holders: z.strictObject({

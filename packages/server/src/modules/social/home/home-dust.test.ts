@@ -6,7 +6,7 @@ import { curveOf, isBlastDust, raiseUsdOf } from "@blast/server/modules/social/h
 import { encodeCursor } from "@blast/server/modules/social/home/codec.ts";
 import { decodeHomeCursor, encodeHomeCursor, HOME_DUST_USD, homeOrder, pageOf, passesFilters, type Rankable } from "@blast/server/modules/social/home/rank.ts";
 
-const base = { tracked_pool_only: false, quote_decimals: 9, quote_price_usd: "2" as string | null, raised: "0", graduation_target: null as string | null };
+const base = { tracked_pool_only: false, lifecycle: "migrated", raise_target: "0", quote_decimals: 9, quote_price_usd: "2" as string | null, raised: "0", graduation_target: null as string | null };
 const sale = (raised: string, quotePrice: string | null = "2") => ({ ...base, presale_id: "0xsale", raised, quote_price_usd: quotePrice });
 const curve = { ...base, presale_id: null };
 const catalog = { ...curve, tracked_pool_only: true };
@@ -103,9 +103,12 @@ test("progress, market cap and last trade: highest first, unknown last, ties by 
   assert.deepEqual(walk(rows, "last_trade"), lastTrade);
 });
 
-test("a version 5 cursor carries progress, market cap and last trade; version 4 still reads", () => {
+test("a cursor carries progress, market cap and last trade, and the idle bit (version 6) only where inputs do not imply it; versions 5 and 4 still read", () => {
   const position = { sort: "progress" as const, coinType: "x::x::X", score: 0, breadth: 0, activity: 0, recency: 0, volume: 0, latestMs: null, launchedMs: 4, holders: null, fdvUsd: 12.5, progressBps: 6_000, marketCapUsd: 99.5, lastTradeMs: 77 };
-  assert.deepEqual(decodeHomeCursor(encodeHomeCursor(position), "progress"), position);
+  // A sale opening soon: active with no participants, so the bit travels.
+  assert.deepEqual(decodeHomeCursor(encodeHomeCursor({ ...position, idle: false }), "progress"), { ...position, idle: false });
+  // A coin: idle as its inputs say, so the cursor stays version 5 for pods that predate the bit.
+  assert.deepEqual(decodeHomeCursor(encodeHomeCursor({ ...position, idle: true }), "progress"), position);
   assert.throws(() => decodeHomeCursor(encodeCursor("discover", [5, "progress", "x", 0, 0, 0, 0, 0, null, null, null, null, 10_001, null, null]), "progress"), "progress is at most 100%");
   const v4 = encodeCursor("discover", [4, "relevant", "dust", 903, 0, 0, 0, 0, null, null, 8, 3.2]);
   assert.deepEqual(decodeHomeCursor(v4, "relevant"), { sort: "relevant", coinType: "dust", score: 903, breadth: 0, activity: 0, recency: 0, volume: 0, latestMs: null, launchedMs: null, holders: 8, fdvUsd: 3.2 });

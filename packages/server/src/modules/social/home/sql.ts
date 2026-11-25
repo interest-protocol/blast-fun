@@ -88,10 +88,11 @@ export function homeSpan(window: HomeWindow, bounds: HomeBounds): HomeSpan {
 /**
  * Which markets a read attributes: public Discover (`almost`: only its
  * Almost graduated curves, `HOME_ALMOST_CURVE_SOURCES`), all shown sales, or
- * specific markets.
+ * specific markets. Discover's `presales` (Trending with `presales=1`) adds
+ * the presales not trading yet, bounded at the chain clock (`presaleScopeSql`).
  */
 export type SaleScope =
-  | Readonly<{ kind: "discover"; almost?: boolean }>
+  | Readonly<{ kind: "discover"; almost?: boolean; presales?: Readonly<{ clockMs: number; fromMs: number }> }>
   | Readonly<{ kind: "all" }>
   | Readonly<{ kind: "ids"; presaleIds: readonly string[]; includeStandalone?: boolean }>;
 
@@ -108,10 +109,33 @@ export type RowsRequest = Readonly<{
   actors: ActorScope;
 }>;
 
+/** How far ahead a scheduled sale joins Trending: far enough not to miss one, near enough to bound spam. */
+export const HOME_UPCOMING_SALE_MS = 30 * 86_400_000;
+
+/** Savers per sale (migration 0168): counts only, accounts with a verified X link. */
+export const PRESALE_SAVERS = "social_presale_savers";
+
+/**
+ * The presales not trading yet that Trending lists (never cancelled; the
+ * caller keeps test-SUI quotes out): a scheduled sale opening within
+ * `HOME_UPCOMING_SALE_MS`; a Pending (unscheduled) one only once someone
+ * saved it, since creating a sale is free; a live one; and one that ended or
+ * was funded inside the window, whose last commits are still traction.
+ */
+function presaleScopeSql(alias: string, presales: Readonly<{ clockMs: number; fromMs: number }>, params: Params): string {
+  const now = `${params.add(presales.clockMs)}::bigint`;
+  const from = `${params.add(presales.fromMs)}::bigint`;
+  return `(${alias}.presale_id IS NOT NULL AND (
+        (${alias}.lifecycle = 'open' AND ${alias}.start_ms > ${now} AND ${alias}.start_ms <= ${now} + ${HOME_UPCOMING_SALE_MS})
+        OR (${alias}.lifecycle = 'pending' AND EXISTS (SELECT 1 FROM ${PRESALE_SAVERS} sv WHERE sv.presale_id = ${alias}.presale_id))
+        OR (${alias}.lifecycle IN ('open', 'funded') AND ${alias}.start_ms <= ${now} AND ${alias}.end_ms > ${from})))`;
+}
+
 export function scopedHomeCoinsSql(scope: SaleScope, params: Params): string {
   if (scope.kind === "discover") {
+    const listed = scope.presales ? `(p.lifecycle = 'migrated' OR ${presaleScopeSql("p", scope.presales, params)})` : "p.lifecycle = 'migrated'";
     return `(SELECT p.* FROM ${scope.almost ? HOME_ALMOST_CURVE_SOURCES : HOME_DISCOVER_COIN_SOURCES} p
-      WHERE p.lifecycle = 'migrated' AND p.quote_type IS DISTINCT FROM ${params.add(CREATE_TEST_SUI_QUOTE_TYPE)}::text)`;
+      WHERE ${listed} AND p.quote_type IS DISTINCT FROM ${params.add(CREATE_TEST_SUI_QUOTE_TYPE)}::text)`;
   }
   const sales = `(SELECT p.presale_id AS source_id,p.*,FALSE AS tracked_pool_only FROM ${SHOWN_PRESALES} p)`;
   if (scope.kind === "all") {

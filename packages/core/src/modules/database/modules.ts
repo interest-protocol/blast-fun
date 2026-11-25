@@ -241,6 +241,8 @@ export const TABLE_OWNERSHIP = {
     "social_callsign_aliases",
     // 0072: who search may find (public accounts and members), with their public identity.
     "social_account_search",
+    // 0168: how many verified accounts saved each presale (counts only), for Home Trending.
+    "social_presale_savers",
   ],
 } as const satisfies Record<MissionControlModule, readonly string[]>;
 

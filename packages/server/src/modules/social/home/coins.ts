@@ -57,10 +57,26 @@ import {
 } from "@blast/server/modules/social/home/aggregate.ts";
 import { readDexVolumes } from "@blast/server/modules/social/home/dex-volume.ts";
 import { fdvOf, outstandingSaleTokensSql, presaleTotalSupply, readSupplies, supplyOf } from "@blast/server/modules/social/home/fdv.ts";
-import { decodeHomeCursor, HOME_DUST_USD, pageOf, passesFilters, rankInputs, relevanceScore, whyShown, type Rankable, type TradeCoverage } from "@blast/server/modules/social/home/rank.ts";
+import {
+  decodeHomeCursor,
+  HOME_DUST_USD,
+  pageOf,
+  passesFilters,
+  rankInputs,
+  relevanceScore,
+  saleIsIdle,
+  saleSlots,
+  scoreOfSlots,
+  upcomingSaleWhy,
+  whyShown,
+  type Rankable,
+  type SaleTraction,
+  type TradeCoverage,
+} from "@blast/server/modules/social/home/rank.ts";
 import {
   GROUPED_GROUP,
   GROUPED_SELECT,
+  PRESALE_SAVERS,
   Params,
   SIDES_GROUP,
   sidesSelect,
@@ -160,6 +176,10 @@ export type FactsRow = Readonly<{
   graduation_target: string | null;
   /** When a migrated curve's first DEX pool was created; null otherwise. */
   graduated_ms: string | null;
+  /** A presale not trading yet, on a Trending read with presales (`social_presale_savers`): savers now and gained in the last hour and day; absent otherwise. */
+  savers?: number | null;
+  savers_1h?: number | null;
+  savers_24h?: number | null;
 }>;
 
 type HomePriceOptions = Pick<HomeReadContext, "includeLiveInputs" | "includeRollingChange">;
@@ -171,6 +191,14 @@ function factsSql(scope: SaleScope, params: Params, options: HomePriceOptions = 
   const cutoff = `${clock} - ${HOME_WINDOW_MS["24h"]}`;
   const source = scopedHomeCoinsSql(scope, params);
   const shorter = options.includeRollingChange ? clock : undefined;
+  // Only Trending's presales carry savers. `OFFSET 0` keeps the lateral a subquery, so the view's
+  // grouping runs per sale on its index instead of over every watchlist row.
+  const savers = scope.kind === "discover" && scope.presales ? {
+    columns: ", sv.savers, sv.gained_1h AS savers_1h, sv.gained_24h AS savers_24h",
+    join: `LEFT JOIN LATERAL (
+    SELECT s.savers, s.gained_1h, s.gained_24h FROM ${PRESALE_SAVERS} s WHERE p.presale_id IS NOT NULL AND p.lifecycle <> 'migrated' AND s.presale_id = p.presale_id OFFSET 0
+  ) sv ON TRUE`,
+  } : { columns: "", join: "" };
   const projectedAt = `CASE WHEN pr.usd_price IS NOT NULL AND pr.as_of_ms <= ${clock}
     THEN greatest(${cutoff}, pr.as_of_ms) ELSE ${cutoff} END`;
   const lastPrice = options.includeRollingChange ? `LEFT JOIN LATERAL (
@@ -200,7 +228,7 @@ function factsSql(scope: SaleScope, params: Params, options: HomePriceOptions = 
     lp.lifecycle AS curve_lifecycle, trunc(lp.quote_reserve)::text AS quote_reserve, trunc(lp.graduation_target)::text AS graduation_target,
     CASE WHEN lp.lifecycle = 'migrated' THEN (
       SELECT min(gp.created_at_ms) FROM chain_read_v1.pools gp WHERE gp.coin_type = p.sale_token AND gp.venue <> 'blast_curve'
-    )::text END AS graduated_ms
+    )::text END AS graduated_ms${savers.columns}
   FROM ${source} p
   LEFT JOIN LATERAL (
     SELECT max(l.timestamp_ms) FILTER (WHERE l.state = 'opened') AS opened_ms,
@@ -221,10 +249,11 @@ function factsSql(scope: SaleScope, params: Params, options: HomePriceOptions = 
   LEFT JOIN LATERAL (
     SELECT ch.holders FROM chain_read_v1.coin_holder_history ch
     WHERE ch.coin_type = p.sale_token AND ch.timestamp_ms <= ${windowFrom} ORDER BY ch.checkpoint DESC LIMIT 1
-  ) h0 ON TRUE`;
+  ) h0 ON TRUE
+  ${savers.join}`;
 }
 
-assertChainReadThroughViews(factsSql({ kind: "discover" }, new Params(), {
+assertChainReadThroughViews(factsSql({ kind: "discover", presales: { clockMs: 0, fromMs: 0 } }, new Params(), {
   includeLiveInputs: true,
   includeRollingChange: true,
 }));
@@ -421,6 +450,8 @@ export type CoinInputs = Readonly<{
   includeLiveInputs?: boolean;
   includeCurve?: boolean;
   rollingChangeClockMs?: number;
+  /** A presale not trading yet on Trending with presales: adds `sale.savers`, and an upcoming sale's why. */
+  sale?: CandidateSale;
 }>;
 
 function isTradable(facts: FactsRow): boolean {
@@ -497,6 +528,12 @@ const curveFieldsOf = (facts: FactsRow) => ({
   graduated_ms: facts.graduated_ms === null ? null : Number(facts.graduated_ms),
 });
 
+/** A presale's terms; `savers` only on Trending's presales. */
+const saleFieldsOf = (facts: FactsRow, savers: number | undefined) => facts.presale_id === null ? null : {
+  start_ms: Number(facts.start_ms), end_ms: Number(facts.end_ms), raise_target: facts.raise_target, raised: facts.raised, participants: Number(facts.participants),
+  ...(savers !== undefined && { savers }),
+};
+
 /** One coin item from its facts, its window and its supply. */
 export function coinOf(input: CoinInputs): HomeCoin {
   const { facts, activity, nowMs, supply, totalSupply, mobileMarket } = input;
@@ -521,7 +558,7 @@ export function coinOf(input: CoinInputs): HomeCoin {
     launch_id: facts.launch_id,
     ...(input.includeCurve && curveFieldsOf(facts)),
     quote: { type: facts.quote_type, symbol: facts.quote_symbol, decimals: facts.quote_decimals },
-    sale: facts.presale_id === null ? null : { start_ms: Number(facts.start_ms), end_ms: Number(facts.end_ms), raise_target: facts.raise_target, raised: facts.raised, participants: Number(facts.participants) },
+    sale: saleFieldsOf(facts, input.sale?.savers),
     price_usd: price?.price ?? null,
     price_as_of_ms: price?.asOfMs ?? null,
     ...dayChange,
@@ -551,11 +588,17 @@ export function coinOf(input: CoinInputs): HomeCoin {
     activity,
     discussion: { posts: input.posts },
     top_holders: input.top_holders,
-    rank: { score: input.score, why: whyShown(activity, tradeCoverageOf(facts)) },
+    rank: { score: input.score, why: input.sale?.upcoming ? upcomingSaleWhy(input.sale.savers, input.sale.startMs, nowMs) : whyShown(activity, tradeCoverageOf(facts)) },
   };
 }
 
-type Candidate = Rankable & Readonly<{ facts: FactsRow; counts: WindowCountsRow | undefined; marketCapUsd: number | null; netInflow: number; newHolders: number }>;
+type Candidate = Rankable & Readonly<{
+  facts: FactsRow; counts: WindowCountsRow | undefined; marketCapUsd: number | null; netInflow: number; newHolders: number;
+  /** A presale not trading yet on Trending with presales: its savers and schedule, for the item. */
+  sale?: CandidateSale;
+}>;
+
+type CandidateSale = Readonly<{ savers: number; startMs: number | null; upcoming: boolean }>;
 
 /**
  * Holders gained in the window: the count now less the count at its start,
@@ -575,17 +618,21 @@ function fdvNumber(price: string | null, totalSupply: string | null, decimals: n
   return fdv === null ? null : Number(fdv);
 }
 
-type RaiseFacts = Pick<FactsRow, "presale_id" | "raised" | "graduation_target" | "quote_decimals" | "quote_price_usd">;
+type RaiseFacts = Pick<FactsRow, "presale_id" | "lifecycle" | "raised" | "raise_target" | "graduation_target" | "quote_decimals" | "quote_price_usd">;
+
+/** A presale not trading yet: upcoming, live, ended or funded (Discover lists one only on Trending with `presales=1`). */
+export const isPresaleNotTrading = (facts: Pick<FactsRow, "presale_id" | "lifecycle">) => facts.presale_id !== null && facts.lifecycle !== "migrated";
 
 /**
- * A Blast coin's raise in USD at the quote's price now: what a sale raised,
- * or the target (quote atoms) its curve had to reach to graduate. Null
- * without a price or a target.
+ * A Blast coin's raise in USD at the quote's price now: what a trading sale
+ * raised, a sale not trading yet's target (a just-opened sale has raised
+ * nothing yet; a target of 0 is no target), or the target (quote atoms) a
+ * curve had to reach to graduate. Null without a price or a target.
  */
 export function raiseUsdOf(facts: RaiseFacts): number | null {
-  const atoms = facts.presale_id === null ? facts.graduation_target : facts.raised;
-  if (facts.quote_price_usd === null || atoms === null || !/^(0|[1-9][0-9]*)$/.test(atoms)) return null;
-  return Number(atoms) / 10 ** facts.quote_decimals * Number(facts.quote_price_usd);
+  const target = facts.raise_target === "0" ? null : facts.raise_target;
+  const atoms = facts.presale_id === null ? facts.graduation_target : isPresaleNotTrading(facts) ? target : facts.raised;
+  return atoms === null ? null : quoteUsd(atoms, facts);
 }
 
 /**
@@ -596,6 +643,59 @@ export function raiseUsdOf(facts: RaiseFacts): number | null {
 export function isBlastDust(facts: RaiseFacts & Pick<FactsRow, "tracked_pool_only">, marketCapUsd: number | null): boolean {
   if (facts.tracked_pool_only) return false;
   return [raiseUsdOf(facts), marketCapUsd].some((value) => value !== null && value < HOME_DUST_USD);
+}
+
+/** A quote amount (atoms) in USD at the quote's price now; null without a price. */
+function quoteUsd(atoms: string, facts: Pick<FactsRow, "quote_decimals" | "quote_price_usd">): number | null {
+  if (facts.quote_price_usd === null || !/^(0|[1-9][0-9]*)$/.test(atoms)) return null;
+  return Number(atoms) / 10 ** facts.quote_decimals * Number(facts.quote_price_usd);
+}
+
+/** A sale's traction (`rank.ts`): its commits in the window (never its claims), its schedule and its savers. */
+function saleTractionOf(facts: FactsRow, commits: WindowCountsRow | undefined, window: HomeWindow): SaleTraction {
+  const start = Number(facts.start_ms);
+  return {
+    // A start of 0 is no schedule (the view reads 0 until the sale opens).
+    startMs: facts.lifecycle === "pending" || !(start > 0) ? null : start,
+    committers: Number(commits?.participants ?? 0),
+    committedUsd: Math.max(0, Number(commits?.volume_usd ?? 0)) || 0,
+    latestCommitMs: commits?.latest_ms == null ? null : Number(commits.latest_ms),
+    allCommitters: Number(facts.participants) || 0,
+    savers: facts.savers ?? 0,
+    saversGained: (window === "1h" ? facts.savers_1h : facts.savers_24h) ?? 0,
+  };
+}
+
+/**
+ * A presale not trading yet as a Trending candidate: its score from its
+ * traction (`saleSlots`), its inputs from its commits alone, and, when
+ * idle, what it raised in the FDV slot (a low estimate of value, so a quiet
+ * sale never beats a real coin; an upcoming sale has raised nothing and
+ * goes last).
+ */
+function saleCandidateOf(facts: FactsRow, counts: WindowCountsRow | undefined, commits: WindowCountsRow | undefined, span: HomeSpan): Candidate {
+  const sale = saleTractionOf(facts, commits, span.window);
+  const slots = saleSlots(sale, span.window, span.toMs);
+  const inputs = rankInputs({ participants: sale.committers, events: Number(commits?.events ?? 0), latest_ms: sale.latestCommitMs, window: span.window, to_ms: span.toMs, volume_usd: sale.committedUsd });
+  const raised = quoteUsd(facts.raised, facts);
+  return {
+    facts,
+    counts,
+    coinType: facts.coin_type,
+    score: scoreOfSlots(slots),
+    idle: saleIsIdle(slots),
+    netInflow: sale.committedUsd,
+    newHolders: sale.committers,
+    inputs,
+    latestMs: sale.latestCommitMs,
+    launchedMs: null,
+    holders: null,
+    fdvUsd: raised === null || raised === 0 ? null : raised,
+    marketCapUsd: null,
+    progressBps: null,
+    lastTradeMs: null,
+    sale: { savers: sale.savers, startMs: sale.startMs, upcoming: sale.startMs === null || sale.startMs > span.toMs },
+  };
 }
 
 function candidateOf(facts: FactsRow, counts: WindowCountsRow | undefined, span: HomeSpan): Candidate {
@@ -643,6 +743,8 @@ export type HomeReadContext = Readonly<{
   includeCurve?: boolean;
   includeRecentBuys?: boolean;
   includeRecentBuyUsd?: boolean;
+  /** Trending lists presales not trading yet (`HOME_PRESALES_PARAM`, `sort=relevant` only). */
+  includePresales?: boolean;
 }>;
 
 function withTrackedPoolMarket(
@@ -748,6 +850,7 @@ export async function assembleCoins(
       includeLiveInputs: context.includeLiveInputs,
       includeCurve: context.includeCurve,
       rollingChangeClockMs: context.includeRollingChange ? bounds.clockMs : undefined,
+      sale: candidate.sale,
     });
     const coin = candidate.facts.tracked_pool_only
       ? withTrackedPoolMarket(indexed, trackedMarkets?.[candidate.coinType], totalSupply, candidate.facts.supply)
@@ -841,12 +944,14 @@ export type HomeDiscoverBase = Readonly<{
 
 /** Which coins a {@link HomeDiscoverBase} holds: Almost graduated reads its few curves alone (`HOME_ALMOST_CURVE_SOURCES`); every other stage, the whole list. */
 const baseSetOf = (stage: HomeStage) => (stage === "almost" ? "almost" : "all");
+/** Presales join the whole list only: the Almost graduated curves never hold one. */
+const basePresales = (stage: HomeStage, context: HomeReadContext) => baseSetOf(stage) === "all" && Boolean(context.includePresales);
 
 /** The key a {@link HomeDiscoverBase} is shared under: only what changes its contents. */
 export function homeDiscoverBaseKey(window: HomeWindow, stage: HomeStage, context: HomeReadContext): string {
   return JSON.stringify([window, baseSetOf(stage), context.hiddenKinds, Boolean(context.includeDexVolume), Boolean(context.includeRecentBuys),
     // The facts read's prices change with these (`factsSql`).
-    Boolean(context.includeLiveInputs), Boolean(context.includeRollingChange)]);
+    Boolean(context.includeLiveInputs), Boolean(context.includeRollingChange), basePresales(stage, context)]);
 }
 
 export async function readHomeDiscoverBase(db: ReadableDatabase, window: HomeWindow, stage: HomeStage, context: HomeReadContext): Promise<HomeDiscoverBase> {
@@ -854,23 +959,33 @@ export async function readHomeDiscoverBase(db: ReadableDatabase, window: HomeWin
   if (!asOf) throw new SocialRouteError("service_unavailable");
   const span = homeSpan(window, bounds);
   const kinds = visibleKinds(context.hiddenKinds);
-  const scope: SaleScope = { kind: "discover", almost: baseSetOf(stage) === "almost" };
+  const scope: SaleScope = {
+    kind: "discover",
+    almost: baseSetOf(stage) === "almost",
+    ...(basePresales(stage, context) ? { presales: { clockMs: bounds.clockMs, fromMs: span.fromMs } } : {}),
+  };
   const [facts, sides] = await Promise.all([
     readCoinFacts(db, scope, span, context),
     readSides(db, { span, bounds, kinds, sales: scope, actors: { kind: "everyone" } }, context.includeRecentBuys ? context.nowMs - HOME_RECENT_BUY_MS : undefined),
   ]);
   const counts = countsOf(sides);
+  // A sale not trading yet scores its commits only: a claim is a refund or a payout, never traction.
+  const commits = context.includePresales ? countsOf(sides.filter((row) => row.kind === "presale_commit")) : null;
   const live = [...facts.values()]
-    .map((row) => candidateOf(row, counts.get(row.presale_id ?? row.coin_type), span))
+    .map((row) => {
+      const id = row.presale_id ?? row.coin_type;
+      return commits && isPresaleNotTrading(row) ? saleCandidateOf(row, counts.get(id), commits.get(id), span) : candidateOf(row, counts.get(id), span);
+    })
     .filter((candidate) => !isBlastDust(candidate.facts, candidate.marketCapUsd));
   const [{ candidates, markets: trackedMarkets }, dexVolumes] = await Promise.all([
     withTrackedMarket(live, context),
-    context.includeDexVolume ? readDexVolumes(db, onDex(live.map(({ facts }) => facts)), span.window, bounds, kinds) : undefined,
+    context.includeDexVolume ? readDexVolumes(db, onDex(live.map(({ facts }) => facts).filter((row) => !isPresaleNotTrading(row))), span.window, bounds, kinds) : undefined,
   ]);
   // Volume (and Relevant, which weighs it) ranks by the same aggregate the cell shows.
   const scored = candidates.map((candidate) => {
     const volume = dexVolumes?.get(candidate.coinType);
-    if (!volume) return candidate;
+    // A sale not trading yet keeps its sale score, even if its coin type has DEX volume.
+    if (!volume || candidate.sale) return candidate;
     const inputs = { ...candidate.inputs, volume: Number(volume.usd ?? 0) };
     return { ...candidate, inputs, score: relevanceScore({ ...candidate, inputs }, span.window, span.toMs) };
   });
@@ -887,7 +1002,8 @@ export async function readHomeDiscover(db: ReadableDatabase, query: HomeQuery, c
   const eligible = candidates.filter((candidate) => passesFilters(query, {
     participants: candidate.inputs.breadth,
     launchedMs: candidate.launchedMs,
-    tradable: tradesInApp(candidate.facts.venue) && (candidate.facts.venue.toLowerCase() !== "aftermath" || candidate.facts.pool_id !== null),
+    // A sale not trading yet has its venue already, but nothing to trade there.
+    tradable: isTradable(candidate.facts),
     listed: isListed(candidate.facts),
     progressBps: candidate.progressBps ?? null,
     nowMs: bounds.clockMs,

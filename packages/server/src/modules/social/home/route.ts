@@ -14,6 +14,7 @@ import {
   SOCIAL_HOME_ACTIVITY_STREAM_ROUTE,
   HOME_DEFAULT_WINDOW,
   HOME_CURVE_PARAM,
+  HOME_PRESALES_PARAM,
   HOME_DEX_VOLUME_PARAM,
   HOME_MOBILE_MARKET_PARAM,
   HOME_RECENT_BUYS_PARAM,
@@ -104,14 +105,16 @@ export function createSocialHomeRoutes(dependencies: SocialHomeRouteDependencies
       const query = parseHomeQuery(params);
       const recentBuys = params.get(HOME_RECENT_BUYS_PARAM);
       const includeRecentBuyUsd = recentBuys === HOME_RECENT_BUYS_WITH_USD;
-      const ctxRead = { ...context(ctx), ...marketOptions(params), trackedPoolMarket, includeRecentBuys: recentBuys === "1" || includeRecentBuyUsd, includeRecentBuyUsd };
+      // Presales not trading yet are Trending candidates only: the other orders rank traded markets.
+      const includePresales = params.get(HOME_PRESALES_PARAM) === "1" && query.sort === "relevant";
+      const ctxRead = { ...context(ctx), ...marketOptions(params), trackedPoolMarket, includeRecentBuys: recentBuys === "1" || includeRecentBuyUsd, includeRecentBuyUsd, includePresales };
       const baseCache = dependencies.caches?.discoverBase;
       const load = () => {
         const db = database();
         const base = baseCache && (() => baseCache.read(homeDiscoverBaseKey(query.window, query.stage, ctxRead), () => readHomeDiscoverBase(db, query.window, query.stage, ctxRead)));
         return readHomeDiscover(db, query, ctxRead, base);
       };
-      return cachedResponse(ctx, dependencies.caches?.discover, JSON.stringify([query, ctxRead.hiddenKinds, ctxRead.includeMobileMarket, ctxRead.includeLiveInputs, ctxRead.includeRollingChange, ctxRead.includeDexVolume, ctxRead.includeCurve, ctxRead.includeRecentBuys, ctxRead.includeRecentBuyUsd]), load);
+      return cachedResponse(ctx, dependencies.caches?.discover, JSON.stringify([query, ctxRead.hiddenKinds, ctxRead.includeMobileMarket, ctxRead.includeLiveInputs, ctxRead.includeRollingChange, ctxRead.includeDexVolume, ctxRead.includeCurve, ctxRead.includeRecentBuys, ctxRead.includeRecentBuyUsd, ctxRead.includePresales]), load);
     }),
     COINS: kit.route({ name: SOCIAL_HOME_COINS_ROUTE, ...publicRead }, async (ctx) => {
       const params = new URL(ctx.request.url).searchParams;

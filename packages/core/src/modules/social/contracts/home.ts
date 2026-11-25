@@ -106,6 +106,12 @@ export const HOME_DEX_VOLUME_PARAM = "dex_volume";
  * client that sends this receives them.
  */
 export const HOME_CURVE_PARAM = "curve";
+/**
+ * Opts Trending (`sort=relevant`) into presales that are not trading yet:
+ * upcoming, live, and ended within the window, each carrying
+ * `HomeCoin.sale.savers`. Home sends it; other sorts ignore it.
+ */
+export const HOME_PRESALES_PARAM = "presales";
 
 /** Keep the original response shape for clients that did not request mobile market figures. */
 export function withHomeMobileMarket(path: string, liveInputs = false): string {

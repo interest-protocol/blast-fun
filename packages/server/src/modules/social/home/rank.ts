@@ -34,7 +34,10 @@ import { decodeCursor, encodeCursor, invalidCursor } from "@blast/server/modules
  * ready to migrate (`HOME_ALMOST_CURVE_SOURCES`). Both less the
  * Blast dust (`HOME_DUST_USD`): a Blast coin whose raise (a presale's, or a
  * curve's graduation target) or market cap is under $1,000. Catalog coins
- * are never dust.
+ * are never dust. Trending with `presales=1` also ranks presales not trading
+ * yet (upcoming, live, ended or funded; never cancelled or test-SUI) on the
+ * same 0–100 score through `saleSlots`; their dust test reads the raise
+ * target, and a target of 0 is never dust.
  *
  * **Inputs**, all over the chosen window:
  * - `breadth`: distinct participants (accounts and unlinked wallets, each
@@ -146,24 +149,134 @@ export const RELEVANCE_CAPS = {
 const MINUTE_MS = 60_000;
 const saturating = (value: number, cap: number) => Math.log1p(Math.min(cap, Math.max(0, value))) / Math.log1p(cap);
 
-/** The Relevant score (see the ranking notes above), ×100 and rounded so cursors carry an integer. */
-export function relevanceScore(
+type RelevanceSlot = keyof typeof RELEVANCE_WEIGHTS;
+/** Each Relevant input scaled 0–1, before its weight. */
+export type RelevanceSlots = Readonly<Record<RelevanceSlot, number>>;
+const SLOTS = Object.keys(RELEVANCE_WEIGHTS) as readonly RelevanceSlot[];
+
+/** The clock moves in whole minutes, the same step for every coin: scores hold still within a minute and never swap order on their own. */
+const minuteClock = (toMs: number) => Math.ceil(toMs / MINUTE_MS) * MINUTE_MS;
+
+/** The Relevant inputs of a candidate, each scaled 0–1 on its capped log curve. */
+export function relevanceSlots(
   candidate: Readonly<{ inputs: Pick<RankInputs, "breadth" | "volume">; latestMs: number | null; holders?: number | null; netInflow?: number | null; newHolders?: number | null }>,
   window: HomeWindow,
   toMs: number,
-): number {
+): RelevanceSlots {
   const { inputs, latestMs, holders, netInflow, newHolders } = candidate;
-  // The clock moves in whole minutes, the same step for every coin: scores hold still within a minute and never swap order on their own.
   // It rounds up, so a trade this minute is never later than the clock (the clamp only catches clock skew).
-  const nowMs = Math.ceil(toMs / MINUTE_MS) * MINUTE_MS;
-  const freshness = latestMs === null ? 0 : Math.min(1, Math.max(0, 1 - (nowMs - latestMs) / HOME_WINDOW_MS[window]));
-  const score = RELEVANCE_WEIGHTS.breadth * saturating(inputs.breadth, RELEVANCE_CAPS.breadth[window])
-    + RELEVANCE_WEIGHTS.netInflow * saturating(netInflow ?? 0, RELEVANCE_CAPS.netInflow[window])
-    + RELEVANCE_WEIGHTS.volume * saturating(inputs.volume, RELEVANCE_CAPS.volume[window])
-    + RELEVANCE_WEIGHTS.newHolders * saturating(newHolders ?? 0, RELEVANCE_CAPS.newHolders[window])
-    + RELEVANCE_WEIGHTS.freshness * freshness
-    + RELEVANCE_WEIGHTS.holders * saturating(holders ?? 0, RELEVANCE_CAPS.holders);
-  return Math.round(score * 100);
+  const nowMs = minuteClock(toMs);
+  return {
+    breadth: saturating(inputs.breadth, RELEVANCE_CAPS.breadth[window]),
+    netInflow: saturating(netInflow ?? 0, RELEVANCE_CAPS.netInflow[window]),
+    volume: saturating(inputs.volume, RELEVANCE_CAPS.volume[window]),
+    newHolders: saturating(newHolders ?? 0, RELEVANCE_CAPS.newHolders[window]),
+    freshness: latestMs === null ? 0 : Math.min(1, Math.max(0, 1 - (nowMs - latestMs) / HOME_WINDOW_MS[window])),
+    holders: saturating(holders ?? 0, RELEVANCE_CAPS.holders),
+  };
+}
+
+/** The weighted sum of the slots, ×100 and rounded so cursors carry an integer. */
+export const scoreOfSlots = (slots: RelevanceSlots) => Math.round(SLOTS.reduce((sum, slot) => sum + RELEVANCE_WEIGHTS[slot] * slots[slot], 0) * 100);
+
+/** The Relevant score (see the ranking notes above), ×100 and rounded so cursors carry an integer. */
+export function relevanceScore(
+  candidate: Parameters<typeof relevanceSlots>[0],
+  window: HomeWindow,
+  toMs: number,
+): number {
+  return scoreOfSlots(relevanceSlots(candidate, window, toMs));
+}
+
+/**
+ * A presale that is not trading yet, as Trending scores it (`presales=1`):
+ * its schedule, its commits in the window and its savers (accounts with a
+ * verified X link that have the sale saved; a view of counts, never ids).
+ */
+export type SaleTraction = Readonly<{
+  /** The scheduled opening; null while the sale has no schedule (Pending, or a start of 0). */
+  startMs: number | null;
+  /** Distinct committers and committed USD in the window; claims never count. */
+  committers: number;
+  committedUsd: number;
+  latestCommitMs: number | null;
+  /** Everyone who ever committed. */
+  allCommitters: number;
+  /** Savers now, and savers gained in the window (the database clock's last hour or day). */
+  savers: number;
+  saversGained: number;
+}>;
+
+const HOUR_MS = 3_600_000;
+/** How long before its opening a saved sale climbs, and how long after it its savers fade out. */
+export const SALE_RAMP_MS = 24 * HOUR_MS;
+
+/**
+ * An upcoming sale's slots. Savers are a stock, so they use the 24 h caps
+ * in either window, and only inside the opens-soon ramp: a far-out or
+ * unscheduled sale scores the savers it gained in the window, nothing else.
+ * The ramp needs a saver, so an unsaved spam sale stays idle. No save-based
+ * freshness: unsaving and saving again would keep a sale fresh forever.
+ */
+function upcomingSlots(sale: Pick<SaleTraction, "savers" | "saversGained">, opensInMs: number | null, window: HomeWindow): RelevanceSlots {
+  const ramp = sale.savers > 0 && opensInMs !== null ? Math.min(1, Math.max(0, 1 - opensInMs / SALE_RAMP_MS)) : 0;
+  const gained = { breadth: saturating(sale.saversGained, RELEVANCE_CAPS.breadth[window]), newHolders: saturating(sale.saversGained, RELEVANCE_CAPS.newHolders[window]) };
+  if (ramp === 0) return { ...gained, netInflow: 0, volume: 0, freshness: 0, holders: 0 };
+  return {
+    breadth: saturating(sale.savers, RELEVANCE_CAPS.breadth["24h"]),
+    netInflow: saturating(sale.savers, RELEVANCE_CAPS.breadth["24h"]),
+    volume: ramp,
+    newHolders: gained.newHolders,
+    freshness: ramp,
+    holders: saturating(sale.savers, RELEVANCE_CAPS.holders),
+  };
+}
+
+/**
+ * A presale's Relevant slots, on the same weights and caps as a coin's.
+ *
+ * | Slot | Live, ended or funded sale | Upcoming sale |
+ * |---|---|---|
+ * | People | committers in the window | savers now (inside the ramp), else savers gained |
+ * | Net inflow | committed USD | savers now (inside the ramp) |
+ * | Volume | committed USD | opens soon: `1 − hours to open / 24` |
+ * | New holders | committers in the window | savers gained in the window |
+ * | Freshness | latest commit, or the opening itself | opens soon |
+ * | Holders | all-time committers | savers now (inside the ramp) |
+ *
+ * No cliff at the opening: for 24 h after it each slot is the larger of its
+ * live value and its value just before the opening, faded linearly to 0, so
+ * nobody counts twice and the score just after equals the score just before.
+ */
+export function saleSlots(sale: SaleTraction, window: HomeWindow, toMs: number): RelevanceSlots {
+  const nowMs = minuteClock(toMs);
+  if (sale.startMs === null || sale.startMs > nowMs) return upcomingSlots(sale, sale.startMs === null ? null : sale.startMs - nowMs, window);
+  // The opening is fresh only for a sale someone saved or backed, so a sale nobody wants stays idle when it opens.
+  const latestMs = sale.latestCommitMs !== null ? Math.max(sale.latestCommitMs, sale.startMs) : sale.savers > 0 || sale.allCommitters > 0 ? sale.startMs : null;
+  const live = relevanceSlots({
+    inputs: { breadth: sale.committers, volume: sale.committedUsd }, latestMs, holders: sale.allCommitters, netInflow: sale.committedUsd, newHolders: sale.committers,
+  }, window, toMs);
+  const fade = Math.max(0, 1 - (nowMs - sale.startMs) / SALE_RAMP_MS);
+  if (fade === 0) return live;
+  const opening = upcomingSlots(sale, 0, window);
+  return Object.fromEntries(SLOTS.map((slot) => [slot, Math.max(live[slot], fade * opening[slot])])) as RelevanceSlots;
+}
+
+/** A sale is idle when nothing but its all-time committers lifts it: no window activity, no savers gained, no ramp and no fading opening. */
+export const saleIsIdle = (slots: RelevanceSlots) => SLOTS.every((slot) => slot === "holders" || slots[slot] === 0);
+
+/** "in 3h", "in 45m", "in 2d", "in <1m". */
+function untilText(ms: number): string {
+  if (ms < MINUTE_MS) return "<1m";
+  if (ms < HOUR_MS) return `${Math.floor(ms / MINUTE_MS)}m`;
+  if (ms < 48 * HOUR_MS) return `${Math.floor(ms / HOUR_MS)}h`;
+  return `${Math.floor(ms / (24 * HOUR_MS))}d`;
+}
+
+/** An upcoming sale's why: "12 saved · opens in 3h", or "not scheduled" without a start. */
+export function upcomingSaleWhy(savers: number, startMs: number | null, toMs: number): string {
+  const opens = startMs === null ? "not scheduled" : `opens in ${untilText(Math.max(0, startMs - toMs))}`;
+  return `${savers.toLocaleString("en-US")} saved · ${opens}`;
 }
 
 /**
@@ -193,14 +306,16 @@ export type Rankable = Readonly<{
   marketCapUsd?: number | null;
   /** The window's newest buy or sell; null without one. */
   lastTradeMs?: number | null;
+  /** Set for a presale not trading yet (`saleIsIdle`); a coin's idleness follows from its inputs. */
+  idle?: boolean;
 }>;
 
 const text = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 const newestFirst = (a: number | null, b: number | null) => (b ?? -1) - (a ?? -1);
 const mostFirst = (a: number | null | undefined, b: number | null | undefined) => (b ?? -1) - (a ?? -1);
 
-/** No participants and no dollars in the window. */
-export const isIdle = (candidate: Pick<Rankable, "inputs">) => candidate.inputs.breadth === 0 && candidate.inputs.volume === 0;
+/** No participants and no dollars in the window (a presale not trading yet says so itself: savers and its schedule count too). */
+export const isIdle = (candidate: Pick<Rankable, "inputs" | "idle">) => candidate.idle ?? (candidate.inputs.breadth === 0 && candidate.inputs.volume === 0);
 
 /** Market value: FDV first, then holders, a coin without either last. */
 const byValue = (a: Rankable, b: Rankable) => mostFirst(a.fdvUsd, b.fdvUsd) || mostFirst(a.holders, b.holders);
@@ -264,21 +379,34 @@ export function hasSortData(sort: HomeSort, candidate: Rankable): boolean {
 export type HomeCursor = Readonly<{
   sort: HomeSort; coinType: string; score: number; breadth: number; activity: number; recency: number; volume: number; latestMs: number | null; launchedMs: number | null;
   holders?: number | null; fdvUsd?: number | null; progressBps?: number | null; marketCapUsd?: number | null; lastTradeMs?: number | null;
+  /** Whether the position is idle (version 6); older cursors derive it from breadth and volume. */
+  idle?: boolean;
 }>;
 
 /**
- * Version 5 adds progress, market cap and the last trade (their orders);
+ * Version 6 adds the idle bit (a presale opening soon can be active with no
+ * participants); version 5 added progress, market cap and the last trade (their orders);
  * version 4 added the FDV (idle coins' order); version 3 the holder count
  * (`held`). Older cursors read with the missing fields null.
  */
-const VERSION = 5;
+const VERSION = 6;
+const VERSION_WITHOUT_IDLE = 5;
 const VERSION_WITHOUT_PROGRESS = 4;
 const VERSION_WITHOUT_FDV = 3;
 const VERSION_WITHOUT_HOLDERS = 2;
 
+/**
+ * Version 5 when the idle bit is what its inputs imply (every coin), so a pod
+ * still on version 5 reads it during a rollout or after a rollback; version 6
+ * only for a sale whose idleness differs.
+ */
 export function encodeHomeCursor(position: HomeCursor): string {
-  return encodeCursor("discover", [VERSION, position.sort, position.coinType, position.score, position.breadth, position.activity, position.recency, position.volume, position.latestMs, position.launchedMs, position.holders ?? null, position.fdvUsd ?? null,
-    position.progressBps ?? null, position.marketCapUsd ?? null, position.lastTradeMs ?? null]);
+  const fields = [position.sort, position.coinType, position.score, position.breadth, position.activity, position.recency, position.volume, position.latestMs, position.launchedMs, position.holders ?? null, position.fdvUsd ?? null,
+    position.progressBps ?? null, position.marketCapUsd ?? null, position.lastTradeMs ?? null];
+  const derived = position.breadth === 0 && position.volume === 0;
+  return position.idle === undefined || position.idle === derived
+    ? encodeCursor("discover", [VERSION_WITHOUT_IDLE, ...fields])
+    : encodeCursor("discover", [VERSION, ...fields, position.idle]);
 }
 
 /** The position a cursor names; `invalid_parameter` (`cursor`) for anything `encodeHomeCursor` did not produce, or for another sort. */
@@ -290,10 +418,15 @@ export function decodeHomeCursor(cursor: string, sort: HomeSort): HomeCursor {
   ] as const;
   const decoded = decodeCursor("discover", cursor);
   const money = z.number().nonnegative().nullable();
-  const current = z.tuple([z.literal(VERSION), ...common, socialCountSchema.nullable(), money,
-    socialCountSchema.max(10_000).nullable(), money, socialCountSchema.nullable()]).safeParse(decoded);
+  const withProgress = [...common, socialCountSchema.nullable(), money, socialCountSchema.max(10_000).nullable(), money, socialCountSchema.nullable()] as const;
+  const current = z.tuple([z.literal(VERSION), ...withProgress, z.boolean()]).safeParse(decoded);
   if (current.success) {
-    const [, , coinType, score, breadth, activity, recency, volume, latestMs, launchedMs, holders, fdvUsd, progressBps, marketCapUsd, lastTradeMs] = current.data;
+    const [, , coinType, score, breadth, activity, recency, volume, latestMs, launchedMs, holders, fdvUsd, progressBps, marketCapUsd, lastTradeMs, idle] = current.data;
+    return { sort, coinType, score, breadth, activity, recency, volume, latestMs, launchedMs, holders, fdvUsd, progressBps, marketCapUsd, lastTradeMs, idle };
+  }
+  const withoutIdle = z.tuple([z.literal(VERSION_WITHOUT_IDLE), ...withProgress]).safeParse(decoded);
+  if (withoutIdle.success) {
+    const [, , coinType, score, breadth, activity, recency, volume, latestMs, launchedMs, holders, fdvUsd, progressBps, marketCapUsd, lastTradeMs] = withoutIdle.data;
     return { sort, coinType, score, breadth, activity, recency, volume, latestMs, launchedMs, holders, fdvUsd, progressBps, marketCapUsd, lastTradeMs };
   }
   const withoutProgress = z.tuple([z.literal(VERSION_WITHOUT_PROGRESS), ...common, socialCountSchema.nullable(), money]).safeParse(decoded);
@@ -315,12 +448,13 @@ export function decodeHomeCursor(cursor: string, sort: HomeSort): HomeCursor {
 /** The cursor's candidate, as the order compares it. */
 export function rankableOfCursor(cursor: HomeCursor): Rankable {
   return { coinType: cursor.coinType, score: cursor.score, inputs: { breadth: cursor.breadth, activity: cursor.activity, recency: cursor.recency, volume: cursor.volume }, latestMs: cursor.latestMs, launchedMs: cursor.launchedMs, holders: cursor.holders ?? null, fdvUsd: cursor.fdvUsd ?? null,
-    progressBps: cursor.progressBps ?? null, marketCapUsd: cursor.marketCapUsd ?? null, lastTradeMs: cursor.lastTradeMs ?? null };
+    progressBps: cursor.progressBps ?? null, marketCapUsd: cursor.marketCapUsd ?? null, lastTradeMs: cursor.lastTradeMs ?? null,
+    ...(cursor.idle !== undefined && { idle: cursor.idle }) };
 }
 
 export function cursorOf(sort: HomeSort, last: Rankable): string {
   return encodeHomeCursor({ sort, coinType: last.coinType, score: last.score, breadth: last.inputs.breadth, activity: last.inputs.activity, recency: last.inputs.recency, volume: last.inputs.volume, latestMs: last.latestMs, launchedMs: last.launchedMs, holders: last.holders ?? null, fdvUsd: last.fdvUsd ?? null,
-    progressBps: last.progressBps ?? null, marketCapUsd: last.marketCapUsd ?? null, lastTradeMs: last.lastTradeMs ?? null });
+    progressBps: last.progressBps ?? null, marketCapUsd: last.marketCapUsd ?? null, lastTradeMs: last.lastTradeMs ?? null, idle: isIdle(last) });
 }
 
 /**
