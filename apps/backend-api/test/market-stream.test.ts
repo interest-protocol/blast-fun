@@ -418,8 +418,6 @@ test("bad deployments, cursor relationships, opening fills and lost continuity f
         }),
       ),
     (s) => s.receive(frame("opening_round", 11, { pool_key: pool() })),
-    (s) => s.receive(frame("resync_required", 11, { reason: "lagged" })),
-    (s) => s.onclose?.({} as never),
   ];
   for (const bad of invalid) {
     const socket = new Socket();
@@ -433,6 +431,32 @@ test("bad deployments, cursor relationships, opening fills and lost continuity f
     assert.equal((await read(reader)).event, "resync");
     assert.equal((await reader.read()).done, true);
     assert.equal(socket.closed, 1);
+    await reader.cancel();
+  }
+  // Losing the upstream is not lost continuity: the relay resumes from its cursor
+  // and the browser stays (stream-resume.test.ts and stream-feed.test.ts cover the rest).
+  for (const lose of [
+    (s: Socket) => s.receive(frame("resync_required", 11, { reason: "lagged" })),
+    (s: Socket) => s.onclose?.({} as never),
+  ]) {
+    const sockets: Socket[] = [];
+    const relay = new MarketStreamRelay(() => {
+      sockets.push(new Socket());
+      return sockets.at(-1)!;
+    }, expected);
+    const reader = relay.stream(request()).body!.getReader();
+    await read(reader);
+    sockets[0]!.hello();
+    sockets[0]!.receive(snapshot());
+    await read(reader);
+    lose(sockets[0]!);
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    assert.equal(sockets.length, 2, "the relay reconnects upstream");
+    sockets[1]!.hello();
+    assert.ok(
+      sockets[1]!.sent.some((op) => op.cursor === "10:1:1:0"),
+      "and resumes the pool from its cursor",
+    );
     await reader.cancel();
   }
 });
@@ -738,38 +762,5 @@ test("one shared stream combines sanitized activity hints with pool updates and 
     assert.throws(() =>
       marketStreamPools(new Request(`https://frontend.test${MARKET_STREAM_PATH}?${query}`)),
     );
-  }
-});
-
-test("upstream heartbeat silence forces recovery instead of keeping stale prices live", async () => {
-  const original = globalThis.setInterval;
-  let beat: (() => void) | undefined;
-  globalThis.setInterval = ((callback: () => void) => {
-    beat = callback;
-    return original(() => {}, 3_600_000);
-  }) as typeof setInterval;
-  const socket = new Socket();
-  const relay = new MarketStreamRelay(() => socket, expected);
-  const reader = relay.stream(request()).body!.getReader();
-  globalThis.setInterval = original;
-  try {
-    await read(reader);
-    socket.hello();
-    socket.receive({ type: "pong" });
-    socket.receive(snapshot());
-    await read(reader);
-    beat!();
-    assert.equal((await read(reader)).event, "heartbeat");
-    socket.receive({ type: "pong" });
-    beat!();
-    await reader.read();
-    beat!(); // The previous private ping never received its pong.
-    const recovery = await read(reader);
-    assert.equal(recovery.event, "resync");
-    assert.equal(recovery.data.reason, "upstream-silent");
-    assert.equal(socket.closed, 1);
-  } finally {
-    globalThis.setInterval = original;
-    await reader.cancel();
   }
 });

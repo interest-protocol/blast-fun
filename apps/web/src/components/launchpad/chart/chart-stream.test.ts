@@ -207,6 +207,38 @@ test("a healthy heartbeat cannot validate a delayed frame or renew old price pro
   assert.equal(s.source().closed, false);
 });
 
+test("a silent market stream clears the shared price nine seconds after its last heartbeat", async (t) => {
+  const s = setup();
+  const prices: (ChartPriceUpdate | null)[] = [];
+  t.after(subscribeChartPrice(CURVE, expected, (price) => prices.push(price)));
+  s.client.start();
+  t.after(() => s.client.stop());
+  s.source().emit("hint", { type: "hello", heartbeat: true, heartbeat_ms: 4_000, provenance: wireProvenance(10) });
+  s.source().ready(10);
+  s.loads.shift()!.resolve(answer(10));
+  await settle();
+  assert.equal(prices.at(-1)?.price, "1");
+
+  const initialDeadline = s.timers.find(({ ms }) => ms === 9_000);
+  assert.ok(initialDeadline, "the advertised cadence sets a nine-second deadline");
+  s.advance(6_000);
+  s.source().emit("hint", { type: "pong" });
+  assert.equal(s.timers.includes(initialDeadline), false, "the first upstream pong resets the startup deadline");
+  const handshakeDeadline = s.timers.find(({ ms }) => ms === 9_000);
+  assert.ok(handshakeDeadline);
+  s.advance(4_000);
+  s.source().emit("heartbeat");
+  assert.equal(s.timers.includes(handshakeDeadline), false, "a healthy heartbeat resets the deadline");
+  assert.equal(prices.at(-1)?.price, "1");
+
+  const renewedDeadline = s.timers.find(({ ms }) => ms === 9_000);
+  assert.ok(renewedDeadline);
+  s.advance(9_000);
+  renewedDeadline.run();
+  assert.equal(s.source().closed, true);
+  assert.equal(prices.at(-1), null);
+});
+
 test("disconnect invalidates prices, settles late reads harmlessly and retries with bounded backoff", async () => {
   const s = setup();
   const prices: (ChartPriceUpdate | null)[] = [];
