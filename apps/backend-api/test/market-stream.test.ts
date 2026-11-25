@@ -750,7 +750,9 @@ test("upstream heartbeat silence forces recovery instead of keeping stale prices
     return realInterval(() => {}, 3_600_000);
   }) as typeof setInterval;
   globalThis.setTimeout = ((callback: () => void, ms?: number) => {
-    if (ms === 2 * B.heartbeatMs) {deadlines.push(callback);}
+    if (ms === 2 * B.heartbeatMs) {
+      deadlines.push(callback);
+    }
     return realTimeout(() => {}, 3_600_000);
   }) as typeof setTimeout;
   const socket = new Socket();
