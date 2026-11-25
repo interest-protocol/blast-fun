@@ -24,5 +24,5 @@ test("chronological heads omit entry hydration and rank lookups while ranked pag
   assert.ok(scan);
   assert.match(scan, /social_whys/);
   assert.match(scan, /AS rank_ms/);
-  assert.match(scan, /e\.digest/);
+  assert.match(scan, /SELECT e\.\*, chosen\.named_account_id, chosen\.rank_ms/);
 });
