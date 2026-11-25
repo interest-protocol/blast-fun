@@ -74,37 +74,9 @@ export function blastV1Coin(coinType: string) {
 /** These pages use a verified SUI-paired pool registered in blast-infra. */
 export const INDEXED_POOL_COINS = CORE_COINS.filter((coin) => "poolKey" in coin);
 
-/** The coin a pool page prices against. */
-export type PoolQuote = Readonly<{ coinType: string; symbol: string; decimals: number }>;
-export const SUI_POOL_QUOTE: PoolQuote = { coinType: SUI_COIN_TYPE, symbol: "SUI", decimals: 9 };
-export const USDC_POOL_QUOTE: PoolQuote = { coinType: USDC_COIN_TYPE, symbol: "USDC", decimals: 6 };
-
-/**
- * Majors priced in USDC from several allowlisted pools (blast-infra PR 1.3, pool report 2026-11-25):
- * Cetus USDC/SUI 0.05% and Bluefin SUI/USDC 0.175%. The first pool is the chart's; trades come from all.
- * Kept out of INDEXED_POOL_COINS, which lists the SUI-paired community pools that Home and FDV read.
- */
-type MajorPoolKey = `cetus:0x${string}` | `bluefin:0x${string}`;
-const MAJOR_POOL_KEYS: ReadonlyMap<string, readonly [MajorPoolKey, ...MajorPoolKey[]]> = new Map([
-  [SUI_COIN_TYPE, [
-    "cetus:0x51e883ba7c0b566a26cbc8a94cd33eb0abd418a77cc1e60ad22fd9b1f29cd2ab",
-    "bluefin:0x15dbcac854b1fc68fc9467dbd9ab34270447aabd8cc0e04a5864d95ccb86b74a",
-  ]],
-]);
-
-/** Pools with no Blast launch behind them: their chart names no V2 migration. */
-const STANDALONE_POOLS: ReadonlySet<string> = new Set([...INDEXED_POOL_COINS.map((coin) => coin.poolKey), ...[...MAJOR_POOL_KEYS.values()].flat()]);
-export function isStandalonePool(poolKey: string): boolean {
-  return STANDALONE_POOLS.has(poolKey);
-}
-
-/** A coin whose page is a pool page: its charted pool, every pool it trades in and the quote it is priced in. */
 export function indexedPoolCoin(coinType: string) {
   const coin = coreCoin(coinType);
-  if (!coin) return undefined;
-  const major = MAJOR_POOL_KEYS.get(coin.coinType);
-  if (major) return { ...coin, poolKey: major[0], poolKeys: major, quote: USDC_POOL_QUOTE, major: true as const };
-  return "poolKey" in coin ? { ...coin, poolKeys: [coin.poolKey] as const, quote: SUI_POOL_QUOTE, major: false as const } : undefined;
+  return coin && "poolKey" in coin ? coin : undefined;
 }
 
 /**

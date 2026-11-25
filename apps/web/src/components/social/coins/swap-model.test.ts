@@ -401,13 +401,6 @@ test("OA-48: a sale's Buy and Sell open the trade screen with the sale's coin in
   assert.equal("focus" in tradeOpening(undefined)!.screen, false);
 });
 
-test("the SUI page's Buy opens USDC to SUI with SUI in focus, so it reads Buy SUI", () => {
-  const coin = { coin_type: SUI_COIN_TYPE, symbol: "SUI", name: "Sui", decimals: 9, icon_url: null, usd_price: "3.1", presale_id: null };
-  const screen = tradeOpening(encodeTradeAction({ side: "buy", coin }))!.screen;
-  assert.deepEqual(screen, { kind: "trade", key: "usdc", out: "sui", focus: "sui" });
-  assert.equal(tradeTitle(USDC, SUI, "sui"), "Buy SUI");
-});
-
 test("OA-48 (the gate's `tradeTitle`): Buy {SYM} for USDC → the focus coin, Sell {SYM} for the reverse, the Swap board's Swap for no focus or any other pair", () => {
   assert.equal(tradeTitle(USDC, KSTL, "kstl"), "Buy KSTL");
   assert.equal(tradeTitle(KSTL, USDC, "kstl"), "Sell KSTL");

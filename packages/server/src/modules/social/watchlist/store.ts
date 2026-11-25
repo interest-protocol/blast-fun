@@ -226,15 +226,9 @@ const STANDALONE_COIN_EXISTS_SQL = `
       SELECT 1 FROM chain_read_v1.vaults v WHERE v.meme_type = $1 AND v.origin_kind = 'launch'
     ))`;
 
-/** A curated pool coin with its own coin page; majors such as SUI are not starred. */
-function isWatchablePoolCoin(key: string): boolean {
-  const coin = indexedPoolCoin(key);
-  return coin?.coinType === key && !coin.major;
-}
-
 async function savedCoinExists(social: Social, key: string): Promise<boolean> {
   if (!isCoinKey(key)) return presaleExists(social, key);
-  const { rowCount } = await social.read(STANDALONE_COIN_EXISTS_SQL, [key, isWatchablePoolCoin(key)]);
+  const { rowCount } = await social.read(STANDALONE_COIN_EXISTS_SQL, [key, indexedPoolCoin(key)?.coinType === key]);
   return rowCount !== null && rowCount > 0;
 }
 
