@@ -1,3 +1,4 @@
+import { observeMetric } from "@blast/core/lib/metrics.ts";
 import type { RedisCommands } from "@blast/core/lib/redis.ts";
 import { attestClientAddress } from "@blast/core/lib/web-security/client-address.ts";
 import { ingressAddress, type IngressTrust } from "@blast/core/lib/web-security/ingress.ts";
@@ -171,6 +172,7 @@ export function createLiveSocket(options: LiveSocketOptions) {
     if (ws.data.closing) return;
     ws.data.closing = true;
     release(ws);
+    observeMetric("live.socket.close", { code });
     ws.close(code);
   };
 
@@ -293,7 +295,16 @@ export function createLiveSocket(options: LiveSocketOptions) {
       const offered = (request.headers.get("sec-websocket-protocol") ?? "").split(",").map((value) => value.trim());
       if (!offered.includes(LIVE_SOCKET.protocol)) return forbidden();
       const client = attestClientAddress(ingressAddress(request, peer, options.ingress));
-      if (!client) return forbidden();
+      if (!client) {
+        // Render's proxy ranges are unverified: this shows which peers and header shapes arrive, never a client address.
+        observeMetric("live.socket.refused", {
+          cause: "client-address",
+          ingress: options.ingress.mode,
+          peer_prefix: peer?.includes(".") ? peer.split(".").slice(0, 2).join(".") : (peer?.split(":").slice(0, 3).join(":") ?? null),
+          forwarded_entries: request.headers.get("x-forwarded-for")?.split(",").length ?? 0,
+        });
+        return forbidden();
+      }
       if (draining) return new Response(null, { status: 503, headers: { ...NO_STORE, "Retry-After": "5" } });
       const tickets = offered.filter((value) => value.startsWith(LIVE_SOCKET.ticketPrefix));
       const data: LiveSocketData = {
