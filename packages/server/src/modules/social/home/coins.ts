@@ -25,7 +25,6 @@ import {
   type HomeCoin,
   type HomeCoinsByIds,
   type HomeCoinsPage,
-  type HomeCurve,
   type HomeDexVolume,
   type HomeParticipant,
   type HomeQuery,
@@ -40,8 +39,7 @@ import { latestWindowPriceSql, rollingPriceAtSql } from "@blast/server/modules/s
 import { PRICE_TIER_SPAN_MS, type PricePoint } from "@blast/core/modules/social/contracts/prices.ts";
 import type { readTrackedPoolMarket, TrackedPoolMarket } from "@blast/server/modules/launchpad-market/legacy-fdv.ts";
 import { optionalSource } from "@blast/server/modules/social/optional-source.ts";
-import { curveProgressBps } from "@blast/core/modules/launchpad-contract/discovery.ts";
-import { LAUNCH_LIFECYCLES, quoteRemaining, type LaunchLifecycle } from "@blast/core/modules/launchpad-contract/discovery-views.ts";
+import type { CurveTargets } from "@blast/server/modules/social/home/curve-targets.ts";
 import {
   activityOf,
   actorOf,
@@ -152,13 +150,6 @@ export type FactsRow = Readonly<{
   quote_price_usd: string | null;
   /** A sale's tokens still held in vesting, in atoms; outside its market cap. */
   escrowed: string | null;
-  /** A Blast curve coin's curve lifecycle (`LAUNCH_LIFECYCLES`); null for any other coin. */
-  curve_lifecycle: string | null;
-  /** A curve's quote reserve and graduation target in quote atoms; null for any other coin, or while unindexed. */
-  quote_reserve: string | null;
-  graduation_target: string | null;
-  /** When a migrated curve's first DEX pool was created; null otherwise. */
-  graduated_ms: string | null;
 }>;
 
 type HomePriceOptions = Pick<HomeReadContext, "includeLiveInputs" | "includeRollingChange">;
@@ -195,11 +186,7 @@ function factsSql(scope: SaleScope, params: Params, options: HomePriceOptions = 
     CASE WHEN open_24h.as_of_ms > ${cutoff} THEN open_24h.as_of_ms::text END AS change_24h_from_ms,
     h.holders::text AS holders, h.timestamp_ms::text AS holders_as_of_ms, h0.holders::text AS holders_at_start,
     trim_scale(qp.usd_price)::text AS quote_price_usd,
-    CASE WHEN p.presale_id IS NOT NULL THEN (${outstandingSaleTokensSql("p.presale_id")}) END AS escrowed,
-    lp.lifecycle AS curve_lifecycle, trunc(lp.quote_reserve)::text AS quote_reserve, trunc(lp.graduation_target)::text AS graduation_target,
-    CASE WHEN lp.lifecycle = 'migrated' THEN (
-      SELECT min(gp.created_at_ms) FROM chain_read_v1.pools gp WHERE gp.coin_type = p.sale_token AND gp.venue <> 'blast_curve'
-    )::text END AS graduated_ms
+    CASE WHEN p.presale_id IS NOT NULL THEN (${outstandingSaleTokensSql("p.presale_id")}) END AS escrowed
   FROM ${source} p
   LEFT JOIN LATERAL (
     SELECT max(l.timestamp_ms) FILTER (WHERE l.state = 'opened') AS opened_ms,
@@ -418,7 +405,6 @@ export type CoinInputs = Readonly<{
   top_holders: HomeTopHolders;
   mobileMarket?: MobileMarketInputs;
   includeLiveInputs?: boolean;
-  includeCurve?: boolean;
   rollingChangeClockMs?: number;
 }>;
 
@@ -457,45 +443,6 @@ function dayChangeOf(facts: FactsRow, price: ReturnType<typeof observedHomePrice
   };
 }
 
-const ATOMS = /^(0|[1-9][0-9]*)$/;
-const atomsOf = (value: string | null) => (value !== null && ATOMS.test(value) ? BigInt(value) : null);
-const isLaunchLifecycle = (value: string | null): value is LaunchLifecycle => LAUNCH_LIFECYCLES.some((lifecycle) => lifecycle === value);
-
-/**
- * A curve coin's curve (`HomeCoin.curve`): progress over the view's reserve
- * and target through the SDK, so a SUI curve and a USDC curve compare by
- * percent, never by atoms. Ready to migrate or migrated is 10,000 with
- * nothing left. Null for a coin without a curve.
- */
-export function curveOf(facts: Pick<FactsRow, "curve_lifecycle" | "quote_reserve" | "graduation_target">): HomeCurve | null {
-  const lifecycle = facts.curve_lifecycle;
-  if (!isLaunchLifecycle(lifecycle)) return null;
-  if (lifecycle === "migration_ready" || lifecycle === "migrated") return { lifecycle, progress_bps: 10_000, quote_remaining: "0" };
-  const reserve = atomsOf(facts.quote_reserve);
-  const target = atomsOf(facts.graduation_target);
-  if (reserve === null || target === null || target === 0n) return { lifecycle, progress_bps: null, quote_remaining: null };
-  return {
-    lifecycle,
-    progress_bps: Number(curveProgressBps(lifecycle, reserve, target)),
-    quote_remaining: quoteRemaining(reserve, target).toString(),
-  };
-}
-
-/** A curve still filling (`live`, `migration_ready`): not yet on a DEX. */
-export const isFillingCurve = (facts: Pick<FactsRow, "curve_lifecycle">) =>
-  facts.curve_lifecycle === "live" || facts.curve_lifecycle === "migration_ready";
-
-// A curve still filling trades on its curve, not a DEX: its volume stays its curve trades, never a DEX figure.
-const onDex = <T extends Pick<FactsRow, "curve_lifecycle">>(rows: readonly T[]) => rows.filter((row) => !isFillingCurve(row));
-/** A coin that trades on a DEX: a migrated sale or curve, a V1 or catalog coin; never a sale or a curve still filling. */
-const isListed = (facts: Pick<FactsRow, "lifecycle" | "curve_lifecycle">) => facts.lifecycle === "migrated" && !isFillingCurve(facts);
-
-/** The opt-in curve fields (`curve=1`): the curve's progress and when the coin graduated. */
-const curveFieldsOf = (facts: FactsRow) => ({
-  curve: curveOf(facts),
-  graduated_ms: facts.graduated_ms === null ? null : Number(facts.graduated_ms),
-});
-
 /** One coin item from its facts, its window and its supply. */
 export function coinOf(input: CoinInputs): HomeCoin {
   const { facts, activity, nowMs, supply, totalSupply, mobileMarket } = input;
@@ -518,7 +465,6 @@ export function coinOf(input: CoinInputs): HomeCoin {
     opened_ms: facts.opened_ms === null ? null : Number(facts.opened_ms),
     launched_ms: facts.launched_ms === null ? null : Number(facts.launched_ms),
     launch_id: facts.launch_id,
-    ...(input.includeCurve && curveFieldsOf(facts)),
     quote: { type: facts.quote_type, symbol: facts.quote_symbol, decimals: facts.quote_decimals },
     sale: facts.presale_id === null ? null : { start_ms: Number(facts.start_ms), end_ms: Number(facts.end_ms), raise_target: facts.raise_target, raised: facts.raised, participants: Number(facts.participants) },
     price_usd: price?.price ?? null,
@@ -574,15 +520,15 @@ function fdvNumber(price: string | null, totalSupply: string | null, decimals: n
   return fdv === null ? null : Number(fdv);
 }
 
-type RaiseFacts = Pick<FactsRow, "presale_id" | "raised" | "graduation_target" | "quote_decimals" | "quote_price_usd">;
+type RaiseFacts = Pick<FactsRow, "presale_id" | "raised" | "quote_decimals" | "quote_price_usd">;
 
 /**
  * A Blast coin's raise in USD at the quote's price now: what a sale raised,
  * or the target (quote atoms) its curve had to reach to graduate. Null
  * without a price or a target.
  */
-export function raiseUsdOf(facts: RaiseFacts): number | null {
-  const atoms = facts.presale_id === null ? facts.graduation_target : facts.raised;
+export function raiseUsdOf(facts: RaiseFacts, graduationTarget: string | null): number | null {
+  const atoms = facts.presale_id === null ? graduationTarget : facts.raised;
   if (facts.quote_price_usd === null || atoms === null || !/^(0|[1-9][0-9]*)$/.test(atoms)) return null;
   return Number(atoms) / 10 ** facts.quote_decimals * Number(facts.quote_price_usd);
 }
@@ -592,9 +538,12 @@ export function raiseUsdOf(facts: RaiseFacts): number | null {
  * or market cap is under `HOME_DUST_USD`. Catalog coins are never dust, and
  * a value we cannot compute does not count: unknown is not small.
  */
-export function isBlastDust(facts: RaiseFacts & Pick<FactsRow, "tracked_pool_only">, marketCapUsd: number | null): boolean {
+export function isBlastDust(
+  facts: RaiseFacts & Pick<FactsRow, "tracked_pool_only">,
+  values: Readonly<{ marketCapUsd: number | null; graduationTarget: string | null }>,
+): boolean {
   if (facts.tracked_pool_only) return false;
-  return [raiseUsdOf(facts), marketCapUsd].some((value) => value !== null && value < HOME_DUST_USD);
+  return [raiseUsdOf(facts, values.graduationTarget), values.marketCapUsd].some((value) => value !== null && value < HOME_DUST_USD);
 }
 
 function candidateOf(facts: FactsRow, counts: WindowCountsRow | undefined, span: HomeSpan): Candidate {
@@ -604,7 +553,6 @@ function candidateOf(facts: FactsRow, counts: WindowCountsRow | undefined, span:
   const netInflow = Math.max(0, Number(counts?.net_inflow_usd ?? 0)) || 0;
   const newHolders = newHoldersOf(facts, span);
   const price = observedHomePrice(facts.price_usd, facts.price_as_of_ms, span.toMs)?.price ?? null;
-  const lastTradeMs = counts?.last_trade_ms === null || counts?.last_trade_ms === undefined ? null : Number(counts.last_trade_ms);
   return {
     facts,
     counts,
@@ -619,9 +567,6 @@ function candidateOf(facts: FactsRow, counts: WindowCountsRow | undefined, span:
     fdvUsd: fdvNumber(price, facts.total_supply, facts.sale_decimals),
     // As the item's market cap: a curve coin's live supply, a sale's supply less its vesting.
     marketCapUsd: fdvNumber(price, supplyOf(facts.supply ?? facts.total_supply, facts.escrowed)?.circulating ?? null, facts.sale_decimals),
-    // Only a curve still filling has a place in the progress order.
-    progressBps: isFillingCurve(facts) ? curveOf(facts)?.progress_bps ?? null : null,
-    lastTradeMs,
   };
 }
 
@@ -632,14 +577,14 @@ export type HomeReadContext = Readonly<{
   /** The sales' terms, for FDV; null when the projection is not configured. */
   terms: PresaleTermsReader | null;
   trackedPoolMarket?: typeof readTrackedPoolMarket;
+  /** Graduated curves' raise targets, for the dust rule (`curve-targets.ts`). */
+  curveTargets?: CurveTargets;
   signal?: AbortSignal;
   holderLimit?: number;
   includeMobileMarket?: boolean;
   includeLiveInputs?: boolean;
   includeRollingChange?: boolean;
   includeDexVolume?: boolean;
-  /** Carry `HomeCoin.curve` and `graduated_ms` (`HOME_CURVE_PARAM`). */
-  includeCurve?: boolean;
   includeRecentBuys?: boolean;
   includeRecentBuyUsd?: boolean;
 }>;
@@ -708,7 +653,7 @@ export async function assembleCoins(
     readTopParticipants(db, { span, bounds, kinds, sales: { kind: "ids", presaleIds: ids, includeStandalone: candidates.some(({ facts }) => facts.presale_id === null) }, actors }, HOME_PREVIEW_ROWS * 2),
     readTopHolders(db, trading, bounds.clockMs, context.holderLimit),
     input.dexVolumes ?? (context.includeDexVolume
-      ? readDexVolumes(db, onDex(trading), span.window, bounds, kinds)
+      ? readDexVolumes(db, trading, span.window, bounds, kinds)
       : null),
   ]);
   const holderAccounts = [...holders.values()].flat().flatMap((row) => (row.account_id === null ? [] : [row.account_id]));
@@ -745,7 +690,6 @@ export async function assembleCoins(
       top_holders: topHoldersOf(holders.get(candidate.facts.coin_type) ?? [], supply, people.identities),
       mobileMarket: mobileMarket?.get(id),
       includeLiveInputs: context.includeLiveInputs,
-      includeCurve: context.includeCurve,
       rollingChangeClockMs: context.includeRollingChange ? bounds.clockMs : undefined,
     });
     const coin = candidate.facts.tracked_pool_only
@@ -797,25 +741,19 @@ function recentPageBuys(sides: readonly SideRow[], coins: readonly HomeCoin[], w
 }
 
 /**
- * Idle coins order by FDV and Graduated by market cap (`rank.ts`); a catalog
- * coin's supply lives outside the chain views, so those orders read the
- * shared tracked pool snapshot (one process-cached read for every catalog
- * coin), with the same fallbacks as the item (`withTrackedPoolMarket`).
+ * Idle coins order by FDV (`rank.ts`); a catalog coin's supply lives outside
+ * the chain views, so those orders read the shared tracked pool snapshot
+ * (one process-cached read for every catalog coin).
  */
-async function withTrackedMarket(candidates: readonly Candidate[], context: HomeReadContext): Promise<{ candidates: readonly Candidate[]; markets?: TrackedMarkets }> {
-  const lacks = (candidate: Candidate) => candidate.facts.tracked_pool_only && (candidate.fdvUsd === null || candidate.marketCapUsd === null);
-  if (!candidates.some(lacks) || !context.trackedPoolMarket) return { candidates };
+async function withTrackedFdv(candidates: readonly Candidate[], context: HomeReadContext): Promise<{ candidates: readonly Candidate[]; markets?: TrackedMarkets }> {
+  const missing = candidates.some((candidate) => candidate.facts.tracked_pool_only && candidate.fdvUsd === null);
+  if (!missing || !context.trackedPoolMarket) return { candidates };
   const markets = await optionalSource("tracked_pool_market", context.trackedPoolMarket, {});
   return { markets, candidates: candidates.map((candidate) => {
-    const market = lacks(candidate) ? markets[candidate.coinType] : undefined;
+    const market = candidate.facts.tracked_pool_only && candidate.fdvUsd === null ? markets[candidate.coinType] : undefined;
     if (!market) return candidate;
-    const { facts } = candidate;
-    const price = observedHomePrice(facts.price_usd, facts.price_as_of_ms, context.nowMs)?.price ?? market.price?.priceUsd ?? null;
-    return {
-      ...candidate,
-      fdvUsd: candidate.fdvUsd ?? fdvNumber(price, facts.total_supply ?? market.totalSupplyAtoms ?? null, facts.sale_decimals),
-      marketCapUsd: candidate.marketCapUsd ?? fdvNumber(price, facts.supply ?? market.circulatingSupplyAtoms ?? null, facts.sale_decimals),
-    };
+    const price = observedHomePrice(candidate.facts.price_usd, candidate.facts.price_as_of_ms, context.nowMs)?.price ?? market.price?.priceUsd ?? null;
+    return { ...candidate, fdvUsd: fdvNumber(price, candidate.facts.total_supply ?? market.totalSupplyAtoms ?? null, candidate.facts.sale_decimals) };
   }) };
 }
 
@@ -851,17 +789,27 @@ export async function readHomeDiscoverBase(db: ReadableDatabase, window: HomeWin
   const span = homeSpan(window, bounds);
   const kinds = visibleKinds(context.hiddenKinds);
   const scope: SaleScope = { kind: "discover" };
-  const [facts, sides] = await Promise.all([
-    readCoinFacts(db, scope, span, context),
+  const factsRead = readCoinFacts(db, scope, span, context);
+  // Curve targets need only the facts, so they load while the sides still scan.
+  const targetsRead = factsRead.then((facts) => {
+    const launchIds = [...facts.values()].flatMap((row) => row.presale_id === null && row.launch_id !== null ? [row.launch_id] : []);
+    return launchIds.length > 0 && context.curveTargets ? context.curveTargets(launchIds) : new Map<string, string>();
+  });
+  const [facts, sides, targets] = await Promise.all([
+    factsRead,
     readSides(db, { span, bounds, kinds, sales: scope, actors: { kind: "everyone" } }, context.includeRecentBuys ? context.nowMs - HOME_RECENT_BUY_MS : undefined),
+    targetsRead,
   ]);
   const counts = countsOf(sides);
   const live = [...facts.values()]
     .map((row) => candidateOf(row, counts.get(row.presale_id ?? row.coin_type), span))
-    .filter((candidate) => !isBlastDust(candidate.facts, candidate.marketCapUsd));
+    .filter((candidate) => !isBlastDust(candidate.facts, {
+      marketCapUsd: candidate.marketCapUsd,
+      graduationTarget: candidate.facts.launch_id === null ? null : targets.get(candidate.facts.launch_id) ?? null,
+    }));
   const [{ candidates, markets: trackedMarkets }, dexVolumes] = await Promise.all([
-    withTrackedMarket(live, context),
-    context.includeDexVolume ? readDexVolumes(db, onDex(live.map(({ facts }) => facts)), span.window, bounds, kinds) : undefined,
+    withTrackedFdv(live, context),
+    context.includeDexVolume ? readDexVolumes(db, live.map(({ facts }) => facts), span.window, bounds, kinds) : undefined,
   ]);
   // Volume (and Relevant, which weighs it) ranks by the same aggregate the cell shows.
   const scored = candidates.map((candidate) => {
@@ -884,8 +832,6 @@ export async function readHomeDiscover(db: ReadableDatabase, query: HomeQuery, c
     participants: candidate.inputs.breadth,
     launchedMs: candidate.launchedMs,
     tradable: tradesInApp(candidate.facts.venue) && (candidate.facts.venue.toLowerCase() !== "aftermath" || candidate.facts.pool_id !== null),
-    listed: isListed(candidate.facts),
-    progressBps: candidate.progressBps ?? null,
     nowMs: bounds.clockMs,
   }));
   const { page, nextCursor, pageNumber, pages, total, ranked } = pageOf(eligible, query.sort, cursor, query.limit, query.page);

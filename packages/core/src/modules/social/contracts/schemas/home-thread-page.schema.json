@@ -709,68 +709,6 @@
           "minimum": 0,
           "description": "First priced observation when the comparison covers less than 24 hours.",
           "$ref": "https://blast-v2.invalid/social/contracts/feed-item.schema.json#/$defs/millis"
-        },
-        "curve": {
-          "description": "A Blast bonding curve coin's curve: its lifecycle, its progress toward graduation in basis points (10000 once ready to migrate or migrated), and the quote atoms left to its target; progress and remaining are null while the target is unknown. Null for any other coin. Present only when the read asks for it (`curve=1`).",
-          "anyOf": [
-            {
-              "type": "object",
-              "properties": {
-                "lifecycle": {
-                  "type": "string",
-                  "enum": [
-                    "opening_round",
-                    "live",
-                    "migration_ready",
-                    "migrated"
-                  ]
-                },
-                "progress_bps": {
-                  "anyOf": [
-                    {
-                      "type": "integer",
-                      "minimum": 0,
-                      "maximum": 10000
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "quote_remaining": {
-                  "anyOf": [
-                    {
-                      "type": "string",
-                      "pattern": "^(0|[1-9][0-9]*)$"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                }
-              },
-              "required": [
-                "lifecycle",
-                "progress_bps",
-                "quote_remaining"
-              ],
-              "additionalProperties": false
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "graduated_ms": {
-          "description": "When a curve coin graduated: its first DEX pool's creation. Null for a curve still filling and for any other coin. Present only with `curve=1`.",
-          "oneOf": [
-            {
-              "type": "null"
-            },
-            {
-              "$ref": "https://blast-v2.invalid/social/contracts/feed-item.schema.json#/$defs/millis"
-            }
-          ]
         }
       },
       "required": [

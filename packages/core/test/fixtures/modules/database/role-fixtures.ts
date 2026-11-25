@@ -156,8 +156,7 @@ export const CHAIN_FIXTURE = `
     lifecycle TEXT NOT NULL,
     created_checkpoint BIGINT NOT NULL,
     created_at_ms BIGINT NOT NULL,
-    quote_reserve NUMERIC,
-    params JSONB
+    quote_reserve NUMERIC
   );
   CREATE TABLE watermarks (
     pipeline TEXT PRIMARY KEY,
@@ -198,8 +197,7 @@ export const CHAIN_FIXTURE = `
   SELECT coin_type, total_supply FROM presale_coin_metadata WHERE total_supply IS NOT NULL;
   CREATE VIEW chain_read_v1.pools AS
   SELECT pool_key, venue, split_part(pool_key, ':', 2) AS pool_id, coin_type, quote_type, lifecycle,
-    created_checkpoint, created_at_ms, quote_reserve::NUMERIC AS quote_reserve,
-    (params->>'graduation_target')::NUMERIC AS graduation_target
+    created_checkpoint, created_at_ms
   FROM public.pools;
   CREATE VIEW chain_read_v1.watermark AS
   SELECT d.network, d.deployment_fingerprint, encode(w.chain_id, 'hex') AS chain_id,

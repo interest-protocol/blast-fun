@@ -82,7 +82,7 @@ export function viewStateOf(params: URLSearchParams): HomeViewState {
   const ranked = hasRankedQueryFields({ ...filters, page });
   return {
     source: isHomeSource(source) ? source : HOME_DEFAULT_VIEW.source,
-    sort: isHomeSort(sort) && isHomeViewSort(sort) ? sort : ranked ? HOME_DEFAULT_VIEW.sort : HOME_DEFAULT_FEED.sort,
+    sort: isHomeSort(sort) ? sort : ranked ? HOME_DEFAULT_VIEW.sort : HOME_DEFAULT_FEED.sort,
     ...filters,
     page,
   };
@@ -131,11 +131,7 @@ export function controlsApply(source: HomeSource): boolean {
   return source === "discover";
 }
 
-/** The orders Home offers and prefetches today; the server's newer orders (progress, market cap, last trade) wait for Home's tabs. */
-export const HOME_VIEW_SORTS = ["relevant", "trending", "newest", "held"] as const satisfies readonly HomeSort[];
-export type HomeViewSort = (typeof HOME_VIEW_SORTS)[number];
-export const isHomeViewSort = (sort: HomeSort): sort is HomeViewSort => (HOME_VIEW_SORTS as readonly HomeSort[]).includes(sort);
-export const SORT_LABELS: Readonly<Record<HomeSort, string>> = { relevant: "Trending", trending: "Volume", newest: "Newest", held: "Most held", progress: "Progress", market_cap: "Market cap", last_trade: "Last trade" };
+export const SORT_LABELS: Readonly<Record<HomeSort, string>> = { relevant: "Trending", trending: "Volume", newest: "Newest", held: "Most held" };
 /** Blast mode's names: its Trending tab is the Volume order, so the blended score keeps the name Relevant there until its tabs change. */
 export const BLAST_MODE_SORT_LABELS: Readonly<Record<HomeSort, string>> = { ...SORT_LABELS, relevant: "Relevant" };
 export const SORT_HINTS: Readonly<Partial<Record<HomeSort, string>>> = {
