@@ -9,9 +9,9 @@ test("parseSse keeps the unfinished tail and joins data lines", () => {
 });
 
 test("frameLag measures receipt minus chain time, with hop offsets", () => {
-  const data = JSON.stringify({ type: "trade", timestamp_ms: 1_000, cursor: "5:0:0:0", provenance: { timestamp_ms: 1_000, lag_ms: 7, picked_ms: 1_150, sent_ms: 1_160 } });
+  const data = JSON.stringify({ type: "trade", timestamp_ms: 1_000, cursor: "5:0:0:0", provenance: { timestamp_ms: 1_000, lag_ms: 7, hops: { r2_put_ms: 38, picked_ms: 1_150, relay_ms: 1_160 } } });
   assert.deepEqual(frameLag({ event: "market", data }, 1_400), {
-    kind: "market:trade", lag_ms: 400, chain_ms: 1_000, received_ms: 1_400, cursor: "5:0:0:0", hops: { picked_ms: 150, sent_ms: 160 },
+    kind: "market:trade", lag_ms: 400, chain_ms: 1_000, received_ms: 1_400, cursor: "5:0:0:0", hops: { r2_put_ms: 38, picked_ms: 150, relay_ms: 160 },
   });
   const prices = JSON.stringify({ checkpoint: 5, prices: [{ as_of_ms: 900 }, { as_of_ms: 950 }] });
   assert.equal(frameLag({ event: "prices", data: prices }, 1_000).lag_ms, 50);

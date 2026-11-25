@@ -32,7 +32,7 @@ export function parseSseBlock(block) {
 /**
  * Lag of one event received at `receivedMs`: receipt minus the chain time the frame carries.
  * Market frames carry `timestamp_ms`; price frames carry each price's `as_of_ms` (newest counts).
- * Hop stamps found in `provenance` (`*_ms` fields) are returned as offsets from the chain time.
+ * Hop stamps in `provenance.hops` are returned as offsets from the chain time.
  */
 export function frameLag(event, receivedMs) {
   let frame;
@@ -51,10 +51,11 @@ export function frameLag(event, receivedMs) {
     chainMs = Math.max(...frame.prices.map((price) => Number(price.as_of_ms)).filter(Number.isSafeInteger));
     if (!Number.isFinite(chainMs)) return null;
   } else return null;
+  // `provenance.hops` holds engine wall-clock stamps; `r2_put_ms` is a duration, kept as is.
   const hops = {};
-  const provenance = frame.provenance && typeof frame.provenance === "object" ? frame.provenance : {};
-  for (const [key, value] of Object.entries(provenance)) {
-    if (key.endsWith("_ms") && key !== "timestamp_ms" && key !== "lag_ms" && Number.isSafeInteger(value)) hops[key] = value - chainMs;
+  const raw = frame.provenance?.hops && typeof frame.provenance.hops === "object" ? frame.provenance.hops : {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (Number.isSafeInteger(value)) hops[key] = key === "r2_put_ms" ? value : value - chainMs;
   }
   return { kind, lag_ms: receivedMs - chainMs, chain_ms: chainMs, received_ms: receivedMs, cursor: frame.cursor ?? null, hops };
 }

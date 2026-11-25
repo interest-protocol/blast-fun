@@ -15,6 +15,6 @@ node apps/web/scripts/live-probe/run.mjs --mode socket --pool blast_curve:0x… 
 - `--mode socket` uses the direct socket (ticket route + `wss://live.blast.fun`).
 - `kind: "prices"` lags are against the price's own `as_of_ms`, not a checkpoint; read
   `market:trade` for chain-to-screen.
-- Hop stamps in `provenance` (`*_ms`) are logged as offsets from the chain time.
+- Hop stamps in `provenance.hops` are logged as offsets from the chain time (`r2_put_ms` is a duration).
 
 Load: one stream per two pools per host. Tests: `npm run test:live-probe -w @blast/web`.
