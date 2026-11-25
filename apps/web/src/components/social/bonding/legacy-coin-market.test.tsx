@@ -193,9 +193,10 @@ test("a tracked coin shows completed pool swaps with exact coin and SUI amounts 
   assert.ok(row?.querySelector('[aria-label="Inspect full ONE amount: 1.234567 ONE"]'));
   assert.ok(row?.querySelector('[aria-label="Inspect full SUI amount: 2.5 SUI"]'));
   assert.ok(row?.querySelector(`[aria-label="Inspect full trader address: ${trader}"]`));
-  const link = row?.querySelector("a");
+  // The trader's face opens the wallet on the explorer; the trade opens its transaction.
+  assert.ok(row?.querySelector(`a[href="https://suiscan.xyz/mainnet/account/${trader}"]`));
+  const link = row?.querySelector<HTMLAnchorElement>(`a[href="https://suiscan.xyz/mainnet/tx/${digest}"]`);
   assert.ok(link);
-  assert.equal(link.href, `https://suiscan.xyz/mainnet/tx/${digest}`);
   t.mock.method(link, "matches", (selector: string) => selector === ":focus-visible");
   await act(async () => link.focus());
   assert.equal(document.activeElement, link);
