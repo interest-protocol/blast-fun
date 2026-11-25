@@ -7,6 +7,7 @@ import { SkeletonLine } from "#web/components/blast-ui/Skeleton.tsx";
 import { diagnosticMessage, publicErrorMessage } from "#web/lib/errors.ts";
 
 import clsx from "clsx";
+import Link from "next/link";
 import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from "react";
 
 import { Sheet, SheetClose, SheetDock, SheetHeading } from "#web/components/blast-ui/Sheet.tsx";
@@ -649,7 +650,7 @@ function CommitPurchaseOptions({ controls }: Readonly<{ controls: ReturnType<typ
       </> : <>
         <CommitTermsList compact controls={controls} tokens="—" fill={fill} />
         <p className={styles.context}>Final allocation is set at close.</p>
-        <a className={styles.detailsLink} href={`/presale/${sale.presaleId}`} onClick={onDetails}>Presale details <span aria-hidden="true">→</span></a>
+        <Link className={styles.detailsLink} href={`/presale/${sale.presaleId}`} onClick={onDetails} prefetch={false}>Presale details <span aria-hidden="true">→</span></Link>
       </>}
     </Sheet>
   </>;
@@ -666,7 +667,7 @@ function CommitExtras({ controls }: Readonly<{ controls: ReturnType<typeof useCo
           <DisclosureSummary>How this presale works</DisclosureSummary>
           <p className={styles.context}>Allocation is set at close. Unused payment is refunded; a full refund is available if the target is missed. Claim tokens at launch, with no lockup.</p>
         </details>
-        <a className={styles.detailsLink} href={`/presale/${sale.presaleId}`} onClick={onDetails}>Presale details <span aria-hidden="true">→</span></a>
+        <Link className={styles.detailsLink} href={`/presale/${sale.presaleId}`} onClick={onDetails} prefetch={false}>Presale details <span aria-hidden="true">→</span></Link>
       </> : null}
       <details className={clsx(styles.disclosure, styles.optional)} ref={disclosure}>
         <DisclosureSummary>Add a message <span>Optional</span></DisclosureSummary>

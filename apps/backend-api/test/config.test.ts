@@ -211,7 +211,7 @@ test("public backend rejects signer material and implicit proxy trust", () => {
         BLAST_BACKEND_INGRESS_MODE: "trusted-proxy",
         BLAST_BACKEND_TRUSTED_PROXY_CIDRS: "10.0.0.0/8",
       }),
-    /narrow/,
+    /\/13\+ inside 10\.0\.0\.0\/8/,
   );
   assert.equal(
     backendConfig({

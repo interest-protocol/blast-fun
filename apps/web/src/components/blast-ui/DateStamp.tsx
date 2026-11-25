@@ -1,6 +1,7 @@
 "use client";
 
 import { NO_VALUE } from "@blast/core/web/format.ts";
+import Link from "next/link";
 import { InspectValue } from "./InspectValue.tsx";
 import { shortUtcDate } from "./date-label.ts";
 
@@ -31,6 +32,6 @@ export function DateStamp({ at, label = "timestamp", className, href, plain = fa
     </time>
   );
   if (plain) return visible;
-  if (href) return <a className={className} href={href} aria-label={`${label}: ${text}, ${full}`} title={full}>{visible}</a>;
+  if (href) return <Link className={className} href={href} aria-label={`${label}: ${text}, ${full}`} title={full} prefetch={false}>{visible}</Link>;
   return <span className={className}><InspectValue value={full} label={label} triggerLabel={triggerLabel} onOpenChange={onInspect}>{visible}</InspectValue></span>;
 }

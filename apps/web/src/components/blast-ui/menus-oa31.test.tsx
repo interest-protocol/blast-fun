@@ -50,15 +50,15 @@ function ActionHost({ onDeposit, onFund, onNotifications }: Readonly<{ onDeposit
   return null;
 }
 
-async function mount(t: TestContext, { signedIn = true, viewerLoading = false, onSignOut, onDeposit = () => undefined, onFund = () => undefined, onNotifications = () => undefined }: Readonly<{ signedIn?: boolean; viewerLoading?: boolean; onSignOut?: () => Promise<void>; onDeposit?: () => void; onFund?: () => void; onNotifications?: () => void }> = {}): Promise<void> {
+async function mount(t: TestContext, { signedIn = true, viewerLoading = false, onSignOut, onDeposit = () => undefined, onFund = () => undefined, onNotifications = () => undefined }: Readonly<{ signedIn?: boolean; viewerLoading?: boolean; onSignOut?: () => Promise<void>; onDeposit?: () => void; onFund?: () => void; onNotifications?: () => void }> = {}) {
   const container = document.createElement("div");
   container.setAttribute("data-blast-ui", "");
   document.body.appendChild(container);
   const root = createRoot(container as unknown as Element);
-  await act(async () =>
+  const renderShell = (pathname: string) => act(async () =>
     root.render(
       <AppRouterContext value={router as never}>
-        <RouterContext value={linkRouter}><PathnameContext value="/">
+        <RouterContext value={linkRouter}><PathnameContext value={pathname}>
           <AppShell portfolio={{ status: "ready", summary: { total_usd: 4760.34, today: null, breakdown: { coins: 3660.34, committed: 850, claimable: 250 } } }} overlays={<ActionHost onDeposit={onDeposit} onFund={onFund} onNotifications={onNotifications} />} onSignOut={onSignOut} signInHref="/sign-in" signedIn={signedIn} viewer={signedIn && !viewerLoading ? KAI : null} viewerLoading={viewerLoading}>
             <p>page</p>
           </AppShell>
@@ -66,12 +66,17 @@ async function mount(t: TestContext, { signedIn = true, viewerLoading = false, o
       </AppRouterContext>,
     ),
   );
+  await renderShell("/");
   t.after(async () => {
     await act(async () => root.unmount());
     container.parentNode?.removeChild(container);
     motion.all.length = 0;
     pushed.length = 0;
   });
+  return async (pathname: string) => {
+    await act(async () => root.render(null));
+    await renderShell(pathname);
+  };
 }
 
 const menuOf = (id: string) => document.getElementById(id);
@@ -233,37 +238,43 @@ test("R3-73-AC-5: Settings goes to /settings and closes the menu (the gate's `go
   assert.equal(menuOf(ACCOUNT_MENU_ID), null);
 });
 
-test("More reveals an inline competition link, reverses on repeat presses and closes with Escape", async (t) => {
-  await mount(t, { signedIn: false });
-  const rail = document.querySelector('nav[aria-label="Primary"]')!;
-  const more = rail.querySelector<HTMLButtonElement>('button[aria-label="More"]')!;
-  const panel = document.getElementById(more.getAttribute("aria-controls")!)!;
-  assert.equal(more.getAttribute("aria-expanded"), "false");
-  assert.ok(panel.hasAttribute("inert"));
-  assert.equal(panel.closest('nav[aria-label="Primary"]'), rail);
-  for (let index = 0; index < 3; index += 1) await press(more);
-  assert.equal(more.getAttribute("aria-expanded"), "true");
-  assert.ok(!panel.hasAttribute("inert"));
-  const destination = panel.querySelector<HTMLAnchorElement>('a[href="/competitions"]')!;
-  destination.focus();
-  await key("Escape");
-  assert.equal(more.getAttribute("aria-expanded"), "false");
-  assert.ok(panel.hasAttribute("inert"));
-  assert.equal(document.activeElement, more);
-  await press(more);
-  await press(destination);
-  assert.deepEqual(pushed, ["/competitions"]);
+test("background music keeps playing when navigation replaces the shell", async (t) => {
+  const audio = document.createElement("audio");
+  let paused = true;
+  Object.defineProperties(audio, {
+    paused: { get: () => paused },
+    play: { value: async () => { paused = false; audio.dispatchEvent(testEvent("play")); } },
+    pause: { value: () => { paused = true; audio.dispatchEvent(testEvent("pause")); } },
+  });
+  Object.defineProperty(globalThis, "Audio", { value: function Audio() { return audio; }, configurable: true });
+  t.after(() => { Reflect.deleteProperty(globalThis, "Audio"); });
+
+  const navigate = await mount(t);
+  const openAudioMenu = () => press(document.querySelector<TestElement>('button[aria-label="Audio"]')!);
+  const musicItem = () => [...document.querySelectorAll<TestElement>('[role="menuitemcheckbox"]')]
+    .find(item => item.textContent === "Background music")!;
+  await openAudioMenu();
+  await press(musicItem());
+  assert.equal(audio.paused, false, "the listener starts the music");
+  await navigate("/portfolio");
+  assert.equal(audio.paused, false, "the route change keeps the same track playing");
+  await openAudioMenu();
+  assert.equal(musicItem().getAttribute("aria-checked"), "true");
+  await press(musicItem());
+  assert.equal(audio.paused, true, "the listener can pause from the new page");
 });
 
-test("phone More belongs to the bottom bar, reveals Portfolio and Competitions, and dismisses safely", async (t) => {
+test("phone More reveals Portfolio and Create, and dismisses safely", async (t) => {
   await mount(t, { signedIn: false });
   const more = document.querySelector<HTMLButtonElement>('nav[aria-label="Tabs"] button[aria-label="More"]')!;
   const panel = document.getElementById(more.getAttribute("aria-controls")!)!;
   await press(more);
   assert.ok(panel.closest('nav[aria-label="Tabs"]'));
   assert.equal(document.querySelector('header button[aria-label="More"]'), null);
-  assert.deepEqual([...panel.querySelectorAll("a")].map((link) => link.getAttribute("href")), ["/portfolio", "/competitions"]);
-  panel.querySelector<HTMLAnchorElement>('a[href="/portfolio"]')!.focus();
+  assert.deepEqual([...panel.querySelectorAll("a")].map((link) => link.getAttribute("href")), ["/portfolio"]);
+  assert.equal(panel.querySelector('button[aria-haspopup="menu"]')?.textContent, "Create");
+  const portfolio = panel.querySelector<HTMLAnchorElement>('a[href="/portfolio"]')!;
+  portfolio.focus();
   await key("Escape");
   assert.equal(document.activeElement, more);
   assert.equal(more.getAttribute("aria-expanded"), "false");
@@ -272,8 +283,8 @@ test("phone More belongs to the bottom bar, reveals Portfolio and Competitions, 
   assert.equal(more.getAttribute("aria-expanded"), "false");
   await press(more);
   assert.ok(!panel.closest('[role="dialog"], [role="menu"]'));
-  await press(panel.querySelector('a[href="/competitions"]')!);
-  assert.deepEqual(pushed, ["/competitions"]);
+  await press(portfolio);
+  assert.deepEqual(pushed, ["/portfolio"]);
   assert.equal(more.getAttribute("aria-expanded"), "false");
   assert.ok(panel.hasAttribute("inert"));
 });
