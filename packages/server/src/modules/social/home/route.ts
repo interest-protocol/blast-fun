@@ -13,6 +13,7 @@ import {
   SOCIAL_HOME_TRADERS_ROUTE,
   SOCIAL_HOME_ACTIVITY_STREAM_ROUTE,
   HOME_DEFAULT_WINDOW,
+  HOME_CURVE_PARAM,
   HOME_DEX_VOLUME_PARAM,
   HOME_MOBILE_MARKET_PARAM,
   HOME_RECENT_BUYS_PARAM,
@@ -62,7 +63,6 @@ export type SocialHomeRouteDependencies = Readonly<{
   /** The sales' terms (`createPresaleTermsReader`), for FDV; null when the projection is not configured. */
   terms: PresaleTermsReader | null;
   trackedPoolMarket?: HomeReadContext["trackedPoolMarket"];
-  curveTargets?: HomeReadContext["curveTargets"];
   now?: () => number;
   caches?: Readonly<{
     discover?: ReadCache<HomeCoinsPage>;
@@ -86,7 +86,7 @@ export type SocialHomeRouteDependencies = Readonly<{
  * `private, no-store`, through the kit's transaction on the primary.
  */
 export function createSocialHomeRoutes(dependencies: SocialHomeRouteDependencies) {
-  const { kit, database, ledgerDatabase, wallets, config, terms, trackedPoolMarket, curveTargets } = dependencies;
+  const { kit, database, ledgerDatabase, wallets, config, terms, trackedPoolMarket } = dependencies;
   const now = dependencies.now ?? Date.now;
   const context = (ctx: SocialRequestContext) => ({ nowMs: now(), hiddenKinds: ctx.hiddenKinds, terms });
   const wantsMobileMarket = (params: URLSearchParams) => params.get(HOME_MOBILE_MARKET_PARAM) === "1";
@@ -95,6 +95,7 @@ export function createSocialHomeRoutes(dependencies: SocialHomeRouteDependencies
     includeLiveInputs: wantsMobileMarket(params) && params.get("live_inputs") === "1",
     includeRollingChange: wantsMobileMarket(params) && params.get(HOME_ROLLING_CHANGE_PARAM) === "1",
     includeDexVolume: params.get(HOME_DEX_VOLUME_PARAM) === "1",
+    includeCurve: params.get(HOME_CURVE_PARAM) === "1",
   });
   const publicRead = { auth: "none", bucket: "social_read", cache: "public" } as const;
   return Object.freeze({
@@ -103,14 +104,14 @@ export function createSocialHomeRoutes(dependencies: SocialHomeRouteDependencies
       const query = parseHomeQuery(params);
       const recentBuys = params.get(HOME_RECENT_BUYS_PARAM);
       const includeRecentBuyUsd = recentBuys === HOME_RECENT_BUYS_WITH_USD;
-      const ctxRead = { ...context(ctx), ...marketOptions(params), trackedPoolMarket, curveTargets, includeRecentBuys: recentBuys === "1" || includeRecentBuyUsd, includeRecentBuyUsd };
+      const ctxRead = { ...context(ctx), ...marketOptions(params), trackedPoolMarket, includeRecentBuys: recentBuys === "1" || includeRecentBuyUsd, includeRecentBuyUsd };
       const baseCache = dependencies.caches?.discoverBase;
       const load = () => {
         const db = database();
         const base = baseCache && (() => baseCache.read(homeDiscoverBaseKey(query.window, ctxRead), () => readHomeDiscoverBase(db, query.window, ctxRead)));
         return readHomeDiscover(db, query, ctxRead, base);
       };
-      return cachedResponse(ctx, dependencies.caches?.discover, JSON.stringify([query, ctxRead.hiddenKinds, ctxRead.includeMobileMarket, ctxRead.includeLiveInputs, ctxRead.includeRollingChange, ctxRead.includeDexVolume, ctxRead.includeRecentBuys, ctxRead.includeRecentBuyUsd]), load);
+      return cachedResponse(ctx, dependencies.caches?.discover, JSON.stringify([query, ctxRead.hiddenKinds, ctxRead.includeMobileMarket, ctxRead.includeLiveInputs, ctxRead.includeRollingChange, ctxRead.includeDexVolume, ctxRead.includeCurve, ctxRead.includeRecentBuys, ctxRead.includeRecentBuyUsd]), load);
     }),
     COINS: kit.route({ name: SOCIAL_HOME_COINS_ROUTE, ...publicRead }, async (ctx) => {
       const params = new URL(ctx.request.url).searchParams;
@@ -121,7 +122,7 @@ export function createSocialHomeRoutes(dependencies: SocialHomeRouteDependencies
       const holderLimit = parseHolderLimit(params, ids.length);
       const ctxRead = { ...context(ctx), holderLimit, ...marketOptions(params), trackedPoolMarket };
       const load = () => readHomeCoinsByIds(database(), ids, window, ctxRead);
-      const key = [ids, window, ctxRead.hiddenKinds, ctxRead.includeMobileMarket, ctxRead.includeLiveInputs, ctxRead.includeRollingChange, ctxRead.includeDexVolume, ...(holderLimit === HOME_TOP_HOLDERS ? [] : [holderLimit])];
+      const key = [ids, window, ctxRead.hiddenKinds, ctxRead.includeMobileMarket, ctxRead.includeLiveInputs, ctxRead.includeRollingChange, ctxRead.includeDexVolume, ctxRead.includeCurve, ...(holderLimit === HOME_TOP_HOLDERS ? [] : [holderLimit])];
       return cachedResponse(ctx, dependencies.caches?.coins, JSON.stringify(key), load);
     }),
     TRADERS: kit.route({ name: SOCIAL_HOME_TRADERS_ROUTE, ...publicRead, cache: "public-fresh" }, async (ctx) => {

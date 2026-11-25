@@ -39,7 +39,7 @@ test("an empty Following result retains its indexing-delay warning", () => {
 
 test("Discover only offers to reset filters when the unfiltered catalog has results", () => {
   const client = createTestQueryClient();
-  const query = { window: "24h", sort: "trending", minParticipants: 5, age: "all", tradable: false, limit: 10, page: 1, cursor: null } as const;
+  const query = { window: "24h", sort: "trending", stage: "all", minParticipants: 5, age: "all", tradable: false, limit: 10, page: 1, cursor: null } as const;
   const empty = {
     coins: [], total: 0, pages: 1, page: 1, next_cursor: null, window: "24h", clock_ms: 0,
     as_of: { checkpoint: 1, timestamp_ms: 0, lag_ms: 0 },
@@ -63,7 +63,7 @@ test("Discover only offers to reset filters when the unfiltered catalog has resu
 
 test("a confirmed empty Discover result survives a refresh and its failure", async () => {
   const client = createTestQueryClient();
-  const query = { window: "1h", sort: "relevant", minParticipants: 0, age: "all", tradable: false, limit: 10, page: 1, cursor: null } as const;
+  const query = { window: "1h", sort: "relevant", stage: "all", minParticipants: 0, age: "all", tradable: false, limit: 10, page: 1, cursor: null } as const;
   const empty = {
     coins: [], total: 0, pages: 1, page: 1, next_cursor: null, window: "1h", clock_ms: 0,
     as_of: { checkpoint: 1, timestamp_ms: 0, lag_ms: 0 },
