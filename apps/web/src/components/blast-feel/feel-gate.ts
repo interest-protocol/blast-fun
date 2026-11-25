@@ -14,7 +14,7 @@
  *  3. **A press is one voice per 60 ms.** A fast scroll of presses, or a
  *     finger dragged over a list, cannot stack taps into noise: twenty presses
  *     in 200 ms are four taps.
- *  4. **One money sound per event.** `land`, `claim`, `chord` and `error`
+ *  4. **One money sound per event.** `buy`, `sell`, `land`, `claim`, `chord` and `error`
  *     answer the result of a real write; two paths reporting the same result
  *     (a dialog closing and its commit landing, a hold and its host) sound it
  *     once.
@@ -35,7 +35,7 @@ export const FEEL_MONEY_EVENT_MS = 300;
 export const FEEL_FRESH_GESTURE_MS = 1000;
 
 /** The sounds that follow money rather than a press. */
-export const FEEL_MONEY_KINDS: ReadonlySet<FeelSignalKind> = new Set<FeelSignalKind>(["land", "claim", "chord", "error"]);
+export const FEEL_MONEY_KINDS: ReadonlySet<FeelSignalKind> = new Set<FeelSignalKind>(["buy", "sell", "land", "claim", "chord", "error"]);
 
 export type FeelPlayOptions = Readonly<{
   /**
@@ -46,7 +46,7 @@ export type FeelPlayOptions = Readonly<{
   fresh?: boolean;
 }>;
 
-const TRADE_MIN_GAP_MS = 140;
+const TRADE_MIN_GAP_MS = 1_200;
 const isCurveTrade = (signal: FeelSignal) => signal.kind === "curve-buy" || signal.kind === "curve-sell";
 
 export type FeelRefusal = "trade-rate" | "no-gesture" | "hidden" | "tap-rate" | "money-event" | "stale";

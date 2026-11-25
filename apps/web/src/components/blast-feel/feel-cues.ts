@@ -6,7 +6,7 @@
  * the table and the press rule are testable without a browser. `feel-synth.ts`
  * turns a signal into sound; `feel-mount.ts` turns a DOM event into a signal.
  *
- * The numbers are the gate's (`design/blast-feel-preview.html`, sha256
+ * The original cues are the gate's (`design/blast-feel-preview.html`, sha256
  * `dd8cb26c…`), read from its `src/lab/feel.js` and confirmed in Chrome by
  * instrumenting `AudioContext.createOscillator`. A note's measured length is
  * its `durationMs` plus `FEEL_RELEASE_TAIL_MS`, because the oscillator is
@@ -32,7 +32,7 @@ export type FeelVoice = Readonly<{
  * `follow` answer in two directions.
  */
 export type FeelSignal =
-  | Readonly<{ kind: "curve-buy" | "curve-sell" | "tap" | "fire" | "land" | "claim" | "chord" | "error" | "open" | "close" | "expand" | "collapse" }>
+  | Readonly<{ kind: "curve-buy" | "curve-sell" | "buy" | "sell" | "tap" | "navigate" | "notification" | "fire" | "land" | "claim" | "chord" | "error" | "open" | "close" | "expand" | "collapse" }>
   | Readonly<{ kind: "tick"; level: number }>
   | Readonly<{ kind: "toggle"; on: boolean }>
   | Readonly<{ kind: "follow"; on: boolean }>;
@@ -53,9 +53,22 @@ const ONE = (hz: number, gain: number, durationMs: number, wave: OscillatorType 
 ];
 
 const FIXED: Readonly<Record<Exclude<FeelSignalKind, "tick" | "toggle" | "follow">, readonly FeelVoice[]>> = {
-  // Quiet rising and falling ticks for trades on the open curve.
-  "curve-buy": ONE(590, 0.18, 105, "sine", 1.32),
-  "curve-sell": ONE(590, 0.18, 105, "sine", 0.72),
+  // Background ticks when the current market paints a new trade.
+  "curve-buy": ONE(590, 0.065, 105, "sine", 1.32),
+  "curve-sell": ONE(590, 0.065, 105, "sine", 0.72),
+  // Confirmed buys climb; confirmed sells resolve down.
+  buy: [
+    { hz: 587.33, wave: "sine", gain: 0.22, durationMs: 140 },
+    { hz: 880, wave: "sine", gain: 0.18, durationMs: 190, atMs: 65 },
+  ],
+  sell: [
+    { hz: 783.99, wave: "sine", gain: 0.2, durationMs: 140 },
+    { hz: 587.33, wave: "sine", gain: 0.18, durationMs: 175, atMs: 65 },
+  ],
+  // A soft glide when the new page arrives.
+  navigate: ONE(330, 0.10, 135, "sine", 1.25),
+  // A quiet bell for a newly delivered notification.
+  notification: ONE(1046.5, 0.075, 225),
   // A press, on the way down, with the button's own scale.
   tap: ONE(880, 0.12, 45, "triangle"),
   // A held blast leaving the button.

@@ -191,15 +191,17 @@ test("a suspended context is resumed, because the first cue follows a real gestu
   synth.dispose();
 });
 
-test("turning sound off silences new notes without tearing the context down", () => {
+test("turning sound off silences the current phrase and future notes", () => {
   const fake = fakeContext();
   const synth = new FeelSynth(() => fake.context, true);
   synth.play({ kind: "tap" });
   synth.setEnabled(false);
+  assert.equal(fake.gains[0]!.gain.value, 0);
   synth.play({ kind: "tap" });
   assert.equal(fake.oscillators.length, 1);
   assert.equal(fake.closed, 0, "a reader who turns it straight back on keeps the same context");
   synth.setEnabled(true);
+  assert.equal(fake.gains[0]!.gain.value, FEEL_MASTER_GAIN);
   synth.play({ kind: "tap" });
   assert.equal(fake.oscillators.length, 2);
   synth.dispose();

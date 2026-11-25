@@ -1,6 +1,7 @@
 "use client";
 
 import type { SubscribeNotificationArrivals } from "#web/components/blast-ui/notification-feedback.ts";
+import { useFeelSound } from "#web/components/blast-feel/FeelProvider.tsx";
 import { pollInterval } from "#web/lib/query/polling.ts";
 import { useQuery, type QueryClient } from "@tanstack/react-query";
 import { useCallback, useLayoutEffect, useRef } from "react";
@@ -16,6 +17,7 @@ const sessions = new WeakMap<QueryClient, Map<string, ReturnType<typeof notifica
 /** There is no private push stream; look for delivered IDs only in a visible, active session. */
 export function useNotificationArrivals(accountId: string | null, getAccessToken: AccessTokenSource | undefined, setCount: (count: number) => void): SubscribeNotificationArrivals {
   const client = useAppQueryClient();
+  const { play } = useFeelSound();
   const listeners = useRef(new Set<() => void>());
   const owner = useRef<{ receive: ReturnType<typeof notificationArrivals>; baseline: boolean; epoch: number } | null>(null);
   useLayoutEffect(() => {
@@ -55,7 +57,10 @@ export function useNotificationArrivals(accountId: string | null, getAccessToken
       session.baseline = !active;
       // A mark-read or newer count answered while this snapshot was in flight.
       if (client.getQueryState(queryKeys.me.notifications.unread())?.dataUpdateCount === countVersion) setCount(page.unread_count);
-      if (arrived) for (const listener of listeners.current) listener();
+      if (arrived) {
+        play({ kind: "notification" });
+        for (const listener of listeners.current) listener();
+      }
       return page;
     },
   }, client);

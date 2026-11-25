@@ -69,7 +69,7 @@ export function SalePriceChartView({ history, loading, failed = false, fetching 
   const liveActivity = useContext(ChartTradeContext)?.placement === "headline";
   return (
     <div className={coinStyles.market} data-sale-market="">
-      <MarketPriceRow price={NO_VALUE} showSound={liveActivity} activity={liveActivity && <ChartLastTrade placement="headline" playSound />} />
+      <MarketPriceRow price={NO_VALUE} activity={liveActivity && <ChartLastTrade placement="headline" playSound />} />
       <ChartCard>
         <div className={cx("trading-market-actions")}>
           {trade}
