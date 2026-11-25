@@ -361,11 +361,19 @@ const TOP_HOLDERS_SQL = `WITH home_named AS (${namedWalletsSql()}),
   ORDER BY ranked.coin_type, ranked.rn`;
 assertChainReadThroughViews(TOP_HOLDERS_SQL);
 
-/** The top holders of the trading coins in `facts`, keyed by coin type. */
-export async function readTopHolders(db: ReadableDatabase, facts: readonly Pick<FactsRow, "presale_id" | "pool_id" | "launch_id" | "coin_type">[], clockMs: number, limit = HOME_TOP_HOLDERS): Promise<ReadonlyMap<string, readonly HolderRow[]>> {
-  if (facts.length === 0) return new Map();
-  const excluded = [...new Set(facts.flatMap((row) => [row.presale_id, row.pool_id, row.launch_id].filter((id): id is string => typeof id === "string")))];
-  const { rows } = await db.read<HolderRow>(`SELECT home_result.* FROM (${TOP_HOLDERS_SQL}) AS home_result`, [facts.map((row) => row.coin_type), excluded, clockMs, limit]);
+/**
+ * The top holders of the trading coins in `facts`, keyed by coin type.
+ *
+ * A tracked pool coin is skipped: `coin_balances` checks each of its rows
+ * against the coin registry, so its top ten costs a scan of every holder
+ * (ONE, about 111k rows, timed Home out). It shows no top holders until that
+ * view serves a tracked coin's largest balances only.
+ */
+export async function readTopHolders(db: ReadableDatabase, facts: readonly Pick<FactsRow, "presale_id" | "pool_id" | "launch_id" | "coin_type" | "tracked_pool_only">[], clockMs: number, limit = HOME_TOP_HOLDERS): Promise<ReadonlyMap<string, readonly HolderRow[]>> {
+  const read = facts.filter((row) => !row.tracked_pool_only);
+  if (read.length === 0) return new Map();
+  const excluded = [...new Set(read.flatMap((row) => [row.presale_id, row.pool_id, row.launch_id].filter((id): id is string => typeof id === "string")))];
+  const { rows } = await db.read<HolderRow>(`SELECT home_result.* FROM (${TOP_HOLDERS_SQL}) AS home_result`, [read.map((row) => row.coin_type), excluded, clockMs, limit]);
   const byCoin = new Map<string, HolderRow[]>();
   for (const row of rows) byCoin.set(row.coin_type, [...(byCoin.get(row.coin_type) ?? []), row]);
   return byCoin;
