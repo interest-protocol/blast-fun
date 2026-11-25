@@ -139,7 +139,7 @@ After 3 failures in a row, the tab uses SSE for 10 minutes.
 ### Sign-off
 
 - [ ] Jose: controls accepted, flag may go on.
-- [ ] Render `X-Forwarded-For` test recorded (see above).
+- [ ] Render `X-Forwarded-For` test recorded: two client IPs get separate keys, and neither a forged leading entry nor a second `X-Forwarded-For` line changes the key, on `live.blast.fun` and the onrender.com host.
 - [ ] No first-party cookie uses `Domain=blast.fun`.
 - [ ] Load test: memory per socket, the chosen cap and the instance count recorded here.
 
