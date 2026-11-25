@@ -145,7 +145,8 @@ export function FollowedBuyAlert({ alert, coinHref, onClose }: Readonly<{ alert:
         onTransitionEnd={(event) => { if (leaving && event.target === event.currentTarget && event.propertyName === "opacity") onClose(); }}
         ref={card}
       >
-        <Link className={styles.who} href={alert.actor.path}>
+        {/* The name beside it is the same link: one tab stop, one announced name. */}
+        <Link aria-hidden className={styles.who} href={alert.actor.path} tabIndex={-1}>
           <Avatar accountId={alert.actor.callsign} avatarUrl={alert.actor.avatar_url} size={28} />
         </Link>
         {/* The name has its own line and cuts off alone, so the amount, coin and cap stay readable. */}

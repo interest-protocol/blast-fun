@@ -8,7 +8,7 @@ import { accountId, activityAssets, activityOrigin, activityRow, activityWallets
 
 const databaseUrl = process.env.MISSION_CONTROL_TEST_DATABASE_URL;
 
-test("followed buy alerts: a named buy of a shown coin has a cached card; everything else is not found; followed wallets stay private", { skip: !databaseUrl }, async () => {
+test("followed buy alerts: a named buy of a shown coin has a card; everything else is a cached null; followed wallets stay private", { skip: !databaseUrl }, async () => {
   const fixture = await createActivityStreamFixture(databaseUrl!, Date.now());
   try {
     const { admin, now } = fixture;
@@ -26,10 +26,10 @@ test("followed buy alerts: a named buy of a shown coin has a cached card; everyt
     const card = (id: string, trading = true) =>
       fixture.buyAlerts(trading).alert.GET(new Request(activityOrigin + socialBuyAlertPath(id), { headers: { "x-forwarded-for": "203.0.113.7" } }), testClient("203.0.113.7"));
 
-    // A sale buy: every field, cached at the edge for 5 minutes.
+    // A sale buy: every field, cached at the edge for 10 s.
     const sale = await card("300:0:0:0");
     assert.equal(sale.status, 200);
-    assert.equal(sale.headers.get("cache-control"), "public, s-maxage=300");
+    assert.equal(sale.headers.get("cache-control"), "public, s-maxage=10");
     assert.deepEqual(await sale.json(), {
       activity_id: "300:0:0:0",
       occurred_at_ms: now - 120_000,
@@ -48,16 +48,20 @@ test("followed buy alerts: a named buy of a shown coin has a cached card; everyt
     assert.equal(curveBody.usd, null);
     assert.equal(curveBody.market_cap_usd, null);
 
-    // A private account's buy, a hidden sale, a sell, an unknown id: not found and never cached.
-    for (const id of ["150:2:3:0", "301:0:0:0", "302:0:0:0", "999:0:0:0"]) {
-      const missing = await card(id);
-      assert.equal(missing.status, 404, id);
-      assert.match(missing.headers.get("cache-control") ?? "", /no-store/, id);
+    // A private account's buy, a hidden sale, a sell, an unknown id, and any id while trades are
+    // hidden: no card, as a null the edge shares too, so every follower's read of it coalesces.
+    const misses = [...["150:2:3:0", "301:0:0:0", "302:0:0:0", "999:0:0:0"].map((id) => card(id)), card("300:0:0:0", false)];
+    for (const missing of await Promise.all(misses)) {
+      assert.equal(missing.status, 200);
+      assert.equal(missing.headers.get("cache-control"), "public, s-maxage=10");
+      assert.equal(await missing.json(), null);
     }
-    // While trades are hidden, nothing.
-    assert.equal((await card("300:0:0:0", false)).status, 404);
-    // A malformed id is a bad request.
-    assert.equal((await card("not-an-id")).status, 400);
+    // A malformed id, or a checkpoint past a bigint, is a bad request and never reaches the database.
+    for (const id of ["not-an-id", "9999999999999999999:0:0:0"]) {
+      const bad = await card(id);
+      assert.equal(bad.status, 400, id);
+      assert.match(bad.headers.get("cache-control") ?? "", /no-store/, id);
+    }
 
     // Followed wallets: signed-in only, private, and only wallets the naming rule names now.
     const wallets = (token?: string) =>

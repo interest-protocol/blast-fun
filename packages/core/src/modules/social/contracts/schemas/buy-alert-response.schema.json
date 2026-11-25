@@ -1,105 +1,114 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "type": "object",
-  "properties": {
-    "activity_id": {
-      "type": "string",
-      "pattern": "^(0|[1-9][0-9]{0,18}):(0|[1-9][0-9]{0,9}):(0|[1-9][0-9]{0,9}):(0|[1-9][0-9]{0,9})$"
+  "title": "Buy alert response",
+  "description": "GET /api/social/activity/{activity_id}/alert 200: the card, or null when the row has none (public, cached 10 s either way, so the edge coalesces every follower's read).",
+  "$id": "https://blast-v2.invalid/social/contracts/buy-alert-response.schema.json",
+  "oneOf": [
+    {
+      "type": "null"
     },
-    "occurred_at_ms": {
-      "$ref": "https://blast-v2.invalid/social/contracts/feed-item.schema.json#/$defs/millis"
-    },
-    "actor": {
-      "$ref": "https://blast-v2.invalid/social/contracts/feed-item.schema.json#/$defs/accountActor"
-    },
-    "wallet": {
-      "type": "string",
-      "pattern": "^0x[0-9a-f]{64}$",
-      "description": "The buying wallet: the hint's `actor`."
-    },
-    "coin": {
+    {
       "type": "object",
       "properties": {
-        "presale_id": {
-          "oneOf": [
-            {
-              "type": "null"
+        "activity_id": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]{0,17}):(0|[1-9][0-9]{0,9}):(0|[1-9][0-9]{0,9}):(0|[1-9][0-9]{0,9})$"
+        },
+        "occurred_at_ms": {
+          "$ref": "https://blast-v2.invalid/social/contracts/feed-item.schema.json#/$defs/millis"
+        },
+        "actor": {
+          "$ref": "https://blast-v2.invalid/social/contracts/feed-item.schema.json#/$defs/accountActor"
+        },
+        "wallet": {
+          "type": "string",
+          "pattern": "^0x[0-9a-f]{64}$",
+          "description": "The buying wallet: the hint's `actor`."
+        },
+        "coin": {
+          "type": "object",
+          "properties": {
+            "presale_id": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^0x[0-9a-f]{64}$"
+                }
+              ],
+              "description": "The sale's id; null for a launch's curve coin, whose page is its coin type."
             },
-            {
+            "coin_type": {
               "type": "string",
-              "pattern": "^0x[0-9a-f]{64}$"
-            }
-          ],
-          "description": "The sale's id; null for a launch's curve coin, whose page is its coin type."
-        },
-        "coin_type": {
-          "type": "string",
-          "pattern": "^0x[0-9a-f]{64}::[A-Za-z_][A-Za-z0-9_]{0,127}::[A-Za-z_][A-Za-z0-9_]{0,127}$"
-        },
-        "symbol": {
-          "type": "string",
-          "minLength": 1
-        },
-        "name": {
-          "type": "string"
-        },
-        "icon_url": {
-          "oneOf": [
-            {
-              "type": "null"
+              "pattern": "^0x[0-9a-f]{64}::[A-Za-z_][A-Za-z0-9_]{0,127}::[A-Za-z_][A-Za-z0-9_]{0,127}$"
             },
-            {
+            "symbol": {
               "type": "string",
               "minLength": 1
+            },
+            "name": {
+              "type": "string"
+            },
+            "icon_url": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "minLength": 1
+                }
+              ]
             }
-          ]
+          },
+          "required": [
+            "presale_id",
+            "coin_type",
+            "symbol",
+            "name",
+            "icon_url"
+          ],
+          "additionalProperties": false
+        },
+        "usd": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)\\.[0-9]{2}$"
+            }
+          ],
+          "description": "What the buy cost in USD, to the cent; null without a price."
+        },
+        "market_cap_usd": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)\\.[0-9]{2}$"
+            }
+          ],
+          "description": "The coin's market cap in USD right after the buy, to the cent; null when unknown."
         }
       },
       "required": [
-        "presale_id",
-        "coin_type",
-        "symbol",
-        "name",
-        "icon_url"
+        "activity_id",
+        "occurred_at_ms",
+        "actor",
+        "wallet",
+        "coin",
+        "usd",
+        "market_cap_usd"
       ],
-      "additionalProperties": false
-    },
-    "usd": {
-      "oneOf": [
-        {
-          "type": "null"
-        },
-        {
-          "type": "string",
-          "pattern": "^(0|[1-9][0-9]*)\\.[0-9]{2}$"
-        }
-      ],
-      "description": "What the buy cost in USD, to the cent; null without a price."
-    },
-    "market_cap_usd": {
-      "oneOf": [
-        {
-          "type": "null"
-        },
-        {
-          "type": "string",
-          "pattern": "^(0|[1-9][0-9]*)\\.[0-9]{2}$"
-        }
-      ],
-      "description": "The coin's market cap in USD right after the buy, to the cent; null when unknown."
+      "additionalProperties": false,
+      "title": "Buy alert",
+      "description": "One named buy of a shown coin, as the followed buy card shows it."
     }
-  },
-  "required": [
-    "activity_id",
-    "occurred_at_ms",
-    "actor",
-    "wallet",
-    "coin",
-    "usd",
-    "market_cap_usd"
-  ],
-  "additionalProperties": false,
-  "title": "Buy alert",
-  "description": "GET /api/social/activity/{activity_id}/alert 200: one named buy of a shown coin, as the followed buy card shows it (public, cached 5 minutes).",
-  "$id": "https://blast-v2.invalid/social/contracts/buy-alert-response.schema.json"
+  ]
 }

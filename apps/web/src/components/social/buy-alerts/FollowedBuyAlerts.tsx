@@ -46,6 +46,8 @@ export function FollowedBuyAlerts({ accountId, ownWallets, getAccessToken }: Rea
     },
     enabled: buyAlerts,
     staleTime: FOLLOWING_WALLETS_STALE_MS,
+    // Another tab or device may follow or unfollow; this tab catches up within the same window.
+    refetchInterval: FOLLOWING_WALLETS_STALE_MS,
     refetchOnWindowFocus: false,
   }, client);
   const followed = useMemo(() => new Set(wallets.data ?? []), [wallets.data]);

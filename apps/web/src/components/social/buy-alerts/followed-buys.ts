@@ -1,4 +1,4 @@
-import { socialBuyAlertPath, socialBuyAlertSchema, type SocialBuyAlert } from "@blast/core/modules/social/contracts/buy-alerts.ts";
+import { socialBuyAlertPath, socialBuyAlertResponseSchema, type SocialBuyAlert } from "@blast/core/modules/social/contracts/buy-alerts.ts";
 
 import type { FreshnessHint } from "../home/feed-freshness";
 
@@ -37,7 +37,7 @@ export type FollowedBuysDependencies = Readonly<{
   /** Uniform in [0, 1). */
   random: () => number;
   visible: () => boolean;
-  /** The trade's card, or null (`404`, a failed read, a malformed answer). */
+  /** The trade's card, or null (no card, a failed read, a malformed answer). */
   readCard: (activityId: string) => Promise<SocialBuyAlert | null>;
   show: (alert: SocialBuyAlert) => void;
 }>;
@@ -81,10 +81,10 @@ export class FollowedBuys {
   }
 }
 
-/** The public card read: the browser and the edge may answer from cache (`s-maxage=300`). */
+/** The public card read: the edge may answer from cache (`s-maxage=10`); `null` when the row has no card. */
 export async function readBuyAlertCard(activityId: string, fetchImpl: typeof fetch = fetch): Promise<SocialBuyAlert | null> {
   const response = await fetchImpl(socialBuyAlertPath(activityId), { headers: { accept: "application/json" } });
   if (!response.ok) return null;
-  const parsed = socialBuyAlertSchema.safeParse(await response.json().catch(() => null));
+  const parsed = socialBuyAlertResponseSchema.safeParse(await response.json().catch(() => undefined));
   return parsed.success ? parsed.data : null;
 }

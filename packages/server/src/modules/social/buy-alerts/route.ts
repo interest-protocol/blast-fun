@@ -41,8 +41,8 @@ export function alertActivityId(request: Request): string {
 /**
  * The followed buy alert routes (contract in `contracts/buy-alerts.ts`):
  * the caller's followed wallets (private) and one trade's card (public,
- * cached 5 minutes; `not_found` unless a named buy of a shown coin, and while
- * trades are hidden).
+ * cached 10 s; `null` unless a named buy of a shown coin, and while trades are
+ * hidden, so misses coalesce at the edge too).
  */
 export function createSocialBuyAlertRoutes(dependencies: SocialBuyAlertRouteDependencies) {
   const { kit, primary, replica } = dependencies;
@@ -55,12 +55,10 @@ export function createSocialBuyAlertRoutes(dependencies: SocialBuyAlertRouteDepe
     }),
     alert: Object.freeze({
       GET: kit.route(
-        { name: SOCIAL_BUY_ALERT_ROUTE, auth: "none", bucket: "social_read", cache: "public-settled" },
+        { name: SOCIAL_BUY_ALERT_ROUTE, auth: "none", bucket: "social_read", cache: "public-fresh" },
         async (context) => {
           const activityId = alertActivityId(context.request);
-          const alert = context.hiddenKinds.includes("trade_buy") ? null : await readBuyAlert(replica(), activityId);
-          if (alert === null) throw new SocialRouteError("not_found");
-          return context.json(alert);
+          return context.json(context.hiddenKinds.includes("trade_buy") ? null : await readBuyAlert(replica(), activityId));
         },
       ),
     }),

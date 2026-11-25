@@ -1,10 +1,10 @@
-/* The followed buy card: top centre, above the page, below sheets and toasts' layer. */
+/* The followed buy card: top centre, above the page and menus (70), below sheets (80) and toasts (90). */
 .anchor {
   position: fixed;
   top: calc(0.75rem + env(safe-area-inset-top, 0px));
   left: 0;
   right: 0;
-  z-index: 85;
+  z-index: 75;
   display: flex;
   justify-content: center;
   padding: 0 1rem;

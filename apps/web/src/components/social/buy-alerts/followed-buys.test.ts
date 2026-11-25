@@ -105,7 +105,7 @@ test("a hidden tab neither queues, reads nor shows; close stops every wait", asy
   assert.equal(h.shown.length, 0);
 });
 
-test("the card read: a 200 parses, a 404 or malformed answer is null", async () => {
+test("the card read: a card parses; no card, an error or a malformed answer is null", async () => {
   const urls: string[] = [];
   const answer = (status: number, body: unknown) => (async (url: string | URL | Request) => {
     urls.push(String(url));
@@ -113,6 +113,7 @@ test("the card read: a 200 parses, a 404 or malformed answer is null", async () 
   }) as typeof fetch;
   assert.deepEqual(await readBuyAlertCard(ID, answer(200, card())), card());
   assert.equal(urls[0], "/api/social/activity/1200%3A3%3A1%3A0/alert");
-  assert.equal(await readBuyAlertCard(ID, answer(404, { code: "not_found" })), null);
+  assert.equal(await readBuyAlertCard(ID, answer(200, null)), null, "no card");
+  assert.equal(await readBuyAlertCard(ID, answer(503, { code: "service_unavailable" })), null);
   assert.equal(await readBuyAlertCard(ID, answer(200, { ...card(), extra: 1 })), null);
 });
