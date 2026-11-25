@@ -46,8 +46,8 @@ import { decodeCursor, encodeCursor, invalidCursor } from "@blast/server/modules
  * `40 × breadth + 30 × volume + 20 × freshness + 10 × holders`, each input
  * scaled 0–1 on a log curve that stops at its cap (`RELEVANCE_CAPS`), so
  * neither one wallet's churn nor one large order can lead. Breadth weighs
- * most: many people beat big money. Freshness falls, in whole minutes, from 1
- * for a trade this minute to 0 at the window's start. Missing data is 0; a coin
+ * most: many people beat big money. Freshness falls from 1 for a trade this
+ * minute to 0 at the window's start, on a clock that ticks once a minute. Missing data is 0; a coin
  * with nothing in the window ranks by its holders alone. Selling counts exactly
  * like buying.
  *
@@ -117,9 +117,9 @@ export function relevanceScore(
   toMs: number,
 ): number {
   const { inputs, latestMs, holders } = candidate;
-  // Age in whole minutes, so a score holds still between refreshes and a cursor's position does not drift.
-  const ageMs = latestMs === null ? null : Math.floor(Math.max(0, toMs - latestMs) / MINUTE_MS) * MINUTE_MS;
-  const freshness = ageMs === null ? 0 : Math.max(0, 1 - ageMs / HOME_WINDOW_MS[window]);
+  // The clock moves in whole minutes, the same step for every coin: scores hold still within a minute and never swap order on their own.
+  const nowMs = Math.floor(toMs / MINUTE_MS) * MINUTE_MS;
+  const freshness = latestMs === null ? 0 : Math.min(1, Math.max(0, 1 - (nowMs - latestMs) / HOME_WINDOW_MS[window]));
   const score = RELEVANCE_WEIGHTS.breadth * saturating(inputs.breadth, RELEVANCE_CAPS.breadth[window])
     + RELEVANCE_WEIGHTS.volume * saturating(inputs.volume, RELEVANCE_CAPS.volume[window])
     + RELEVANCE_WEIGHTS.freshness * freshness

@@ -30,8 +30,8 @@ export function useRankMotion(view: string, { group = view, holding = false }: R
     // Read all layout before writing animations. offsetTop excludes the running transform.
     const positions = rows.map(row => ({ id: row.dataset.listRow ?? "", top: row.offsetTop }));
     const before = previous.current;
-    // Held rows still belong to the old view: keep its name so the landing reads as a view change.
-    previous.current = { view: holding && before ? before.view : view, group, rows: positions };
+    // Held rows still belong to the old view and group: the landing is judged against them.
+    previous.current = holding && before ? { ...before, rows: positions } : { view, group, rows: positions };
     const reduce = instantFeedback();
     const restored = restoring.current;
     if (!holding) restoring.current = false;

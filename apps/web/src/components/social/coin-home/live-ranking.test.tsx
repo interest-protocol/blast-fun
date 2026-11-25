@@ -88,8 +88,9 @@ test("a new sort slides rows within one list; a new page snaps; a held Back/Forw
   assert.ok(animations.all.every(animation => animation.timing.duration === 240));
   assert.deepEqual(animations.all.at(-1)!.keyframes, [{ opacity: 0 }, { opacity: 1 }]);
   const count = animations.all.length;
+  await render(["c", "a", "d"], "volume", "page-2", true);
   await render(["d", "c"], "volume", "page-2");
-  assert.equal(animations.all.length, count, "another page starts fresh");
+  assert.equal(animations.all.length, count, "another page starts fresh, even after its rows were held");
   await act(() => dom.window.dispatchEvent(new dom.window.PopStateEvent("popstate")));
   await render(["d", "c"], "relevant", "page-2", true);
   await render(["c", "d"], "relevant", "page-2");

@@ -357,6 +357,7 @@ function FollowingContent({ props, onDiscover }: Readonly<{ props: ListProps; on
         checkpoint={read.isPlaceholderData ? data.as_of?.checkpoint : undefined}
         rankings={rankings}
         viewKey={JSON.stringify([props.source, props.window, viewer.callsign, props.page, props.rows, read.isPlaceholderData])}
+        swapping={read.isPlaceholderData}
         coins={coins}
         end={listPager(props, props.page, data.pages, data.total, read.isPlaceholderData)}
         props={{ ...props, marketLoading: read.isFetching }}
