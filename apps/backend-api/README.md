@@ -240,11 +240,13 @@ Before deployment, require a verified reverse proxy with header/connection/rate
 limits and slow-client protection. Choose `BLAST_BACKEND_INGRESS_MODE=direct`
 for socket-address identity with forwarding headers ignored. In `trusted-proxy`
 mode, configure `BLAST_BACKEND_TRUSTED_PROXY_CIDRS` (at most 32 explicit IPv4 /24+
-or IPv6 /64+ ranges, or exact IPs). Only those peers may supply exactly one
-`X-Forwarded-For` address; unknown peers and absent/ambiguous addresses fail closed.
-IPv4-mapped IPv6 normalizes consistently. Private ranges are never auto-trusted.
-Render's actual proxy ownership and overwrite behavior remain an unverified
-hosted release prerequisite; do not invent ranges for it.
+ranges, /13+ inside 10.0.0.0/8, IPv6 /64+ ranges, or exact IPs). Only those peers
+are trusted, and the key is the **last** `X-Forwarded-For` entry: the one the proxy
+appended. Earlier entries come from the client and are ignored. Unknown peers and
+an absent or invalid last entry fail closed. IPv4-mapped IPv6 normalizes
+consistently. Private ranges are never auto-trusted. Measured on Render on
+2026-11-25: proxy peers sit in 10.24.0.0/13, and Render appends to a client-sent
+`X-Forwarded-For` rather than replacing it.
 
 `/v1/live` reports process liveness. `/v1/health` bounds and coalesces Redis and
 primary checks. Health is not proof of product readiness. Choose replica counts
