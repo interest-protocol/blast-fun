@@ -40,7 +40,7 @@ import type { PriceWindow } from "@blast/core/web/contracts/prices.ts";
 
 import { SalePriceChart, type MarketExtras } from "./SalePriceChart";
 import { formatMove, presaleHolderShare, priceDirection, type PriceMove } from "./sale-market-format";
-import { useChartPrice } from "#web/components/launchpad/chart/chart-live-price.ts";
+import { PresalePoolChart, usePresalePoolPrice } from "./PresalePoolChart";
 import { PoolChart } from "#web/components/social/coins/PoolChart.tsx";
 import { PresaleHolderSummary } from "./PresaleHolderSummary";
 import { ChartCard, CoinPriceFigure, MarketOverview, MarketPriceRow, useLastPrice } from "#web/components/social/bonding/CoinPageParts.tsx";
@@ -451,7 +451,7 @@ const POOL_CHART_CONTROLS = { range: "24h", interval: "5m" } as const;
 /**
  * A graduated sale's pool on the chart and market feed every coin uses. Only swaps of the verified pool are
  * candles: contributions, claims and refunds stay in the sale's own record. A pool the market read does not
- * know shows the empty state.
+ * know when the page loads keeps the sale's earlier swap chart until reload.
  */
 function SalePoolChart({ sale, market, pool }: Readonly<{
   sale: SocialPresaleDetail["presale"];
@@ -461,9 +461,9 @@ function SalePoolChart({ sale, market, pool }: Readonly<{
   const poolKey = `${pool.venue}:${pool.id}`;
   // The headline's rule, so the chart never shows a price the headline hides, or the reverse.
   const price = usePresalePoolPrice(pool);
-  const uncharted = <EmptyState title="No price history for this pool yet" />;
-  // The shared feed keys pools by the venues it indexes: a pool on any other venue has no chart.
-  if (!MIGRATOR_POOL_KEY.test(poolKey)) return uncharted;
+  const earlier = <PresalePoolChart sale={sale} market={market} pool={pool} />;
+  // The shared feed keys pools by the venues it indexes: a pool on any other venue has only the earlier chart.
+  if (!MIGRATOR_POOL_KEY.test(poolKey)) return earlier;
   return <PoolChart
     key={pool.id}
     poolKey={poolKey}
@@ -474,16 +474,8 @@ function SalePoolChart({ sale, market, pool }: Readonly<{
     initialControls={POOL_CHART_CONTROLS}
     live
     price={price}
-    uncovered={uncharted}
+    uncovered={earlier}
   />;
-}
-
-/** The pool's price from its chart, once it is newer than the pool's last change the market read saw. */
-function usePresalePoolPrice(pool: HomeCoinMarket["pool"]) {
-  const price = useChartPrice(pool ? `${pool.venue}:${pool.id}` : null);
-  const confirmedAt = price?.provenance.timestampMs;
-  // Consecutive checkpoints can share a timestamp. Require proof past the last pool mutation.
-  return pool && confirmedAt != null && confirmedAt > pool.as_of_ms ? price : null;
 }
 
 function PresaleMarketPrice({ market, move }: Readonly<{ market: HomeCoinMarket; move?: PriceMove | null }>) {

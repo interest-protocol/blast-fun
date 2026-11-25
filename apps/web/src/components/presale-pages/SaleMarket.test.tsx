@@ -341,8 +341,7 @@ test("a graduated pool shows a dash until its current close is confirmed", () =>
   client.clear();
 });
 
-const SWAP_CHART = "/api/social/prices?source=pool_swaps";
-const UNCHARTED = "No price history for this pool yet";
+const EARLIER_CHART = "/api/social/prices?source=pool_swaps";
 
 /** A graduated sale's market on a pool of `venue`, with every read answering not found. */
 async function mountGraduatedSale(t: test.TestContext, venue: string) {
@@ -370,19 +369,18 @@ async function mountGraduatedSale(t: test.TestContext, venue: string) {
     else Reflect.deleteProperty(globalThis, "EventSource");
   });
   await act(async () => root.render(withQueryClient(client, <SaleMarket nowMs={FIXTURE_NOW} sale={detail.presale} terms={detail.terms} />)));
-  await waitFor(() => document.body.textContent!.includes(UNCHARTED), "the empty state", 5_000);
+  await waitFor(() => asked.includes(EARLIER_CHART), "the earlier chart to read", 5_000);
   return { asked, shared: `/api/launchpad/market/pools/${venue}/${pool.id}/candles` };
 }
 
-test("a graduated sale charts its verified pool on the shared market read, and shows the empty state when that read does not know the pool", async (t) => {
+test("a graduated sale charts its verified pool on the shared market read, and keeps its earlier chart only when that read does not know the pool", async (t) => {
   const { asked, shared } = await mountGraduatedSale(t, "bluefin");
   assert.ok(asked.includes(shared), "the verified venue and pool id select the candles");
+  assert.ok(asked.indexOf(shared) < asked.indexOf(EARLIER_CHART), "the earlier chart reads only after the shared read answered not found");
   assert.equal(asked.filter((path) => path === shared).length, 1);
-  assert.ok(!asked.includes(SWAP_CHART), "never the database swap candles");
 });
 
-test("a graduated sale on a venue the shared market feed does not index shows the empty state", async (t) => {
+test("a graduated sale on a venue the shared market feed does not index keeps its earlier chart", async (t) => {
   const { asked, shared } = await mountGraduatedSale(t, "aftermath");
   assert.ok(!asked.includes(shared), "the shared read is never asked for a pool it cannot key");
-  assert.ok(!asked.includes(SWAP_CHART), "never the database swap candles");
 });

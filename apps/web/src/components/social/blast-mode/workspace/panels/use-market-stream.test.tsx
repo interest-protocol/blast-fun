@@ -9,6 +9,7 @@ import { handClock } from "../../../../../../test/fixtures/workspace/live-clock"
 import type { MarketCoinHistory } from "./coin-market-history";
 import { coinPollMs, useCoinRead } from "./use-coin-read";
 import { useMarketStream } from "./use-market-stream";
+import type { TradeCoinHistory } from "./trade-coin-history";
 
 const POOL = `blast_curve:0x${"11".repeat(32)}`;
 const COIN = `0x${"22".repeat(32)}::meme::MEME`;
@@ -167,3 +168,85 @@ test("a migrated coin's stream survives an empty read: its candle frames keep th
   }
 });
 
+test("a migrated coin's pool swap candles stream: swaps after the read move the candle by the server's formula", async () => {
+  const dom = new JSDOM('<div id="mount"></div>');
+  Object.assign(globalThis, { window: dom.window, document: dom.window.document, IS_REACT_ACT_ENVIRONMENT: true });
+  const root = createRoot(document.getElementById("mount")!);
+  const time = handClock(NOW);
+  const sources: Source[] = [];
+  const hub = new MarketStreamHub({
+    createSource: () => { const source = new Source(); sources.push(source); return source; },
+    schedule: () => () => {},
+    defer: queueMicrotask, random: () => 0, visible: () => true, onVisibilityChange: () => () => {},
+  });
+  const id = `0x${"33".repeat(32)}`;
+  const venue = `cetus:${id}`;
+  let checkpoint = 10;
+  let reads = 0;
+  // One 1 m candle at 2 SUI per coin from the indexed pool swaps, read at `checkpoint`.
+  const read = async (): Promise<TradeCoinHistory> => {
+    reads++;
+    return {
+      kind: "trades",
+      coin_type: COIN,
+      page: {
+        format: "ohlcv", source: "chain_pool_swaps", price_basis: "pool_swap", pool: { id, venue: "cetus" }, network: "mainnet",
+        coin_type: COIN, presale_id: null, window: "24h", interval: "1m", quote: { coin_type: "0x2::sui::SUI", symbol: "SUI" }, status: "available",
+        from_ms: BUCKET - 60_000, to_ms: NOW, candles: [{ at_ms: BUCKET, open: "2", high: "2", low: "2", close: "2", volume: "4", trades: 2 }],
+        excluded_trades: 0, truncated: false, as_of: { checkpoint, timestamp_ms: NOW + checkpoint, lag_ms: 0 },
+      },
+    };
+  };
+  // A Cetus swap of `quote` SUI atoms (9 decimals) for `meme` coin atoms (6 decimals).
+  const swap = (at: number, quote: string, meme: string) => {
+    const cursor = `${at}:1:0:0`;
+    return {
+      type: "trade", cursor, checkpoint: at, timestamp_ms: NOW + at, provenance: wire(at),
+      summary: { quote: "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI", price: "3000", inputs: { meme_decimals: "6", quote_decimals: "9" }, quote_usd: { price: "345210000", expo: -8 } },
+      trade: {
+        cursor, timestamp_ms: NOW + at, digest: "1".repeat(32), pool_key: venue, venue: "cetus", trader: null, side: "buy", kind: "swap", quote_amount: quote, meme_amount: meme, price: "3000", volume_usd: null,
+        venue_swap: { amount_in: quote, amount_out: meme, ref_amount: "0", before_sqrt_price: "1", after_sqrt_price: "1", a_to_b: false },
+      },
+    };
+  };
+  function Subject() {
+    const [live, setLive] = useState(false);
+    const base = useCoinRead(true, "coin:24h", read, undefined, coinPollMs(live));
+    const stream = useMarketStream(COIN, base.value, true, base.refresh, hub);
+    if (stream.live !== live) setLive(stream.live);
+    const page = stream.history?.kind === "trades" ? stream.history.page : null;
+    return <output>{JSON.stringify({ live, candles: page?.candles, usd: stream.price?.usd })}</output>;
+  }
+  const shown = () => JSON.parse(document.querySelector("output")!.textContent!);
+  try {
+    await act(async () => root.render(<WorkspaceLiveProvider clock={time.clock}><Subject /></WorkspaceLiveProvider>));
+    assert.equal(sources.length, 1, "the swap candles' pool joins the tab's stream");
+    await act(async () => {
+      sources[0]!.emit("status", { state: "live", pool_key: venue, checkpoint: 10, cursor: "10:0:0:0", provenance: wire(10) });
+      sources[0]!.emit("hint", { type: "hello", provenance: wire(1) });
+    });
+    assert.equal(shown().live, true);
+
+    // A candle frame for the venue pool does not concern swap candles and never needs a migration.
+    const closed = { type: "candle_closed", cursor: "11:0:0:0", checkpoint: 11, timestamp_ms: NOW + 11, provenance: wire(11), pool_key: venue, interval: "1m", candle: { bucket_start: BUCKET - 60_000, interval: "1m", open: "2", high: "2", low: "2", close: "2", volume_quote: "5", volume_meme: "3", volume_usd: null, buys: 1, sells: 0, trades: 1 } };
+    await act(async () => sources[0]!.emit("market", closed));
+    assert.equal(shown().live, true, "the stream stays up");
+
+    // 3 SUI for 1 coin: price 3 SUI per coin, volume 3 SUI, on the same 1 m candle.
+    await act(async () => sources[0]!.emit("market", swap(12, "3000000000", "1000000")));
+    assert.deepEqual(shown().candles, [{ at_ms: BUCKET, open: "2", high: "3", low: "2", close: "3", volume: "7", trades: 3 }]);
+    assert.equal(shown().usd, "10.3563", "the header prices the pool's mark: 3000 atoms per atom × 10^(6−9) = 3 SUI × $3.4521");
+    assert.equal(reads, 1, "the swap moved the chart with no read");
+
+    // A read that already holds the swap replaces it; a later swap stacks on that read.
+    checkpoint = 12;
+    await act(async () => time.advance(15_000));
+    assert.equal(reads, 2);
+    assert.deepEqual(shown().candles, [{ at_ms: BUCKET, open: "2", high: "2", low: "2", close: "2", volume: "4", trades: 2 }], "the read is the truth at its checkpoint");
+    await act(async () => sources[0]!.emit("market", swap(13, "500000000", "1000000")));
+    assert.deepEqual(shown().candles.at(-1), { at_ms: BUCKET, open: "2", high: "2", low: "0.5", close: "0.5", volume: "4.5", trades: 3 });
+  } finally {
+    await act(async () => root.unmount());
+    dom.window.close();
+  }
+});

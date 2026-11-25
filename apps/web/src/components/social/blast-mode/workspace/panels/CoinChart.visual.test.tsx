@@ -544,4 +544,63 @@ test("migration bucket shows combined volume and retains exact source volume wit
   } finally { await act(async () => root.unmount()); }
 });
 
+test("transaction candles preserve quote volume, provenance and retry in the shared plot", async () => {
+  const { root } = mount();
+  const page: import("@blast/core/modules/social/contracts/trade-candles.ts").TradeCandlePage = {
+    format: "ohlcv", source: "chain_trade_activity", price_basis: "transaction_balance_change", network: "mainnet",
+    coin_type: "coin", presale_id: "sale", window: "7d", interval: "1m", quote: { coin_type: "sui", symbol: "SUI" },
+    status: "available", from_ms: 0, to_ms: 180_000, excluded_trades: 1, truncated: false,
+    as_of: { checkpoint: 100, timestamp_ms: 180_000, lag_ms: 0 },
+    candles: [
+      { at_ms: 60_000, open: "1", high: "3", low: "1", close: "2", volume: "6", trades: 3 },
+      { at_ms: 120_000, open: "2", high: "4", low: "2", close: "3", volume: "7", trades: 2 },
+    ],
+  };
+  let retried = 0;
+  const show = async (status: "available" | "unavailable", style: "line" | "candles") => {
+    await act(async () => root.render(<CoinChart activity={{ status: "ready", value: null, checkedAt: null, unavailable: false, retry() {}, refresh() {} }} chart={{ renderer: "recharts", window: "7d", interval: "1m", style, volume: true, viewport: null }} coin={null} failed={false} history={{ kind: "trades", coin_type: "coin", page: { ...page, status } }} onChart={() => {}} pending={false} retry={() => { retried++; }} />));
+  };
+  try {
+    for (const style of ["line", "candles"] as const) {
+      await show("available", style);
+      assert.ok(document.querySelector("[data-tradingview-plot]"));
+      assert.match(document.body.textContent!, /Close price in SUI \/ coin/);
+      assert.match(document.body.textContent!, /Vol 7 SUI/);
+      assert.match(document.body.textContent!, /Last candle 1 Jan ’70/);
+      assert.ok(document.querySelector('time[datetime="1970-01-01T00:02:00.000Z"]'));
+      assert.ok(document.querySelector('button[aria-label="Inspect full last candle time: 1970-01-01 00:02:00 UTC"]'));
+      assert.match(document.body.textContent!, /Trades estimated from wallet balance changes/);
+      assert.match(document.body.textContent!, /Partial coverage: 1 trades/);
+    }
+    await show("unavailable", "candles");
+    const retry = document.querySelector<HTMLButtonElement>('[aria-label="Retry price history"]');
+    assert.ok(retry);
+    await act(async () => retry.click());
+    assert.equal(retried, 1);
+  } finally {
+    await act(async () => root.unmount());
+    document.body.innerHTML = "";
+  }
+});
 
+
+test("migration pool candles keep genuine quote volume and describe their coverage", async () => {
+  const { root } = mount();
+  const page = {
+    format: "ohlcv", source: "chain_pool_swaps", price_basis: "pool_swap", network: "mainnet",
+    pool: { id: `0x${"3".repeat(64)}`, venue: "cetus" },
+    coin_type: "coin", presale_id: "sale", window: "7d", interval: "1m", quote: { coin_type: "sui", symbol: "SUI" },
+    status: "available", from_ms: 0, to_ms: 180_000, excluded_trades: 1, truncated: false,
+    as_of: { checkpoint: 100, timestamp_ms: 180_000, lag_ms: 0 },
+    candles: [{ at_ms: 60_000, open: "1", high: "3", low: "1", close: "2", volume: "6", trades: 3 }],
+  } as const;
+  try {
+    await act(async () => root.render(<CoinChart activity={{ status: "ready", value: null, checkedAt: null, unavailable: false, retry() {}, refresh() {} }} chart={{ renderer: "recharts", window: "7d", interval: "1m", style: "candles", volume: true, viewport: null }} coin={null} failed={false} history={{ kind: "trades", coin_type: "coin", page: { ...page, candles: [...page.candles] } }} onChart={() => {}} pending={false} retry={() => {}} />));
+    assert.ok(document.querySelector("[data-tradingview-plot]"));
+    assert.match(document.body.textContent!, /Vol 6 SUI/);
+    assert.match(document.body.textContent!, /Migration pool trades/);
+    assert.match(document.body.textContent!, /Trading in other pools is excluded/);
+    assert.match(document.body.textContent!, /Partial coverage: 1 swaps/);
+    assert.doesNotMatch(document.body.textContent!, /Trades estimated from wallet balance changes/);
+  } finally { await act(async () => root.unmount()); document.body.innerHTML=""; }
+});
