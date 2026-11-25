@@ -109,7 +109,11 @@ export function ListHead({ sort, defaultSort = "relevant", onSort, window }: Pic
  */
 export function CoinList({ coins, props, result, empty = false, end, viewKey, rankings, checkpoint = 0, buy, swapping = false }: Readonly<{ coins: readonly RankedCoin[]; props: ListProps; result?: ReactNode; empty?: boolean; end?: ReactNode; viewKey?: string; rankings?: Rankings; checkpoint?: number; buy?: Readonly<{ coinKey: string; amount: string }>; /** The previous view's rows, held while the new view loads. */ swapping?: boolean }>) {
   // A new sort or filter re-ranks the same list, so its rows slide; another source or page starts fresh.
-  const list = useRankMotion(JSON.stringify([viewKey ?? [props.source, props.window, props.sort, props.page, props.rows], rankings?.motionVersion]), JSON.stringify([props.source, props.page, props.rows]));
+  // `motionVersion` is in both keys: a blur or keyboard update makes the next reorder land without motion.
+  const list = useRankMotion(JSON.stringify([viewKey ?? [props.source, props.window, props.sort, props.page, props.rows], rankings?.motionVersion]), {
+    group: JSON.stringify([props.source, props.page, props.rows, rankings?.motionVersion]),
+    holding: swapping,
+  });
   const hasResult = Boolean(result);
   const latest = useHomePrices(coins, props.streamPrices === true && !hasResult);
   // Home shows new-coin admissions in the Coins header.
