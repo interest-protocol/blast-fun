@@ -211,6 +211,9 @@ test("WP2: the CSP never admits blast-infra: the browser reads market data only 
   const connect = createContentSecurityPolicy({ nonce }).split("; ").find((part) => part.startsWith("connect-src "))!.split(" ");
   assert.ok(connect.includes("'self'"), "the same-origin /api/launchpad/market routes");
   assert.ok(!connect.some((source) => /infra|api\.blast\.fun|127\.0\.0\.1|localhost/.test(source)), connect.join(" "));
+  const live = connectSources(createContentSecurityPolicy({ nonce, liveSocketOrigin: "wss://live.blast.fun" }));
+  assert.deepEqual(live.filter((source) => !connect.includes(source)), ["wss://live.blast.fun"], "the direct socket's origin only");
+  assert.throws(() => createContentSecurityPolicy({ nonce, liveSocketOrigin: "wss://*.blast.fun" }), /plain origin/);
   // The policy takes no market origin at all, whatever the environment holds.
   const environment = { BLAST_INFRA_ORIGIN: process.env.BLAST_INFRA_ORIGIN, NEXT_PUBLIC_BLAST_INFRA_ORIGIN: process.env.NEXT_PUBLIC_BLAST_INFRA_ORIGIN };
   process.env.BLAST_INFRA_ORIGIN = "https://infra.blast.test";

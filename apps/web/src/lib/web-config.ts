@@ -49,7 +49,16 @@ export type WebConfig = Readonly<{
   presale: PresaleConfig;
   /** `NODE_ENV` is development: the CSP allows the dev server's eval and websocket. */
   development: boolean;
+  /** The direct market socket, or null when it is off and every tab uses the SSE relay. */
+  liveSocket: LiveSocketConfig | null;
 }>;
+
+/**
+ * `BLAST_LIVE_SOCKET_URL` (the hints process's `wss://…/v1/socket`) with
+ * `BLAST_LIVE_SOCKET_ROLLOUT_PERCENT` (0–100, default 0). Tickets are signed
+ * with the hints gateway secret, so the socket needs the hints upstream.
+ */
+export type LiveSocketConfig = Readonly<{ url: string; origin: string; rolloutPercent: number }>;
 
 export function parseWebConfig(environment: Environment): WebConfig {
   const relay = parseRelayConfig(environment);
@@ -66,7 +75,22 @@ export function parseWebConfig(environment: Environment): WebConfig {
     presaleDeployment: readPresaleDeploymentIdentity(environment),
     presale: readPresaleConfig(environment),
     development: environment.NODE_ENV === "development",
+    liveSocket: liveSocketConfig(environment, relay),
   };
+}
+
+function liveSocketConfig(environment: Environment, relay: RelayConfig): LiveSocketConfig | null {
+  const raw = environment.BLAST_LIVE_SOCKET_URL?.trim();
+  if (!raw) return null;
+  const url = URL.canParse(raw) ? new URL(raw) : null;
+  const local = url?.protocol === "ws:" && (url.hostname === "127.0.0.1" || url.hostname === "localhost");
+  if (!url || (url.protocol !== "wss:" && !local) || url.pathname !== "/v1/socket" || url.search || url.hash || url.username || url.password) {
+    throw new Error("BLAST_LIVE_SOCKET_URL must be a wss:// URL ending in /v1/socket.");
+  }
+  if (relay.hints === null) throw new Error("BLAST_LIVE_SOCKET_URL needs BLAST_BACKEND_HINTS_ORIGIN and its gateway secret.");
+  const percent = environment.BLAST_LIVE_SOCKET_ROLLOUT_PERCENT?.trim() || "0";
+  if (!/^(100|[1-9]?\d)$/.test(percent)) throw new Error("BLAST_LIVE_SOCKET_ROLLOUT_PERCENT must be an integer from 0 to 100.");
+  return { url: url.href, origin: url.origin, rolloutPercent: Number(percent) };
 }
 
 function gateConfig(environment: Environment, production: boolean): GateConfig {
