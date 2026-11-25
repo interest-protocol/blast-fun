@@ -65,3 +65,36 @@ test("live ranking preserves focus and history while adopting incoming changes, 
   await render([coin("c"), coin("a")]);
   assert.deepEqual(ids(), ["c", "a"]);
 });
+
+function Grouped({ ids, view, group, holding = false }: { ids: readonly string[]; view: string; group: string; holding?: boolean }) {
+  const ref = useRankMotion(view, { group, holding });
+  return <ol ref={ref}>{ids.map(id => <li key={id} data-list-row={id} ref={row => {
+    if (row) Object.defineProperty(row, "offsetTop", { configurable: true, get: () => Array.from(row.parentElement!.children).indexOf(row) * 60 });
+  }}>{id}</li>)}</ol>;
+}
+
+test("a new sort slides rows within one list; a new page snaps; a held Back/Forward stays still until its rows land", async t => {
+  const host = dom.document.createElement("div");
+  dom.document.body.append(host);
+  const root = createRoot(host);
+  t.after(async () => { await act(() => root.unmount()); host.remove(); });
+  const animations = recordAnimations();
+  const render = (ids: readonly string[], view: string, group: string, holding = false) => act(() => root.render(<Grouped group={group} holding={holding} ids={ids} view={view} />));
+  await render(["a", "b", "c"], "relevant", "page-1");
+  await render(["a", "b", "c"], "volume", "page-1", true);
+  assert.equal(animations.all.length, 0, "the held rows do not move while the new view loads");
+  await render(["c", "a", "d"], "volume", "page-1");
+  assert.equal(animations.all.length, 3);
+  assert.ok(animations.all.every(animation => animation.timing.duration === 240));
+  assert.deepEqual(animations.all.at(-1)!.keyframes, [{ opacity: 0 }, { opacity: 1 }]);
+  const count = animations.all.length;
+  await render(["c", "a", "d"], "volume", "page-2", true);
+  await render(["d", "c"], "volume", "page-2");
+  assert.equal(animations.all.length, count, "another page starts fresh, even after its rows were held");
+  await act(() => dom.window.dispatchEvent(new dom.window.PopStateEvent("popstate")));
+  await render(["d", "c"], "relevant", "page-2", true);
+  await render(["c", "d"], "relevant", "page-2");
+  assert.equal(animations.all.length, count, "Back/Forward lands without motion after its load");
+  await render(["d", "c"], "volume", "page-2");
+  assert.equal(animations.all.length, count + 2, "the next sort change slides again");
+});

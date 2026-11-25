@@ -34,8 +34,6 @@ export type HomeViewState = Readonly<{
   page: number;
 }>;
 
-export type HomeFeedState = Omit<HomeViewState, "sort"> & Readonly<{ sort: HomeSort | "mixed" }>;
-
 export const HOME_DEFAULT_VIEW: HomeViewState = Object.freeze({
   source: "discover",
   sort: "held",
@@ -46,7 +44,8 @@ export const HOME_DEFAULT_VIEW: HomeViewState = Object.freeze({
   page: 1,
 });
 
-export const HOME_DEFAULT_FEED: HomeFeedState = Object.freeze({ ...HOME_DEFAULT_VIEW, sort: "mixed" });
+/** Home opens on Relevant: the blended score of traders, volume, recency and holders (`home/rank.ts`). */
+export const HOME_DEFAULT_FEED: HomeViewState = Object.freeze({ ...HOME_DEFAULT_VIEW, sort: "relevant" });
 
 /** The minimum-participants choices the filter offers. */
 export const MIN_PARTICIPANT_CHOICES = [0, 2, 5, 10] as const;
@@ -65,7 +64,7 @@ function pageOf(raw: string | null): number {
   return value <= HOME_PAGE_LAST ? value : 1;
 }
 
-export function viewStateOf(params: URLSearchParams): HomeFeedState {
+export function viewStateOf(params: URLSearchParams): HomeViewState {
   const source = params.get(KEYS.source);
   const sort = params.get(KEYS.sort);
   const window = params.get(KEYS.window);
@@ -80,7 +79,7 @@ export function viewStateOf(params: URLSearchParams): HomeFeedState {
   };
   const page = pageOf(params.get(KEYS.page));
   // Older ranked links omitted `sort=held`, including links to later pages.
-  const ranked = sort !== "mixed" && hasRankedQueryFields({ ...filters, page });
+  const ranked = hasRankedQueryFields({ ...filters, page });
   return {
     source: isHomeSource(source) ? source : HOME_DEFAULT_VIEW.source,
     sort: isHomeSort(sort) ? sort : ranked ? HOME_DEFAULT_VIEW.sort : HOME_DEFAULT_FEED.sort,
@@ -90,7 +89,7 @@ export function viewStateOf(params: URLSearchParams): HomeFeedState {
 }
 
 /** The query string of a view state, `""` for the default view. */
-export function viewSearchOf(state: HomeFeedState): string {
+export function viewSearchOf(state: HomeViewState): string {
   const params = new URLSearchParams();
   if (state.source !== HOME_DEFAULT_VIEW.source) params.set(KEYS.source, state.source);
   if (state.sort !== HOME_DEFAULT_FEED.sort || hasRankedQueryFields(state)) params.set(KEYS.sort, state.sort);
@@ -108,20 +107,17 @@ function hasRankedQueryFields(state: Pick<HomeViewState, "age" | "minParticipant
 }
 
 /** Whether two states show the same list apart from its page (a new list starts on page 1; see `withView`). */
-export function sameListView(a: HomeFeedState, b: HomeFeedState): boolean {
+export function sameListView(a: HomeViewState, b: HomeViewState): boolean {
   return a.source === b.source && a.sort === b.sort && a.window === b.window && a.minParticipants === b.minParticipants && a.age === b.age && a.tradable === b.tradable;
 }
 
 /** The next state for a change: any change but the page itself starts the list on page 1. */
-export function withView(current: HomeFeedState, next: HomeFeedState): HomeFeedState {
+export function withView(current: HomeViewState, next: HomeViewState): HomeViewState {
   return sameListView(current, next) ? next : { ...next, page: 1 };
 }
 
 /** The Discover read a view state asks for, at the device's rows per page. */
-export function discoverQueryOf(state: HomeFeedState, rows: number = HOME_PAGE_DEFAULT): HomeQuery {
-  if (state.sort === "mixed") {
-    return { ...HOME_DEFAULT_QUERY, window: "1h", limit: 20, traction: true };
-  }
+export function discoverQueryOf(state: HomeViewState, rows: number = HOME_PAGE_DEFAULT): HomeQuery {
   return { ...HOME_DEFAULT_QUERY, sort: state.sort, window: state.window, minParticipants: state.minParticipants, age: state.age, tradable: state.tradable, limit: rows, page: state.page };
 }
 
@@ -135,9 +131,9 @@ export function controlsApply(source: HomeSource): boolean {
   return source === "discover";
 }
 
-export const SORT_LABELS: Readonly<Record<HomeFeedState["sort"], string>> = { mixed: "Discover", relevant: "Relevant", trending: "Volume", newest: "Newest", held: "Most held" };
+export const SORT_LABELS: Readonly<Record<HomeSort, string>> = { relevant: "Relevant", trending: "Volume", newest: "Newest", held: "Most held" };
 export const SORT_HINTS: Readonly<Partial<Record<HomeSort, string>>> = {
-  relevant: "Unique participants, then activity (up to three trades per person), then recency",
+  relevant: "Unique traders first, then dollar volume, how recent the last trade was, and holders",
   trending: "Trade and presale dollar volume, then unique participants",
 };
 export const WINDOW_LABELS: Readonly<Record<HomeWindow, string>> = { "1h": "1h", "24h": "24h" };
