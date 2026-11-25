@@ -31,7 +31,7 @@ import { homeCoinsPageReadSchema } from "@blast/core/modules/social/contracts/ho
 import type { HomeCoinMarket, HomeHoldersPage } from "@blast/core/modules/social/contracts/coin-market.ts";
 import { CREATE_TEST_SUI_QUOTE_TYPE } from "@blast/core/modules/social/contracts/create.ts";
 import { INDEXED_POOL_COINS } from "@blast/core/modules/social/portfolio/core-coins.ts";
-import { readCoinFacts } from "@blast/server/modules/social/home/coins.ts";
+import { readCoinFacts, type HomeDiscoverBase } from "@blast/server/modules/social/home/coins.ts";
 import { createSocialHomeRoutes, type SocialHomeRouteDependencies } from "@blast/server/modules/social/home/route.ts";
 import { optionalSource } from "@blast/server/modules/social/optional-source.ts";
 import type { TraderPortfolioRead } from "@blast/server/modules/social/home/traders.ts";
@@ -295,6 +295,7 @@ async function withFixture(run: (fixture: Fixture) => Promise<void>, options: Re
     const readNow = () => now + (options.elapsedMs?.() ?? 0);
     const caches = options.cached ? {
       discover: createReadCache<HomeCoinsPage>(10_000, 64, readNow),
+      discoverBase: createReadCache<HomeDiscoverBase>(10_000, 6, readNow),
       coins: createReadCache<HomeCoinsByIds>(10_000, 64, readNow),
       portfolios: createReadCache<ReadonlyMap<string, TraderPortfolioRead>>(10_000, 64, readNow),
     } : undefined;
@@ -351,6 +352,9 @@ test("Home origin cache spends the edge freshness budget and keeps trade-filtere
     const hidden = await ok<HomeCoinsPage>(await discover("", { trades: false }), "home-coins-page");
     assert.notDeepEqual(hidden.coins, first.coins, "Trade-hidden requests must not reuse visible trade results");
     await admin.query("UPDATE blast_infra_fixture.presales SET sale_symbol = 'REFRESHED' WHERE presale_id = $1", [P.orbit]);
+    // Another sort of the same window reuses the window read: same coins, no new read.
+    const volume = await ok<HomeCoinsPage>(await discover("?sort=trending"), "home-coins-page");
+    assert.equal(volume.coins.find((coin) => coin.presale_id === P.orbit)?.symbol, first.coins.find((coin) => coin.presale_id === P.orbit)?.symbol);
     elapsed = 11_000;
     const refreshed = await ok<HomeCoinsPage>(await discover(), "home-coins-page");
     assert.equal(refreshed.coins.find((coin) => coin.presale_id === P.orbit)?.symbol, "REFRESHED");
@@ -1012,11 +1016,11 @@ test("Discover and saved coins fill missing price and supply from tracked pools 
   let snapshots = 0;
   let poolPricesAvailable = true;
   return withFixture(async ({ admin, coins, discover, market, now }) => {
+    // The window read every sort shares fills catalog FDV from one snapshot read, and the page reuses it.
     await ok<HomeCoinsPage>(await discover("?page=1&limit=5&sort=newest"), "home-coins-page");
-    assert.equal(snapshots, 0);
-    // Relevant ranks idle catalog coins by FDV, so it reads the snapshot once and the page reuses it.
-    await ok<HomeCoinsPage>(await discover("?page=1&limit=5"), "home-coins-page");
     assert.equal(snapshots, 1);
+    await ok<HomeCoinsPage>(await discover("?page=1&limit=5"), "home-coins-page");
+    assert.equal(snapshots, 2);
     const page = await ok<HomeCoinsPage>(await discover("?page=2&limit=5&mobile_market=1&live_inputs=1&rolling_change=1&dex_volume=1"), "home-coins-page");
     // ONE's snapshot FDV ($12.50) lifts it to page 1, above the idle coins with no value.
     assert.deepEqual([page.page, page.pages, page.total, symbols(page.coins)], [2, 2, 10, ["QUIET", "HELMET", "BLAST", "Wheels", "MANIFEST"]]);
@@ -1035,7 +1039,7 @@ test("Discover and saved coins fill missing price and supply from tracked pools 
     assert.deepEqual([oneRow.live_inputs?.total_supply, oneRow.live_inputs?.circulating_supply], ["20000000000", "15000000000"]);
     assert.equal(oneRow.change_24h_bps, null);
     assert.equal(oneRow.live_inputs?.price_checkpoint, undefined);
-    assert.equal(snapshots, 3);
+    assert.equal(snapshots, 4);
     assert.deepEqual([manifestRow.presale_id, manifestRow.sale, manifestRow.launch_id, manifestRow.launched_ms], [null, null, null, null]);
     assert.deepEqual([manifestRow.price_usd, manifestRow.holders, manifestRow.fdv_usd, manifestRow.spark], [null, null, null, []]);
     assert.equal(manifestRow.dex_volume, undefined);

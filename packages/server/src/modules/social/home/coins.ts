@@ -740,9 +740,9 @@ function recentPageBuys(sides: readonly SideRow[], coins: readonly HomeCoin[]): 
  * the chain views, so those orders read the shared tracked pool snapshot
  * (one process-cached read for every catalog coin).
  */
-async function withTrackedFdv(candidates: readonly Candidate[], query: HomeQuery, context: HomeReadContext): Promise<{ candidates: readonly Candidate[]; markets?: TrackedMarkets }> {
+async function withTrackedFdv(candidates: readonly Candidate[], context: HomeReadContext): Promise<{ candidates: readonly Candidate[]; markets?: TrackedMarkets }> {
   const missing = candidates.some((candidate) => candidate.facts.tracked_pool_only && candidate.fdvUsd === null);
-  if (!missing || !context.trackedPoolMarket || (query.sort !== "relevant" && query.sort !== "trending")) return { candidates };
+  if (!missing || !context.trackedPoolMarket) return { candidates };
   const markets = await optionalSource("tracked_pool_market", context.trackedPoolMarket, {});
   return { markets, candidates: candidates.map((candidate) => {
     const market = candidate.facts.tracked_pool_only && candidate.fdvUsd === null ? markets[candidate.coinType] : undefined;
@@ -752,46 +752,85 @@ async function withTrackedFdv(candidates: readonly Candidate[], query: HomeQuery
   }) };
 }
 
-/** One Discover page (contract in `contracts/home.ts`). */
-export async function readHomeDiscover(db: ReadableDatabase, query: HomeQuery, context: HomeReadContext): Promise<HomeCoinsPage> {
-  const cursor = query.cursor === null ? null : decodeHomeCursor(query.cursor, query.sort);
+/**
+ * Everything a Discover page needs that does not depend on its sort, filters
+ * or page: the window's facts, sides, counts and every non-dust candidate,
+ * already scored (DEX volume and tracked FDV folded in). Switching between
+ * Trending, Volume, New and Held reuses one of these per window instead of
+ * reading the window again, so a switch costs one in-memory sort plus the
+ * page's own details.
+ */
+export type HomeDiscoverBase = Readonly<{
+  asOf: NonNullable<Awaited<ReturnType<typeof readAsOf>>>;
+  bounds: HomeBounds;
+  span: HomeSpan;
+  kinds: readonly string[];
+  sides: readonly SideRow[];
+  candidates: readonly Candidate[];
+  dexVolumes?: ReadonlyMap<string, HomeDexVolume>;
+  trackedMarkets?: TrackedMarkets;
+}>;
+
+/** The key a {@link HomeDiscoverBase} is shared under: only what changes its contents. */
+export function homeDiscoverBaseKey(window: HomeWindow, context: HomeReadContext): string {
+  return JSON.stringify([window, context.hiddenKinds, Boolean(context.includeDexVolume), Boolean(context.includeRecentBuys),
+    // The facts read's prices change with these (`factsSql`).
+    Boolean(context.includeLiveInputs), Boolean(context.includeRollingChange)]);
+}
+
+export async function readHomeDiscoverBase(db: ReadableDatabase, window: HomeWindow, context: HomeReadContext): Promise<HomeDiscoverBase> {
   const [bounds, asOf] = await Promise.all([readHomeBounds(db, context.nowMs), readAsOf(db)]);
   if (!asOf) throw new SocialRouteError("service_unavailable");
-  const span = homeSpan(query.window, bounds);
+  const span = homeSpan(window, bounds);
   const kinds = visibleKinds(context.hiddenKinds);
   const scope: SaleScope = { kind: "discover" };
-  const actors: ActorScope = { kind: "everyone" };
-  const [facts, sides] = await Promise.all([
-    readCoinFacts(db, scope, span, context),
-    readSides(db, { span, bounds, kinds, sales: scope, actors }, context.includeRecentBuys ? context.nowMs - HOME_RECENT_BUY_MS : undefined),
+  const factsRead = readCoinFacts(db, scope, span, context);
+  // Curve targets need only the facts, so they load while the sides still scan.
+  const targetsRead = factsRead.then((facts) => {
+    const launchIds = [...facts.values()].flatMap((row) => row.presale_id === null && row.launch_id !== null ? [row.launch_id] : []);
+    return launchIds.length > 0 && context.curveTargets ? context.curveTargets(launchIds) : new Map<string, string>();
+  });
+  const [facts, sides, targets] = await Promise.all([
+    factsRead,
+    readSides(db, { span, bounds, kinds, sales: scope, actors: { kind: "everyone" } }, context.includeRecentBuys ? context.nowMs - HOME_RECENT_BUY_MS : undefined),
+    targetsRead,
   ]);
   const counts = countsOf(sides);
-  const launchIds = [...facts.values()].flatMap((row) => row.presale_id === null && row.launch_id !== null ? [row.launch_id] : []);
-  const targets = launchIds.length > 0 && context.curveTargets ? await context.curveTargets(launchIds) : new Map<string, string>();
-  const eligible = [...facts.values()]
+  const live = [...facts.values()]
     .map((row) => candidateOf(row, counts.get(row.presale_id ?? row.coin_type), span))
     .filter((candidate) => !isBlastDust(candidate.facts, {
       marketCapUsd: candidate.marketCapUsd,
       graduationTarget: candidate.facts.launch_id === null ? null : targets.get(candidate.facts.launch_id) ?? null,
-    }) && passesFilters(query, {
-      participants: candidate.inputs.breadth,
-      launchedMs: candidate.launchedMs,
-      tradable: tradesInApp(candidate.facts.venue) && (candidate.facts.venue.toLowerCase() !== "aftermath" || candidate.facts.pool_id !== null),
-      nowMs: bounds.clockMs,
     }));
-  const { candidates, markets: trackedMarkets } = await withTrackedFdv(eligible, query, context);
-  // Volume-based sorts (Relevant weighs volume too) need the same aggregate as the cell for all eligible candidates.
-  const dexVolumes = context.includeDexVolume && query.sort !== "newest"
-    ? await readDexVolumes(db, candidates.map(({ facts }) => facts), span.window, bounds, kinds)
-    : undefined;
-  const rankedCandidates = candidates.map(candidate => {
+  const [{ candidates, markets: trackedMarkets }, dexVolumes] = await Promise.all([
+    withTrackedFdv(live, context),
+    context.includeDexVolume ? readDexVolumes(db, live.map(({ facts }) => facts), span.window, bounds, kinds) : undefined,
+  ]);
+  // Volume (and Relevant, which weighs it) ranks by the same aggregate the cell shows.
+  const scored = candidates.map((candidate) => {
     const volume = dexVolumes?.get(candidate.coinType);
     if (!volume) return candidate;
     const inputs = { ...candidate.inputs, volume: Number(volume.usd ?? 0) };
     return { ...candidate, inputs, score: relevanceScore({ ...candidate, inputs }, span.window, span.toMs) };
   });
-  const { page, nextCursor, pageNumber, pages, total, ranked } = pageOf(rankedCandidates, query.sort, cursor, query.limit, query.page);
-  const coins = await assembleCoins(db, { candidates: page, sides, span, bounds, kinds, actors, scope: "pool", context, dexVolumes, trackedMarkets });
+  return { asOf, bounds, span, kinds, sides, candidates: scored, dexVolumes, trackedMarkets };
+}
+
+/**
+ * One Discover page (contract in `contracts/home.ts`), from a shared window
+ * read when one is given. A bad cursor fails before any read starts.
+ */
+export async function readHomeDiscover(db: ReadableDatabase, query: HomeQuery, context: HomeReadContext, base?: () => Promise<HomeDiscoverBase>): Promise<HomeCoinsPage> {
+  const cursor = query.cursor === null ? null : decodeHomeCursor(query.cursor, query.sort);
+  const { asOf, bounds, span, kinds, sides, candidates, dexVolumes, trackedMarkets } = await (base ? base() : readHomeDiscoverBase(db, query.window, context));
+  const eligible = candidates.filter((candidate) => passesFilters(query, {
+    participants: candidate.inputs.breadth,
+    launchedMs: candidate.launchedMs,
+    tradable: tradesInApp(candidate.facts.venue) && (candidate.facts.venue.toLowerCase() !== "aftermath" || candidate.facts.pool_id !== null),
+    nowMs: bounds.clockMs,
+  }));
+  const { page, nextCursor, pageNumber, pages, total, ranked } = pageOf(eligible, query.sort, cursor, query.limit, query.page);
+  const coins = await assembleCoins(db, { candidates: page, sides, span, bounds, kinds, actors: { kind: "everyone" }, scope: "pool", context, dexVolumes, trackedMarkets });
   const recentBuys = context.includeRecentBuys ? recentPageBuys(sides, coins) : [];
   return { coins, page: pageNumber, pages, total, ...(query.ranked ? { ranked } : {}), next_cursor: nextCursor, window: query.window, clock_ms: bounds.clockMs, as_of: asOf,
     ...(recentBuys.length > 0 && { recent_buys: recentBuys }) };
