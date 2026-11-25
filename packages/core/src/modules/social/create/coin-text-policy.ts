@@ -37,7 +37,7 @@ export function coinTextIssues(text: CoinText): { path: CoinTextField; message: 
  * A word starting with one of these prefixes, or the full name anywhere ("TheAdeniyi", "eman abio").
  */
 const HIGHLIGHT_HIDDEN_PREFIXES = ["aden", "eman", "abio"];
-const HIGHLIGHT_HIDDEN_NAMES = ["adeniyi", "emanabio", "abiodun"];
+const HIGHLIGHT_HIDDEN_NAMES = ["adeniyi", "emanabio", "abiodun", "theaden", "theeman"];
 
 /** Whether the auto-picked Home and Bonding highlight may show this coin: no slur and no founder name. */
 export function isHighlightable(coin: Readonly<{ name: string | null; symbol: string | null }>): boolean {
@@ -63,6 +63,7 @@ function hasBlockedWord(text: string): boolean {
 function normalizeCoinText(text: string): string {
   return text.normalize("NFKD").toLowerCase()
     .replace(/[\p{M}\p{Cf}]/gu, "")
+    .replaceAll("0", "o")
     .replaceAll("1", "i")
     .replaceAll("3", "e")
     .replaceAll("4", "a");

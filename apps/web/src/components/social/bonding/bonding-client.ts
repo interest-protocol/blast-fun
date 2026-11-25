@@ -6,6 +6,7 @@ import { gatedFetch } from "#web/lib/api-gate-client.ts";
 import { parseDiscoveryResponse } from "@blast/core/modules/launchpad-discovery/rows.ts";
 import { GRADUATED_MARKET_CAP_PATH, type BondingSort } from "@blast/core/modules/launchpad-discovery/bonding.ts";
 import { launchDetailsPath, parseLaunchDetails } from "@blast/core/modules/launchpad-coin/transfer.ts";
+import { isHighlightable } from "@blast/core/modules/social/create/coin-text-policy.ts";
 import { discoveryNext, discoveryRows, readVisiblePage, withoutTestLaunches } from "#web/lib/test-launches.ts";
 
 const DISCOVERY_PATH = "/api/launchpad/discovery";
@@ -17,8 +18,9 @@ export function pageOf(answer: DiscoveryResponse | undefined) {
     : null;
 }
 
+/** Home's highlighted curve: the closest live one, never a slur or a coin about the founder. */
 export function closestLiveCurve(answer: DiscoveryResponse | undefined) {
-  return pageOf(answer)?.rows.find((row) => row.lifecycle === "live" && row.progressBps !== null);
+  return pageOf(answer)?.rows.find((row) => row.lifecycle === "live" && row.progressBps !== null && isHighlightable(row));
 }
 
 async function fetchBondingCatalog(path: string, signal?: AbortSignal) {
