@@ -282,5 +282,5 @@
 .filterClose { grid-column: 1 / -1; justify-self: end; }
 
 @media (max-width: 760px) {
-  .filterInterval[data-line-interval] { display: none; }
+  .chart:not([data-market-chart]) .filterInterval[data-line-interval] { display: none; }
 }

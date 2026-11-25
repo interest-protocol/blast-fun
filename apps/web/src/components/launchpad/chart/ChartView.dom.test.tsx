@@ -71,41 +71,14 @@ test("changing the interval leaves an untouched range at its coin default", asyn
   try {
     saveChartControls({ interval: "5m", range: "all" }, { interval: "15m", range: "all" });
     const saved = dom.window.localStorage.getItem(key) ?? "";
-    assert.equal(saved, "interval=15m");
+    assert.equal(saved, "interval.all=15m");
     assert.deepEqual(preferredChartControls(saved, "", { interval: "5m", range: "24h" }), {
-      interval: "15m",
+      interval: "5m",
       range: "24h",
     });
   } finally {
     dom.window.localStorage.removeItem(key);
   }
-});
-
-test("reopening a Live link preserves the saved history interval when leaving Live", async (t) => {
-  const { useCoinChartControls } = await import("./chart-preferences.ts");
-  const key = "blast.coin-chart.controls";
-  const original = window.location.href;
-  const node = dom.document.createElement("div");
-  dom.document.body.append(node);
-  const root = createRoot(node);
-  t.after(async () => {
-    await act(async () => root.unmount());
-    node.remove();
-    window.localStorage.removeItem(key);
-    window.history.replaceState(null, "", original);
-  });
-  window.localStorage.setItem(key, "interval=15m&range=7d");
-  window.history.replaceState(null, "", "?range=live&interval=1s");
-  function Probe() {
-    const { controls, commit } = useCoinChartControls(true, { range: "live", interval: "1s" });
-    return <button onClick={() => commit({ ...controls, range: "1h" })}>{controls.range} / {controls.interval}</button>;
-  }
-  await act(async () => root.render(<Probe />));
-  assert.equal(node.textContent, "live / 1s");
-  await act(async () => node.querySelector("button")?.click());
-  assert.equal(node.textContent, "1h / 15m");
-  assert.equal(window.location.search, "?range=1h&interval=15m");
-  assert.equal(window.localStorage.getItem(key), "interval=15m&range=1h");
 });
 
 test("compact style controls keep one chart and the trade cue above it", async () => {

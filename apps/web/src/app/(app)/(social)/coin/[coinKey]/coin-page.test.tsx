@@ -375,11 +375,11 @@ test("a direct link's chart interval and range reach the chart, so a refresh rea
     const details = JSDOM.fragment(renderToStaticMarkup(linked)).querySelector('button[aria-label="Source details"]');
     assert.equal(details, null);
     const plain = await chart({ interval: "bogus" });
-    assert.deepEqual(plain.props.controls, { interval: "5m", range: "24h" });
-    assert.deepEqual((await chart({ range: "all" })).props.controls, { interval: "5m", range: "all" });
+    assert.deepEqual(plain.props.controls, { interval: "15m", range: "24h" });
+    assert.deepEqual((await chart({ range: "all" })).props.controls, { interval: "1w", range: "all" });
     assert.deepEqual((await chart({ range: "live", interval: "1h" })).props.controls, { interval: "1s", range: "live" });
     Object.assign(fixture.state, { indexed: "live", fresh: "live" });
-    assert.deepEqual((await chart({})).props.controls, { interval: "5m", range: "all" });
+    assert.deepEqual((await chart({})).props.controls, { interval: "1w", range: "all" });
   } finally {
     Object.assign(fixture.state, { indexed: "live", fresh: "live", infra: "ok", venue: "ok" });
   }

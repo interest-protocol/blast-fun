@@ -82,6 +82,11 @@ export class DisplayPriceFeed {
     return new Set([...this.#subscribers].flatMap((subscriber) => subscriber.coins));
   }
 
+  /** Whether these coins fit the shared price table next to every current subscriber's. */
+  admits(coins: readonly string[]): boolean {
+    return new Set([...this.#coins(), ...coins]).size <= MARKET_STREAM_BUDGET.maxPriceCoins;
+  }
+
   subscribe(coins: readonly string[], send: Subscriber["send"]): (() => void) | undefined {
     if (!coins.length) return;
     const requested = this.#coins();

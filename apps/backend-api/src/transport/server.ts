@@ -2,6 +2,7 @@ import { privateRoute } from "@blast/core/modules/backend-api/private-routes.ts"
 import type { Server } from "bun";
 import { TRANSPORT_LIMITS, type BackendHttpOptions } from "./contracts.ts";
 import type { createTransportHttp } from "./http.ts";
+import { LIVE_SOCKET, type LiveSocket, type LiveSocketData } from "./live-socket.ts";
 
 export type BackendServerOptions = BackendHttpOptions &
   Readonly<{ port?: number; hostname?: string }>;
@@ -10,8 +11,9 @@ export type BackendServerOptions = BackendHttpOptions &
 export function serveBackend(
   options: Pick<BackendServerOptions, "port" | "hostname" | "privateApi">,
   http: ReturnType<typeof createTransportHttp>,
+  live?: LiveSocket,
 ) {
-  const server: Server<undefined> = Bun.serve({
+  const server: Server<LiveSocketData> = Bun.serve<LiveSocketData>({
     port: options.port ?? 0,
     hostname: options.hostname ?? "127.0.0.1",
     development: false,
@@ -20,7 +22,12 @@ export function serveBackend(
       TRANSPORT_LIMITS.adminBodyBytes,
       TRANSPORT_LIMITS.privateBodyBytes,
     ),
+    // Without a live host nothing upgrades, so the empty handler never runs.
+    websocket: live?.websocket ?? { message() {} },
     fetch(request, native) {
+      if (live && new URL(request.url).pathname === LIVE_SOCKET.path) {
+        return live.upgrade(request, native, native.requestIP(request)?.address ?? null);
+      }
       if (
         options.privateApi &&
         privateRoute(request.method, new URL(request.url).pathname, "browser")
@@ -59,7 +66,7 @@ export function serveBackend(
     server,
     drainTimeoutMs: http.drainTimeoutMs,
     drain() {
-      stopped ??= Promise.all([http.drain(), server.stop()]).then(() => {});
+      stopped ??= Promise.all([http.drain(), live?.drain(), server.stop()]).then(() => {});
       return stopped;
     },
   };
