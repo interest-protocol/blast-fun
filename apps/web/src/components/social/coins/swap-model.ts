@@ -8,7 +8,6 @@ import { amtExact, divideExact, exactDecimal, fixedExact, groupDigits, pxNumExac
 import { atomsValue, HIDDEN_AMOUNT, NO_VALUE } from "@blast/core/web/format.ts";
 import { bpsPercent } from "@blast/core/lib/bps.ts";
 import type { SocialTransferFee } from "@blast/core/web/contracts/coins.ts";
-import { SUI_COIN_TYPE } from "@blast/core/lib/sui/coin-types.ts";
 import { TEST_SUI_COIN_TYPES } from "@blast/core/web/contracts/create.ts";
 import { normalizeTradeCoinQuery, SOCIAL_TRADE_DEFAULT_SLIPPAGE_BPS, type SocialTradeCoin, type SocialTradeQuote, type SocialTradeQuoteRequest } from "@blast/core/web/contracts/trades.ts";
 
@@ -527,9 +526,9 @@ export function decodeTradeAction(text: string | undefined): TradeAction | null 
   return ok ? { side: value.side, coin: coin as unknown as SocialTradeCoin } : null;
 }
 
-/** The pair a coin page's Buy or Sell opens (a sale, or SUI against USDC): Buy spends USDC on the coin, Sell turns the coin into USDC (the gate's `openSaleTrade`). */
+/** The pair a sale page's Buy or Sell opens: Buy spends USDC on the coin, Sell turns the coin into USDC (the gate's `openSaleTrade`). */
 export function salePair(action: TradeAction): SwapPair {
-  const key = saleKey(action);
+  const key = action.coin.presale_id ?? action.coin.coin_type;
   return action.side === "sell" ? { in: key, out: "usdc" } : { in: "usdc", out: key };
 }
 
@@ -539,11 +538,6 @@ export function salePair(action: TradeAction): SwapPair {
  * `outK: 'sui'`) until either side is picked.
  */
 export const PLAIN_SWAP_PAIR: SwapPair = Object.freeze({ in: "usdc", out: "sui" });
-
-/** The sale coin's wallet key; SUI's is "sui", like its balance row, so the SUI page swaps against USDC. */
-function saleKey(action: TradeAction): string {
-  return action.coin.presale_id ?? (action.coin.coin_type === SUI_COIN_TYPE ? "sui" : action.coin.coin_type);
-}
 
 /**
  * What the shell's `openTrade` opens: with no argument the plain swap; with a
@@ -557,7 +551,7 @@ export function tradeOpening(argument: string | undefined): Readonly<{ pair: Swa
   const action = decodeTradeAction(argument);
   if (action === null) return null;
   const pair = salePair(action);
-  return { pair, action, screen: { kind: "trade", key: pair.in, out: pair.out, focus: saleKey(action) } };
+  return { pair, action, screen: { kind: "trade", key: pair.in, out: pair.out, focus: action.coin.presale_id ?? action.coin.coin_type } };
 }
 
 const PRICES_UNAVAILABLE = "Couldn’t get a price. Try again.";
