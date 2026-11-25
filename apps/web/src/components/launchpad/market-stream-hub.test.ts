@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { MARKET_STREAM_BUDGET } from "@blast/core/modules/launchpad-contract/market-stream.ts";
 
 import { marketHintTransport } from "#web/lib/live-stream/market-hints.ts";
 import { HIDDEN_GRACE_MS, MarketStreamHub, STABLE_MS, UNSERVED_RETRY_MS, type MarketEventSource, type MarketStreamState, type MarketTrade } from "./market-stream-hub.ts";
@@ -84,14 +83,14 @@ test("two subscribers to the same pool share one EventSource, and it closes afte
   assert.equal(s.listening(), false);
 });
 
-test("a missing heartbeat invalidates the live stream and requires a new fence", async () => {
+test("a legacy relay keeps its original heartbeat deadline and requires a new fence after loss", async () => {
   const s = setup();
   const chart = watcher();
   const subscription = s.hub.subscribe({ pools: chart.pools, expected, listener: chart.listener });
   const old = s.source();
   old.fence(10);
   old.hello(true);
-  s.fire(3 * MARKET_STREAM_BUDGET.heartbeatMs);
+  s.fire(45_000);
   assert.equal(old.closed, true);
   assert.equal(chart.states.at(-1), "reconnecting");
   old.emit("market", trade(11));
