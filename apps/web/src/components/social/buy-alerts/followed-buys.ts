@@ -1,7 +1,6 @@
 import { coinPagePath } from "@blast/core/modules/launchpad-coin/page-key.ts";
 import { socialBuyAlertPath, socialBuyAlertResponseSchema, type SocialBuyAlert } from "@blast/core/modules/social/contracts/buy-alerts.ts";
 
-
 import { presaleHref } from "../feed-ui/shell-bridge-model";
 import type { FreshnessHint } from "../home/feed-freshness";
 
