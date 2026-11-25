@@ -1,8 +1,7 @@
 const queuedChunks = 64;
 const maxChunkBytes = 1_024;
 // Application relay queue payload only; runtime, socket and proxy buffers are additional.
-// 1,024 clients at the worst-case queue. Measured 2026-11-25: ~60 KB a socket
-// under traffic, CPU before memory; the configured stream count sets the cap.
+// 1,024 clients per relay at the worst-case queue; the configured stream count sets the cap.
 const queuePayloadBudgetBytes = 64 * 1_024 * 1_024;
 
 /** Connected streams use a separate bounded lane from ordinary request work. */

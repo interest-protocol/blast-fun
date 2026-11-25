@@ -64,9 +64,10 @@ workflows remain bounded until their owner costs are assessed; receipt rendering
 retains its existing four-workflow limit rather than changing its contention.
 
 `BLAST_BACKEND_MAX_HINT_STREAMS` is optional: default 200, integer range 1–1,024
-per replica. The relay and SSE admission both use the configured value. The
-maximum derives from a 64 MiB application relay queue payload budget: 1,024
-clients × 64 queued chunks × at most 1 KiB per encoded chunk. Slow readers close
+per replica. Sockets and market SSE share the market relay at the configured
+value; activity SSE is admitted separately up to the same value, so one process
+can hold twice that many streams in total. The maximum derives from a 64 MiB
+queue payload budget per relay: 1,024 clients × 64 queued chunks × at most 1 KiB per encoded chunk. Slow readers close
 before exceeding 64 chunks; every outgoing frame has the byte bound. This budget
 excludes JavaScript/runtime overhead, Bun/kernel socket and proxy buffers, and
 bandwidth. One upstream is shared per process. A local check on 2026-11-25
