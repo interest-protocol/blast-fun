@@ -52,6 +52,8 @@ type Topic = {
   resuming?: boolean;
   /** A replayed frame arrived: the trailing snapshot is a new fence. Otherwise it is dropped. */
   resumeChanged?: boolean;
+  /** The latest `coin_stats` (state, not log): sent after each fence, never in the ring. */
+  stats?: { checkpoint: number; bytes: Uint8Array; unsent?: boolean };
 };
 /** Options for a direct socket subscriber. SSE keeps its finite lifetime and never resumes. */
 export type MarketSubscribeOptions = Readonly<{
@@ -188,6 +190,16 @@ function parseSubscription(request: Request): { pools: readonly string[]; priceC
   } catch {
     return null;
   }
+}
+
+/** Whether the frame's latest trade lacks a price; undefined when the frame says nothing about it. */
+function priceMissing(frame: Frame): boolean | undefined {
+  if (frame.type === "snapshot" && Array.isArray(frame.trades)) {
+    const latest = frame.trades.map(object).find((trade) => trade.kind !== "opening_round_fill");
+    return latest !== undefined && latest.price == null;
+  }
+  if (frame.type === "trade") return object(frame.trade).price === null;
+  return undefined;
 }
 
 function validateMarketBody(frame: Frame): void {
@@ -340,7 +352,20 @@ export class MarketStreamRelay {
         this.#send(client, event("status", { ...topic.fence, cursor: missed.from, resumed: true }));
         for (const frame of missed.frames) this.#send(client, frame.bytes);
       } else this.#send(client, event("status", topic.fence));
+      if (topic.stats) this.#send(client, topic.stats.bytes);
     }
+  }
+
+  /** Latest wins by checkpoint; its cursor may precede trades it already counts, so it skips the cursor order. */
+  #stats(topic: Topic, frame: Frame): void {
+    if (typeof frame.coin !== "string" || frame.coin.length > 320) throw new Error();
+    if (topic.stats && (frame.checkpoint as number) < topic.stats.checkpoint) return;
+    const bytes = event("stats", stampRelay(withoutLabels(frame), Date.now()));
+    if (bytes.byteLength > B.maxChunkBytes) return;
+    const send = topic.fence !== undefined && !topic.resuming;
+    // Held during a resume: the trailing snapshot sends it, or #endResume does when nothing changed.
+    topic.stats = { checkpoint: frame.checkpoint as number, bytes, unsent: !send };
+    if (send) for (const client of topic.clients) this.#send(client, bytes);
   }
 
   #releaseTopics(client: Client): void {
@@ -560,7 +585,7 @@ export class MarketStreamRelay {
 
   #market(frame: Frame): void {
     if (
-      !["snapshot", "trade", "candle_closed", "lifecycle", "opening_round"].includes(
+      !["snapshot", "trade", "candle_closed", "lifecycle", "opening_round", "coin_stats"].includes(
         String(frame.type),
       )
     )
@@ -570,6 +595,7 @@ export class MarketStreamRelay {
     // An unsubscribe can race with already queued, still valid upstream frames.
     if (!topic) return;
     const cursor = validateEnvelope(frame, this.#expected);
+    if (frame.type === "coin_stats") return this.#stats(topic, frame);
     if (topic.resuming && !this.#endResume(topic, frame, cursor)) return;
     if (topic.cursor && compareEventCursors(cursor, topic.cursor) < 0)
       throw new Error();
@@ -594,18 +620,15 @@ export class MarketStreamRelay {
     const changed = topic.resumeChanged;
     clearTimeout(topic.deadline);
     Object.assign(topic, { deadline: undefined, resuming: false, resumeChanged: false });
+    if (changed === true) return true;
     // Nothing happened to the pool while upstream was away: browsers keep their fence and ring.
-    return changed === true;
+    if (topic.stats?.unsent) for (const client of topic.clients) this.#send(client, topic.stats.bytes);
+    if (topic.stats) topic.stats.unsent = false;
+    return false;
   }
 
   #deliver(pool: string, topic: Topic, frame: Frame, cursor: string): void {
-    if (frame.type === "snapshot" && Array.isArray(frame.trades)) {
-      const latest = frame.trades.map(object).find((trade) => trade.kind !== "opening_round_fill");
-      topic.priceMissing = latest !== undefined && latest.price == null;
-    } else if (frame.type === "trade") {
-      const trade = object(frame.trade);
-      topic.priceMissing = trade.price === null;
-    }
+    topic.priceMissing = priceMissing(frame) ?? topic.priceMissing;
     topic.cursor = cursor;
     topic.fence = {
       state: "live",
@@ -621,8 +644,11 @@ export class MarketStreamRelay {
       topic.ring = [];
       topic.ringBytes = 0;
       topic.floor = cursor;
-      for (const client of topic.clients)
+      if (topic.stats) topic.stats.unsent = false;
+      for (const client of topic.clients) {
         this.#send(client, event("status", topic.fence));
+        if (topic.stats) this.#send(client, topic.stats.bytes);
+      }
     } else {
       const bytes = event("market", stampRelay(withoutLabels(frame), Date.now()), cursor);
       if (bytes.byteLength > B.maxChunkBytes)

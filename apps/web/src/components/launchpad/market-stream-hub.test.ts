@@ -407,3 +407,50 @@ test("a pool whose subscriber names no coin learns it from its first trade's sum
   assert.deepEqual(seen.map((each) => each.checkpoint), [11]);
   assert.equal(otherSeen.length, 0);
 });
+
+// This fails if coin stats reach a screen for a pool it did not ask for, before the pool's fence, or from another deployment.
+test("coin stats reach only the fenced pool's subscribers from the expected deployment", async () => {
+  const s = setup();
+  const curve: unknown[] = [];
+  const other: unknown[] = [];
+  s.hub.subscribe({ pools: [CURVE], expected, listener: { state: () => {}, stats: (frame) => curve.push(frame.holders) } });
+  s.hub.subscribe({ pools: [VENUE], expected, listener: { state: () => {}, stats: (frame) => other.push(frame.holders) } });
+  await settle();
+  const stats = (holders: number, deployment = DEPLOYMENT) => ({
+    type: "coin_stats", coin: `0x${"44".repeat(32)}::meme::MEME`, pool_key: CURVE, checkpoint: 20, timestamp_ms: NOW + 20,
+    cursor: "20:0:0:0", provenance: { ...wireProvenance(20), deployment_fingerprint: deployment }, holders, price: "0.5",
+  });
+  s.source().emit("stats", stats(1));
+  assert.deepEqual(curve, [], "no stats before the pool's fence");
+  s.source().fence(10);
+  s.source().fence(10, VENUE);
+  s.source().hello();
+  s.source().emit("stats", stats(2));
+  s.source().emit("stats", stats(3, "cd".repeat(32)));
+  s.source().emit("stats", { ...stats(4), holders: -1 });
+  assert.deepEqual(curve, [2]);
+  assert.deepEqual(other, []);
+});
+
+// This fails if a migrated coin's frozen curve stats replace its venue stats, or a late screen waits for the next change.
+test("a coin's newest stats win across its two pools, and a late subscriber gets them at once", async () => {
+  const s = setup();
+  const first: unknown[] = [];
+  s.hub.subscribe({ pools: [CURVE, VENUE], expected, listener: { state: () => {}, stats: (frame) => first.push(frame.holders) } });
+  await settle();
+  const stats = (pool: string, checkpoint: number, holders: number) => ({
+    type: "coin_stats", coin: `0x${"44".repeat(32)}::meme::MEME`, pool_key: pool, checkpoint, timestamp_ms: NOW + checkpoint,
+    cursor: `${checkpoint}:0:0:0`, provenance: wireProvenance(checkpoint), holders, price: "0.5",
+  });
+  s.source().fence(10);
+  s.source().fence(10, VENUE);
+  s.source().hello();
+  s.source().emit("stats", stats(VENUE, 30, 250));
+  s.source().emit("stats", stats(CURVE, 20, 211));
+  s.source().emit("stats", { ...stats(CURVE, 30, 212), cursor: "29:9:0:0" });
+  assert.deepEqual(first, [250], "the curve's older stats are dropped, by checkpoint and then by cursor");
+  const late: unknown[] = [];
+  s.hub.subscribe({ pools: [CURVE, VENUE], expected, listener: { state: () => {}, stats: (frame) => late.push(frame.holders) } });
+  await settle();
+  assert.deepEqual(late, [250]);
+});
