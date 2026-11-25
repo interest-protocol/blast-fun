@@ -113,6 +113,26 @@ async function settle(): Promise<void> {
   await act(async () => motion.finishAll());
 }
 
+/**
+ * Holds animation frames until the test runs them. A held-open sheet springs home on the next
+ * frame, and jsdom's frame timer can fire before a pull's `act` returns under load.
+ */
+function holdFrames(t: TestContext): () => Promise<void> {
+  const frames = new Map<number, FrameRequestCallback>();
+  let last = 0;
+  t.mock.method(globalThis, "requestAnimationFrame", (callback: FrameRequestCallback) => {
+    frames.set(++last, callback);
+    return last;
+  });
+  t.mock.method(globalThis, "cancelAnimationFrame", (id: number) => frames.delete(id));
+  return () =>
+    act(async () => {
+      const due = [...frames.values()];
+      frames.clear();
+      for (const callback of due) callback(performance.now());
+    });
+}
+
 let clock = 5_000;
 
 function touch(target: TestElement, type: string, y: number): void {
@@ -293,10 +313,11 @@ test("OA-31: pulled a little and let go, it springs home; a sheet its owner keep
     springFrames(80, 0).map((y) => `translateY(${y}px)`),
   );
   await settle();
+  const nextFrame = holdFrames(t);
   await pull([20, 520], 100);
   assert.equal(calls.requests.length, 1, "asked to close");
   assert.equal(dialog.style.transform, "translateY(500px)");
-  await act(async () => new Promise((resolve) => setTimeout(resolve, 40)));
+  await nextFrame();
   assert.equal(dialog.style.transform, "", "held open: rest is the inline state again");
   assert.deepEqual(
     latest(dialog).keyframes.map((frame) => frame.transform),
@@ -384,8 +405,9 @@ test("reduced motion returns a dragged sheet directly to rest, including when di
   await pull([20, 40], 100);
   assert.equal(dialog.style.transform, "");
   assert.equal(started(dialog).length, before);
+  const nextFrame = holdFrames(t);
   await pull([20, 520], 100);
-  await act(async () => new Promise((resolve) => setTimeout(resolve, 40)));
+  await nextFrame();
   assert.equal(calls.requests.length, 1);
   assert.equal(dialog.style.transform, "");
   assert.equal(started(dialog).length, before);
