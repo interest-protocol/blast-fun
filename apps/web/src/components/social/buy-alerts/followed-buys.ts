@@ -1,6 +1,8 @@
 import { coinPagePath } from "@blast/core/modules/launchpad-coin/page-key.ts";
 import { socialBuyAlertPath, socialBuyAlertResponseSchema, type SocialBuyAlert } from "@blast/core/modules/social/contracts/buy-alerts.ts";
 
+import { isTradeUnderDollar } from "#web/components/launchpad/activity/small-trades.ts";
+
 import { presaleHref } from "../feed-ui/shell-bridge-model";
 import type { FreshnessHint } from "../home/feed-freshness";
 
@@ -14,7 +16,8 @@ import type { FreshnessHint } from "../home/feed-freshness";
  * every follower's tab at once; the card reads then spread), then reads the
  * trade's public card. A `null` card (a private account, a wallet no longer
  * named) or a `404` (no row or coin yet, a hidden sale) shows nothing. The
- * card must name the hint's wallet.
+ * card must name the hint's wallet. A buy under $1 shows nothing, as the
+ * trades list hides it.
  */
 
 /** The followed wallets are read once and stay fresh this long; a follow or unfollow here reads them again. */
@@ -81,6 +84,7 @@ export class FollowedBuys {
     if (this.#closed || !this.#deps.visible()) return;
     const card = await this.#deps.readCard(buy.activityId).catch(() => null);
     if (this.#closed || card === null || card.wallet !== buy.actor || card.activity_id !== buy.activityId) return;
+    if (isTradeUnderDollar({ usd: card.usd })) return;
     if (this.#deps.visible()) this.#deps.show(card);
   }
 

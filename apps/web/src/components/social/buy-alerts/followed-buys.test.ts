@@ -72,6 +72,15 @@ test("a kept buy waits a share of the spread, reads its card once and shows it",
   assert.equal(h.shown.length, 1);
 });
 
+test("a buy under $1 shows nothing; an unpriced buy still shows", async () => {
+  for (const [usd, shows] of [["0.00", false], ["0.99", false], ["1.00", true], [null, true]] as const) {
+    const h = harness({ read: async () => card({ usd }) });
+    h.buys.offer({ activityId: ID, actor: MAYA });
+    await h.fire();
+    assert.equal(h.shown.length, shows ? 1 : 0, `usd ${usd}`);
+  }
+});
+
 test("a card that names another wallet or another trade, or a missing card, shows nothing", async () => {
   for (const answer of [card({ wallet: KAI }), card({ activity_id: "1:1:1:1" }), null]) {
     const h = harness({ read: async () => answer });
