@@ -55,6 +55,7 @@ const readMarket = Effect.fnUntraced(function* (
   route: MarketRouteName,
   makePath: () => string,
   cache: (body: unknown) => string,
+  at?: number,
 ) {
   const path = yield* Effect.try({ try: makePath, catch: marketParameterFailure }).pipe(
     Effect.result,
@@ -62,7 +63,7 @@ const readMarket = Effect.fnUntraced(function* (
   const response =
     path._tag === "Failure"
       ? path.failure
-      : yield* Effect.promise(() => relay(route, path.success, cache));
+      : yield* Effect.promise(() => relay(route, path.success, cache, at));
   return relayResponse(response);
 });
 
@@ -72,6 +73,7 @@ function readCandles(
   makePath: (request: CandleRequest) => string,
 ) {
   const to = decimal(query.to);
+  const at = decimal(query.at);
   return readMarket(
     relay,
     "candles",
@@ -82,7 +84,8 @@ function readCandles(
         to,
         limit: decimal(query.limit),
       }),
-    candleCache(to, decimal(query.at)),
+    candleCache(to, at),
+    at,
   );
 }
 
@@ -95,7 +98,8 @@ export const marketHandlers = HttpApiBuilder.group(Api, "market", (handlers) =>
     const relay = yield* MarketRelay;
 
     function read(route: MarketRouteName, makePath: () => string, at: string | undefined) {
-      return readMarket(relay, route, makePath, checkpointCache(decimal(at)));
+      const checkpoint = decimal(at);
+      return readMarket(relay, route, makePath, checkpointCache(checkpoint), checkpoint);
     }
 
     function readPrivate(route: MarketRouteName, makePath: () => string) {

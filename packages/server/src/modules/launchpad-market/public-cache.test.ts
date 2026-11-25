@@ -134,3 +134,26 @@ test("large successful bodies bypass retention and oversized streams are cancell
     assert.equal(cancelled, true);
   }
 });
+
+test("a hint's read past the shared answer reads blast-infra again, once per checkpoint", async () => {
+  let checkpoint = 4;
+  let reads = 0;
+  const shared = cachedMarketUpstream({ origin, fetch: async () => {
+    reads++;
+    return Response.json({ provenance: { checkpoint } });
+  } }, createPublicPresaleReader(() => 0));
+  const routes = createMarketRoutes({ limiter: null, upstream: () => shared });
+  const candles = `https://blast.test/api/launchpad/market/pools/blast_curve/0x${"a".repeat(64)}/candles?interval=1m`;
+  const read = async (url: string) => {
+    const response = await routes.handle(new Request(url), testClient());
+    return { checkpoint: ((await response.json()) as { provenance: { checkpoint: number } }).provenance.checkpoint, cache: response.headers.get("cache-control") };
+  };
+  assert.equal((await read(candles)).checkpoint, 4);
+  checkpoint = 6;
+  assert.equal((await read(`${candles}&at=4`)).checkpoint, 4, "the shared answer already reaches the hint");
+  assert.equal(reads, 1);
+  const hinted = await Promise.all([read(`${candles}&at=5`), read(`${candles}&at=5`)]);
+  assert.deepEqual(hinted.map((reply) => reply.checkpoint), [6, 6], "an older shared answer is read again");
+  assert.match(hinted[0].cache ?? "", /^public/);
+  assert.equal(reads, 2, "viewers of one hint share that read");
+});

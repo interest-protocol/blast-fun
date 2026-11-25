@@ -137,7 +137,7 @@ test("trade frames show once, newest first, and the next read's rows take their 
 
   const shown = () => shownActivity(feed.state()).view!.rows.map((row) => row.position);
   const before = shown();
-  listener().fence!(VENUE_POOL_KEY, READ_THROUGH);
+  listener().fence!(VENUE_POOL_KEY, READ_THROUGH, { lastEvent: READ_THROUGH });
   const first = frame(VENUE_POOL_KEY, READ_THROUGH + 1, { kind: "swap" });
   const second = frame(VENUE_POOL_KEY, READ_THROUGH + 2, { kind: "swap", side: "sell", volumeUsd: "0.999" });
   listener().trade!(first);
@@ -248,11 +248,11 @@ test("a gap or reconnect asks for one read pinned to the newest checkpoint, at m
   };
   const stop = followLiveTrades({ hub, launchId: LAUNCH, pools: [CURVE_POOL_KEY], expected: null, feed, onState: () => {}, schedule: clock.schedule, now: clock.now, random: () => 0.5 });
   const delays = () => clock.timers.filter((timer) => !timer.cancelled).map((timer) => timer.ms);
-  listener().fence!(CURVE_POOL_KEY, 100);
+  listener().fence!(CURVE_POOL_KEY, 100, { lastEvent: 100 });
   assert.deepEqual(delays(), [], "a fence the list has read through");
 
   // A reconnect's fence, then a frame the list cannot show: one read, at the newer checkpoint.
-  listener().fence!(CURVE_POOL_KEY, 101);
+  listener().fence!(CURVE_POOL_KEY, 101, { lastEvent: 101 });
   listener().trade!(frame(CURVE_POOL_KEY, 103, { kind: "opening_round" }));
   assert.deepEqual(delays(), [500]);
   clock.fire();
@@ -272,7 +272,7 @@ test("a gap or reconnect asks for one read pinned to the newest checkpoint, at m
   // A read that fails or answers behind is asked again, the floor doubling up to the live poll's pace.
   answers = () => 105;
   clock.advance(60_000);
-  listener().fence!(CURVE_POOL_KEY, 107);
+  listener().fence!(CURVE_POOL_KEY, 107, { lastEvent: 107 });
   const retries: number[] = [];
   for (let attempt = 0; attempt < 4; attempt++) {
     retries.push(...delays());
@@ -290,12 +290,12 @@ test("a gap or reconnect asks for one read pinned to the newest checkpoint, at m
   // A read in flight when the list goes away asks nothing more.
   answers = () => 107;
   clock.advance(60_000);
-  listener().fence!(CURVE_POOL_KEY, 110);
+  listener().fence!(CURVE_POOL_KEY, 110, { lastEvent: 110 });
   clock.fire();
   stop();
   await settle();
   assert.deepEqual(delays(), []);
-  listener().fence!(CURVE_POOL_KEY, 111);
+  listener().fence!(CURVE_POOL_KEY, 111, { lastEvent: 111 });
   assert.deepEqual(reads.at(-1), 110);
 });
 
@@ -316,7 +316,7 @@ test("before the list's first answer a frame read waits a whole floor, and a row
   const delays = () => clock.timers.map((timer) => timer.ms);
   listener().trade!(frame(CURVE_POOL_KEY, 49));
   assert.deepEqual(delays(), [], "a row the list holds needs no read");
-  listener().fence!(CURVE_POOL_KEY, 50);
+  listener().fence!(CURVE_POOL_KEY, 50, { lastEvent: 50 });
   assert.deepEqual(delays(), [FRAME_READ_FLOOR_MS]);
   // A row past the cap asks for the read that brings back the one it pushed out.
   full = true;

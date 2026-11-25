@@ -39,7 +39,7 @@ function setup(pools = [CURVE], requestFrom?: number, migration: MigrationMarker
   let now = NOW;
   const sources: Source[] = [];
   const urls: string[] = [];
-  const loads: { pool: string; resolve: (answer: ChartPoolRead) => void; reject: (error: unknown) => void }[] = [];
+  const loads: { pool: string; at: number | null; resolve: (answer: ChartPoolRead) => void; reject: (error: unknown) => void }[] = [];
   const sections: { pool: string; section: Section<PoolCandlePage> }[] = [];
   const statuses: ChartStreamStatus[] = [];
   const timers: { run: () => void; ms: number }[] = [];
@@ -51,7 +51,7 @@ function setup(pools = [CURVE], requestFrom?: number, migration: MigrationMarker
   });
   const client = new ChartStream({
     pools, expected, migration: () => migration, request: () => ({ ...chartRequest({ interval: "1s", range: "all" }, NOW), ...(requestFrom === undefined ? {} : { from: requestFrom }) }),
-    load: (pool) => new Promise<ChartPoolRead>((resolve, reject) => loads.push({ pool, resolve, reject })),
+    load: (pool, at) => new Promise<ChartPoolRead>((resolve, reject) => loads.push({ pool, at, resolve, reject })),
     onSection: (pool, section) => sections.push({ pool, section }), onStatus: (status) => statuses.push(status),
     hub, visible: () => true, schedule, now: () => now, ...(livePolls === undefined ? {} : { livePolls }),
     publish: (run) => { publications.push(run); return () => { const index = publications.indexOf(run); if (index >= 0) publications.splice(index, 1); }; }, random: () => 0,
@@ -438,6 +438,31 @@ test("history read before the stream's fence starts the stream without a second 
   s.flush();
   const latest = s.sections.findLast((item) => item.pool === CURVE)!.section;
   assert.equal(latest.state === "available" && latest.data.candles[0].volumeQuote, 12n, "frames after the kept read apply");
+  s.client.stop();
+});
+
+test("a read behind the fence but past the pool's last event starts the stream without a second read", async () => {
+  const s = setup([CURVE, VENUE]);
+  // The stream fences each pool at 12; the curve last traded at 8, the venue at 11.
+  const fence = (poolKey: string, last: number) =>
+    s.source().emit("status", { state: "live", pool_key: poolKey, checkpoint: 12, cursor: `${last}:1:0:2`, provenance: wireProvenance(12) });
+  s.client.start();
+  assert.deepEqual(s.loads.map((load) => load.pool), [CURVE, VENUE]);
+  fence(CURVE, 8);
+  s.loads.shift()!.resolve(answer(10));
+  s.loads.shift()!.resolve(answer(10, VENUE));
+  await settle();
+  fence(VENUE, 11);
+  assert.deepEqual(s.loads.map(({ pool, at }) => [pool, at]), [[VENUE, 11]], "only the venue, which traded after its read, reads again, up to that trade");
+  assert.ok(!s.timers.some(({ ms }) => ms === 2_000), "no behind-fence retry for the curve");
+  s.loads.shift()!.resolve(answer(11, VENUE));
+  await settle();
+  assert.equal(s.loads.length, 0);
+  assert.equal(s.statuses.at(-1), "streaming");
+  s.source().emit("market", trade(13));
+  s.flush();
+  const latest = s.sections.findLast((item) => item.pool === CURVE)!.section;
+  assert.equal(latest.state === "available" && latest.data.candles[0].volumeQuote, 12n, "frames after the fence apply on the kept read");
   s.client.stop();
 });
 

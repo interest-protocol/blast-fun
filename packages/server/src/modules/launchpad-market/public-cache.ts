@@ -5,6 +5,16 @@ import { readBoundedText } from "@blast/server/lib/web-security/request-body.ts"
 type PublicRead = <T>(key: string, load: () => Promise<T>, cacheMs: number) => Promise<T>;
 const MAX_CACHED_BODY_BYTES = 256 * 1_024;
 
+/** Whether a body names a checkpoint before `at`; one that is not JSON is relayed as it is. */
+function behind(text: string, at: number): boolean {
+  try {
+    const checkpoint = (JSON.parse(text) as { provenance?: { checkpoint?: unknown } } | null)?.provenance?.checkpoint;
+    return typeof checkpoint !== "number" || checkpoint < at;
+  } catch {
+    return false;
+  }
+}
+
 /** Private fields keep provider bodies out of serialized errors and metrics. */
 class UncachedResponseDefinition extends Error {
   readonly #reply: MarketTextResponse;
@@ -41,9 +51,7 @@ export function cachedMarketUpstream(upstream: MarketUpstream, publicRead: Publi
     return { status: response.status, text };
   }
 
-  async function readText(input: RequestInfo | URL, init?: RequestInit): Promise<MarketTextResponse> {
-    const key = cacheKey(input, init);
-    if (!key) return source(input, init);
+  async function shared(key: string, input: RequestInfo | URL, init?: RequestInit): Promise<MarketTextResponse> {
     try {
       const text = await publicRead(key, async () => {
         const reply = await source(input, init);
@@ -57,6 +65,19 @@ export function cachedMarketUpstream(upstream: MarketUpstream, publicRead: Publi
       if (error instanceof UncachedResponse) return error.reply();
       throw error;
     }
+  }
+
+  /**
+   * `at`: the checkpoint a live hint's read must reach. A shared answer older than it would only
+   * send the reader back for the same answer until it expires, so it is read again, once per
+   * checkpoint for every reader of that hint.
+   */
+  async function readText(input: RequestInfo | URL, init?: RequestInit, at?: number): Promise<MarketTextResponse> {
+    const key = cacheKey(input, init);
+    if (!key) return source(input, init);
+    const reply = await shared(key, input, init);
+    if (at === undefined || reply.status !== 200 || !behind(reply.text, at)) return reply;
+    return shared(`${key}#at=${at}`, input, init);
   }
 
   return {

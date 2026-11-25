@@ -140,8 +140,8 @@ export type MarketTextResponse = Readonly<{ status: number; text: string }>;
 export type MarketUpstream = Readonly<{
   origin: string;
   fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-  /** Already bounded text, avoiding a synthetic Response stream on cache hits. */
-  readText?: (input: RequestInfo | URL, init?: RequestInit) => Promise<MarketTextResponse>;
+  /** Already bounded text, avoiding a synthetic Response stream on cache hits. `at`: the checkpoint a hint's read must reach. */
+  readText?: (input: RequestInfo | URL, init?: RequestInit, at?: number) => Promise<MarketTextResponse>;
 }>;
 
 export type MarketRoutesDependencies = Readonly<{
@@ -209,6 +209,8 @@ type Matched = Readonly<{
   path: () => string;
   /** The 200's `Cache-Control`, from its body. */
   cache: (body: unknown) => string;
+  /** The hint's checkpoint (`at`) once `path` accepted it. */
+  at?: () => number | undefined;
 }>;
 
 const shortCache = () => MARKET_CACHE_CONTROL;
@@ -337,6 +339,7 @@ function match(segments: readonly string[], params: URLSearchParams): Matched | 
       return matched.path();
     },
     cache: (body) => (reachedCheckpoint(body, at) ? matched.cache(body) : PRIVATE_NO_STORE),
+    at: () => (Number.isFinite(at) ? at : undefined),
   };
 }
 
@@ -471,7 +474,7 @@ function metric(route: MarketRouteName, outcome: string, fields: Record<string, 
 export function createMarketRelay(dependencies: Pick<MarketRoutesDependencies, "upstream" | "timeoutMs">) {
   const timeoutMs = dependencies.timeoutMs ?? 3_000;
 
-  return async function relay(route: MarketRouteName, path: string, cache: (body: unknown) => string): Promise<Response> {
+  return async function relay(route: MarketRouteName, path: string, cache: (body: unknown) => string, at?: number): Promise<Response> {
     let upstream: MarketUpstream;
     try {
       upstream = dependencies.upstream();
@@ -489,7 +492,7 @@ export function createMarketRelay(dependencies: Pick<MarketRoutesDependencies, "
         signal: AbortSignal.timeout(timeoutMs),
       };
       if (upstream.readText) {
-        ({ status, text } = await upstream.readText(input, init));
+        ({ status, text } = await upstream.readText(input, init, at));
       } else {
         const response = await upstream.fetch(input, init);
         status = response.status;
@@ -584,7 +587,7 @@ export function createMarketRoutes(dependencies: MarketRoutesDependencies) {
       } catch (error) {
         return marketParameterFailure(error);
       }
-      return relay(matched.route, path, matched.cache);
+      return relay(matched.route, path, matched.cache, matched.at?.());
     },
   });
 }
