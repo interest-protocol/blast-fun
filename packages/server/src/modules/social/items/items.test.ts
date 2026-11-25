@@ -244,11 +244,15 @@ test("T-005-AC-2: big and presale_post follow the thresholds passed for this rea
   assert.equal(build({ ...trade, usdValue: "5000", presaleId: null })?.big, false);
 });
 
-test("T-005-AC-3: amounts carry the stored USD to two places, null when the indexer stored none", () => {
+test("T-005-AC-3: amounts carry the stored USD unrounded (at most 12 places), null when the indexer stored none", () => {
   assert.deepEqual(build({ namedAccountId: ACCOUNT })?.amounts, {
-    quote: "20000000000", quote_symbol: "USDC", quote_decimals: 6, usd: "20000.00", tokens: null, quote_refund: null,
+    quote: "20000000000", quote_symbol: "USDC", quote_decimals: 6, usd: "20000", tokens: null, quote_refund: null,
   });
-  assert.equal(build({ namedAccountId: ACCOUNT, usdValue: "17.505" })?.amounts?.usd, "17.51");
+  assert.equal(build({ namedAccountId: ACCOUNT, usdValue: "17.505" })?.amounts?.usd, "17.505");
+  // A dust trade keeps its cents' fraction, so its price per token is never $0 (live QA 2026-11-25).
+  assert.equal(build({ namedAccountId: ACCOUNT, usdValue: "0.000100000000000000" })?.amounts?.usd, "0.0001");
+  valid(build({ namedAccountId: ACCOUNT, usdValue: "0.000100000000000000" }));
+  assert.equal(build({ namedAccountId: ACCOUNT, usdValue: "0.00000000000049" })?.amounts?.usd, "0");
   assert.equal(build({ namedAccountId: ACCOUNT, usdValue: null })?.amounts?.usd, null);
   // An amount in another quote than the presale's carries no symbol rather than a wrong one.
   const other = build({ namedAccountId: ACCOUNT, quoteType: "0x2::sui::SUI" })?.amounts;

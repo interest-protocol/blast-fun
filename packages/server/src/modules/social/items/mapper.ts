@@ -15,7 +15,7 @@ import type {
 import { profilePagePath } from "@blast/core/modules/social/contracts/profiles.ts";
 import type { FeedEntry } from "@blast/core/modules/social/read-model/entries.ts";
 import { namedWalletsOfSql, TRADE_ENTRY_KINDS } from "@blast/core/modules/social/read-model/naming.ts";
-import { compareDecimal, toUsd } from "@blast/core/modules/social/items/decimal.ts";
+import { compareDecimal, toUsd, toUsdDecimal } from "@blast/core/modules/social/items/decimal.ts";
 import { doTheSameDescriptor } from "@blast/core/modules/social/items/do-the-same.ts";
 import { SHOWN_PRESALES } from "@blast/core/modules/social/read-model/chain-presales.ts";
 import { settledAll } from "@blast/server/lib/settled-all.ts";
@@ -201,7 +201,7 @@ function itemAmounts(entry: FeedEntry, presale: PresaleRow | undefined): FeedIte
       quote: entry.quoteAmount,
       quote_symbol: inPresaleQuote ? presale.quote_symbol : null,
       quote_decimals: inPresaleQuote ? presale.quote_decimals : null,
-      usd: entry.usdValue === null ? null : toUsd(entry.usdValue),
+      usd: entry.usdValue === null ? null : toUsdDecimal(entry.usdValue),
       tokens: entry.coinAmount,
       quote_refund: entry.quoteRefund,
     }

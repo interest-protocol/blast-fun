@@ -26,3 +26,13 @@ export function toUsd(value: string): string {
   const text = decimal(value).toFixed(2, Decimal.ROUND_HALF_UP);
   return text === "-0.00" ? "0.00" : text;
 }
+
+/**
+ * `value` to at most 12 places (rounded half away from zero), trailing zeros
+ * dropped: a feed amount's USD unrounded, so a dust trade's price per token
+ * never reads as $0.
+ */
+export function toUsdDecimal(value: string): string {
+  const text = decimal(value).toDecimalPlaces(12, Decimal.ROUND_HALF_UP).toFixed();
+  return text === "-0" ? "0" : text;
+}

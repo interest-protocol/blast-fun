@@ -15,6 +15,8 @@ import { createActivityFeed, linkTarget, listStart, shownActivity } from "./acti
 import { followLiveTrades } from "./activity-live";
 import type { PageOutcome } from "./activity-model";
 import { usePublishWalletTrades } from "./wallet-trades";
+import { dustQuoteUsd, isTradeUnderDollar } from "./small-trades";
+import { useCoinPriceCurrency } from "../chart/CoinPriceCurrency";
 import { createTradeTape } from "./trade-tape";
 import { ActivityView, type ActivityUnits, type TransactionExplorer } from "./ActivityView";
 import { useLiveScreen } from "../coin/LiveScreen";
@@ -90,8 +92,12 @@ function CoinActivityFeed({ source, compact, initialActivity, start }: CoinActiv
   const state = useSyncExternalStore(feed.subscribe, feed.state, feed.state);
   const activity = useMemo(() => shownActivity(state), [state]);
   // An activity permalink starts partway through the tape and cannot name its latest trade.
+  // The Last-trade pill skips dust, as the trades list does.
+  const quoteUsd = dustQuoteUsd(source.units.quoteType, useCoinPriceCurrency(), source.units.quoteUsd);
+  const shownTrade = (row: ActivityRow) => isActivityTrade(row)
+    && !isTradeUnderDollar({ usd: row.volumeUsd, quote: row.amounts.quote, decimals: source.units.quoteDecimals, quoteUsd });
   const lastTrade = start === null
-    ? activity.newer?.rows.find(isActivityTrade) ?? activity.view?.rows.find(isActivityTrade)
+    ? activity.newer?.rows.find(shownTrade) ?? activity.view?.rows.find(shownTrade)
     : null;
   usePublishWalletTrades(activity.view?.rows ?? NO_ROWS, lastTrade ?? null);
   const scrolled = useRef(false);

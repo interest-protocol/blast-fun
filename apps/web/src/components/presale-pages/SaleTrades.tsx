@@ -232,7 +232,8 @@ export function SaleTradeFeed({ sale, children }: Readonly<{ sale: SocialPresale
   const read = useSaleTradeFeed(sale);
   const { data } = read;
   const chart = useMemo(() => {
-    const event = data?.rows[0]?.event;
+    // The Last-trade pill skips dust, as the trades list does.
+    const event = data?.rows.find((row) => !isHomeTradeUnderDollar(row.event.quote))?.event;
     const quote = event?.quote;
     return {
       // Coin activity can span venues and cannot price a candle for a specific pool.

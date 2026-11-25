@@ -475,6 +475,19 @@ test("T-004-AC-5: a sharing account's trade_sell is a named person entry", { ski
   });
 });
 
+test("a named trade under $1 is not a person entry; a $1 trade and an unpriced one are", { skip }, async () => {
+  await withMatrix(async ({ admin, db }) => {
+    const dust = act(90, "trade_buy", W.sharing, { usd_value: "0.0001", product: "market" });
+    const dollar = act(91, "trade_sell", W.sharing, { usd_value: "1", product: "market" });
+    const unpriced = act(92, "trade_buy", W.sharing, { usd_value: null, product: "market" });
+    await rebuildChainRead(admin, { activity: [dust, dollar, unpriced], presales: CHAIN_READ_ROWS.presales });
+    const entries = (await personEntriesOf(db, [A.sharing], PAGE)).map((entry) => entry.entryId);
+    assert.deepEqual(entries, [id(unpriced), id(dollar)]);
+    assert.equal(await isVisible(db, id(dust), THRESHOLDS), false);
+    assert.equal(await isVisible(db, id(dollar), THRESHOLDS), true);
+  });
+});
+
 test("T-004: windows page by keyset in occurred_at_ms then entry_id order", { skip }, async () => {
   await withMatrix(async ({ admin, db }) => {
     // Two parts of one transaction share a time: entry_id breaks the tie.

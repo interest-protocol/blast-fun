@@ -1,3 +1,5 @@
+import { SMALL_TRADE_USD } from "../contracts/coin-market.ts";
+
 
 /**
  * The social feed's naming rule and the entry predicates built on it, as SQL
@@ -121,10 +123,15 @@ export function namedWalletsOfSql(addresses: string): string {
   return namedWalletsSql(`named_owner.address = ANY(${addresses})`);
 }
 
-/** True when the entry aliased `entry` is a person entry (named or not). */
+/**
+ * True when the entry aliased `entry` is a person entry (named or not). A
+ * trade under `SMALL_TRADE_USD` is dust, as the trades lists hide it; an
+ * unpriced trade is not dust.
+ */
 export function personEntrySql(entry: string): string {
   const e = alias(entry);
-  return `(${e}.source = 'activity' AND ${e}.kind IN (${list(PERSON_ENTRY_KINDS)}))`;
+  return `(${e}.source = 'activity' AND ${e}.kind IN (${list(PERSON_ENTRY_KINDS)})
+      AND (${e}.kind NOT IN (${list(TRADE_ENTRY_KINDS)}) OR ${e}.usd_value IS NULL OR ${e}.usd_value >= ${SMALL_TRADE_USD}::numeric))`;
 }
 
 /**

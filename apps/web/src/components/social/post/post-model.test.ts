@@ -309,6 +309,17 @@ test("R3-83-AC-1: a sell reads SELL $1,100 [LUMN] at $0.0013 with no move and no
   assert.equal((postView(moved, null)?.body as { now: unknown }).now, null);
 });
 
+test("a trade's price comes from its unrounded dollars; amounts under a dollar read in cents, never $0", () => {
+  // $0.0001 for 0.747 tokens (9 decimals) is about $0.000134 each.
+  const presale = { ...THEO_SELL!.presale!, decimals: 9 };
+  const dust = { ...THEO_SELL!, kind: "trade_buy", presale, amounts: { ...THEO_SELL!.amounts!, usd: "0.0001", tokens: "747000000" } };
+  const body = postView(dust, null)?.body as { amount: string; tail: string };
+  assert.deepEqual([body.amount, body.tail], ["<$0.01", `at ${px(0.0001 / 0.747)}`]);
+  assert.notEqual(body.tail, "at $0");
+  const cents = { ...dust, amounts: { ...dust.amounts, usd: "0.3" } };
+  assert.equal((postView(cents, null)?.body as { amount: string }).amount, "$0.30");
+});
+
 test("R3-83: the move since shows from 0.1 % either way and never without a fresh price", () => {
   // Sam bought Quarry at its price now: no move.
   assert.equal((postView(SAM_BUY!, null)?.body as { now: unknown }).now, null);

@@ -1,4 +1,4 @@
-import { atomsValue, qm, qs, quoteOf, quoteUsd, readsInCoin } from "@blast/core/web/format.ts";
+import { atomsValue, cents, qm, qs, quoteOf, quoteUsd, readsInCoin } from "@blast/core/web/format.ts";
 import { postIdOf } from "@blast/core/web/contracts/item-routes.ts";
 import type { FeedItem, FeedItemBacker, FeedItemPresale } from "@blast/core/web/contracts/items.ts";
 import { WHY_WINDOW_MS } from "@blast/core/modules/social/whys/validate.ts";
@@ -120,10 +120,15 @@ function quoteAmount(atoms: string, presale: FeedItemPresale): string | null {
   return amount === null ? null : `${Math.round(amount).toLocaleString("en-US")} ${presale.quote_symbol}`;
 }
 
+/** Dollars, whole (`$850`); under a dollar in cents (`$0.30`, `<$0.01`), so a real amount never reads `$0`. */
+function dollarsText(dollars: number): string {
+  return dollars > 0 && dollars < 1 ? cents(dollars) : usd0(dollars);
+}
+
 /**
  * The item's amount: a commit to a SUI sale in SUI (R3-40, the gate's
- * `qm(s, p.q)`) unless `inCoin` is off, else its dollars, whole (`amounts.usd`,
- * two places, or an unpriced USDC quote at $1), else its Quote amount with the symbol.
+ * `qm(s, p.q)`) unless `inCoin` is off, else its dollars (`dollarsText` of
+ * `amounts.usd`, or an unpriced USDC quote at $1), else its Quote amount with the symbol.
  */
 function itemAmount(item: FeedItem, inCoin = true): string | null {
   const coin = item.amounts?.quote_symbol && item.amounts.quote_decimals !== null
@@ -131,12 +136,12 @@ function itemAmount(item: FeedItem, inCoin = true): string | null {
     : null;
   if (inCoin && readsInCoin(coin) && item.kind.startsWith("presale_")) return qm(coin, { usd: null, atoms: item.amounts!.quote });
   const dollars = decimal(item.amounts?.usd);
-  if (dollars !== null) return usd0(dollars);
+  if (dollars !== null) return dollarsText(dollars);
   const amounts = item.amounts;
   if (!amounts) return null;
   const quote = { quote_symbol: amounts.quote_symbol ?? "", quote_decimals: amounts.quote_decimals, quote_usd: null };
   const fallback = quoteUsd(quote, amounts.quote);
-  if (fallback !== null) return usd0(fallback);
+  if (fallback !== null) return dollarsText(fallback);
   const amount = atomsValue(amounts.quote, amounts.quote_decimals);
   return amount !== null && amounts.quote_symbol ? `${Math.round(amount).toLocaleString("en-US")} ${amounts.quote_symbol}` : null;
 }
@@ -168,7 +173,8 @@ function tradeBody(item: FeedItem): PostBody {
   const market = presale?.market ?? null;
   const traded = tokens(item);
   const dollars = decimal(item.amounts?.usd);
-  const price = traded && dollars !== null ? dollars / traded : null;
+  // The unrounded dollars (`amounts.usd`) over the tokens; no price without both.
+  const price = traded && dollars ? dollars / traded : null;
   const buy = item.kind === "trade_buy";
   return {
     kind: "action",
