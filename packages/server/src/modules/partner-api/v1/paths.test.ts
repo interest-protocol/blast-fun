@@ -16,7 +16,7 @@ test("only audited public reads are allowlisted, including all supported venues"
     `/api/v1/market/launches/${ID}/activity`,
     ...poolVenues.map((venue) => `/api/v1/market/pools/${venue}/${ID}`),
     ...poolVenues.map((venue) => `/api/v1/market/pools/${venue}/${ID}/candles`),
-    ...["cetus", "bluefin"].map((venue) => `/api/v1/market/pools/${venue}/${ID}/trades`),
+    ...poolVenues.map((venue) => `/api/v1/market/pools/${venue}/${ID}/trades`),
     // LP-14: the launchpad's rewards, wallet, partner and policy reads.
     `/api/v1/market/launches/${ID}/rewards`, `/api/v1/market/launches/${ID}/reward-rounds`,
     ...["launches", "launch-rewards", "launch-holder-rewards"].map((read) => `/api/v1/market/wallets/${ID}/${read}`),
@@ -27,7 +27,7 @@ test("only audited public reads are allowlisted, including all supported venues"
     "/api/social/trades/quote", "/api/presale/allowlists", `${PATH}/unknown`,
     `${PATH}/${ID}/viewer`, `${PATH}/${ID}/proof/extra`, `${PATH}/`, "/api/v1/market/status/extra", "/api/social/%70resales",
     `/api/v1/market/pools/unknown/${ID}`,
-    `/api/v1/market/pools/blast_curve/${ID}/trades`, "/api/launchpad/presales", "/api/social/search",
+    `/api/v1/market/pools/unknown/${ID}/trades`, "/api/launchpad/presales", "/api/social/search",
     `/api/v1/market/wallets/${ID}`, `/api/v1/market/wallets/${ID}/trades`, `/api/v1/market/partners/${ID}/earnings`,
     "/api/v1/market/launchpad", `/api/v1/market/launches/${ID}/opening-round/bidders`,
   ]) assert.equal(partnerV1Route(path), null, path);

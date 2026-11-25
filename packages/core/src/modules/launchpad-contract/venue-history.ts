@@ -423,7 +423,7 @@ export function readPoolCandles(
   return readV1("market", poolCandlesPath(poolKey, request), (body) => parsePoolCandlePage(poolKey, request.interval, body), dependencies);
 }
 
-/** Reads one page of a pool's trades (a venue pool's: its venue activity), validated. */
+/** Reads one page of a pool's raw trades, on the curve or a venue, validated. */
 export function readPoolTrades(
   poolKey: string,
   request: TradeRequest,
