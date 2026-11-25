@@ -72,8 +72,8 @@ export function CoinPriceFigure({ price, tradeId, quoteSymbol, quoteMark }: Read
   </span>;
 }
 
-export function MarketPriceRow({ price, change, activity, showSound = false, showCurrency = true }: Readonly<{
-  price: ReactNode; change?: Readonly<{ value: ReactNode; direction?: "up" | "down" }> | null;
+export function MarketPriceRow({ price, priceLabel = "Price", change, activity, showSound = false, showCurrency = true }: Readonly<{
+  price: ReactNode; priceLabel?: string; change?: Readonly<{ value: ReactNode; direction?: "up" | "down" }> | null;
   activity?: ReactNode; showSound?: boolean; showCurrency?: boolean;
 }>) {
   const sound = useSoundSwitch();
@@ -84,7 +84,7 @@ export function MarketPriceRow({ price, change, activity, showSound = false, sho
   if (!hasPrice && !showSound && !currency && !activity) return null;
   return <div className={styles.marketPriceRow}>
     {hasPrice || activity ? <div className={styles.marketPrice}>
-      {hasPrice && <><span>Price</span><strong>{price}</strong></>}
+      {hasPrice && <><span>{priceLabel}</span><strong>{price}</strong></>}
       {hasPrice && change && !amountsHidden && <span className={styles.priceChange} data-direction={change.direction}>{change.value}</span>}
       {activity}
     </div> : null}

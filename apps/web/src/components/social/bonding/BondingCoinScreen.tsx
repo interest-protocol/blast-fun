@@ -146,7 +146,7 @@ function hasMarketSound(view: View, poolKey: string | null) {
 function MarketPrice({ units, price, tradeId = null, activity, showSound, showCurrency }: Readonly<{
   units: PriceUnits | null; price?: string | null; tradeId?: string | null; activity?: ReactNode; showSound?: boolean; showCurrency?: boolean;
 }>) {
-  return <MarketPriceRow price={price != null && units ? <PriceValue units={units} price={price} tradeId={tradeId} /> : NO_VALUE}
+  return <MarketPriceRow priceLabel="Current pool price" price={price != null && units ? <PriceValue units={units} price={price} tradeId={tradeId} /> : NO_VALUE}
     activity={activity} showSound={showSound} showCurrency={showCurrency} />;
 }
 
