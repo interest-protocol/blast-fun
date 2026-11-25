@@ -15,7 +15,9 @@ import * as HttpServer from "effect/http/HttpServer";
 import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
 import { HintsApi } from "../../data/api/hints/HintsApi.ts";
 import { HintRelays, VerifiedHintsRequest, hintHandlers } from "../../features/hints/handlers.ts";
-import { createBackendServer } from "../server.ts";
+import { createLiveSocket } from "../../transport/live-socket.ts";
+import { createBackendHttp } from "../server.ts";
+import { serveBackend, type BackendServerOptions } from "../../transport/server.ts";
 import type { hintsConfig } from "./config.ts";
 
 export const HINTS_READINESS_DEPENDENCIES = Object.freeze(["quota-redis", "private-replay-redis"]);
@@ -46,7 +48,7 @@ export function createHintsServer(
     ),
     { disableLogger: true },
   );
-  const runtime = createBackendServer({
+  const options: BackendServerOptions = {
     ...config,
     redis,
     privateReplayRedis,
@@ -69,7 +71,22 @@ export function createHintsServer(
       await Promise.all([redis.execute(["PING"]), privateReplayRedis.execute(["PING"])]);
       return true;
     },
-  });
+  };
+  // The direct browser socket exists only on a configured live host, beside the signed SSE route.
+  const live =
+    market && config.liveHost
+      ? createLiveSocket({
+          host: config.liveHost,
+          siteOrigin: config.siteOrigin,
+          gatewaySecret: config.gatewaySecret,
+          namespace: config.namespace,
+          redis: privateReplayRedis,
+          ingress: config.ingress,
+          relay: market(),
+          drainMs: config.streamDrainMs,
+        })
+      : undefined;
+  const runtime = serveBackend(options, createBackendHttp(options), live);
   let stopped: Promise<void> | undefined;
   return {
     server: runtime.server,

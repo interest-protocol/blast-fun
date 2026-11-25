@@ -64,7 +64,7 @@ test("the relay sends a four-second heartbeat only after a pong and times out fr
   assert.equal(frames.length, framesAtLoss);
   t.mock.timers.tick(1);
   assert.equal(socket.closed, 1);
-  assert.match(frames.at(-1)!, /"reason":"upstream-silent"/);
+  assert.equal(frames.length, framesAtLoss, "browsers stay connected and quiet while the relay reconnects");
 });
 
 test("optional feed refusal preserves activity and sanitizes metadata on the combined stream", async () => {
@@ -150,19 +150,29 @@ test("the relay reads subscribed prices in one batch and sends each client only 
 });
 
 for (const type of ["resync_required", "reconnect"]) {
-  test(`${type} during optional feed handshake still forces recovery`, async () => {
-    const socket = new Socket();
-    const relay = new MarketStreamRelay(() => socket, { network: "mainnet", deployment: fingerprint });
-    const reader = relay.stream(new Request("https://frontend.test/api/launchpad/market/stream?activity=true")).body!.getReader();
-    try {
-      await read(reader);
-      socket.receive({ type: "hello", protocol: 1, provenance });
-      await read(reader);
-      socket.receive({ type: "pong" });
-      await read(reader);
-      socket.receive({ type });
-      assert.equal((await read(reader)).event, "resync");
-      assert.equal(socket.closed, 1);
-    } finally { await reader.cancel(); }
+  test(`${type} during optional feed handshake reconnects upstream and keeps the browser`, (t) => {
+    t.mock.timers.enable({ apis: ["setInterval", "setTimeout"] });
+    const sockets: Socket[] = [];
+    const relay = new MarketStreamRelay(() => {
+      sockets.push(new Socket());
+      return sockets.at(-1)!;
+    }, { network: "mainnet", deployment: fingerprint });
+    const events: string[] = [];
+    let closed = false;
+    const stop = relay.subscribe(new Request("https://frontend.test/api/launchpad/market/stream?activity=true"), {
+      send: (chunk) => { events.push(new TextDecoder().decode(chunk).match(/^event: (.+)$/m)![1]!); return true; },
+      close: () => { closed = true; },
+    }) as () => void;
+    sockets[0]!.receive({ type: "hello", protocol: 1, provenance });
+    sockets[0]!.receive({ type: "pong" });
+    sockets[0]!.receive({ type });
+    assert.equal(sockets[0]!.closed, 1);
+    assert.equal(closed, false);
+    assert.equal(events.includes("resync"), false);
+    t.mock.timers.tick(400);
+    assert.equal(sockets.length, 2);
+    sockets[1]!.receive({ type: "hello", protocol: 1, provenance });
+    assert.equal(events.at(-1), "hint", "the browser gets the new hello");
+    stop();
   });
 }
