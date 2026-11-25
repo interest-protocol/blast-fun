@@ -238,7 +238,7 @@ test("R3-73-AC-5: Settings goes to /settings and closes the menu (the gate's `go
   assert.equal(menuOf(ACCOUNT_MENU_ID), null);
 });
 
-test("background music keeps playing when navigation replaces the shell", async (t) => {
+test("background music keeps playing across navigation and tab switches until turned off", async (t) => {
   const audio = document.createElement("audio");
   let paused = true;
   Object.defineProperties(audio, {
@@ -256,12 +256,21 @@ test("background music keeps playing when navigation replaces the shell", async 
   await openAudioMenu();
   await press(musicItem());
   assert.equal(audio.paused, false, "the listener starts the music");
+  assert.equal(window.sessionStorage.getItem("blast.backgroundMusic"), "true", "a reload can recover the on choice");
   await navigate("/portfolio");
   assert.equal(audio.paused, false, "the route change keeps the same track playing");
+  Object.defineProperty(document, "hidden", { value: true, configurable: true });
+  try {
+    await act(async () => { document.dispatchEvent(testEvent("visibilitychange")); });
+    assert.equal(audio.paused, false, "switching browser tabs lets the track keep playing");
+  } finally {
+    Reflect.deleteProperty(document, "hidden");
+  }
   await openAudioMenu();
   assert.equal(musicItem().getAttribute("aria-checked"), "true");
   await press(musicItem());
   assert.equal(audio.paused, true, "the listener can pause from the new page");
+  assert.equal(window.sessionStorage.getItem("blast.backgroundMusic"), "false", "a reload also remembers the off choice");
 });
 
 test("phone More reveals Portfolio and Create, and dismisses safely", async (t) => {

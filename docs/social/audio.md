@@ -1,6 +1,6 @@
 # Blast web audio
 
-The speaker beside Search opens the Audio menu. Sound effects start on and remember the reader’s choice. Background music starts off. Once started, it continues through in-app navigation in the same tab and pauses when the tab is hidden.
+The speaker beside Search opens the Audio menu. Sound effects start on and remember the reader’s choice. An independently opened Blast tab starts with background music off. Once on, it continues through in-app navigation and while the reader uses another tab. The tab remembers the setting on reload. If the browser blocks autoplay, the music starts at the next click, tap or key press that allows playback.
 
 | Page or surface | Action | Sound |
 | --- | --- | --- |
@@ -18,4 +18,4 @@ The speaker beside Search opens the Audio menu. Sound effects start on and remem
 | Settings `/settings`, sign-in `/sign-in`, invites `/invites`, presale receipt `/presale/[presaleId]/receipt/[wallet]` | Change a setting, sign in, copy, share or inspect | Soft control sounds. Typing, loading and passive account status stay silent. |
 | Legal pages, share-card pages and the fallback terminal at `/` when the app is disabled | Read or share | Silent. |
 
-Effects wait for the first gesture, stay silent in hidden tabs and use the browser’s synthesizer. The music is Mission Control’s *Cozy Vinyl Groove*, from the original `cozy-vinyl-groove.wav` in Blast history at `9b6bb418f`. The full 188-second track is a quiet, 48 kbps stereo MP3 of 1,129,536 bytes. The browser receives the media URL only when the reader starts music. Effects, playback and the action map add no API requests. Music uses a static file that the browser can fetch in ranges.
+Effects wait for the first gesture, stay silent in hidden tabs and use the browser’s synthesizer. The music is Mission Control’s *Cozy Vinyl Groove*, from the source `cozy-vinyl-groove.wav` in Blast history at `9b6bb418f`. The WAV’s embedded metadata identifies it as made with Suno. The full 188-second track is a quiet, 48 kbps stereo MP3 of 1,129,536 bytes. The browser sets the media URL when the reader turns on music or the saved setting is on. Effects, playback and the action map add no API requests. Music uses a static file that the browser can fetch in ranges.
