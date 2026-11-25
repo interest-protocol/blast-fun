@@ -174,6 +174,20 @@ function validateCandle(frame: Frame): void {
 }
 
 /** One private market socket per process; subscription and downstream byte budgets are finite. */
+function parseSubscription(request: Request): { pools: readonly string[]; priceCoins: readonly string[]; presale: string | null } | null {
+  try {
+    return { pools: marketStreamPools(request), priceCoins: marketStreamPriceCoins(request), presale: marketStreamPresale(request) };
+  } catch {
+    return null;
+  }
+}
+
+function validateMarketBody(frame: Frame): void {
+  if (frame.type === "trade") validateTrade(frame);
+  if (frame.type === "candle_closed") validateCandle(frame);
+  if (frame.type === "opening_round") parseOpeningRound(frame.opening_round, "opening_round");
+}
+
 export class MarketStreamRelay {
   readonly #connect: () => RelaySocket;
   readonly #expected: ExpectedDeployment;
@@ -222,20 +236,15 @@ export class MarketStreamRelay {
   }
 
   subscribe(request: Request, sink?: HintSink, options: MarketSubscribeOptions = {}): HintSubscription {
-    let pools: readonly string[];
-    let priceCoins: readonly string[];
-    let presale: string | null;
-    try {
-      pools = marketStreamPools(request);
-      priceCoins = marketStreamPriceCoins(request);
-      presale = marketStreamPresale(request);
-    } catch {
+    const parsed = parseSubscription(request);
+    if (!parsed) {
       return publicErrorResponse(
         "invalid_parameter",
         "Invalid subscription to market pools or coin prices.",
         400,
       );
     }
+    const { pools, priceCoins, presale } = parsed;
     if (request.signal.aborted)
       return publicErrorResponse(
         "request_cancelled",
@@ -287,14 +296,17 @@ export class MarketStreamRelay {
     }
     this.#send(client, event("status", { state: "connecting" }));
     this.#joinTopics(client, options.resume);
-    if (client.activity && this.#hello) {
-      this.#send(client, event("hint", this.#hello));
-      if (this.#hintReady) this.#send(client, event("hint", this.#hintPong(client.presale !== null)));
-    }
+    this.#greetHints(client);
     if (!this.#heartbeat) this.#heartbeat = setInterval(() => this.#beat(), B.heartbeatMs);
     if (!this.#socket && !this.#reopen) this.#open();
     else if (this.#ready && added.length) this.#subscribe("subscribe", added);
     return stop;
+  }
+
+  #greetHints(client: Client): void {
+    if (!client.activity || !this.#hello) return;
+    this.#send(client, event("hint", this.#hello));
+    if (this.#hintReady) this.#send(client, event("hint", this.#hintPong(client.presale !== null)));
   }
 
   #joinTopics(client: Client, resume?: ReadonlyMap<string, string>): void {
@@ -542,25 +554,11 @@ export class MarketStreamRelay {
     // An unsubscribe can race with already queued, still valid upstream frames.
     if (!topic) return;
     const cursor = validateEnvelope(frame, this.#expected);
-    if (topic.resuming) {
-      if (frame.type !== "snapshot") {
-        // Replayed frames lack their state; the browser gets them through the snapshot's new fence.
-        if (!topic.cursor || compareEventCursors(cursor, topic.cursor) > 0) topic.resumeChanged = true;
-        return;
-      }
-      const changed = topic.resumeChanged;
-      clearTimeout(topic.deadline);
-      Object.assign(topic, { deadline: undefined, resuming: false, resumeChanged: false });
-      // Nothing happened to the pool while upstream was away: browsers keep their fence and ring.
-      if (!changed) return;
-    }
+    if (topic.resuming && !this.#endResume(topic, frame, cursor)) return;
     if (topic.cursor && compareEventCursors(cursor, topic.cursor) < 0)
       throw new Error();
     if (frame.type !== "snapshot" && !topic.fence) throw new Error();
-    if (frame.type === "trade") validateTrade(frame);
-    if (frame.type === "candle_closed") validateCandle(frame);
-    if (frame.type === "opening_round")
-      parseOpeningRound(frame.opening_round, "opening_round");
+    validateMarketBody(frame);
     if (
       topic.cursor &&
       frame.type !== "snapshot" &&
@@ -568,6 +566,20 @@ export class MarketStreamRelay {
     )
       return;
     this.#deliver(pool, topic, frame, cursor);
+  }
+
+  /** True when a resuming pool's frame should be delivered: only a snapshot after a change while away. */
+  #endResume(topic: Topic, frame: Frame, cursor: string): boolean {
+    if (frame.type !== "snapshot") {
+      // Replayed frames lack their state; the browser gets them through the snapshot's new fence.
+      if (!topic.cursor || compareEventCursors(cursor, topic.cursor) > 0) topic.resumeChanged = true;
+      return false;
+    }
+    const changed = topic.resumeChanged;
+    clearTimeout(topic.deadline);
+    Object.assign(topic, { deadline: undefined, resuming: false, resumeChanged: false });
+    // Nothing happened to the pool while upstream was away: browsers keep their fence and ring.
+    return changed === true;
   }
 
   #deliver(pool: string, topic: Topic, frame: Frame, cursor: string): void {
