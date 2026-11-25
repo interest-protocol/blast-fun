@@ -166,7 +166,7 @@ export class MarketStreamRelay {
   #hintReady = false;
   #presaleCheckpoint: number | null = null;
   #feedPending = false;
-  #awaitingPong = false;
+  #pongDeadline?: ReturnType<typeof setTimeout>;
   #handshake?: ReturnType<typeof setTimeout>;
   #heartbeat?: ReturnType<typeof setInterval>;
   #ending = false;
@@ -295,16 +295,19 @@ export class MarketStreamRelay {
   }
 
   #beat(): void {
-    if (this.#awaitingPong) return this.#end("upstream-silent");
-    for (const client of this.#clients)
-      this.#send(client, HEARTBEAT);
     if (!this.#ready) return;
     try {
-      this.#awaitingPong = true;
-      this.#socket?.send(JSON.stringify({ op: "ping" }));
+      this.#ping();
     } catch {
       this.#end("upstream-unavailable");
     }
+  }
+
+  #ping(): void {
+    if (!this.#socket || this.#pongDeadline !== undefined) return;
+    // A ping during handshake can land just before an interval tick.
+    this.#pongDeadline = setTimeout(() => this.#end("upstream-silent"), 2 * B.heartbeatMs);
+    this.#socket.send(JSON.stringify({ op: "ping" }));
   }
 
   #subscribe(
@@ -375,7 +378,7 @@ export class MarketStreamRelay {
   #control(socket: RelaySocket, frame: Frame): boolean {
     switch (frame.type) {
       case "hello":
-        this.#greet(socket, frame);
+        this.#greet(frame);
         return true;
       case "pong":
         this.#pong(socket, frame);
@@ -404,7 +407,7 @@ export class MarketStreamRelay {
     }
   }
 
-  #greet(socket: RelaySocket, frame: Frame): void {
+  #greet(frame: Frame): void {
     if (
       this.#ready ||
       frame.protocol !== 1 ||
@@ -412,17 +415,23 @@ export class MarketStreamRelay {
     )
       throw new Error();
     this.#ready = true;
-    this.#hello = { type: "hello", provenance: frame.provenance, heartbeat: true };
+    this.#hello = { type: "hello", provenance: frame.provenance, heartbeat: true, heartbeat_ms: B.heartbeatMs };
     this.#hint(this.#hello);
     this.#subscribe("subscribe", [...this.#topics.keys()], true);
-    this.#awaitingPong = true;
-    socket.send(JSON.stringify({ op: "ping" }));
+    this.#ping();
   }
 
   #pong(socket: RelaySocket, frame: Frame): void {
-    this.#awaitingPong = false;
     if (!this.#ready) throw new Error();
-    if (this.#hintReady) { this.#feedPending = false; return; }
+    if (this.#pongDeadline === undefined) return;
+    clearTimeout(this.#pongDeadline);
+    this.#pongDeadline = undefined;
+    if (this.#hintReady) {
+      this.#feedPending = false;
+      // Confirm the upstream is alive before resetting the browser's deadline.
+      for (const client of this.#clients) this.#send(client, HEARTBEAT);
+      return;
+    }
     if (safeCount(frame.activity_checkpoint)) {
       this.#presaleCheckpoint = Math.max(this.#presaleCheckpoint ?? -1, Number(frame.activity_checkpoint));
     }
@@ -435,7 +444,7 @@ export class MarketStreamRelay {
       if (client.activity) this.#send(client, client.presale ? presalePong : pong);
     this.#feedPending = true;
     socket.send(JSON.stringify({ op: "subscribe", topics: ["feed"] }));
-    socket.send(JSON.stringify({ op: "ping" }));
+    this.#ping();
   }
 
   #hintPong(presale: boolean): Frame {
@@ -567,7 +576,8 @@ export class MarketStreamRelay {
     this.#hintReady = false;
     this.#presaleCheckpoint = null;
     this.#feedPending = false;
-    this.#awaitingPong = false;
+    clearTimeout(this.#pongDeadline);
+    this.#pongDeadline = undefined;
     if (socket) {
       socket.onclose = socket.onerror = socket.onmessage = null;
       socket.close();

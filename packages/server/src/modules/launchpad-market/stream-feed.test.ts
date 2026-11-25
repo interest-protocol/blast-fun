@@ -24,6 +24,49 @@ async function read(reader: ReadableStreamDefaultReader<Uint8Array>) {
   return { event: text.match(/^event: (.+)$/m)?.[1], data: JSON.parse(text.match(/^data: (.+)$/m)![1]!) };
 }
 
+test("the relay sends a four-second heartbeat only after a pong and times out from the ping", (t) => {
+  t.mock.timers.enable({ apis: ["setInterval", "setTimeout"] });
+  const socket = new Socket();
+  const relay = new MarketStreamRelay(() => socket, { network: "mainnet", deployment: fingerprint });
+  const frames: string[] = [];
+  relay.subscribe(new Request("https://frontend.test/api/launchpad/market/stream?activity=true"), {
+    send: (chunk) => { frames.push(new TextDecoder().decode(chunk)); return true; },
+    close: () => {},
+  });
+
+  t.mock.timers.tick(3_999);
+  socket.receive({ type: "hello", protocol: 1, provenance });
+  assert.match(frames.at(-1)!, /"heartbeat_ms":4000/);
+  const sentAfterHello = socket.sent.length;
+  t.mock.timers.tick(1);
+  assert.equal(socket.closed, 0, "the first interval tick cannot expire a new ping");
+  assert.equal(socket.sent.length, sentAfterHello, "one ping can be in flight");
+
+  t.mock.timers.tick(5_999);
+  socket.receive({ type: "pong" });
+  assert.match(frames.at(-1)!, /"type":"pong"/);
+  t.mock.timers.tick(4_000);
+  socket.receive({ type: "pong" });
+  const sentAfterHandshake = socket.sent.length;
+  const confirmedFrames = frames.length;
+  t.mock.timers.tick(2_001);
+  assert.deepEqual(socket.sent.slice(sentAfterHandshake), [{ op: "ping" }]);
+  assert.equal(frames.length, confirmedFrames, "an unanswered ping cannot refresh the browser watchdog");
+  socket.receive({ type: "pong" });
+  assert.equal(frames.at(-1), "event: heartbeat\ndata: {}\n\n");
+
+  t.mock.timers.tick(4_000);
+  const framesAtLoss = frames.length;
+  const sentAtLoss = socket.sent.length;
+  t.mock.timers.tick(7_999);
+  assert.equal(socket.closed, 0);
+  assert.equal(socket.sent.length, sentAtLoss, "later ticks neither repeat the ping nor extend its deadline");
+  assert.equal(frames.length, framesAtLoss);
+  t.mock.timers.tick(1);
+  assert.equal(socket.closed, 1);
+  assert.match(frames.at(-1)!, /"reason":"upstream-silent"/);
+});
+
 test("optional feed refusal preserves activity and sanitizes metadata on the combined stream", async () => {
   const socket = new Socket();
   const relay = new MarketStreamRelay(() => socket, { network: "mainnet", deployment: fingerprint });
@@ -70,6 +113,12 @@ test("the relay reads subscribed prices in one batch and sends each client only 
     socket.receive({ type: "hello", protocol: 1, provenance });
     assert.equal((await read(first)).event, "hint");
     assert.equal((await read(second)).event, "hint");
+    socket.receive({ type: "pong" });
+    assert.equal((await read(first)).data.type, "pong");
+    assert.equal((await read(second)).data.type, "pong");
+    socket.receive({ type: "pong" });
+    assert.equal((await read(first)).event, "heartbeat");
+    assert.equal((await read(second)).event, "heartbeat");
     t.mock.timers.tick(1);
     assert.deepEqual(await read(first), { event: "prices", data: { checkpoint: 10, prices: [firstPrice] } });
     assert.deepEqual(await read(second), { event: "prices", data: { checkpoint: 10, prices: [secondPrice] } });
