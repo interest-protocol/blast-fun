@@ -43,6 +43,9 @@ function ntpSynced() {
 async function gateCookie() {
   if (cookie && Date.now() - cookieAt < 30 * 60_000) return { html: null };
   const response = await fetch(`${site}/`, { redirect: "follow", signal: AbortSignal.timeout(15_000) });
+  if (!response.ok) {
+    throw new Error(`Home page load failed: HTTP ${response.status}`);
+  }
   cookie = response.headers.getSetCookie().map((value) => value.split(";")[0]).join("; ");
   cookieAt = Date.now();
   return { html: await response.text() };
