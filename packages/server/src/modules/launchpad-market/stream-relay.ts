@@ -52,6 +52,8 @@ type Topic = {
   resuming?: boolean;
   /** A replayed frame arrived: the trailing snapshot is a new fence. Otherwise it is dropped. */
   resumeChanged?: boolean;
+  /** The latest `coin_stats` (state, not log): sent after each fence, never in the ring. */
+  stats?: { checkpoint: number; bytes: Uint8Array };
 };
 /** Options for a direct socket subscriber. SSE keeps its finite lifetime and never resumes. */
 export type MarketSubscribeOptions = Readonly<{
@@ -320,7 +322,18 @@ export class MarketStreamRelay {
         this.#send(client, event("status", { ...topic.fence, cursor: missed.from, resumed: true }));
         for (const frame of missed.frames) this.#send(client, frame.bytes);
       } else this.#send(client, event("status", topic.fence));
+      if (topic.stats) this.#send(client, topic.stats.bytes);
     }
+  }
+
+  /** Latest wins by checkpoint; its cursor may precede trades it already counts, so it skips the cursor order. */
+  #stats(topic: Topic, frame: Frame): void {
+    if (typeof frame.coin !== "string" || frame.coin.length > 320) throw new Error();
+    if (topic.stats && (frame.checkpoint as number) < topic.stats.checkpoint) return;
+    const bytes = event("stats", stampRelay(withoutLabels(frame), Date.now()));
+    if (bytes.byteLength > B.maxChunkBytes) return;
+    topic.stats = { checkpoint: frame.checkpoint as number, bytes };
+    if (topic.fence && !topic.resuming) for (const client of topic.clients) this.#send(client, bytes);
   }
 
   #releaseTopics(client: Client): void {
@@ -540,7 +553,7 @@ export class MarketStreamRelay {
 
   #market(frame: Frame): void {
     if (
-      !["snapshot", "trade", "candle_closed", "lifecycle", "opening_round"].includes(
+      !["snapshot", "trade", "candle_closed", "lifecycle", "opening_round", "coin_stats"].includes(
         String(frame.type),
       )
     )
@@ -550,6 +563,7 @@ export class MarketStreamRelay {
     // An unsubscribe can race with already queued, still valid upstream frames.
     if (!topic) return;
     const cursor = validateEnvelope(frame, this.#expected);
+    if (frame.type === "coin_stats") return this.#stats(topic, frame);
     if (topic.resuming) {
       if (frame.type !== "snapshot") {
         // Replayed frames lack their state; the browser gets them through the snapshot's new fence.
@@ -601,8 +615,10 @@ export class MarketStreamRelay {
       topic.ring = [];
       topic.ringBytes = 0;
       topic.floor = cursor;
-      for (const client of topic.clients)
+      for (const client of topic.clients) {
         this.#send(client, event("status", topic.fence));
+        if (topic.stats) this.#send(client, topic.stats.bytes);
+      }
     } else {
       const bytes = event("market", stampRelay(withoutLabels(frame), Date.now()), cursor);
       if (bytes.byteLength > B.maxChunkBytes)
