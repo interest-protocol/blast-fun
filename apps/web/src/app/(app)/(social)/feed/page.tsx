@@ -44,7 +44,7 @@ async function loadHome(state: HomeFeedState, sections: HomeSectionPrefs, rows: 
   const posts = shown("posts") ? readFeedPageFromBackend().catch(failed("posts")) : null;
   const [pinnedPresales, pinnedCurves] = await Promise.all([
     readFeaturedPresalesFromBackend().catch(failed("pinned-presales")),
-    readBondingHeroFromBackend().then((seed) => seed ?? failed("pinned-curves")()),
+    readBondingHeroFromBackend().then((seed) => seed ?? failed("pinned-curves")(), failed("pinned-curves")),
   ]);
   const marketSeed = async () => {
     const initial = await Promise.race([coins, coinsPending] as const);
