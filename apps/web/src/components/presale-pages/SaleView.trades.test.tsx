@@ -222,7 +222,7 @@ test("confirmed presale trades update the list and headline without a read, incl
     const history = await historyStream;
     await emitTrade(106, ID, CREATE_SUI_QUOTE_TYPE, history);
     await act(async () => {
-      history.receive({ type: "activity", activity_id: "106:0:4294967295:0", kind: "trade_buy", presale_id: ID });
+      history.emit("hint", { type: "activity", activity_id: "106:0:4294967295:0", kind: "trade_buy", presale_id: ID });
     });
     await settle();
     assert.equal(reads.length, readsBeforeDust, "a dust trade's hint asks for no read");
