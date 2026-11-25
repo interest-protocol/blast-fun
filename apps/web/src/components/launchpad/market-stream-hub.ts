@@ -84,6 +84,7 @@ type Pool = { fence: number | null; seen: number; cursor: string | null; tradeCu
 type Connection = { pools: Map<string, Pool>; priceCoins: Set<string>; presale?: string; presaleFence: number | null; presaleSeen: number; expected: ExpectedDeployment | null; source: MarketEventSource | null; live: boolean };
 
 const HELLO_DEADLINE_MS = 10_000;
+const LEGACY_HEARTBEAT_TIMEOUT_MS = 45_000;
 /** A hidden tab keeps its stream this long, so a quick tab flip costs no reconnect or history read. */
 export const HIDDEN_GRACE_MS = 15_000;
 /** A connection live this long resets the backoff; a subscriber that keeps restarting a live stream still backs off. */
@@ -417,15 +418,22 @@ export class MarketStreamHub {
       }, STABLE_MS);
       this.covered("live");
     };
-    let heartbeat = false;
+    let heartbeatTimeoutMs: number | null = null;
     const expectHeartbeat = () => {
-      if (!current()) return;
+      if (!current() || heartbeatTimeoutMs === null) return;
       this.cancelHeartbeat?.();
       this.cancelHeartbeat = this.deps.schedule(() => {
         if (current()) this.reconnect();
-      }, 3 * MARKET_STREAM_BUDGET.heartbeatMs);
+      }, heartbeatTimeoutMs);
     };
-    source.addEventListener("heartbeat", () => { if (heartbeat) expectHeartbeat(); });
+    const confirmPong = (checkpoint: unknown) => {
+      // The handshake pong is the first confirmed upstream heartbeat.
+      if (heartbeatTimeoutMs === MARKET_STREAM_BUDGET.heartbeatTimeoutMs) expectHeartbeat();
+      if (typeof checkpoint === "number" && Number.isSafeInteger(checkpoint) && checkpoint >= 0) {
+        this.presaleState(connection, checkpoint);
+      }
+    };
+    source.addEventListener("heartbeat", expectHeartbeat);
     source.addEventListener("status", (event) => {
       if (!current()) return;
       try {
@@ -500,14 +508,18 @@ export class MarketStreamHub {
         const hint = JSON.parse(event.data) as Record<string, unknown>;
         if (hint.type === "hello" && parseInfraProvenance(hint.provenance).network === "mainnet" && !hintReady) {
           hintReady = true;
-          heartbeat = hint.heartbeat === true;
-          if (heartbeat) expectHeartbeat();
+          if (hint.heartbeat === true) {
+            heartbeatTimeoutMs = hint.heartbeat_ms === MARKET_STREAM_BUDGET.heartbeatMs
+              ? MARKET_STREAM_BUDGET.heartbeatTimeoutMs
+              : LEGACY_HEARTBEAT_TIMEOUT_MS;
+            expectHeartbeat();
+          }
           // Pools get their fence deadline from the handshake, not from a slow upstream before it.
           this.cancelHello?.();
           this.cancelHello = this.deps.schedule(() => { if (current()) this.deadline(connection); }, HELLO_DEADLINE_MS);
           ready();
-        } else if (hintReady && hint.type === "pong" && Number.isSafeInteger(hint.presale_checkpoint) && Number(hint.presale_checkpoint) >= 0) {
-          this.presaleState(connection, Number(hint.presale_checkpoint));
+        } else if (hintReady && hint.type === "pong") {
+          confirmPong(hint.presale_checkpoint);
         }
       } catch { /* The hint carrier refuses malformed hints independently. */ }
       this.hints?.frame(event.data);

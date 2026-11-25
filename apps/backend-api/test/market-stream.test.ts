@@ -742,34 +742,38 @@ test("one shared stream combines sanitized activity hints with pool updates and 
 });
 
 test("upstream heartbeat silence forces recovery instead of keeping stale prices live", async () => {
-  const original = globalThis.setInterval;
+  const { setInterval: realInterval, setTimeout: realTimeout } = globalThis;
   let beat: (() => void) | undefined;
+  const deadlines: (() => void)[] = [];
   globalThis.setInterval = ((callback: () => void) => {
     beat = callback;
-    return original(() => {}, 3_600_000);
+    return realInterval(() => {}, 3_600_000);
   }) as typeof setInterval;
+  globalThis.setTimeout = ((callback: () => void, ms?: number) => {
+    if (ms === 2 * B.heartbeatMs) {
+      deadlines.push(callback);
+    }
+    return realTimeout(() => {}, 3_600_000);
+  }) as typeof setTimeout;
   const socket = new Socket();
   const relay = new MarketStreamRelay(() => socket, expected);
   const reader = relay.stream(request()).body!.getReader();
-  globalThis.setInterval = original;
   try {
     await read(reader);
     socket.hello();
     socket.receive({ type: "pong" });
     socket.receive(snapshot());
     await read(reader);
-    beat!();
+    socket.receive({ type: "pong" }); // Answers the feed ping: the browser hears the upstream is alive.
     assert.equal((await read(reader)).event, "heartbeat");
-    socket.receive({ type: "pong" });
     beat!();
-    await reader.read();
-    beat!(); // The previous private ping never received its pong.
+    deadlines.at(-1)!(); // That ping is never answered.
     const recovery = await read(reader);
     assert.equal(recovery.event, "resync");
     assert.equal(recovery.data.reason, "upstream-silent");
     assert.equal(socket.closed, 1);
   } finally {
-    globalThis.setInterval = original;
+    Object.assign(globalThis, { setInterval: realInterval, setTimeout: realTimeout });
     await reader.cancel();
   }
 });
