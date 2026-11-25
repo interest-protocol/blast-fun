@@ -16,7 +16,8 @@ import { SOCIAL_CONFIG_DEFAULTS, type SocialConfig } from "@blast/core/modules/s
 import type { SocialFeedNewResponse, SocialFeedPage } from "@blast/core/modules/social/contracts/feed.ts";
 import { createSocialValidator } from "@blast/core/modules/social/contracts/validate.ts";
 import { createSocialRouteKit } from "@blast/server/modules/social/route-kit/route.ts";
-import { FEED_STORY_ACCOUNTS, FEED_STORY_HIDDEN_TEXT, FEED_STORY_MARKUP, seedFeedStory, seedHiddenSales, type FeedStory } from "../../../../../core/test/fixtures/modules/social/feed/feed-story.ts";
+import { FEED_STORY_ACCOUNTS, FEED_STORY_HIDDEN_TEXT, FEED_STORY_MARKUP, FEED_STORY_PRESALES, seedFeedStory, seedHiddenSales, type FeedStory } from "../../../../../core/test/fixtures/modules/social/feed/feed-story.ts";
+import { encodeForYouCursor } from "@blast/server/modules/social/feed/feed-reader.ts";
 import { createSocialFeedRoute } from "@blast/server/modules/social/feed/route.ts";
 
 /**
@@ -57,6 +58,8 @@ type Fixture = Readonly<{
   fresh(query: string): Promise<Response>;
   /** The next read's tuning values come from the database again. */
   expireConfig(): void;
+  advanceFeedClock(ms: number): void;
+  feedLoads(): number;
 }>;
 
 async function withFixture(run: (fixture: Fixture) => Promise<void>, filler = 0): Promise<void> {
@@ -70,6 +73,8 @@ async function withFixture(run: (fixture: Fixture) => Promise<void>, filler = 0)
     assert.equal((await replicaPool.query("SELECT current_user AS role")).rows[0]?.role, "blast_replica");
     const replica = autocommitReader(replicaPool, "social");
     let clock = 0;
+    let feedClock = NOW;
+    let loads = 0;
     const reader = createSocialConfigReader(autocommitReader(webPool, "social"), { now: () => clock });
     const kit = createSocialRouteKit({
       tradingVisible: () => true,
@@ -91,7 +96,10 @@ async function withFixture(run: (fixture: Fixture) => Promise<void>, filler = 0)
         throw new Error("the feed never opens a primary transaction");
       },
     });
-    const route = createSocialFeedRoute({ kit, database: () => replica, config: reader.getSocialConfig, now: () => NOW });
+    const route = createSocialFeedRoute({ kit, database: () => {
+      loads += 1;
+      return replica;
+    }, config: reader.getSocialConfig, now: () => feedClock });
     await run({
       admin,
       url,
@@ -103,6 +111,8 @@ async function withFixture(run: (fixture: Fixture) => Promise<void>, filler = 0)
       expireConfig: () => {
         clock += 60_000;
       },
+      advanceFeedClock: (ms) => { feedClock += ms; },
+      feedLoads: () => loads,
     });
   } finally {
     await Promise.all([admin.end(), replicaPool.end(), webPool.end()]);
@@ -221,7 +231,7 @@ test("T-007-AC-3: the window, the naming rule and live or recently migrated pres
 });
 
 test("T-007-AC-4: as_of is the slowest pipeline's watermark; 61 s of lag is reported, never an error", { skip }, async () => {
-  await withFixture(async ({ admin, get }) => {
+  await withFixture(async ({ admin, get, advanceFeedClock }) => {
     await admin.query(advanceWatermark(41_000, 1_000, "presale"));
     await admin.query(advanceWatermark(40_500, 61_000, "market"));
     const body = await page(await get());
@@ -229,17 +239,56 @@ test("T-007-AC-4: as_of is the slowest pipeline's watermark; 61 s of lag is repo
     assert.ok(body.as_of.lag_ms >= 61_000 && body.as_of.lag_ms < 120_000, String(body.as_of.lag_ms));
     assert.ok(body.items.length > 0);
     await admin.query(advanceWatermark(39_000, 3_600_000, "presale"));
+    advanceFeedClock(10_000);
     const later = await page(await get());
     assert.equal(later.as_of.checkpoint, 39_000);
     assert.ok(later.as_of.lag_ms >= 3_600_000);
     assert.deepEqual(later.items.map((item) => item.entry_id), body.items.map((item) => item.entry_id));
     // With no readable watermark the freshness is unknown: 503, not stale data presented as fresh.
     await admin.query("DELETE FROM watermarks");
+    advanceFeedClock(10_000);
     const unknown = await get();
     assert.equal(unknown.status, 503);
     assert.equal(unknown.headers.get("cache-control"), "no-store");
     assert.ok(unknown.headers.get("retry-after"));
   });
+});
+
+test("overlapping default feed requests share one page and its remaining freshness, while other pages load independently", { skip }, async () => {
+  await withFixture(async ({ admin, get, advanceFeedClock, feedLoads }) => {
+    const [first, joined] = await Promise.all([get(), get("?tab=for_you&limit=20")]);
+    assert.notEqual(first.headers.get("x-request-id"), joined.headers.get("x-request-id"));
+    const body = await page(first);
+    assert.deepEqual(await page(joined), body);
+    assert.equal(feedLoads(), 1);
+
+    await admin.query(advanceWatermark(41_000, 0, "market"));
+    await admin.query(advanceWatermark(41_000, 0, "presale"));
+    advanceFeedClock(4_000);
+    const held = await get();
+    assert.equal(held.status, 200);
+    assert.equal(held.headers.get("cache-control"), "public, s-maxage=6, stale-while-revalidate=20");
+    assert.deepEqual(await held.json(), body);
+    assert.equal(feedLoads(), 1);
+
+    assert.ok(body.next_cursor);
+    const next = await page(await get(`?cursor=${encodeURIComponent(body.next_cursor)}`));
+    const custom = await page(await get("?limit=7"));
+    assert.equal(next.as_of.checkpoint, 41_000);
+    assert.equal(custom.as_of.checkpoint, 41_000);
+    assert.equal(custom.items.length, 7);
+    assert.equal(feedLoads(), 3);
+
+    advanceFeedClock(5_500);
+    const almostStale = await get();
+    assert.equal(almostStale.headers.get("cache-control"), "no-store");
+    assert.deepEqual(await almostStale.json(), body);
+    assert.equal(feedLoads(), 3);
+
+    advanceFeedClock(500);
+    assert.equal((await page(await get())).as_of.checkpoint, 41_000);
+    assert.equal(feedLoads(), 4);
+  }, 40);
 });
 
 test("T-007: paging walks every candidate exactly once in rank order; bad parameters are invalid_parameter", { skip }, async () => {
@@ -266,6 +315,9 @@ test("T-007: paging walks every candidate exactly once in rank order; bad parame
     await refused(await get("?cursor=nope"), "cursor");
     const [body, check] = first.next_cursor!.split(".");
     await refused(await get(`?cursor=${body}x.${check}`), "cursor");
+    const cursorWithNull = encodeForYouCursor({ rankMs: NOW + 86_400_000, entryId: `m:${FEED_STORY_PRESALES.open}:participants:\u0000` });
+    const resumed = await page(await get(`?cursor=${cursorWithNull}`));
+    assert.deepEqual(resumed.items, first.items, "accepted cursor strings still compare by UTF-8 bytes");
     // Unknown parameters are ignored.
     assert.deepEqual((await page(await get("?utm_source=x"))).items.map((item) => item.entry_id), first.items.map((item) => item.entry_id));
   }, 40);
