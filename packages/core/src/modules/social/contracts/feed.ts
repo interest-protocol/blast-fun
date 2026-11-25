@@ -6,9 +6,9 @@ import { socialAsOfSchema, socialFeedItemSchema, type FeedReadonly } from "./ite
  * JSON Schema: `schemas/feed-page.schema.json`.
  *
  * No authentication; a token changes nothing. Every answer is the same for
- * every caller, so a 200 is publicly cached
- * (`public, s-maxage=10, stale-while-revalidate=20`) and carries no
- * viewer-specific field.
+ * every caller and carries no viewer-specific field. Public responses allow
+ * up to 10 s of shared freshness and 20 s of stale revalidation. The default
+ * first page uses the same 10 s budget at the origin and the CDN.
  */
 export const SOCIAL_FEED_ROUTE = "GET /api/social/feed";
 export const SOCIAL_FEED_PATH = "/api/social/feed";

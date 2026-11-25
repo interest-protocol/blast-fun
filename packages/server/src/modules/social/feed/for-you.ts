@@ -2,7 +2,7 @@ import { recordMetric } from "@blast/core/lib/metrics.ts";
 import { z } from "zod";
 import type { ReadableDatabase } from "@blast/core/modules/database/transaction.ts";
 import type { SocialConfig } from "@blast/core/modules/social/contracts/config.ts";
-import { TRADE_ENTRY_KINDS, namedOwnerSql, personEntrySql, presalePostSql, visibleEntrySql } from "@blast/core/modules/social/read-model/naming.ts";
+import { TRADE_ENTRY_KINDS, namedOwnerSql, namedWalletsOfSql, personEntrySql, presalePostSql, visibleEntrySql } from "@blast/core/modules/social/read-model/naming.ts";
 import { EntryQueryError, MAX_ENTRY_PAGE, entryFromRow, type FeedEntry } from "@blast/core/modules/social/read-model/entries.ts";
 import { PUBLIC_PRESALES, PUBLIC_FEED_ENTRIES, pinnablePresaleSql } from "@blast/core/modules/social/read-model/chain-presales.ts";
 
@@ -68,58 +68,93 @@ function bigEntrySql(bigCommitUsd: string, bigTradeUsd: string): string {
 /** Raw entries read per scan step: bounds each statement's work and its plan (no JIT, whatever the volume). */
 export const FOR_YOU_SCAN_BATCH = 400;
 
-/*
- * One scan step: the next `$batch` entries of the window in time order (newest
- * first, then `entry_id` descending, bytewise), each marked as a For You
- * candidate or not, with its rank. The candidate rule is evaluated on those
- * rows only, so a step's cost is bounded by the batch, not by the window.
- *
- * Parameters: $1 big commit USD, $2 big trade USD, $3 window start, $4
- * migrated cut-off, $5 hidden kinds, $6 why boost, $7 big boost, $8 batch,
- * then the scan position (see `scanSql`).
- */
-function scanSql(position: "none" | "at_or_before" | "before" | "after", selection: "ranked" | "head" = "ranked"): string {
+type ScanPosition = "none" | "at_or_before" | "before" | "after";
+
+function scanBatchSql(position: ScanPosition, unusedRankBinds = ""): string {
   const bound = {
     none: "",
     at_or_before: " AND e.occurred_at_ms <= $9::bigint",
     before: ` AND (e.occurred_at_ms, e.entry_id COLLATE "C") < ($9::bigint, $10::text COLLATE "C")`,
     after: " AND e.occurred_at_ms > $9::bigint",
   }[position];
-  const columns = selection === "head" ? "e.entry_id, e.occurred_at_ms" : `e.entry_id, e.source, e.kind, e.product, e.occurred_at_ms, e.actor, e.presale_id, e.coin_type,
-      e.digest, e.activity_id, e.quote_type, e.quote_amount, e.coin_amount, e.quote_refund, e.usd_value,
-      e.usd_price_as_of_ms, e.milestone_value`;
-  // Chronological counts do not hydrate entry payloads or look up rank boosts.
-  const rank = selection === "head" ? "" : `,
-      e.occurred_at_ms
-        + CASE WHEN EXISTS (SELECT 1 FROM social_whys w WHERE w.entry_id = e.entry_id AND w.state = 'active')
-            THEN $6::bigint ELSE 0 END
-        + CASE WHEN ${bigEntrySql("$1", "$2")} THEN $7::bigint ELSE 0 END AS rank_ms`;
-  // Type the shared rank bindings inside the scan; PostgreSQL prunes these unused columns.
-  const parameters = selection === "head" ? ", $6::bigint AS why_boost_ms, $7::bigint AS big_boost_ms" : "";
-  return `SELECT ${columns}, named.account_id AS named_account_id,
-      (
-        (${personEntrySql("e")} AND named.account_id IS NOT NULL)
-        OR (${presalePostSql("e", "$1", "$2")} AND (
-          p.lifecycle IN (${list(FOR_YOU_LIVE_LIFECYCLES)})
-          OR (p.lifecycle = 'migrated' AND EXISTS (
-            SELECT 1 FROM chain_read_v1.presale_lifecycle l
-            WHERE l.presale_id = e.presale_id AND l.state = 'migrated' AND l.timestamp_ms >= $4::bigint
-          ))
-        ))
-      ) AS candidate${rank}
-    FROM (
-      SELECT *${parameters} FROM ${PUBLIC_FEED_ENTRIES} e
-      WHERE e.occurred_at_ms >= $3::bigint AND e.kind <> ALL($5::text[])${bound}
-      ORDER BY e.occurred_at_ms DESC, e.entry_id COLLATE "C" DESC
-      LIMIT $8
-    ) e
+  return `SELECT e.*${unusedRankBinds}
+    FROM ${PUBLIC_FEED_ENTRIES} e
+    WHERE e.occurred_at_ms >= $3::bigint AND e.kind <> ALL($5::text[])${bound}
+    ORDER BY e.occurred_at_ms DESC, e.entry_id COLLATE "C" DESC
+    LIMIT $8`;
+}
+
+function candidateSql(namedAccount: string): string {
+  return `(
+    (${personEntrySql("e")} AND ${namedAccount} IS NOT NULL)
+    OR (${presalePostSql("e", "$1", "$2")} AND (
+      p.lifecycle IN (${list(FOR_YOU_LIVE_LIFECYCLES)})
+      OR (p.lifecycle = 'migrated' AND EXISTS (
+        SELECT 1 FROM chain_read_v1.presale_lifecycle l
+        WHERE l.presale_id = e.presale_id AND l.state = 'migrated' AND l.timestamp_ms >= $4::bigint
+      ))
+    ))
+  )`;
+}
+
+/** The chronological count has no rank boosts or display payload. */
+function scanSql(position: ScanPosition): string {
+  return `SELECT e.entry_id, e.occurred_at_ms, named.account_id AS named_account_id,
+      ${candidateSql("named.account_id")} AS candidate
+    FROM (${scanBatchSql(position, ", $6::bigint AS why_boost_ms, $7::bigint AS big_boost_ms")}) e
     CROSS JOIN LATERAL (SELECT ${namedOwnerSql("e")} AS account_id) named
     LEFT JOIN ${PUBLIC_PRESALES} p ON p.presale_id = e.presale_id
     ORDER BY e.occurred_at_ms DESC, e.entry_id COLLATE "C" DESC`;
 }
 
-type ScanRow = Parameters<typeof entryFromRow>[0] & Readonly<{ candidate: boolean; rank_ms: string }>;
-type NewHeadRow = Pick<ScanRow, "entry_id" | "occurred_at_ms" | "named_account_id" | "candidate">;
+/**
+ * Resolve naming once per wallet in the bounded raw batch. Keep only the
+ * page's worth of ranked keys, then return their display fields from that
+ * same batch. The extra unranked row advances a full batch even if no entry
+ * qualified. Its raw time is also the ceiling for unseen boosted ranks.
+ */
+function rankedScanSql(position: Exclude<ScanPosition, "after">, firstExtraBind: number): string {
+  const pins = `$${firstExtraBind}`;
+  const cursorRank = `$${firstExtraBind + 1}`;
+  const cursorId = `$${firstExtraBind + 2}`;
+  const limit = `$${firstExtraBind + 3}`;
+  return `SELECT result.* FROM (
+    WITH batch AS MATERIALIZED (${scanBatchSql(position)}),
+    wallets AS MATERIALIZED (
+      ${namedWalletsOfSql("ARRAY(SELECT DISTINCT actor FROM batch WHERE actor IS NOT NULL)")}
+    ),
+    ranked AS (
+      SELECT e.entry_id, e.occurred_at_ms, named.account_id AS named_account_id,
+        e.occurred_at_ms
+          + CASE WHEN EXISTS (SELECT 1 FROM social_whys w WHERE w.entry_id = e.entry_id AND w.state = 'active')
+              THEN $6::bigint ELSE 0 END
+          + CASE WHEN ${bigEntrySql("$1", "$2")} THEN $7::bigint ELSE 0 END AS rank_ms
+      FROM batch e
+      LEFT JOIN wallets named ON named.address = e.actor AND named.named_from_ms <= e.occurred_at_ms
+      LEFT JOIN ${PUBLIC_PRESALES} p ON p.presale_id = e.presale_id
+      WHERE e.entry_id <> ALL(${pins}::text[]) AND ${candidateSql("named.account_id")}
+    ),
+    chosen AS (
+      SELECT entry_id, occurred_at_ms, named_account_id, rank_ms FROM ranked
+      WHERE ${cursorRank}::bigint IS NULL
+        OR (rank_ms, convert_to(entry_id, 'UTF8')) < (${cursorRank}::bigint, ${cursorId}::bytea)
+      ORDER BY rank_ms DESC, entry_id COLLATE "C" DESC
+      LIMIT ${limit}::int
+    )
+    SELECT e.*, chosen.named_account_id, chosen.rank_ms
+    FROM chosen JOIN batch e USING (entry_id, occurred_at_ms)
+    UNION ALL
+    SELECT last_row.*, NULL::uuid, NULL::bigint
+    FROM (
+      SELECT e.* FROM batch e
+      ORDER BY e.occurred_at_ms DESC, e.entry_id COLLATE "C" DESC
+      OFFSET ($8::int - 1) LIMIT 1
+    ) last_row
+  ) result`;
+}
+
+type RankedScanRow = Parameters<typeof entryFromRow>[0] & Readonly<{ rank_ms: string | null }>;
+type NewHeadRow = Pick<RankedScanRow, "entry_id" | "occurred_at_ms" | "named_account_id"> & Readonly<{ candidate: boolean }>;
 
 /** One latest public post per eligible pinned sale. Pins override post age, never sale eligibility or visibility. */
 async function pinnedEntries(db: ReadableDatabase, config: SocialConfig, nowMs: number, hiddenKinds: readonly string[]): Promise<RankedEntry[]> {
@@ -200,27 +235,39 @@ export async function forYouEntries(db: ReadableDatabase, window: ForYouWindow):
   const values = scanValues(config, nowMs, window.hiddenKinds);
   const batch = window.scanBatch ?? FOR_YOU_SCAN_BATCH;
   const pins = await pinnedEntries(db, config, nowMs, window.hiddenKinds);
-  const pinnedIds = new Set(pins.map((entry) => entry.entryId));
+  const pinnedIds = pins.map((entry) => entry.entryId);
   const found: RankedEntry[] = pins.filter((entry) => !before || afterCursor(entry, before));
-  let position: { sql: string; values: unknown[] } = before
-    ? { sql: scanSql("at_or_before"), values: [before.rankMs] }
-    : { sql: scanSql("none"), values: [] };
+  let position: Exclude<ScanPosition, "after"> = "none";
+  let bound: readonly unknown[] = [];
+  let beforeId: Buffer | null = null;
+  if (before) {
+    position = "at_or_before";
+    bound = [before.rankMs];
+    // The cursor compares UTF-8 bytes and may name a string Postgres cannot bind as text.
+    beforeId = Buffer.from(before.entryId, "utf8");
+  }
   for (;;) {
-    const result = await db.read<ScanRow>(position.sql, [...values, batch, ...position.values]);
-    for (const row of result.rows) {
-      if (!row.candidate || pinnedIds.has(row.entry_id)) continue;
-      const entry: RankedEntry = { ...entryFromRow(row), rankMs: Number(row.rank_ms) };
-      if (!before || afterCursor(entry, before)) found.push(entry);
+    const { rows } = await db.read<RankedScanRow>(rankedScanSql(position, 9 + bound.length), [
+      ...values, batch, ...bound, pinnedIds, before?.rankMs ?? null, beforeId, limit,
+    ]);
+    let last: RankedScanRow | undefined;
+    for (const row of rows) {
+      if (row.rank_ms === null) {
+        last = row;
+        continue;
+      }
+      found.push({ ...entryFromRow(row), rankMs: Number(row.rank_ms) });
     }
     found.sort(byRank);
-    const last = result.rows.at(-1);
-    if (!last || result.rows.length < batch) break;
+    if (found.length > limit) found.length = limit;
+    if (!last) break;
     // Everything not read yet ranks at most the last read time plus the largest boost.
     const ceiling = Number(last.occurred_at_ms) + maxBoost;
-    if (found.length >= limit && found[limit - 1]!.rankMs > ceiling) break;
-    position = { sql: scanSql("before"), values: [Number(last.occurred_at_ms), last.entry_id] };
+    if (found.length === limit && found[limit - 1]!.rankMs > ceiling) break;
+    position = "before";
+    bound = [Number(last.occurred_at_ms), last.entry_id];
   }
-  return found.slice(0, limit);
+  return found;
 }
 
 /** What the "N new posts" pill needs: how many candidates are newer, and the newest named actors among them. */
@@ -262,7 +309,7 @@ async function newEntryHead(db: ReadableDatabase, request: NewHeadRequest, since
   let outcome: "ok" | "error" = "error";
   try {
     const candidates: NewHeadRow[] = [];
-    let position: { sql: string; values: unknown[] } = { sql: scanSql("after", "head"), values: [sinceMs] };
+    let position: { sql: string; values: unknown[] } = { sql: scanSql("after"), values: [sinceMs] };
     for (;;) {
       steps += 1;
       const result = await db.read<NewHeadRow>(position.sql, [...values, batch, ...position.values]);
@@ -270,7 +317,7 @@ async function newEntryHead(db: ReadableDatabase, request: NewHeadRequest, since
       candidates.push(...result.rows.filter((row) => row.candidate && Number(row.occurred_at_ms) > sinceMs));
       const last = result.rows.at(-1);
       if (candidates.length > max || !last || result.rows.length < batch || Number(last.occurred_at_ms) <= sinceMs) break;
-      position = { sql: scanSql("before", "head"), values: [Number(last.occurred_at_ms), last.entry_id] };
+      position = { sql: scanSql("before"), values: [Number(last.occurred_at_ms), last.entry_id] };
     }
     const head = {
       max,
