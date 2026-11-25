@@ -5,6 +5,7 @@
 
 import { candleBucketStart, candleIntervalMs, comparePrices, type MigrationMarker, type PoolTrade } from "@blast/core/modules/launchpad-contract/venue-history.ts";
 
+import type { LivePricePoint } from "./chart-live-model";
 import { candleGaps, type CandleGap, type ChartCandle, type ChartCandlePage } from "./chart-model";
 
 export const CHART_WIDTH = 1000;
@@ -21,6 +22,8 @@ export type DrawnSeries = Readonly<{
   page: ChartCandlePage;
   opening?: Readonly<{ timestampMs: number; price: string }>;
   liveTrades?: readonly PoolTrade[];
+  /** Live's confirmed price trace; see `liveTrace`. */
+  liveLine?: readonly LivePricePoint[];
   lastTrade?: PoolTrade;
   carriedClose?: Readonly<{ timestampMs: number; price: string }>;
   observedAt?: number | null;

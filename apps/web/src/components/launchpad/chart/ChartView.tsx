@@ -34,6 +34,7 @@ import type { SectionState } from "../primitives/data-state";
 import primitives from "../primitives/primitives.module.css";
 import type { ChartSource } from "./chart-client";
 import { chartGeometry, type DrawnSeries } from "./chart-geometry";
+import { liveTrace } from "./chart-live-model";
 import { ChartPreview } from "./ChartPreview";
 import { CHART_INTERVALS, LIVE_CHART_INTERVALS, CHART_RANGES, LIVE_CHART_CONTROLS, LIVE_CHART_SPAN_MS, candleGaps, chartLatestTimestamp, chartOpening, chartSources, pageTruncated, type ChartCandlePage, type ChartControls, type ChartRange, type ChartRequest, type ChartState, type CandleGap, type SourceState } from "./chart-model";
 import { useChartClock } from "./use-chart-clock.ts";
@@ -213,12 +214,12 @@ function useChartViewControls({
 }>) {
   const live = controls.range === "live";
   const now = useChartClock(1_000, live);
-  const drawing = chartDrawing({ state, source, omitCurve, historyRequest, hidden, live, now, marketChart, currentPrice });
+  const drawing = chartDrawing({ state, source, omitCurve, historyRequest, hidden, live, now, marketChart, currentPrice, streamCurrent: !updates });
   const delayed = live && drawing.sources.some(({ section }) => !section || section.state === "stale" || section.state === "unavailable");
   return { source, quoteUsd, controls, pending, updates: updates ?? (delayed ? "Trade updates delayed." : null), emptyMessage, livePreset, diagnostic, marketChart, onControls, onToggle, onRefresh, ...drawing };
 }
 
-function chartDrawing({ state, source, omitCurve, historyRequest, hidden, live, now, marketChart, currentPrice }: Readonly<{
+function chartDrawing({ state, source, omitCurve, historyRequest, hidden, live, now, marketChart, currentPrice, streamCurrent }: Readonly<{
   state: ChartState;
   source: ChartViewSource;
   omitCurve?: boolean;
@@ -228,6 +229,8 @@ function chartDrawing({ state, source, omitCurve, historyRequest, hidden, live, 
   now: number | null;
   currentPrice?: string | null;
   marketChart: boolean;
+  /** The update stream is connected, so a quiet second means no trade. */
+  streamCurrent: boolean;
 }>) {
   const chainTime = chartLatestTimestamp(state);
   const liveEnd = live ? Math.max(now ?? 0, chainTime) : null;
@@ -238,14 +241,14 @@ function chartDrawing({ state, source, omitCurve, historyRequest, hidden, live, 
   const venuePoolKey = source.venuePoolKey ?? migration?.venuePoolKey ?? null;
   const sources = chartSources(state)
     .filter(({ name }) => name !== "curve" || (!omitCurve && source.curvePoolKey !== null))
-    .map((read) => priceSource(read, request, liveStart, liveEnd, marketChart ? undefined : source.opening));
+    .map((read) => priceSource(read, request, liveStart, liveEnd, marketChart ? undefined : source.opening, { current: streamCurrent, migrationAt: state.migration?.timestampMs }));
   const label = (name: ChartSourceName) => sourceLabel(name, venuePoolKey);
   const selectable = sources.filter(({ section }) => hasData(section) && section.data.candles.length > 0);
   const shown = (name: ChartSourceName) =>
     (selectable.length === 1 && selectable[0]?.name === name) || !hidden.includes(name);
-  const drawn: DrawnSeries[] = sources.flatMap(({ name, section, opening, lastTrade, liveTrades }) =>
-    hasData(section) && section.data.candles.length && shown(name) ? [{
-      source: name, page: section.data, opening, liveTrades, lastTrade, observedAt: section.provenance.timestampMs,
+  const drawn: DrawnSeries[] = sources.flatMap(({ name, section, opening, lastTrade, liveTrades, liveLine, carriedClose }) =>
+    hasData(section) && (section.data.candles.length || carriedClose) && shown(name) ? [{
+      source: name, page: section.data, opening, liveTrades, liveLine, carriedClose, lastTrade, observedAt: section.provenance.timestampMs,
     }] : [],
   );
   const visible = sources.filter(({ name }) => shown(name));
@@ -256,7 +259,7 @@ function chartDrawing({ state, source, omitCurve, historyRequest, hidden, live, 
   const liveIncomplete = liveStart !== null && visible.some(({ liveTapeStart }) => liveTapeStart !== undefined && liveTapeStart >= liveStart);
   const hasLiveTrades = visible.some(({ inWindow }) => inWindow);
   const latest = drawn.at(-1);
-  const close = latest?.page.candles.at(-1)?.close ?? null;
+  const close = latest?.page.candles.at(-1)?.close ?? latest?.carriedClose?.price ?? null;
   const hasLatest = latest !== undefined &&
     sources.find(({ name }) => name === latest.source)?.section?.state === "available" &&
     (currentPrice === undefined || (currentPrice === close && latest.source === (venuePoolKey ? "venue" : "curve")));
@@ -312,6 +315,7 @@ function priceSource(
   liveStart: number | null,
   liveEnd: number | null,
   launch: ChartViewSource["opening"],
+  coverage: LiveCoverage,
 ) {
   if (!hasData(read)) return { name, section: read };
   if (liveStart !== null && liveEnd !== null) {
@@ -322,7 +326,9 @@ function priceSource(
     const lastTrade = executions.at(-1);
     const buckets = new Set(liveTrades.map(trade => candleBucketStart("1s", trade.timestampMs)));
     const candles = read.data.candles.filter(({ bucketStart }) => buckets.has(bucketStart));
-    return { name, section: { ...read, data: { ...read.data, candles } }, liveTrades, lastTrade, inWindow: inWindow.length > 0,
+    const liveLine = liveTrace(executions, liveStart, liveCoveredThrough(name, read, executions, liveEnd, coverage));
+    const carriedClose = liveLine[0]?.timestampMs === liveStart && liveLine[0].price !== null ? { timestampMs: liveStart, price: liveLine[0].price } : undefined;
+    return { name, section: { ...read, data: { ...read.data, candles } }, liveTrades, liveLine, carriedClose, lastTrade, inWindow: inWindow.length > 0,
       liveTapeStart: read.data.truncated ? tape[0]?.timestampMs : undefined };
   }
   const { from } = request;
@@ -340,6 +346,20 @@ function priceSource(
     low: comparePrices(price, first.low) < 0 ? price : first.low,
   };
   return { name, section: { ...read, data: { ...read.data, candles: [candle, ...candles.slice(1)] } }, opening };
+}
+
+type LiveCoverage = Readonly<{ current: boolean; migrationAt?: number }>;
+
+/**
+ * How far a Live source's price is confirmed. A connected stream reports every
+ * trade, so its price holds to the clock; otherwise it holds only to what the
+ * last read observed. The curve stops trading at the migration.
+ */
+function liveCoveredThrough(name: ChartSourceName, read: Extract<SourceState, { state: "available" | "stale" }>, executions: readonly { timestampMs: number }[],
+  liveEnd: number, { current, migrationAt }: LiveCoverage) {
+  const observed = Math.max(read.provenance.timestampMs ?? -Infinity, executions.at(-1)?.timestampMs ?? -Infinity);
+  const through = current && read.state === "available" ? liveEnd : Math.min(liveEnd, observed);
+  return name === "curve" && migrationAt !== undefined ? Math.min(through, migrationAt) : through;
 }
 
 export function ChartView(props: Parameters<typeof useChartViewControls>[0] & Readonly<{ compact?: boolean; preview?: boolean }>) {
@@ -652,6 +672,7 @@ function LiveTradeStatus({ view }: Readonly<{ view: ChartViewControls }>) {
       {lastTrade.price === null ? "Last trade · price unavailable" : `Last traded price ${amountsHidden ? HIDDEN_AMOUNT : tokenPrice(lastTrade.price, source, quoteUsd)}`}
       {" · "}<time dateTime={at}>{at.slice(0, 10)} · {at.slice(11, 19)} UTC</time>
     </p>}
+    {view.geometry && !view.hasLiveTrades && !updates && !liveIncomplete && <p className={styles.note} role="status">No trades in the last 5 min</p>}
     {updates && <p className={styles.note} role="status">{updates}</p>}
     {liveIncomplete && <p className={styles.note} role="status">Partial trade history in this window.</p>}
   </>;

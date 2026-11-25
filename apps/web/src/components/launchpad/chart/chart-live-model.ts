@@ -120,6 +120,35 @@ export function candlesFromTrades(trades: readonly PoolTrade[]): Candle[] {
   return candles;
 }
 
+/** A Live trace point. A null price ends the trace until the next priced execution. */
+export type LivePricePoint = Readonly<{ timestampMs: number; price: string | null }>;
+
+/**
+ * Live's price over `[from, through]`, drawn as steps: the last execution
+ * before `from` opens the window, each later execution changes the price, and
+ * the last price holds to `through`, the end of confirmed coverage. An
+ * execution without a price breaks the trace. `executions` is the newest
+ * contiguous tape, oldest first, without opening-round fills.
+ */
+export function liveTrace(executions: readonly PoolTrade[], from: number, through: number): LivePricePoint[] {
+  if (through < from) return [];
+  const before = executions.findLast(({ timestampMs }) => timestampMs < from);
+  const points: LivePricePoint[] = before && before.price !== null ? [{ timestampMs: from, price: before.price }] : [];
+  for (const { timestampMs, price } of executions) {
+    if (timestampMs >= from && timestampMs <= through) points.push(...traceStep(points.at(-1), timestampMs, price));
+  }
+  const last = points.at(-1);
+  return last?.price != null && last.timestampMs < through ? [...points, { timestampMs: through, price: last.price }] : points;
+}
+
+/** A priced execution moves the trace; an unpriced one holds the price up to it, then breaks. */
+function traceStep(held: LivePricePoint | undefined, timestampMs: number, price: string | null): LivePricePoint[] {
+  if (price !== null) return [{ timestampMs, price }];
+  if (held?.price == null) return [];
+  const hold = held.timestampMs < timestampMs - 0.5 ? [{ timestampMs: timestampMs - 0.5, price: held.price }] : [];
+  return [...hold, { timestampMs, price: null }];
+}
+
 function applyLiveTrade(page: StreamChartPage, tape: readonly PoolTrade[], trade: PoolTrade, request: ChartRequest): StreamChartPage {
   const last = tape.at(-1);
   if (last && compareEventCursors(trade.cursor, last.cursor) <= 0) {

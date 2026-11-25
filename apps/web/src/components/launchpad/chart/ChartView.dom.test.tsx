@@ -29,7 +29,7 @@ const hook = registerHooks({ resolve(specifier, context, next) {
           return () => { mounted = false; };
         }
       }, [series, projectionKey]);
-      return React.createElement('div', {'data-latest-series': latestPrice?.seriesIndex, 'data-series': series.map(s=>s.type).join(','), 'data-tags': series.map(s=>String(s.options?.lastValueVisible)).join(','), 'data-points': series[0]?.data.map(p => p.time + ':' + priceFormatter(p.value ?? p.close)).join(','), 'data-last-points': series.at(-1)?.data.map(p => p.time + ':' + priceFormatter(p.value ?? p.close)).join(',')}, preview); }`)}`,
+      return React.createElement('div', {'data-latest-series': latestPrice?.seriesIndex, 'data-series': series.map(s=>s.type).join(','), 'data-tags': series.map(s=>String(s.options?.lastValueVisible)).join(','), 'data-points': series[0]?.data.map(p => p.time + ':' + (p.value === undefined && p.close === undefined ? 'gap' : priceFormatter(p.value ?? p.close))).join(','), 'data-line': series.map(s => s.options?.lineVisible === false ? 'points' : s.options?.lineType === 1 ? 'step' : 'line').join(','), 'data-last-points': series.at(-1)?.data.map(p => p.time + ':' + (p.value === undefined && p.close === undefined ? 'gap' : priceFormatter(p.value ?? p.close))).join(',')}, preview); }`)}`,
   };
   return next(specifier, context);
 } });
@@ -360,30 +360,31 @@ test("a migrated coin tags only the venue and keeps the phone plot a line", asyn
   }
 });
 
-test("quiet Live keeps the last executed time and plots the next exact trade once", async (t) => {
+test("Live holds the confirmed price as steps through quiet seconds and joins the next trade once", async (t) => {
   const start = 1_800_000_000_000;
   let now = start;
   t.mock.method(Date, "now", () => now);
   const poolKey = "blast_curve:0x1";
-  const trade = (cursor: string, timestampMs: number, price: string) => ({
+  const trade = (cursor: string, timestampMs: number, price: string | null) => ({
     cursor, timestampMs, price, poolKey, venue: "blast_curve" as const, kind: "buy" as const, side: "buy" as const,
     trader: null, digest: "1".repeat(32), quoteAmount: 20n, memeAmount: 10n, volumeUsd: null, venueSwap: null,
   });
-  const candle = ({ timestampMs, price }: ReturnType<typeof trade>) => ({
+  const candles = (trades: readonly ReturnType<typeof trade>[]) => trades.flatMap(({ timestampMs, price }) => price === null ? [] : [{
     bucketStart: Math.floor(timestampMs / 1_000) * 1_000, open: price, high: price, low: price, close: price,
     volumeQuote: 20n, volumeMeme: 10n, volumeUsd: null, buys: 1, sells: 0, trades: 1,
-  });
-  const last = trade("1:0:0:0", start - 303_250, "92");
-  const next = trade("2:0:0:0", start + 2_375, "93");
+  }]);
+  const prior = trade("1:0:0:0", start - 360_000, "90");
+  const active = trade("2:0:0:0", start - 60_000, "92");
+  const next = trade("3:0:0:0", start + 302_375, "93");
   const controls = { interval: "1s", range: "live" } as const;
   const container = dom.document.createElement("div");
   const root = createRoot(container);
   t.after(() => act(async () => root.unmount()));
-  const render = (updates: string | null, liveTrades = [last]) => {
-    const provenance = { source: "blast-infra" as const, network: "localnet" as const, deployment: "fixture", checkpoint: 2, timestampMs: now, observedAt: now, lagMs: 0 };
+  const render = (updates: string | null, liveTrades: readonly ReturnType<typeof trade>[], observedAt = now) => {
+    const provenance = { source: "blast-infra" as const, network: "localnet" as const, deployment: "fixture", checkpoint: 2, timestampMs: observedAt, observedAt, lagMs: 0 };
     const page = {
       poolKey, source: "curve" as const, venue: "blast_curve" as const, interval: "1s" as const, migration: null,
-      liveTrades, candles: liveTrades.map(candle),
+      liveTrades, candles: candles(liveTrades),
     };
     return act(async () => root.render(<ChartView
       compact marketChart livePreset
@@ -393,27 +394,59 @@ test("quiet Live keeps the last executed time and plots the next exact trade onc
       onControls={() => {}} onToggle={() => {}} onRefresh={() => {}}
     />));
   };
-  await render(null);
+  const plot = () => container.querySelector("[data-series]");
+  const points = () => plot()?.getAttribute("data-points");
   const dateTime = () => container.querySelector("time")?.dateTime;
-  assert.match(container.textContent ?? "", /No trades in the last 5 min/);
-  assert.equal(container.querySelector("[data-series]"), null);
-  assert.equal(dateTime(), new Date(last.timestampMs).toISOString());
+  const at = (ms: number) => ms / 1_000;
 
-  now += 1_000;
-  await render(null);
-  assert.equal(dateTime(), new Date(last.timestampMs).toISOString(), "a fresher checkpoint leaves the execution time intact");
-  await render("Trade updates delayed.");
-  assert.match(container.querySelector('[role="status"]')?.textContent ?? "", /Trade updates delayed/);
+  // Active: the price before the window opens it, the trade changes it, and it holds to the clock.
+  await render(null, [prior, active]);
+  assert.equal(plot()?.getAttribute("data-series"), "Area");
+  assert.equal(plot()?.getAttribute("data-line"), "step", "a connected step line, never disconnected points");
+  assert.match(points() ?? "", new RegExp(`^${at(start - 300_000)}:90,${at(active.timestampMs)}:92,${at(start)}:92`));
   assert.doesNotMatch(container.textContent ?? "", /No trades in the last 5 min/);
-  assert.equal(dateTime(), new Date(last.timestampMs).toISOString());
 
-  now += 2_000;
-  await render(null, [last, next]);
-  const plot = container.querySelector("[data-series]");
-  assert.equal(plot?.getAttribute("data-series"), "Area");
-  assert.equal(plot?.getAttribute("data-points"), `${next.timestampMs / 1_000}:93`);
+  // Quiet: the trade leaves the window. The held price and the quiet status show together.
+  for (const step of [241_000, 1_000]) {
+    now += step;
+    await render(null, [prior, active]);
+    assert.equal(plot()?.getAttribute("data-line"), "step");
+    assert.match(points() ?? "", new RegExp(`^${at(now - 300_000)}:92,${at(now)}:92`), "a flat line across the whole window");
+    assert.equal(points()?.split(",").length, 2);
+    assert.match(container.textContent ?? "", /No trades in the last 5 min/);
+    assert.equal(dateTime(), new Date(active.timestampMs).toISOString(), "heartbeats keep the real execution time");
+  }
+
+  // Delayed: the line stops at the last observed time and the quiet claim is withdrawn.
+  await render("Trade updates delayed.", [prior, active], now - 30_000);
+  assert.match(points() ?? "", new RegExp(`,${at(now - 30_000)}:92$`), "no price is drawn past confirmed coverage");
+  assert.doesNotMatch(container.textContent ?? "", /No trades in the last 5 min/);
+  assert.match(container.textContent ?? "", /Trade updates delayed/);
+
+  // Fully stale coverage before the window draws nothing at all.
+  await render("Trade updates delayed.", [prior, active], now - 310_000);
+  assert.equal(plot(), null);
+
+  // The next trade joins the line once, even when delivered twice.
+  now = next.timestampMs + 1_000;
+  await render(null, [prior, active, next, next]);
+  assert.equal(plot()?.getAttribute("data-line"), "step");
+  const drawn = points()?.split(",") ?? [];
+  assert.equal(drawn.filter(point => point.startsWith(`${at(next.timestampMs)}:`)).length, 1);
+  assert.match(drawn[0] ?? "", /:92$/, "the leading edge carries the earlier confirmed price");
+  assert.match(drawn.at(-1) ?? "", new RegExp(`^${at(now)}:93`));
   assert.equal(dateTime(), new Date(next.timestampMs).toISOString());
-  assert.equal(container.querySelector("[data-candle-trade-amount]"), null);
+  assert.doesNotMatch(container.textContent ?? "", /No trades in the last 5 min/);
+
+  // An execution without a price breaks the line: no price is invented after it.
+  const unpriced = trade("4:0:0:0", now - 500, null);
+  await render(null, [prior, active, next, unpriced]);
+  assert.match(points() ?? "", new RegExp(`,${at(unpriced.timestampMs)}:gap$`));
+
+  // A coin with no confirmed price in or before the window keeps the empty state.
+  await render(null, [trade("5:0:0:0", now - 400_000, null)]);
+  assert.equal(plot(), null);
+  assert.match(container.textContent ?? "", /No trades in the last 5 min/);
 });
 
 test("partial line history has only indexed candle closes, with no points in the gaps", async (t) => {

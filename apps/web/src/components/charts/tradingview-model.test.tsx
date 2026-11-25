@@ -56,6 +56,12 @@ test("resizing keeps the live gutter and leaves a history range alone", () => {
   const settled = resizedLiveChartRange(narrowFit, 302, 0, 258, true)!;
   assert.equal(atLiveEdge(settled, 302, 258), true);
   assert.equal(resizedLiveChartRange({ from: -40, to: 290 }, 302, 0, 258, true), null);
+
+  const pinned = liveChartRange({ from: -24, to: 1357 }, 1201, 282);
+  assert.equal(pinned.from, 0, "a view wider than the bars starts at the pinned first bar");
+  assert.equal(atLiveEdge(pinned, 1201, 282), true);
+  const slid = resizedLiveChartRange({ from: 185, to: 1566.28 }, 1201, 0, 282, true)!;
+  assert.deepEqual([slid.from, atLiveEdge(slid, 1201, 282)], [0, true], "a fit the pinned edge slid right returns to every bar");
 });
 
 test("a refreshed fallback time grid keeps both historical time bounds", () => {
@@ -144,6 +150,13 @@ test("inspection reports a held close only inside a flat line on the same source
   assert.equal(exactChartPrice([curve, venue], 30, -1, false), undefined);
   assert.equal(exactChartPrice([curve, venue], 30, 0, false), "1.000000000005");
   assert.equal(exactChartPrice([curve, venue], 30, 1, false), "5");
+  // A Live step holds the previous trade's price until the next one, and stops at a break or the trace's end.
+  const live = { times: [10, 20, 25, 30], values: new Map([[10, "1"], [20, "2"], [25, "2"]]) };
+  assert.equal(exactChartPrice([live], 15, 0, "step"), "1");
+  assert.equal(exactChartPrice([live], 27, 0, "step"), "2");
+  assert.equal(exactChartPrice([live], 30, 0, "step"), undefined);
+  assert.equal(exactChartPrice([live], 35, 0, "step"), undefined);
+  assert.equal(exactChartPrice([live], 5, 0, "step"), undefined);
 });
 
 test("inspection takes OHLC and volume from the selected pool even when their closes match", () => {

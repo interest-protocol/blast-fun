@@ -65,12 +65,12 @@ export function useChartInspection() {
     };
   }
 
-  function priceAt(points: readonly ExactSeries[], volumes: ReadonlyMap<number, string>, mode: Inspection["mode"], hidden: boolean, gapStatus?: (at: number) => string, exactOnly = false) {
+  function priceAt(points: readonly ExactSeries[], volumes: ReadonlyMap<number, string>, mode: Inspection["mode"], hidden: boolean, gapStatus?: (at: number) => string, stepped = false) {
     if (hidden || inspected?.mode !== mode) return undefined;
     const { at, series, guide, onVolume } = inspected;
     const gap = () => gapStatus && { at, guide, gap: gapStatus(at * 1_000) };
     if (mode === "line") {
-      const value = exactChartPrice(points, at, series, !exactOnly && !gapStatus);
+      const value = exactChartPrice(points, at, series, stepped ? "step" : !gapStatus);
       return value === undefined ? gap() : { at, guide, value };
     }
     const candle = exactChartCandle(points, at, series);

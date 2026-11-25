@@ -2,7 +2,7 @@
 
 import type { DrawnSeries } from "#web/components/launchpad/chart/chart-geometry.ts";
 
-import type { AutoscaleInfoProvider } from "lightweight-charts";
+import type { AutoscaleInfoProvider, LineType } from "lightweight-charts";
 import { shortUtcDate } from "#web/components/blast-ui/date-label.ts";
 
 import { useCallback, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
@@ -70,8 +70,8 @@ function poolTimeline(sources: readonly Source[], intervalMs: number, from?: num
  */
 function liveTimeline(sources: readonly Source[], from: number, to: number, migrationAt?: number) {
   const step = 250;
-  const occupied = new Set(sources.flatMap(({ liveTrades }) =>
-    liveTrades?.map(({ timestampMs }) => Math.floor(timestampMs / step)) ?? [],
+  const occupied = new Set(sources.flatMap(({ liveLine }) =>
+    liveLine?.map(({ timestampMs }) => Math.floor(timestampMs / step)) ?? [],
   ));
   if (migrationAt !== undefined) occupied.add(Math.floor(migrationAt / step));
   const timeline = [from];
@@ -82,6 +82,9 @@ function liveTimeline(sources: readonly Source[], from: number, to: number, migr
   timeline.push(to);
   return timeline.sort((a, b) => a - b);
 }
+
+/** `LineType.WithSteps`; the library loads lazily, so its enum is not imported. */
+const STEP_LINE = 1 as LineType;
 
 const CHART_STYLES = [["line", "Line"], ["candles", "Candles"]] as const;
 export function PoolCandleChart({
@@ -482,12 +485,6 @@ function latestPoolMarker(latest: ReturnType<typeof latestPrice>, points: readon
   };
 }
 
-function executedTradePoints(sources: readonly Source[]) {
-  return sources.map(({ liveTrades }) => liveTrades?.flatMap(trade =>
-    trade.price === null ? [] : [{ timestampMs: trade.timestampMs, price: trade.price }],
-  ) ?? []);
-}
-
 function candleClosePoints(sources: readonly Source[], migrationAt?: number) {
   return sources.map(history => {
     const { page } = history;
@@ -496,9 +493,11 @@ function candleClosePoints(sources: readonly Source[], migrationAt?: number) {
   });
 }
 
-function poolPriceSeries({ sources, lines, compact, mode, migrationAt, walletTrades, price, quantity, scale, autoscaleInfoProvider, pointsOnly }: Readonly<{
+type LinePoint = Readonly<{ timestampMs: number; price: string | null }>;
+
+function poolPriceSeries({ sources, lines, compact, mode, migrationAt, walletTrades, price, quantity, scale, autoscaleInfoProvider, pointsOnly, stepped }: Readonly<{
   sources: readonly Source[];
-  lines: ReturnType<typeof poolLinePoints>;
+  lines: readonly (readonly LinePoint[])[];
   compact: boolean;
   mode: "line" | "candles";
   migrationAt?: number;
@@ -508,11 +507,13 @@ function poolPriceSeries({ sources, lines, compact, mode, migrationAt, walletTra
   scale: ReturnType<typeof exactChartScale>;
   autoscaleInfoProvider: AutoscaleInfoProvider;
   pointsOnly: boolean;
+  /** Live: the price holds until the next execution changes it. */
+  stepped: boolean;
 }>) {
   const pointPrices: ExactSeries[] = [];
   const up = compact ? "var(--coin-chart-up)" : "var(--up)";
   const down = compact ? "var(--coin-chart-down)" : "var(--down)";
-  const lineStyle = compact || pointsOnly ? { lineColor: "var(--ink)", topColor: "transparent", bottomColor: "transparent" } : {};
+  const lineStyle = compact || pointsOnly || stepped ? { lineColor: "var(--ink)", topColor: "transparent", bottomColor: "transparent" } : {};
   // The newest source owns the latest readout (after migration, the venue).
   const tagged = sources.findLastIndex(({ page, carriedClose }) => page.candles.length > 0 || carriedClose);
   const markers: PlottedWalletMarker[] = [];
@@ -540,15 +541,15 @@ function poolPriceSeries({ sources, lines, compact, mode, migrationAt, walletTra
             {
               type: "Area" as const,
               data: chartData(
-                line.map(({ timestampMs, price: raw }) => ({
-                  time: chartTimestamp(timestampMs),
-                  value: pointValue(timestampMs, raw),
-                })),
+                line.map(({ timestampMs, price: raw }) => raw === null
+                  ? { time: chartTimestamp(timestampMs) }
+                  : { time: chartTimestamp(timestampMs), value: pointValue(timestampMs, raw) }),
               ),
               options: {
                 priceLineVisible: false,
                 ...tag,
                 ...lineStyle,
+                ...(stepped ? { lineType: STEP_LINE } : {}),
                 lineVisible: !pointsOnly,
                 pointMarkersVisible: pointsOnly || line.length === 1,
                 autoscaleInfoProvider,
@@ -594,7 +595,7 @@ function priceLines(sources: readonly Source[], options: Readonly<{
   mode: "line" | "candles"; rollingWindow?: boolean; marketChart?: boolean; migrationAt?: number; to?: number;
 }>) {
   if (options.mode === "candles") return [];
-  if (options.rollingWindow) return executedTradePoints(sources);
+  if (options.rollingWindow) return sources.map(({ liveLine }) => liveLine ?? []);
   if (options.marketChart) return candleClosePoints(sources, options.migrationAt);
   return poolLinePoints(sources, options.migrationAt, options.to);
 }
@@ -622,7 +623,7 @@ function poolChartModel({
     shiftDecimal(value.toString(), -(quoteDecimals ?? 0));
   const lines = priceLines(sources, { mode, rollingWindow, marketChart, migrationAt, to });
   const prices = mode === "line"
-    ? lines.flatMap((points) => points.map((point) => price(point.price)))
+    ? lines.flatMap((points) => points.flatMap((point) => point.price === null ? [] : [price(point.price)]))
     : sources.flatMap(({ page }) => page.candles.flatMap((candle) => [candle.open, candle.high, candle.low, candle.close].map(price)));
   const scale = exactChartScale(prices);
   const autoscaleInfoProvider: AutoscaleInfoProvider = scale.flat
@@ -647,7 +648,7 @@ function poolChartModel({
     : poolTimeline(sources, intervalMs, from, to, migrationAt);
   const { series, pointPrices, markers, tagged, up, down } = poolPriceSeries({
     sources, lines, compact, mode, migrationAt, walletTrades, price, quantity, scale, autoscaleInfoProvider,
-    pointsOnly: Boolean(rollingWindow) || Boolean(discontinuous),
+    pointsOnly: !rollingWindow && Boolean(discontinuous), stepped: Boolean(rollingWindow),
   });
   const latest = rollingWindow ? undefined : latestPrice(sources[tagged], price);
   if (showVolume)
