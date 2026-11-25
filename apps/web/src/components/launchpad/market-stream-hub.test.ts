@@ -18,11 +18,13 @@ function trade(checkpoint: number, part = 2, summary: unknown = { holders: check
 
 class Source implements MarketEventSource {
   closed = false;
+  /** The hub gave up at a deadline: the source counts it as a failure. */
+  failed = false;
   readonly listeners = new Map<string, ((event: { data?: string }) => void)[]>();
   readonly url: string;
   constructor(url: string) { this.url = url; }
   addEventListener(type: string, listener: (event: { data?: string }) => void): void { this.listeners.set(type, [...this.listeners.get(type) ?? [], listener]); }
-  close(): void { this.closed = true; }
+  close(failed?: boolean): void { this.closed = true; this.failed = failed === true; }
   emit(type: string, value: unknown = {}): void { for (const listener of this.listeners.get(type) ?? []) listener({ data: JSON.stringify(value) }); }
   fence(checkpoint: number, poolKey = CURVE): void { this.emit("status", { state: "live", pool_key: poolKey, checkpoint, cursor: `${checkpoint}:0:0:0`, provenance: wireProvenance(checkpoint) }); }
   hello(heartbeat = false): void { this.emit("hint", { type: "hello", provenance: wireProvenance(1), heartbeat }); }
@@ -92,6 +94,7 @@ test("a legacy relay keeps its original heartbeat deadline and requires a new fe
   old.hello(true);
   s.fire(45_000);
   assert.equal(old.closed, true);
+  assert.equal(old.failed, true, "a missed heartbeat counts as a failure");
   assert.equal(chart.states.at(-1), "reconnecting");
   old.emit("market", trade(11));
   assert.equal(chart.trades.length, 0);
@@ -273,6 +276,7 @@ test("without the hint handshake the deadline reconnects with backoff, as an ups
   s.hub.subscribe({ pools: chart.pools, expected, listener: chart.listener });
   s.source().fence(10);
   s.fire(10_000);
+  assert.equal(s.source().failed, true, "a missed hello counts as a failure");
   assert.deepEqual(chart.states, ["connecting", "reconnecting"]);
   s.fire(500);
   assert.equal(s.sources.length, 2);
@@ -284,6 +288,7 @@ test("a dropped stream is not live and retries with growing backoff", async () =
   s.hub.subscribe({ pools: chart.pools, expected, listener: chart.listener });
   s.source().emit("error");
   assert.equal(s.source().closed, true);
+  assert.equal(s.source().failed, false, "the source already counted its own close");
   assert.deepEqual(chart.states, ["connecting", "reconnecting"]);
   s.fire(500);
   assert.equal(s.sources.length, 2);

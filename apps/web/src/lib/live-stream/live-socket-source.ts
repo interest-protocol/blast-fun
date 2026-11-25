@@ -74,7 +74,7 @@ export function liveMarketSource(path: string, state: LiveSourceState, deps: Liv
   let socket: LiveSocketLike | null = null;
   let cancelWait: (() => void) | null = null;
   let closed = false;
-  /** The socket opened but sent nothing yet: a close now, by either side, counts as a failure. */
+  /** This attempt asked for a ticket but its socket sent nothing yet: a close now, by either side or at the caller's deadline, counts as a failure. */
   let silent = false;
 
   const emit = (type: string, event: { data?: string }) => {
@@ -96,16 +96,19 @@ export function liveMarketSource(path: string, state: LiveSourceState, deps: Liv
       await Promise.resolve();
       return refuse();
     }
+    silent = true;
     let grant: LiveGrant | null;
     try {
       grant = await deps.fetchTicket();
     } catch {
       if (closed) return;
+      silent = false;
       fail();
       return emit("error", {});
     }
     if (closed) return;
     if (grant === null) {
+      silent = false;
       state.offUntil = deps.now() + spreadWait(LIVE_OFF_MS, deps.random);
       return refuse();
     }
@@ -113,11 +116,11 @@ export function liveMarketSource(path: string, state: LiveSourceState, deps: Liv
     try {
       current = deps.openSocket(`${grant.url}${path.slice(path.indexOf("?"))}`, [LIVE_PROTOCOL, `blast-ticket.${grant.ticket}`]);
     } catch {
+      silent = false;
       fail();
       return emit("error", {});
     }
     socket = current;
-    silent = true;
     /** Render's edge delivers custom close codes as 1005, so the server names its code in a last `close` frame. */
     let named: number | null = null;
     current.onmessage = ({ data }) => {
@@ -127,8 +130,8 @@ export function liveMarketSource(path: string, state: LiveSourceState, deps: Liv
           named = closeCode(block.data);
           continue;
         }
-        // A pong answers our own clock ping before admission ends: it proves nothing about the stream.
-        if (block.event !== "pong") {
+        // A pong answers our own clock ping, and `connecting` comes before the upstream answers: neither proves the stream works.
+        if (block.event !== "pong" && !(block.event === "status" && isConnecting(block.data))) {
           silent = false;
           state.failures = 0;
         }
@@ -169,6 +172,14 @@ export function liveMarketSource(path: string, state: LiveSourceState, deps: Liv
       current?.close();
     },
   };
+}
+
+function isConnecting(data: string): boolean {
+  try {
+    return (JSON.parse(data) as { state?: unknown }).state === "connecting";
+  } catch {
+    return false;
+  }
 }
 
 function closeCode(data: string): number | null {

@@ -156,6 +156,17 @@ test("the tab gets refused, with the wait, while the socket is off, refused, or 
   pongs.open();
   await settle();
   assert.equal(pongs.sockets.length, 3, "pongs alone do not prove the stream");
+  // `connecting` arrives before the upstream answers: a relay with its upstream down still backs off.
+  const connecting = harness(async () => GRANT);
+  for (let i = 0; i < 3; i++) {
+    connecting.open();
+    await settle();
+    connecting.sockets.at(-1)!.onmessage!({ data: 'event: status\ndata: {"state":"connecting"}\n\n' });
+    connecting.sockets.at(-1)!.onclose!({ code: 1006 });
+  }
+  connecting.open();
+  await settle();
+  assert.equal(connecting.sockets.length, 3, "connecting alone does not prove the stream");
 
   const throwing = harness(async () => GRANT, true);
   const { events } = throwing.open();
@@ -201,13 +212,34 @@ test("a ticket that does not answer in time is a failure toward the backoff", as
     init.signal!.addEventListener("abort", () => reject(init.signal!.reason));
   }));
   await assert.rejects(fetchLiveTicket(5), { name: "TimeoutError" });
-  const tab = harness(() => fetchLiveTicket(5));
+  // A timeout is a throw, which the source counts.
+  const throwing = harness(async () => { throw new DOMException("timed out", "TimeoutError"); });
   for (let i = 0; i < 3; i++) {
-    const { events } = tab.open();
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    const { events } = throwing.open();
+    await settle();
     assert.deepEqual(events, [["error", undefined]]);
   }
-  const { events } = tab.open();
+  const { events } = throwing.open();
   await settle();
   assert.deepEqual(events.map(([type]) => type), ["refused"], "three timeouts back off");
+});
+
+// This fails if the caller's hello deadline, firing while the ticket request still hangs, is not counted.
+test("a caller's deadline during a hung ticket request is a failure toward the backoff", async () => {
+  const hung = harness(() => new Promise<never>(() => {}));
+  for (let i = 0; i < 3; i++) {
+    const { source } = hung.open();
+    await settle();
+    source.close(true);
+  }
+  const { events } = hung.open();
+  await settle();
+  assert.deepEqual(events.map(([type]) => type), ["refused"], "three hung tickets back off");
+  // A close the caller chose (a pool change) is not a failure.
+  const changed = harness(() => new Promise<never>(() => {}));
+  for (let i = 0; i < 3; i++) {
+    changed.open().source.close();
+    await settle();
+  }
+  assert.equal(changed.state.failures, 0);
 });
