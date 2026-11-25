@@ -226,7 +226,7 @@ for (const [stage, pausedSql, failingSql] of [
           await gate.promise;
         }
         if (fail && sql.includes(failingSql)) throw new Error("database read failed");
-        const rows = sql.includes("FROM chain_read_v1.watermark")
+        const rows: unknown[] = sql.includes("FROM chain_read_v1.watermark")
           ? [{ market_checkpoint: "10", market_timestamp_ms: "900", presale_checkpoint: "11", presale_timestamp_ms: "950", observed_ms: "1000" }]
           : sql.includes("LIMIT $8")
             ? [{ entry_id: "a:10:0:0:0", occurred_at_ms: "900", rank_ms: "900", source: "activity", kind: "presale_commit", named_account_id: null, presale_id: null, usd_price_as_of_ms: null }]
@@ -238,7 +238,7 @@ for (const [stage, pausedSql, failingSql] of [
     const unexpected = () => { throw new Error("unexpected authentication or primary access"); };
     const kit = createSocialRouteKit({
       expectedOrigin: origin, tradingVisible: () => true, verifyAccessToken: unexpected,
-      limiter: { async consume() { return { allowed: true }; } },
+      limiter: { async consume(bucket) { return { allowed: true, bucket, policyVersion: 1, retryAfterSeconds: 0 }; } },
       accounts: { resolve: unexpected, resolveWallet: unexpected }, primary: unexpected,
     });
     const { GET } = createSocialFeedRoute({ kit, config: async () => config, now: () => NOW, database: () => {
