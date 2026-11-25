@@ -179,6 +179,10 @@
   line-height: 20px;
 }
 
+.status {
+  min-height: 20px;
+}
+
 .source {
   display: grid;
   gap: 8px;

@@ -50,7 +50,7 @@ export function CoinChart({
   const [useEntry, setUseEntry] = useState(true);
   const venuePoolKey = source.venuePoolKey ?? state.migration?.venuePoolKey ?? null;
   const curvePoolKey = source.curvePoolKey;
-  const currentPrice = useShownPrice(venuePoolKey ?? curvePoolKey, checkpoint);
+  const currentPrice = useShownPrice(venuePoolKey ?? curvePoolKey, checkpoint ?? null);
   const migrationCursor = source.migration?.cursor ?? null;
   const migrationTimestamp = source.migration?.timestampMs ?? null;
   const migrationCurve = source.migration?.curvePoolKey ?? null;

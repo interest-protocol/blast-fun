@@ -321,7 +321,8 @@ export function ChartView(props: Parameters<typeof useChartViewControls>[0] & Re
 
       {geometry && exactDecimal(quoteUsd) ? <p className={styles.note}>USD prices use the current {source.quoteSymbol} rate.</p> : null}
       {missingPriceUnits ? <p className={styles.note}>Price units couldn’t load.</p> : null}
-      {updates ? <p className={styles.note} role="status">{updates}</p> : null}
+      {/* The status line keeps its height when empty, so the note coming and going never moves the page. */}
+      <p className={`${styles.note} ${styles.status}`} role="status">{updates}</p>
 
       <ChartSourcePages view={view} />
     </div>
@@ -565,7 +566,7 @@ function CompactChart({ view }: Readonly<{ view: ChartViewControls }>) {
     </div>
     <ChartLastTrade />
     <CompactChartBody view={view} style={style} />
-    {view.updates && (geometry || !live) && <p className={styles.note} role="status">{view.updates}</p>}
+    <p className={`${styles.note} ${styles.status}`} role="status">{geometry || !live ? view.updates : null}</p>
   </div>;
 }
 
