@@ -12,7 +12,10 @@ export type ExactSeries = Readonly<{
   candles?: ReadonlyMap<number, ExactCandle>;
 }>;
 
-function seriesPrice(series: ExactSeries | undefined, at: number, held: boolean) {
+/** How a price between points reads: only at points, a flat hold, or a step that holds until the next point. */
+export type PriceHold = boolean | "step";
+
+function seriesPrice(series: ExactSeries | undefined, at: number, held: PriceHold) {
   if (!series) return undefined;
   const exact = series.values.get(at);
   if (exact !== undefined || !held) return exact;
@@ -27,11 +30,13 @@ function seriesPrice(series: ExactSeries | undefined, at: number, held: boolean)
     else high = middle;
   }
   const before = series.values.get(series.times[low - 1]!);
+  // A step holds the previous point's price inside the trace; a whitespace point ends it.
+  if (held === "step") return low < series.times.length && series.times[low] !== at ? before : undefined;
   const after = series.values.get(series.times[low]!);
   return before === after ? before : undefined;
 }
 
-export function exactChartPrice(series: readonly ExactSeries[], at: number, picked: number, held: boolean) {
+export function exactChartPrice(series: readonly ExactSeries[], at: number, picked: number, held: PriceHold) {
   const selected = seriesPrice(series[picked], at, held);
   if (selected !== undefined) return selected;
 
