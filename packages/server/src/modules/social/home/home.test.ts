@@ -6,7 +6,7 @@ import { homeCoinSchema } from "@blast/core/modules/social/contracts/home-schema
 import { SOCIAL_TRADE_BASE_COINS } from "@blast/core/modules/social/contracts/trades.ts";
 import { activityOf, addDecimal, amountOf, countsOf, participantOf, previewOf, quoteAssetOf, shareBps, sideAcross, sideOf, totalsOf } from "@blast/server/modules/social/home/aggregate.ts";
 import { decodeCursor, encodeCursor } from "@blast/server/modules/social/home/codec.ts";
-import { topHoldersOf } from "@blast/server/modules/social/home/coins.ts";
+import { newHoldersOf, topHoldersOf } from "@blast/server/modules/social/home/coins.ts";
 import { fdvOf } from "@blast/server/modules/social/home/fdv.ts";
 import { decodeHomeCursor, encodeHomeCursor, homeOrder, pageOf, parseHomeQuery, passesFilters, rankInputs, recencyOf, relevanceScore, whyShown, type Rankable } from "@blast/server/modules/social/home/rank.ts";
 import type { GroupedRow, SideRow } from "@blast/server/modules/social/home/sql.ts";
@@ -113,8 +113,16 @@ test("counts: distinct identities overall and per direction; one actor's repeats
     side({ who: "w:2", kind: "trade_buy", n: "1" }),
     side({ who: "w:3", kind: "presale_commit", n: "2", latest_ms: "100" }),
   ]).get(SALE);
-  assert.deepEqual(counts, { sale: SALE, participants: "3", events: "8", buyers: "2", sellers: "1", backers: "1", claimers: "0", latest_ms: "9000", volume_usd: "4.00" });
+  assert.deepEqual(counts, { sale: SALE, participants: "3", events: "8", buyers: "2", sellers: "1", backers: "1", claimers: "0", latest_ms: "9000", volume_usd: "4.00", net_inflow_usd: "2.00" });
   assert.equal(countsOf([]).size, 0);
+  // Net inflow: buys and commits in, sells out, claims neither; it may go below zero.
+  const out = countsOf([
+    side({ who: "a:1", kind: "trade_buy", usd: "10.50" }),
+    side({ who: "a:1", kind: "trade_sell", usd: "25.00" }),
+    side({ who: "w:2", kind: "presale_claim", usd: "99.00" }),
+    side({ who: "w:3", kind: "trade_buy", usd: null }),
+  ]).get(SALE);
+  assert.deepEqual([out?.volume_usd, out?.net_inflow_usd], ["134.50", "-14.50"]);
 });
 
 const person = (key: string, latest: number, sells: boolean): HomeParticipant => ({
@@ -145,20 +153,38 @@ test("ranking: breadth first, one actor capped at three events, recency in steps
   const day = 86_400_000;
   assert.equal(relevanceScore({ inputs: rankInputs(activity({})), latestMs: null }, "24h", day), 0);
   // Every input at its cap, traded this moment: the full 100, stored ×100.
-  assert.equal(relevanceScore({ inputs: { breadth: 50, volume: 20_000 }, latestMs: day, holders: 1_000 }, "24h", day), 10_000);
-  assert.equal(relevanceScore({ inputs: { breadth: 500, volume: 1e9 }, latestMs: day + 5, holders: 1e6 }, "24h", day), 10_000);
+  assert.equal(relevanceScore({ inputs: { breadth: 50, volume: 20_000 }, latestMs: day, holders: 1_000, netInflow: 10_000, newHolders: 50 }, "24h", day), 10_000);
+  assert.equal(relevanceScore({ inputs: { breadth: 500, volume: 1e9 }, latestMs: day + 5, holders: 1e6, netInflow: 1e9, newHolders: 1e6 }, "24h", day), 10_000);
   // Ten traders with $500 between them beat one wallet's $20,000 at the same moment.
   const crowd = relevanceScore({ inputs: { breadth: 10, volume: 500 }, latestMs: day, holders: 0 }, "24h", day);
   const whaleOnly = relevanceScore({ inputs: { breadth: 1, volume: 20_000 }, latestMs: day, holders: 0 }, "24h", day);
   assert.ok(crowd > whaleOnly, `${crowd} > ${whaleOnly}`);
   // Freshness halves at half the window; a coin with no window activity ranks by holders alone.
-  assert.equal(relevanceScore({ inputs: { breadth: 0, volume: 0 }, latestMs: day / 2, holders: 0 }, "24h", day), 1_000);
-  assert.equal(relevanceScore({ inputs: { breadth: 0, volume: 0 }, latestMs: null, holders: 1_000 }, "24h", day), 1_000);
+  assert.equal(relevanceScore({ inputs: { breadth: 0, volume: 0 }, latestMs: day / 2, holders: 0 }, "24h", day), 750);
+  assert.equal(relevanceScore({ inputs: { breadth: 0, volume: 0 }, latestMs: null, holders: 1_000 }, "24h", day), 500);
+  // Churn: one wallet buying and selling $20,000 in a loop, with no money left in and no new holder,
+  // ranks below five buyers who put $500 in and stayed.
+  const churn = relevanceScore({ inputs: { breadth: 1, volume: 20_000 }, latestMs: day, holders: 100, netInflow: 0, newHolders: 0 }, "24h", day);
+  const buyers = relevanceScore({ inputs: { breadth: 5, volume: 500 }, latestMs: day, holders: 100, netInflow: 500, newHolders: 5 }, "24h", day);
+  assert.ok(buyers > churn, `${buyers} > ${churn}`);
+  // Same trades, same people: the coin that gained holders and kept the money ranks higher; a net outflow counts as none.
+  const kept = relevanceScore({ inputs: { breadth: 5, volume: 500 }, latestMs: day, holders: 100, netInflow: 400, newHolders: 4 }, "24h", day);
+  const left = relevanceScore({ inputs: { breadth: 5, volume: 500 }, latestMs: day, holders: 100, netInflow: -400, newHolders: 0 }, "24h", day);
+  assert.ok(kept > left, `${kept} > ${left}`);
+  assert.equal(left, relevanceScore({ inputs: { breadth: 5, volume: 500 }, latestMs: day, holders: 100 }, "24h", day));
+  // New holders: now less the window's start; a coin launched inside the window started from none; anything unknown gains 0.
+  const holderFacts = (holders: string | null, start: string | null, launched: string | null) => ({ holders, holders_at_start: start, launched_ms: launched });
+  assert.equal(newHoldersOf(holderFacts("120", "100", "1"), { fromMs: 1_000 }), 20);
+  assert.equal(newHoldersOf(holderFacts("90", "100", "1"), { fromMs: 1_000 }), 0);
+  assert.equal(newHoldersOf(holderFacts("30", null, "5000"), { fromMs: 1_000 }), 30);
+  assert.equal(newHoldersOf(holderFacts("30", null, "1"), { fromMs: 1_000 }), 0);
+  assert.equal(newHoldersOf(holderFacts("30", null, null), { fromMs: 1_000 }), 0);
+  assert.equal(newHoldersOf(holderFacts(null, "10", "5000"), { fromMs: 1_000 }), 0);
   // The clock ticks once a minute for every coin: within a minute a score holds still, and two coins
   // keep the same gap across ticks, even while one traded within the current minute, so they never swap on their own.
   const at = 36_000_000;
   const fresh = (latestMs: number, toMs: number) => relevanceScore({ inputs: { breadth: 0, volume: 0 }, latestMs, holders: 0 }, "1h", toMs);
-  const gaps = [95_000, 110_000, 130_000, 185_000].map(offset => fresh(at + 90_000, at + offset) - fresh(at + 36_000, at + offset));
+  const gaps = [95_000, 110_000, 130_000, 185_000].map(offset => fresh(at + 108_000, at + offset) - fresh(at + 36_000, at + offset));
   assert.deepEqual(gaps, [30, 30, 30, 30]);
   assert.equal(fresh(at, at + 120_001), fresh(at, at + 180_000));
   assert.equal(recencyOf(null, "1h", 10_000_000), 0);
