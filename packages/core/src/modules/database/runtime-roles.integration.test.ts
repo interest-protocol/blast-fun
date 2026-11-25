@@ -196,6 +196,8 @@ const SOCIAL_FEED_GRANTS: Readonly<Record<string, readonly string[]>> = {
   social_watchlist: ["blast_web:DELETE,INSERT,SELECT"],
   // 0072: who search may find, read by the public search route on the replica.
   social_account_search: ["blast_replica:SELECT", "blast_web:SELECT"],
+  // 0168: savers per presale (counts only), read by Home Trending on the primary and the replica.
+  social_presale_savers: ["blast_replica:SELECT", "blast_web:SELECT"],
   // 0075: withdrawal records, the web runtime's alone; never deleted (audit).
   social_coin_transfers: ["blast_web:INSERT,SELECT,UPDATE"],
   // 0084 (R3-27): the transaction log (personal, never on the replica); the web logs and settles
@@ -695,6 +697,8 @@ test("each role performs only its named table operations and cross-owner writes 
       "DELETE FROM social_watchlist WHERE FALSE": ["blast_web"],
       "UPDATE social_watchlist SET created_at = created_at WHERE FALSE": [],
       "SELECT callsign, display_name, avatar_url, verified FROM social_account_search WHERE haystack LIKE '%a%'": ["blast_web", "blast_replica"],
+      // 0168: the replica reads the savers counts, never the watchlist rows behind them.
+      "SELECT presale_id, savers, gained_1h, gained_24h FROM social_presale_savers": ["blast_web", "blast_replica"],
       // 0075: withdrawal records: the web records and settles them; nobody deletes one.
       "SELECT count(*) FROM social_coin_transfers": ["blast_web"],
       "UPDATE social_coin_transfers SET status = status WHERE FALSE": ["blast_web"],

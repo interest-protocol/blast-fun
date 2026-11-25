@@ -632,6 +632,11 @@
             "participants": {
               "type": "integer",
               "minimum": 0
+            },
+            "savers": {
+              "description": "Accounts with a verified X link that have the sale saved now. Present only on a Discover read that asks for presales (`presales=1`).",
+              "type": "integer",
+              "minimum": 0
             }
           },
           "required": [

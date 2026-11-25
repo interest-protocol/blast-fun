@@ -1252,3 +1252,77 @@ test("Standalone Cetus and Bluefin coins use Discover, without a presale or dupl
     const nativeHolders = await ok<HomeHoldersPage>(await holders(`?coin=${encodeURIComponent(native)}&limit=10`), "home-holders-page", "public, s-maxage=10");
     assert.deepEqual(nativeHolders.holders.map((holder) => holder.share_bps), [2500, 500]);
   }));
+
+test("Trending with presales: upcoming, live and ended sales in their bounds, savers counted from verified accounts only", { skip }, () =>
+  withFixture(async ({ admin, discover, now, replica }) => {
+    const S = { soon: hex("5007"), pend: hex("9e7d"), unsaved: hex("9e7e"), far: hex("fa7"), ended: hex("e7d"), old: hex("01d"), cancelled: hex("ca7c"), testSui: hex("7e51"), dust: hex("d057") } as const;
+    const ENDED = { id: S.ended, symbol: "ENDED" };
+    await seedChainRead(admin, {
+      presales: [
+        presale(S.soon, "SOON", "open", { start_ms: now + 3 * HOUR, end_ms: now + 2 * DAY }),
+        presale(S.pend, "PEND", "pending", {}),
+        presale(S.unsaved, "NOSAVE", "pending", {}),
+        presale(S.far, "FAR", "open", { start_ms: now + 40 * DAY, end_ms: now + 41 * DAY }),
+        presale(S.ended, "ENDED", "funded", { start_ms: now - 3 * DAY, end_ms: now - 2 * HOUR, participants: 1 }),
+        presale(S.old, "OLD", "funded", { start_ms: now - 9 * DAY, end_ms: now - 3 * DAY }),
+        presale(S.cancelled, "CNCL", "cancelled", { start_ms: now + HOUR, end_ms: now + DAY }),
+        presale(S.testSui, "TSUI", "open", { start_ms: now + HOUR, end_ms: now + DAY, quote_type: CREATE_TEST_SUI_QUOTE_TYPE, quote_symbol: "TEST_SUI", quote_decimals: 9 }),
+        // A $500 target: dust before it raises anything.
+        presale(S.dust, "DUST", "open", { start_ms: now + 2 * HOUR, end_ms: now + DAY, raise_target: "500000000" }),
+      ],
+      activity: [commit(W.ben, ENDED, 50, now - 3 * HOUR)],
+    });
+    await admin.query(advanceWatermark(checkpoint, 0, "presale"));
+    // One account with no X link: its saves never count.
+    await admin.query(
+      `INSERT INTO social_accounts (account_id, privy_did, callsign, display_name, privacy, sharing_since, onboarded_at)
+       VALUES ($1, $2, 'nox', 'Name nox', 'public', NULL, now())`,
+      [uuid(0x200), did("nox")],
+    );
+    await admin.query(
+      `INSERT INTO social_watchlist (account_id, presale_id, created_at) VALUES
+       ($1, $5, now() - interval '3 days'), ($2, $5, now() - interval '2 hours'), ($3, $5, now() - interval '10 minutes'), ($4, $5, now()),
+       ($1, $6, now()), ($1, $7, now()), ($1, $8, now()), ($1, $9, now()), ($1, $10, now())`,
+      [A.maya, A.leo, A.jules, uuid(0x200), S.soon, S.pend, S.far, S.cancelled, S.testSui, S.dust],
+    );
+    // A coin saved by its type (0163) is not a presale: the view skips it.
+    await admin.query("INSERT INTO social_watchlist (account_id, presale_id) VALUES ($1, $2)", [A.leo, coinOf(P.orbit, "ORBIT")]);
+
+    // The replica reads counts only, never the rows behind them.
+    const savers = await replica.read<Record<string, unknown>>("SELECT * FROM social_presale_savers ORDER BY presale_id");
+    assert.deepEqual(savers.rows.find((row) => row.presale_id === S.soon), { presale_id: S.soon, savers: 3, gained_1h: 1, gained_24h: 2 });
+    assert.equal(savers.rows.some((row) => !/^0x[0-9a-f]{64}$/.test(String(row.presale_id))), false);
+
+    const trending = await ok<HomeCoinsPage>(await discover("?sort=relevant&presales=1&limit=50"), "home-coins-page");
+    const shown = symbols(trending.coins);
+    for (const symbol of ["SOON", "PEND", "ENDED", "HALO"]) assert.ok(shown.includes(symbol), `${symbol} is on Trending`);
+    for (const symbol of ["NOSAVE", "FAR", "OLD", "CNCL", "TSUI", "DUST"]) assert.ok(!shown.includes(symbol), `${symbol} is not`);
+    const soon = trending.coins.find((coin) => coin.symbol === "SOON")!;
+    assert.deepEqual([soon.sale?.savers, soon.rank.why, soon.tradable], [3, "3 saved · opens in 3h", false]);
+    assert.equal(trending.coins.find((coin) => coin.symbol === "PEND")?.rank.why, "1 saved · not scheduled");
+    // Commits attribute by presale id, claims never; a sale's own people only.
+    const ended = trending.coins.find((coin) => coin.symbol === "ENDED")!;
+    assert.deepEqual([ended.activity.participants, ended.activity.backers], [1, 1]);
+    // Maya's two wallets are one backer.
+    assert.equal(trending.coins.find((coin) => coin.symbol === "HALO")?.activity.backers, 2);
+
+    // Keyset pages over the mixed list: the same items, none twice.
+    const paged: string[] = [];
+    let cursor: string | null = null;
+    do {
+      const page: HomeCoinsPage = await ok<HomeCoinsPage>(await discover(`?sort=relevant&presales=1&limit=3${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`), "home-coins-page");
+      paged.push(...symbols(page.coins));
+      cursor = page.next_cursor;
+    } while (cursor);
+    assert.deepEqual(paged, shown);
+
+    // Without the flag, or on any other order, no presale that is not trading yet.
+    const notTrading = ["SOON", "PEND", "ENDED", "HALO"];
+    for (const query of ["?sort=relevant&limit=50", "?sort=held&presales=1&limit=50", "?sort=trending&presales=1&limit=50", "?sort=newest&presales=1&limit=50"]) {
+      const page = await ok<HomeCoinsPage>(await discover(query), "home-coins-page");
+      assert.deepEqual(symbols(page.coins).filter((symbol) => notTrading.includes(symbol)), [], query);
+    }
+    // Filters still apply: a sale not trading yet is never tradable.
+    const tradable = await ok<HomeCoinsPage>(await discover("?sort=relevant&presales=1&tradable=1&limit=50"), "home-coins-page");
+    assert.deepEqual(symbols(tradable.coins).filter((symbol) => notTrading.includes(symbol)), []);
+  }));

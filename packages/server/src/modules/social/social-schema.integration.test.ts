@@ -1829,8 +1829,11 @@ test("UI-06 (0062): the account's own name and picture lead the public identity;
     }
 
     // Down: the identity reads the sources again and the columns are gone. 0072's search view reads
-    // the picture columns, so it goes down first (newest first) and comes back with 0062.
+    // the picture columns, and 0168's savers view reads 0072's watchlist, so they go down first
+    // (newest first) and come back with 0062.
     await admin.query("BEGIN");
+    await admin.query(await readFile(new URL("0168_social_presale_savers.down.sql", MIGRATIONS), "utf8"));
+    await admin.query("DELETE FROM mission_control_schema_migrations WHERE name = '0168_social_presale_savers'");
     await admin.query(await readFile(new URL("0072_social_watchlist_search.down.sql", MIGRATIONS), "utf8"));
     await admin.query("DELETE FROM mission_control_schema_migrations WHERE name = '0072_social_watchlist_search'");
     await admin.query(await readFile(new URL("0062_social_profile_edit.down.sql", MIGRATIONS), "utf8"));
@@ -1840,7 +1843,7 @@ test("UI-06 (0062): the account's own name and picture lead the public identity;
     assert.deepEqual(await identity(fresh), { display_name: "Fresh", avatar_url: "https://pbs.twimg.com/f.png", verified: false });
     assert.deepEqual(await rows(admin, "SELECT column_name FROM information_schema.columns WHERE table_name = 'social_accounts' AND column_name IN ('picture', 'picture_url', 'profile_updated_at')"), []);
     // Up again.
-    assert.deepEqual(await migrateDatabase(admin), ["0062_social_profile_edit", "0072_social_watchlist_search"]);
+    assert.deepEqual(await migrateDatabase(admin), ["0062_social_profile_edit", "0072_social_watchlist_search", "0168_social_presale_savers"]);
     assert.deepEqual(await identity(member), { display_name: "Profile Name", avatar_url: "https://pbs.twimg.com/m.png", verified: true });
     const replica = createRuntimePool(urlAs(url, "blast_replica"), { connectionTimeoutMs: 5_000, idleInTransactionMs: 5_000, idleTimeoutMs: 1_000, lockTimeoutMs: 2_000, max: 1, statementTimeoutMs: 5_000 }, "ui06-schema-replica");
     try {
@@ -1899,14 +1902,18 @@ test("UI-12 (0072): one star per account and presale; search finds public accoun
       await replica.end();
     }
 
-    // Down: the view, its indexes and the watchlist are gone; up again.
+    // Down: the view, its indexes and the watchlist are gone; up again. 0168's savers view reads
+    // the watchlist, so it goes down first (newest first) and comes back with it.
     await admin.query("BEGIN");
+    await admin.query(await readFile(new URL("0168_social_presale_savers.down.sql", MIGRATIONS), "utf8"));
+    await admin.query("DELETE FROM mission_control_schema_migrations WHERE name = '0168_social_presale_savers'");
     await admin.query(await readFile(new URL("0072_social_watchlist_search.down.sql", MIGRATIONS), "utf8"));
     await admin.query("DELETE FROM mission_control_schema_migrations WHERE name = '0072_social_watchlist_search'");
     await admin.query("COMMIT");
     assert.deepEqual(await rows(admin, "SELECT relname FROM pg_class WHERE relname IN ('social_watchlist', 'social_account_search', 'social_accounts_search_trgm_idx', 'social_profiles_search_trgm_idx')"), []);
-    assert.deepEqual(await migrateDatabase(admin), ["0072_social_watchlist_search"]);
+    assert.deepEqual(await migrateDatabase(admin), ["0072_social_watchlist_search", "0168_social_presale_savers"]);
     assert.equal((await rows(admin, "SELECT 1 FROM social_account_search")).length, 2);
+    assert.equal((await rows(admin, "SELECT 1 FROM pg_class WHERE relname IN ('social_presale_savers', 'social_watchlist_presale_idx')")).length, 2);
   } finally {
     await admin.end();
     await drop();

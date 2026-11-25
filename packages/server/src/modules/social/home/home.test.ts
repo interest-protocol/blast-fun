@@ -123,14 +123,14 @@ test("counts: distinct identities overall and per direction; one actor's repeats
   ]).get(SALE);
   assert.deepEqual([later?.latest_ms, later?.last_trade_ms], ["950", "500"]);
   assert.equal(countsOf([side({ who: "w:2", kind: "presale_commit", latest_ms: "900" })]).get(SALE)?.last_trade_ms, null);
-  // Net inflow: buys and commits in, sells out, claims neither; it may go below zero.
+  // Net inflow: buys and commits in, sells out, claims neither; it may go below zero. A claim is not volume either.
   const out = countsOf([
     side({ who: "a:1", kind: "trade_buy", usd: "10.50" }),
     side({ who: "a:1", kind: "trade_sell", usd: "25.00" }),
     side({ who: "w:2", kind: "presale_claim", usd: "99.00" }),
     side({ who: "w:3", kind: "trade_buy", usd: null }),
   ]).get(SALE);
-  assert.deepEqual([out?.volume_usd, out?.net_inflow_usd], ["134.50", "-14.50"]);
+  assert.deepEqual([out?.volume_usd, out?.net_inflow_usd], ["35.50", "-14.50"]);
 });
 
 const person = (key: string, latest: number, sells: boolean): HomeParticipant => ({

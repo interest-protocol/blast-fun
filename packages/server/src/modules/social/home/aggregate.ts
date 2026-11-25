@@ -277,7 +277,8 @@ export function countsOf(sides: readonly SideRow[]): ReadonlyMap<string, WindowC
   for (const row of sides) {
     const sale = perSale.get(row.sale) ?? { who: new Set(), byKind: new Map(), events: 0, latest: 0, lastTrade: null, volume: "0.00", netInflow: 0 };
     sale.who.add(row.who);
-    if (row.usd !== null) {
+    // A claim pays out what was already counted at the commit: never volume again.
+    if (row.usd !== null && row.kind !== "presale_claim") {
       sale.volume = addDecimal(sale.volume, row.usd);
       sale.netInflow += (NET_INFLOW_SIGN[row.kind] ?? 0) * Number(row.usd);
     }
