@@ -7,16 +7,17 @@ import { useAppQueryClient } from "#web/lib/query/provider.tsx";
 import type { HomeQuery } from "@blast/core/web/contracts/home.ts";
 
 import { discoverQuery } from "./home-client";
-import { HOME_VIEW_SORTS } from "./home-state";
+import { HOME_TAB_KEYS, HOME_TABS } from "./home-state";
 
 /**
- * Makes a sort switch instant. Once the visible list has loaded, the first
- * page of every other sort (same window and filters) is fetched while the
+ * Makes a tab switch instant. Once the visible list has loaded, the first
+ * page of every other tab (same window and filters) is fetched while the
  * browser is idle, so the switch paints from the cache. A cached view older
  * than the public freshness limit is shown at once and refreshed behind it.
  * Each prefetch is the same public URL for every reader, so the CDN answers
- * most of them (`s-maxage=10`), and the server builds all sorts of a window
- * from one shared read.
+ * most of them (`s-maxage=10`), and the server builds every tab of a window
+ * from one shared read. A header sort is not prefetched: it is one request
+ * when pressed.
  */
 export function useSortPrefetch(query: HomeQuery, loaded: boolean): void {
   const client = useAppQueryClient();
@@ -31,8 +32,9 @@ export function useSortPrefetch(query: HomeQuery, loaded: boolean): void {
   useEffect(() => {
     if (!loaded || query.page !== 1 || query.cursor !== null) return;
     const prefetch = () => {
-      for (const sort of HOME_VIEW_SORTS) {
-        if (sort !== query.sort) void client.prefetchQuery(discoverQuery({ ...query, sort }, true));
+      for (const key of HOME_TAB_KEYS) {
+        const { stage, sort } = HOME_TABS[key];
+        if (stage !== query.stage || sort !== query.sort) void client.prefetchQuery(discoverQuery({ ...query, stage, sort }, true));
       }
     };
     // A tab opened in the background prefetches once it is shown.

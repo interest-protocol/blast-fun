@@ -24,7 +24,7 @@ export function useDiscoverRailCoins(enabled: boolean) {
   const { snapshot } = useWorkspace();
   const client = useAppQueryClient();
   const controls = snapshot.data.controls.Coins;
-  const state: HomeViewState = { ...controls, minParticipants: controls.min_participants };
+  const state: HomeViewState = { ...controls, stage: "all", minParticipants: controls.min_participants };
   const options = discoverQuery(workspaceDiscoverQuery(state, controls.rows));
   return useQuery<HomeCoinsPage>(
     {

@@ -13,14 +13,14 @@ import { pollInterval } from "#web/lib/query/polling.ts";
 import { useAppQueryClient } from "#web/lib/query/provider.tsx";
 import type { AsOf } from "@blast/core/web/contracts/items.ts";
 import { SOCIAL_FEED_DELAYED_LAG_MS } from "@blast/core/web/contracts/feed.ts";
-import { HOME_COINS_MAX_IDS, type HomeCoinsPage, type HomeQuery, type HomeSort, type HomeSource, type HomeWindow } from "@blast/core/web/contracts/home.ts";
+import { HOME_COINS_MAX_IDS, type HomeCoinsPage, type HomeQuery, type HomeSort, type HomeSource, type HomeStage, type HomeWindow } from "@blast/core/web/contracts/home.ts";
 
 import { useSignInGate, useSocialViewer } from "../SignInGate";
 import { useWatchlistSnapshot, useWatchlistRetry, useWatchStar } from "../watchlist/Watchlist";
 import { CoinCard } from "./CoinCard";
 import styles from "./CoinHome.module.css";
 import { coinsByIdsQuery, discoverQuery, followingCoinsQuery } from "./home-client";
-import { resultsAnnouncement, SORT_LABELS } from "./home-state";
+import { resultsAnnouncement, SORT_LABELS, type HeaderSort } from "./home-state";
 import { biggestBuy, buyCueOf, homeCoinKey, type HomeBuyCue } from "./home-model";
 import { TableFooter } from "./TableFooter";
 import { countWords } from "@blast/core/web/format.ts";
@@ -39,11 +39,13 @@ export type ListProps = Readonly<{
   window: HomeWindow;
   nowMs: number;
   trading: boolean;
-  /** Discover's order and how to change it (the header's Vol and Age sort); the other sources keep their own order. */
   onReset?: () => void;
   onWindow?: (window: HomeWindow) => void;
   marketLoading?: boolean;
+  /** Discover's tab (its stage and order) and how a header changes the order; the other sources keep their own order. */
+  stage?: HomeStage;
   sort?: HomeSort;
+  /** The order a sorted header returns to when pressed again. */
   defaultSort?: HomeSort;
   streamPrices?: boolean;
   onSort?: (sort: HomeSort) => void;
@@ -56,7 +58,7 @@ export type ListProps = Readonly<{
 
 /** Each source owns its result announcement alongside the data it renders. */
 function ResultsAnnouncement({ props, count, pages }: Readonly<{ props: ListProps; count: number; pages: number }>) {
-  return <p aria-live="polite" className="sr" role="status">{resultsAnnouncement({ source: props.source, page: props.page, sort: props.sort ?? "relevant", window: props.window }, count, pages)}</p>;
+  return <p aria-live="polite" className="sr" role="status">{resultsAnnouncement({ source: props.source, page: props.page, stage: props.stage ?? "all", sort: props.sort ?? "relevant", window: props.window }, count, pages)}</p>;
 }
 
 /** The footer under a list: rows per page and the count ("45 coins") on the left, the pager on the right. */
@@ -71,34 +73,39 @@ function useLastPage(page: number, pages: number | undefined, onPage: ListProps[
   }, [page, pages, onPage]);
 }
 
-/** A column label that sorts the list when it can: the arrow marks the order in force; the same label again returns to the default. */
-function SortHead({ label, by, sort, defaultSort, onSort, className }: Readonly<{ label: string; by: HomeSort; sort?: HomeSort; defaultSort: HomeSort; onSort?: (sort: HomeSort) => void; className: string }>) {
-  if (!onSort) return <span className={className}>{label}</span>;
+type HeadProps = Pick<ListProps, "sort" | "defaultSort" | "onSort" | "window"> & Readonly<{ /** Table roles; off while a result stands in for the rows. */ table?: boolean }>;
+
+/**
+ * A sortable column's header: a button inside the header cell, and `aria-sort` on the sorted column only.
+ * The sorted header pressed again returns to the stage's own order (Trending on the whole list). Without an order to change, the label alone.
+ */
+function SortHead({ label, by, className, sort, defaultSort = "relevant", onSort, table = true }: HeadProps & Readonly<{ label: string; by: HeaderSort; className: string }>) {
+  const role = table ? "columnheader" : undefined;
+  if (!onSort) return <span className={className} role={role}>{label}</span>;
   const on = sort === by;
   return (
-    <button aria-pressed={on} className={clsx(className, styles.sortHead)} data-on={on || undefined} onClick={() => onSort(on ? defaultSort : by)} title={on ? `Back to ${SORT_LABELS[defaultSort]}` : `Sort by ${label.toLowerCase()}`} type="button">
-      {on ? <span aria-hidden="true">↓ </span> : null}{label}
-    </button>
+    <span aria-sort={on && table ? "descending" : undefined} className={className} role={role}>
+      <button className={styles.sortHead} onClick={() => onSort(on ? defaultSort : by)} title={on && defaultSort !== by ? `Back to ${SORT_LABELS[defaultSort]}` : undefined} type="button">
+        {label}{on ? <span aria-hidden="true">↓</span> : null}
+      </button>
+    </span>
   );
 }
 
 /**
- * The columns' one header per list (the Main board's: `#`, Coin, Price,
- * price change, Volume, FDV, Top 10, Age and 7d; a phone stacks the
- * figures and needs none). Volume and Age sort the list where it has an
- * order (Discover).
+ * The Coins table's header (plan decision 7): Coin · MCap · price change · Vol · Holders · Status.
+ * MCap, Vol and Holders sort Discover; a phone keeps only those three.
  */
-export function ListHead({ sort, defaultSort = "relevant", onSort, window }: Pick<ListProps, "sort" | "defaultSort" | "onSort" | "window">) {
-  return <div className={clsx(styles.listHead, styles.cols)}>
-    <span className={styles.hRank}>#</span>
-    <span className={styles.hIdent}>Coin</span>
-    <span className={styles.hPrice}>Price</span>
-    <span className={styles.hChange}>{window}</span>
-    <SortHead by="trending" className={styles.hVol} defaultSort={defaultSort} label="Volume" onSort={onSort} sort={sort} />
-    <span className={styles.hFdv}>FDV</span>
-    <span className={styles.hTop}>Top 10</span>
-    <SortHead by="newest" className={styles.hAge} defaultSort={defaultSort} label="Age" onSort={onSort} sort={sort} />
-    <span className={styles.hWeek}>Trend</span>
+export function ListHead(props: HeadProps) {
+  const role = props.table === false ? undefined : "columnheader";
+  return <div className={clsx(styles.listHead, styles.cols)} role={role && "row"}>
+    <span className={styles.hIdent} role={role}>Coin</span>
+    <SortHead {...props} by="market_cap" className={styles.hMcap} label="MCap" />
+    <span className={styles.hChange} role={role}>{props.window}</span>
+    <SortHead {...props} by="trending" className={styles.hVol} label={`Vol ${props.window}`} />
+    <SortHead {...props} by="held" className={styles.hHolders} label="Holders" />
+    <span className={styles.hStatus} role={role}>Status</span>
+    <span className={clsx(styles.hActions, "sr-only")} role={role}>Actions</span>
   </div>;
 }
 
@@ -126,31 +133,32 @@ export function CoinList({ coins, props, result, empty = false, end, viewKey, ra
   // Home shows new-coin admissions in the Coins header.
   const slotted = useRankingsSlot(rankings);
   const controls = rankings && !slotted ? <RankingControls rankings={rankings} /> : null;
-  const header = <ListHead defaultSort={props.defaultSort} window={props.window} onSort={props.source === "discover" ? props.onSort : undefined} sort={props.sort} />;
+  const head = { defaultSort: props.defaultSort, window: props.window, onSort: props.source === "discover" ? props.onSort : undefined, sort: props.sort };
   if (result) return <>
     {controls}
-    {empty ? null : header}
+    {empty ? null : <ListHead {...head} table={false} />}
     <div aria-busy={props.marketLoading || undefined} className={styles.coinResult} data-list-none={empty || undefined}>{result}</div>
   </>;
   return (
     <>
       {controls}
-      {coins.length > 0 ? <span className={styles.phoneWindow}>{props.window === "1h" ? "1 hour" : "24 hours"}</span> : null}
-      {header}
-      <CoinRows buy={buy} checkpoint={checkpoint} coins={coins} latest={latest} list={list} props={props} rankings={rankings} swapping={swapping} />
+      {/* react-doctor-disable-next-line react-doctor/prefer-tag-over-role -- Rows are grid list items that restack on a phone and slide when ranks move; a native table cannot take that layout, so ARIA table roles give the sorted headers their columns. */}
+      <div aria-label="Coins" data-source={props.source} role="table">
+        <ListHead {...head} />
+        <CoinRows buy={buy} checkpoint={checkpoint} coins={coins} latest={latest} list={list} props={props} rankings={rankings} swapping={swapping} />
+      </div>
       <div data-table-end="">{end}</div>
     </>
   );
 }
 
 function CoinRows({ coins, props, latest, checkpoint, buy, list, rankings, swapping }: Readonly<{ coins: readonly RankedCoin[]; props: ListProps; latest: ReturnType<typeof useHomePrices>; checkpoint: number; buy?: Readonly<{ coinKey: string; cue: HomeBuyCue }>; list: ReturnType<typeof useRankMotion>; rankings?: Rankings; swapping: boolean }>) {
-  return <ol aria-busy={swapping || undefined} className={clsx(styles.list, styles.rankedList)} data-swapping={swapping || undefined} data-volume-sort={props.source === "discover" && props.sort === "trending" || undefined} ref={list} {...rankings?.interactionProps}>
-    {coins.map((coin, index) => (
+  return <ol aria-busy={swapping || undefined} className={clsx(styles.list, styles.rankedList)} data-swapping={swapping || undefined} data-sort={props.source === "discover" ? props.sort : undefined} ref={list} role="rowgroup" {...rankings?.interactionProps}>
+    {coins.map((coin) => (
     <CoinCard
       key={homeCoinKey(coin)}
       coin={coin}
       buy={buy?.coinKey === homeCoinKey(coin) ? buy.cue : undefined}
-      rank={(props.page - 1) * props.rows + index + 1}
       livePrice={props.streamPrices ? newerHomePrice(latest, coin, coin.readCheckpoint ?? checkpoint) : undefined}
       nowMs={props.nowMs}
       trading={props.trading}
@@ -290,19 +298,26 @@ type DiscoverEmptyProps = Readonly<{ query: HomeQuery; onReset?: () => void; com
 
 export function DiscoverEmpty({ query, onReset, compact }: DiscoverEmptyProps) {
   const filtered = query.minParticipants > 0 || query.age !== "all" || query.tradable;
-  if (!filtered) return <DiscoverCatalogEmpty compact={compact} />;
+  if (!filtered) return <DiscoverCatalogEmpty compact={compact} stage={query.stage} />;
   return <FilteredDiscoverEmpty compact={compact} onReset={onReset} query={query} />;
 }
 
-function DiscoverCatalogEmpty({ compact }: Readonly<{ compact?: boolean }>) {
-  return <EmptyState compact={compact} listEmpty role="status" title="No coins to discover" />;
+/** An empty tab says what it is waiting for, in the Bonding Curves card's words. */
+const STAGE_EMPTY: Readonly<Record<HomeStage, string>> = {
+  all: "No coins to discover.",
+  almost: "No curve is at 60% yet.",
+  graduated: "No coin has graduated yet.",
+};
+
+function DiscoverCatalogEmpty({ compact, stage }: Readonly<{ compact?: boolean; stage: HomeStage }>) {
+  return <EmptyState compact={compact} listEmpty role="status" title={STAGE_EMPTY[stage]} />;
 }
 
 function FilteredDiscoverEmpty({ query, onReset, compact }: DiscoverEmptyProps) {
   const client = useAppQueryClient();
   const unfiltered = useQuery(discoverQuery({ ...query, minParticipants: 0, age: "all", tradable: false, page: 1, cursor: null }), client);
   const total = settledHomePage(unfiltered)?.total;
-  if (total === 0) return <DiscoverCatalogEmpty compact={compact} />;
+  if (total === 0) return <DiscoverCatalogEmpty compact={compact} stage={query.stage} />;
   return <EmptyState
     action={onReset && total !== undefined && total > 0 ? <Button onClick={onReset} size="sm">Reset filters</Button> : undefined}
     compact={compact}

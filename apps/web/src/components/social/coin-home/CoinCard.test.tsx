@@ -25,7 +25,7 @@ const coin: HomeCoin = {
 
 const router = { bfcacheId: "test", back() {}, forward() {}, refresh() {}, hmrRefresh() {}, push() {}, replace() {}, prefetch: async () => {} };
 
-test("streamed prices update the existing row without reordering it or changing its FDV", async (t) => {
+test("streamed prices revalue the existing row's market cap without reordering it", async (t) => {
   const dom = installTestDom();
   const { act } = await import("react");
   const { createRoot } = await import("react-dom/client");
@@ -52,9 +52,11 @@ test("streamed prices update the existing row without reordering it or changing 
   });
 
   const type = (id: string) => `0x${id.repeat(64)}::coin::COIN`;
+  // A million whole coins in circulation: market cap = price × 1M.
+  const supply = { total_supply: "1000000000000000", circulating_supply: "1000000000000000", open_1h_usd: null, open_24h_usd: null, baselines_until_ms: 1000 };
   const coins = [
-    { ...coin, coin_type: type("1"), price_usd: "0.05", price_as_of_ms: 500, fdv_usd: "1000" },
-    { ...coin, coin_type: type("2"), price_usd: "0.01", price_as_of_ms: 500, fdv_usd: "200" },
+    { ...coin, coin_type: type("1"), price_usd: "0.05", price_as_of_ms: 500, mobile_market: { market_cap_usd: "50000", change_1h_bps: null }, live_inputs: supply },
+    { ...coin, coin_type: type("2"), price_usd: "0.01", price_as_of_ms: 500, mobile_market: { market_cap_usd: "10000", change_1h_bps: null }, live_inputs: supply },
   ];
   const noop = () => undefined;
   const props: ListProps = { source: "discover", window: "24h", nowMs: 1000, sort: "held", streamPrices: true,
@@ -65,9 +67,10 @@ test("streamed prices update the existing row without reordering it or changing 
     </QueryProvider></AppRouterContext>,
   ));
   await renderRows(10);
-  assert.equal(host.querySelector(".hPrice")?.textContent, "Price");
+  assert.equal(host.querySelector(".hMcap")?.textContent, "MCap");
   assert.equal(host.querySelector('[aria-label="Refresh market prices"]'), null);
   const rows = [...host.querySelectorAll("[data-list-row]")];
+  const mcap = (row = 1) => rows[row]?.querySelector('[data-slot="coin-mcap"]')?.textContent;
   await act(async () => {});
   assert.equal(streams.length, 1);
   const stream = streams[0]!;
@@ -78,35 +81,27 @@ test("streamed prices update the existing row without reordering it or changing 
     ] }) }));
   });
   await send(11, "0.9", 500);
-  assert.equal(rows[1]?.querySelector(".price")?.textContent, "$0.0100", "HTTP wins timestamp ties across different checkpoints");
-  const stamped = (priceCheckpoint: number) => coins.map(row => ({ ...row, live_inputs: {
-    price_checkpoint: priceCheckpoint, total_supply: null, circulating_supply: null,
-    open_1h_usd: null, open_24h_usd: null, baselines_until_ms: 1000,
-  } }));
+  assert.equal(mcap(), "$10K", "HTTP wins timestamp ties across different checkpoints");
+  const stamped = (priceCheckpoint: number) => coins.map(row => ({ ...row, live_inputs: { ...supply, price_checkpoint: priceCheckpoint } }));
   await renderRows(10, stamped(11));
-  assert.equal(rows[1]?.querySelector(".price")?.textContent, "$0.0100", "HTTP wins on the same market checkpoint");
+  assert.equal(mcap(), "$10K", "HTTP wins on the same market checkpoint");
   await renderRows(10, stamped(10));
-  assert.equal(rows[1]?.querySelector(".price")?.textContent, "$0.9000", "a later committed market checkpoint corrects the same price timestamp");
+  assert.equal(mcap(), "$900K", "a later committed market checkpoint corrects the same price timestamp");
   await renderRows(10);
   await send(11, "2", 600);
   assert.deepEqual([...host.querySelectorAll("[data-list-row]")], rows);
-  assert.deepEqual(rows.map((row) => row.querySelector(".price")?.textContent), ["$0.0500", "$2.00"]);
-  assert.equal(rows[1]?.querySelector(".fdv")?.textContent, "$200");
+  assert.deepEqual([mcap(0), mcap()], ["$50K", "$2M"]);
   await send(11, "3", 550);
-  assert.equal(rows[1]?.querySelector(".price")?.textContent, "$2.00");
+  assert.equal(mcap(), "$2M");
   await send(10, "3", 650);
-  assert.equal(rows[1]?.querySelector(".price")?.textContent, "$2.00");
+  assert.equal(mcap(), "$2M");
   await renderRows(12);
-  assert.equal(rows[1]?.querySelector(".price")?.textContent, "$0.0100");
+  assert.equal(mcap(), "$10K");
   await send(12, "4", 700);
-  assert.equal(rows[1]?.querySelector(".price")?.textContent, "$4.00");
+  assert.equal(mcap(), "$4M");
   assert.ok(animations.all.length > 0);
-  assert.ok(animations.all.every(animation => rows[1]?.querySelector(".price")?.contains(animation.target)),
-    "Only the changing price pulses on an older snapshot without supply inputs");
-  await send(13, "0.0000839", 710);
-  assert.equal(rows[1]?.querySelector(".price")?.textContent, "$0.0₄839");
-  await send(14, "0.000084", 720);
-  assert.equal(rows[1]?.querySelector(".price")?.textContent, "$0.0₄840");
+  assert.ok(animations.all.every(animation => rows[1]?.querySelector(".mcap")?.contains(animation.target)),
+    "only the changing market cap pulses");
   assert.equal(streams.length, 1);
 });
 
@@ -127,33 +122,25 @@ test("Home distinguishes first-observation changes from full 24-hour changes and
   const flat = render({ ...quoted, change_24h_bps: 0 });
   const down = render({ ...quoted, change_24h_bps: -7739 });
   try {
-    assert.equal(young.window.document.querySelector(".price")?.textContent, "$1.00");
-    const shortChange = young.window.document.querySelector(".desktopChange");
-    assert.match(shortChange?.getAttribute("title") ?? "", /first price on Nov 20, 12:00 UTC/);
-    assert.match(shortChange?.textContent ?? "", /\+10%$/);
-    for (const kind of [".desktopChange", ".mobileChange"]) {
-      assert.equal(young.window.document.querySelector(`${kind} [aria-hidden="true"]`)?.textContent?.trim(), "≤24h");
-    }
-    assert.equal(mature.window.document.querySelector(".change"), null);
-    assert.equal(flat.window.document.querySelector(".change.up")?.textContent, "+0%");
-    assert.equal(flat.window.document.querySelector(".desktopChange")?.getAttribute("title"), null);
-    assert.equal(down.window.document.querySelector(".change.down")?.textContent, "−77.39%");
+    const change = young.window.document.querySelector(".change");
+    assert.match(change?.getAttribute("title") ?? "", /first price on Nov 20, 12:00 UTC/);
+    assert.match(change?.textContent ?? "", /\+10%$/);
+    assert.equal(change?.querySelector('[aria-hidden="true"]')?.textContent?.trim(), "≤24h");
+    assert.equal(mature.window.document.querySelector(".change")?.textContent, "—Price change unknown");
+    assert.equal(flat.window.document.querySelector(".change")?.textContent, "0%");
+    assert.equal(flat.window.document.querySelector(".change")?.getAttribute("title"), null);
+    assert.equal(down.window.document.querySelector(".change")?.textContent, "−77.39%");
   } finally {
     young.window.close();
     mature.window.close();
     flat.window.close();
     down.window.close();
   }
-});
 
-test("Home shows the same FDV in desktop and mobile rows", () => {
-  const dom = render({ ...coin, fdv_usd: "12000", mobile_market: { market_cap_usd: "7000", change_1h_bps: null } });
+  const unavailable = render({ ...coin, tradable: false });
   try {
-    assert.equal(dom.window.document.querySelector(".fdv")?.textContent, "$12K");
-    assert.equal(dom.window.document.querySelector(".mobileFdv")?.textContent, "FDV$12K");
-  } finally {
-    dom.window.close();
-  }
+    assert.equal(unavailable.window.document.querySelector('button[aria-label="Buy TEST"]'), null);
+  } finally { unavailable.window.close(); }
 });
 
 test("the selected change window determines which percentage appears", () => {
@@ -161,14 +148,11 @@ test("the selected change window determines which percentage appears", () => {
   for (const [window, value, expected] of [
     ["1h", quoted, "+12%"],
     ["24h", quoted, "−32%"],
-    ["1h", { ...quoted, mobile_market: { ...quoted.mobile_market, change_1h_bps: null } }, undefined],
+    ["1h", { ...quoted, mobile_market: { ...quoted.mobile_market, change_1h_bps: null } }, "—Price change unknown"],
   ] as const) {
     const dom = render(value, false, 1, window);
     try {
-      assert.equal(dom.window.document.querySelector(".desktopChange")?.textContent, expected);
-      assert.equal(dom.window.document.querySelector(".mobileChange")?.textContent, expected === undefined
-        ? undefined
-        : `${window === "1h" ? "1-hour" : "24-hour"} price change ${window}${expected}`);
+      assert.equal(dom.window.document.querySelector(".change")?.textContent, expected);
     } finally {
       dom.window.close();
     }
@@ -206,54 +190,59 @@ test("Home volume distinguishes partial USD, unknown USD and confirmed zero in t
   }
 });
 
-test("unavailable prices stay visually blank, pending reads show a status, and actual zero stays visible", () => {
+test("an unknown market cap or holder count reads as a dash, a pending read shows a status, and zero stays visible", () => {
   for (const loading of [false, true]) {
     const dom = render(coin, loading);
     const { document } = dom.window;
     try {
-      const price = document.querySelector(".price");
-      const fdv = document.querySelector(".fdv");
-      assert.equal(price?.querySelector('[aria-label="Loading Price"]') != null, loading);
-      assert.equal(fdv?.querySelector('[aria-label="Loading FDV"]') != null, loading);
-      if (!loading) {
-        assert.equal(price, null, "missing price omits its complete group");
-        assert.equal(fdv, null, "missing FDV omits its label and wrapper");
-        assert.equal(document.querySelector(".top, .age"), null);
-      }
-      assert.equal(price?.textContent ?? "", "", "missing price never becomes a dash or a zero");
+      const mcap = document.querySelector(".mcap");
+      assert.equal(mcap?.querySelector('[aria-label="Loading market cap"]') != null, loading);
+      if (!loading) assert.equal(mcap?.textContent, "—Market cap unknown");
+      assert.equal(document.querySelector(".holders")?.textContent, "—Holders unknown");
     } finally { dom.window.close(); }
   }
-  const dom = render({ ...coin, price_usd: "0", fdv_usd: "0", top_holders: { holders: [], share_bps: 0 } }, true);
+  const dom = render({ ...coin, holders: 0, mobile_market: { market_cap_usd: "0", change_1h_bps: null } }, true);
   try {
     const { document } = dom.window;
-    assert.equal(document.querySelector(".price")?.textContent, "$0.00");
-    assert.equal(document.querySelector(".fdv")?.textContent, "$0");
-    assert.equal(document.querySelector(".top")?.textContent, "0%");
+    assert.equal(document.querySelector(".mcap")?.textContent, "$0");
+    assert.equal(document.querySelector(".holders")?.textContent, "0");
     assert.equal(document.querySelectorAll('[role="status"]').length, 0, "refreshing must not replace observed zero with a loader");
   } finally { dom.window.close(); }
 });
 
-test("#588: a scheduled sale shows its opening time until the sale opens", () => {
+test("the Status cell names where each coin is in its life", () => {
+  const day = 86_400_000;
+  const now = 10 * day;
+  const status = (value: HomeCoin, nowMs = now) => {
+    const dom = render(value, false, nowMs);
+    try {
+      const cell = dom.window.document.querySelector(".status");
+      return [cell?.textContent, cell?.querySelector("progress")?.getAttribute("value") ?? null];
+    } finally { dom.window.close(); }
+  };
+  const curve = (lifecycle: NonNullable<HomeCoin["curve"]>["lifecycle"], progress_bps: number | null) => ({
+    ...coin, launch_id: "0xlaunch", lifecycle: "open" as const, venue: "blast_curve", curve: { lifecycle, progress_bps, quote_remaining: "310000000000" },
+  });
+  assert.deepEqual(status(curve("live", 7250)), ["72% · 310 SUI to go", "72"]);
+  assert.deepEqual(status({ ...curve("migrated", 10_000), lifecycle: "migrated", graduated_ms: now - 3 * day }), ["Graduated 3d ago", null]);
+  assert.deepEqual(status({ ...coin, presale_id: "0xsale", launched_ms: now - 3 * day }), ["Listed 3d ago", null]);
+  // A coin with no Blast history: the venue alone, by name for assistive technology.
+  assert.match(status(coin)[0] ?? "", /Cetus/);
+  // The server sends `curve: null` for every coin that never had a curve.
+  assert.match(status({ ...coin, curve: null })[0] ?? "", /Cetus/);
+
+  // #588: a scheduled sale shows its opening time until the sale opens.
   const start = 10_000_000;
   const sale: HomeCoin = {
     ...coin, presale_id: "0xsale", lifecycle: "open", tradable: false,
-    sale: { start_ms: start, end_ms: start + 3 * 86_400_000, raise_target: "1000000000000", raised: "0", participants: 0 },
+    sale: { start_ms: start, end_ms: start + 3 * day, raise_target: "1000000000000", raised: "0", participants: 0 },
   };
-  const renderAt = (nowMs: number) => render(sale, false, nowMs);
-  const before = renderAt(start - 39 * 60_000);
+  assert.deepEqual(status(sale, start - 39 * 60_000), ["Opens in 39m", null]);
+  assert.deepEqual(status(sale, start), ["0% · closes in 3d", "0"]);
+  const before = render(sale, false, start);
   try {
-    const { document } = before.window;
-    assert.equal(document.querySelector(".saleStatus .status")?.textContent, "upcoming");
-    assert.equal(document.querySelector(".saleStatus .status")?.getAttribute("data-tone"), "pending");
-    assert.equal(document.querySelector(".closes")?.textContent, "Opens39m");
-    assert.equal(document.querySelector("a")?.getAttribute("href"), "/presale/0xsale");
+    assert.equal(before.window.document.querySelector("a")?.getAttribute("href"), "/presale/0xsale");
   } finally { before.window.close(); }
-  const after = renderAt(start);
-  try {
-    const { document } = after.window;
-    assert.equal(document.querySelector(".saleStatus .status")?.textContent, "open");
-    assert.match(document.querySelector(".closes")!.textContent!, /^Closes3d/);
-  } finally { after.window.close(); }
 });
 
 test("a Home coin links directly to its page and offers Buy as a separate action", () => {
@@ -275,8 +264,8 @@ test("a Home coin links directly to its page and offers Buy as a separate action
   } finally { unavailable.window.close(); }
 });
 
-test("a newer Home price revalues each supply independently, preserves missing values and updates the observed spark tip", async () => {
-  const { coinAtPrice, sparkAtPrice } = await import("./live-market");
+test("a newer Home price revalues each supply independently and preserves missing values", async () => {
+  const { coinAtPrice } = await import("./live-market");
   const base: HomeCoin = { ...coin, price_usd: "1", price_as_of_ms: 500, fdv_usd: "100.00",
     change_24h_bps: 0, mobile_market: { market_cap_usd: "45.00", change_1h_bps: 0 },
     live_inputs: { total_supply: "100000000000", circulating_supply: "45000000000", open_1h_usd: "0.5",
@@ -294,11 +283,6 @@ test("a newer Home price revalues each supply independently, preserves missing v
   assert.equal(expiredDay.mobile_market?.change_1h_bps, 30_000);
   const unknown = coinAtPrice({ ...base, live_inputs: { ...base.live_inputs!, circulating_supply: null } }, tick);
   assert.equal(unknown.mobile_market?.market_cap_usd, null);
-  const history = [[100, 0.5], [500, 1]] as const;
-  assert.deepEqual(sparkAtPrice(history, next.price_as_of_ms, next.price_usd), [...history, [600, 2]]);
-  assert.deepEqual(sparkAtPrice(history, 500, "2"), [[100, 0.5], [500, 2]]);
-  assert.equal(sparkAtPrice(history, 499, "2"), history);
-  assert.equal(sparkAtPrice(null, 600, "2"), null);
 });
 
 // Fails if a buy's figure is missing, or a large one lands as quietly as a small one.

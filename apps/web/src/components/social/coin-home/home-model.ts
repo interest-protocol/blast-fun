@@ -1,5 +1,5 @@
 import { coinPagePath } from "@blast/core/modules/launchpad-coin/page-key.ts";
-import { ago, bxSigned, qs, qsRaised, qm, raisedShort, short, shortAddress, signPct, usd0 } from "@blast/core/web/format.ts";
+import { ago, bxSigned, fillPercent, qs, qsRaised, qm, raisedShort, short, shortAddress, signPct, timeUntil, usd0 } from "@blast/core/web/format.ts";
 import { amtExact, atLeastPow10, bxUsdExact, compareExact, exactAtoms, exactDecimal, groupedExact, numShortExact, shortQtyExact, unitsAt } from "@blast/core/web/exact-amount.ts";
 import type { FeedItemActor } from "@blast/core/web/contracts/items.ts";
 import type { HomeTapeEvent, HomeActivity, HomeAmount, HomeCoin, HomeEvent, HomeKind, HomeParticipant, HomeRecentBuy, HomeSide, HomeWindow } from "@blast/core/web/contracts/home.ts";
@@ -9,7 +9,8 @@ import { BLAST_V1_COINS } from "@blast/core/modules/social/portfolio/core-coins.
 import { explorerTxUrl } from "../post/post-format";
 import { presaleHref } from "../feed-ui/shell-bridge-model";
 import { numberDecimal, readablePrice, readableUsd } from "#web/lib/market-format.ts";
-import { ALMOST_GRADUATED_BPS } from "#web/components/launchpad/discovery/discovery-model.ts";
+import { ALMOST_GRADUATED_BPS, compactQuoteAmount } from "#web/components/launchpad/discovery/discovery-model.ts";
+import { saleLifecycleAt } from "@blast/core/web/contracts/presales.ts";
 
 /**
  * Every word and figure the coin-centred Home draws, as plain values. Pure,
@@ -520,4 +521,50 @@ export function homeCoinHref(coin: Pick<HomeCoin, "presale_id" | "launch_id" | "
 /** The existing presale identity or a standalone coin’s canonical type. */
 export function homeCoinKey(coin: Pick<HomeCoin, "presale_id" | "coin_type">): string {
   return coin.presale_id ?? coin.coin_type;
+}
+
+/**
+ * The row's Status cell (plan decision 7), one short line: where the coin is
+ * in its life. A filling curve or an open sale also gives its fill (0–100)
+ * for the row's one bar; a coin on a DEX with no Blast history names its venue.
+ */
+export type HomeStatus = Readonly<{ text: string; fill?: number; venue?: string }>;
+
+export function homeStatus(coin: HomeCoin, nowMs: number): HomeStatus {
+  if (coin.curve) return curveStatus(coin, coin.curve, nowMs);
+  if (coin.sale && coin.lifecycle !== "migrated") return saleStatus(coin, coin.sale, nowMs);
+  if (coin.lifecycle === "migrated" && (coin.presale_id !== null || coin.launch_id !== null)) return { text: since("Listed", coin.launched_ms, nowMs) };
+  return coin.venue ? { text: "", venue: coin.venue } : { text: "—" };
+}
+
+function since(word: string, ms: number | null | undefined, nowMs: number): string {
+  if (ms == null) return word;
+  const text = ago(ms, nowMs);
+  return text === "now" ? `${word} just now` : `${word} ${text} ago`;
+}
+
+function curveStatus(coin: HomeCoin, curve: NonNullable<HomeCoin["curve"]>, nowMs: number): HomeStatus {
+  if (curve.lifecycle === "migrated") return { text: since("Graduated", coin.graduated_ms, nowMs) };
+  if (curve.lifecycle === "opening_round") return { text: "Opening round" };
+  if (curve.progress_bps === null) return { text: "Bonding curve" };
+  if (curve.lifecycle === "migration_ready" || curve.progress_bps >= 10_000) return { text: "Graduating", fill: 100 };
+  // Whole percent, rounded down, so a curve never reads 100% before it is full.
+  const fill = Math.floor(curve.progress_bps / 100);
+  if (curve.quote_remaining === null) return { text: `${fill}%`, fill };
+  return { text: `${fill}% · ${compactQuoteAmount(curve.quote_remaining, coin.quote.decimals)} ${coin.quote.symbol} to go`, fill };
+}
+
+/** A sale's time, coarse enough for a row (`3h`, `1h 11m`, `39m`, `<1m`): a row never ticks by the second. */
+function coarseUntil(ms: number, nowMs: number): string {
+  return ms - nowMs < 60_000 ? "<1m" : timeUntil(ms, nowMs).replace(/ (\d+s|0[mh])$/, "");
+}
+
+function saleStatus(coin: HomeCoin, sale: NonNullable<HomeCoin["sale"]>, nowMs: number): HomeStatus {
+  const fill = Math.min(100, fillPercent(Number(sale.raised), Number(sale.raise_target)));
+  const lifecycle = saleLifecycleAt(coin.lifecycle, sale.start_ms, nowMs);
+  if (lifecycle === "pending") return { text: sale.start_ms > nowMs ? `Opens in ${coarseUntil(sale.start_ms, nowMs)}` : "Upcoming" };
+  if (lifecycle === "open") return { text: sale.end_ms > nowMs ? `${fill}% · closes in ${coarseUntil(sale.end_ms, nowMs)}` : `${fill}% · closing`, fill };
+  if (lifecycle === "funded") return { text: "Funded", fill: 100 };
+  if (lifecycle === "cancelled") return { text: "Cancelled" };
+  return { text: lifecycle.charAt(0).toUpperCase() + lifecycle.slice(1) };
 }

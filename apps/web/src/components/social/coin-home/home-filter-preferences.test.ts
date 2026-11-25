@@ -30,7 +30,8 @@ test("Home restores saved filters, skips explicit views, and retains unrelated U
 
 test("Home validates stored filters and tolerates denied storage", (t) => {
   window.localStorage.setItem(STORAGE_KEY, "sort=unknown&w=24h&min=999&src=following&page=4");
-  assert.equal(restoreHomeFilters(new URL(home))?.href, `${home}?sort=held&w=24h`);
+  // An unknown sort falls back to the order the filters imply (`held`), which the URL leaves out.
+  assert.equal(restoreHomeFilters(new URL(home))?.href, `${home}?w=24h`);
 
   window.localStorage.setItem(STORAGE_KEY, "w=unknown&min=999&page=4");
   assert.equal(restoreHomeFilters(new URL(home)), null);

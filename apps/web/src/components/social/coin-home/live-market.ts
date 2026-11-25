@@ -2,7 +2,6 @@ import type { HomeCoin } from "@blast/core/web/contracts/home.ts";
 import type { DisplayPrice } from "@blast/core/modules/launchpad-contract/market-stream.ts";
 import { changeBps } from "@blast/core/modules/social/prices/change.ts";
 import { fdvOf } from "@blast/core/modules/social/prices/valuation.ts";
-import type { SparkPoint } from "#web/components/charts/spark-model.ts";
 
 /** Revalue the public snapshot with its own supply and window inputs on each newer USD observation. */
 export function coinAtPrice(coin: HomeCoin, price: DisplayPrice | undefined): HomeCoin {
@@ -26,15 +25,4 @@ export function coinAtPrice(coin: HomeCoin, price: DisplayPrice | undefined): Ho
       }),
     }),
   };
-}
-
-/** A fixed history plus its latest observed tip. Keep the historical time and price together. */
-export function sparkAtPrice(history: readonly SparkPoint[] | null, at: number | null, usd: string | null, days: 1 | 7 = 7): readonly SparkPoint[] | null {
-  const last = history?.at(-1);
-  if (!history || !last || at === null || usd === null || at < last[0]) return history;
-  const value = Number(usd);
-  if (!Number.isFinite(value) || (at === last[0] && value === last[1])) return history;
-  const start = at - days * 86_400_000;
-  const points = history.filter(([time]) => time >= start && time < at);
-  return [...points, [at, value]];
 }

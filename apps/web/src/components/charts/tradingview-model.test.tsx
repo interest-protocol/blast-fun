@@ -3,14 +3,12 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
-import { seriesChange } from "./series-change";
 import { exactChartCandle, exactChartPrice, migrationCaptionOffset, nearestPriceSeries } from "./chart-inspection-model";
 import { exactChartScale } from "./exact-chart-scale";
 import {
   atLiveEdge,
   chartData,
   chartTimestamp,
-  sparkTimeScale,
   distinctTicks,
   elapsedTimeScale,
   keyboardChartRange,
@@ -107,20 +105,6 @@ test("an incoming bar keeps a Back to live or keyboard zoom request made before 
   viewport.write(zoom);
   viewport.write(rebaseCoinChartRange(viewport.read()!, after, [...after, 80], width));
   assert.deepEqual(queued, { from: zoom.from + 1, to: zoom.to + 1 });
-});
-
-test("a live Home price amends the tail without moving the time grid or its history", () => {
-  const base = 1_795_000_000_000;
-  const latest = base + 83_000_000;
-  const previous = sparkTimeScale(base, latest);
-  const next = sparkTimeScale(base, latest + 15_000);
-  assert.deepEqual(next.timeline, previous.timeline);
-  const prices = (scale: typeof next, at: number, value: number) => chartData([
-    { time: scale.timestamp(base), value: 0.5 },
-    { time: scale.timestamp(base + 12_000_000), value: 0.7 },
-    { time: scale.timestamp(at), value },
-  ]);
-  assert.equal(seriesChange(prices(previous, latest, 1), prices(next, latest + 15_000, 1.01)), "tail");
 });
 
 test("canvas scales retain tiny prices and distinguish large, tightly spaced prices", () => {

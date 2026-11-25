@@ -1,14 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { homeTablePrice, numberDecimal, readablePrice, readableUsd, subscriptZeros } from "./market-format";
-
-test("Home price columns retain precision on either side of each display range", () => {
-  for (const [source, shown] of [
-    ["0", "$0.00"], ["1.9", "$1.90"], ["1000", "$1,000.00"], ["0.36", "$0.3600"],
-    ["0.99999", "$1.00"], ["0.0009999", "$0.00100"], ["0.0000839", "$0.0₄839"],
-    ["0.0000840001", "$0.0₄840"], ["0.0000000009999", "$0.0₈100"],
-  ] as const) assert.equal(homeTablePrice(source), shown);
-});
+import { numberDecimal, readablePrice, readableUsd, subscriptZeros } from "./market-format";
 
 test("financial summaries preserve sub-dollar amounts instead of rounding them to zero or one", () => {
   assert.equal(readableUsd("0.36"), "$0.36");
