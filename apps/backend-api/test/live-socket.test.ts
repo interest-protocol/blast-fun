@@ -3,7 +3,7 @@ import test from "node:test";
 import { mintLiveTicket } from "@blast/core/modules/launchpad-contract/live-ticket.ts";
 import type { HintSink } from "@blast/server/lib/hint-subscription.ts";
 import { MarketStreamRelay } from "@blast/server/modules/launchpad-market/stream-relay.ts";
-import type { RelaySocket } from "@blast/server/modules/social/activity/hint-relay.ts";
+import type { RelaySocket } from "@blast/server/modules/launchpad-market/stream-relay.ts";
 import {
   createLiveSocket,
   LIVE_CLOSE,
@@ -20,7 +20,6 @@ type Sub = {
   url: string;
   sink: HintSink;
   resume?: ReadonlyMap<string, string>;
-  lifetime?: boolean;
   stopped: boolean;
 };
 
@@ -138,10 +137,9 @@ test("a ticketed socket gets SSE blocks, answers pings, and never echoes its tic
     assert.equal(
       new URL(subs[0]!.url).searchParams.has("resume"),
       false,
-      "the relay sees the plain SSE query",
+      "the relay sees the plain market query",
     );
     assert.deepEqual([...subs[0]!.resume!], [[pool(1), "11:0:0:0"]]);
-    assert.equal(subs[0]!.lifetime, false);
     client.ws.send(JSON.stringify({ op: "ping", t: 123 }));
     await until(() => client.messages.length === 2);
     assert.match(client.messages[1]!, /^event: pong\ndata: \{"t":123,"server_ms":\d+\}\n\n$/);
@@ -220,7 +218,10 @@ test("admission refuses in order: origin before upgrade, then ticket, query, per
 });
 
 test("a full relay refuses with 4503 and drain closes sockets with 1012", async () => {
-  const full = harness({ admits: () => false, subscribe: () => null });
+  const full = harness({
+    admits: () => false,
+    subscribe: () => assert.fail("refused before subscribing"),
+  });
   try {
     assert.equal((await full.open(`pool=${pool(1)}`).closed).code, LIVE_CLOSE.busy);
   } finally {

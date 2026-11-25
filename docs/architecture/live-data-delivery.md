@@ -17,9 +17,9 @@ requirements below. Nothing here is a capacity measurement; numbers marked
 
 | Data | Delivery | Owner |
 | --- | --- | --- |
-| Coin chart candles and header price | Continuous market stream (`/api/launchpad/market/stream`), committed trades as they land | Bun hints role, `MarketStreamRelay` |
+| Coin chart candles and header price | The direct market socket (`wss://live.blast.fun/v1/socket`), committed trades as they land | Bun hints role, `MarketStreamRelay` |
 | Opening-round bidder count | The same market stream's `opening_round` frames (at most one per pool per checkpoint, never replayed); the page's `router.refresh()` (`refreshIntervalMs`: 30 s, 10 s while a section is stale, 5 s on a conflict) stays as the fallback | Bun hints role, `MarketStreamRelay` |
-| New activity, presale lifecycle, coin identity changes | Hint frames on the same stream ("look now"), then the surface's own coalesced read | Bun hints role |
+| New activity, presale lifecycle, coin identity changes | Hint frames on the same socket ("look now"), then the surface's own coalesced read; a tab without a market subscription opens an activity-only socket (`?activity=true`) | Bun hints role |
 | Holders, coin activity tab, feeds, rankings | Visible-tab poll (15–30 s) plus hint-triggered reads; CDN keys shared per checkpoint | Existing routes |
 | Wallet, portfolio, viewer state | Private no-store reads on lifecycle signals and user actions | Bun API |
 | Quotes and trade submissions | Request/response, admission-reserved (below) | Bun API |
@@ -30,32 +30,32 @@ stream and no retry timer.
 
 ## One browser stream role: the isolated Bun hints process
 
-Every browser stream goes to the isolated hints process
-(`apps/backend-api/src/hints-main.ts`) through the same-origin relay, which
-signs it with `BLAST_BACKEND_HINTS_GATEWAY_SECRET` for
-`BLAST_BACKEND_HINTS_ORIGIN`. Without that pair the relay answers 503 and tabs
-stay on their polls; it never falls back to the API process.
+Every browser stream is a WebSocket to the isolated hints process
+(`apps/backend-api/src/hints-main.ts`) at `/v1/socket` on the live host. The
+tab first asks the web app for a single-use ticket (`POST
+/api/launchpad/market/ticket`), signed with
+`BLAST_BACKEND_HINTS_GATEWAY_SECRET` for the site origin. It never falls back
+to the API process.
 
 Why this one:
 
 - It is the only role that carries the continuous market stream, so a coin
   page needs one browser stream for candles, price and hints
-  (`continuous-market-data.md`, `hints.sharedBrowserStream`).
-- It reuses the private gateway's signed proof, replay burn, quota identity,
-  stream permits, backpressure, drain and fleet arithmetic, and it never
-  shares the API's connection ceiling, admission or database pools.
-- The browser keeps one first-party origin: no CORS surface, and no ticket in
-  a query string.
+  (`continuous-market-data.md`).
+- It never shares the API's connection ceiling, admission or database pools.
+- It holds no web-function invocation per tab.
 
-Accepted cost: each browser stream holds one web-function invocation for up to
-its 270 s lifetime, so web-function concurrency equals visible subscribed tabs.
-If that concurrency or its cost becomes the binding limit, the next step is an
-authenticated direct connection from the browser to the hints process, after a
-security review. That review is the next section; the connection is being built
-behind a flag (2026-11-25).
+The kill switch is `BLAST_LIVE_SOCKET_URL` on the web app: unset, the ticket
+route answers 204, tabs have no stream and stay on their polls, and they ask
+again after 30 minutes.
+
+Retired on 2026-11-25: the Vercel SSE relays (`/api/launchpad/market/stream`
+and `/api/social/activity/hints`), their signed SSE routes on the hints
+process, the browser's relay fallback and the socket rollout percent. The
+market stream path stays as the socket's query shape (`MARKET_STREAM_PATH`).
 
 Retired on 2026-10-27, after the hints process went live on develop: the
-`live-hints` worker and its Render service, the ticket route
+`live-hints` worker and its Render service, the old hint ticket route
 (`/api/social/activity/hints/token`) with its token signer and the browser's
 ticket client, the coin-topic `coin_market` hints only that worker produced
 (and the coin page's hint-driven reads of them), and the API process's own
@@ -64,17 +64,17 @@ header price arrive on its market stream.
 
 ## Direct browser socket: security review (2026-11-25)
 
-Proposal: a tab opens one WebSocket to the hints process at
-`wss://live.blast.fun/v1/socket` and receives the same events the SSE route
-sends, one SSE event block per message. The Vercel route stays for one release
-as the rollback. Wire details: `handoffs/realtime-tonight/protocol.md` in the
-workspace. Status: **awaiting Jose's sign-off**; the flag stays off until then.
+A tab opens one WebSocket to the hints process at
+`wss://live.blast.fun/v1/socket` and receives its events as SSE event blocks,
+one per message. Wire details: `handoffs/realtime-tonight/protocol.md` in the
+workspace. The SSE relay that was the rollback is retired; the rollback is now
+unsetting `BLAST_LIVE_SOCKET_URL` (tabs poll).
 
 What changes: the hints service is already a public Render web service, but
 every route that does work needs the signed gateway proof. `/v1/socket` is its
 first unsigned route that does work. It must not become a free fan-out, an
-amplifier, a way to starve other tabs, or a way to read anything the public SSE
-stream does not already show.
+amplifier, a way to starve other tabs, or a way to read anything the public
+pages do not already show.
 
 What it carries: only public market data (trades, candles, prices, presale
 fills, activity hints) for the pools the URL names. No account, no wallet, no
@@ -93,7 +93,7 @@ never write to Redis and a ticket is never burned on a refusal.
    with a code. A browser cannot read a pre-upgrade status or `Retry-After`; it
    only sees `error` and 1006.
 3. Ticket HMAC and `exp` → close 4401.
-4. Query (same parsers as SSE, plus `resume`) → close 4400.
+4. Query (the market stream parsers, plus `resume`) → close 4400.
 5. Per-instance pool and coin limits per IP → close 4429.
 6. Global capacity → close 4503.
 7. One Redis step: fleet-wide per-IP sockets and opens → close 4429, then burn
@@ -101,7 +101,10 @@ never write to Redis and a ticket is never burned on a refusal.
    closed).
 
 Clients treat a handshake that never opens like 4503: wait a random 1–30 s.
-After 3 failures in a row, the tab uses SSE for 10 minutes.
+After a 4429, or 3 sockets in a row that close before their first frame, the
+tab asks for no ticket for 10 minutes. Meanwhile the hub reports the stream
+unavailable and charts, prices and feeds keep their polls; then the socket is
+tried again.
 
 ### Controls
 
@@ -111,13 +114,13 @@ After 3 failures in a row, the tab uses SSE for 10 minutes.
 | Ticket leaks through logs, history or Referer | The ticket travels only in `Sec-WebSocket-Protocol`, never in the URL. Surfaces that must not record it: Render request logs (they record the path only), error and trace reporters, and refusal close reasons. A test checks that no refusal echoes it. |
 | Another site embeds the socket | Exact `Origin` match, and the ticket binds `o`. The server never reads `Cookie`. The gate cookie is `__Host-` (host-only); sign-off checks that no first-party cookie uses `Domain=blast.fun`. |
 | One client starves the shared tables | Limits per IP across the fleet: **8 open sockets** and **20 opens a minute** (resumes count). One Redis script on the private-replay store checks both, then burns the ticket, so the count holds at any instance count. Closes remove their entries in one batched command per address; a failed removal is retried every 2 s and once more at drain. An entry also expires after the longest socket life plus 5 minutes (65 min), so a crashed instance frees its slots by then. Per IP, per instance: **4 distinct pools** and **40 distinct price coins** across that IP's sockets, because they guard that process's own tables. The key is `ClientAddress.rateKey`, a /64 for IPv6. Global tables per process: 64 pool topics and 128 price coins (`MARKET_STREAM_BUDGET`). A socket whose new topics or coins would not fit is refused with 4503; tables never fill silently. A pool the engine never snapshots frees its slot after 10 s. |
-| Process exhaustion | Sockets and SSE streams share the relay's client ceiling: the configured `BLAST_BACKEND_MAX_HINT_STREAMS`, at most 1,024 per instance (`ACTIVITY_HINT_STREAM_BUDGET.maxClients`, a 64 MiB queue budget per relay; activity SSE has its own relay with the same cap). Fleet capacity is instances × the configured value. The rollout percent keeps expected sockets under 70% of that. Measured locally on 2026-11-25: about 60 KB a socket under traffic, CPU before memory; raising the configured value needs a Render memory and CPU reading first. One upstream reader socket per process, never one per browser. |
-| Expensive subscriptions | Topics are fixed at connect, using the SSE parsers (`marketStreamPools`, `marketStreamPriceCoins`, `marketStreamPresale`, `marketStreamActivity`): ≤ 2 pools, ≤ 20 price coins, ≤ 1 presale. `resume=<pool>~<cursor>` is allowed at most 2 times. Its pool must match `POOL_KEY`, appear in `pool=` and not repeat; its cursor must match `EVENT_CURSOR`. Otherwise 4400. The browser cannot send subscribe messages. |
+| Process exhaustion | Sockets share the relay's client ceiling: the configured `BLAST_BACKEND_MAX_HINT_STREAMS`, at most 1,024 per instance (`ACTIVITY_HINT_STREAM_BUDGET.maxClients`, a 64 MiB queue budget per relay). Fleet capacity is instances × the configured value; size it so expected sockets stay under 70% of that. Measured locally on 2026-11-25: about 60 KB a socket under traffic, CPU before memory; raising the configured value needs a Render memory and CPU reading first. One upstream reader socket per process, never one per browser. |
+| Expensive subscriptions | Topics are fixed at connect, using the market stream parsers (`marketStreamPools`, `marketStreamPriceCoins`, `marketStreamPresale`, `marketStreamActivity`): ≤ 2 pools, ≤ 20 price coins, ≤ 1 presale. `resume=<pool>~<cursor>` is allowed at most 2 times. Its pool must match `POOL_KEY`, appear in `pool=` and not repeat; its cursor must match `EVENT_CURSOR`. Otherwise 4400. The browser cannot send subscribe messages. |
 | Client messages | The only accepted message is `{"op":"ping","t":<int>}`: at most 128 bytes and 1 a second. Anything else, binary or over the rate closes 1008. `maxPayloadLength` is 1 KiB and `perMessageDeflate` is off. |
 | Slow readers | The relay queue (64 KiB a client) is the control: overflow closes 4408. Bun's `backpressureLimit` is 256 KiB with `closeOnBackpressureLimit`, as a backstop only. |
 | Liveness | Heartbeat every 4 s, sent only while upstream is confirmed alive (PR #31). The hub watchdog clears prices after 9 s. Bun `idleTimeout` is 60 s and `sendPings` is on, so a socket stays open through an upstream reconnect; heartbeats are not what keeps it open. |
 | Resume ring | Per pool: the last 2 minutes, at most 256 frames and 64 KiB. A replay is at most 32 KiB, under the 64 KiB queue; anything larger gets a normal fence and the browser refetches. The ring dies with its topic when the last subscriber leaves, so it pins no topics or upstream subscriptions. |
-| Long-lived sockets | Each socket closes 1000 after a random 30–60 minutes and reconnects with a fresh ticket. So turning the flag off, rotating the secret, or changing a limit reaches every socket within an hour. |
+| Long-lived sockets | Each socket closes 1000 after a random 30–60 minutes and reconnects with a fresh ticket. So turning the socket off, rotating the secret, or changing a limit reaches every socket within an hour. |
 | Reconnect storms after a deploy | Drain closes with 1012, spread over 5 s. Clients wait a random 1–30 s before reconnecting. Prices may clear (9 s watchdog), and the screens' 15 s CDN poll covers the gap. A resume from the ring avoids a history refetch per tab. |
 | Data integrity | Frames are the reader's frames after the same checks: an explicit type allowlist with a validator per type, `parseInfraProvenance`, cursor and deployment fingerprint. New frame types (for example `coin_stats`) are added to the allowlist with a validator. The socket adds no data source. |
 | Spoofed client IP | The hints service runs `trusted-proxy` ingress, so `render.yaml` declares `BLAST_BACKEND_TRUSTED_PROXY_CIDRS`. `ingressAddress` keys on the last `X-Forwarded-For` entry, the one Render appended; client-sent entries before it are ignored. Measured 2026-11-25: Render's proxies sit in 10.24.0.0/13 and append to a forged header (2 entries arrive). Null means refuse; it never falls back to the peer address. |
@@ -130,16 +133,13 @@ After 3 failures in a row, the tab uses SSE for 10 minutes.
 - A client with many IPs can still hold sockets up to the global cap. The cap
   and the per-IP limits bound the cost, and Render's network is the DDoS
   layer. Cloudflare is added only if a measurement shows the need.
-- Pre-existing: the global tables can already be exhausted through SSE by
-  scripts that hold a gate cookie. The per-IP pool and coin limits above
-  apply to sockets only.
 - Unsigned routes on the service: `/v1/socket`, plus the existing liveness
   (`/v1/live`), `/v1/health` and readiness.
   The last two are bounded by a 5 s cache and 8 requests in flight.
 
 ### Sign-off
 
-- [ ] Jose: controls accepted, flag may go on.
+- [ ] Jose: controls accepted, `BLAST_LIVE_SOCKET_URL` may be set.
 - [ ] Render `X-Forwarded-For` test recorded: two client IPs get separate keys, and neither a forged leading entry nor a second `X-Forwarded-For` line changes the key, on `live.blast.fun` and the onrender.com host.
 - [ ] No first-party cookie uses `Domain=blast.fun`.
 - [ ] Load test: memory per socket, the chosen cap and the instance count recorded here.
@@ -163,7 +163,7 @@ blast.fun after develop merges to main (`docs/deploy/RENDER.md`).
 
 The evidence and per-step log are in the workspace
 (`outputs/verification/2026-10-27-backend-capacity-10k/rollout-log.md`).
-Rollback of step 2 leaves streams failing closed (pages poll); it does not
+Rollback of step 2 leaves tabs without a stream (pages poll); it does not
 restore an API stream path.
 
 ## Reads: the committed reader
@@ -255,11 +255,11 @@ Proposed mix: 10,000 users × 1.2 tabs × 70 % visible ≈ 8,400 subscribed tabs
 
 ## Follow-ups, in order
 
-1. Keep relay streams open across an engine reconnect: send `resync` as a
+1. Keep relay sockets open across an engine reconnect: send `resync` as a
    hint, paced (128 streams every 100 ms worked in the retired worker), and
    reconnect upstream in the relay,
    instead of closing every client. Changes the pinned close-on-failure tests
-   (`hint-relay.test.ts`, `market-stream.test.ts`); own PR.
+   (`market-stream.test.ts`); own PR.
 2. Gas-pool busy → "not submitted": an explicit `submitted → reserved`
    rollback so a busy pool answer is retried at once.
 3. Native journal retention design with provenance (no deletion as a fix).

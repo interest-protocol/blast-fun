@@ -1,18 +1,6 @@
-// Pure helpers for the live market probe: SSE parsing, per-frame lag and percentiles.
+// Pure helpers for the live market probe: socket message parsing, per-frame lag and percentiles.
 
-/** Splits SSE text into complete events; `rest` is the unfinished tail to prepend next time. */
-export function parseSse(text) {
-  const blocks = text.replace(/\r\n/g, "\n").split("\n\n");
-  const rest = blocks.pop() ?? "";
-  const events = [];
-  for (const block of blocks) {
-    const event = parseSseBlock(block);
-    if (event) events.push(event);
-  }
-  return { events, rest };
-}
-
-/** One SSE event block (also one direct-socket message) → `{ event, data, id }`, or null. */
+/** One direct-socket message (an SSE event block) → `{ event, data, id }`, or null. */
 export function parseSseBlock(block) {
   let event = "message";
   let id = null;

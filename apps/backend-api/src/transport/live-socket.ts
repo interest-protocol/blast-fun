@@ -79,7 +79,7 @@ export type LiveRelay = Readonly<{
   subscribe(
     request: Request,
     sink: HintSink,
-    options: Readonly<{ resume?: ReadonlyMap<string, string>; lifetime?: boolean }>,
+    options: Readonly<{ resume?: ReadonlyMap<string, string> }>,
   ): HintSubscription;
 }>;
 
@@ -139,7 +139,7 @@ const text = (chunk: Uint8Array) => {
   return value;
 };
 
-/** The socket query is the SSE query plus `resume=<pool>~<cursor>`; `cursor` stays SSE-only. */
+/** The market stream query plus `resume=<pool>~<cursor>`; `cursor` is refused. */
 export function liveSocketQuery(url: URL): Query {
   const params = new URLSearchParams(url.search);
   const resumes = params.getAll("resume");
@@ -391,13 +391,10 @@ export function createLiveSocket(options: LiveSocketOptions) {
       // The removal sent at close can reach Redis before the add (NOSCRIPT falls back to EVAL).
       return unclaim(data);
     }
-    const result = options.relay.subscribe(query.request, sink(ws), {
-      resume: query.resume,
-      lifetime: false,
-    });
+    const result = options.relay.subscribe(query.request, sink(ws), { resume: query.resume });
     if (typeof result !== "function") {
       if (!data.closing) {
-        shut(ws, result?.status === 400 ? LIVE_CLOSE.query : LIVE_CLOSE.busy);
+        shut(ws, result.status === 400 ? LIVE_CLOSE.query : LIVE_CLOSE.busy);
       }
       return;
     }

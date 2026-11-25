@@ -1,4 +1,3 @@
-import { deploymentIdentity } from "@blast/core/lib/config/deployment-identity.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
@@ -6,18 +5,13 @@ import {
   MARKET_STREAM_PATH,
   marketStreamPools,
 } from "@blast/core/modules/launchpad-contract/market-stream.ts";
-import { privateRoute } from "@blast/core/modules/backend-api/private-routes.ts";
-import { signPrivateRequest } from "@blast/core/modules/backend-api/private-gateway.ts";
-import { quotaNamespace } from "@blast/core/lib/web-security/redis-rate-limits.ts";
 import { MarketStreamRelay } from "@blast/server/modules/launchpad-market/stream-relay.ts";
-import type { RelaySocket } from "@blast/server/modules/social/activity/hint-relay.ts";
+import type { RelaySocket } from "@blast/server/modules/launchpad-market/stream-relay.ts";
 import {
   infraProvenanceFixture,
   FIXTURE_FINGERPRINT,
   poolSummaryFixture,
 } from "../../../packages/server/test/fixtures/modules/launchpad-contract/fixtures.ts";
-import { hintsConfig } from "../src/app/hints/config.ts";
-import { createHintsServer } from "../src/app/hints/server.ts";
 import { validateBackendFleet } from "../src/app/config/fleet.ts";
 import { fleetFixture } from "./fleet-fixture.ts";
 
@@ -26,9 +20,9 @@ const expected = {
   deployment: FIXTURE_FINGERPRINT,
 } as const;
 const pool = (index = 1) => `blast_curve:0x${index.toString(16).padStart(64, "0")}`;
-const request = (pools = [pool()], cursor?: string) =>
+const request = (pools = [pool()]) =>
   new Request(
-    `https://frontend.test${MARKET_STREAM_PATH}?${new URLSearchParams([...pools.map((value) => ["pool", value]), ...(cursor ? [["cursor", cursor]] : [])])}`,
+    `https://frontend.test${MARKET_STREAM_PATH}?${new URLSearchParams(pools.map((value) => ["pool", value]))}`,
   );
 const provenance = (checkpoint = 10) =>
   infraProvenanceFixture({ checkpoint, timestamp_ms: checkpoint * 1000 });
@@ -81,6 +75,45 @@ class Socket implements RelaySocket {
     this.receive({ type: "hello", protocol: 1, provenance: provenance() });
   }
 }
+
+/** One socket client's SSE blocks as a byte-bounded stream; a refusal is its error response. */
+function open(relay: MarketStreamRelay, target: Request): Response {
+  let stop: (() => void) | undefined;
+  let refusal: Response | undefined;
+  let cancelled = false;
+  const body = new ReadableStream<Uint8Array>(
+    {
+      start(controller) {
+        const subscription = relay.subscribe(target, {
+          send(chunk) {
+            if ((controller.desiredSize ?? 0) < chunk.byteLength) {
+              return false;
+            }
+            controller.enqueue(chunk);
+            return true;
+          },
+          close() {
+            if (!cancelled) {
+              controller.close();
+            }
+          },
+        });
+        if (subscription instanceof Response) {
+          refusal = subscription;
+        } else {
+          stop = subscription;
+        }
+      },
+      cancel() {
+        cancelled = true;
+        stop?.();
+      },
+    },
+    { highWaterMark: B.queueBytesPerClient, size: (chunk) => chunk?.byteLength ?? 0 },
+  );
+  return refusal ?? new Response(body);
+}
+
 const read = async (reader: ReadableStreamDefaultReader<Uint8Array>) => {
   const value = await reader.read();
   assert.equal(value.done, false);
@@ -95,7 +128,7 @@ const read = async (reader: ReadableStreamDefaultReader<Uint8Array>) => {
 test("an unpriced fill reaches live clients and is preserved in the next subscriber's fence", async () => {
   const socket = new Socket();
   const relay = new MarketStreamRelay(() => socket, expected);
-  const live = relay.stream(request()).body!.getReader();
+  const live = open(relay, request()).body!.getReader();
   try {
     await read(live);
     socket.hello();
@@ -107,7 +140,7 @@ test("an unpriced fill reaches live clients and is preserved in the next subscri
     assert.equal(received.event, "market");
     assert.equal((received.data.trade as { price: unknown }).price, null);
 
-    const later = relay.stream(request()).body!.getReader();
+    const later = open(relay, request()).body!.getReader();
     try {
       await read(later);
       assert.equal((await read(later)).data.price_missing, true);
@@ -119,11 +152,7 @@ test("an unpriced fill reaches live clients and is preserved in the next subscri
   }
 });
 
-test("market stream is an exact browser-only signed GET/HEAD with one or two canonical pools", () => {
-  assert.equal(privateRoute("GET", MARKET_STREAM_PATH, "browser")?.workBudgetMs, 300_000);
-  assert.equal(privateRoute("HEAD", MARKET_STREAM_PATH, "browser")?.maxBodyBytes, 0);
-  assert.equal(privateRoute("GET", MARKET_STREAM_PATH, "ssr-read"), null);
-  assert.equal(privateRoute("POST", MARKET_STREAM_PATH, "browser"), null);
+test("a market subscription names one or two canonical pools", () => {
   assert.deepEqual(marketStreamPools(request([pool(), pool(2)])), [pool(), pool(2)]);
   for (const query of [
     "",
@@ -145,7 +174,7 @@ test("presale clients share the socket and receive only their fills beyond a sco
     new Request(`https://frontend.test${MARKET_STREAM_PATH}?presale=${id}`);
   const socket = new Socket();
   const relay = new MarketStreamRelay(() => socket, expected);
-  const a = relay.stream(scoped(sale(1))).body!.getReader();
+  const a = open(relay, scoped(sale(1))).body!.getReader();
   await read(a);
   socket.hello();
   await read(a);
@@ -166,7 +195,7 @@ test("presale clients share the socket and receive only their fills beyond a sco
   const frame = await read(a);
   assert.equal(frame.event, "presale");
   assert.deepEqual(frame.data, fill);
-  const b = relay.stream(scoped(sale(2))).body!.getReader();
+  const b = open(relay, scoped(sale(2))).body!.getReader();
   await read(b);
   await read(b);
   assert.equal((await read(b)).data.presale_checkpoint, 13);
@@ -185,8 +214,8 @@ test("one socket shares pool topics, committed fences and precise replay-shaped 
     opened++;
     return socket;
   }, expected);
-  const a = relay.stream(request()).body!.getReader();
-  const b = relay.stream(request()).body!.getReader();
+  const a = open(relay, request()).body!.getReader();
+  const b = open(relay, request()).body!.getReader();
   assert.equal(opened, 1);
   await read(a);
   await read(b);
@@ -208,8 +237,7 @@ test("one socket shares pool topics, committed fences and precise replay-shaped 
   assert.match(first.text, /^id: 11:1:1:2/m);
   assert.equal(JSON.stringify(first.data).includes("labels"), false);
   assert.equal((first.data.trade as Record<string, unknown>).quote_amount, "9007199254740993");
-  const late = relay.stream(request([pool(), pool(2)], "11:1:1:2")).body!.getReader();
-  assert.equal((await read(late)).event, "resync");
+  const late = open(relay, request([pool(), pool(2)])).body!.getReader();
   assert.equal((await read(late)).data.state, "connecting");
   assert.equal(
     (await read(late)).data.checkpoint,
@@ -236,7 +264,7 @@ test("one socket shares pool topics, committed fences and precise replay-shaped 
 test("a pool the engine never snapshots fails only its own clients and never resets other pools", async () => {
   const socket = new Socket();
   const relay = new MarketStreamRelay(() => socket, expected);
-  const served = relay.stream(request()).body!.getReader();
+  const served = open(relay, request()).body!.getReader();
   const original = globalThis.setTimeout;
   const timers: { run: () => void; ms: number }[] = [];
   globalThis.setTimeout = ((run: () => void, ms: number) => {
@@ -245,7 +273,7 @@ test("a pool the engine never snapshots fails only its own clients and never res
   }) as typeof setTimeout;
   let stalled: ReadableStreamDefaultReader<Uint8Array>;
   try {
-    stalled = relay.stream(request([pool(2)])).body!.getReader();
+    stalled = open(relay, request([pool(2)])).body!.getReader();
     await read(served);
     await read(stalled);
     // A slow upstream handshake is the handshake timer's fault, never a pool's.
@@ -281,7 +309,7 @@ test("a pool the engine never snapshots fails only its own clients and never res
 test("authoritative closed candles retain exact decimals and bounded representative snapshots stay upstream-only", async () => {
   const socket = new Socket();
   const relay = new MarketStreamRelay(() => socket, expected);
-  const reader = relay.stream(request()).body!.getReader();
+  const reader = open(relay, request()).body!.getReader();
   await read(reader);
   socket.hello();
   const example = snapshot() as Record<string, unknown>;
@@ -341,7 +369,7 @@ const openingRound = (bidders = 3) => ({
 test("an opening round frame reaches the pool's clients as a market event with its exact round", async () => {
   const socket = new Socket();
   const relay = new MarketStreamRelay(() => socket, expected);
-  const reader = relay.stream(request()).body!.getReader();
+  const reader = open(relay, request()).body!.getReader();
   await read(reader);
   socket.hello();
   socket.receive(snapshot());
@@ -422,7 +450,7 @@ test("bad deployments, cursor relationships, opening fills and lost continuity f
   for (const bad of invalid) {
     const socket = new Socket();
     const relay = new MarketStreamRelay(() => socket, expected);
-    const reader = relay.stream(request()).body!.getReader();
+    const reader = open(relay, request()).body!.getReader();
     await read(reader);
     socket.hello();
     socket.receive(snapshot());
@@ -444,7 +472,7 @@ test("bad deployments, cursor relationships, opening fills and lost continuity f
       sockets.push(new Socket());
       return sockets.at(-1)!;
     }, expected);
-    const reader = relay.stream(request()).body!.getReader();
+    const reader = open(relay, request()).body!.getReader();
     await read(reader);
     sockets[0]!.hello();
     sockets[0]!.receive(snapshot());
@@ -465,9 +493,9 @@ test("topic, subscribe frame and downstream byte bounds refuse work and disconne
   const socket = new Socket();
   const relay = new MarketStreamRelay(() => socket, expected);
   const readers = Array.from({ length: 32 }, (_, i) =>
-    relay.stream(request([pool(i * 2), pool(i * 2 + 1)])).body!.getReader(),
+    open(relay, request([pool(i * 2), pool(i * 2 + 1)])).body!.getReader(),
   );
-  assert.equal(relay.stream(request([pool(64)])).status, 503);
+  assert.equal(open(relay, request([pool(64)])).status, 503);
   socket.hello();
   const subscriptions = socket.sent.filter((value) => value.op === "subscribe");
   assert.ok(subscriptions.length > 1);
@@ -479,8 +507,8 @@ test("topic, subscribe frame and downstream byte bounds refuse work and disconne
 
   const activeSocket = new Socket();
   const owner = new MarketStreamRelay(() => activeSocket, expected);
-  const slow = owner.stream(request()).body!.getReader();
-  const healthy = owner.stream(request()).body!.getReader();
+  const slow = open(owner, request()).body!.getReader();
+  const healthy = open(owner, request()).body!.getReader();
   await read(healthy);
   activeSocket.hello();
   activeSocket.receive(snapshot());
@@ -503,7 +531,7 @@ test("topic, subscribe frame and downstream byte bounds refuse work and disconne
   assert.equal(activeSocket.closed, 1);
 });
 
-test("opted-in fleet counts activity plus market subscriptions and every additional physical socket", () => {
+test("opted-in fleet counts market subscriptions and one engine socket per hints process", () => {
   const plan = fleetFixture();
   plan.hints.marketStream = true;
   plan.marketSubscribedTabs = 10_000;
@@ -522,7 +550,7 @@ test("opted-in fleet counts activity plus market subscriptions and every additio
     { ...env, BLAST_BACKEND_FLEET_CONFIG: JSON.stringify(plan) },
     local,
   )!;
-  assert.equal(result.demand.infraHintSockets, plan.hints.replicas * 2);
+  assert.equal(result.demand.infraHintSockets, plan.hints.replicas);
   delete plan.marketSubscribedTabs;
   assert.throws(
     () => validateBackendFleet({ ...env, BLAST_BACKEND_FLEET_CONFIG: JSON.stringify(plan) }, local),
@@ -567,145 +595,10 @@ test("shared browser fleet explicitly budgets unified tabs and legacy coexistenc
   assert.throws(check, /settings differ/);
 });
 
-test(
-  "native enabled profile shares hint and market permits, authenticates, and drains the market owner",
-  { timeout: 5000 },
-  async () => {
-    const plan = fleetFixture();
-    plan.visibleSubscribedTabs = 1;
-    plan.marketSubscribedTabs = 1;
-    plan.utilizationPercent = 100;
-    plan.hints = { replicas: 3, maxHintStreams: 1, marketStream: true };
-    const env = {
-      NODE_ENV: "production",
-      BLAST_DEPLOYMENT_TARGET: "production",
-      BLAST_REDIS_NAMESPACE: "market-stream-native",
-      BLAST_BACKEND_INGRESS_MODE: "direct",
-      BLAST_QUOTA_REDIS_URL: "redis://127.0.0.1:6379",
-      RATE_LIMIT_SUBJECT_PEPPER: "p".repeat(32),
-      BLAST_BACKEND_HINTS_GATEWAY_SECRET: "h".repeat(32),
-      BLAST_INFRA_ORIGIN: "https://infra.test",
-      BLAST_INFRA_READ_MODE: "committed-markets",
-      BLAST_INFRA_READ_ORIGIN: "https://reader.test",
-      BLAST_INFRA_API_KEY: "i".repeat(32),
-      BLAST_BACKEND_FLEET_CONFIG: JSON.stringify(plan),
-      BLAST_BACKEND_MARKET_STREAM_ENABLED: "true",
-      BLAST_BACKEND_MAX_HINT_STREAMS: "1",
-      NEXT_PUBLIC_SITE_URL: "https://frontend.test",
-      BLAST_NETWORK: "mainnet",
-      BLAST_DEPLOYMENT_FINGERPRINT: FIXTURE_FINGERPRINT,
-    };
-    const configured = {
-      ...env,
-      BLAST_BACKEND_EXPECTED_QUOTA_NAMESPACE: quotaNamespace(
-        env.BLAST_REDIS_NAMESPACE,
-        deploymentIdentity(env),
-      ),
-    };
-    const socket = new Socket();
-    const slots = globalThis as unknown as Record<symbol, unknown>;
-    const marketKey = Symbol.for("blast.launchpad.market-stream");
-    const oldMarket = slots[marketKey];
-    let opened = 0;
-    slots[marketKey] = new MarketStreamRelay(() => {
-      opened++;
-      return socket;
-    }, expected);
-    const nonces = new Set<string>();
-    const redis = {
-      async execute(args: string[]) {
-        if (args[0] === "PING") {
-          return "PONG";
-        }
-        if (nonces.has(args[1]!)) {
-          return null;
-        }
-        nonces.add(args[1]!);
-        return "OK";
-      },
-      close() {},
-    };
-    const runtime = createHintsServer(
-      { ...hintsConfig(configured), port: 0, hostname: "127.0.0.1" },
-      redis,
-      redis,
-    );
-    const origin = `http://127.0.0.1:${runtime.server.port}`;
-    const send = (path: string, method = "GET") => {
-      const target = new Request(origin + path, { method });
-      const headers = signPrivateRequest(
-        target,
-        new Uint8Array(),
-        env.BLAST_BACKEND_HINTS_GATEWAY_SECRET,
-        {
-          namespace: quotaNamespace(env.BLAST_REDIS_NAMESPACE, deploymentIdentity(env)),
-          purpose: "browser",
-          siteOrigin: env.NEXT_PUBLIC_SITE_URL,
-          ip: "192.0.2.111",
-        },
-      );
-      return fetch(target, { headers });
-    };
-    let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
-    try {
-      const bare = await fetch(origin + MARKET_STREAM_PATH + `?pool=${pool()}`);
-      assert.equal(bare.status, 403);
-      await bare.text();
-      const invalidHead = await send(MARKET_STREAM_PATH + "?pool=invalid", "HEAD");
-      assert.equal(invalidHead.status, 400);
-      assert.equal(await invalidHead.text(), "");
-      const head = await send(MARKET_STREAM_PATH + `?pool=${pool()}`, "HEAD");
-      assert.equal(head.status, 200);
-      assert.equal(head.headers.get("content-type"), "text/event-stream");
-      assert.equal(head.headers.get("cache-control"), "private, no-store");
-      assert.equal(head.headers.get("x-accel-buffering"), "no");
-      assert.equal(await head.text(), "");
-      assert.equal(opened, 0);
-      const connected = await send(MARKET_STREAM_PATH + `?pool=${pool()}`);
-      assert.equal(connected.status, 200);
-      assert.equal(connected.headers.get("content-type"), "text/event-stream");
-      assert.equal(connected.headers.get("cache-control"), "private, no-store");
-      assert.equal(connected.headers.get("x-accel-buffering"), "no");
-      reader = connected.body!.getReader();
-      assert.equal(
-        new TextDecoder().decode((await reader.read()).value),
-        'event: status\ndata: {"state":"connecting"}\n\n',
-      );
-      socket.hello();
-      socket.receive(snapshot());
-      await reader.read();
-      const activity = await send("/api/social/activity/hints");
-      assert.equal(activity.status, 503);
-      await activity.text();
-      await runtime.drain();
-      assert.equal(socket.closed, 1);
-    } finally {
-      await reader?.cancel().catch(() => {});
-      await runtime.drain();
-      if (oldMarket === undefined) {
-        delete slots[marketKey];
-      } else {
-        slots[marketKey] = oldMarket;
-      }
-    }
-    const disabled = fleetFixture();
-    disabled.visibleSubscribedTabs = 1;
-    assert.throws(
-      () =>
-        hintsConfig({
-          ...configured,
-          BLAST_BACKEND_FLEET_CONFIG: JSON.stringify(disabled),
-          BLAST_BACKEND_MAX_HINT_STREAMS: "512",
-        }),
-      /market stream settings/,
-    );
-  },
-);
-
 test("one shared stream combines sanitized activity hints with pool updates and supports hint-only clients", async () => {
   const socket = new Socket();
   const relay = new MarketStreamRelay(() => socket, expected);
-  const combined = relay.stream(new Request(request().url + "&activity=true")).body!.getReader();
+  const combined = open(relay, new Request(request().url + "&activity=true")).body!.getReader();
   await read(combined);
   socket.hello();
   const hello = (await read(combined)).data;
@@ -732,9 +625,10 @@ test("one shared stream combines sanitized activity hints with pool updates and 
   });
   socket.receive(trade());
   assert.equal((await read(combined)).event, "market");
-  const hintOnly = relay
-    .stream(new Request(`https://frontend.test${MARKET_STREAM_PATH}?activity=true`))
-    .body!.getReader();
+  const hintOnly = open(
+    relay,
+    new Request(`https://frontend.test${MARKET_STREAM_PATH}?activity=true`),
+  ).body!.getReader();
   await read(hintOnly);
   assert.equal((await read(hintOnly)).data.type, "hello");
   assert.equal((await read(hintOnly)).data.type, "pong");

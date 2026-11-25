@@ -8,7 +8,7 @@ export type PrivateResourceLane =
   | "render"
   | "allowlist";
 
-type AdmissionLane = PrivateResourceLane | "ordinary" | "readiness" | "hint";
+type AdmissionLane = PrivateResourceLane | "ordinary" | "readiness";
 
 /** Permit observations only: admissions are sampled, capacity refusals are not. */
 export function observeAdmission(

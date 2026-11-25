@@ -24,7 +24,7 @@ test("isolated stream replicas add zero DB clients and quote workers", () => {
     reportingClients: 0,
     quotaRedisClients: 60,
     cacheRedisClients: 0,
-    infraHintSockets: 26,
+    infraHintSockets: 0,
     quoteWorkers: 8,
   });
   assert.equal(api.totals.primaryClients, 52);
@@ -35,7 +35,11 @@ test("isolated stream replicas add zero DB clients and quote workers", () => {
   assert.equal(larger.demand.replicaClients, api.demand.replicaClients);
   assert.equal(larger.demand.quoteWorkers, api.demand.quoteWorkers);
   assert.equal(larger.demand.quotaRedisClients, api.demand.quotaRedisClients + 2);
-  assert.equal(larger.demand.infraHintSockets, api.demand.infraHintSockets + 1);
+  assert.equal(
+    larger.demand.infraHintSockets,
+    0,
+    "without the market stream no hints process opens an engine socket",
+  );
 });
 
 test("default-capacity stream arithmetic cannot silently claim 10000 visible tabs", () => {

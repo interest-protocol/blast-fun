@@ -8,7 +8,7 @@ combined ingestion/read acceptance remain blocked pending coordinator decision.
 
 | Data | Delivery | Authoritative answer |
 | --- | --- | --- |
-| New activity and presale lifecycle changes | Shared SSE hints while a tab has visible subscribers | Existing bounded feed, Happening and lifecycle reads |
+| New activity and presale lifecycle changes | Hints on the shared market socket while a tab has visible subscribers | Existing bounded feed, Happening and lifecycle reads |
 | Feed pages, discovery rankings and public market summaries | Cacheable reads; hints trigger coalesced refreshes | Original producer checkpoint and clock |
 | Wallet, portfolio and viewer state | Private reads on relevant lifecycle/catch-up signals and user actions | Existing authenticated, no-store reads |
 | Trade quotes | Request/response while the trade view needs them; bounded busy recovery | Validated route and fullnode results |

@@ -161,9 +161,12 @@ test("LP-12: no claim without a claim path, for another wallet, or for a ledger 
 
 test("LP-12: once a claim answers, the rows are read again: their figures are the server's", async (t) => {
   const signals = new Set<FreshnessSignal>();
-  const original = globalThis.EventSource;
-  globalThis.EventSource = class {} as unknown as typeof EventSource;
-  t.after(() => { globalThis.EventSource = original; });
+  const original = Object.getOwnPropertyDescriptor(globalThis, "WebSocket");
+  Object.defineProperty(globalThis, "WebSocket", { value: class {}, configurable: true, writable: true });
+  t.after(() => {
+    if (original) Object.defineProperty(globalThis, "WebSocket", original);
+    else Reflect.deleteProperty(globalThis, "WebSocket");
+  });
   t.mock.method(ActivityHints.prototype, "subscribe", (_name: string, next: FreshnessSignal) => {
     signals.add(next);
     return () => { signals.delete(next); };
@@ -366,9 +369,12 @@ test("LP-17: a later page keeps the order rows arrived in, and only the busy Loa
 
 test("LP-17: after a claim answers the server is read again, and the launch moves to the fee row only once blast-infra shows the cap", async (t) => {
   const signals = new Set<FreshnessSignal>();
-  const before = globalThis.EventSource;
-  globalThis.EventSource = class {} as unknown as typeof EventSource;
-  t.after(() => { globalThis.EventSource = before; });
+  const before = Object.getOwnPropertyDescriptor(globalThis, "WebSocket");
+  Object.defineProperty(globalThis, "WebSocket", { value: class {}, configurable: true, writable: true });
+  t.after(() => {
+    if (before) Object.defineProperty(globalThis, "WebSocket", before);
+    else Reflect.deleteProperty(globalThis, "WebSocket");
+  });
   t.mock.method(ActivityHints.prototype, "subscribe", (_name: string, next: FreshnessSignal) => {
     signals.add(next);
     return () => { signals.delete(next); };
@@ -412,9 +418,12 @@ test("LP-17: after a claim answers the server is read again, and the launch move
 });
 
 test("LP-17: a refusal is said once, by the host's toast; a launch claimed elsewhere leaves on the next read", async (t) => {
-  const original = globalThis.EventSource;
-  globalThis.EventSource = class {} as unknown as typeof EventSource;
-  t.after(() => { globalThis.EventSource = original; });
+  const original = Object.getOwnPropertyDescriptor(globalThis, "WebSocket");
+  Object.defineProperty(globalThis, "WebSocket", { value: class {}, configurable: true, writable: true });
+  t.after(() => {
+    if (original) Object.defineProperty(globalThis, "WebSocket", original);
+    else Reflect.deleteProperty(globalThis, "WebSocket");
+  });
   const subscribe = t.mock.method(ActivityHints.prototype, "subscribe", () => () => undefined);
   const state: { wallet: readonly string[]; account: readonly string[]; capHeld: boolean } = { wallet: [], account: [ACCOUNT_LAUNCH], capHeld: false };
   const views = new Map<string, ClaimView>();

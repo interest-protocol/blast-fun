@@ -3,6 +3,7 @@ import test from "node:test";
 import type { HomeCoinMarket } from "@blast/core/modules/social/contracts/coin-market.ts";
 import type { HomeAmount } from "@blast/core/modules/social/contracts/home.ts";
 import { installTestDom, waitFor } from "../../../test/fixtures/social/test-dom.ts";
+import { installLiveSocket, LIVE_TICKET_PATH, liveTicket } from "../../../test/fixtures/lib/live-socket.testing.ts";
 import type { MarketExtras } from "./SalePriceChart.tsx";
 
 const { document } = installTestDom();
@@ -356,15 +357,15 @@ const UNCHARTED = "No price history for this pool yet";
 
 /** A graduated sale's market on a pool of `venue`, with every read answering not found. */
 async function mountGraduatedSale(t: test.TestContext, venue: string) {
-  class QuietStream { close() {} addEventListener() {} }
-  const source = Object.getOwnPropertyDescriptor(globalThis, "EventSource");
-  Object.defineProperty(globalThis, "EventSource", { configurable: true, value: QuietStream });
+  // A market socket that stays quiet.
+  const live = installLiveSocket();
   const client = createTestQueryClient();
   const detail = fixtureDetail("kstl");
   const pool = { id: `0x${"9".repeat(64)}`, venue, coin_atoms: "1", quote_atoms: "1", as_of_ms: FIXTURE_NOW };
   client.setQueryData([...queryKeys.home.all, "market", detail.presale.sale_token], fixtureCoinMarket({ pool }));
   const asked: string[] = [];
   t.mock.method(globalThis, "fetch", async (input: RequestInfo | URL) => {
+    if (String(input) === LIVE_TICKET_PATH) return liveTicket();
     const url = new URL(String(input), "https://blast.test");
     asked.push(url.pathname + (url.searchParams.get("source") ? `?source=${url.searchParams.get("source")}` : ""));
     return Response.json({ error: { code: "not_found" } }, { status: 404 });
@@ -376,8 +377,7 @@ async function mountGraduatedSale(t: test.TestContext, venue: string) {
     await act(async () => root.unmount());
     client.clear();
     container.remove();
-    if (source) Object.defineProperty(globalThis, "EventSource", source);
-    else Reflect.deleteProperty(globalThis, "EventSource");
+    live.restore();
   });
   await act(async () => root.render(withQueryClient(client, <SaleMarket nowMs={FIXTURE_NOW} sale={detail.presale} terms={detail.terms} />)));
   await waitFor(() => document.body.textContent!.includes(UNCHARTED), "the empty state", 5_000);

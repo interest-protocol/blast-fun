@@ -3,9 +3,11 @@
  * live surfaces are signalled after a new commit, claim or lifecycle row,
  * with the existing reader gates controlling when they look.
  *
- * - **Same-origin stream.** The browser reads `/api/social/activity/hints`
- *   over SSE. The server subscribes to infra with its private key; the
- *   stream adapter feeds this client's existing handshake and reconnects.
+ * - **The live socket.** The browser reads hints from the direct market
+ *   socket (`activity=true`): the market stream's own connection while a
+ *   screen holds one, else an activity-only socket. The hints process
+ *   subscribes to infra with its private key; the adapter feeds this
+ *   client's existing handshake and reconnects.
  * - **Mainnet only.** The engine's `hello` must name Sui mainnet in its
  *   `provenance`, or the socket closes and the page stays on its poll.
  * - **Subscribe, then confirm.** After `hello` the client sends
@@ -47,7 +49,9 @@ import type { MetricFields } from "@blast/core/lib/metrics.ts";
 import { compareEventCursors } from "@blast/core/modules/launchpad-contract/cursor.ts";
 import { parseInfraProvenance } from "@blast/core/modules/launchpad-contract/provenance.ts";
 import { DEPLOYMENT_NETWORKS } from "@blast/core/web/launchpad-read.ts";
-import { gatedEventSource } from "#web/lib/live-stream/gated-event-source.ts";
+import { MARKET_STREAM_PATH } from "@blast/core/modules/launchpad-contract/market-stream.ts";
+import type { MarketEventSource } from "#web/components/launchpad/market-stream-hub.ts";
+import { browserLiveSource } from "#web/lib/live-stream/live-socket-source.ts";
 import { marketHintTransport } from "#web/lib/live-stream/market-hints.ts";
 import { hintOf, type Hint } from "@blast/core/modules/live/hint-frames.ts";
 
@@ -163,7 +167,7 @@ export class ActivityHints {
   #catchUp = false;
   /** The engine refused (not mainnet, no topic) or the browser did: no reconnect until the surfaces start over. */
   #refused = false;
-  /** The refusal came from the socket closing as unavailable (a gate refusal or a busy relay): the tab's return tries once more. */
+  /** The refusal came from the socket closing as unavailable (the browser refused to open it): the tab's return tries once more. */
   #socketRefused = false;
   readonly #seen = new Set<string>();
   readonly #connectionListeners = new Set<() => void>();
@@ -424,43 +428,30 @@ export function activityHints(surface: string, hints: ActivityHints, accepts?: H
   return { name: "activity", subscribe: (signal) => hints.subscribe(surface, signal, accepts) };
 }
 
-/** The relay subscribes and pings upstream; the browser transport is read-only. */
-export function hintEventStream(url: string): HintSocket {
-  const source = gatedEventSource(url);
-  const socket: HintSocket = {
-    send: () => undefined,
-    close: () => {
-      source.close();
-      if (typeof document !== "undefined") document.removeEventListener("visibilitychange", resume);
-    },
-    onmessage: null,
-    onclose: null,
-  };
-  // Hints ignored while hidden are recovered even when no later chain event arrives.
-  const resume = () => {
-    if (document.visibilityState !== "hidden") socket.onmessage?.({ data: JSON.stringify({ type: "resync_required" }) });
-  };
-  if (typeof document !== "undefined") document.addEventListener("visibilitychange", resume);
-  source.addEventListener("message", (event) => socket.onmessage?.(event as MessageEvent));
-  source.addEventListener("error", () => {
-    socket.close();
+/** The socket's hint events as a hint socket. The hints process subscribes and pings upstream, so `send` does nothing. */
+export function socketHintStream(source: MarketEventSource): HintSocket {
+  const socket: HintSocket = { send: () => undefined, close: () => source.close(), onmessage: null, onclose: null };
+  const end = () => {
+    source.close();
     socket.onclose?.();
-  });
-  // Refused even after one gate refresh: the client stays on its poll until its surfaces start over.
-  source.addEventListener("refused", () => {
-    socket.unavailable = true;
-    socket.close();
-    socket.onclose?.();
-  });
+  };
+  source.addEventListener("hint", (event) => socket.onmessage?.({ data: event.data }));
+  // A drop, or a socket that is off or backing off: the client retries with its own backoff, and the source
+  // answers at once without a ticket until its wait ends.
+  source.addEventListener("error", end);
+  source.addEventListener("refused", end);
   return socket;
 }
+
+/** The activity-only query on the market socket. */
+export const ACTIVITY_SOCKET_PATH = `${MARKET_STREAM_PATH}?activity=true`;
 
 let tabHints: ActivityHints | null = null;
 
 /** A tab's client of `createSocket`'s streams. */
 function tabClient(createSocket: ActivityHintsDependencies["createSocket"]): ActivityHints {
   return new ActivityHints({
-    url: "/api/social/activity/hints",
+    url: ACTIVITY_SOCKET_PATH,
     createSocket,
     now: Date.now,
     setTimeout: (run, ms) => window.setTimeout(run, ms),
@@ -476,11 +467,11 @@ function tabClient(createSocket: ActivityHintsDependencies["createSocket"]): Act
   });
 }
 
-/** One same-origin stream per tab, opened by the first subscriber. */
+/** One hint socket per tab, opened by the first subscriber. */
 export function tabActivityHints(): ActivityHints | null {
-  if (typeof window === "undefined" || typeof EventSource === "undefined") return null;
+  if (typeof window === "undefined" || typeof WebSocket === "undefined") return null;
   // The chart's market stream carries the tab's hints while a coin page holds one.
-  return (tabHints ??= tabClient((url) => marketHintTransport(url, hintEventStream)));
+  return (tabHints ??= tabClient((url) => marketHintTransport(url, (path) => socketHintStream(browserLiveSource(path)))));
 }
 
 /**

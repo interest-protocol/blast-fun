@@ -96,8 +96,7 @@ a lost execution reply checks that transaction instead of signing again.
   never relay an upstream error payload. Image errors use JSON codes while
   successful images keep their existing binary/cache behavior.
 - Proxy API feature refusals carry the same fixed not_found code and reference;
-  normal page 404s remain empty and do not create API error logs. SSE refusals
-  before streaming use fixed JSON codes and references.
+  normal page 404s remain empty and do not create API error logs.
 - Gate refresh preserves its legacy string protocol and adds a fixed sibling
   code/message plus reference. Shared route-limit and final telemetry guards
   convert unexpected outer exceptions into fixed public failures.

@@ -14,10 +14,8 @@ export const MARKET_STREAM_BUDGET = Object.freeze({
   queueBytesPerClient: 65_536,
   heartbeatMs: 4_000,
   heartbeatTimeoutMs: 9_000,
-  lifetimeMs: 270_000,
 });
 export const MARKET_STREAM_PATH = "/api/launchpad/market/stream";
-export const MARKET_STREAM_ROUTE_ID = "launchpad.market.stream";
 
 export const displayPriceCoinSchema = z.string().max(320).regex(/^[\w:<>,]+$/).regex(COIN_TYPE_WITH_GENERICS);
 export const displayPriceSchema = z.object({

@@ -49,16 +49,16 @@ export type WebConfig = Readonly<{
   presale: PresaleConfig;
   /** `NODE_ENV` is development: the CSP allows the dev server's eval and websocket. */
   development: boolean;
-  /** The direct market socket, or null when it is off and every tab uses the SSE relay. */
+  /** The direct market socket, or null when it is off and tabs have no live stream. */
   liveSocket: LiveSocketConfig | null;
 }>;
 
 /**
- * `BLAST_LIVE_SOCKET_URL` (the hints process's `wss://…/v1/socket`) with
- * `BLAST_LIVE_SOCKET_ROLLOUT_PERCENT` (0–100, default 0). Tickets are signed
- * with the hints gateway secret, so the socket needs the hints upstream.
+ * `BLAST_LIVE_SOCKET_URL`: the hints process's `wss://…/v1/socket`. Unset is
+ * the kill switch: no tab streams. Tickets are signed with the hints gateway
+ * secret, so the socket needs the hints upstream.
  */
-export type LiveSocketConfig = Readonly<{ url: string; origin: string; rolloutPercent: number }>;
+export type LiveSocketConfig = Readonly<{ url: string; origin: string }>;
 
 export function parseWebConfig(environment: Environment): WebConfig {
   const relay = parseRelayConfig(environment);
@@ -88,9 +88,7 @@ function liveSocketConfig(environment: Environment, relay: RelayConfig): LiveSoc
     throw new Error("BLAST_LIVE_SOCKET_URL must be a wss:// URL ending in /v1/socket.");
   }
   if (relay.hints === null) throw new Error("BLAST_LIVE_SOCKET_URL needs BLAST_BACKEND_HINTS_ORIGIN and its gateway secret.");
-  const percent = environment.BLAST_LIVE_SOCKET_ROLLOUT_PERCENT?.trim() || "0";
-  if (!/^(100|[1-9]?\d)$/.test(percent)) throw new Error("BLAST_LIVE_SOCKET_ROLLOUT_PERCENT must be an integer from 0 to 100.");
-  return { url: url.href, origin: url.origin, rolloutPercent: Number(percent) };
+  return { url: url.href, origin: url.origin };
 }
 
 function gateConfig(environment: Environment, production: boolean): GateConfig {

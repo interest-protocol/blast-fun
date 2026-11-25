@@ -101,21 +101,3 @@ export function installGateAwareFetch(target: { fetch: Fetch } = globalThis): vo
   if ((target.fetch as GateAwareFetch)[WRAPPED]) return;
   target.fetch = createGateAwareFetch(target.fetch.bind(target));
 }
-
-let refreshingGate: Promise<boolean> | null = null;
-/** A hung refresh counts as failed, so a waiting stream stops; shorter than the market hub's 10 s hello deadline. */
-const GATE_REFRESH_TIMEOUT_MS = 5_000;
-
-/**
- * `GET /api/gate` once for every caller waiting on it now: true when a new
- * cookie was issued. For streams, which cannot see a refusal's status.
- */
-export function refreshGate(): Promise<boolean> {
-  return (refreshingGate ??= globalThis
-    .fetch(GATE_REFRESH_PATH, { method: "GET", credentials: "same-origin", cache: "no-store", signal: AbortSignal.timeout(GATE_REFRESH_TIMEOUT_MS) })
-    .then((response) => response.ok)
-    .catch(() => false)
-    .finally(() => {
-      refreshingGate = null;
-    }));
-}

@@ -7,7 +7,7 @@ type HintSocket = {
   onclose: (() => void) | null;
   unavailable?: boolean;
 };
-/** `lost`: the market stream dropped or missed its hello deadline; hint clients use the legacy stream until a new hello. */
+/** `lost`: the market stream dropped or missed its hello deadline; hint clients use the activity-only socket until a new hello. */
 type Carrier = { hello: string | null; pong: string | null; lost: boolean };
 type Notice = Readonly<{ type: "changed" | "disconnected" }> | Readonly<{ type: "frame"; data: string }>;
 let carrier: Carrier | null = null;
@@ -32,7 +32,7 @@ export function beginMarketHints() {
           owner.hello = data;
           owner.pong = null;
           owner.lost = false;
-          // Close the legacy connection once the market carrier is usable.
+          // Close the activity-only socket once the market carrier is usable.
           if (first) announce({ type: "changed" });
         } else if (hint.type === "pong" && owner.hello !== null) {
           owner.pong = data;
@@ -64,13 +64,13 @@ export function beginMarketHints() {
 const pending = (owner: Carrier | null) => owner !== null && owner.hello === null && !owner.lost;
 
 /**
- * Prefer the market stream's connection; healthy legacy hints remain available during market outages.
- * While a market stream is starting, the legacy stream opens only if its hello misses the deadline.
+ * Prefer the market stream's connection; an activity-only socket carries hints during market outages.
+ * While a market stream is starting, the activity-only socket opens only if its hello misses the deadline.
  */
 export function marketHintTransport(url: string, fallback: (url: string) => HintSocket): HintSocket {
   let underlying: HintSocket | null = null;
   let closed = false;
-  /** The carrier this socket reads; null on the legacy stream, undefined while still choosing. */
+  /** The carrier this socket reads; null on the activity-only socket, undefined while still choosing. */
   let selected: Carrier | null | undefined;
   const socket: HintSocket = {
     send: () => undefined,
@@ -109,11 +109,7 @@ export function marketHintTransport(url: string, fallback: (url: string) => Hint
     try {
       underlying = fallback(url);
       underlying.onmessage = (event) => socket.onmessage?.(event);
-      underlying.onclose = () => {
-        // A refused relay stream stops the hint client instead of its backoff.
-        if (underlying?.unavailable) socket.unavailable = true;
-        disconnect();
-      };
+      underlying.onclose = disconnect;
     } catch (error) {
       if (cause === "open") {
         socket.close();

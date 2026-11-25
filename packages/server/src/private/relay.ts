@@ -1,5 +1,3 @@
-import { MARKET_STREAM_ROUTE_ID } from "@blast/core/modules/launchpad-contract/market-stream.ts";
-import { isLaunchEnabled } from "@blast/core/lib/launch-flags.ts";
 import { privateBodyDeadlineMs } from "@blast/core/modules/backend-api/private-body.ts";
 import { frontendClientAddress } from "@blast/core/modules/backend-api/frontend-ingress.ts";
 import {
@@ -25,9 +23,7 @@ function unavailable(): Response {
   );
 }
 
-/** Connected streams go to the isolated hints role alone; without it they fail closed. */
-function upstream(id: string, config: RelayConfig): RelayUpstream | null {
-  if (id === "social.activity.hints" || id === MARKET_STREAM_ROUTE_ID) return config.hints;
+function upstream(config: RelayConfig): RelayUpstream | null {
   if (config.apiOrigin === null || config.gatewaySecret === null) return null;
   return { origin: config.apiOrigin, secret: config.gatewaySecret };
 }
@@ -56,14 +52,9 @@ export function privateBackendRelay(
         ((incoming) => frontendClientAddress(incoming, config.ingress))
       )(request);
       if (!ip) return unavailable();
-      const target = upstream(contract.id, config);
+      const target = upstream(config);
       if (!target || config.quotaNamespace === null) return unavailable();
       if (source.origin !== config.siteOrigin) return unavailable();
-      // The signed stream follows the same launch gates as the presale activity read.
-      if (contract.id === MARKET_STREAM_ROUTE_ID && source.searchParams.has("presale") &&
-          !(isLaunchEnabled("social") && isLaunchEnabled("trading"))) {
-        source.searchParams.delete("presale");
-      }
       const body = await readBody(request, contract.maxBodyBytes);
       const headers = new Headers(request.headers);
       stripPrivateHeaders(headers);

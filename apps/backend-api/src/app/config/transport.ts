@@ -56,7 +56,7 @@ export function backendTransportConfig(environment: Environment, role: keyof typ
     maxHintStreams < 1 ||
     maxHintStreams > ACTIVITY_HINT_STREAM_BUDGET.maxClients
   ) {
-    throw new Error("Invalid connected activity stream capacity.");
+    throw new Error("Invalid live stream capacity.");
   }
   if (
     !Number.isInteger(port) ||

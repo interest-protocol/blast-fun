@@ -22,9 +22,9 @@ export type RelayUpstream = Readonly<{ origin: string; secret: string }>;
 export type RelayConfig = Readonly<{
   /** `BLAST_BACKEND_API_ORIGIN`, as a bare origin; the cron relay needs only this. */
   apiOrigin: string | null;
-  /** `BLAST_BACKEND_GATEWAY_SECRET`, signing everything but streams. */
+  /** `BLAST_BACKEND_GATEWAY_SECRET`, signing every relayed request. */
   gatewaySecret: string | null;
-  /** `BLAST_BACKEND_HINTS_ORIGIN` and `BLAST_BACKEND_HINTS_GATEWAY_SECRET`: both or neither; streams go only here. */
+  /** `BLAST_BACKEND_HINTS_ORIGIN` and `BLAST_BACKEND_HINTS_GATEWAY_SECRET`: both or neither; the secret signs live socket tickets. */
   hints: RelayUpstream | null;
   /** Hashed from the raw `BLAST_REDIS_NAMESPACE` and the deployment identity; the backend compares it. */
   quotaNamespace: string | null;

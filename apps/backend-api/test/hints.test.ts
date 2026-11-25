@@ -10,13 +10,7 @@ import { join } from "node:path";
 import { setTimeout as pause } from "node:timers/promises";
 import test from "node:test";
 import { signPrivateRequest } from "@blast/core/modules/backend-api/private-gateway.ts";
-import { ACTIVITY_HINT_STREAM_BUDGET } from "@blast/core/modules/backend-api/stream-budget.ts";
 import { quotaNamespace } from "@blast/core/lib/web-security/redis-rate-limits.ts";
-import {
-  ActivityHintRelay,
-  type RelaySocket,
-} from "@blast/server/modules/social/activity/hint-relay.ts";
-import { infraProvenanceFixture } from "../../../packages/server/test/fixtures/modules/launchpad-contract/fixtures.ts";
 import { fleetFixture } from "./fleet-fixture.ts";
 import { hintsConfig } from "../src/app/hints/config.ts";
 import { createHintsServer } from "../src/app/hints/server.ts";
@@ -206,207 +200,61 @@ test("fresh hints import constructs no SQL pools or broad private owners or part
   }
 });
 
-test(
-  "standalone hints authenticates, rejects other owners and replay, bounds streams, cancels and drains",
-  { timeout: 10_000 },
-  async () => {
-    const singleton = Symbol.for("blast.social.activity-hints");
-    const store = globalThis as unknown as Record<symbol, unknown>;
-    const previous = store[singleton];
-    let opened = 0;
-    let closed = 0;
-    let flood = () => {};
-    const owner = new ActivityHintRelay(() => {
-      opened++;
-      const socket: RelaySocket = {
-        onmessage: null,
-        onclose: null,
-        onerror: null,
-        send(text) {
-          if (JSON.parse(text).op === "ping") {
-            queueMicrotask(() =>
-              socket.onmessage?.({
-                data: JSON.stringify({ type: "pong" }),
-              } as Parameters<NonNullable<RelaySocket["onmessage"]>>[0]),
-            );
-          }
-        },
-        close() {
-          closed++;
-        },
-      };
-      flood = () => {
-        const frame = { data: '{"type":"activity","activity_id":"11:1:0:0"}' } as Parameters<
-          NonNullable<RelaySocket["onmessage"]>
-        >[0];
-        // One producer turn outpaces the Effect stream's consumer.
-        for (let index = 0; index < ACTIVITY_HINT_STREAM_BUDGET.queuedChunks + 2; index++) {
-          socket.onmessage?.(frame);
-        }
-      };
-      queueMicrotask(() =>
-        socket.onmessage?.({
-          data: JSON.stringify({
-            type: "hello",
-            protocol: 1,
-            provenance: infraProvenanceFixture({
-              deployment_fingerprint: null,
-            }),
-          }),
-        } as Parameters<NonNullable<RelaySocket["onmessage"]>>[0]),
-      );
-      return socket;
-    });
-    store[singleton] = owner;
-    const nonces = new Set<string>();
-    const commands: string[][] = [];
-    let redisClosed = 0;
-    let replayClosed = 0;
-    const runtime = createHintsServer(
+test("standalone hints serves readiness, refuses every HTTP route and drains once", async () => {
+  const commands: string[][] = [];
+  let redisClosed = 0;
+  let replayClosed = 0;
+  const redis = (onClose: () => void) => ({
+    async execute(args: string[]) {
+      commands.push(args);
+      assert.deepEqual(args, ["PING"]);
+      return "PONG";
+    },
+    close: onClose,
+  });
+  const runtime = createHintsServer(
+    { ...hintsConfig(configured), port: 0, hostname: "127.0.0.1" },
+    redis(() => redisClosed++),
+    redis(() => replayClosed++),
+  );
+  const origin = `http://127.0.0.1:${runtime.server.port}`;
+  try {
+    assert.deepEqual(runtime.readinessDependencies, ["quota-redis", "private-replay-redis"]);
+    const health = await fetch(origin + "/v1/health");
+    assert.equal(health.status, 200);
+    assert.equal(await health.text(), "ready");
+    assert.deepEqual(commands, [["PING"], ["PING"]]);
+    const path = "/api/social/me";
+    const signed = signPrivateRequest(
+      new Request(origin + path),
+      new Uint8Array(),
+      configured.BLAST_BACKEND_HINTS_GATEWAY_SECRET,
       {
-        ...hintsConfig(configured),
-        port: 0,
-        hostname: "127.0.0.1",
-        maxHintStreams: 1,
-      },
-      {
-        async execute(args) {
-          commands.push(args);
-          assert.deepEqual(args, ["PING"]);
-          return "PONG";
-        },
-        close() {
-          redisClosed++;
-        },
-      },
-      {
-        async execute(args) {
-          commands.push(args);
-          if (args[0] === "PING") {
-            return "PONG";
-          }
-          assert.equal(args[0], "SET");
-          assert.equal(args[3], "NX");
-          if (nonces.has(args[1]!)) {
-            return null;
-          }
-          nonces.add(args[1]!);
-          return "OK";
-        },
-        close() {
-          replayClosed++;
-        },
-      },
-    );
-    const origin = `http://127.0.0.1:${runtime.server.port}`;
-    const signed = (
-      path = "/api/social/activity/hints",
-      secret = configured.BLAST_BACKEND_HINTS_GATEWAY_SECRET,
-      method = "GET",
-    ) => {
-      const request = new Request(origin + path, { method });
-      return signPrivateRequest(request, new Uint8Array(), secret, {
         namespace: quotaNamespace(configured.BLAST_REDIS_NAMESPACE, deploymentIdentity(configured)),
         siteOrigin: configured.NEXT_PUBLIC_SITE_URL,
         ip: "192.0.2.91",
         purpose: "browser",
-      });
-    };
-    const readers: ReadableStreamDefaultReader<Uint8Array>[] = [];
-    try {
-      assert.deepEqual(runtime.readinessDependencies, ["quota-redis", "private-replay-redis"]);
-      const health = await fetch(origin + "/v1/health");
-      assert.equal(health.status, 200);
-      assert.equal(await health.text(), "ready");
-      assert.deepEqual(commands, [["PING"], ["PING"]]);
-      for (const [path, status] of [
-        ["/api/social/activity/hints", 403],
-        ["/api/v1/prices", 403],
-        ["/api/admin/partner-keys", 401],
-      ] as const) {
-        const refused = await fetch(origin + path);
-        assert.equal(refused.status, status, path);
-        await refused.text();
-      }
-      const wrong = await fetch(origin + "/api/social/activity/hints", {
-        headers: signed(undefined, "x".repeat(32)),
-      });
-      assert.equal(wrong.status, 403);
-      await wrong.text();
-      const otherOwner = await fetch(origin + "/api/social/me", {
-        headers: signed("/api/social/me"),
-      });
-      assert.equal(otherOwner.status, 403);
-      await otherOwner.text();
-      assert.equal(nonces.size, 0, "forbidden profiles never burn nonces or reach owner work");
-      const head = await fetch(origin + "/api/social/activity/hints", {
-        method: "HEAD",
-        headers: signed(undefined, undefined, "HEAD"),
-      });
-      assert.equal(head.status, 200);
-      assert.equal(head.headers.get("content-type"), "text/event-stream");
-      assert.equal(head.headers.get("cache-control"), "no-store");
-      assert.equal(head.headers.get("x-accel-buffering"), "no");
-      assert.equal(await head.text(), "");
-      assert.equal(opened, 0);
-      const headers = signed();
-      const first = await fetch(origin + "/api/social/activity/hints", {
-        headers,
-      });
-      assert.equal(first.status, 200);
-      assert.equal(first.headers.get("content-type"), "text/event-stream");
-      assert.equal(first.headers.get("cache-control"), "no-store");
-      assert.equal(first.headers.get("x-accel-buffering"), "no");
-      readers.push(first.body!.getReader());
-      const hello = new TextDecoder().decode((await readers[0]!.read()).value);
-      assert.match(hello, /^data: \{"type":"hello",/);
-      assert.match(hello, /\n\n$/);
-      const full = await fetch(origin + "/api/social/activity/hints", {
-        headers: signed(),
-      });
-      assert.equal(full.status, 503);
-      await full.text();
-      await readers.shift()!.cancel();
-      for (let attempt = 0; attempt < 50 && closed === 0; attempt++) {
-        await pause(10);
-      }
-      assert.equal(closed, 1);
-      const replay = await fetch(origin + "/api/social/activity/hints", {
-        headers,
-      });
-      assert.equal(replay.status, 403);
-      assert.equal((await replay.json()).error.code, "private_gateway_replayed");
-      const slow = await fetch(origin + "/api/social/activity/hints", { headers: signed() });
-      assert.equal(slow.status, 200);
-      flood();
-      assert.equal(closed, 2, "overflow releases the upstream without waiting for network reads");
-      await slow.arrayBuffer();
-      const replacement = await fetch(origin + "/api/social/activity/hints", {
-        headers: signed(),
-      });
-      assert.equal(replacement.status, 200);
-      readers.push(replacement.body!.getReader());
-      await readers[0]!.read();
-      assert.equal(opened, 3);
-      await runtime.drain();
-      assert.equal(closed, 3, "drain closes shared upstream without browser cancellation");
-      assert.equal(redisClosed, 1);
-      assert.equal(replayClosed, 1);
-      await runtime.drain();
-      assert.equal(redisClosed, 1);
-    } finally {
-      for (const reader of readers) {
-        await reader.cancel().catch(() => {});
-      }
-      await runtime.drain();
-      if (previous === undefined) {
-        delete store[singleton];
-      } else {
-        store[singleton] = previous;
-      }
+      },
+    );
+    for (const [target, headers, status] of [
+      [path, signed, 403],
+      [path, undefined, 403],
+      ["/api/v1/prices", undefined, 403],
+      ["/api/admin/partner-keys", undefined, 401],
+    ] as const) {
+      const refused = await fetch(origin + target, { headers });
+      assert.equal(refused.status, status, target);
+      await refused.text();
     }
-  },
-);
+    assert.equal(commands.length, 2, "refused requests never burn a nonce");
+    await runtime.drain();
+    await runtime.drain();
+    assert.equal(redisClosed, 1);
+    assert.equal(replayClosed, 1);
+  } finally {
+    await runtime.drain();
+  }
+});
 
 test(
   "native hints entrypoint starts without DB/partner configuration and exits on SIGTERM",

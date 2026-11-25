@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { MarketStreamRelay } from "./stream-relay.ts";
-import type { RelaySocket } from "../social/activity/hint-relay.ts";
+import type { RelaySocket } from "./stream-relay.ts";
 
 const fingerprint = "a".repeat(64);
 const provenance = { network: "mainnet", deployment_fingerprint: fingerprint, checkpoint: 10, timestamp_ms: 10000, observed_ms: 10000, lag_ms: 0 };
@@ -16,6 +16,22 @@ class Socket implements RelaySocket {
   receive(frame: Record<string, unknown>) {
     this.onmessage?.({ data: JSON.stringify(frame) } as Parameters<NonNullable<RelaySocket["onmessage"]>>[0]);
   }
+}
+/** Collects one socket client's SSE blocks as a readable stream. */
+function stream(relay: MarketStreamRelay, request: Request) {
+  let stop: (() => void) | undefined;
+  let cancelled = false;
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      const subscription = relay.subscribe(request, {
+        send: (chunk) => { controller.enqueue(chunk); return true; },
+        close: () => { if (!cancelled) controller.close(); },
+      });
+      assert.equal(typeof subscription, "function");
+      stop = subscription as () => void;
+    },
+    cancel() { cancelled = true; stop?.(); },
+  }).getReader();
 }
 async function read(reader: ReadableStreamDefaultReader<Uint8Array>) {
   const next = await reader.read();
@@ -70,7 +86,7 @@ test("the relay sends a four-second heartbeat only after a pong and times out fr
 test("optional feed refusal preserves activity and sanitizes metadata on the combined stream", async () => {
   const socket = new Socket();
   const relay = new MarketStreamRelay(() => socket, { network: "mainnet", deployment: fingerprint });
-  const reader = relay.stream(new Request("https://frontend.test/api/launchpad/market/stream?activity=true")).body!.getReader();
+  const reader = stream(relay, new Request("https://frontend.test/api/launchpad/market/stream?activity=true"));
   try {
     await read(reader);
     socket.receive({ type: "hello", protocol: 1, provenance });
@@ -102,9 +118,9 @@ test("the relay reads subscribed prices in one batch and sends each client only 
       return { checkpoint: 9 + requests.length, prices };
     },
   );
-  const subscribe = (type: string) => relay.stream(new Request(
+  const subscribe = (type: string) => stream(relay, new Request(
     `https://frontend.test/api/launchpad/market/stream?${new URLSearchParams({ activity: "true", price_coin: type })}`,
-  )).body!.getReader();
+  ));
   const first = subscribe(firstPrice.coin_type);
   const second = subscribe(secondPrice.coin_type);
   try {

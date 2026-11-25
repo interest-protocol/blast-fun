@@ -14,8 +14,8 @@ installTestDom();
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 
 test("a live activity hint rereads private claim state and stops once inclusion is observed", async (t) => {
-  const before = globalThis.EventSource;
-  globalThis.EventSource = class {} as unknown as typeof EventSource;
+  const before = Object.getOwnPropertyDescriptor(globalThis, "WebSocket");
+  Object.defineProperty(globalThis, "WebSocket", { value: class {}, configurable: true, writable: true });
   let signal: FreshnessSignal | undefined;
   let stopped = false;
   t.mock.method(ActivityHints.prototype, "subscribe", (_name: string, next: FreshnessSignal) => {
@@ -45,14 +45,15 @@ test("a live activity hint rereads private claim state and stops once inclusion 
     stop();
     off();
     client.clear();
-    globalThis.EventSource = before;
+    if (before) Object.defineProperty(globalThis, "WebSocket", before);
+    else Reflect.deleteProperty(globalThis, "WebSocket");
   }
 });
 
 test("unmount cancels the fallback and an already queued live refresh", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
-  const before = globalThis.EventSource;
-  globalThis.EventSource = class {} as unknown as typeof EventSource;
+  const before = Object.getOwnPropertyDescriptor(globalThis, "WebSocket");
+  Object.defineProperty(globalThis, "WebSocket", { value: class {}, configurable: true, writable: true });
   let signal: FreshnessSignal | undefined;
   t.mock.method(ActivityHints.prototype, "subscribe", (_name: string, next: FreshnessSignal) => {
     signal = next;
@@ -69,6 +70,7 @@ test("unmount cancels the fallback and an already queued live refresh", async (t
     await tick();
     assert.equal(reads, 0);
   } finally {
-    globalThis.EventSource = before;
+    if (before) Object.defineProperty(globalThis, "WebSocket", before);
+    else Reflect.deleteProperty(globalThis, "WebSocket");
   }
 });

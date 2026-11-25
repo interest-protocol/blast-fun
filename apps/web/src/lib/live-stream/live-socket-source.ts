@@ -1,13 +1,11 @@
 import type { MarketEventSource } from "#web/components/launchpad/market-stream-hub.ts";
 
-/** The browser's stable rollout bucket, 0–99, sent with each ticket request. */
-export const LIVE_BUCKET_HEADER = "x-blast-live-bucket";
 export const LIVE_TICKET_PATH = "/api/launchpad/market/ticket";
 export const LIVE_PROTOCOL = "blast-live.v1";
 
-/** After a per-address refusal or repeated failures, the tab uses the SSE relay this long. */
-export const LIVE_FALLBACK_MS = 10 * 60_000;
-/** While the socket is off for this browser (204), the tab asks again after this long: one small request per tab per half hour. */
+/** After a per-address refusal or repeated failures, the tab asks for no ticket this long. */
+export const LIVE_BACKOFF_MS = 10 * 60_000;
+/** While the socket is off (the ticket route answers 204), the tab asks again after this long: one small request per tab per half hour. */
 export const LIVE_OFF_MS = 30 * 60_000;
 export const LIVE_MAX_FAILURES = 3;
 /** Drain (1012) and a full process (4503): the next ticket waits a random 1–9 s so tabs do not return together (under the hub's 10 s hello deadline). */
@@ -23,25 +21,24 @@ export type LiveSocketLike = {
 };
 
 export type LiveSourceDependencies = Readonly<{
-  /** null: the socket is off for this browser. Throws when the ticket cannot be read. */
+  /** null: the socket is off. Throws when the ticket cannot be read. */
   fetchTicket: () => Promise<LiveGrant | null>;
   openSocket: (url: string, protocols: string[]) => LiveSocketLike;
-  openEventSource: (path: string) => MarketEventSource;
   schedule: (run: () => void, ms: number) => () => void;
   now: () => number;
   random: () => number;
 }>;
 
-/** Per tab: shared by every source the hub opens. */
-export type LiveSourceState = { failures: number; fallbackUntil: number; notBefore: number };
+/** Per tab: shared by every source the tab opens. `offUntil`: no ticket is asked for before this. */
+export type LiveSourceState = { failures: number; offUntil: number; notBefore: number };
 
 export function liveSourceState(): LiveSourceState {
-  return { failures: 0, fallbackUntil: 0, notBefore: 0 };
+  return { failures: 0, offUntil: 0, notBefore: 0 };
 }
 
 type Listener = (event: { data?: string }) => void;
 
-/** Splits the relay's own SSE blocks (`event: ` and `data: ` lines, `\n` endings); other lines and empty blocks are skipped. */
+/** Splits the socket's SSE blocks (`event: ` and `data: ` lines, `\n` endings); other lines and empty blocks are skipped. */
 export function parseSseBlocks(text: string): { event: string; data: string }[] {
   const blocks: { event: string; data: string }[] = [];
   for (const block of text.split("\n\n")) {
@@ -58,15 +55,15 @@ export function parseSseBlocks(text: string): { event: string; data: string }[] 
 }
 
 /**
- * A `MarketEventSource` on the direct socket: the same SSE events the relay
- * route sends, so the hub cannot tell them apart. Any close is the hub's
- * "error" and it reconnects as it does for EventSource. The tab falls back to
- * the SSE relay while the socket is off, after a per-address refusal, or
- * after three sockets in a row closed before their first frame.
+ * A `MarketEventSource` on the direct socket, which frames its events as SSE
+ * blocks. Any close is an `error`, and the caller reconnects with its backoff.
+ * While the socket is off, after a per-address refusal, or after three sockets
+ * in a row closed before their first frame, the tab asks for no ticket for a
+ * while: each source opened then sends `refused`, whose data is the wait in
+ * milliseconds, and the tab has no stream until it ends.
  */
 export function liveMarketSource(path: string, state: LiveSourceState, deps: LiveSourceDependencies): MarketEventSource {
   const listeners = new Map<string, Set<Listener>>();
-  let fallback: MarketEventSource | null = null;
   let socket: LiveSocketLike | null = null;
   let cancelWait: (() => void) | null = null;
   let closed = false;
@@ -76,20 +73,22 @@ export function liveMarketSource(path: string, state: LiveSourceState, deps: Liv
   const emit = (type: string, event: { data?: string }) => {
     for (const listener of [...listeners.get(type) ?? []]) listener(event);
   };
-  const openRelay = () => {
-    if (closed) return;
-    fallback = deps.openEventSource(path);
-    for (const [type, set] of listeners) for (const listener of set) fallback.addEventListener(type, listener);
+  const refuse = () => {
+    if (!closed) emit("refused", { data: String(Math.max(0, state.offUntil - deps.now())) });
   };
   const fail = (refusedForAddress = false) => {
     if (refusedForAddress || ++state.failures >= LIVE_MAX_FAILURES) {
       state.failures = 0;
-      state.fallbackUntil = deps.now() + LIVE_FALLBACK_MS;
+      state.offUntil = deps.now() + LIVE_BACKOFF_MS;
     }
   };
   const open = async () => {
     cancelWait = null;
-    if (deps.now() < state.fallbackUntil) return openRelay();
+    if (deps.now() < state.offUntil) {
+      // The caller adds its listeners after this source returns.
+      await Promise.resolve();
+      return refuse();
+    }
     let grant: LiveGrant | null;
     try {
       grant = await deps.fetchTicket();
@@ -100,8 +99,8 @@ export function liveMarketSource(path: string, state: LiveSourceState, deps: Liv
     }
     if (closed) return;
     if (grant === null) {
-      state.fallbackUntil = deps.now() + LIVE_OFF_MS;
-      return openRelay();
+      state.offUntil = deps.now() + LIVE_OFF_MS;
+      return refuse();
     }
     let current: LiveSocketLike;
     try {
@@ -151,15 +150,13 @@ export function liveMarketSource(path: string, state: LiveSourceState, deps: Liv
       let set = listeners.get(type);
       if (!set) listeners.set(type, (set = new Set()));
       set.add(listener);
-      fallback?.addEventListener(type, listener);
     },
     close() {
-      // The hub gave up on a socket that never spoke (its hello deadline): a hung network must reach the relay too.
+      // The hub gave up on a socket that never spoke (its hello deadline): a hung network counts as a failure too.
       if (silent && !closed) fail();
       silent = false;
       closed = true;
       cancelWait?.();
-      fallback?.close();
       const current = socket;
       socket = null;
       current?.close();
@@ -191,26 +188,11 @@ export function browserSocket(url: string, protocols: string[]): LiveSocketLike 
   return socket;
 }
 
-const BUCKET_KEY = "blast.live.bucket";
-
-/** This browser's rollout bucket, kept across visits; a fresh one per tab when storage is blocked. */
-export function liveBucket(random: () => number = Math.random): number {
-  try {
-    const stored = localStorage.getItem(BUCKET_KEY);
-    if (stored && /^\d{1,2}$/.test(stored)) return Number(stored);
-    const bucket = Math.floor(random() * 100);
-    localStorage.setItem(BUCKET_KEY, String(bucket));
-    return bucket;
-  } catch {
-    return Math.floor(random() * 100);
-  }
-}
-
 const TICKET = /^[A-Za-z0-9_-]{1,256}\.[A-Za-z0-9_-]{43}$/;
 
-/** POSTs for a ticket; null on 204 (off for this browser). */
-export async function fetchLiveTicket(bucket: number): Promise<LiveGrant | null> {
-  const response = await fetch(LIVE_TICKET_PATH, { method: "POST", cache: "no-store", headers: { [LIVE_BUCKET_HEADER]: String(bucket) } });
+/** POSTs for a ticket; null on 204 (the socket is off). */
+export async function fetchLiveTicket(): Promise<LiveGrant | null> {
+  const response = await fetch(LIVE_TICKET_PATH, { method: "POST", cache: "no-store" });
   if (response.status === 204) return null;
   if (!response.ok) throw new Error(`ticket ${response.status}`);
   const body = (await response.json()) as { url?: unknown; ticket?: unknown };
@@ -218,4 +200,24 @@ export async function fetchLiveTicket(bucket: number): Promise<LiveGrant | null>
     throw new Error("ticket body");
   }
   return { url: body.url, ticket: body.ticket };
+}
+
+let tabState: LiveSourceState | null = null;
+
+/** A source on the browser's socket. Every source in the tab shares one failure count and wait. */
+export function browserLiveSource(path: string, onSocket?: (socket: ReturnType<typeof browserSocket>) => void): MarketEventSource {
+  return liveMarketSource(path, (tabState ??= liveSourceState()), {
+    fetchTicket: fetchLiveTicket,
+    openSocket: (url, protocols) => {
+      const socket = browserSocket(url, protocols);
+      onSocket?.(socket);
+      return socket;
+    },
+    schedule: (run, ms) => {
+      const timer = window.setTimeout(run, ms);
+      return () => window.clearTimeout(timer);
+    },
+    now: Date.now,
+    random: Math.random,
+  });
 }

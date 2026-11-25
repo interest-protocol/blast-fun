@@ -36,15 +36,10 @@ verification and cold production packaging remain release gates; individual
 passing suites do not establish completion of the whole architecture. The shared
 admin password without named operators/MFA remains an accepted security gap.
 
-Connected activity SSE streams have a separate bounded lane, so established
-streams do not retain ordinary or expensive-work permits. Body, replay and owner
-admission finish under the ordinary limit before an accepted GET SSE response
-transfers its permit. Stream ownership still counts toward shutdown and remains
-held until cancellation and actual owner work complete. Drain aborts established
-authenticated stream lifetimes, spread over `streamDrainMs` (30 s for the API
-process, 5 s for hints) so browsers reconnect gradually, and cancels a response
-that finishes admission after draining begins; unrelated actual work still
-completes before shutdown.
+The backend serves no SSE: browsers read live market data from the hints
+process's WebSocket. On drain the hints process closes its live sockets spread
+over 5 s, so browsers reconnect gradually; actual API work still completes
+before shutdown.
 Readiness has a separate
 bounded, coalesced dependency probe lane and retains dependency/draining failures.
 
@@ -64,9 +59,7 @@ workflows remain bounded until their owner costs are assessed; receipt rendering
 retains its existing four-workflow limit rather than changing its contention.
 
 `BLAST_BACKEND_MAX_HINT_STREAMS` is optional: default 200, integer range 1–1,024
-per replica. Sockets and market SSE share the market relay at the configured
-value; activity SSE is admitted separately up to the same value, so one process
-can hold twice that many streams in total. The maximum derives from a 64 MiB
+per hints replica. It caps the live sockets on the market relay. The maximum derives from a 64 MiB
 queue payload budget per relay: 1,024 clients × 64 queued chunks × at most 1 KiB per encoded chunk. Slow readers close
 before exceeding 64 chunks; every outgoing frame has the byte bound. This budget
 excludes JavaScript/runtime overhead, Bun/kernel socket and proxy buffers, and
@@ -82,13 +75,13 @@ hints process. Each entry point delegates to its process startup module.
 | Module | Owns |
 | --- | --- |
 | `app/api/` | API startup, caller admission and Effect HttpApi composition |
-| `app/hints/` | Hints startup, stream HttpApi composition and readiness |
+| `app/hints/` | Hints startup, live socket and readiness |
 | `app/config/` | Shared transport and fleet configuration |
 | `app/server.ts`, `app/health-http.ts` | Shared HTTP composition and the Effect health probes |
 | `data/api/`, `features/` | Effect HTTP contracts and feature handlers |
 | `transport/server.ts`, `transport/http.ts` | Bun sockets, request admission and transport response headers |
 | `transport/request.ts` | Target validation, ingress identity and gateway authentication |
-| `transport/admission.ts` | Process capacity, connected-stream permits and drain |
+| `transport/admission.ts` | Process capacity and drain |
 | `transport/private-admission.ts` | Expensive private work and reserved trading capacity |
 | `transport/lifetime.ts` | Deadlines, cancellation and permits through body settlement |
 | `transport/health.ts` | Coalesced readiness probes in a separate admission lane |
@@ -116,8 +109,7 @@ requests and peer context to the transport. The transport verifies gateway
 signatures, enforces body limits and fills missing `nosniff` and request-ID
 headers. Effect HttpApi dispatches admitted routes to their owners. Define new
 contracts with Effect Schema. Preserve exact signed bytes and the authenticated
-context when an owner must validate them before parsing. Hints scope each
-subscriber to its response stream. Reuse the shared owners for Privy JWT
+context when an owner must validate them before parsing. Reuse the shared owners for Privy JWT
 verification, canonical ingress addresses and structured logging.
 
 Backend startup and after-response failures use the shared Pino JSON format.
@@ -142,7 +134,7 @@ Redis namespace and counter identities.
 ### Hosted configuration
 
 The web app selects its API with server-only `BLAST_BACKEND_API_ORIGIN`.
-Browser streams use the separate hints process. See the
+Browser live sockets use the separate hints process. See the
 [hosting guide](../../docs/deploy/RENDER.md) for the two process entry points,
 gateway settings and Render's shutdown allowance.
 

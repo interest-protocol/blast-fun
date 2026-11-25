@@ -7,7 +7,7 @@
  * - Browser receipt and paint (after `requestAnimationFrame`) are on the
  *   browser clock. They join the server clocks through the socket's
  *   ping/pong: the sample with the smallest round trip gives the offset.
- *   Without an offset (the SSE relay) the cross-clock hops are skipped.
+ *   Without an offset yet the cross-clock hops are skipped.
  */
 
 export const LIVE_TIMING_PATH = "/api/launchpad/market/timing";
@@ -27,7 +27,7 @@ export const TIMING_SEGMENTS = ["intake", "market", "reader", "hints", "wire", "
 export type TimingSegment = (typeof TIMING_SEGMENTS)[number];
 export type HopStats = Readonly<{ n: number; p50: number; p95: number }>;
 export type TimingReport = Readonly<{
-  transport: "socket" | "sse";
+  transport: "socket";
   offset_rtt_ms: number | null;
   hops: Partial<Record<TimingSegment, HopStats>>;
 }>;
@@ -95,7 +95,7 @@ const stats = (value: unknown): value is HopStats => {
 export function parseTimingReport(body: unknown): TimingReport | null {
   if (!body || typeof body !== "object" || Array.isArray(body)) return null;
   const { transport, offset_rtt_ms: rtt, hops } = body as Record<string, unknown>;
-  if (transport !== "socket" && transport !== "sse") return null;
+  if (transport !== "socket") return null;
   if (rtt !== null && !(Number.isInteger(rtt) && (rtt as number) >= 0 && (rtt as number) <= 60_000)) return null;
   if (!hops || typeof hops !== "object" || Array.isArray(hops)) return null;
   const entries = Object.entries(hops);
@@ -118,7 +118,6 @@ export type LiveTimingDependencies = Readonly<{
 export function createLiveTiming(deps: LiveTimingDependencies) {
   let clock = new ClockOffset();
   const samples = new Map<TimingSegment, number[]>();
-  let transport: "socket" | "sse" = "sse";
   let socket: TimingSocket | null = null;
 
   const ping = (current: TimingSocket, step: number, retries = 0) => {
@@ -139,23 +138,18 @@ export function createLiveTiming(deps: LiveTimingDependencies) {
     }
     samples.clear();
     if (!Object.keys(hops).length) return;
-    const rtt = transport === "socket" ? clock.rtt : null;
-    deps.send(LIVE_TIMING_PATH, JSON.stringify({ transport, offset_rtt_ms: rtt === null ? null : Math.round(rtt), hops }));
+    const rtt = clock.rtt;
+    deps.send(LIVE_TIMING_PATH, JSON.stringify({ transport: "socket", offset_rtt_ms: rtt === null ? null : Math.round(rtt), hops }));
   };
   deps.schedule(report, TIMING_REPORT_MS);
 
   return {
     /** A new socket carries this tab's stream; it gets the clock pings. */
     socket(next: TimingSocket): void {
-      transport = "socket";
       socket = next;
       // Another instance, a sleep or a clock step: the old offset may no longer hold.
       clock = new ClockOffset();
       deps.schedule(() => ping(next, 0), PING_DELAYS_MS[0]!);
-    },
-    relay(): void {
-      transport = "sse";
-      socket = null;
     },
     pong(data: string | undefined): void {
       try {
@@ -175,8 +169,7 @@ export function createLiveTiming(deps: LiveTimingDependencies) {
       }
       deps.afterPaint(() => {
         if (!deps.visible()) return;
-        const offset = transport === "socket" ? clock.offset : null;
-        for (const [segment, value] of Object.entries(frameSegments(stamps, receipt, deps.now(), offset)) as [TimingSegment, number][]) {
+        for (const [segment, value] of Object.entries(frameSegments(stamps, receipt, deps.now(), clock.offset)) as [TimingSegment, number][]) {
           let list = samples.get(segment);
           if (!list) samples.set(segment, (list = []));
           if (list.length < MAX_SAMPLES) list.push(value);

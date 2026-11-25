@@ -6,7 +6,8 @@ import { quotaNamespace } from "@blast/core/lib/web-security/redis-rate-limits.t
 import { signPrivateRequest } from "@blast/core/modules/backend-api/private-gateway.ts";
 import { trackRequestWork } from "@blast/server/lib/request-work.ts";
 import { createBackendHttp, type BackendHttpOptions } from "../src/app/server.ts";
-import { relayToOneBackend } from "./relay-fixture.ts";
+import { privateBackendRelay } from "@blast/server/private/relay.ts";
+import { parseRelayConfig } from "@blast/server/private/relay-config.ts";
 import { deferred } from "../../../packages/core/test/kit.ts";
 
 const siteOrigin = "https://frontend.test";
@@ -81,7 +82,7 @@ function fixture(overrides: Partial<BackendHttpOptions> = {}) {
     },
     ...overrides,
   });
-  const relay = relayToOneBackend(environment, {
+  const relay = privateBackendRelay(parseRelayConfig(environment), {
     clientAddress: () => "192.0.2.1",
     fetch: (input, init) => backend.fetch(new Request(input, init), "127.0.0.1"),
   });
@@ -120,7 +121,6 @@ function assertFixedFields(metrics: Metric[]) {
         "upload",
         "render",
         "allowlist",
-        "hint",
       ].includes(metric.lane),
     );
     assert.ok(["admitted", "busy"].includes(metric.outcome));
@@ -340,28 +340,6 @@ test("readiness observations count reserved permits rather than coalesced depend
     assertFixedFields(metrics);
   } finally {
     gate.resolve();
-    await source.backend.drain();
-  }
-});
-
-test("authenticated hint observations describe admission before the owner and retain actual work", async (t) => {
-  const metrics = capture(t);
-  const source = fixture({ maxHintStreams: 1 });
-  try {
-    assert.equal(await consumed(await source.request("/api/social/activity/hints", "GET")), 200);
-    assert.equal(await consumed(await source.request("/api/social/activity/hints", "GET")), 503);
-    assert.deepEqual(labels(metrics.filter((metric) => metric.lane === "hint")), [
-      { lane: "hint", outcome: "admitted", sampleRate: 0.02 },
-      { lane: "hint", outcome: "busy", cause: "capacity" },
-    ]);
-    assert.equal(source.owners.length, 1);
-    assert.equal(source.nonces(), 1);
-    source.work.resolve();
-    await pause(0);
-    assert.equal(await consumed(await source.request("/api/social/activity/hints", "GET")), 200);
-    assertFixedFields(metrics);
-  } finally {
-    source.work.resolve();
     await source.backend.drain();
   }
 });
