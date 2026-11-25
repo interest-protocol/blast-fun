@@ -14,6 +14,7 @@ import { SocialRouteError } from "@blast/core/modules/social/route-kit/errors.ts
 import {
   HOME_COINS_MAX_IDS,
   HOME_PREVIEW_ROWS,
+  HOME_RECENT_BUY_MIN_USD,
   HOME_RECENT_BUY_MS,
   HOME_SPARK_POINTS,
   HOME_TOP_HOLDERS,
@@ -231,10 +232,11 @@ export async function readSides(db: ReadableDatabase, request: RowsRequest, rece
   const params = new Params();
   const rows = rowsWithSql(request, params);
   // Keep one event's fields together, ordered by timestamp and cursor, in the existing aggregate.
+  // A priced buy under the floor is skipped here, so dust never hides the real buy before it.
   const recentBuy = recentBuyFromMs === undefined ? "" : `,
-    (max(ARRAY[w.timestamp_ms, w.checkpoint, w.tx_slot, w.event_slot, w.part, w.quote_amount]::numeric[])
+    (max(ARRAY[w.timestamp_ms, w.checkpoint, w.tx_slot, w.event_slot, w.part, w.quote_amount, trim_scale(w.usd_value)]::numeric[])
       FILTER (WHERE w.kind = 'trade_buy' AND w.timestamp_ms > ${params.add(recentBuyFromMs)}::bigint
-        AND w.quote_amount > 0))::text[] AS recent_buy`;
+        AND w.quote_amount > 0 AND (w.usd_value IS NULL OR w.usd_value >= ${params.add(HOME_RECENT_BUY_MIN_USD)}::numeric)))::text[] AS recent_buy`;
   const text = selectHome(rows, `${sidesSelect(recentBuy)} ${SIDES_GROUP}`);
   assertChainReadThroughViews(text);
   return (await db.read<SideRow>(text, params.values)).rows;
@@ -584,6 +586,7 @@ export type HomeReadContext = Readonly<{
   includeRollingChange?: boolean;
   includeDexVolume?: boolean;
   includeRecentBuys?: boolean;
+  includeRecentBuyUsd?: boolean;
 }>;
 
 function withTrackedPoolMarket(
@@ -709,13 +712,13 @@ async function readSparks(db: ReadableDatabase, facts: readonly FactsRow[], cloc
   return new Map(histories.flatMap((history) => ([[history.presale_id ?? history.coin_type, history.points] as const])));
 }
 
-/** One confirmed amount per returned coin, with its actual quote asset. */
-function recentPageBuys(sides: readonly SideRow[], coins: readonly HomeCoin[]): HomeRecentBuy[] {
+/** One confirmed amount per returned coin, with its actual quote asset and its dollar value when priced. */
+function recentPageBuys(sides: readonly SideRow[], coins: readonly HomeCoin[], withUsd: boolean): HomeRecentBuy[] {
   const page = new Set(coins.map(coin => coin.presale_id ?? coin.coin_type));
   const buys = new Map<string, HomeRecentBuy>();
   for (const row of sides) {
     if (!row.recent_buy || !page.has(row.sale)) continue;
-    const [timestamp, checkpoint, tx, event, part, atoms] = row.recent_buy;
+    const [timestamp, checkpoint, tx, event, part, atoms, usd] = row.recent_buy;
     const asset = quoteAssetOf(row.quote_type, row);
     if (!asset.symbol || asset.decimals === null || !/^[1-9][0-9]{0,19}$/.test(atoms)) continue;
     const id = `${checkpoint}:${tx}:${event}:${part}`;
@@ -730,6 +733,8 @@ function recentPageBuys(sides: readonly SideRow[], coins: readonly HomeCoin[]): 
       quote_atoms: atoms,
       quote_symbol: asset.symbol,
       quote_decimals: asset.decimals,
+      // Digits only: a NaN or Infinity value would fail the page's strict schema.
+      ...(withUsd && usd !== null && /^(0|[1-9][0-9]*)(\.[0-9]+)?$/.test(usd) && { usd }),
     });
   }
   return [...buys.values()];
@@ -831,7 +836,7 @@ export async function readHomeDiscover(db: ReadableDatabase, query: HomeQuery, c
   }));
   const { page, nextCursor, pageNumber, pages, total, ranked } = pageOf(eligible, query.sort, cursor, query.limit, query.page);
   const coins = await assembleCoins(db, { candidates: page, sides, span, bounds, kinds, actors: { kind: "everyone" }, scope: "pool", context, dexVolumes, trackedMarkets });
-  const recentBuys = context.includeRecentBuys ? recentPageBuys(sides, coins) : [];
+  const recentBuys = context.includeRecentBuys ? recentPageBuys(sides, coins, context.includeRecentBuyUsd === true) : [];
   return { coins, page: pageNumber, pages, total, ...(query.ranked ? { ranked } : {}), next_cursor: nextCursor, window: query.window, clock_ms: bounds.clockMs, as_of: asOf,
     ...(recentBuys.length > 0 && { recent_buys: recentBuys }) };
 }

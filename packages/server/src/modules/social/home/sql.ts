@@ -204,7 +204,7 @@ export type SideRow = Readonly<{
   unpriced: string;
   tokens: string | null;
   latest_ms: string;
-  recent_buy?: readonly [string, string, string, string, string, string] | null;
+  recent_buy?: readonly [string, string, string, string, string, string, string | null] | null;
 }>;
 
 /** Per (sale, who, kind, quote asset): count, exact atoms, priced USD, unpriced rows, tokens and the latest time. */

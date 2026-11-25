@@ -366,20 +366,26 @@ test("Discover exposes only the latest confirmed buy per coin in its opt-in resp
     const older = buy(W.mayaA, ORBIT, 80, now - 6_000);
     const latest = buy(W.mayaA, ORBIT, 1.25, now - 6_000, { quote_type: SUI, quote_amount: "1250000000" });
     const other = buy(W.leo, EMAN, 4, now - 5_000, { presale_id: P.eman });
+    const dust = buy(W.leo, ORBIT, 0.09, now - 5_500);
+    const unpriced = buy(W.leo, EMAN, 4, now - 5_000, { presale_id: P.eman, usd_value: null });
     const recentSell = sell(W.leo, ORBIT, 200, now - 4_000);
     const uncommitted = buy(W.mayaA, ORBIT, 999, now - 3_000);
-    await seedChainRead(admin, { activity: [older, latest, other, recentSell, uncommitted] });
+    await seedChainRead(admin, { activity: [older, latest, other, dust, unpriced, recentSell, uncommitted] });
     await admin.query(advanceWatermark(recentSell.checkpoint));
 
-    const read = await discover("?recent_buys=1");
+    const read = await discover("?recent_buys=2");
     assert.equal(read.status, 200);
     const page = homeCoinsPageReadSchema.parse(await read.json());
     assert.deepEqual(page.recent_buys?.find(buy => buy.coin_key === P.orbit), {
       coin_key: P.orbit, activity_id: `${latest.checkpoint}:0:0:0`, occurred_at_ms: now - 6_000,
-      quote_atoms: "1250000000", quote_symbol: "SUI", quote_decimals: 9,
-    });
-    assert.equal(page.recent_buys?.find(buy => buy.coin_key === P.eman)?.quote_atoms, "4000000");
+      quote_atoms: "1250000000", quote_symbol: "SUI", quote_decimals: 9, usd: "1.25",
+    }, "a newer buy under $0.10 must not replace the real one");
+    const eman = page.recent_buys?.find(buy => buy.coin_key === P.eman);
+    assert.equal(eman?.quote_atoms, "4000000");
+    assert.equal(eman?.usd, undefined, "an unpriced buy still shows, without a dollar value");
     assert.equal(page.recent_buys?.length, 2);
+    const olderTab = homeCoinsPageReadSchema.parse(await (await discover("?recent_buys=1")).json());
+    assert.deepEqual(olderTab.recent_buys?.map(buy => buy.usd), [undefined, undefined], "a tab from before dollars shipped gets the buys without the new field");
     assert.equal((await ok<HomeCoinsPage>(await discover(), "home-coins-page")).recent_buys, undefined);
     const hidden = await discover("?recent_buys=1", { trades: false });
     assert.equal(homeCoinsPageReadSchema.parse(await hidden.json()).recent_buys, undefined);

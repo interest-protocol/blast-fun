@@ -16,6 +16,7 @@ import {
   HOME_DEX_VOLUME_PARAM,
   HOME_MOBILE_MARKET_PARAM,
   HOME_RECENT_BUYS_PARAM,
+  HOME_RECENT_BUYS_WITH_USD,
   HOME_ROLLING_CHANGE_PARAM,
   HOME_TOP_HOLDERS,
   SOCIAL_HOME_ACTIVITY_ROUTE,
@@ -100,14 +101,16 @@ export function createSocialHomeRoutes(dependencies: SocialHomeRouteDependencies
     DISCOVER: kit.route({ name: SOCIAL_HOME_ROUTE, ...publicRead }, async (ctx) => {
       const params = new URL(ctx.request.url).searchParams;
       const query = parseHomeQuery(params);
-      const ctxRead = { ...context(ctx), ...marketOptions(params), trackedPoolMarket, curveTargets, includeRecentBuys: params.get(HOME_RECENT_BUYS_PARAM) === "1" };
+      const recentBuys = params.get(HOME_RECENT_BUYS_PARAM);
+      const includeRecentBuyUsd = recentBuys === HOME_RECENT_BUYS_WITH_USD;
+      const ctxRead = { ...context(ctx), ...marketOptions(params), trackedPoolMarket, curveTargets, includeRecentBuys: recentBuys === "1" || includeRecentBuyUsd, includeRecentBuyUsd };
       const baseCache = dependencies.caches?.discoverBase;
       const load = () => {
         const db = database();
         const base = baseCache && (() => baseCache.read(homeDiscoverBaseKey(query.window, ctxRead), () => readHomeDiscoverBase(db, query.window, ctxRead)));
         return readHomeDiscover(db, query, ctxRead, base);
       };
-      return cachedResponse(ctx, dependencies.caches?.discover, JSON.stringify([query, ctxRead.hiddenKinds, ctxRead.includeMobileMarket, ctxRead.includeLiveInputs, ctxRead.includeRollingChange, ctxRead.includeDexVolume, ctxRead.includeRecentBuys]), load);
+      return cachedResponse(ctx, dependencies.caches?.discover, JSON.stringify([query, ctxRead.hiddenKinds, ctxRead.includeMobileMarket, ctxRead.includeLiveInputs, ctxRead.includeRollingChange, ctxRead.includeDexVolume, ctxRead.includeRecentBuys, ctxRead.includeRecentBuyUsd]), load);
     }),
     COINS: kit.route({ name: SOCIAL_HOME_COINS_ROUTE, ...publicRead }, async (ctx) => {
       const params = new URL(ctx.request.url).searchParams;
