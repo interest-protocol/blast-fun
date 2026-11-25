@@ -550,29 +550,42 @@ function useChartStyle() {
   }] as const;
 }
 
-function CompactChart({ view }: Readonly<{ view: ChartViewControls }>) {
+/** The style the compact chart draws, and whether the viewer can choose it: Live, phones and a handful of trades are always a line. */
+function useCompactStyle(view: ChartViewControls) {
   const mobile = useMobileChartLayout();
   const [preferredStyle, setStyle] = useChartStyle();
-  const live = view.controls.range === "live";
   const { source, quoteUsd, geometry, drawn } = view;
+  const live = view.controls.range === "live";
   // The chart draws a line for a handful of trades, so the picker would offer a style it ignores.
   const fewTrades = drawn.length > 0 && forcesLine(klineBars(drawn, source.memeDecimals, source.quoteDecimals, quoteUsd ?? null));
-  const style = mobile || live || fewTrades ? "line" : preferredStyle;
+  const fixed = mobile || live || fewTrades;
+  return { style: fixed ? "line" as const : preferredStyle, choosable: Boolean(geometry) && !fixed, setStyle };
+}
+
+function CompactChart({ view }: Readonly<{ view: ChartViewControls }>) {
+  const { style, choosable, setStyle } = useCompactStyle(view);
+  const { source, quoteUsd, geometry } = view;
   const unit = geometry && (exactDecimal(quoteUsd) ? "USD" : source.quoteSymbol);
   return <div className={styles.chart} data-compact-chart="" data-chart-style={style}>
     <div className={styles.compactHead}>
       <h2>Price{unit ? <span> · {unit}</span> : null}</h2>
       <div className={styles.compactTools}>
-        {geometry && !live && !mobile && !fewTrades && <Segmented className={styles.stylePicker} label="Chart style" size="touch" variant="outline" options={CHART_STYLES} value={style} onChange={setStyle} />}
+        {choosable && <Segmented className={styles.stylePicker} label="Chart style" size="touch" variant="outline" options={CHART_STYLES} value={style} onChange={setStyle} />}
         <ChartFilters view={view} style={style} />
       </div>
     </div>
     <ChartLastTrade />
     <CompactChartBody view={view} style={style} />
-    {/* One slot, as tall as its Try again button, holds the delayed notice or the update line, so neither moves the page. */}
-    <div className={`${styles.note} ${styles.status} ${styles.alertSlot}`} role="status">
-      {(geometry ? compactSourceAlert(view) : null) ?? (geometry || !live ? view.updates : null)}
-    </div>
+    <CompactStatus view={view} />
+  </div>;
+}
+
+/** One slot, as tall as its Try again button, holds the delayed notice or the update line, so neither moves the page. */
+function CompactStatus({ view }: Readonly<{ view: ChartViewControls }>) {
+  const { geometry, updates } = view;
+  const live = view.controls.range === "live";
+  return <div className={`${styles.note} ${styles.status} ${styles.alertSlot}`} role="status">
+    {(geometry ? compactSourceAlert(view) : null) ?? (geometry || !live ? updates : null)}
   </div>;
 }
 
