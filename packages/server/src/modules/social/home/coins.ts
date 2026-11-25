@@ -6,7 +6,6 @@ import { compareEventCursors } from "@blast/core/modules/launchpad-contract/curs
 import { assertChainReadThroughViews } from "@blast/core/modules/database/modules.ts";
 import type { ReadableDatabase } from "@blast/core/modules/database/transaction.ts";
 import { coinLabel } from "@blast/core/modules/social/contracts/financial-wire.ts";
-import { tradingRelevance } from "@blast/core/modules/social/discovery/relevance.ts";
 import type { PresaleTermsReader } from "@blast/core/modules/presale/terms/index.ts";
 import { blastV1Coin } from "@blast/core/modules/social/portfolio/core-coins.ts";
 import { namedWalletsSql } from "@blast/core/modules/social/read-model/naming.ts";
@@ -53,7 +52,7 @@ import {
 } from "@blast/server/modules/social/home/aggregate.ts";
 import { readDexVolumes } from "@blast/server/modules/social/home/dex-volume.ts";
 import { fdvOf, outstandingSaleTokensSql, presaleTotalSupply, readSupplies, supplyOf } from "@blast/server/modules/social/home/fdv.ts";
-import { decodeHomeCursor, pageOf, passesFilters, rankInputs, rankOf, relevanceScore, type Rankable, type TradeCoverage } from "@blast/server/modules/social/home/rank.ts";
+import { decodeHomeCursor, pageOf, passesFilters, rankInputs, relevanceScore, whyShown, type Rankable, type TradeCoverage } from "@blast/server/modules/social/home/rank.ts";
 import {
   GROUPED_GROUP,
   GROUPED_SELECT,
@@ -375,6 +374,8 @@ async function readMobileMarket(db: ReadableDatabase, trading: readonly FactsRow
 export type CoinInputs = Readonly<{
   facts: FactsRow;
   activity: HomeActivity;
+  /** The Relevant score the read ranked it by (`rank.ts`). */
+  score: number;
   nowMs: number;
   supply: string | null;
   totalSupply: string | null;
@@ -474,7 +475,7 @@ export function coinOf(input: CoinInputs): HomeCoin {
     activity,
     discussion: { posts: input.posts },
     top_holders: input.top_holders,
-    rank: rankOf(activity, tradeCoverageOf(facts)),
+    rank: { score: input.score, why: whyShown(activity, tradeCoverageOf(facts)) },
   };
 }
 
@@ -483,15 +484,16 @@ type Candidate = Rankable & Readonly<{ facts: FactsRow; counts: WindowCountsRow 
 function candidateOf(facts: FactsRow, counts: WindowCountsRow | undefined, span: HomeSpan): Candidate {
   const latestMs = counts?.latest_ms === null || counts?.latest_ms === undefined ? null : Number(counts.latest_ms);
   const inputs = rankInputs({ participants: Number(counts?.participants ?? 0), events: Number(counts?.events ?? 0), latest_ms: latestMs, window: span.window, to_ms: span.toMs, volume_usd: counts?.volume_usd ?? null });
+  const holders = facts.holders === null ? null : Number(facts.holders);
   return {
     facts,
     counts,
     coinType: facts.coin_type,
-    score: relevanceScore(inputs),
+    score: relevanceScore({ inputs, latestMs, holders }, span.window, span.toMs),
     inputs,
     latestMs,
     launchedMs: facts.launched_ms === null ? null : Number(facts.launched_ms),
-    holders: facts.holders === null ? null : Number(facts.holders),
+    holders,
   };
 }
 
@@ -606,7 +608,7 @@ export async function assembleCoins(
       : presaleTotalSupply(candidate.facts.total_supply, terms);
     const supply = candidate.facts.supply ?? totalSupply ?? terms?.supply.total ?? null;
     const indexed = coinOf({
-      facts: candidate.facts, activity, nowMs: context.nowMs, supply, totalSupply, posts: posts.get(id) ?? 0, spark: sparks.get(id) ?? [],
+      facts: candidate.facts, activity, score: candidate.score, nowMs: context.nowMs, supply, totalSupply, posts: posts.get(id) ?? 0, spark: sparks.get(id) ?? [],
       top_holders: topHoldersOf(holders.get(candidate.facts.coin_type) ?? [], supply, people.identities),
       mobileMarket: mobileMarket?.get(id),
       includeLiveInputs: context.includeLiveInputs,
@@ -663,11 +665,8 @@ export async function readHomeDiscover(db: ReadableDatabase, query: HomeQuery, c
   const cursor = query.cursor === null ? null : decodeHomeCursor(query.cursor, query.sort);
   const [bounds, asOf] = await Promise.all([readHomeBounds(db, context.nowMs), readAsOf(db)]);
   if (!asOf) throw new SocialRouteError("service_unavailable");
-  const windowSpan = homeSpan(query.window, bounds);
-  const now = context.nowMs;
-  const floor = now - HOME_WINDOW_MS["1h"];
-  const span = query.traction ? { ...windowSpan, fromMs: floor, toMs: Math.max(floor, windowSpan.toMs) } : windowSpan;
-  const kinds = visibleKinds(context.hiddenKinds).filter(kind => !query.traction || kind === "trade_buy" || kind === "trade_sell");
+  const span = homeSpan(query.window, bounds);
+  const kinds = visibleKinds(context.hiddenKinds);
   const scope: SaleScope = { kind: "discover" };
   const actors: ActorScope = { kind: "everyone" };
   const [facts, sides] = await Promise.all([
@@ -683,27 +682,20 @@ export async function readHomeDiscover(db: ReadableDatabase, query: HomeQuery, c
       tradable: tradesInApp(candidate.facts.venue) && (candidate.facts.venue.toLowerCase() !== "aftermath" || candidate.facts.pool_id !== null),
       nowMs: bounds.clockMs,
     }));
-  // Volume-based sorts need the same aggregate as the cell for all eligible candidates.
-  const dexVolumes = context.includeDexVolume && (query.traction || query.sort === "trending" || query.sort === "held")
-    ? await readDexVolumes(db, candidates.map(({ facts }) => facts), span.window, bounds, kinds, query.traction ? floor : undefined)
+  // Volume-based sorts (Relevant weighs volume too) need the same aggregate as the cell for all eligible candidates.
+  const dexVolumes = context.includeDexVolume && query.sort !== "newest"
+    ? await readDexVolumes(db, candidates.map(({ facts }) => facts), span.window, bounds, kinds)
     : undefined;
-  const rankedCandidates = candidates.flatMap(candidate => {
+  const rankedCandidates = candidates.map(candidate => {
     const volume = dexVolumes?.get(candidate.coinType);
-    if (query.traction) {
-      const score = tradingRelevance({
-        volumeUsd: Number(volume?.usd) || candidate.inputs.volume,
-        traders: candidate.inputs.breadth,
-        lastTradeMs: candidate.latestMs,
-        now,
-      });
-      return score > 0 ? [{ ...candidate, score: Math.round(score * 1_000) }] : [];
-    }
-    return [volume ? { ...candidate, inputs: { ...candidate.inputs, volume: Number(volume.usd ?? 0) } } : candidate];
+    if (!volume) return candidate;
+    const inputs = { ...candidate.inputs, volume: Number(volume.usd ?? 0) };
+    return { ...candidate, inputs, score: relevanceScore({ ...candidate, inputs }, span.window, span.toMs) };
   });
   const { page, nextCursor, pageNumber, pages, total, ranked } = pageOf(rankedCandidates, query.sort, cursor, query.limit, query.page);
   const coins = await assembleCoins(db, { candidates: page, sides, span, bounds, kinds, actors, scope: "pool", context, dexVolumes });
   const recentBuys = context.includeRecentBuys ? recentPageBuys(sides, coins) : [];
-  return { coins, page: pageNumber, pages: query.traction ? 1 : pages, total, ...(query.ranked ? { ranked } : {}), next_cursor: query.traction ? null : nextCursor, window: query.window, clock_ms: bounds.clockMs, as_of: asOf,
+  return { coins, page: pageNumber, pages, total, ...(query.ranked ? { ranked } : {}), next_cursor: nextCursor, window: query.window, clock_ms: bounds.clockMs, as_of: asOf,
     ...(recentBuys.length > 0 && { recent_buys: recentBuys }) };
 }
 

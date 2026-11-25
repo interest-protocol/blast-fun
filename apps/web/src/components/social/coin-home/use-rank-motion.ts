@@ -7,10 +7,19 @@ import { useLayoutEffect, useRef } from "react";
 
 type RowPosition = Readonly<{ id: string; top: number }>;
 
-/** Animate only incoming rank changes, in layout coordinates so scrolling never looks like a rank change. */
-export function useRankMotion(view: string) {
+function reordered(before: readonly RowPosition[], after: readonly RowPosition[]): boolean {
+  return before.length !== after.length || after.some((row, index) => row.id !== before[index]?.id);
+}
+
+/**
+ * Animate rank changes, in layout coordinates so scrolling never looks like a rank change.
+ * Rows slide when the same list re-ranks (`view` changes within one `group`, such as a new sort);
+ * a new `group` (another source or page) starts without motion. While `holding` (the previous
+ * view's rows shown during a load), a Back/Forward restore stays motionless until the new rows land.
+ */
+export function useRankMotion(view: string, { group = view, holding = false }: Readonly<{ group?: string; holding?: boolean }> = {}) {
   const root = useRef<HTMLOListElement>(null);
-  const previous = useRef<{ view: string; rows: RowPosition[] } | null>(null);
+  const previous = useRef<{ view: string; group: string; rows: RowPosition[] } | null>(null);
   const restoring = useRef(false);
   const animations = useRef(new Map<HTMLElement, Animation>());
 
@@ -21,17 +30,17 @@ export function useRankMotion(view: string) {
     // Read all layout before writing animations. offsetTop excludes the running transform.
     const positions = rows.map(row => ({ id: row.dataset.listRow ?? "", top: row.offsetTop }));
     const before = previous.current;
-    previous.current = { view, rows: positions };
-    const changed = before && (before.rows.length !== positions.length || positions.some((row, index) => row.id !== before.rows[index]?.id));
+    // Held rows still belong to the old view and group: the landing is judged against them.
+    previous.current = holding && before ? { ...before, rows: positions } : { view, group, rows: positions };
     const reduce = instantFeedback();
     const restored = restoring.current;
-    restoring.current = false;
-    if (!before || before.view !== view || reduce || restored) {
+    if (!holding) restoring.current = false;
+    if (!before || before.group !== group || reduce || restored) {
       animations.current.forEach(animation => animation.cancel());
       animations.current.clear();
       return;
     }
-    if (!changed) return;
+    if (!reordered(before.rows, positions)) return;
     const oldPositions = new Map(before.rows.map(row => [row.id, row.top]));
     const moves = rows.map((row, index) => {
       const oldTop = oldPositions.get(positions[index]!.id);
@@ -45,7 +54,7 @@ export function useRankMotion(view: string) {
       if (typeof row.animate !== "function" || delta === 0) continue;
       const animation = row.animate(
         delta === null ? [{ opacity: 0 }, { opacity: 1 }] : [{ transform: `translateY(${delta}px)` }, { transform: "translateY(0)" }],
-        { duration: 180, easing: delta === null ? EASE_OUT : EASE_IN_OUT },
+        { duration: before.view === view ? 180 : 240, easing: delta === null ? EASE_OUT : EASE_IN_OUT },
       );
       animations.current.set(row, animation);
       animation.onfinish = () => animations.current.delete(row);
