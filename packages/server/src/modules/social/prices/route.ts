@@ -21,6 +21,48 @@ import type { SocialRouteKit } from "@blast/server/modules/social/route-kit/rout
 import { readPriceHistories, readPriceKeys } from "@blast/server/modules/social/prices/history.ts";
 import { parseTradeCandlesQuery, readTradeCandles } from "./trade-candles.ts";
 import { COIN_TYPE, SUI_OBJECT_ID_PATTERN } from "@blast/core/lib/sui/ids.ts";
+import { databaseErrorCause } from "@blast/core/modules/database/retry.ts";
+
+/**
+ * How long a pool-swap candle read that hit the statement timeout (57014)
+ * answers every caller with that same failure. One busy graduated pool's
+ * candles can outlast the replica's budget; without the hold, each open chart
+ * retries the same doomed read and starves the replica's other reads.
+ */
+export const POOL_SWAP_TIMEOUT_HOLD_MS = 30_000;
+const POOL_SWAP_TIMEOUT_KEYS = 1_000;
+
+const isStatementTimeout = (error: unknown) =>
+  (databaseErrorCause(error) as { code?: unknown } | null)?.code === "57014";
+
+/**
+ * Per process: runs `read` for `key` unless that key timed out within the
+ * hold, in which case it throws the held error without touching the database.
+ */
+function statementTimeoutHold(now: () => number) {
+  const timedOut = new Map<string, { until: number; error: unknown }>();
+  // Expired keys go first; at the cap the oldest key makes room.
+  const hold = (key: string, error: unknown) => {
+    const failedAt = now();
+    for (const [stale, entry] of timedOut) if (entry.until <= failedAt) timedOut.delete(stale);
+    if (!timedOut.has(key) && timedOut.size >= POOL_SWAP_TIMEOUT_KEYS) timedOut.delete(timedOut.keys().next().value!);
+    timedOut.set(key, { until: failedAt + POOL_SWAP_TIMEOUT_HOLD_MS, error });
+    recordMetric("social.prices.timeout_hold", { outcome: "started" });
+  };
+  return async <T>(key: string, read: () => Promise<T>): Promise<T> => {
+    const held = timedOut.get(key);
+    if (held && held.until > now()) {
+      recordMetric("social.prices.timeout_hold", { outcome: "held" });
+      throw held.error;
+    }
+    try {
+      return await read();
+    } catch (error) {
+      if (isStatementTimeout(error)) hold(key, error);
+      throw error;
+    }
+  };
+}
 
 export type PricesRequest = Readonly<{
   presales: readonly string[];
@@ -82,6 +124,7 @@ export function createSocialPricesRoute(dependencies: SocialPricesRouteDependenc
   const { kit, database } = dependencies;
   const now = dependencies.now ?? Date.now;
   const publicRead = dependencies.publicRead ?? ((_key, load) => load());
+  const timeoutHold = statementTimeoutHold(now);
   return Object.freeze({
     GET: kit.route({ name: SOCIAL_PRICES_ROUTE, auth: "none", bucket: "social_read_prices", cache: "public" }, async (context) => {
       const started = performance.now();
@@ -90,8 +133,11 @@ export function createSocialPricesRoute(dependencies: SocialPricesRouteDependenc
         const { at, ...request } = parseTradeCandlesQuery(url);
         const live = at !== undefined;
         // Callers with different checkpoint floors can share the same recent aggregate.
-        const answer = await publicRead(JSON.stringify({ format: "ohlcv", ...request, ...(live ? { live } : {}) }),
-          () => readTradeCandles(database(), request, now()), live ? 1_000 : 10_000);
+        const key = JSON.stringify({ format: "ohlcv", ...request, ...(live ? { live } : {}) });
+        // Live and settled reads of one range run the same query, so they share one hold.
+        const holdKey = JSON.stringify({ format: "ohlcv", ...request });
+        const read = () => publicRead(key, () => readTradeCandles(database(), request, now()), live ? 1_000 : 10_000);
+        const answer = request.source === "pool_swaps" ? await timeoutHold(holdKey, read) : await read();
         if (at !== undefined && answer.as_of.checkpoint < at) throw new SocialRouteError("service_unavailable");
         return context.json(answer);
       }

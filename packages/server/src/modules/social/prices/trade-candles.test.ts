@@ -366,3 +366,81 @@ test("existing chart clients retain balance candles until they opt into pool swa
   for (const suffix of ["&source=other", "&source=pool_swaps"])
     assert.throws(() => parseTradeCandlesQuery(url(suffix)));
 });
+
+test("a pool-swap candle statement timeout answers 503 from memory for 30 seconds", async () => {
+  const { createSocialRouteKit } = await import(
+    "@blast/server/modules/social/route-kit/route.ts"
+  );
+  const { createSocialPricesRoute, POOL_SWAP_TIMEOUT_HOLD_MS } = await import(
+    "@blast/server/modules/social/prices/route.ts"
+  );
+  const kit = createSocialRouteKit({
+    tradingVisible: () => true,
+    expectedOrigin: "https://blast.test",
+    verifyAccessToken: async () => {
+      throw new Error("public read must not authenticate");
+    },
+    accounts: {
+      resolve: async () => {
+        throw new Error("no account lookup");
+      },
+      resolveWallet: async () => null,
+    },
+    primary: () => {
+      throw new Error("no primary access");
+    },
+    limiter: {
+      consume: async (bucket) => ({
+        allowed: true,
+        bucket,
+        policyVersion: 1,
+        retryAfterSeconds: 0,
+      }),
+    },
+  });
+  let clock = now;
+  let failure: string | null = "57014";
+  let reads = 0;
+  const route = createSocialPricesRoute({
+    kit,
+    database: () => ({
+      read: async (sql, values) => {
+        reads += 1;
+        if (failure && sql === TRADE_CANDLES_SQL)
+          throw new Error("query failed", {
+            cause: Object.assign(new Error("canceling statement"), { code: failure }),
+          });
+        return database().read(sql, values);
+      },
+    }),
+    now: () => clock,
+  });
+  const get = (query = `&presale=${presale}&window=7d&interval=1m`) =>
+    route.GET(new Request(url(query)), testClient());
+
+  const first = await get();
+  assert.equal(first.status, 503);
+  const readsAfterFirst = reads;
+  const held = await get();
+  assert.equal(held.status, 503);
+  assert.match(held.headers.get("cache-control")!, /no-store/);
+  assert.equal(reads, readsAfterFirst, "a held key never reaches the database");
+  assert.equal((await get(`&presale=${presale}&window=7d&interval=1m&at=100`)).status, 503, "the live read of a held range is held too");
+  assert.equal(reads, readsAfterFirst);
+
+  failure = null;
+  assert.equal((await get("&window=24h&interval=1m")).status, 200, "other keys still read");
+  clock += POOL_SWAP_TIMEOUT_HOLD_MS - 1;
+  assert.equal((await get()).status, 503, "still held just before 30 s");
+  clock += 1;
+  assert.equal((await get()).status, 200, "reads again after 30 s");
+
+  failure = "57P01";
+  clock += 1;
+  const other = "&window=1h&interval=1m";
+  assert.equal((await get(other)).status, 503);
+  const readsAfterOther = reads;
+  failure = null;
+  assert.equal((await get(other)).status, 200, "only statement timeouts are held");
+  assert.ok(reads > readsAfterOther);
+});
