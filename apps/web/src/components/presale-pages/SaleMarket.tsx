@@ -23,7 +23,6 @@ import { readableUsd, subscriptZeros } from "#web/lib/market-format.ts";
 import { PUBLIC_STALE_MS } from "#web/lib/query/client.ts";
 import { queryKeys } from "#web/lib/query/keys.ts";
 import { useAppQueryClient } from "#web/lib/query/provider.tsx";
-import { MIGRATOR_POOL_KEY } from "@blast/core/modules/launchpad-contract/venues.ts";
 import type { HomeCoinMarket } from "@blast/core/web/contracts/coin-market.ts";
 import {
   HOME_MAX_HOLDERS,
@@ -41,7 +40,6 @@ import type { PriceWindow } from "@blast/core/web/contracts/prices.ts";
 import { SalePriceChart, type MarketExtras } from "./SalePriceChart";
 import { formatMove, presaleHolderShare, priceDirection, type PriceMove } from "./sale-market-format";
 import { PresalePoolChart, usePresalePoolPrice } from "./PresalePoolChart";
-import { PoolChart } from "#web/components/social/coins/PoolChart.tsx";
 import { PresaleHolderSummary } from "./PresaleHolderSummary";
 import { ChartCard, CoinPriceFigure, MarketOverview, MarketPriceRow, useLastPrice } from "#web/components/social/bonding/CoinPageParts.tsx";
 import coinStyles from "#web/components/social/bonding/bonding-coin.module.css";
@@ -435,7 +433,7 @@ export function SaleMarket({
         <CoinPriceCurrencyProvider quoteType={market.quote.type} quoteSymbol={market.quote.symbol}>
           <div className={coinStyles.market} data-sale-market="">
             <PresaleMarketPrice market={market} move={extras.move} />
-            <ChartCard><SalePoolChart sale={sale} market={market} pool={market.pool} /></ChartCard>
+            <ChartCard><PresalePoolChart sale={sale} market={market} pool={market.pool} /></ChartCard>
           </div>
           {extras.note}
         </CoinPriceCurrencyProvider>
@@ -444,38 +442,6 @@ export function SaleMarket({
       {children}
     </SaleMarketView>
   );
-}
-
-const POOL_CHART_CONTROLS = { range: "24h", interval: "5m" } as const;
-
-/**
- * A graduated sale's pool on the chart and market feed every coin uses. Only swaps of the verified pool are
- * candles: contributions, claims and refunds stay in the sale's own record. A pool the market read does not
- * know when the page loads keeps the sale's earlier swap chart until reload.
- */
-function SalePoolChart({ sale, market, pool }: Readonly<{
-  sale: SocialPresaleDetail["presale"];
-  market: HomeCoinMarket;
-  pool: NonNullable<HomeCoinMarket["pool"]>;
-}>) {
-  const poolKey = `${pool.venue}:${pool.id}`;
-  // The headline's rule, so the chart never shows a price the headline hides, or the reverse.
-  const price = usePresalePoolPrice(pool);
-  const earlier = <PresalePoolChart sale={sale} market={market} pool={pool} />;
-  // The shared feed keys pools by the venues it indexes: a pool on any other venue has only the earlier chart.
-  if (!MIGRATOR_POOL_KEY.test(poolKey)) return earlier;
-  return <PoolChart
-    key={pool.id}
-    poolKey={poolKey}
-    coinType={sale.sale_token}
-    symbol={sale.symbol}
-    decimals={market.decimals}
-    quote={market.quote}
-    initialControls={POOL_CHART_CONTROLS}
-    live
-    price={price}
-    uncovered={earlier}
-  />;
 }
 
 function PresaleMarketPrice({ market, move }: Readonly<{ market: HomeCoinMarket; move?: PriceMove | null }>) {
