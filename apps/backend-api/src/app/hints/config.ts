@@ -44,8 +44,15 @@ export function hintsConfig(environment: Environment = process.env) {
   if (marketEnabled && !marketExpected) {
     throw new Error("Market streams require an explicit expected deployment.");
   }
+  const liveHost = environment.BLAST_LIVE_SOCKET_HOST?.trim() || null;
+  if (liveHost && (!marketEnabled || !/^(?=.{1,253}$)[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(liveHost))) {
+    throw new Error(
+      "BLAST_LIVE_SOCKET_HOST must be a lowercase hostname, with market streams enabled.",
+    );
+  }
   return {
     ...transport,
+    liveHost,
     fleet,
     marketEnabled,
     marketExpected,
