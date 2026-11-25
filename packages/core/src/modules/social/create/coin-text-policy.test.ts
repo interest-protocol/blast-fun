@@ -13,9 +13,11 @@ test("the highlight hides slurs and coins about the founder, and keeps ordinary 
 
 test("the highlight hides sexual coins, spelled out or glued, and keeps words that only contain the letters", () => {
   const hidden = ["PornCoin", "P0RN", "p o r n", "s e x", "S3X", "Sexy Cat", "Big Tits", "Nudes", "Hentai Inu", "NSFW",
-    "OnlyFans", "Pussy Cat", "FuckCoin", "Milf", "Dicks", "Hoes", "Horny Pepe", "Jerk Off", "XXX"];
+    "OnlyFans", "Pussy Cat", "FuckCoin", "Milf", "Dicks", "Hoes", "Horny Pepe", "Jerk Off", "XXX", "SexCoin", "DickButt",
+    "Blow Job", "Only Fan", "Orgies", "pu55y", "5ex", "Asshole"];
   for (const name of hidden) assert.equal(isHighlightable({ name, symbol: "COIN" }), false, name);
   const shown = ["Essex", "Grape", "Peacock", "Cucumber", "Analysis", "Titan", "Dickens", "Torpedo", "Cockpit", "Shoe",
-    "Class", "Assets", "Sextant", "Tamil Finance", "Prince Stark", "Top Ornament"];
+    "Class", "Assets", "Sextant", "Tamil Finance", "Tamil-Finance", "Prince-Stark", "Top-Ornament", "Milford", "Dik Dik",
+    "Jerk Official", "Bass Coin", "Agent 47"];
   for (const name of shown) assert.equal(isHighlightable({ name, symbol: "COIN" }), true, name);
 });
