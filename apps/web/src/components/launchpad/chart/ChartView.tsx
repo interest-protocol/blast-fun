@@ -566,7 +566,10 @@ function CompactChart({ view }: Readonly<{ view: ChartViewControls }>) {
     </div>
     <ChartLastTrade />
     <CompactChartBody view={view} style={style} />
-    <p className={`${styles.note} ${styles.status}`} role="status">{geometry || !live ? view.updates : null}</p>
+    {/* One slot, as tall as its Try again button, holds the delayed notice or the update line, so neither moves the page. */}
+    <div className={`${styles.note} ${styles.status} ${styles.alertSlot}`} role="status">
+      {(geometry ? compactSourceAlert(view) : null) ?? (geometry || !live ? view.updates : null)}
+    </div>
   </div>;
 }
 
@@ -615,15 +618,19 @@ function compactOpeningPrice({ migration, hasPriceUnits, source, controls, shown
   return source.opening?.price ?? null;
 }
 
+/** The first source whose history is delayed or failed, with its Try again; null when every source is current. */
+function compactSourceAlert(view: ReturnType<typeof useChartViewControls>) {
+  const alert = view.sources.find(({ section }) => section?.state === "unavailable" || section?.state === "stale");
+  if (!alert) return null;
+  return <>
+    {alert.section?.state === "stale" ? `${view.label(alert.name)} price updates delayed.` : `${view.label(alert.name)} price history couldn’t load.`}{" "}
+    <Button size="sm" variant="ghost" disabled={view.pending} onClick={view.onRefresh}>Try again</Button>
+    {view.diagnostic && <DiagnosticCode message={view.diagnostic} generic={PRICE_HISTORY_UNAVAILABLE} />}
+  </>;
+}
+
 function CompactSourceNotices({ view }: Readonly<{ view: ReturnType<typeof useChartViewControls> }>) {
   return <>{view.sources.map(({ name, section }) => {
-    if (section?.state === "unavailable" || section?.state === "stale") return (
-      <div key={name} className={styles.note} role="status">
-        {section.state === "stale" ? `${view.label(name)} price updates delayed.` : `${view.label(name)} price history couldn’t load.`}{" "}
-        <Button size="sm" variant="ghost" disabled={view.pending} onClick={view.onRefresh}>Try again</Button>
-        {view.diagnostic && <DiagnosticCode message={view.diagnostic} generic={PRICE_HISTORY_UNAVAILABLE} />}
-      </div>
-    );
     if (!hasData(section)) return null;
     const note = limitedNote(section.data, view.request, view.controls.range);
     return note ? <p className={styles.note} key={name}>{view.label(name)}: {note}</p> : null;

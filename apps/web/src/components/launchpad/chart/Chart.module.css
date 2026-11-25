@@ -183,6 +183,15 @@
   min-height: 20px;
 }
 
+/* Fits the small Try again button, so the slot keeps one height with or without it. */
+.alertSlot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: .25rem;
+  min-height: 2rem;
+}
+
 .source {
   display: grid;
   gap: 8px;
