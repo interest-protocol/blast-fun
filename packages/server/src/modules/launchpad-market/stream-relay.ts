@@ -579,7 +579,7 @@ export class MarketStreamRelay {
     clearTimeout(topic.deadline);
     Object.assign(topic, { deadline: undefined, resuming: false, resumeChanged: false });
     // Nothing happened to the pool while upstream was away: browsers keep their fence and ring.
-    return changed;
+    return changed === true;
   }
 
   #deliver(pool: string, topic: Topic, frame: Frame, cursor: string): void {
