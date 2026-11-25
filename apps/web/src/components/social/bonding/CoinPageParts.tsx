@@ -148,9 +148,8 @@ export function ChartCard({ children }: Readonly<{ children: ReactNode }>) {
 type ActivityTab = "trades" | "holders" | "posts";
 const ACTIVITY_TABS = [["trades", "Trades"], ["holders", "Holders"], ["posts", "Posts"]] as const;
 
-/** `lazy` mounts each tab when first shown; `lazyHolders` defers only Holders (the live screen keeps trades streaming). */
-export function CoinTradingActivity({ trades, holders, posts, lazy = false, lazyHolders = false }: Readonly<{
-  trades: ReactNode; holders: ReactNode; posts?: ReactNode; lazy?: boolean; lazyHolders?: boolean;
+export function CoinTradingActivity({ trades, holders, posts, lazy = false }: Readonly<{
+  trades: ReactNode; holders: ReactNode; posts?: ReactNode; lazy?: boolean;
 }>) {
   const phone = usePhoneLayout();
   const [tab, setTab] = useState<ActivityTab>("trades");
@@ -160,7 +159,7 @@ export function CoinTradingActivity({ trades, holders, posts, lazy = false, lazy
   return <section className={styles.card} aria-label="Trading activity">
     <Segmented label="Trading activity" options={tabs} value={tab} onChange={setTab} stretch={phone} tabs tabId={(key) => `${id}-${key}`} panelId={(key) => `${id}-${key}-panel`} />
     {tabs.map(([key]) => <div className={styles.activityPanel} key={key} hidden={tab !== key} id={`${id}-${key}-panel`} role="tabpanel" aria-labelledby={`${id}-${key}`}>
-      {(tab === key || !(lazy || (lazyHolders && key === "holders"))) && <SectionBoundary subject={key}>{panels[key]}</SectionBoundary>}
+      {(!lazy || tab === key) && <SectionBoundary subject={key}>{panels[key]}</SectionBoundary>}
     </div>)}
   </section>;
 }

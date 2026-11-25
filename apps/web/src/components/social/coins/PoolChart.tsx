@@ -12,7 +12,6 @@ import { afterChartSourceRead, chartKey, chartRequest, initialChart, type ChartC
 import { useCoinChartControls } from "#web/components/launchpad/chart/chart-preferences.ts";
 import { ChartView, PRICE_HISTORY_UNAVAILABLE } from "#web/components/launchpad/chart/ChartView.tsx";
 import { useCoinPriceCurrency } from "#web/components/launchpad/chart/CoinPriceCurrency.tsx";
-import { useLiveScreen } from "#web/components/launchpad/coin/LiveScreen.tsx";
 import { PublicError, publicErrorMessage } from "#web/lib/errors.ts";
 import { useAppQueryClient } from "#web/lib/query/provider.tsx";
 
@@ -49,7 +48,6 @@ export function PoolChart({ poolKey, coinType, symbol, decimals, quote = SUI_POO
 }>) {
   const { controls, ready, commit } = useCoinChartControls(true, initialControls, false);
   const currency = useCoinPriceCurrency();
-  const liveScreen = useLiveScreen();
   const key = chartKey(controls);
   const stream = useRef<ChartStream | null>(null);
   const recoveryCheckpoint = useRef<number | null>(null);
@@ -88,7 +86,7 @@ export function PoolChart({ poolKey, coinType, symbol, decimals, quote = SUI_POO
       pools: [poolKey], ...(coinType ? { coin: coinType } : {}), expected: null, migration: () => null,
       request: () => chartTailRequest(controls, Date.now()),
       load: (_, checkpoint) => load(checkpoint),
-      pollMs: () => pollMs(), livePolls: !liveScreen, retryReadErrors: false,
+      pollMs: () => pollMs(), retryReadErrors: false,
       onStatus: (next) => { if (live && stream.current === client) setStatus(next); },
       onSection: (_, section) => setState((previous) =>
         afterChartSourceRead(previous.key === key ? previous : initialChart(key, true), key, "venue", section, null)),
@@ -99,7 +97,7 @@ export function PoolChart({ poolKey, coinType, symbol, decimals, quote = SUI_POO
       if (stream.current === client) stream.current = null;
       client.stop();
     };
-  }, [poolKey, coinType, controls, key, ready, live, unknown, liveScreen]);
+  }, [poolKey, coinType, controls, key, ready, live, unknown]);
 
   if (unknown) return uncovered;
   return <ChartView

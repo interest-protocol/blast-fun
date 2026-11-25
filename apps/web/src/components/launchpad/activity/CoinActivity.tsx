@@ -17,7 +17,6 @@ import type { PageOutcome } from "./activity-model";
 import { usePublishWalletTrades } from "./wallet-trades";
 import { createTradeTape } from "./trade-tape";
 import { ActivityView, type ActivityUnits, type TransactionExplorer } from "./ActivityView";
-import { useLiveScreen } from "../coin/LiveScreen";
 
 const NO_ROWS: readonly ActivityRow[] = [];
 const skipSubscription = () => () => {};
@@ -102,7 +101,6 @@ function CoinActivityFeed({ source, compact, initialActivity, start }: CoinActiv
   const pools = start === null ? [...new Set(source.livePools ?? [])].filter((pool) => POOL_KEY.test(pool)).slice(0, 2) : [];
   const poolsKey = pools.join(",");
   const [stream, setStream] = useState({ key: "", live: false });
-  const liveScreen = useLiveScreen();
   const live = stream.key === poolsKey && stream.live;
   useEffect(() => {
     const hub = poolsKey ? tabMarketStream() : null;
@@ -124,7 +122,6 @@ function CoinActivityFeed({ source, compact, initialActivity, start }: CoinActiv
   }, [feed, launchId, network, deployment, poolsKey]);
   useMarketPoll({
     live,
-    stopWhileLive: liveScreen,
     onInitialRefresh: () => void feed.initialize(),
     onRefresh: (at) => void feed.refresh(false, at),
   });

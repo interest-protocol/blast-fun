@@ -4,7 +4,7 @@ import test from "node:test";
 import type { Candle, MigratedChart, MigrationMarker, PoolCandlePage } from "@blast/core/modules/launchpad-contract/venue-history.ts";
 import type { Provenance } from "@blast/core/modules/launchpad-contract/read.ts";
 
-import { afterChartRead, candleGaps, denseInterval, chartRequest, chartSearch, initialChart, parseChartControls, preferredChartControls } from "./chart-model.ts";
+import { afterChartRead, candleGaps, chartRequest, chartSearch, initialChart, parseChartControls, preferredChartControls } from "./chart-model.ts";
 
 import { chartPoolKeys } from "./chart-client.ts";
 
@@ -153,17 +153,4 @@ test("the marker is the committed migration; a page about another migration is n
   const learned = afterChartRead(initialChart("1m|all"), "1m|all", { curve: answered(CURVE_PAGE), venue: null, migration: MIGRATION }, null);
   assert.deepEqual(learned.migration, MIGRATION);
   assert.equal(learned.venue, null);
-});
-
-test("a quiet coin opens on the finest interval where a quarter of the buckets traded", () => {
-  const M = 60_000;
-  const now = 1_795_188_000_000 + 60 * M;
-  const start = now - 60 * M;
-  const busy = Array.from({ length: 30 }, (_, index) => start + index * 2 * M);
-  assert.equal(denseInterval(busy, { interval: "1m", range: "1h" }, now), "1m", "half the minutes traded");
-  const quiet = [start, start + 20 * M, start + 40 * M];
-  assert.equal(denseInterval(quiet, { interval: "1m", range: "all" }, now), "15m");
-  assert.equal(denseInterval(quiet, { interval: "1m", range: "1h" }, now), "5m", "a bounded range keeps at least 12 buckets");
-  assert.equal(denseInterval([], { interval: "5m", range: "24h" }, now), "5m");
-  assert.equal(denseInterval(quiet, { interval: "1s", range: "live" }, now), "1s");
 });

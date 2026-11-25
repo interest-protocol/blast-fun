@@ -10,7 +10,6 @@ import { BondingCoinScreen, LegacyCoinScreen } from "#web/components/social/bond
 import { PoolChart } from "#web/components/social/coins/PoolChart.tsx";
 import { allChartInterval, CHART_CONTROLS_COOKIE, LIVE_CHART_INTERVALS, DEFAULT_CHART_CONTROLS, parseChartControls, parseLiveChartControls, preferredChartControls } from "#web/components/launchpad/chart/chart-model.ts";
 import { CoinLive } from "#web/components/launchpad/coin/CoinLive.tsx";
-import { LiveScreen } from "#web/components/launchpad/coin/LiveScreen.tsx";
 import { coinIdentity, pageLifecycle, venueRoute } from "#web/components/launchpad/coin/coin-view.ts";
 import { coinChartOptions, coinTerminalSlots, type CoinActionSlots } from "#web/components/launchpad/coin/CoinSlots.tsx";
 import { readActivityPage } from "#web/components/launchpad/activity/activity-client.ts";
@@ -33,9 +32,6 @@ import type { CoinPageTransfer } from "@blast/core/modules/launchpad-coin/transf
 import { indexedPoolCoin } from "@blast/core/modules/social/portfolio/core-coins.ts";
 
 type Params = Promise<{ coinKey: string }>;
-
-/** `refreshIntervalMs` for a page whose sections all read cleanly. */
-const HEALTHY_REFRESH_MS = 30_000;
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 /**
@@ -119,17 +115,17 @@ async function renderGenericCoin(coin: Readonly<{ coinType: string; name: string
   }
 
   const { coinType, name, symbol, decimals, logoUrl, poolKey, poolKeys, quote, major } = poolCoin;
-  const [{ trading, liveScreen }, search] = await Promise.all([requestLaunchFlags(), searchParams]);
+  const [{ trading }, search] = await Promise.all([requestLaunchFlags(), searchParams]);
   const controls = parseChartControls(search ?? {}, { ...DEFAULT_CHART_CONTROLS, range: "24h" });
   return (
-    <LiveScreen enabled={liveScreen}><LegacyCoinScreen
+    <LegacyCoinScreen
       coinType={coinType} name={name} symbol={symbol} logoUrl={logoUrl} decimals={decimals} poolKey={poolKey} poolKeys={poolKeys} quote={quote} major={major}
       chart={<PoolChart poolKey={poolKey} symbol={symbol} decimals={decimals} quote={quote} initialControls={controls} />}
       trade={trading ? <GraduatedCoinTrade coinType={coinType} name={name} symbol={symbol} decimals={decimals} iconUrl={logoUrl} /> : null}
       legacy={poolCoin.category === "Legacy"}
       verified={poolCoin.category === "Legacy" && poolCoin.verifiedTeam}
       verifiedCommunity={"verifiedCommunity" in poolCoin && poolCoin.verifiedCommunity}
-    /></LiveScreen>
+    />
   );
 }
 
@@ -187,13 +183,10 @@ async function renderLaunchCoin(
     chartControls: typeof chart === "string" ? requestedControls : chart.initialControls, initialChart, initialActivity, activity: { explorer, anchor }, theses: THESES, quoteLabel: "", compact: true,
   });
   const execution = <CoinTradeExecution key={launchId} page={page} availability={tradeAvailability} connection={connection}>{slots.execution}</CoinTradeExecution>;
-  const refreshMs = refreshIntervalMs(page);
-  // The live screen loads once and listens; its timer rests while the stream listens on a healthy read.
-  const healthy = refreshMs === HEALTHY_REFRESH_MS && page.confirmed && browserMarket !== null;
   return (
-    <LiveScreen enabled={flags.liveScreen}>
-      <BondingCoinScreen page={page} details={details ?? null} verified={verifiedTeam === true} slots={{ ...slots, execution }} expected={browserMarket?.expected ?? null} />
-      <CoinLive launchId={launchId} coinType={identity.coinType} tradable={page.tradable} refreshMs={refreshMs} restWhileListening={flags.liveScreen && healthy} />
-    </LiveScreen>
+    <>
+      <BondingCoinScreen page={page} details={details ?? null} verified={verifiedTeam === true} slots={{ ...slots, execution }} />
+      <CoinLive launchId={launchId} coinType={identity.coinType} tradable={page.tradable} refreshMs={refreshIntervalMs(page)} />
+    </>
   );
 }
