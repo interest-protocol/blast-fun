@@ -58,3 +58,24 @@ test("with no pins, the highlight skips a coin about the founder and shows the n
   assert.equal(rows.length, 1);
   assert.notEqual(rows[0]!.launchId, closest.launchId);
 });
+
+test("with no pins and every candidate hidden, the highlight answers empty", async () => {
+  const engine = discoveryFixtureEngine({ state: () => "serving" });
+  const hidden: typeof engine = {
+    ...engine,
+    fetch: async (input) => {
+      const response = await engine.fetch(input);
+      if (new URL(String(input)).pathname !== "/v1/bonding") return response;
+      const body = await response.json();
+      for (const pool of body.pools) pool.metadata = { name: "Po-rn", symbol: "PORN", description: "", icon_url: "" };
+      return Response.json(body);
+    },
+  };
+  const response = await handleDiscoveryRequest(featured(), hidden, async () => []);
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.featured, false);
+  assert.equal(body.section.state, "empty");
+  assert.ok(body.section.provenance);
+  assert.deepEqual(body.metrics, {});
+});

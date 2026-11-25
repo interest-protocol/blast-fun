@@ -74,9 +74,25 @@ const HIGHLIGHT_HIDDEN_FRAGMENTS = [
 /** Whether the auto-picked Home and Bonding highlight may show this coin: no slur, no founder name, nothing sexual. */
 export function isHighlightable(coin: Readonly<{ name: string | null; symbol: string | null }>): boolean {
   return [coin.name, coin.symbol].every((field) => {
-    const value = normalizeCoinText(field ?? "").replaceAll("5", "s").replaceAll("7", "t");
-    // Dropping separators glues real words ("Tamil-Finance"), so that pass skips the inside-a-word check.
-    return !isHiddenFromHighlight(value, true) && !isHiddenFromHighlight(value.replace(/[.*_·-]/gu, ""), false);
+    const value = normalizeCoinText(field ?? "").replaceAll("0", "o").replaceAll("5", "s").replaceAll("7", "t");
+    // Dropping separators glues real words ("Tamil-Finance"), so that pass skips the inside-a-word check;
+    // a fragment split by a separator ("Po-rn") is caught by `hasSplitFragment` instead.
+    return !isHiddenFromHighlight(value, true) && !isHiddenFromHighlight(value.replace(/[.*_·-]/gu, ""), false)
+      && !(value.match(/[\p{L}\p{N}]+(?:[.*_·-]+[\p{L}\p{N}]+)+/gu) ?? []).some(hasSplitFragment);
+  });
+}
+
+/**
+ * A fragment that crosses a separator and starts or ends where a part does ("Po-rn", "Fu.ck", "Po-rnCoin").
+ * One that starts and ends inside parts joins two real words ("Top-Ornament", "Prince-Stark"), so it is kept.
+ */
+function hasSplitFragment(joinedWord: string): boolean {
+  const parts = joinedWord.split(/[.*_·-]+/u);
+  return parts.some((part, index) => {
+    const fromPart = parts.slice(index).join("");
+    const throughPart = parts.slice(0, index + 1).join("");
+    return HIGHLIGHT_HIDDEN_FRAGMENTS.some((fragment) => fragment.length > part.length
+      && (fromPart.startsWith(fragment) || throughPart.endsWith(fragment)));
   });
 }
 
@@ -108,7 +124,6 @@ function hasBlockedWord(text: string): boolean {
 function normalizeCoinText(text: string): string {
   return text.normalize("NFKD").toLowerCase()
     .replace(/[\p{M}\p{Cf}]/gu, "")
-    .replaceAll("0", "o")
     .replaceAll("1", "i")
     .replaceAll("3", "e")
     .replaceAll("4", "a");

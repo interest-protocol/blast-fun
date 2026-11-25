@@ -192,15 +192,15 @@ async function composeFeatured(
   const body = await closestToGraduation(request, dependencies);
   const section = body.section;
   if (section.state !== "available" && section.state !== "stale") return { ...body, featured: false };
-  // Slurs and coins about the founder are never highlighted; the next closest curve is.
-  const rows = section.data.rows.filter(isHighlightable).slice(0, 1);
-  const shown = rows[0];
-  const shownMetrics = shown && body.metrics?.[shown.launchId];
+  // Slurs, coins about the founder and sexual coins are never highlighted; the next closest curve is.
+  const shown = section.data.rows.find(isHighlightable);
+  if (!shown) return { ...body, metrics: {}, featured: false, section: { state: "empty", provenance: section.provenance } };
+  const shownMetrics = body.metrics?.[shown.launchId];
   return {
     ...body,
-    metrics: shown && shownMetrics ? { [shown.launchId]: shownMetrics } : {},
-    ...(await verifiedTeamOf(rows, readVerified)),
+    metrics: shownMetrics ? { [shown.launchId]: shownMetrics } : {},
+    ...(await verifiedTeamOf([shown], readVerified)),
     featured: false,
-    section: { ...section, data: { rows, nextCursor: null } },
+    section: { ...section, data: { rows: [shown], nextCursor: null } },
   };
 }

@@ -21,3 +21,12 @@ test("the highlight hides sexual coins, spelled out or glued, and keeps words th
     "Jerk Official", "Bass Coin", "Agent 47"];
   for (const name of shown) assert.equal(isHighlightable({ name, symbol: "COIN" }), true, name);
 });
+
+test("the highlight hides a sexual word split by a separator, and keeps real words a separator joins", () => {
+  const hidden = ["Po-rn", "Fu-ck", "Fu.ck", "Hen-tai", "Pus_sy", "Po-rnCoin", "SuperFu-ck", "P0-rn"];
+  for (const name of hidden) assert.equal(isHighlightable({ name, symbol: "COIN" }), false, name);
+  const shown = ["Tamil-Finance", "Prince-Stark", "Top-Ornament", "Essex", "Sussex", "Scunthorpe", "Cockburn", "Hancock",
+    "Assassin", "Arsenal", "Therapist", "Analog", "Canal", "Titanic", "Cumulus", "Grapes", "Rapeseed", "Uranus",
+    "Princeton", "Sexton", "U S A", "Windows 7", "Area 51"];
+  for (const name of shown) assert.equal(isHighlightable({ name, symbol: "COIN" }), true, name);
+});
