@@ -158,7 +158,7 @@ test("the Status cell says where a coin is in one line: its curve, its sale, its
   assert.deepEqual(homeStatus({ ...base, presale_id: "0xsale", launch_id: null }, NOW), { text: "Listed 3d ago" });
   assert.deepEqual(homeStatus({ ...base, launch_id: null, venue: "cetus" }, NOW), { text: "", venue: "cetus" });
   const sale = { ...base, presale_id: "0xsale", launch_id: null, lifecycle: "open", sale: { start_ms: NOW - DAY, end_ms: NOW + 3 * 3_600_000, raise_target: "100", raised: "42", participants: 3 } } satisfies HomeCoin;
-  assert.deepEqual(homeStatus(sale, NOW), { text: "Live · ends in 3h", fill: 42 });
+  assert.deepEqual(homeStatus(sale, NOW), { text: "Live · ends in 3h", fill: 42, label: "Live · ends in 3h · 42% filled" });
   assert.deepEqual(homeStatus({ ...sale, sale: { ...sale.sale, end_ms: NOW } }, NOW), { text: "Ended", fill: 42 }, "time is up, the chain has not settled it yet");
   const upcoming = (over: Partial<NonNullable<HomeCoin["sale"]>>, lifecycle = "pending") => homeStatus({ ...sale, lifecycle, sale: { ...sale.sale, raised: "0", ...over } }, NOW);
   assert.deepEqual(upcoming({ start_ms: NOW + 39 * 60_000 + 5_000 }), { text: "Opens in 39m" });

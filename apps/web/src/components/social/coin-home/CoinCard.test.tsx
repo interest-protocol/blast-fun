@@ -240,7 +240,9 @@ test("the Status cell names where each coin is in its life", () => {
     const dom = render(value, false, nowMs);
     try {
       const cell = dom.window.document.querySelector(".status");
-      return [cell?.textContent, cell?.querySelector("progress")?.getAttribute("value") ?? null];
+      // The line as seen; a spoken label, when the line drops the bar's figure, follows it.
+      const spoken = cell?.querySelector(".sr-only")?.textContent;
+      return [cell?.textContent?.replace(spoken ?? "\u0000", ""), cell?.querySelector("progress")?.getAttribute("value") ?? null, ...(spoken ? [spoken] : [])];
     } finally { dom.window.close(); }
   };
   const curve = (lifecycle: NonNullable<HomeCoin["curve"]>["lifecycle"], progress_bps: number | null) => ({
@@ -261,7 +263,7 @@ test("the Status cell names where each coin is in its life", () => {
     sale: { start_ms: start, end_ms: start + 3 * day, raise_target: "1000000000000", raised: "0", participants: 0 },
   };
   assert.deepEqual(status(sale, start - 39 * 60_000), ["Opens in 39m", null]);
-  assert.deepEqual(status(sale, start), ["Live · ends in 3d", "0"]);
+  assert.deepEqual(status(sale, start), ["Live · ends in 3d", "0", "Live · ends in 3d · 0% filled"]);
   const before = render(sale, false, start);
   try {
     assert.equal(before.window.document.querySelector("a")?.getAttribute("href"), "/presale/0xsale");

@@ -203,7 +203,7 @@ function StatusCell({ status }: Readonly<{ status: HomeStatus }>) {
   return <span className={styles.status} role="cell">
     {status.venue ? <DexIdentity venue={status.venue} /> : <>
       {status.fill === undefined ? null : <progress aria-hidden="true" className={styles.fill} max={100} value={status.fill} />}
-      <span className={styles.statusText}>{status.text}</span>
+      {status.label ? <><span aria-hidden="true" className={styles.statusText}>{status.text}</span><span className="sr-only">{status.label}</span></> : <span className={styles.statusText}>{status.text}</span>}
     </>}
   </span>;
 }

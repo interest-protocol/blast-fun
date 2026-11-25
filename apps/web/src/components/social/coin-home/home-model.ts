@@ -497,8 +497,9 @@ export function homeCoinKey(coin: Pick<HomeCoin, "presale_id" | "coin_type">): s
  * The row's Status cell (plan decision 7), one short line: where the coin is
  * in its life. A filling curve or an open sale also gives its fill (0–100)
  * for the row's one bar; a coin on a DEX with no Blast history names its venue.
+ * `label` is what a screen reader hears when the line leaves out the bar's figure.
  */
-export type HomeStatus = Readonly<{ text: string; fill?: number; venue?: string }>;
+export type HomeStatus = Readonly<{ text: string; fill?: number; venue?: string; label?: string }>;
 
 export function homeStatus(coin: HomeCoin, nowMs: number): HomeStatus {
   if (coin.curve) return curveStatus(coin, coin.curve, nowMs);
@@ -542,7 +543,11 @@ function saleStatus(coin: HomeCoin, sale: NonNullable<HomeCoin["sale"]>, nowMs: 
     const saved = sale.savers ? ` · ${sale.savers.toLocaleString("en-US")} saved` : "";
     return { text: `${sale.start_ms > nowMs ? `Opens in ${coarseUntil(sale.start_ms, nowMs)}` : "Upcoming"}${saved}` };
   }
-  if (lifecycle === "open") return { text: sale.end_ms > nowMs ? `Live · ends in ${coarseUntil(sale.end_ms, nowMs)}` : "Ended", fill };
+  if (lifecycle === "open") {
+    if (sale.end_ms <= nowMs) return { text: "Ended", fill };
+    const text = `Live · ends in ${coarseUntil(sale.end_ms, nowMs)}`;
+    return { text, fill, label: `${text} · ${fill}% filled` };
+  }
   if (lifecycle === "funded") return { text: "Funded", fill: 100 };
   if (lifecycle === "cancelled") return { text: "Cancelled" };
   return { text: lifecycle.charAt(0).toUpperCase() + lifecycle.slice(1) };

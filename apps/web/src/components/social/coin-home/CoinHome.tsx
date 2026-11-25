@@ -10,6 +10,7 @@ import type { SocialPresaleSummary } from "@blast/core/web/contracts/presales.ts
 import type { BondingHeroSeed } from "#web/lib/backend-api/bonding.ts";
 
 import { blastModeCovering, onUncover } from "../blast-mode/live/mode-cover";
+import { happeningStore } from "../happening/happening-store";
 import { EmptyState } from "#web/components/blast-ui/EmptyState.tsx";
 import { usePhoneLayout } from "#web/components/blast-ui/use-shell-prefs.ts";
 import { PageHeader } from "#web/components/blast-ui/PageHeader.tsx";
@@ -37,6 +38,7 @@ import { HomeBondingCurves } from "./HomeBondingCurves";
 import { TradersSection } from "./TradersSection";
 import { setHomeSections, useHomeSections } from "./use-home-sections";
 
+const noop = () => undefined;
 
 /** Relative times move on every 30 s (as the feed's), never while Blast mode covers the page. */
 function useClock(initialMs: number): number {
@@ -143,6 +145,8 @@ export function CoinHome({ initial, initialState, pinned, traders, posts = null,
   const id = useId();
   const viewer = useSocialViewer();
   const late = useListsLate();
+  // Home keeps the happening reads running, so the funded-presale notice and the portfolio refresh still hear a sale close.
+  useEffect(() => happeningStore().subscribe(noop), []);
   const listValue = useMemo(() => ({ rows, sections: prefs }), [rows, prefs]);
   const listRoot = useListRestoration(`home:${viewer.callsign ?? "public"}`, listValue, saved => {
     setRestoredRows(saved.rows);
