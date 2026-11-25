@@ -89,9 +89,11 @@ export type CoinReads = Readonly<{
     asset: CoinAsset,
     signal: AbortSignal,
   ) => Promise<HomeTopHolders | null>;
+  /** `minTradeUsd`: leave trades proven under this many dollars out of the page (its totals still count them). */
   activity: (
     asset: CoinAsset,
     signal: AbortSignal,
+    minTradeUsd: number | null,
   ) => Promise<HomeThreadPage | null>;
 }>;
 
@@ -240,9 +242,9 @@ export function createCoinReads(
           ?.top_holders ?? null
       );
     },
-    async activity(asset, signal) {
+    async activity(asset, signal, minTradeUsd) {
       if (asset.network !== "mainnet" || !asset.presale_id) return null;
-      const page = await fetchHomeThread(asset.presale_id, "24h", null, signal, { exactTradeUsd: true });
+      const page = await fetchHomeThread(asset.presale_id, "24h", null, signal, { exactTradeUsd: true, minTradeUsd: minTradeUsd ?? undefined });
       return page.presale_id === asset.presale_id ? page : null;
     },
   };

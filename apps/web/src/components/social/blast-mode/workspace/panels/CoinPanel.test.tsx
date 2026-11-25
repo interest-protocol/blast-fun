@@ -1480,6 +1480,77 @@ test("the redesigned panel names the venue, keeps exact figures inspectable, and
   }
 });
 
+test("with trades under $1 hidden, a burst of dust cannot empty Trades: the read leaves dust out, and turning the filter off reads every trade once", async () => {
+  const dom = new JSDOM('<div data-blast-ui><div id="mount"></div></div>', { url: "https://blast.test" });
+  Object.assign(globalThis, { window: dom.window, document: dom.window.document, HTMLElement: dom.window.HTMLElement, Element: dom.window.Element, self: dom.window, IS_REACT_ACT_ENVIRONMENT: true });
+  const store = createWorkspaceStore();
+  store.add({ panel_id: "A", ...asset, presale_id: "0xsale" });
+  const sui = { quote_type: "0x2::sui::SUI", quote_symbol: "SUI", quote_decimals: 9 };
+  const trade = (id: string, usd: string, at: number) => {
+    const actor = { type: "address" as const, address: `0x${id.padStart(64, "0")}`, short: `0x${id}` };
+    const event = { activity_id: id, entry_id: `a:${id}`, kind: "trade_buy" as const, occurred_at_ms: at, digest: null, refund: null, has_why: false, tokens: "1000000000", quote: { ...sui, atoms: "1000000", usd, usd_complete: true } };
+    return { key: `w:${actor.address}`, actor, followers: null, buys: null, sells: null, commits: null, claims: null, latest_ms: at, latest_kind: event.kind, events_total: 1, events: [event] };
+  };
+  // A bot's 20 dust wallets trade after the one real buy: unfloored, they fill the whole page.
+  const dust = Array.from({ length: 20 }, (_, n) => trade(`d${n + 10}`, "0.01", 1790337600000 + n));
+  const real = trade("1234", "250.00", 1790337500000);
+  let realInWindow = true;
+  const floors: (number | null)[] = [];
+  let answerAll: (() => void) | null = null;
+  const reads: CoinPanelProps["reads"] = {
+    coin: async () => ({ coin_type: asset.coin_type, symbol: "KSTL", name: "Kestrel", decimals: 9, price_usd: null, presale_id: "0xsale", lifecycle: "migrated" }),
+    chart: async () => null,
+    holders: async () => null,
+    activity: async (_asset, _signal, minTradeUsd) => {
+      floors.push(minTradeUsd);
+      if (minTradeUsd === null) await new Promise<void>((resolve) => (answerAll = resolve));
+      const all = [...dust, ...(realInWindow ? [real] : [])];
+      return {
+        presale_id: "0xsale", coin_type: null, next_cursor: null, window: "24h", clock_ms: 1790337660000,
+        as_of: { checkpoint: 1, timestamp_ms: 1790337600000, lag_ms: 0 },
+        participants: minTradeUsd === 1 ? all.filter((row) => !dust.includes(row)) : all.slice(0, 20),
+        // The totals are never floored: they still count the dust.
+        totals: { scope: "pool", window: "24h", from_ms: 0, to_ms: 1790337660000, participants: all.length, events: all.length, buyers: all.length, sellers: 0, backers: 0, claimers: 0, bought: [], sold: [], committed: [], latest_ms: 1790337600019 },
+      } as unknown as Awaited<ReturnType<CoinPanelProps["reads"]["activity"]>>;
+    },
+  };
+  function Subject() {
+    const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
+    const current = snapshot.panels.A!;
+    return <CoinPanel panel_id="A" asset={current} coin_setup={current.coin} onSetupChange={(coin) => store.patchPanel("A", { coin })} effective_visibility actions={{ trade: null, authenticated: false, actor_key: "guest", confirmation: { status: "ready", enabled: false }, signIn() {} }} reads={reads} />;
+  }
+  let root = createRoot(document.getElementById("mount")!);
+  const tab = (name: string) => [...document.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find((button) => button.textContent === name)!;
+  const rows = () => [...document.querySelectorAll('[role="tabpanel"] li')];
+  const filter = () => document.querySelector<HTMLButtonElement>('[role="tabpanel"] button[role="switch"]');
+  try {
+    await act(async () => root.render(<Subject />));
+    await act(async () => tab("Trades").click());
+    assert.deepEqual(rows().map((row) => row.textContent?.includes("$250")), [true], "the real buy stays on the list");
+    assert.ok(floors.length > 0 && floors.every((floor) => floor === 1), "with the filter on every read leaves dust out");
+
+    const before = floors.length;
+    await act(async () => filter()!.click());
+    assert.deepEqual(floors.slice(before), [null], "turning the filter off reads every trade, once");
+    assert.equal(rows().length, 1, "the shown list stays until that read answers");
+    await act(async () => answerAll!());
+    assert.equal(rows().length, 12, "the dust shows");
+
+    // A window of only dust still offers the switch: there are trades, just none over $1.
+    realInWindow = false;
+    await act(async () => root.unmount());
+    root = createRoot(document.getElementById("mount")!);
+    await act(async () => root.render(<Subject />));
+    assert.equal(rows().length, 0);
+    assert.match(document.querySelector('[role="tabpanel"]')!.textContent!, /No trades match this filter/);
+    assert.doesNotMatch(document.querySelector('[role="tabpanel"]')!.textContent!, /No recorded trades/);
+    assert.ok(filter());
+  } finally {
+    await act(async () => root.unmount());
+    dom.window.close();
+  }
+});
+
 test("missing holder counts retain a retry and count-change time does not imply a fresh observation", async () => {
   const dom = new JSDOM('<div data-blast-ui><div id="mount"></div></div>', { url: "https://blast.test", pretendToBeVisual: true });
   Object.assign(globalThis, { window: dom.window, document: dom.window.document, HTMLElement: dom.window.HTMLElement, Element: dom.window.Element, IS_REACT_ACT_ENVIRONMENT: true });

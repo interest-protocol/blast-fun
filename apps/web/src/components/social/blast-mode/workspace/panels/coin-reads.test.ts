@@ -67,7 +67,7 @@ test("production resolution falls back to loaded identity without an old price a
     assert.equal(await reads.coin(other, signal), null);
     await assert.rejects(reads.chart(other, "24h", signal), WorkspaceDataUnavailable);
     assert.equal(await reads.holders(other, signal), null);
-    assert.equal(await reads.activity(other, signal), null);
+    assert.equal(await reads.activity(other, signal, null), null);
   } finally {
     globalThis.fetch = original;
   }
@@ -166,12 +166,37 @@ test("production search requires canonical type matching and a bounded Discover 
     assert.equal((await reads.coin(asset, signal))?.coin_type, asset.coin_type);
     assert.equal(requests.length, 3);
     assert.equal(await reads.holders(asset, signal), null);
-    assert.equal(await reads.activity(asset, signal), null);
+    assert.equal(await reads.activity(asset, signal, null), null);
     assert.equal(
       requests.length,
       3,
       "standalone holders/activity never invent a sale binding",
     );
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test("a sale's trades read asks the server to leave trades under the floor out, and reads every trade without one", async () => {
+  const sale = { ...asset, presale_id: `0x${"5".repeat(64)}` };
+  const requests: URL[] = [];
+  const original = globalThis.fetch;
+  globalThis.fetch = async (input) => {
+    requests.push(new URL(String(input), "https://blast.test"));
+    return Response.json({
+      presale_id: sale.presale_id, coin_type: null, participants: [], next_cursor: null, window: "24h", clock_ms: 2000,
+      as_of: asOf,
+      totals: { scope: "pool", window: "24h", from_ms: 0, to_ms: 1000, participants: 0, events: 0, buyers: 0, sellers: 0, backers: 0, claimers: 0, bought: [], sold: [], committed: [], latest_ms: null },
+    });
+  };
+  try {
+    const reads = createCoinReads();
+    const signal = new AbortController().signal;
+    assert.equal((await reads.activity(sale, signal, 1))?.presale_id, sale.presale_id);
+    assert.equal(requests[0]!.searchParams.get("min_trade_usd"), "1");
+    assert.equal(requests[0]!.searchParams.get("exact_trade_usd"), "1");
+    await reads.activity(sale, signal, null);
+    assert.equal(requests[1]!.searchParams.has("min_trade_usd"), false, "with the filter off every trade is read");
   } finally {
     globalThis.fetch = original;
   }

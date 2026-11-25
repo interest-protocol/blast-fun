@@ -326,6 +326,34 @@ test("before the list's first answer a frame read waits a whole floor, and a row
   assert.deepEqual(reads, [51]);
 });
 
+test("under the small-trade filter a burst of dust frames takes no row and asks no read; a real trade still shows, and turning the filter off reads the dust once", () => {
+  const { hub, listener } = fakeHub();
+  const clock = fakeClock();
+  const added: string[] = [];
+  const reads: (number | null | undefined)[] = [];
+  const feed: LiveActivityFeed = {
+    // Past the cap every added row would ask for a read.
+    addLive: (row) => (added.push(row.position), added.length > LIVE_ROWS_MAX),
+    readThrough: () => READ_THROUGH,
+    refresh: async (_manual, at) => (reads.push(at), true),
+  };
+  const dust = (row: ActivityRow) => Number(row.volumeUsd ?? "1") < 1;
+  const follow = followLiveTrades({ hub, launchId: LAUNCH, pools: [CURVE_POOL_KEY], expected: null, feed, hides: dust, onState: () => {}, schedule: clock.schedule, now: clock.now, random: () => 0 });
+  for (let index = 1; index <= LIVE_ROWS_MAX * 2; index++) listener().trade!(frame(CURVE_POOL_KEY, READ_THROUGH + index, { volumeUsd: "0.01" }));
+  assert.deepEqual(added, [], "dust takes no row");
+  assert.equal(clock.timers.length, 0, "dust asks for no read");
+  listener().trade!(frame(CURVE_POOL_KEY, READ_THROUGH + 100, { volumeUsd: "25.00" }));
+  assert.deepEqual(added, [`${READ_THROUGH + 100}:2:0:0`], "a real trade still shows at once");
+  assert.equal(clock.timers.length, 0);
+
+  follow.showHidden();
+  follow.showHidden();
+  assert.equal(clock.timers.length, 1, "turning the filter off asks for one read");
+  clock.fire();
+  assert.deepEqual(reads, [READ_THROUGH + LIVE_ROWS_MAX * 2], "through the newest dust trade");
+  follow();
+});
+
 test("provisional rows stay bounded: one page at most, none on a link's list, and a newer page offered beside loaded pages answers for them", async () => {
   const fixture = parseClassifiedActivityPage(LAUNCH, classifiedActivityBody("migrated", {}, NOW));
   let newest = page(fixture.activity, READ_THROUGH, fixture.nextCursor);

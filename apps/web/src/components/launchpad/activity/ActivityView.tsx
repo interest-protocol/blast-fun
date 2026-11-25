@@ -9,7 +9,7 @@ import { traderProfileKey, type TraderProfile } from "@blast/core/modules/social
 import { ActivityAmount, CompactTradeList, CompactTradeRow, Transaction, useTradeInspector, useTradeVisibility, type TradeExplorer, type TradeRowState, type TransactionExplorer } from "./CompactTradeList";
 import { WalletAddress } from "./WalletAddress";
 import { recentTrades } from "./recent-trades";
-import { dustQuoteUsd, isTradeUnderDollar } from "./small-trades";
+import { dustQuoteUsd, isTradeUnderDollar, type SmallTradeFilter } from "./small-trades";
 import { useTraderProfiles } from "./trader-profiles";
 import { Button } from "#web/components/blast-ui/Button.tsx";
 import { Disclosure } from "#web/components/blast-ui/Disclosure.tsx";
@@ -75,6 +75,8 @@ export type ActivityViewProps = Readonly<{
   onMoreActivity: () => void;
   onShowNewerActivity: () => void;
   onWindow: (window: WindowName) => void;
+  /** The "Hide trades under $1" switch, when the feed behind the list acts on it; else the list keeps its own. */
+  smallTradeFilter?: SmallTradeFilter;
 }>;
 
 // --- Amounts ---------------------------------------------------------------------------------------
@@ -434,7 +436,7 @@ function CompactTrades({ props }: Readonly<{ props: ActivityViewProps }>) {
     {props.activity.newer ? <Newer subject="trades" onShow={props.onShowNewerActivity} /> : null}
     <TradeList key={props.launchId} rows={rows} availableRows={display.view.rows.filter(isActivityTrade)}
       units={props.units} explorer={props.explorer} profileSource={profileSource} next={display.view.next}
-      entering={tape?.recent.entering} leaving={tape?.recent.leaving} slide={tape?.recent.slide} hold={tape?.hold} />
+      entering={tape?.recent.entering} leaving={tape?.recent.leaving} slide={tape?.recent.slide} hold={tape?.hold} filter={props.smallTradeFilter} />
     <Disclosure title="Launch activity"><ActivityView {...props} compact={false} /></Disclosure>
   </>;
 }
@@ -448,20 +450,21 @@ type TradeListProps = Readonly<{
 
 const NO_CONFIRMED_ACTIVITY = initialList<ActivityRow>();
 
-export const TradeList = memo(function TradeList({ rows, availableRows, units, explorer, profileSource, next, entering, leaving, slide, hold }: TradeListProps & Readonly<{
+export const TradeList = memo(function TradeList({ rows, availableRows, units, explorer, profileSource, next, entering, leaving, slide, hold, filter }: TradeListProps & Readonly<{
   rows: readonly ActivityRow[];
   availableRows?: readonly ActivityRow[];
   entering?: string | null;
   leaving?: ActivityRow | null;
   slide?: boolean;
   hold?: (hold: boolean) => void;
+  filter?: SmallTradeFilter;
 }>) {
   const currency = useCoinPriceCurrency();
   const quoteUsd = dustQuoteUsd(units.quoteType, currency, units.quoteUsd);
-  const filter = useState(true);
+  const ownFilter = useState(true);
   const visibility = useTradeVisibility(rows, availableRows,
     (row) => isTradeUnderDollar({ usd: row.volumeUsd, quote: row.amounts.quote, decimals: units.quoteDecimals, quoteUsd }),
-    filter,
+    filter ?? ownFilter,
   );
   const profiles = useTraderProfiles(profileSource?.launchId ?? "", profileSource?.activity ?? NO_CONFIRMED_ACTIVITY, profileSource !== undefined, visibility.rows, leaving);
   if (!rows.length) return <EmptyState title={next ? "No trades in this page of activity" : "No trades in the loaded activity"} />;

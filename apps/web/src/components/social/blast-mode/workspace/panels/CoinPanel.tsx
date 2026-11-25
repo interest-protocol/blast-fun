@@ -31,7 +31,8 @@ import { ago, NO_VALUE } from "@blast/core/web/format.ts";
 import { SOCIAL_FEED_DELAYED_LAG_MS } from "@blast/core/web/contracts/feed.ts";
 import { InspectValue } from "#web/components/blast-ui/InspectValue.tsx";
 import { SmallTradeSwitch } from "#web/components/launchpad/activity/SmallTradeSwitch.tsx";
-import { isHomeTradeUnderDollar } from "#web/components/launchpad/activity/small-trades.ts";
+import { isHomeTradeUnderDollar, type SmallTradeFilter } from "#web/components/launchpad/activity/small-trades.ts";
+import { SMALL_TRADE_USD } from "@blast/core/web/contracts/coin-market.ts";
 import { SkeletonText } from "#web/components/blast-ui/Skeleton.tsx";
 import { useShellPrefs } from "#web/components/blast-ui/use-shell-prefs.ts";
 import { KindGlyph, QuoteMark } from "#web/components/social/coin-home/glyphs.tsx";
@@ -299,15 +300,28 @@ function useCoinViews({ visible, focus, tab, key, reads, asset, setup, onSetupCh
     undefined,
     pollMs,
   );
+  // With "Hide trades under $1" on, the server leaves dust out, so a burst of it cannot crowd the real trades off.
+  const [hideSmallTrades, setHideSmallTrades] = useState(true);
+  const minTradeUsd = hideSmallTrades ? SMALL_TRADE_USD : null;
   const loadActivity = useCallback(
-    (signal: AbortSignal) => reads.activity(asset, signal),
-    [asset, reads],
+    (signal: AbortSignal) => reads.activity(asset, signal, minTradeUsd),
+    [asset, reads, minTradeUsd],
   );
-  const activity = useCoinRead(
+  // Switching the filter keeps the shown page until the other read answers.
+  const [shownActivity, setShownActivity] = useState<Readonly<{ asset: CoinAsset; page: HomeThreadPage | null }> | null>(null);
+  const activityRead = useCoinRead(
     visible,
-    key,
+    `${key}:${minTradeUsd ?? "all"}`,
     loadActivity,
+    (page) => setShownActivity({ asset, page }),
   );
+  // Only for the same asset: one that just learned its presale still shows its skeleton.
+  const switching = activityRead.status === "pending" && shownActivity?.asset === asset;
+  const activity: ActivityRead = {
+    ...activityRead,
+    ...(switching ? { status: "ready", value: shownActivity.page } : {}),
+    filter: [hideSmallTrades, setHideSmallTrades],
+  };
   const selectedRead = presentationTab === "activity" ? activity : history;
   const navigation = useCoinNavigation({
     visible,
@@ -376,8 +390,10 @@ const noSubscribe = () => () => {};
 const noVersion = () => 0;
 
 type RecentTrade = Readonly<{ participant: HomeParticipant; event: HomeEvent }>;
+/** With its "Hide trades under $1" switch: on, the read leaves those trades out. */
+type ActivityRead = ReadResult<HomeThreadPage | null> & Readonly<{ filter: SmallTradeFilter }>;
 
-function Activity({ page, coin }: Readonly<{ page: HomeThreadPage | null; coin: CoinRecord | null }>) {
+function Activity({ page, coin, filter }: Readonly<{ page: HomeThreadPage | null; coin: CoinRecord | null; filter: SmallTradeFilter }>) {
   const noteId = useId();
   const followingOnly = useContext(FollowingOnlyContext);
   const clearFollowingOnly = useContext(ClearFollowingOnlyContext);
@@ -393,7 +409,9 @@ function Activity({ page, coin }: Readonly<{ page: HomeThreadPage | null; coin: 
   const events = followingOnly ? trades.filter(({ participant }) => participant.actor.type === "account" &&
     store?.following({ kind: "account", callsign: participant.actor.callsign }) === true) : trades;
   const freshness = activityFreshness(page.as_of);
-  const empty = followingOnly && clearFollowingOnly && trades.length > 0
+  // The totals are never floored: trades there but none listed means every one was under the floor.
+  const traded = trades.length > 0 || page.totals.buyers + page.totals.sellers > 0;
+  const empty = followingOnly && clearFollowingOnly && traded
     ? <EmptyState compact role="status" title="No trades by people you follow in this period" action={<Button variant="ghost" size="sm" type="button" onClick={clearFollowingOnly}>Show all trades</Button>} />
     : <PanelEmptyState title={followingOnly ? "No trades by people you follow in this period" : "No recorded trades in this period"} />;
   return (
@@ -406,21 +424,31 @@ function Activity({ page, coin }: Readonly<{ page: HomeThreadPage | null; coin: 
         ].filter(Boolean).join(" ")}
       </ListNote>
       {freshness.warning && <p role="status" className={styles.warning}>{freshness.warning}</p>}
-      <RecentTrades events={events} coin={coin} nowMs={page.clock_ms} noteId={noteId} empty={empty} />
+      <RecentTrades
+        events={events}
+        coin={coin}
+        nowMs={page.clock_ms}
+        noteId={noteId}
+        empty={empty}
+        filter={filter}
+        onlySmall={!followingOnly && trades.length === 0 && traded}
+      />
     </>
   );
 }
 
-function RecentTrades({ events, coin, nowMs, noteId, empty }: Readonly<{
+function RecentTrades({ events, coin, nowMs, noteId, empty, filter: [hideSmallTrades, setHideSmallTrades], onlySmall }: Readonly<{
   events: readonly RecentTrade[];
   coin: CoinRecord | null;
   nowMs: number;
   noteId: string;
   empty: ReactNode;
+  filter: SmallTradeFilter;
+  onlySmall: boolean;
 }>) {
   const [limit, setLimit] = useState(12);
-  const [hideSmallTrades, setHideSmallTrades] = useState(true);
-  if (events.length === 0) return empty;
+  // Filtered, a window of only small trades still shows the switch, so they are one tap away.
+  if (events.length === 0 && !(hideSmallTrades && onlySmall)) return empty;
   const visibleEvents = hideSmallTrades ? events.filter(({ event }) => !isHomeTradeUnderDollar(event.quote)) : events;
   return (
     <>
@@ -837,7 +865,7 @@ function CoinContent({
   coinRead: ReadResult<CoinRecord | null>;
   coin: CoinRecord | null;
   history: ReadResult<CoinHistory | null>;
-  activity: ReadResult<HomeThreadPage | null>;
+  activity: ActivityRead;
   asset: CoinAsset;
   setup: PanelSetup["coin"];
   onSetupChange: CoinPanelProps["onSetupChange"];
@@ -884,7 +912,7 @@ function CoinContent({
           ) : activity.status === "pending" ? (
             <Pending name="activity" />
           ) : (
-            <Activity page={activity.value} coin={coin} />
+            <Activity page={activity.value} coin={coin} filter={activity.filter} />
           )}
         </>
       )}
