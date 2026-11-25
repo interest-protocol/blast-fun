@@ -21,6 +21,7 @@ const LIBRARIES = [
   "@dnd-kit/dom",
   "@dnd-kit/react",
   "clsx",
+  "klinecharts",
   "lightweight-charts",
   "motion",
   "react-virtuoso",

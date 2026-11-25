@@ -17,6 +17,8 @@ import {
 import {
   amountShort,
   amountText,
+  biggestBuy,
+  buyCueOf,
   eventLine,
   eventSentence,
   followersText,
@@ -232,4 +234,27 @@ test("a positive volume under a dollar keeps its cents and never reads $0; a pri
   assert.deepEqual(pnlText("0.30"), { text: "+$0.3", tone: "up" });
   assert.deepEqual(pnlText("-0.05"), { text: "−$0.05", tone: "down" });
   assert.deepEqual(pnlText("0.004"), { text: "$0", tone: "flat" });
+});
+
+// Fails if a live buy reads long, loses its dollars, or a small buy lands as loud as a large one.
+test("a live buy reads in a glance and lands as loud as its size", () => {
+  const buy = (usd?: string, atoms = "13482913000") => ({ coin_key: "a", activity_id: "1:0:0:0", occurred_at_ms: 1, quote_atoms: atoms, quote_symbol: "SUI", quote_decimals: 9, ...(usd !== undefined && { usd }) });
+  assert.deepEqual(buyCueOf(buy("0.42")), { text: "+$0.42", tier: "small" });
+  assert.deepEqual(buyCueOf(buy("5")), { text: "+$5", tier: "small" });
+  assert.deepEqual(buyCueOf(buy("13.482913")), { text: "+$13", tier: "small" });
+  assert.deepEqual(buyCueOf(buy("99.99")), { text: "+$100", tier: "big" });
+  assert.deepEqual(buyCueOf(buy("99.4")), { text: "+$99", tier: "small" });
+  assert.deepEqual(buyCueOf(buy("999.4")), { text: "+$999", tier: "big" });
+  assert.deepEqual(buyCueOf(buy("999.5")), { text: "+$1,000", tier: "huge" });
+  assert.deepEqual(buyCueOf(buy("100")), { text: "+$100", tier: "big" });
+  assert.deepEqual(buyCueOf(buy("1204.5")), { text: "+$1.2K", tier: "huge" });
+  assert.deepEqual(buyCueOf(buy("2310000")), { text: "+$2.31M", tier: "huge" });
+  assert.deepEqual(buyCueOf(buy()), { text: "+13.5 SUI", tier: "small" }, "an unpriced buy keeps the coin it was paid in");
+  assert.deepEqual(buyCueOf(buy(undefined, "4210000")), { text: "+0.00421 SUI", tier: "small" });
+  assert.equal(buyCueOf(buy(undefined, "x")), null);
+
+  const at = (coin_key: string, occurred_at_ms: number, usd?: string) => ({ ...buy(usd), coin_key, occurred_at_ms });
+  assert.equal(biggestBuy([at("new", 9, "2"), at("big", 1, "900"), at("unpriced", 10)])?.coin_key, "big");
+  assert.equal(biggestBuy([at("old", 1, "5"), at("new", 2, "5.0")])?.coin_key, "new");
+  assert.equal(biggestBuy([]), undefined);
 });

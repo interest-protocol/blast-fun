@@ -944,6 +944,8 @@ export const homeCoinsPageSchema = homeCoinsPageContractSchema.required({
     quote_atoms: z.string().regex(/^[1-9][0-9]{0,19}$/),
     quote_symbol: z.string().min(1),
     quote_decimals: z.number().int().min(0).max(255),
+    /** The buy's dollar value when the indexer priced it. */
+    usd: z.string().regex(/^(0|[1-9][0-9]*)(\.[0-9]+)?$/).optional(),
   })).max(50).optional(),
 });
 export const homeCoinsByIdsSchema = homeCoinsPageContractSchema.required({

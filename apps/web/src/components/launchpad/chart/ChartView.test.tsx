@@ -237,10 +237,8 @@ test("compact chart exposes controls and history notices without a chart disclos
   assert.match(text(html), /Cetus pool price history couldn’t load/);
   assert.doesNotMatch(html, /Chart info|chart values/i);
   assert.doesNotMatch(html, /Source details|type="checkbox"/);
-  assert.match(html, /data-tradingview-plot/);
   assert.equal(count(html, /aria-label="Chart range and interval: All · 1m"/g), 1);
   assert.doesNotMatch(html, /<select|>Refresh chart</);
-  assert.equal(count(html, /data-tradingview-plot/g), 1);
   assert.match(text(html), /Candles & volume/);
   assert.doesNotMatch(text(html), /Source Network|Show 4 bonding curve candles/);
 });
