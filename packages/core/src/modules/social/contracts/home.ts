@@ -156,7 +156,8 @@ export function isHomeWindow(value: unknown): value is HomeWindow {
  *
  * - `progress`: live bonding curves by graduation progress
  *   (`HomeCoin.curve.progress_bps`, a percent, so SUI and USDC curves compare
- *   fairly), highest first; every other coin after them by market cap.
+ *   fairly), highest first; every other coin after them by market cap. Only
+ *   `stage=almost` lists curves still filling.
  * - `market_cap`: market cap now, highest first. A curve coin's comes from
  *   its live supply, a sale's from its supply less the tokens still in
  *   vesting, a catalog coin's from the tracked pool's supply. A coin whose
@@ -179,8 +180,10 @@ export function isHomeSort(value: unknown): value is HomeSort {
 }
 
 /**
- * Which coins Discover lists. `all`: every coin. `almost`: live bonding
- * curves at `HOME_ALMOST_GRADUATED_BPS` or more of their graduation target.
+ * Which coins Discover lists. `all`: every coin except bonding curves still
+ * filling, which list only on `almost`. `almost`: live bonding curves at
+ * `HOME_ALMOST_GRADUATED_BPS` or more of their graduation target, and curves
+ * ready to migrate.
  * `graduated`: every coin that trades on a DEX (graduated curves, migrated
  * sales, V1 and catalog coins); a sale or a curve still filling is left out.
  */

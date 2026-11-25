@@ -29,6 +29,7 @@ import {
   type HomeDexVolume,
   type HomeParticipant,
   type HomeQuery,
+  type HomeStage,
   type HomeRecentBuy,
   type HomeWindow,
 } from "@blast/core/modules/social/contracts/home.ts";
@@ -838,19 +839,22 @@ export type HomeDiscoverBase = Readonly<{
   trackedMarkets?: TrackedMarkets;
 }>;
 
+/** Which coins a {@link HomeDiscoverBase} holds: Almost graduated reads its few curves alone (`HOME_ALMOST_CURVE_SOURCES`); every other stage, the whole list. */
+const baseSetOf = (stage: HomeStage) => (stage === "almost" ? "almost" : "all");
+
 /** The key a {@link HomeDiscoverBase} is shared under: only what changes its contents. */
-export function homeDiscoverBaseKey(window: HomeWindow, context: HomeReadContext): string {
-  return JSON.stringify([window, context.hiddenKinds, Boolean(context.includeDexVolume), Boolean(context.includeRecentBuys),
+export function homeDiscoverBaseKey(window: HomeWindow, stage: HomeStage, context: HomeReadContext): string {
+  return JSON.stringify([window, baseSetOf(stage), context.hiddenKinds, Boolean(context.includeDexVolume), Boolean(context.includeRecentBuys),
     // The facts read's prices change with these (`factsSql`).
     Boolean(context.includeLiveInputs), Boolean(context.includeRollingChange)]);
 }
 
-export async function readHomeDiscoverBase(db: ReadableDatabase, window: HomeWindow, context: HomeReadContext): Promise<HomeDiscoverBase> {
+export async function readHomeDiscoverBase(db: ReadableDatabase, window: HomeWindow, stage: HomeStage, context: HomeReadContext): Promise<HomeDiscoverBase> {
   const [bounds, asOf] = await Promise.all([readHomeBounds(db, context.nowMs), readAsOf(db)]);
   if (!asOf) throw new SocialRouteError("service_unavailable");
   const span = homeSpan(window, bounds);
   const kinds = visibleKinds(context.hiddenKinds);
-  const scope: SaleScope = { kind: "discover" };
+  const scope: SaleScope = { kind: "discover", almost: baseSetOf(stage) === "almost" };
   const [facts, sides] = await Promise.all([
     readCoinFacts(db, scope, span, context),
     readSides(db, { span, bounds, kinds, sales: scope, actors: { kind: "everyone" } }, context.includeRecentBuys ? context.nowMs - HOME_RECENT_BUY_MS : undefined),
@@ -879,7 +883,7 @@ export async function readHomeDiscoverBase(db: ReadableDatabase, window: HomeWin
  */
 export async function readHomeDiscover(db: ReadableDatabase, query: HomeQuery, context: HomeReadContext, base?: () => Promise<HomeDiscoverBase>): Promise<HomeCoinsPage> {
   const cursor = query.cursor === null ? null : decodeHomeCursor(query.cursor, query.sort);
-  const { asOf, bounds, span, kinds, sides, candidates, dexVolumes, trackedMarkets } = await (base ? base() : readHomeDiscoverBase(db, query.window, context));
+  const { asOf, bounds, span, kinds, sides, candidates, dexVolumes, trackedMarkets } = await (base ? base() : readHomeDiscoverBase(db, query.window, query.stage, context));
   const eligible = candidates.filter((candidate) => passesFilters(query, {
     participants: candidate.inputs.breadth,
     launchedMs: candidate.launchedMs,

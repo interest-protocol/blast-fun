@@ -616,7 +616,7 @@ TO blast_web, blast_watcher, blast_social, blast_replica;
   ALTER TABLE blast_infra_fixture.native_coin_prices OWNER TO blast_indexer;
   CREATE FUNCTION chain_read_v1.native_coin_price_at(TEXT, BIGINT)
     RETURNS TABLE (usd_price NUMERIC, as_of_ms BIGINT)
-    LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog AS $$
+    LANGUAGE sql STABLE SECURITY DEFINER ROWS 1 SET search_path = pg_catalog AS $$
       SELECT p.usd_price, p.as_of_ms FROM blast_infra_fixture.native_coin_prices p
       WHERE p.coin_type = $1 AND p.cutoff_ms = $2 AND p.as_of_ms <= $2
       ORDER BY p.as_of_ms DESC LIMIT 1

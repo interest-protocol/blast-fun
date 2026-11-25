@@ -6,7 +6,7 @@ import { SHOWN_PRESALES } from "@blast/core/modules/social/read-model/chain-pres
 import { namedWalletsOfSql, namedWalletsSql } from "@blast/core/modules/social/read-model/naming.ts";
 import { SocialRouteError } from "@blast/core/modules/social/route-kit/errors.ts";
 
-import { HOME_LIST_COIN_SOURCES } from "@blast/server/modules/social/home/sources.ts";
+import { HOME_ALMOST_CURVE_SOURCES, HOME_DISCOVER_COIN_SOURCES, HOME_LIST_COIN_SOURCES } from "@blast/server/modules/social/home/sources.ts";
 
 import { HOME_KINDS, HOME_WINDOW_MS, type HomeWindow } from "@blast/core/modules/social/contracts/home.ts";
 
@@ -85,9 +85,13 @@ export function homeSpan(window: HomeWindow, bounds: HomeBounds): HomeSpan {
   return { window, fromMs: bounds.clockMs - HOME_WINDOW_MS[window], toMs: bounds.clockMs };
 }
 
-/** Which markets a read attributes: public Discover, all shown sales, or specific markets. */
+/**
+ * Which markets a read attributes: public Discover (`almost`: only its
+ * Almost graduated curves, `HOME_ALMOST_CURVE_SOURCES`), all shown sales, or
+ * specific markets.
+ */
 export type SaleScope =
-  | Readonly<{ kind: "discover" }>
+  | Readonly<{ kind: "discover"; almost?: boolean }>
   | Readonly<{ kind: "all" }>
   | Readonly<{ kind: "ids"; presaleIds: readonly string[]; includeStandalone?: boolean }>;
 
@@ -106,7 +110,7 @@ export type RowsRequest = Readonly<{
 
 export function scopedHomeCoinsSql(scope: SaleScope, params: Params): string {
   if (scope.kind === "discover") {
-    return `(SELECT p.* FROM ${HOME_LIST_COIN_SOURCES} p
+    return `(SELECT p.* FROM ${scope.almost ? HOME_ALMOST_CURVE_SOURCES : HOME_DISCOVER_COIN_SOURCES} p
       WHERE p.lifecycle = 'migrated' AND p.quote_type IS DISTINCT FROM ${params.add(CREATE_TEST_SUI_QUOTE_TYPE)}::text)`;
   }
   const sales = `(SELECT p.presale_id AS source_id,p.*,FALSE AS tracked_pool_only FROM ${SHOWN_PRESALES} p)`;
@@ -144,6 +148,8 @@ export function rowsWithSql(request: RowsRequest, params: Params): string {
     ? `home_named AS MATERIALIZED (${namedWalletsOfSql("ARRAY(SELECT DISTINCT r.actor FROM home_rows r)")}),`
     : "";
   const source = scopedHomeCoinsSql(sales, params);
+  // A few curves, all without a sale: their own rows through the coin index, not the whole window.
+  const fewCoins = sales.kind === "discover" && sales.almost ? "AND a.coin_type IN (SELECT hs.coin_type FROM home_sales hs)" : "";
   return `WITH home_sales AS (
     SELECT p.source_id, p.presale_id, p.sale_token AS coin_type, p.quote_type, p.quote_symbol, p.quote_decimals, p.sale_decimals
     FROM ${source} p
@@ -157,6 +163,7 @@ export function rowsWithSql(request: RowsRequest, params: Params): string {
     WHERE a.timestamp_ms > ${from}::bigint AND a.timestamp_ms <= ${to}::bigint
       AND a.kind = ANY(${kindList}::text[])
       AND a.checkpoint <= CASE WHEN a.kind IN ('presale_commit', 'presale_claim') THEN ${presaleCp}::bigint ELSE ${marketCp}::bigint END
+      ${fewCoins}
   ),
   home_rows AS (
     SELECT c.source_id AS sale, c.coin_type AS sale_coin, c.quote_type AS sale_quote, c.quote_symbol AS sale_quote_symbol,
