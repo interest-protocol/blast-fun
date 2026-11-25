@@ -35,6 +35,8 @@ function view(props: Partial<SettingsViewProps> = {}): string {
       explorer="suiscan"
       mode="account"
       onCelebrate={noop}
+      buyAlerts
+      onBuyAlerts={noop}
       onCopy={noop}
       onExplorer={noop}
       onLinkWallet={noop}
@@ -70,6 +72,7 @@ test("UI-07 (§7): a signed-in account sees every group, in the Settings board's
     ["People you follow", "true"],
     ["Up since your call", "true"],
     ["Celebrations", "true"],
+    ["Buy alerts from people you follow", "true"],
     ["Confirm Blast mode trades", "false"],
     ["Public portfolio", "false"],
     ["Private account", "false"],
@@ -112,7 +115,7 @@ test("UI-07: loading keeps the groups' shape (aria-busy, placeholders); an error
   const loading = view({ mode: "loading", settings: null });
   assert.match(loading, /^<div aria-busy="true" class="set" data-shell-aside="settings" data-surface="">/);
   assert.deepEqual(headings(loading), ORDER);
-  assert.deepEqual(switches(loading), [["Celebrations", "true"]]);
+  assert.deepEqual(switches(loading), [["Celebrations", "true"], ["Buy alerts from people you follow", "true"]]);
   assert.equal((loading.match(/aria-hidden="true" class="text"/g) ?? []).length, 10);
   assert.match(loading, /skeleton fieldSize/);
   const error = view({ mode: "error", settings: null });
@@ -124,7 +127,7 @@ test("UI-07: loading keeps the groups' shape (aria-busy, placeholders); an error
 test("UI-07: a visitor sees all settings groups while account actions require sign-in", () => {
   const html = view({ mode: "visitor", explorer: "suivision", celebrate: false });
   assert.deepEqual(headings(html), ORDER);
-  assert.equal(switches(html).length, 11);
+  assert.equal(switches(html).length, 12);
   assert.ok(switches(html).some(([name]) => name === "Private account"));
   assert.match(html, /<option value="suiscan">Suiscan<\/option><option value="suivision" selected="">SuiVision<\/option>/);
   assert.match(html, /<b>Sign in<\/b>/);
@@ -216,7 +219,7 @@ test("Hold pays with: the stored coin once the wallet is read, a placeholder whi
 test("failed account settings never invent notification or privacy switch values", () => {
   const html = view({ mode: "error", settings: null });
   const states = switches(html).map(([name]) => name);
-  assert.deepEqual(states, ["Celebrations"]);
+  assert.deepEqual(states, ["Celebrations", "Buy alerts from people you follow"]);
   assert.match(html, /Your privacy preference could not load/);
   assert.match(html, /Your portfolio visibility could not load/);
   assert.ok((html.match(/Unavailable/g) ?? []).length >= 9);

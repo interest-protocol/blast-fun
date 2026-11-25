@@ -34,7 +34,7 @@ export type FreshnessHint = Readonly<{
   presaleId?: string;
   lifecycle?: string;
   coinType?: string;
-  trade?: Readonly<{ presaleId?: string; coinType?: string; checkpoint: number; cursor: string }>;
+  trade?: Readonly<{ presaleId?: string; coinType?: string; checkpoint: number; cursor: string; kind?: "trade_buy" | "trade_sell"; actor?: string }>;
   catchUp?: true;
 }>;
 

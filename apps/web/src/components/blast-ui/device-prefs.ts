@@ -17,6 +17,8 @@ import { DEFAULT_SOCIAL_EXPLORER, isSocialExplorer, type SocialExplorer } from "
  *   /api/social/me/settings`) and copied here whenever it is read or saved,
  *   so every page can build links without a request; a visitor's choice
  *   lives only here.
+ * - `buyAlerts`: Settings → Notifications → "Buy alerts from people you
+ *   follow" (the followed buy card at the top of the page), on by default.
  *
  * Stored in `localStorage` under the prototype's `blast.<name>` keys as JSON.
  * Storage may be missing or refuse writes (private windows): reads fall back
@@ -24,15 +26,16 @@ import { DEFAULT_SOCIAL_EXPLORER, isSocialExplorer, type SocialExplorer } from "
  * snapshot is the defaults, so hydration matches and the stored values
  * arrive in the next render. The page's copy is a zustand store (OA-28 M6).
  */
-export type DevicePrefs = Readonly<{ celebrate: boolean; explorer: SocialExplorer }>;
+export type DevicePrefs = Readonly<{ celebrate: boolean; explorer: SocialExplorer; buyAlerts: boolean }>;
 export type DevicePrefName = keyof DevicePrefs;
 
 export const DEVICE_PREF_KEYS: Readonly<Record<DevicePrefName, string>> = {
   celebrate: "blast.celebrate",
   explorer: "blast.explorer",
+  buyAlerts: "blast.buyAlerts",
 };
 
-export const DEFAULT_DEVICE_PREFS: DevicePrefs = Object.freeze({ celebrate: true, explorer: DEFAULT_SOCIAL_EXPLORER });
+export const DEFAULT_DEVICE_PREFS: DevicePrefs = Object.freeze({ celebrate: true, explorer: DEFAULT_SOCIAL_EXPLORER, buyAlerts: true });
 
 type PrefStorage = Pick<Storage, "getItem" | "setItem">;
 
@@ -49,9 +52,11 @@ function parsed(storage: PrefStorage | null, key: string): unknown {
 export function readDevicePrefs(storage: PrefStorage | null): DevicePrefs {
   const celebrate = parsed(storage, DEVICE_PREF_KEYS.celebrate);
   const explorer = parsed(storage, DEVICE_PREF_KEYS.explorer);
+  const buyAlerts = parsed(storage, DEVICE_PREF_KEYS.buyAlerts);
   return {
     celebrate: typeof celebrate === "boolean" ? celebrate : DEFAULT_DEVICE_PREFS.celebrate,
     explorer: isSocialExplorer(explorer) ? explorer : DEFAULT_DEVICE_PREFS.explorer,
+    buyAlerts: typeof buyAlerts === "boolean" ? buyAlerts : DEFAULT_DEVICE_PREFS.buyAlerts,
   };
 }
 

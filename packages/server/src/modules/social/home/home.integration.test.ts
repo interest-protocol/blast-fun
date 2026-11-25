@@ -969,7 +969,7 @@ test("The discussion: the sale's posts with a why, newest first, as feed items; 
   }));
 
 test("Following: strictly the viewer's follows, previews and threads scoped, discussion-only labelled, private and visitor states", { skip }, () =>
-  withFixture(async ({ following }) => {
+  withFixture(async ({ admin, following }) => {
     const ben = await ok<HomeFollowingResponse>(await following("ben", { mode: "coins", window: "24h" }), "home-following-response", "private, no-store");
     assert.equal(ben.mode, "coins");
     if (ben.mode !== "coins") return;
@@ -1002,6 +1002,13 @@ test("Following: strictly the viewer's follows, previews and threads scoped, dis
     assert.deepEqual([tape.events[0]!.actor.type === "account" ? tape.events[0]!.actor.callsign : null, tape.events[0]!.kind, tape.events[0]!.coin.symbol], ["maya", "trade_sell", "ORBIT"]);
     assert.ok(tape.events.every((event) => event.actor.type === "account" && ["maya", "leo", "jules", "cyra"].includes(event.actor.callsign)));
     assert.doesNotMatch(JSON.stringify(tape), /satoshi|bb01|aa05|aa06/);
+    // Each tape event carries the coin's cap right after it, when the indexer stamped one.
+    assert.ok(tape.events.every((event) => event.market_cap_usd === null), "no cap stamped yet");
+    await admin.query("UPDATE blast_infra_fixture.activity SET market_cap_usd = 45000.5 WHERE actor = ANY($1::text[]) AND kind = 'trade_sell'", [[W.mayaA, W.mayaB]]);
+    const capped = await ok<HomeFollowingResponse>(await following("ben", { mode: "tape", window: "24h" }), "home-following-response", "private, no-store");
+    if (capped.mode !== "tape") return;
+    assert.deepEqual([capped.events[0]!.kind, capped.events[0]!.market_cap_usd], ["trade_sell", "45000.50"]);
+    assert.ok(capped.events.filter((event) => event.kind !== "trade_sell").every((event) => event.market_cap_usd === null));
     const solo = await ok<HomeFollowingResponse>(await following("solo", { mode: "coins", window: "24h" }), "home-following-response", "private, no-store");
     if (solo.mode !== "coins") return;
     assert.deepEqual([solo.following, solo.coins], [0, []]);

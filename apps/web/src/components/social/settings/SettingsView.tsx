@@ -50,6 +50,8 @@ export type SettingsViewProps = Readonly<{
   wallets: readonly SocialAccountWallet[];
   callsign: string | null;
   celebrate: boolean;
+  /** This device's followed buy cards (`buyAlerts`). */
+  buyAlerts: boolean;
   /** The explorer shown: the account's in `account` mode, else this device's. */
   explorer: SocialExplorer;
   /** The coins a hold may pay with: the wallet's held coins once read. */
@@ -58,6 +60,7 @@ export type SettingsViewProps = Readonly<{
   onHoldCoin?(coinType: string | null): void;
   onNotification(key: NotificationPreferenceKey, on: boolean): void;
   onCelebrate(on: boolean): void;
+  onBuyAlerts(on: boolean): void;
   onBlastConfirmation(on: boolean): void;
   onPrivate(on: boolean): void;
   onPublicPortfolio(on: boolean): void;
@@ -250,6 +253,12 @@ export function SettingsView(input: SettingsViewProps) {
           on={props.celebrate}
           onChange={props.onCelebrate}
           title={COPY.celebrations.title}
+        />
+        <SwitchRow
+          busy={false}
+          on={props.buyAlerts}
+          onChange={props.onBuyAlerts}
+          title={COPY.buyAlerts.title}
         />
       </Group>
 

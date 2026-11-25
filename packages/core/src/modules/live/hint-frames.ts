@@ -22,10 +22,12 @@ const presaleTradeHint = z.object({
   kind: z.enum(["trade_buy", "trade_sell"]),
   presale_id: z.string().regex(SUI_OBJECT_ID_PATTERN).nullish().catch(undefined),
   coin_type: z.string().regex(COIN_TYPE).nullish().catch(undefined),
+  /** The trader's wallet: lets a signed-in tab tell a buy by someone it follows without a read. */
+  actor: z.string().regex(SUI_OBJECT_ID_PATTERN).nullish().catch(undefined),
 });
 
 export type Hint =
-  | Readonly<{ type: "activity"; activity_id: string } & Partial<{ kind: z.infer<typeof presaleTradeHint>["kind"]; presale_id: string; coin_type: string }>>
+  | Readonly<{ type: "activity"; activity_id: string } & Partial<{ kind: z.infer<typeof presaleTradeHint>["kind"]; presale_id: string; coin_type: string; actor: string }>>
   | Readonly<{ type: "presale_lifecycle"; presale_id: string; state: LifecycleState }>
   /** A coin's identity (name, symbol, description, icon) changed: blast-infra's `metadata` state message. */
   | Readonly<{ type: "metadata"; coin: string; cursor: string }>;
@@ -43,9 +45,10 @@ export function hintOf(frame: Readonly<Record<string, unknown>>): Hint | null {
   if (parsed.data.type === "activity" && EVENT_CURSOR.test(parsed.data.activity_id)) {
     const trade = presaleTradeHint.safeParse(frame);
     if (trade.success) {
-      const { kind, presale_id, coin_type } = trade.data;
-      if (presale_id) return { ...parsed.data, kind, presale_id };
-      if (coin_type) return { ...parsed.data, kind, coin_type };
+      const { kind, presale_id, coin_type, actor } = trade.data;
+      const trader = actor ? { actor } : {};
+      if (presale_id) return { ...parsed.data, kind, presale_id, ...trader };
+      if (coin_type) return { ...parsed.data, kind, coin_type, ...trader };
     }
   }
   return parsed.data;

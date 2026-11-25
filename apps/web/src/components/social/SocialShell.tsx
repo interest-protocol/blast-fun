@@ -20,6 +20,7 @@ import { useTradeHost } from "./trade/TradeHost";
 import { FeedOverlaysProvider } from "./feed-ui/shell-bridge";
 import { CelebrationHost } from "./celebration/CelebrationHost";
 import { LiveQueries } from "./LiveQueries";
+import { FollowedBuyAlerts } from "./buy-alerts/FollowedBuyAlerts";
 import { ShellPortfolioProvider } from "./shell-portfolio-context";
 import { signInHref } from "./sign-in-gate";
 import { useSoundSwitch } from "./settings/use-sound-switch";
@@ -103,6 +104,8 @@ function SocialShellContent({
   // R3-55: the one trade path (quote and swap) every trading surface runs. Not gated on the presale
   // deployment: the route builds, and the wallet pays when Blast cannot sponsor.
   const trade = useTradeHost({ balances });
+  const accountWallets = viewer.signedIn ? account?.wallets : undefined;
+  const ownWallets = useMemo(() => accountWallets?.map((wallet) => wallet.address) ?? [], [accountWallets]);
   const overlays = useMemo(
     () => ({ ...commit.overlays, claimPath: claim.claimPath, tradeKit: trade.tradeKit }),
     [claim.claimPath, commit.overlays, trade.tradeKit],
@@ -128,6 +131,7 @@ function SocialShellContent({
           <CoinsOverlay />
           <CelebrationHost />
           <LiveQueries />
+          {shellViewer && viewer.getAccessToken ? <FollowedBuyAlerts accountId={shellViewer.accountId} getAccessToken={viewer.getAccessToken} ownWallets={ownWallets} /> : null}
           {commit.node}
           {claim.node}
           {trade.node}

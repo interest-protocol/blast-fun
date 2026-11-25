@@ -366,6 +366,7 @@ TO blast_web, blast_watcher, blast_social, blast_replica;
     venue TEXT,
     participants_after BIGINT,
     total_commitments_after NUMERIC,
+    market_cap_usd NUMERIC,
     PRIMARY KEY (checkpoint, tx_slot, event_slot, part)
   );
   CREATE TABLE blast_infra_fixture.presale_lifecycle (
@@ -520,7 +521,7 @@ TO blast_web, blast_watcher, blast_social, blast_replica;
   SELECT checkpoint || ':' || tx_slot || ':' || event_slot || ':' || part AS activity_id,
     checkpoint, tx_slot, event_slot, part, timestamp_ms, digest, kind, product, actor, tx_sender,
     presale_id, coin_type, quote_type, quote_amount, coin_amount, quote_refund, usd_value, usd_price_as_of_ms,
-    venue, participants_after, total_commitments_after
+    venue, participants_after, total_commitments_after, market_cap_usd
   FROM blast_infra_fixture.activity;
   CREATE TABLE blast_infra_fixture.pnl_accounting_period (
     singleton boolean PRIMARY KEY DEFAULT true CHECK(singleton),

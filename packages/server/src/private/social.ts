@@ -2,6 +2,7 @@ import { serviceHealthRoute } from "../modules/service-health/route.ts";
 import { competitionRankRoute, competitionRoutes } from "../modules/social/competitions/runtime.ts";
 import { socialWorkspaceRoute } from "../modules/social/workspace/runtime.ts";
 import { socialHomeRoutes } from "../modules/social/home/runtime.ts";
+import { socialBuyAlertRoutes } from "../modules/social/buy-alerts/runtime.ts";
 import { socialFollowRoutes } from "../modules/social/follows/runtime.ts";
 import { socialWatchlistRoutes } from "../modules/social/watchlist/runtime.ts";
 import { socialNotificationRoutes } from "../modules/social/notifications/runtime.ts";
@@ -17,6 +18,7 @@ export const SOCIAL_HANDLERS = {
   "social.home.activity-stream": (request, { client }) => socialHomeRoutes().ACTIVITY_STREAM(request, client),
   "social.workspace.read": (request, { client }) => socialWorkspaceRoute().GET(request, client),
   "social.workspace.write": (request, { client }) => socialWorkspaceRoute().PUT(request, client),
+  "social.following.wallets": (request, { client }) => socialBuyAlertRoutes().wallets.GET(request, client),
   "social.follow.account.put": (request, { client }) => socialFollowRoutes().account.PUT(request, client),
   "social.follow.account.delete": (request, { client }) => socialFollowRoutes().account.DELETE(request, client),
   "social.follow.presale.put": (request, { client }) => socialFollowRoutes().presale.PUT(request, client),

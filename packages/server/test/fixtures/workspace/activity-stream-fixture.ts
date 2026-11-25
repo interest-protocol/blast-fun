@@ -19,6 +19,7 @@ import { urlAs } from "../../../../core/test/fixtures/modules/database/role-fixt
 import { createSocialHomeRoutes } from "@blast/server/modules/social/home/route.ts";
 import { createSocialFeedRoute } from "@blast/server/modules/social/feed/route.ts";
 import { createSocialPresaleRoutes } from "@blast/server/modules/social/presales/route.ts";
+import { createSocialBuyAlertRoutes } from "@blast/server/modules/social/buy-alerts/route.ts";
 import { createReadCache } from "@blast/server/modules/social/read-cache.ts";
 import type { HomeActivityStreamPage } from "@blast/core/modules/social/contracts/home.ts";
 export const activityOrigin = "http://127.0.0.1:42916";
@@ -288,9 +289,16 @@ export async function createActivityStreamFixture(
     ...common,
     terms: async () => null,
   });
+  const buyAlerts = (trading = true) =>
+    createSocialBuyAlertRoutes({
+      kit: trading ? kits.shown : kits.hidden,
+      primary: () => autocommitReader(web, "social"),
+      replica: () => autocommitReader(replica, "social"),
+    });
   return {
     feed,
     presales,
+    buyAlerts,
     admin,
     web,
     replica,

@@ -263,6 +263,9 @@ export const homeFollowingTapeEventSchema = homeEventSchema.extend({
         .optional(),
     lifecycle: z.string().min(1),
   }),
+  market_cap_usd: z
+    .xor([z.null(), z.string().regex(/^(0|[1-9][0-9]*)\.[0-9]{2}$/)])
+    .describe("A trade's coin market cap in USD right after it, to the cent; null for a commit, a claim or an unknown cap."),
 });
 
 export const homeTraderCoinSchema = z.strictObject({

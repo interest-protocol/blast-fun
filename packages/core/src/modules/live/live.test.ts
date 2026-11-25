@@ -17,6 +17,21 @@ test("only a hint's selecting fields cross, and a malformed frame carries no hin
     hintOf({ type: "activity", activity_id: "10:3:0:0", kind: "trade_sell", presale_id: null, coin_type: COIN }),
     { type: "activity", activity_id: "10:3:0:0", kind: "trade_sell", coin_type: COIN },
   );
+  const trader = `0x${"b".repeat(64)}`;
+  assert.deepEqual(
+    hintOf({ type: "activity", activity_id: "10:4:0:0", kind: "trade_buy", coin_type: COIN, actor: trader }),
+    { type: "activity", activity_id: "10:4:0:0", kind: "trade_buy", coin_type: COIN, actor: trader },
+    "a trade hint keeps its trader",
+  );
+  assert.deepEqual(
+    hintOf({ type: "activity", activity_id: "10:5:0:0", kind: "trade_buy", presale_id: sale, actor: trader }),
+    { type: "activity", activity_id: "10:5:0:0", kind: "trade_buy", presale_id: sale, actor: trader },
+  );
+  assert.deepEqual(
+    hintOf({ type: "activity", activity_id: "10:6:0:0", kind: "trade_buy", coin_type: COIN, actor: "0xB0B" }),
+    { type: "activity", activity_id: "10:6:0:0", kind: "trade_buy", coin_type: COIN },
+    "a malformed trader is dropped, the hint kept",
+  );
   assert.deepEqual(hintOf({ type: "presale_lifecycle", presale_id: sale, state: "funded", extra: 1 }), { type: "presale_lifecycle", presale_id: sale, state: "funded" });
   assert.equal(hintOf({ type: "presale_lifecycle", presale_id: sale, state: "drained" }), null);
   assert.deepEqual(

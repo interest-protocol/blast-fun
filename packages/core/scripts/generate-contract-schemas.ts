@@ -48,6 +48,7 @@ import {
   socialWalletLinkRequestSchema,
   socialWalletLinkedSchema,
 } from "../src/modules/social/contracts/wallets.ts";
+import { socialBuyAlertResponseSchema, socialFollowingWalletsSchema } from "../src/modules/social/contracts/buy-alerts.ts";
 import { socialWatchlistIdsSchema, socialWatchlistKeysSchema } from "../src/modules/social/contracts/watchlist.ts";
 import {
   socialWhyCreateRequestSchema,
@@ -472,6 +473,8 @@ const socialContracts = {
   "wallet-sign-in-challenge-response": socialWalletSignInChallengeSchema,
   "wallet-sign-out-response": socialWalletSignOutSchema,
   "watchlist-ids-response": socialWatchlistIdsSchema,
+  "buy-alert-response": socialBuyAlertResponseSchema,
+  "following-wallets-response": socialFollowingWalletsSchema,
   "watchlist-keys-response": socialWatchlistKeysSchema,
   "why-request": socialWhyCreateRequestSchema,
   "why-response": socialWhyCreatedSchema,
@@ -522,6 +525,7 @@ const workspaceReferences = new Map<z.core.$ZodType, string>([
 const socialPublications: Partial<Record<keyof typeof socialContracts, SocialPublication>> = {
   "activity-page": { definitions: activityPageDefinitions, references: feedReferences },
   "blast-workspace-request": { references: workspaceReferences },
+  "buy-alert-response": { references: feedReferences },
   "blast-workspace-response": { references: workspaceReferences },
   "create-draft": { definitions: { vestingRecipient: createRecipientSchema } },
   "create-draft-request": { references: new Map([createDraftReference]) },

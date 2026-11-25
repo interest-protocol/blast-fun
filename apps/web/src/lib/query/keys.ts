@@ -134,6 +134,8 @@ export const queryKeys = {
     invitees: (callsign: string) => [ROOT, "me", "invitees", callsign] as const,
     referrals: (callsign: string) => [ROOT, "me", "referrals", callsign] as const,
     all: [ROOT, "me"] as const,
+    /** `GET /api/social/me/following/wallets`: the followed wallets a tab filters buy hints by, per account. */
+    followingWallets: (accountId?: string) => (accountId === undefined ? ([ROOT, "me", "following-wallets"] as const) : ([ROOT, "me", "following-wallets", accountId] as const)),
     connections: {
       all: [ROOT, "me", "connections"] as const,
       counts: (callsign: string, scope: string) => [ROOT, "me", "connections", scope, callsign, "counts"] as const,

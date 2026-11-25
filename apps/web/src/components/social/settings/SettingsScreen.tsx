@@ -112,11 +112,15 @@ export function SettingsScreen() {
         errorMessage={current?.status === "error" ? current.message : undefined}
         callsign={account?.callsign ?? null}
         celebrate={device.celebrate}
+        buyAlerts={device.buyAlerts}
         explorer={explorer}
         loggingOut={loggingOut}
         mode={mode}
         onCelebrate={(on) => {
           setDevicePref("celebrate", on);
+        }}
+        onBuyAlerts={(on) => {
+          setDevicePref("buyAlerts", on);
         }}
         onBlastConfirmation={(on) => saver.change({ patch: { blast_mode_confirm_actions: on } })}
         holdCoins={holdCoins}
