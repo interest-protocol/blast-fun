@@ -452,7 +452,13 @@ test("Live holds the confirmed price as steps through quiet seconds and joins th
   await render(null, [prior, active, next, unpriced]);
   assert.match(points() ?? "", new RegExp(`,${at(unpriced.timestampMs)}:gap$`));
   assert.equal(dots(), `${at(next.timestampMs)}:93`, "an unpriced execution gets no dot");
-  assert.match(points() ?? "", new RegExp(`,${at(unpriced.timestampMs - 0.5)}:93~,${at(unpriced.timestampMs)}:gap$`), "the run out of the break is hidden");
+  assert.match(points() ?? "", new RegExp(`,${at(unpriced.timestampMs - 0.5)}:93~,${at(unpriced.timestampMs)}:gap$`), "the run into the break is hidden");
+
+  // A priced execution in the same millisecond as the unpriced one carries no price across the break.
+  const sameMs = trade("3:9:0:0", unpriced.timestampMs, "95");
+  const resumed = trade("6:0:0:0", now - 100, "96");
+  await render(null, [prior, active, next, sameMs, unpriced, resumed]);
+  assert.match(points() ?? "", new RegExp(`,${at(next.timestampMs)}:93~,${at(unpriced.timestampMs)}:gap,${at(resumed.timestampMs - 0.5)}:96~,`), "the same-millisecond break hides the run across it");
 
   // The next priced execution starts a new segment: neither the run nor the rise into it is drawn.
   const after = trade("6:0:0:0", now - 100, "95");

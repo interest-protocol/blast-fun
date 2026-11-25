@@ -609,11 +609,14 @@ const HIDDEN_RUN = { lineColor: "transparent" } as const;
 /**
  * A step trace with real breaks. The chart drops gap rows and joins their
  * neighbours, and a step takes its flat run from the earlier point and its
- * rise from the later one. So the run out of an unpriced execution is hidden,
+ * rise from the later one. So the run into an unpriced execution is hidden,
  * and a hidden point just before the next price hides the rise into it. Gap
- * rows stay, so an inspected time inside the break reads no price.
+ * rows stay, so an inspected time inside the break reads no price. Rows in
+ * the same millisecond collapse to the last first, as the chart would, so a
+ * break shares its time with a price only as the break.
  */
-function steppedLineData(line: readonly LinePoint[], pointValue: (at: number, raw: string) => number) {
+function steppedLineData(trace: readonly LinePoint[], pointValue: (at: number, raw: string) => number) {
+  const line = [...new Map(trace.map((point) => [point.timestampMs, point])).values()];
   return line.flatMap(({ timestampMs, price: raw }, index) => {
     const time = chartTimestamp(timestampMs);
     if (raw === null) return [{ time }];
