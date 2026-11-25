@@ -465,7 +465,7 @@ function ChartFigure({ drawn, migrationAt, venuePoolKey, geometry, latest, lates
       </p>}
       <div className={compact ? styles.compactCanvas : styles.canvas}>
         {compact
-          ? <KLineCoinChart sources={drawn} interval={controls.interval} memeDecimals={source.memeDecimals} quoteDecimals={source.quoteDecimals} quoteUsd={quoteUsd ?? null} latestAvailable={latestAvailable} label={label} style={line ? "line" : "candles"} trade={candleTrade} walletTrades={walletTrades} migrationAt={migrationAt} />
+          ? <KLineCoinChart sources={drawn} interval={controls.interval} memeDecimals={source.memeDecimals} quoteDecimals={source.quoteDecimals} quoteUsd={quoteUsd ?? null} latestAvailable={latestAvailable} label={label} style={line ? "line" : "candles"} trade={candleTrade} migrationAt={migrationAt} />
           : <PoolCandleChart latestAvailable={latestAvailable} walletTrades={walletTrades} ripple={walletRipple(walletTrades, liveTrade, controls.interval)} trade={candleTrade} label={label} compact={compact} rollingWindow={controls.range === "live"} presentation={presentation} memeDecimals={source.memeDecimals} quoteDecimals={source.quoteDecimals} quoteUsd={quoteUsd} sources={drawn} migrationAt={migrationAt} migrationLabel={venue ? <>Graduated to <DexIdentity venue={venue} /></> : graduation} quoteSymbol={source.quoteSymbol} from={geometry.start} to={geometry.end} />}
       </div>
     </figure>

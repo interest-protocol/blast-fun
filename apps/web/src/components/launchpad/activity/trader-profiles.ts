@@ -10,6 +10,8 @@ import { recentTrades } from "./recent-trades";
 import { listDisplay, type ListState } from "./activity-model";
 
 const NO_PROFILES: TraderProfiles = {};
+/** The query key prefix of the trade list's profile lookup; the chart's people read its answers. */
+export const TRADER_PROFILES_QUERY = "trader-profiles";
 
 export async function loadTraderProfiles(traders: readonly TraderProfileRequest[], signal: AbortSignal, request: typeof fetch = gatedFetch): Promise<TraderProfiles> {
   const response = await request(traderProfilesPath(traders), { credentials: "omit", cache: "no-store", signal });
@@ -30,7 +32,7 @@ export function useTraderProfiles(launchId: string, activity: ListState<Activity
     ? [{ address: row.actor, timestampMs: row.timestampMs }] : []) : [];
   const active = enabled && view !== null;
   const query = useQuery({
-    queryKey: ["trader-profiles", launchId, active],
+    queryKey: [TRADER_PROFILES_QUERY, launchId, active],
     queryFn: ({ signal }) => loadTraderProfiles(traders, AbortSignal.any([signal, AbortSignal.timeout(15000)])),
     enabled: active && traders.length > 0,
     retry: false,
