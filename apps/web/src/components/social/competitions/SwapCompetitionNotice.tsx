@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import type { Competition } from "@blast/core/modules/social/competitions/contracts.ts";
 import styles from "./SwapCompetitionNotice.module.css";
 
@@ -23,9 +25,9 @@ export function SwapCompetitionNotice({
             <strong>{event.coin_symbol} competition · Live</strong>
           </p>
           <nav aria-label={`${event.coin_symbol} competition links`}>
-            <a href={`/competitions/${event.slug}`} onClick={onNavigate}>
+            <Link href={`/competitions/${event.slug}`} onClick={onNavigate} prefetch={false}>
               Leaderboard
-            </a>
+            </Link>
             {event.rules_url ? (
               <a href={event.rules_url} target="_blank" rel="noopener noreferrer">
                 Rules <span className="sr">(opens in a new tab)</span>

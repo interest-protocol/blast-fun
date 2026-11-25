@@ -1,4 +1,4 @@
-
+import Link from "next/link";
 import { shortAddress as shortId } from "@blast/core/lib/format.ts";
 import { SUI_COIN_TYPE } from "@blast/core/lib/sui/coin-types.ts";
 import { CREATE_QUOTE_TYPE, quotePriceType } from "@blast/core/web/contracts/create.ts";
@@ -326,7 +326,7 @@ function LinkNote({ id, launchId, anchor, shown, unavailable }: Readonly<{ id: s
   return (
     <p className={styles.note} id={id}>
       {note}{" "}
-      <a className={styles.link} href={`/coin/${launchId}`}>Show the newest activity</a>
+      <Link className={styles.link} href={`/coin/${launchId}`} prefetch={false}>Show the newest activity</Link>
     </p>
   );
 }
