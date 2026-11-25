@@ -18,10 +18,13 @@ test("published decoration uses one validated ID read without a visitor session"
   });
   const response = await read(request());
   assert.equal(response.status, 200);
-  assert.equal(response.headers.get("cache-control"), "private, no-store");
+  assert.equal(response.headers.get("cache-control"), "public, s-maxage=10, stale-while-revalidate=20");
+  assert.equal(response.headers.get("set-cookie"), null);
   assert.deepEqual(await response.json(), { details });
   assert.deepEqual(seen, [id]);
-  assert.equal((await read(request("invalid"))).status, 400);
+  const invalid = await read(request("invalid"));
+  assert.equal(invalid.status, 400);
+  assert.equal(invalid.headers.get("cache-control"), "private, no-store");
   assert.deepEqual(seen, [id]);
 });
 

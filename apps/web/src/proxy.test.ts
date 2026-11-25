@@ -22,7 +22,9 @@ const ROOT_WITH_QUERY = "/?ref=abc&utm_source=x";
 const PNL_PAGE = `/card/pnl/${"a".repeat(64)}`;
 const PNL_WITH_REFERRAL = `${PNL_PAGE}?ref=nova&utm_source=x`;
 const PNL_IMAGE = `${PNL_PAGE}/image`;
-const PATHS = ["/", ROOT_WITH_QUERY, PNL_PAGE, PNL_WITH_REFERRAL, PNL_IMAGE, "/presale", "/api/presale/presales", "/team", "/privacy", ...LAUNCHPAD_PAGES, ...LAUNCHPAD_APIS, ...REMOVED_DEV_PAGES];
+// Edge-cached public reads: the proxy must leave them without a cookie or its own Cache-Control.
+const PUBLIC_READS = [`/api/launchpad/launch-details/${LAUNCH_ID}?ref=abc`, "/api/launchpad/market/status"];
+const PATHS = ["/", ROOT_WITH_QUERY, PNL_PAGE, PNL_WITH_REFERRAL, PNL_IMAGE, "/presale", "/api/presale/presales", "/team", "/privacy", ...LAUNCHPAD_PAGES, ...LAUNCHPAD_APIS, ...REMOVED_DEV_PAGES, ...PUBLIC_READS];
 
 type Answer = Readonly<{
   status: number;
@@ -123,6 +125,18 @@ test("public launchpad and presale routes reach their handlers with the page non
     }
     assert.equal(answers["/team"]!.status, 404);
     assert.equal(answers["/privacy"]!.next, true);
+  }
+});
+
+test("gated public reads pass the proxy with no Set-Cookie and no Cache-Control of its own, so the edge may share the handler's answer", () => {
+  for (const flags of COMBINATIONS) {
+    const answers = outcome(flags);
+    for (const path of PUBLIC_READS) {
+      const answer = answers[path]!;
+      assert.equal(answer.next, true, `${path} ${label(flags)}`);
+      assert.equal(answer.cookies, null, `${path} ${label(flags)}`);
+      assert.equal(answer.cacheControl, null, `${path} ${label(flags)}`);
+    }
   }
 });
 
