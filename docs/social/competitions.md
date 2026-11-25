@@ -50,13 +50,7 @@ creation time, and publishes an immutable configuration. No runtime update/delet
 grants or edit endpoint exist. A repeat slug fails rather than changing rules.
 This first version has no enrollment, rewards, payout automation, or admin UI.
 The public pages are `/competitions` and `/competitions/<slug>`.
-Discovery is secondary: More → Competitions expands below Search in the sidebar.
-On phones, the labeled More tab replaces Portfolio in the bottom bar and reveals
-Portfolio and Competitions directly above it. Home, Swap, Create and Presales
-remain visible. There is no separate header More control.
-Both start collapsed, support keyboard/Escape and respect reduced motion. A quiet
-text link below Home's content also opens the directory. Announcements can link
-directly to an event. Event pages show the
+Announcements can link directly to an event. Event pages show the
 configured name once, with coin identity, UTC schedule, optional prizes and the
 organizer's X announcement/rules link.
 

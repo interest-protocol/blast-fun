@@ -250,7 +250,6 @@ function ShellFrame({
           </button>
           <LaunchDestinations current={current} />
           <RailItem current={current} href={PORTFOLIO_PATH} icon={<PieIcon />} item="portfolio" label="Portfolio" />
-          <MoreNavigation />
           <BlastMenuTrigger
             aria-label="Create"
             className={clsx(styles.navItem, styles.railCreate)}
@@ -332,7 +331,7 @@ function ShellFrame({
             Swap
           </button>
           <LaunchDestinations current={current} mobile />
-          <MoreNavigation createMenu={createMenu} key={pathname} mobile />
+          <MoreNavigation createMenu={createMenu} key={pathname} />
         </nav>
       </div>
       <AccountMenu
@@ -410,9 +409,9 @@ function TopbarAccount({ handle, loading, signedIn, error, onRetry, onSignIn, pr
   if (!viewer) {
     if (error || signedIn) return <button className={clsx("btn btn-quiet", styles.topbarSignin)} onClick={onRetry} type="button">Try again</button>;
     return (
-      <a className={clsx("btn btn-ink", styles.topbarSignin)} href={signInHref} onClick={onSignIn}>
+      <Link className={clsx("btn btn-ink", styles.topbarSignin)} href={signInHref} onClick={onSignIn} prefetch={false}>
         Sign in
-      </a>
+      </Link>
     );
   }
   return (
