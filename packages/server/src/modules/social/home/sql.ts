@@ -6,7 +6,7 @@ import { SHOWN_PRESALES } from "@blast/core/modules/social/read-model/chain-pres
 import { namedWalletsOfSql, namedWalletsSql } from "@blast/core/modules/social/read-model/naming.ts";
 import { SocialRouteError } from "@blast/core/modules/social/route-kit/errors.ts";
 
-import { HOME_ALMOST_CURVE_SOURCES, HOME_DISCOVER_COIN_SOURCES, HOME_LIST_COIN_SOURCES } from "@blast/server/modules/social/home/sources.ts";
+import { HOME_ALMOST_CURVE_SOURCES, HOME_DISCOVER_COIN_SOURCES, HOME_LIST_COIN_SOURCES, homeTrendingCoinSources } from "@blast/server/modules/social/home/sources.ts";
 
 import { HOME_KINDS, HOME_WINDOW_MS, type HomeWindow } from "@blast/core/modules/social/contracts/home.ts";
 
@@ -89,10 +89,11 @@ export function homeSpan(window: HomeWindow, bounds: HomeBounds): HomeSpan {
  * Which markets a read attributes: public Discover (`almost`: only its
  * Almost graduated curves, `HOME_ALMOST_CURVE_SOURCES`), all shown sales, or
  * specific markets. Discover's `presales` (Trending with `presales=1`) adds
- * the presales not trading yet, bounded at the chain clock (`presaleScopeSql`).
+ * the presales not trading yet, bounded at the chain clock (`presaleScopeSql`),
+ * and its `curves` the live curves traded in the window (`tradedCurveSql`).
  */
 export type SaleScope =
-  | Readonly<{ kind: "discover"; almost?: boolean; presales?: Readonly<{ clockMs: number; fromMs: number }> }>
+  | Readonly<{ kind: "discover"; almost?: boolean; presales?: Readonly<{ clockMs: number; fromMs: number }>; curves?: TradedCurves }>
   | Readonly<{ kind: "all" }>
   | Readonly<{ kind: "ids"; presaleIds: readonly string[]; includeStandalone?: boolean }>;
 
@@ -133,10 +134,29 @@ function presaleScopeSql(alias: string, presales: Readonly<{ clockMs: number; fr
         OR (${alias}.lifecycle IN ('open', 'funded') AND ${alias}.start_ms <= ${now} AND ${alias}.end_ms > ${from})))`;
 }
 
+/**
+ * The window Trending finds its live curves in: a buy or sell of the curve's
+ * coin inside `(fromMs, toMs]`, committed by `marketCheckpoint`, of a visible
+ * trade kind, as the window's own rows count it (`rowsWithSql`).
+ */
+export type TradedCurves = Readonly<{ fromMs: number; toMs: number; marketCheckpoint: number; kinds: readonly string[] }>;
+
+/** A live curve (`lp`) with a trade in the window: a range of blast-infra's `(coin_type, timestamp_ms DESC)` index. */
+function tradedCurveSql(curves: TradedCurves, params: Params): string {
+  return `EXISTS (SELECT 1 FROM chain_read_v1.activity a
+        WHERE a.coin_type = lp.coin_type AND a.timestamp_ms > ${params.add(curves.fromMs)}::bigint AND a.timestamp_ms <= ${params.add(curves.toMs)}::bigint
+          AND a.kind = ANY(${params.add([...curves.kinds])}::text[]) AND a.checkpoint <= ${params.add(curves.marketCheckpoint)}::bigint)`;
+}
+
+function discoverSourcesSql(scope: Extract<SaleScope, { kind: "discover" }>, params: Params): string {
+  if (scope.almost) return HOME_ALMOST_CURVE_SOURCES;
+  return scope.curves ? homeTrendingCoinSources(tradedCurveSql(scope.curves, params)) : HOME_DISCOVER_COIN_SOURCES;
+}
+
 export function scopedHomeCoinsSql(scope: SaleScope, params: Params): string {
   if (scope.kind === "discover") {
     const listed = scope.presales ? `(p.lifecycle = 'migrated' OR ${presaleScopeSql("p", scope.presales, params)})` : "p.lifecycle = 'migrated'";
-    return `(SELECT p.* FROM ${scope.almost ? HOME_ALMOST_CURVE_SOURCES : HOME_DISCOVER_COIN_SOURCES} p
+    return `(SELECT p.* FROM ${discoverSourcesSql(scope, params)} p
       WHERE ${listed} AND p.quote_type IS DISTINCT FROM ${params.add(CREATE_TEST_SUI_QUOTE_TYPE)}::text)`;
   }
   const sales = `(SELECT p.presale_id AS source_id,p.*,FALSE AS tracked_pool_only FROM ${SHOWN_PRESALES} p)`;

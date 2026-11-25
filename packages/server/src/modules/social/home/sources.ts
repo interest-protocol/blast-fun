@@ -69,6 +69,15 @@ export const HOME_COIN_SOURCES = homeCoinSources("");
  * mostly dust, and the facts and window reads cost per coin (#71 timed out).
  */
 export const HOME_DISCOVER_COIN_SOURCES = homeCoinSources(TRACKED_POOL_SOURCE);
+/**
+ * Home's Trending list (`sort=relevant` with `presales=1`): Discover's whole
+ * list plus the live curves someone traded in the window. `tradedIn` is that
+ * test on the curve's coin (`lp.coin_type`), one probe of the activity
+ * coin index per live curve, so the per-coin reads see only the few traded
+ * curves, never the idle thousand.
+ */
+export const homeTrendingCoinSources = (tradedIn: string) =>
+  homeCoinSources(`UNION ALL ${liveCurves(`\n      AND ${tradedIn}`)}\n    ${TRACKED_POOL_SOURCE}`);
 /** Reads by id (saved coins, a page's coins) also find a live curve; the id filter reaches every branch. */
 export const HOME_LIST_COIN_SOURCES = homeCoinSources(`UNION ALL ${liveCurves()}\n    ${TRACKED_POOL_SOURCE}`);
 

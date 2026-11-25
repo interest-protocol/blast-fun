@@ -253,7 +253,7 @@ function factsSql(scope: SaleScope, params: Params, options: HomePriceOptions = 
   ${savers.join}`;
 }
 
-assertChainReadThroughViews(factsSql({ kind: "discover", presales: { clockMs: 0, fromMs: 0 } }, new Params(), {
+assertChainReadThroughViews(factsSql({ kind: "discover", presales: { clockMs: 0, fromMs: 0 }, curves: { fromMs: 0, toMs: 0, marketCheckpoint: 0, kinds: [] } }, new Params(), {
   includeLiveInputs: true,
   includeRollingChange: true,
 }));
@@ -767,7 +767,7 @@ export type HomeReadContext = Readonly<{
   includeCurve?: boolean;
   includeRecentBuys?: boolean;
   includeRecentBuyUsd?: boolean;
-  /** Trending lists presales not trading yet (`HOME_PRESALES_PARAM`, `sort=relevant` only). */
+  /** Trending lists presales not trading yet and live curves traded in the window (`HOME_PRESALES_PARAM`, `sort=relevant` only). */
   includePresales?: boolean;
 }>;
 
@@ -970,7 +970,7 @@ export type HomeDiscoverBase = Readonly<{
 
 /** Which coins a {@link HomeDiscoverBase} holds: Almost graduated reads its few curves alone (`HOME_ALMOST_CURVE_SOURCES`); every other stage, the whole list. */
 const baseSetOf = (stage: HomeStage) => (stage === "almost" ? "almost" : "all");
-/** Presales join the whole list only: the Almost graduated curves never hold one. */
+/** Presales, and live curves traded in the window, join the whole list only: the Almost graduated curves never hold one. */
 const basePresales = (stage: HomeStage, context: HomeReadContext) => baseSetOf(stage) === "all" && Boolean(context.includePresales);
 
 /** The key a {@link HomeDiscoverBase} is shared under: only what changes its contents. */
@@ -985,10 +985,15 @@ export async function readHomeDiscoverBase(db: ReadableDatabase, window: HomeWin
   if (!asOf) throw new SocialRouteError("service_unavailable");
   const span = homeSpan(window, bounds);
   const kinds = visibleKinds(context.hiddenKinds);
+  const tradeKinds = kinds.filter((kind) => kind === "trade_buy" || kind === "trade_sell");
   const scope: SaleScope = {
     kind: "discover",
     almost: baseSetOf(stage) === "almost",
-    ...(basePresales(stage, context) ? { presales: { clockMs: bounds.clockMs, fromMs: span.fromMs } } : {}),
+    ...(basePresales(stage, context) ? {
+      presales: { clockMs: bounds.clockMs, fromMs: span.fromMs },
+      // Live curves join Trending only once traded in the window, so the per-coin reads stay off the idle thousand (#71).
+      ...(tradeKinds.length > 0 ? { curves: { fromMs: span.fromMs, toMs: span.toMs, marketCheckpoint: bounds.marketCheckpoint, kinds: tradeKinds } } : {}),
+    } : {}),
   };
   const [facts, sides] = await Promise.all([
     readCoinFacts(db, scope, span, context),

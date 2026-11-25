@@ -106,7 +106,7 @@ export function createSocialHomeRoutes(dependencies: SocialHomeRouteDependencies
       const query = parseHomeQuery(params);
       const recentBuys = params.get(HOME_RECENT_BUYS_PARAM);
       const includeRecentBuyUsd = recentBuys === HOME_RECENT_BUYS_WITH_USD;
-      // Presales not trading yet are Trending candidates only: the other orders rank traded markets.
+      // Presales not trading yet, and live curves traded in the window, are Trending candidates only: the other orders rank traded markets.
       const includePresales = params.get(HOME_PRESALES_PARAM) === "1" && query.sort === "relevant";
       const ctxRead = { ...context(ctx), ...marketOptions(params), trackedPoolMarket, includeRecentBuys: recentBuys === "1" || includeRecentBuyUsd, includeRecentBuyUsd, includePresales };
       const baseCache = dependencies.caches?.discoverBase;
