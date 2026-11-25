@@ -220,7 +220,7 @@ export async function readCoinFacts(db: ReadableDatabase, scope: SaleScope, cloc
 export async function readSides(db: ReadableDatabase, request: RowsRequest, recentBuyFromMs?: number): Promise<readonly SideRow[]> {
   if (request.sales.kind === "ids" && request.sales.presaleIds.length === 0) return [];
   const params = new Params();
-  const rows = rowsWithSql(request, params, "sides");
+  const rows = rowsWithSql(request, params);
   // Keep one event's fields together, ordered by timestamp and cursor, in the existing aggregate.
   const recentBuy = recentBuyFromMs === undefined ? "" : `,
     (max(ARRAY[w.timestamp_ms, w.checkpoint, w.tx_slot, w.event_slot, w.part, w.quote_amount]::numeric[])
@@ -236,7 +236,7 @@ export async function readTopParticipants(db: ReadableDatabase, request: RowsReq
   if (request.sales.kind === "ids" && request.sales.presaleIds.length === 0) return [];
   const params = new Params();
   const limit = params.add(perSale);
-  const text = selectHome(`${rowsWithSql(request, params, "participants")},
+  const text = selectHome(`${rowsWithSql(request, params)},
   home_grouped AS (${GROUPED_SELECT} ${GROUPED_GROUP})`, `SELECT ranked.sale, ranked.who, ranked.account_id, ranked.wallet, ranked.events_total, ranked.latest_ms, ranked.latest_kind
   FROM (SELECT g.*, row_number() OVER (PARTITION BY g.sale ORDER BY g.latest_ms::bigint DESC, g.who) AS rn FROM home_grouped g) ranked
   WHERE ranked.rn <= ${limit}::int`);
