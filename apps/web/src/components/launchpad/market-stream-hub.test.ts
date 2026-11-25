@@ -447,7 +447,8 @@ test("a coin's newest stats win across its two pools, and a late subscriber gets
   s.source().hello();
   s.source().emit("stats", stats(VENUE, 30, 250));
   s.source().emit("stats", stats(CURVE, 20, 211));
-  assert.deepEqual(first, [250], "the curve's older stats are dropped");
+  s.source().emit("stats", { ...stats(CURVE, 30, 212), cursor: "29:9:0:0" });
+  assert.deepEqual(first, [250], "the curve's older stats are dropped, by checkpoint and then by cursor");
   const late: unknown[] = [];
   s.hub.subscribe({ pools: [CURVE, VENUE], expected, listener: { state: () => {}, stats: (frame) => late.push(frame.holders) } });
   await settle();

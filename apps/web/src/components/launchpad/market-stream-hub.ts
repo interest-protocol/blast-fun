@@ -503,7 +503,8 @@ export class MarketStreamHub {
       if (target?.fence == null) return;
       // One coin can span two pools (curve, then venue): only its newest stats count, from either pool.
       const others = [...connection.pools.values()].filter((pool) => pool.stats?.coin === frame.coin);
-      if (others.some((pool) => pool.stats!.checkpoint > frame.checkpoint)) return;
+      const newer = ({ checkpoint, cursor }: CoinStatsFrame): boolean => checkpoint > frame.checkpoint || (checkpoint === frame.checkpoint && compareEventCursors(cursor, frame.cursor) > 0);
+      if (others.some((pool) => newer(pool.stats!))) return;
       for (const pool of others) pool.stats = undefined;
       target.stats = frame;
       for (const subscriber of [...this.subscribers]) {
