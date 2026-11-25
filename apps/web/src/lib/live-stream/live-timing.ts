@@ -13,8 +13,11 @@
 export const LIVE_TIMING_PATH = "/api/launchpad/market/timing";
 export const TIMING_SAMPLE_RATE = 0.01;
 export const TIMING_REPORT_MS = 60_000;
-/** Pings at 1, 3 and 5 s after a socket opens, then once a minute (the server allows one a second). */
-const PING_DELAYS_MS = [1_000, 2_000, 2_000];
+/** Pings at 1, 6 and 11 s after a socket opens, then once a minute: the server closes on two within a second, so a stalled pair must not reach it together. */
+const PING_DELAYS_MS = [1_000, 5_000, 5_000];
+/** A socket still connecting is retried this often, at most `PING_RETRIES` times. */
+const PING_RETRY_MS = 1_000;
+const PING_RETRIES = 15;
 const PING_EVERY_MS = 60_000;
 /** A hop longer than this is a replayed or stale frame, not a live one. */
 const MAX_HOP_MS = 120_000;
@@ -106,20 +109,25 @@ export type LiveTimingDependencies = Readonly<{
   now: () => number;
   schedule: (run: () => void, ms: number) => void;
   afterPaint: (run: () => void) => void;
+  /** Hidden tabs do not paint: their frames would record the hidden time as paint. */
+  visible: () => boolean;
   send: (path: string, body: string) => void;
 }>;
 
 /** One tab's recorder; sampling is the caller's choice. */
 export function createLiveTiming(deps: LiveTimingDependencies) {
-  const clock = new ClockOffset();
+  let clock = new ClockOffset();
   const samples = new Map<TimingSegment, number[]>();
   let transport: "socket" | "sse" = "sse";
   let socket: TimingSocket | null = null;
 
-  const ping = (step: number) => {
-    const current = socket;
-    if (!current || !current.send(JSON.stringify({ op: "ping", t: deps.now() }))) return;
-    deps.schedule(() => { if (socket === current) ping(step + 1); }, PING_DELAYS_MS[step + 1] ?? PING_EVERY_MS);
+  const ping = (current: TimingSocket, step: number, retries = 0) => {
+    if (socket !== current) return;
+    if (!current.send(JSON.stringify({ op: "ping", t: deps.now() }))) {
+      if (retries < PING_RETRIES) deps.schedule(() => ping(current, step, retries + 1), PING_RETRY_MS);
+      return;
+    }
+    deps.schedule(() => ping(current, step + 1), PING_DELAYS_MS[step + 1] ?? PING_EVERY_MS);
   };
   const report = () => {
     deps.schedule(report, TIMING_REPORT_MS);
@@ -141,7 +149,9 @@ export function createLiveTiming(deps: LiveTimingDependencies) {
     socket(next: TimingSocket): void {
       transport = "socket";
       socket = next;
-      deps.schedule(() => { if (socket === next) ping(0); }, PING_DELAYS_MS[0]!);
+      // Another instance, a sleep or a clock step: the old offset may no longer hold.
+      clock = new ClockOffset();
+      deps.schedule(() => ping(next, 0), PING_DELAYS_MS[0]!);
     },
     relay(): void {
       transport = "sse";
@@ -154,6 +164,7 @@ export function createLiveTiming(deps: LiveTimingDependencies) {
       } catch { /* a malformed pong is just not a sample */ }
     },
     market(data: string | undefined): void {
+      if (!deps.visible()) return;
       const receipt = deps.now();
       let stamps: Stamps;
       try {
@@ -163,6 +174,7 @@ export function createLiveTiming(deps: LiveTimingDependencies) {
         return;
       }
       deps.afterPaint(() => {
+        if (!deps.visible()) return;
         const offset = transport === "socket" ? clock.offset : null;
         for (const [segment, value] of Object.entries(frameSegments(stamps, receipt, deps.now(), offset)) as [TimingSegment, number][]) {
           let list = samples.get(segment);

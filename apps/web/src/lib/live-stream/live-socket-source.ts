@@ -114,9 +114,13 @@ export function liveMarketSource(path: string, state: LiveSourceState, deps: Liv
     silent = true;
     current.onmessage = ({ data }) => {
       if (closed || typeof data !== "string") return;
-      silent = false;
-      state.failures = 0;
-      for (const block of parseSseBlocks(data)) emit(block.event, { data: block.data });
+      const blocks = parseSseBlocks(data);
+      // A pong answers our own clock ping before admission ends: it proves nothing about the stream.
+      if (blocks.some((block) => block.event !== "pong")) {
+        silent = false;
+        state.failures = 0;
+      }
+      for (const block of blocks) emit(block.event, { data: block.data });
     };
     current.onclose = ({ code }) => {
       if (socket !== current) return;

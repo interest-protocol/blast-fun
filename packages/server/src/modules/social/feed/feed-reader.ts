@@ -6,6 +6,7 @@ import type { SocialConfig } from "@blast/core/modules/social/contracts/config.t
 import { SOCIAL_FEED_DEFAULT_TAB, SOCIAL_FEED_NEW_ACTORS, SOCIAL_FEED_NEW_MAX, SOCIAL_FEED_TABS, type SocialFeedNewActor, type SocialFeedNewResponse, type SocialFeedPage, type SocialFeedTab } from "@blast/core/modules/social/contracts/feed.ts";
 import { decodeItemCursor, encodeItemCursor, parseItemLimit, readAsOf, toItems } from "@blast/server/modules/social/items/index.ts";
 import { SocialRouteError } from "@blast/core/modules/social/route-kit/errors.ts";
+import { settledAll } from "@blast/server/lib/settled-all.ts";
 import { forYouEntries, forYouNewEntries, forYouNewEntriesFromHead, forYouNewHead, type ForYouCursor, type RankedEntry } from "@blast/server/modules/social/feed/for-you.ts";
 
 /**
@@ -74,7 +75,7 @@ export async function readForYouPage(
   }>,
 ): Promise<SocialFeedPage> {
   const { config, nowMs, limit, before, hiddenKinds } = request;
-  const [entries, asOf] = await Promise.all([forYouEntries(db, { config, nowMs, limit, before, hiddenKinds }), readAsOf(db)]);
+  const [entries, asOf] = await settledAll([forYouEntries(db, { config, nowMs, limit, before, hiddenKinds }), readAsOf(db)]);
   if (!asOf) throw new SocialRouteError("service_unavailable");
   const pins = new Set(entries.filter((entry) => entry.pinned).map((entry) => entry.entryId));
   return {

@@ -644,6 +644,7 @@ export function tabMarketStream(): MarketStreamHub | null {
       now: Date.now,
       schedule,
       afterPaint: (run) => requestAnimationFrame(() => run()),
+      visible: () => document.visibilityState === "visible",
       send: (path, body) => navigator.sendBeacon(path, body),
     })
     : null;
