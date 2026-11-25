@@ -1,5 +1,6 @@
 "use client";
 
+import { AudioMenu } from "./AudioMenu.tsx";
 import { isPresaleId } from "@blast/core/modules/presale/presale-id.ts";
 import clsx from "clsx";
 import { Button, IconButton, IconButtonLink, type ControlSize } from "./Button";
@@ -66,6 +67,7 @@ export type AppShellProps = Readonly<{
   viewerError?: boolean;
   onRetryAccount?: () => void;
   onRetryPortfolio?: () => void;
+  onSoundToggle?: (enabled: boolean) => void;
   /** Where "Sign in" goes without a sign-in sheet: `/sign-in?next=…`. */
   signInHref: string;
   /** Ends the session; the page stays and reads as a visitor's. */
@@ -165,6 +167,7 @@ function ShellFrame({
   viewerError = false,
   onRetryAccount,
   onRetryPortfolio,
+  onSoundToggle,
   signInHref,
   onSignOut,
   portfolio,
@@ -272,9 +275,10 @@ function ShellFrame({
           </Link>
           <span className={styles.topbarTools}>
             <ServiceStatus mobile />
-            <IconButton aria-keyshortcuts="/" aria-label="Search" className={styles.search} onClick={runOr("openSearch")} size="chip" title="Search (/)">
+            <IconButton aria-keyshortcuts="/" aria-label="Search" className={styles.topbarTool} onClick={runOr("openSearch")} size="chip" title="Search (/)">
               <SearchIcon />
             </IconButton>
+            <AudioMenu className={styles.topbarTool} onToggle={onSoundToggle} />
           </span>
           {account ? <ShellWallet {...wallet} size="chip" /> : <AccountMessage error={viewerError} loading={viewerLoading} signedIn={signedIn} />}
           <NotificationsIconLink

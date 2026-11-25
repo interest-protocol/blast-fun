@@ -44,10 +44,8 @@ function view(props: Partial<SettingsViewProps> = {}): string {
       onPublicPortfolio={noop}
       onRetry={noop}
       onSignIn={noop}
-      onSound={noop}
       onBlastConfirmation={noop}
       settings={SETTINGS}
-      sound={false}
       wallets={WALLETS}
       {...props}
     />,
@@ -63,7 +61,6 @@ test("UI-07 (§7): a signed-in account sees every group, in the Settings board's
   const html = view();
   assert.deepEqual(headings(html), ORDER);
   assert.deepEqual(switches(html), [
-    ["Sound", "false"],
     ["Opens soon", "true"],
     ["80% filled", "true"],
     ["Last hour", "true"],
@@ -115,7 +112,7 @@ test("UI-07: loading keeps the groups' shape (aria-busy, placeholders); an error
   const loading = view({ mode: "loading", settings: null });
   assert.match(loading, /^<div aria-busy="true" class="set" data-shell-aside="settings" data-surface="">/);
   assert.deepEqual(headings(loading), ORDER);
-  assert.deepEqual(switches(loading), [["Sound", "false"], ["Celebrations", "true"]]);
+  assert.deepEqual(switches(loading), [["Celebrations", "true"]]);
   assert.equal((loading.match(/aria-hidden="true" class="text"/g) ?? []).length, 10);
   assert.match(loading, /skeleton fieldSize/);
   const error = view({ mode: "error", settings: null });
@@ -127,7 +124,7 @@ test("UI-07: loading keeps the groups' shape (aria-busy, placeholders); an error
 test("UI-07: a visitor sees all settings groups while account actions require sign-in", () => {
   const html = view({ mode: "visitor", explorer: "suivision", celebrate: false });
   assert.deepEqual(headings(html), ORDER);
-  assert.equal(switches(html).length, 12);
+  assert.equal(switches(html).length, 11);
   assert.ok(switches(html).some(([name]) => name === "Private account"));
   assert.match(html, /<option value="suiscan">Suiscan<\/option><option value="suivision" selected="">SuiVision<\/option>/);
   assert.match(html, /<b>Sign in<\/b>/);
@@ -136,21 +133,6 @@ test("UI-07: a visitor sees all settings groups while account actions require si
   const noAccount = view({ mode: "no-account" });
   assert.match(noAccount, /<b class="danger">Log out<\/b>/);
   assert.doesNotMatch(noAccount, /kaimoreno|0x3f9a8c21|0x88e1d0a4/);
-});
-
-test("R3-12: Feel is the first group, in the gate's words, for every viewer; its switch is the sound flag and skips the layer's own switch cue", () => {
-  for (const mode of ["account", "loading", "error", "visitor", "no-account"] as const) {
-    const html = view({ mode, settings: mode === "account" ? SETTINGS : null });
-    assert.equal(headings(html)[0], "Appearance", mode);
-  }
-  const off = view({ sound: false });
-  const feel = off.slice(off.indexOf('aria-labelledby="settings-appearance"'), off.indexOf('aria-labelledby="settings-notifications"'));
-  assert.match(feel, /<h2 class="label" id="settings-appearance">Appearance<\/h2>/);
-  assert.match(feel, /<b>Sound<\/b>/);
-  assert.match(feel, /<button aria-checked="false" aria-label="Sound" class="switch" data-feel-sound="" role="switch" type="button"><\/button>/);
-  // The switch reflects the flag it is given, in any mode; it is never a placeholder (sound is a device choice).
-  assert.match(view({ sound: true }), /<button aria-checked="true" aria-label="Sound" class="switch" data-feel-sound=""/);
-  assert.match(view({ mode: "loading", settings: null, sound: true }), /<button aria-checked="true" aria-label="Sound"/);
 });
 
 test("UI-07 (§14.3): the link sheet is a named modal dialog with the supported Sui wallets", () => {
@@ -234,7 +216,7 @@ test("Hold pays with: the stored coin once the wallet is read, a placeholder whi
 test("failed account settings never invent notification or privacy switch values", () => {
   const html = view({ mode: "error", settings: null });
   const states = switches(html).map(([name]) => name);
-  assert.deepEqual(states, ["Sound", "Celebrations"]);
+  assert.deepEqual(states, ["Celebrations"]);
   assert.match(html, /Your privacy preference could not load/);
   assert.match(html, /Your portfolio visibility could not load/);
   assert.ok((html.match(/Unavailable/g) ?? []).length >= 9);

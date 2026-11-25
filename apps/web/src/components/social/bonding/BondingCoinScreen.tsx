@@ -139,16 +139,11 @@ function PriceValue({ units, price: rawPrice, tradeId }: Readonly<{ units: Price
   return <CoinPriceFigure price={prices.price(rawPrice)} tradeId={tradeId} quoteSymbol={prices.usd ? undefined : quoteSymbol} quoteMark={quoteMark} />;
 }
 
-function hasMarketSound(view: View, poolKey: string | null) {
-  if (view.lifecycle === "migrated") return poolKey !== null;
-  return view.lifecycle !== "migration_ready" && view.inputs?.quoteReserve != null && view.inputs.graduationTarget != null;
-}
-
-function MarketPrice({ units, price, tradeId = null, activity, showSound, showCurrency }: Readonly<{
-  units: PriceUnits | null; price?: string | null; tradeId?: string | null; activity?: ReactNode; showSound?: boolean; showCurrency?: boolean;
+function MarketPrice({ units, price, tradeId = null, activity, showCurrency }: Readonly<{
+  units: PriceUnits | null; price?: string | null; tradeId?: string | null; activity?: ReactNode; showCurrency?: boolean;
 }>) {
   return <MarketPriceRow priceLabel="Current pool price" price={price != null && units ? <PriceValue units={units} price={price} tradeId={tradeId} /> : NO_VALUE}
-    activity={activity} showSound={showSound} showCurrency={showCurrency} />;
+    activity={activity} showCurrency={showCurrency} />;
 }
 
 function ProgressCard({ view, tradeId, children }: Readonly<{ view: View; tradeId: string | null; children?: ReactNode }>) {
@@ -381,7 +376,7 @@ function CoinMarket({ snapshot, page, chart, activity, poolKey, checkpoint }: Re
   const context = coinTradeSource(view, poolKey, lastTrade, receivedAt);
   return <ChartPriceCheckpoint value={{ poolKey, checkpoint }}><ChartTradeContext value={context}>
     <div className={styles.market}>
-      <MarketPrice units={priceUnits(view)} price={price?.price} tradeId={tradeId && price?.cursor ? tradeId : null} showSound={hasMarketSound(view, poolKey)}
+      <MarketPrice units={priceUnits(view)} price={price?.price} tradeId={tradeId && price?.cursor ? tradeId : null}
         showCurrency={view.identity.quoteType !== null} activity={context && <ChartLastTrade placement="headline" />} />
       <CoinMarketCards graduated={graduated} view={view} tick={tick} tradeId={tradeId} chart={chart} activity={activity} />
     </div>

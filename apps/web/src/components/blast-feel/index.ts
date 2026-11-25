@@ -19,15 +19,13 @@
  *    `holdProps`; a social surface does it through
  *    `social/commit/use-held-blast.ts`, which commits through the one commit
  *    module (R3-13).
- *  - Settings renders `<FeelSoundSwitch />`; the Blast mode header renders
- *    `<FeelSoundButton />`.
+ *  - The shared header renders one Audio menu for effects and background music.
  *
  * Three rules the layer keeps, and the tests that hold it to them:
  *
  *  - `prefers-reduced-motion: reduce` **switches the animation off**, not down:
  *    no ball is created, no keyframes run, the glow has no transition.
- *  - Sound is **off until the reader turns it on** (the owner, amending OA-25
- *    Q3a), signed in or not; the choice is kept per device and, when signed
+ *  - Sound is on by default. An explicit choice is kept per device and, when signed
  *    in, on the account. No audio context exists until sound is on and a cue
  *    follows the reader's first gesture, nothing sounds while the tab is
  *    hidden, a press is one voice per 60 ms and a money result sounds once
@@ -38,14 +36,6 @@
  */
 
 export { FeelProvider, useFeel, useFeelMotion, useFeelSound, type FeelContextValue } from "./FeelProvider.tsx";
-export {
-  FEEL_SETTINGS_ROW_DESCRIPTION,
-  FEEL_SETTINGS_ROW_TITLE,
-  FEEL_SETTINGS_SECTION_TITLE,
-  FeelSoundButton,
-  FeelSoundSwitch,
-  type FeelSoundControlProps,
-} from "./FeelSoundSwitch.tsx";
 export { holdAriaLabel, holdLabel, useFeelHold, type FeelHold, type FeelHoldOptions, type FeelHoldProps } from "./use-feel-hold.ts";
 export {
   FeelHoldGesture,
