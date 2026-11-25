@@ -158,7 +158,7 @@ projects:
             branch: main
             region: virginia
             plan: starter
-            numInstances: 2
+            numInstances: 14
             autoDeployTrigger: "off"
             maxShutdownDelaySeconds: 20
             healthCheckPath: /v1/health
