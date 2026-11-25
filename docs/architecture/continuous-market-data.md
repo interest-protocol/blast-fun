@@ -72,7 +72,7 @@ is limited to 128 frames and 64 Ki characters. Saturation returns a retryable
 large snapshots can still require degraded recovery.
 
 Market and legacy hints share the existing native transport stream permits,
-maximum 512 per process. The relay's additional upstream socket is explicitly
+maximum 1,024 per process. The relay's additional upstream socket is explicitly
 included in the fleet envelope; the legacy activity socket remains budgeted for
 other clients. This is process-local fan-out, not a distributed subscription
 directory or evidence of capacity for 10,000 distinct pools.

@@ -138,7 +138,7 @@ test("hints profile needs no SQL or partner settings and retains identity and cr
     /must be absent/,
   );
   assert.throws(
-    () => hintsConfig({ ...configured, BLAST_BACKEND_MAX_HINT_STREAMS: "513" }),
+    () => hintsConfig({ ...configured, BLAST_BACKEND_MAX_HINT_STREAMS: "1025" }),
     /stream capacity/,
   );
 });
