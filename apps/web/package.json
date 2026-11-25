@@ -23,6 +23,7 @@
     "test": "node --no-warnings --import ../../scripts/test-tsx-hooks.mjs --test --experimental-strip-types 'loadtest/**/*.test.mjs' 'src/**/!(*.integration|*.external).test.ts' 'src/**/!(*.integration|*.external).test.tsx' 'test/**/!(*.integration|*.external).test.ts' 'test/**/!(*.integration|*.external).test.tsx'",
     "test:integration": "node ../../scripts/test-integration.mjs",
     "test:shell-typography": "node --test --test-concurrency=1 test/fixtures/workspace/verify-shell-typography.mjs",
+    "test:coin-price-row": "node --test --test-concurrency=1 test/fixtures/workspace/verify-coin-price-row.mjs",
     "test:workspace-layout": "node --test --test-concurrency=1 test/fixtures/workspace/layout/verify.mjs",
     "test:portfolio-fixture": "test -n \"$T020_CONFIG_DIR\" || { echo \"T020_CONFIG_DIR must name the prepared Portfolio fixture configuration\" >&2; exit 1; }; node --no-warnings --import ../../scripts/test-tsx-hooks.mjs --test --experimental-strip-types src/components/social/blast-mode/workspace/PortfolioData.fixture.external.test.ts",
     "typecheck": "tsc --noEmit",

@@ -49,7 +49,7 @@ import { useAppQueryClient } from "#web/lib/query/provider.tsx";
 import { pollInterval } from "#web/lib/query/polling.ts";
 import { legacyCoinMarketQuery } from "./bonding-client.ts";
 import styles from "./bonding-coin.module.css";
-import { ChartCard, CoinCover, CoinIdentityHeader, CoinPriceFigure, CoinTradingActivity, Fact, MarketOverview, MarketPriceRow } from "./CoinPageParts.tsx";
+import { ChartCard, CoinCover, CoinIdentityHeader, CoinPriceFigure, CoinTradingActivity, Fact, MarketOverview, MarketPriceRow, useLastPrice } from "./CoinPageParts.tsx";
 import { bpsPercent } from "@blast/core/lib/bps.ts";
 
 const ZERO = BigInt(0);
@@ -142,7 +142,9 @@ function PriceValue({ units, price: rawPrice, tradeId }: Readonly<{ units: Price
 function MarketPrice({ units, price, tradeId = null, activity, showCurrency }: Readonly<{
   units: PriceUnits | null; price?: string | null; tradeId?: string | null; activity?: ReactNode; showCurrency?: boolean;
 }>) {
+  const last = useLastPrice(price);
   return <MarketPriceRow priceLabel="Current pool price" price={price != null && units ? <PriceValue units={units} price={price} tradeId={tradeId} /> : NO_VALUE}
+    reserve={price == null && last != null && units ? <PriceValue units={units} price={last} tradeId={null} /> : null}
     activity={activity} showCurrency={showCurrency} />;
 }
 

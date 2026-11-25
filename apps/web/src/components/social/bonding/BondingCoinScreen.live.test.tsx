@@ -71,16 +71,22 @@ test("both coin price consumers hide a stream close behind the page's confirmed 
     provenance: { ...curve.provenance, checkpoint: at }, poolKey: CURVE_POOL_KEY, cursor: null, price,
   }));
   const header = () => container.querySelector('[aria-label="Price chart"]')?.previousElementSibling?.querySelector("strong")?.textContent;
+  // The waiting row keeps the last price's space, unseen, so the page below it does not move.
+  const held = () => container.querySelector('[aria-label="Price chart"]')?.previousElementSibling?.querySelector('strong[aria-hidden="true"]')?.textContent;
   const values = () => [header(), container.querySelector("output")?.textContent];
   await render(checkpoint);
   await publish(checkpoint, "1.25");
-  assert.ok(header() && header() !== "—");
+  const shown = header();
+  assert.ok(shown && shown !== "—");
   assert.equal(values()[1], "1.25");
+  assert.equal(held(), undefined);
   await render(checkpoint + 1);
   assert.deepEqual(values(), ["—", "—"]);
+  assert.equal(held(), shown);
   await publish(checkpoint + 1, "1.5");
   assert.ok(header() && header() !== "—");
   assert.equal(values()[1], "1.5");
+  assert.equal(held(), undefined);
 });
 
 test("curve progress advances and a delayed trade or page read cannot undo the buy", async (t) => {

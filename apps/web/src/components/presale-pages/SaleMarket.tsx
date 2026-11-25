@@ -41,7 +41,7 @@ import { SalePriceChart, type MarketExtras } from "./SalePriceChart";
 import { formatMove, presaleHolderShare, priceDirection, type PriceMove } from "./sale-market-format";
 import { PresalePoolChart, usePresalePoolPrice } from "./PresalePoolChart";
 import { PresaleHolderSummary } from "./PresaleHolderSummary";
-import { ChartCard, CoinPriceFigure, MarketOverview, MarketPriceRow } from "#web/components/social/bonding/CoinPageParts.tsx";
+import { ChartCard, CoinPriceFigure, MarketOverview, MarketPriceRow, useLastPrice } from "#web/components/social/bonding/CoinPageParts.tsx";
 import coinStyles from "#web/components/social/bonding/bonding-coin.module.css";
 import { ChartLastTrade } from "#web/components/launchpad/chart/ChartLastTrade.tsx";
 import { CoinPriceCurrencyProvider, useCoinPriceCurrency } from "#web/components/launchpad/chart/CoinPriceCurrency.tsx";
@@ -447,10 +447,12 @@ export function SaleMarket({
 function PresaleMarketPrice({ market, move }: Readonly<{ market: HomeCoinMarket; move?: PriceMove | null }>) {
   const currency = useCoinPriceCurrency();
   const live = usePresalePoolPrice(market.pool);
+  const last = useLastPrice(live?.price);
   const prices = poolPrices(market.decimals, market.quote.decimals, currency?.quoteUsd);
+  const quoteSymbol = prices.usd ? undefined : market.quote.symbol;
   return <MarketPriceRow showCurrency={currency?.rate != null}
     activity={<ChartLastTrade placement="headline" playSound />}
-    price={live ? <CoinPriceFigure price={prices.price(live.price)} quoteSymbol={prices.usd ? undefined : market.quote.symbol}
-      tradeId={live.cursor} /> : NO_VALUE}
-    change={move && live && prices.usd ? { value: <>{formatMove(move)} <span>today</span></>, direction: priceDirection(move.bps) } : null} />;
+    price={live ? <CoinPriceFigure price={prices.price(live.price)} quoteSymbol={quoteSymbol} tradeId={live.cursor} /> : NO_VALUE}
+    reserve={!live && last != null ? <CoinPriceFigure price={prices.price(last)} quoteSymbol={quoteSymbol} tradeId={null} /> : null}
+    change={move && last != null && prices.usd ? { value: <>{formatMove(move)} <span>today</span></>, direction: priceDirection(move.bps) } : null} />;
 }
