@@ -101,7 +101,7 @@ function open(relay: MarketStreamRelay, target: Request): Response {
         if (subscription instanceof Response) {
           refusal = subscription;
         } else {
-          stop = subscription;
+          stop = subscription.stop;
         }
       },
       cancel() {
