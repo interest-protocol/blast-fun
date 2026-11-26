@@ -362,8 +362,15 @@
           "type": "object",
           "properties": {
             "presale_id": {
-              "type": "string",
-              "pattern": "^0x[0-9a-f]{64}$"
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^0x[0-9a-f]{64}$"
+                }
+              ]
             },
             "symbol": {
               "type": "string",
@@ -388,11 +395,16 @@
             },
             "verified_team": {
               "type": "boolean",
-              "description": "R3-23: Blast checked who is behind the sale (social_sale_trust); sent only when true."
+              "description": "R3-23: Blast checked who is behind the coin (social_sale_trust for a sale, social_coin_trust for a coin without one); sent only when true."
+            },
+            "coin_type": {
+              "type": "string",
+              "minLength": 1
             }
           },
           "required": [
             "presale_id",
+            "coin_type",
             "symbol",
             "name",
             "icon_url",
@@ -618,8 +630,15 @@
       "type": "object",
       "properties": {
         "presale_id": {
-          "type": "string",
-          "pattern": "^0x[0-9a-f]{64}$"
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^0x[0-9a-f]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "coin_type": {
           "type": "string",
@@ -826,42 +845,49 @@
           ]
         },
         "sale": {
-          "type": "object",
-          "properties": {
-            "start_ms": {
-              "type": "integer",
-              "minimum": 0
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "start_ms": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "end_ms": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "raise_target": {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)$"
+                },
+                "raised": {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)$"
+                },
+                "participants": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "savers": {
+                  "description": "Accounts with a verified X link that have the sale saved now. Present only on a Discover read that asks for presales (`presales=1`).",
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "start_ms",
+                "end_ms",
+                "raise_target",
+                "raised",
+                "participants"
+              ],
+              "additionalProperties": false
             },
-            "end_ms": {
-              "type": "integer",
-              "minimum": 0
-            },
-            "raise_target": {
-              "type": "string",
-              "pattern": "^(0|[1-9][0-9]*)$"
-            },
-            "raised": {
-              "type": "string",
-              "pattern": "^(0|[1-9][0-9]*)$"
-            },
-            "participants": {
-              "type": "integer",
-              "minimum": 0
-            },
-            "savers": {
-              "description": "Accounts with a verified X link that have the sale saved now. Present only on a Discover read that asks for presales (`presales=1`).",
-              "type": "integer",
-              "minimum": 0
+            {
+              "type": "null"
             }
-          },
-          "required": [
-            "start_ms",
-            "end_ms",
-            "raise_target",
-            "raised",
-            "participants"
-          ],
-          "additionalProperties": false
+          ]
         },
         "top_holders": {
           "type": "object",

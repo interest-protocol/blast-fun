@@ -149,7 +149,7 @@ test("trader holdings must identify a presale or a launch", () => {
   );
 });
 
-test("standalone discover coins stay distinct from the published following presale shape", () => {
+test("the published following contract accepts a coin without a presale, as Discover does", () => {
   const activity = {
     scope: "pool",
     window: "24h",
@@ -203,7 +203,7 @@ test("standalone discover coins stay distinct from the published following presa
     homePublishedContracts[
       "home-following-response"
     ].definitions.coin.safeParse(coin).success,
-    false,
+    true,
   );
   assert.equal(
     homePublishedContracts["home-coins-page"].definitions.coin.safeParse({

@@ -1057,7 +1057,7 @@ test("Following: strictly the viewer's follows, previews and threads scoped, dis
   withFixture(async ({ admin, following }) => {
     const ben = await ok<HomeFollowingResponse>(await following("ben", { mode: "coins", window: "24h" }), "home-following-response", "private, no-store");
     assert.equal(ben.mode, "coins");
-    if (ben.mode !== "coins") return;
+    assert.equal(ben.mode, "coins");
     assert.equal(ben.following, 4);
     // By the latest followed activity or post: Maya's sell 2 min ago, Cyra's post 10 min ago, Maya's commit 30 min ago.
     assert.deepEqual(symbols(ben.coins), ["ORBIT", "QUIET", "HALO"]);
@@ -1073,15 +1073,15 @@ test("Following: strictly the viewer's follows, previews and threads scoped, dis
     const quiet = ben.coins[1]!;
     assert.deepEqual([quiet.qualified, quiet.activity.events, quiet.discussion.posts], ["discussion", 0, 1]);
     const preview = await ok<HomeFollowingResponse>(await following("ben", { mode: "preview", window: "24h", presale_ids: [P.orbit, P.eman] }), "home-following-response", "private, no-store");
-    if (preview.mode !== "preview") return;
+    assert.equal(preview.mode, "preview");
     assert.deepEqual([preview.previews[P.orbit]!.participants, preview.previews[P.eman]!.participants, preview.previews[P.eman]!.preview], [3, 0, []]);
     const thread = await ok<HomeFollowingResponse>(await following("ben", { mode: "thread", window: "24h", presale_id: P.orbit }), "home-following-response", "private, no-store");
-    if (thread.mode !== "thread") return;
+    assert.equal(thread.mode, "thread");
     assert.deepEqual(keysOf(thread.participants), ["c:maya", "c:leo", "c:jules"]);
     assert.deepEqual([thread.totals.scope, thread.totals.participants, thread.participants[0]!.relation, thread.participants[0]!.events?.length], ["followed", 3, "followed", 4]);
     // The tape: the followed accounts' events across every coin, newest first; wallets and the unfollowed never appear.
     const tape = await ok<HomeFollowingResponse>(await following("ben", { mode: "tape", window: "24h" }), "home-following-response", "private, no-store");
-    if (tape.mode !== "tape") return;
+    assert.equal(tape.mode, "tape");
     assert.ok(tape.events.length >= 6 && tape.events.length <= 12, `${tape.events.length} tape events`);
     assert.ok(tape.events.every((event, index) => index === 0 || tape.events[index - 1]!.occurred_at_ms >= event.occurred_at_ms), "newest first");
     assert.deepEqual([tape.events[0]!.actor.type === "account" ? tape.events[0]!.actor.callsign : null, tape.events[0]!.kind, tape.events[0]!.coin.symbol], ["maya", "trade_sell", "ORBIT"]);
@@ -1091,11 +1091,11 @@ test("Following: strictly the viewer's follows, previews and threads scoped, dis
     assert.ok(tape.events.every((event) => event.market_cap_usd === null), "no cap stamped yet");
     await admin.query("UPDATE blast_infra_fixture.activity SET market_cap_usd = 45000.5 WHERE actor = ANY($1::text[]) AND kind = 'trade_sell'", [[W.mayaA, W.mayaB]]);
     const capped = await ok<HomeFollowingResponse>(await following("ben", { mode: "tape", window: "24h" }), "home-following-response", "private, no-store");
-    if (capped.mode !== "tape") return;
+    assert.equal(capped.mode, "tape");
     assert.deepEqual([capped.events[0]!.kind, capped.events[0]!.market_cap_usd], ["trade_sell", "45000.50"]);
     assert.ok(capped.events.filter((event) => event.kind !== "trade_sell").every((event) => event.market_cap_usd === null));
     const solo = await ok<HomeFollowingResponse>(await following("solo", { mode: "coins", window: "24h" }), "home-following-response", "private, no-store");
-    if (solo.mode !== "coins") return;
+    assert.equal(solo.mode, "coins");
     assert.deepEqual([solo.following, solo.coins], [0, []]);
     assert.equal((await following(null, { mode: "coins", window: "24h" })).status, 401);
     for (const bad of [{ mode: "coins" }, { mode: "coins", window: "24h", limit: 0 }, { mode: "preview", window: "1h", presale_ids: [] }, { mode: "thread", window: "1h" }, { mode: "tape", window: "1h", limit: 5 }, { mode: "x", window: "1h" }]) {
@@ -1103,6 +1103,66 @@ test("Following: strictly the viewer's follows, previews and threads scoped, dis
     }
   }));
 
+
+test("Following covers every Blast coin: a followed account's launch vault coin and live curve trades reach the tape, the coins and the preview; an unfollowed account's never do", { skip }, () =>
+  withFixture(async ({ admin, following, now }) => {
+    await admin.query("INSERT INTO blast_infra_fixture.coin_metadata (coin_type,name,symbol,decimals) VALUES ($1,'USD Coin','USDC',6)", [QUOTE]);
+    const metadata = (coinType: string, symbol: string) =>
+      admin.query("INSERT INTO blast_infra_fixture.coin_metadata (coin_type,name,symbol,decimals) VALUES ($1,$2,$2,9)", [coinType, symbol]);
+    // VAULT: launched straight into a Cetus launch vault, no presale.
+    const vault = coinOf(hex("fa1"), "VAULT");
+    await metadata(vault, "VAULT");
+    await admin.query(`INSERT INTO blast_infra_fixture.vaults
+      (vault_id,origin_kind,origin_id,meme_type,venue_type,venue,pool_id,quote_type,created_checkpoint,created_tx_slot)
+      VALUES ($1,'launch',$1,$2,$3,'cetus',$1,$4,40000,0)`, [hex("fa10"), vault, `${hex("f")}::cetus::Venue`, QUOTE]);
+    // CURVE and OTHER: bonding curves still filling, no vault yet.
+    const liveCurve = async (id: string, symbol: string) => {
+      const coinType = coinOf(hex(id), symbol);
+      const poolKey = `blast_curve:${hex(`${id}0`)}`;
+      await metadata(coinType, symbol);
+      await admin.query(`INSERT INTO coins (coin_type,decimals,launcher,creator,metadata,pool_key,created_checkpoint,created_at_ms,currency_supply,balance_0x0)
+        VALUES ($1,9,$2,$2,'{}',$3,41000,$4,1000000000000000000,0)`, [coinType, W.anon, poolKey, now - 2 * DAY]);
+      await admin.query(`INSERT INTO pools (pool_key,venue,coin_type,quote_type,lifecycle,created_checkpoint,created_at_ms,quote_reserve,params)
+        VALUES ($1,'blast_curve',$2,$3,'live',41000,$4,'2000000000',$5)`, [poolKey, coinType, QUOTE, now - 2 * DAY, { graduation_target: "8000000000" }]);
+      return coinType;
+    };
+    const curve = await liveCurve("fc1", "CURVE");
+    const other = await liveCurve("fc2", "OTHER");
+    const trade = (kind: string, actor: string, coinType: string, agoMs: number, cp: number, venue: string) =>
+      activity(kind, actor, null, now - agoMs, { checkpoint: cp, coin_type: coinType, coin_amount: "1000000000", quote_amount: "50000000", usd_value: "50", venue });
+    await seedChainRead(admin, {
+      activity: [
+        // Maya (followed by ben) buys VAULT and sells CURVE.
+        trade("trade_buy", W.mayaA, vault, 30_000, 49_980, "cetus"),
+        trade("trade_sell", W.mayaB, curve, 40_000, 49_981, "blast_curve"),
+        // Satoshi (named, not followed by ben) and an unnamed wallet: never in ben's reads.
+        trade("trade_buy", W.satoshi, other, 20_000, 49_982, "blast_curve"),
+        trade("trade_buy", W.anon, vault, 10_000, 49_983, "cetus"),
+      ],
+    });
+
+    const tape = await ok<HomeFollowingResponse>(await following("ben", { mode: "tape", window: "24h" }), "home-following-response", "private, no-store");
+    assert.equal(tape.mode, "tape");
+    const standalone = tape.events.filter((event) => event.coin.presale_id === null);
+    assert.deepEqual(standalone.map((event) => [event.actor.type === "account" ? event.actor.callsign : null, event.kind, event.coin.symbol, event.coin.coin_type]),
+      [["maya", "trade_buy", "VAULT", vault], ["maya", "trade_sell", "CURVE", curve]]);
+    assert.equal(tape.events[0]!.coin.coin_type, vault, "newest first, across presale and standalone coins");
+    assert.doesNotMatch(JSON.stringify(tape), /satoshi|OTHER|bb01/);
+
+    const ben = await ok<HomeFollowingResponse>(await following("ben", { mode: "coins", window: "24h" }), "home-following-response", "private, no-store");
+    assert.equal(ben.mode, "coins");
+    assert.deepEqual(symbols(ben.coins), ["VAULT", "CURVE", "ORBIT", "QUIET", "HALO"]);
+    const [vaultCoin, curveCoin] = ben.coins;
+    assert.deepEqual([vaultCoin!.presale_id, vaultCoin!.coin_type, vaultCoin!.activity.scope, vaultCoin!.activity.participants, vaultCoin!.activity.buyers], [null, vault, "followed", 1, 1]);
+    assert.deepEqual(keysOf(vaultCoin!.activity.preview), ["c:maya"]);
+    assert.deepEqual([curveCoin!.presale_id, curveCoin!.coin_type, curveCoin!.activity.participants, curveCoin!.activity.sellers], [null, curve, 1, 1]);
+
+    const preview = await ok<HomeFollowingResponse>(await following("ben", { mode: "preview", window: "24h", presale_ids: [vault, curve, other, P.orbit] }), "home-following-response", "private, no-store");
+    assert.equal(preview.mode, "preview");
+    assert.deepEqual([vault, curve, other, P.orbit].map((id) => preview.previews[id]!.participants), [1, 1, 0, 3]);
+    assert.deepEqual(keysOf(preview.previews[vault]!.preview), ["c:maya"]);
+    assert.ok(preview.previews[vault]!.preview.every((row) => row.relation === "followed"));
+  }));
 
 test("Discover and saved coins fill missing price and supply from tracked pools independently", { skip }, () => {
   const bySymbol = new Map(INDEXED_POOL_COINS.map((coin) => [coin.symbol, coin]));
