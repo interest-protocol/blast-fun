@@ -1261,9 +1261,7 @@ function WorkspaceBalance() {
   const signedIn = !!useCurrentBlastAccount().accountState?.account;
   const portfolio = useShellPortfolioContext();
   const hidden = useShellPrefs().amountsHidden;
-  return <>
-    {signedIn ? <span className={styles.balance}><AccountBalance hidden={hidden} portfolio={portfolio.state} onRetry={portfolio.refresh} /></span> : null}
-  </>;
+  return signedIn ? <span className={styles.balance}><AccountBalance hidden={hidden} portfolio={portfolio.state} onRetry={portfolio.refresh} /></span> : null;
 }
 
 function dataViewTabId(view: DataView) {

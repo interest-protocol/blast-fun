@@ -35,10 +35,9 @@ export default async function AppLayout({
     config.privyAppId.status === "available",
   );
 
-  const testPricing = testSuiPriceEnabled();
   const shellBanner = (
     <>
-      <TestPricingNotice enabled={testPricing} />
+      <TestPricingNotice enabled={testSuiPriceEnabled()} />
       {banner}
     </>
   );
