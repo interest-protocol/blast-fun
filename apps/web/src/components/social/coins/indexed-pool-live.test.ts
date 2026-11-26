@@ -30,7 +30,7 @@ function setup(answers: (pool: VenuePoolKey, at: number | null) => number | null
   const timers: { run: () => void; at: number }[] = [];
   const schedule = (run: () => void, ms: number) => { const timer = { run, at: now + ms }; timers.push(timer); return () => { const index = timers.indexOf(timer); if (index >= 0) timers.splice(index, 1); }; };
   const sources: Source[] = [];
-  const hub = new MarketStreamHub({ createSource: () => { const source = new Source(); sources.push(source); return source; }, schedule, defer: queueMicrotask, random: () => 0, visible: () => true, onVisibilityChange: () => () => {} });
+  const hub = new MarketStreamHub({ createSource: () => { const source = new Source(); sources.push(source); return source; }, schedule, defer: queueMicrotask, settle: (run) => { run(); return () => {}; }, random: () => 0, visible: () => true, onVisibilityChange: () => () => {} });
   const client = createTestQueryClient();
   const reads: [VenuePoolKey, number | null][] = [];
   const rows: ActivityRow[] = [];

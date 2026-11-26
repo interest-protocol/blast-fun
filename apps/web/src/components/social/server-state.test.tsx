@@ -431,7 +431,7 @@ test("infra hints refresh discovery and creator lists, including after the edge 
   followup.run();
   await settleQueries(client);
   assert.deepEqual(reads, { live: 4, ended: 4, sale: 4, wallet: 1, mine: 1, created: 4 });
-  assert.deepEqual(HINTED_KEYS, [queryKeys.presales.lists, queryKeys.presales.details, queryKeys.prices.batches, queryKeys.me.createdPresales()]);
+  assert.deepEqual(HINTED_KEYS, [queryKeys.presales.lists, queryKeys.prices.batches, queryKeys.me.createdPresales()]);
   off();
   stop();
 });
@@ -527,6 +527,60 @@ test("malformed successful presale and featured lists preserve diagnostic refere
     });
     client.clear();
   }
+});
+
+test("a plain hint re-reads only sales still taking commits; an ended sale reads on its own lifecycle hint or a catch-up", async () => {
+  const client = createTestQueryClient();
+  const sale = (phase: string) => async () => ({ presale: { presale_id: phase, phase } });
+  const reads = { open: 0, trading: 0, cancelled: 0 };
+  const offs = (["open", "trading", "cancelled"] as const).map((phase) =>
+    new QueryObserver(client, { queryKey: queryKeys.presales.detail(phase === "open" ? OPEN : phase === "trading" ? OTHER : "0xcancelled"), queryFn: async () => { reads[phase] += 1; return sale(phase)(); }, staleTime: Number.POSITIVE_INFINITY }).subscribe(() => undefined),
+  );
+  await settleQueries(client);
+  let now = 100_000;
+  let signal: (hint?: FreshnessHint) => void = () => undefined;
+  const off = hintInvalidation(client, { name: "fake", subscribe: (next) => ((signal = next), () => undefined) }, { now: () => now, setTimeout: () => 0, clearTimeout: () => undefined });
+  try {
+    signal({ atMs: now, cause: "hint" });
+    await settleQueries(client);
+    assert.deepEqual(reads, { open: 2, trading: 1, cancelled: 1 }, "a commit anywhere cannot move a graduated or cancelled sale");
+    now += 10_000;
+    signal({ atMs: now, cause: "hint", presaleId: OTHER, lifecycle: "migrated" });
+    await settleQueries(client);
+    assert.deepEqual(reads, { open: 3, trading: 2, cancelled: 1 }, "its own lifecycle hint reads that sale, not another ended one");
+    now += 10_000;
+    signal({ atMs: now, cause: "connect", catchUp: true });
+    await settleQueries(client);
+    assert.deepEqual(reads, { open: 4, trading: 3, cancelled: 2 }, "a catch-up after a gap reads every sale");
+  } finally { off(); offs.forEach((stop) => stop()); client.clear(); }
+});
+
+test("sales that change phase together each read once, though the hint gate keeps one hint and drops the rest", async () => {
+  const client = createTestQueryClient();
+  const ids = ["0xa", "0xb", "0xc"] as const;
+  const reads: Record<string, number> = { "0xa": 0, "0xb": 0, "0xc": 0 };
+  const offs = ids.map((id) =>
+    new QueryObserver(client, { queryKey: queryKeys.presales.detail(id), queryFn: async () => { reads[id]! += 1; return { presale: { presale_id: id, phase: "funded" } }; }, staleTime: Number.POSITIVE_INFINITY }).subscribe(() => undefined),
+  );
+  await settleQueries(client);
+  let now = 100_000;
+  const timers: { run: () => void; ms: number }[] = [];
+  let signal: (hint?: FreshnessHint) => void = () => undefined;
+  const off = hintInvalidation(
+    client,
+    { name: "fake", subscribe: (next) => ((signal = next), () => undefined) },
+    { now: () => now, setTimeout: (run, ms) => timers.push({ run, ms }), clearTimeout: () => undefined },
+    () => 0,
+  );
+  try {
+    for (const id of ids) signal({ atMs: now, cause: "hint", presaleId: id, lifecycle: "funded" });
+    await settleQueries(client);
+    assert.deepEqual(reads, { "0xa": 2, "0xb": 1, "0xc": 1 }, "the first hint reads its sale at once; the gate keeps the second and drops the third");
+    now += 5_000;
+    for (const timer of timers.splice(0).filter(({ ms }) => ms <= 5_000)) timer.run();
+    await settleQueries(client);
+    assert.deepEqual(reads, { "0xa": 2, "0xb": 2, "0xc": 2 }, "the kept hint's look reads the dropped sale too");
+  } finally { off(); offs.forEach((stop) => stop()); client.clear(); }
 });
 
 test("a migration hint refreshes the allocation, wallet and vesting reads without a page reload", async () => {

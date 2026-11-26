@@ -124,5 +124,28 @@ export function clearViewerQueries(client: QueryClient): void {
   client.removeQueries({ queryKey: queryKeys.me.all });
 }
 
-/** Discovery reads that a committed activity or lifecycle hint can change. */
-export const HINTED_KEYS: readonly QueryKey[] = [queryKeys.presales.lists, queryKeys.presales.details, queryKeys.prices.batches, queryKeys.me.createdPresales()];
+/** Discovery reads that a committed activity or lifecycle hint can change. Sale details are narrower: see `saleDetailsHinted`. */
+export const HINTED_KEYS: readonly QueryKey[] = [queryKeys.presales.lists, queryKeys.prices.batches, queryKeys.me.createdPresales()];
+
+/** The phases in which a sale can still take a commit; the edge may answer `closed` while late commits are still being indexed. */
+const TAKES_COMMITS = new Set(["open", "closed"]);
+
+/**
+ * The sale details a hint can change. A plain activity hint names no sale, so it
+ * may be a commit to any sale still taking commits; every other sale (pending,
+ * funded, trading, cancelled) moves only on its own lifecycle hint, on a catch-up
+ * after a gap, or on its own timer. Without this, every hint anywhere re-read the
+ * open page of a graduated sale (about every 7 s on a busy site).
+ */
+export function saleDetailsHinted(sales: ReadonlySet<string>, catchUp: boolean): Parameters<QueryClient["invalidateQueries"]>[0] {
+  return {
+    queryKey: queryKeys.presales.details,
+    predicate: ({ queryKey, state }) => {
+      if (catchUp || sales.has(String(queryKey[4]))) return true;
+      const sale = isRecord(state.data) && isRecord(state.data.presale) ? state.data.presale : null;
+      return sale === null || typeof sale.phase !== "string" || TAKES_COMMITS.has(sale.phase);
+    },
+  };
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
