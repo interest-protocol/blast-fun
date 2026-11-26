@@ -6,6 +6,7 @@ import type { ActivityRow } from "@blast/core/modules/launchpad-contract/activit
 import { traderProfileKey, traderProfilesPath, traderProfilesSchema, type TraderProfileRequest, type TraderProfiles } from "@blast/core/modules/social/contracts/trader-profiles.ts";
 import { gatedFetch } from "#web/lib/api-gate-client.ts";
 import { useAppQueryClient } from "#web/lib/query/provider.tsx";
+import { useLiveListening } from "#web/components/launchpad/coin/LiveScreen.tsx";
 import { recentTrades } from "./recent-trades";
 import { listDisplay, type ListState } from "./activity-model";
 
@@ -22,6 +23,14 @@ export async function loadTraderProfiles(traders: readonly TraderProfileRequest[
   return profiles;
 }
 
+/**
+ * The profile read's period: 15 s, or 60 s while the live screen listens and every shown trader has
+ * an answer. Profiles change rarely; a new trader, or a failed read, is asked again within 15–18 s.
+ */
+export function profilesPollMs(listening: boolean, traders: readonly TraderProfileRequest[], answered: TraderProfiles | undefined): number {
+  return listening && traders.every((trader) => answered?.[traderProfileKey(trader)] !== undefined) ? 60_000 : 15_000;
+}
+
 /** Revalidate public profiles on the existing poll. Keep the last good answer while the next one is pending. */
 export function useTraderProfiles(launchId: string, activity: ListState<ActivityRow>, enabled: boolean, shownRows?: readonly ActivityRow[], leaving?: ActivityRow | null): TraderProfiles {
   const client = useAppQueryClient();
@@ -31,6 +40,7 @@ export function useTraderProfiles(launchId: string, activity: ListState<Activity
   const traders = view ? rows.flatMap((row) => row.actor && view.rows.some((confirmed) => confirmed.position === row.position)
     ? [{ address: row.actor, timestampMs: row.timestampMs }] : []) : [];
   const active = enabled && view !== null;
+  const listening = useLiveListening();
   const query = useQuery({
     queryKey: [TRADER_PROFILES_QUERY, launchId, active],
     queryFn: ({ signal }) => loadTraderProfiles(traders, AbortSignal.any([signal, AbortSignal.timeout(15000)])),
@@ -38,7 +48,7 @@ export function useTraderProfiles(launchId: string, activity: ListState<Activity
     retry: false,
     gcTime: 0,
     staleTime: 0,
-    refetchInterval: (query) => pollInterval(15_000, query),
+    refetchInterval: (query) => pollInterval(profilesPollMs(listening, traders, query.state.status === "error" ? undefined : query.state.data), query),
   }, client);
   if (!active || query.isError || !query.data) return NO_PROFILES;
   const eligible = new Set(traders.map(traderProfileKey));

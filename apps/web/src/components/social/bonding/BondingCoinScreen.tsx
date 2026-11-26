@@ -401,7 +401,7 @@ function CoinMarket({ snapshot, page, chart, activity, poolKey, checkpoint, expe
   const liveOn = useLiveScreen() && expected !== null && page.confirmed;
   const live = useLiveCoin({ coin: snapshot.identity.coinType, pools: poolKey ? [poolKey] : [], expected, enabled: liveOn });
   const stats = statsAfterRead(live.stats, checkpoint);
-  useReportListening(live.live && live.stats !== null);
+  useReportListening(live.live);
   const graduated = snapshot.lifecycle === "migrated";
   const view = !graduated && tick ? coinView(page, tick) : snapshot;
   const tradeId = tick?.showCue ? tick.trade.cursor : null;
@@ -549,7 +549,7 @@ export function LegacyCoinScreen({ coinType, name, symbol, logoUrl, chart, decim
   const liveScreen = useLiveScreen();
   // Both pools of the Trades list (at most a stream's two), so neither waits on a poll while the other streams.
   const live = useLiveCoin({ coin: coinType, pools: poolKeys.length <= 2 && poolKeys.includes(poolKey) ? poolKeys : [poolKey], pool: poolKey, expected: null, enabled: liveScreen });
-  useReportListening(live.live && live.stats !== null);
+  useReportListening(live.live);
   const { market, fdvUsd: readFdvUsd } = useLegacyMarket(coinType, !major, useLiveListening());
   const fdvUsd = live.stats?.fdvUsd ?? readFdvUsd;
   const mark = <>{verified || verifiedCommunity ? <CoinVerifiedMark community={verifiedCommunity} /> : null}{legacy ? <CoinLegacyMark /> : null}</>;

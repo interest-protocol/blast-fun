@@ -556,7 +556,8 @@ test("the live screen polls only the pool that is not live; the other streams wi
   s.client.stop();
 });
 
-test("on a live stream a quiet pool's price is renewed by a read before its proof runs out; a trading pool's needs none", async (t) => {
+// This fails if the live screen reads a quiet pool's history again while its stream stays live.
+test("on a live stream a quiet pool keeps its price with no reads; it ends, and reads resume, once the stream is stale", async (t) => {
   const s = setup([CURVE], undefined, null, false);
   const prices: (ChartPriceUpdate | null)[] = [];
   t.after(subscribeChartPrice(CURVE, expected, (price) => prices.push(price)));
@@ -567,23 +568,43 @@ test("on a live stream a quiet pool's price is renewed by a read before its proo
   s.loads.shift()!.resolve(answer(10));
   await settle();
   const poll = () => s.timers.find((timer) => timer.ms === 15_000)!.run();
+  s.advance(30_000);
+  s.timers.find(({ ms }) => ms === 29_980)!.run();
   poll();
-  assert.equal(s.loads.length, 0, "a fresh price needs no read");
-  s.advance(10_000);
+  s.advance(60_000);
   poll();
-  assert.deepEqual(s.loads.map((load) => load.pool), [CURVE], "a quiet pool reads before its price expires");
-  s.loads.shift()!.resolve(answer(10_000));
-  await settle();
-  assert.equal(prices.at(-1)?.provenance.checkpoint, 10_000);
-  assert.equal(prices.includes(null), false, "the price never blanks while it is renewed");
-  s.advance(5_000);
-  s.source().emit("market", trade(15_000)); s.flush();
-  s.advance(5_000);
+  assert.equal(s.loads.length, 0, "no read while the pool is live");
+  assert.equal(prices.includes(null), false, "the price outlives its proof while the pool is live");
+  s.source().emit("market", trade(90_000)); s.flush();
+  assert.equal(prices.at(-1)?.provenance.checkpoint, 90_000, "a trade still moves it");
+  s.advance(31_000);
+  s.timers.filter(({ ms }) => ms === 29_980).at(-1)!.run();
+  s.source().emit("status", { state: "stale" });
+  assert.equal(prices.at(-1), null, "a held price ends when the stream goes stale");
   poll();
-  assert.equal(s.loads.length, 0, "a trade renews the price without a read");
+  assert.deepEqual(s.loads.map((load) => load.pool), [CURVE], "and the reads resume");
 });
 
-test("a failed or unavailable renewal read leaves a live chart and its price as they are", async (t) => {
+// This fails if a price whose proof is still running is dropped when the stream goes stale, or held once it runs out there.
+test("a price within its proof stays when the stream goes stale, and ends when the proof runs out there", async (t) => {
+  const s = setup([CURVE], undefined, null, false);
+  const prices: (ChartPriceUpdate | null)[] = [];
+  t.after(subscribeChartPrice(CURVE, expected, (price) => prices.push(price)));
+  s.client.start();
+  t.after(() => s.client.stop());
+  s.source().ready(10);
+  s.source().emit("hint", { type: "hello", provenance: wireProvenance(10) });
+  s.loads.shift()!.resolve(answer(10));
+  await settle();
+  s.source().emit("status", { state: "stale" });
+  assert.equal(prices.includes(null), false);
+  s.advance(30_000);
+  s.timers.find(({ ms }) => ms === 29_980)!.run();
+  assert.equal(prices.at(-1), null);
+});
+
+// This fails if a quiet pool's price, dropped during a short stale spell, stays "—" once the stream is live again.
+test("a price dropped while the stream was stale is read again on the next tick once it is live, even after a failed read", async (t) => {
   const s = setup([CURVE], undefined, null, false);
   const prices: (ChartPriceUpdate | null)[] = [];
   t.after(subscribeChartPrice(CURVE, expected, (price) => prices.push(price)));
@@ -594,20 +615,47 @@ test("a failed or unavailable renewal read leaves a live chart and its price as 
   s.loads.shift()!.resolve(answer(10));
   await settle();
   const poll = () => s.timers.find((timer) => timer.ms === 15_000)!.run();
-  const shown = s.sections.length;
-  s.advance(10_000);
+  s.advance(30_000);
+  s.timers.find(({ ms }) => ms === 29_980)!.run();
+  s.source().emit("status", { state: "stale" });
+  s.source().emit("status", { state: "fresh" });
+  assert.equal(prices.at(-1), null);
+  assert.equal(s.statuses.at(-1), "streaming");
   poll();
+  assert.deepEqual(s.loads.map((load) => load.pool), [CURVE], "the missing price is read");
   s.loads.shift()!.reject(new Error("429"));
   await settle();
+  assert.equal(s.statuses.at(-1), "streaming", "a failed read leaves the live chart as it is");
   s.advance(1_000);
   poll();
-  s.loads.shift()!.resolve({ page: null, section: { state: "unavailable", reason: "stream-history-unavailable" } });
+  s.loads.shift()!.resolve(answer(31_000));
   await settle();
-  assert.equal(s.sections.length, shown, "the shown history stays");
-  assert.equal(prices.includes(null), false, "the price stays");
-  assert.equal(s.statuses.at(-1), "streaming");
-  s.source().emit("market", trade(20_000)); s.flush();
-  assert.equal(prices.at(-1)?.provenance.checkpoint, 20_000, "a later trade still applies");
+  assert.equal(prices.at(-1)?.provenance.checkpoint, 31_000, "the price returns");
+  poll();
+  assert.equal(s.loads.length, 0, "and the reads rest again");
+});
+
+// This fails if a re-fence of a quiet pool replays its old read as the price and never reads again.
+test("a quiet pool fenced again after its proof ran out reads its price on the next tick", async (t) => {
+  const s = setup([CURVE], undefined, null, false);
+  const prices: (ChartPriceUpdate | null)[] = [];
+  t.after(subscribeChartPrice(CURVE, expected, (price) => prices.push(price)));
+  s.client.start();
+  t.after(() => s.client.stop());
+  s.source().ready(10);
+  s.source().emit("hint", { type: "hello", provenance: wireProvenance(10) });
+  s.loads.shift()!.resolve(answer(10));
+  await settle();
+  s.advance(40_000);
+  s.source().emit("status", { state: "recovering", pool_key: CURVE });
+  s.source().ready(10);
+  assert.equal(s.loads.length, 0, "the fence reuses the read that reaches it");
+  assert.equal(prices.at(-1), null, "whose price is too old to show");
+  s.timers.find((timer) => timer.ms === 15_000)!.run();
+  assert.deepEqual(s.loads.map((load) => load.pool), [CURVE]);
+  s.loads.shift()!.resolve(answer(40_000));
+  await settle();
+  assert.equal(prices.at(-1)?.provenance.checkpoint, 40_000);
 });
 
 test("on a live stream a quiet pool shown stale reads again on the next tick and recovers its price", async (t) => {

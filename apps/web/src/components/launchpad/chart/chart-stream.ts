@@ -10,8 +10,6 @@ import { chartPriceRemaining, publishChartPrice, type ChartPriceUpdate } from ".
 import type { ChartRequest } from "./chart-model.ts";
 
 export type ChartStreamStatus = "connecting" | "streaming" | "recovering" | "reconnecting" | "unavailable" | "paused";
-/** A live stream renews a quiet pool's price once this little of its proof is left, before the next poll tick. */
-const PRICE_RENEW_MS = 20_000;
 type Pool = {
   fence: number | null;
   /** The checkpoint a history read must reach to start the stream: after it, every pool event arrives as a frame. */
@@ -19,8 +17,10 @@ type Pool = {
   cutoff: number | null;
   priceMissing: boolean;
   cancelPriceExpiry: (() => void) | null;
-  /** When the last published price's proof runs out, kept after it does; null while the pool has no price. */
-  priceProofEnds: number | null;
+  /** The published price outlived its proof while the live screen follows the pool's live stream (see `expirePrice`). */
+  priceHeld: boolean;
+  /** A price is published for the pool now. */
+  priced: boolean;
   page: PoolCandlePage | null;
   section: Section<PoolCandlePage> | null;
   loading: boolean;
@@ -93,7 +93,7 @@ export class ChartStream {
 
   constructor(options: Options) {
     this.options = options;
-    for (const pool of options.pools) this.pools.set(pool, { fence: null, reach: null, cutoff: null, priceMissing: false, cancelPriceExpiry: null, priceProofEnds: null, page: null, section: null, loading: false, buffered: [], retryAttempts: 0, cancelRetry: null, inflight: null, untouched: null, generation: 0, state: null });
+    for (const pool of options.pools) this.pools.set(pool, { fence: null, reach: null, cutoff: null, priceMissing: false, cancelPriceExpiry: null, priceHeld: false, priced: false, page: null, section: null, loading: false, buffered: [], retryAttempts: 0, cancelRetry: null, inflight: null, untouched: null, generation: 0, state: null });
   }
 
   start(initial?: readonly (readonly [string, ChartPoolRead])[]): void {
@@ -169,14 +169,15 @@ export class ChartStream {
       if (remaining && remaining > 0) return this.poll();
       // A hidden tab reads nothing; its stream's next fence brings the chart up to date.
       if (!this.visible()) return this.poll();
-      // A live stream needs no read when the screen asked for none (`livePolls`), except to renew the
-      // price of a quiet pool, whose proof would otherwise run out before the next tick.
+      // A live stream needs no read when the screen asked for none (`livePolls`), however quiet the
+      // pool: its price holds while it stays live (`expirePrice`). Stale history (a frame that came
+      // too late), or a close with no price shown (dropped while the stream was stale, or an old
+      // read replayed at a fence), is read again rather than leave "—" until the next trade.
       // Each pool on its own: a pool that is not live is read while the other streams.
-      const renewBy = this.now() + PRICE_RENEW_MS;
       // A curve the coin has migrated off trades no more: once its history is read, only the venue is polled.
       const curve = this.options.migration()?.curvePoolKey;
       const due = [...this.pools].filter(([key, pool]) => (key !== curve || pool.page === null)
-        && (this.options.livePolls !== false || pool.state !== "live" || (pool.priceProofEnds !== null && pool.priceProofEnds <= renewBy)));
+        && (this.options.livePolls !== false || pool.state !== "live" || pool.section?.state === "stale" || this.priceWanted(pool)));
       if (!due.length) return this.poll();
       void Promise.all(due.map(([key]) => this.load(key))).then(() => this.poll());
     }, Math.max(1_000, delay));
@@ -202,6 +203,8 @@ export class ChartStream {
     const pool = this.pools.get(key);
     if (this.stopped || !pool) return;
     pool.state = state;
+    // A price held only by the live stream ends with it; the reads that now run bring a proven one.
+    if (state !== "live" && pool.priceHeld) this.invalidatePrice(key);
     // `live` brings a fence; `stale` keeps it (frames may pause, polls run meanwhile).
     if (state === "live" || state === "stale" || pool.fence === null) return;
     // The socket went away: the fence ends with it, and what follows it is no longer current.
@@ -408,7 +411,26 @@ export class ChartStream {
     const pool = this.pools.get(key)!;
     pool.cancelPriceExpiry?.();
     pool.cancelPriceExpiry = null;
+    pool.priceHeld = false;
+    pool.priced = false;
     publishChartPrice(key, null);
+  }
+
+  /** The pool's history has a close the stream would price, yet no price is shown. */
+  private priceWanted(pool: Pool): boolean {
+    return !pool.priced && !pool.priceMissing && pool.page !== null && latestClose(pool.page) !== undefined;
+  }
+
+  /**
+   * The price's proof ran out. On the live screen a pool that is live and followed by its history
+   * keeps it: the stream brings every trade, and the relay calls the stream `stale` once the
+   * indexer stops moving, so a quiet pool's last price is still its price. Otherwise it ends.
+   */
+  private expirePrice(key: string): void {
+    const pool = this.pools.get(key)!;
+    pool.cancelPriceExpiry = null;
+    if (this.options.livePolls === false && pool.state === "live" && pool.cutoff !== null) pool.priceHeld = true;
+    else this.invalidatePrice(key);
   }
 
   private retry(key: string): void {
@@ -444,13 +466,14 @@ export class ChartStream {
     const remaining = price ? this.priceRemaining(price.provenance) : 0;
     pool.cancelPriceExpiry?.();
     pool.cancelPriceExpiry = null;
-    // Stale history is due at once: the next visible tick reads it again rather than leave "—" until a trade.
-    pool.priceProofEnds = price && !pool.priceMissing ? this.now() + remaining : pool.section?.state === "stale" ? this.now() : null;
+    pool.priceHeld = false;
+    pool.priced = false;
     if (!price || pool.priceMissing || remaining <= 0) {
       publishChartPrice(key, null);
       return;
     }
-    pool.cancelPriceExpiry = this.schedule(() => this.invalidatePrice(key), remaining);
+    pool.priced = true;
+    pool.cancelPriceExpiry = this.schedule(() => this.expirePrice(key), remaining);
     publishChartPrice(key, price);
   }
 
