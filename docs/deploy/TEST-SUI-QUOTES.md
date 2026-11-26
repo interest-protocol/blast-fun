@@ -7,5 +7,4 @@ live LaunchConfig quote admission independently. Trades use the actual quote
 token, balance and decimals.
 
 Keep Production's launch/access flags at `team` and preserve the team password
-while testing. The separate `BLAST_TEST_SUI_PRICE_ENABLED` display setting remains
-unavailable in Production; TEST_SUI has no real USD value.
+while testing. TEST_SUI has no real USD value.

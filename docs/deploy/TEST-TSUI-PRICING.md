@@ -14,9 +14,3 @@ amounts, settlement and ledger entries retain their recorded values.
 blast-infra prices coins quoted in TSUI (sale pools and bonding curves) in
 `chain_read_v1.prices` and `price_history` like any other coin; the web
 estimates none from pool marks.
-
-## Simulated-pricing notice
-
-Set `BLAST_TEST_SUI_PRICE_ENABLED=true` on a preview web process to show the
-simulated-pricing notice. Production disables this setting. A local process
-requires `NODE_ENV` set to `development` or `test`.

@@ -1,15 +1,5 @@
-import { deploymentIdentity } from "../../../lib/config/deployment-identity.ts";
 import { quotePriceType, CREATE_TEST_SUI_QUOTE_TYPE } from "../contracts/create.ts";
 import { PORTFOLIO_PRICE_MAX_AGE_MS } from "../contracts/portfolio.ts";
-
-type Environment = Readonly<Record<string, string | undefined>>;
-
-/** Whether this deployment shows the simulated-pricing notice: an explicit, non-production setting. */
-export function testSuiPriceEnabled(environment: Environment = process.env): boolean {
-  const { production, target } = deploymentIdentity(environment);
-  if (environment.BLAST_TEST_SUI_PRICE_ENABLED !== "true" || production) return false;
-  return target !== "local" || environment.NODE_ENV === "development" || environment.NODE_ENV === "test";
-}
 
 /**
  * The display prices: blast-infra's, with the canonical TSUI quote at the

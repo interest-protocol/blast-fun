@@ -793,8 +793,8 @@
 /*
  * Compact composition (Blast mode audit, 2026-10-28). Below the desktop width the header stays one
  * row down to 768px: the toolbar sits inline and the header's own tiers compact its controls
- * (no three-row header). Phones get a compact app bar: the brand, the search, the test-pricing
- * mark when it applies, Layout and Exit on the first row; the coin context (coin chips and Saved)
+ * (no three-row header). Phones get a compact app bar: the brand, the search, Layout and
+ * Exit on the first row; the coin context (coin chips and Saved)
  * with Portfolio and settings on the second. The save status keeps its quiet slot.
  */
 @container workspace-frame (min-width:768px) and (max-width:1099px) {
@@ -816,7 +816,6 @@
  .frame .headerToolbar,.frame .headerToolbar > .toolbar { display:contents; }
  .frame .brand { grid-area:1 / 1 / 2 / 3; min-height:max(44px, 2.75rem); }
  .frame .headerToolbar :global([data-add-chart]) { grid-area:1 / 3; order:0; }
- .frame .headerToolbar :global(aside) { grid-area:1 / 4; }
  .frame > .header > .viewer { display:none; }
  .frame > .header > .exit { grid-area:1 / 6; margin-left:0; }
  .frame .headerToolbar .panelTools { grid-area:2 / 1 / 3 / 5; display:flex; width:auto; min-width:0; }
@@ -831,8 +830,6 @@
  @supports not (animation-timeline:scroll()) { .frame .headerToolbar .panelTools nav[aria-label="Workspace panels"] > ul { padding-inline-end:1.5rem; -webkit-mask-image:linear-gradient(to right, #000 calc(100% - 1.5rem), transparent); mask-image:linear-gradient(to right, #000 calc(100% - 1.5rem), transparent); } }
  .frame .headerToolbar .panelTools nav[aria-label="Workspace panels"] > button,
  .frame .headerToolbar .panelTools [data-more-panels-trigger] { flex:none; width:auto; }
- /* With the test-pricing mark in the first row, the brand keeps its mark and its name for assistive technology. */
- .frame > .header:has(aside) .brand strong { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
 }
 
 /*
