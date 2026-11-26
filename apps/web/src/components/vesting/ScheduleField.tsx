@@ -46,14 +46,17 @@ export function ScheduleField({
   error?: string;
 }>) {
   const [open, setOpen] = useState(false);
-  const timeLabel = label.replace(/date$/i, "time");
+  const timeLabel = `${label.replace(/date$/i, "time")} (UTC)`;
   const describedBy = `${id}-utc${error ? ` ${id}-error` : ""}`;
   // The value is "date", "dateTtime" or an ISO string, all UTC; only its date and minute are edited.
   const split = value.indexOf("T");
   const date = split < 0 ? value : value.slice(0, split);
   const time = split < 0 ? "12:00" : value.slice(split + 1, split + 6);
   const selected = calendarDay(date);
-  const year = new Date().getFullYear();
+  // The calendar works in browser-local midnights; "today" is the UTC calendar day.
+  const now = new Date();
+  const today = new Date(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const year = today.getFullYear();
   return (
     <div className={styles.field} onBlur={onBlur}>
       <div className={styles.date}>
@@ -91,6 +94,7 @@ export function ScheduleField({
             <DayPicker
               mode="single"
               autoFocus
+              today={today}
               selected={selected}
               defaultMonth={selected}
               onSelect={(day) => {

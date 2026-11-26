@@ -10,7 +10,7 @@ import {
   linearReleaseSummary,
   type CreationInput,
 } from "./creation-model";
-import { compactVestingAmount, vestingDate } from "./creation-display";
+import { compactVestingAmount, summaryDate } from "./creation-display";
 import { VestingChart } from "./VestingChart";
 import styles from "./Vesting.module.css";
 import createStyles from "./Creation.module.css";
@@ -40,11 +40,11 @@ function summaryOf(
   let first = "Complete schedule";
   let final = "Complete schedule";
   if (linear) {
-    first = vestingDate(linear.start);
-    final = vestingDate(linear.final);
+    first = summaryDate(linear.start);
+    final = summaryDate(linear.final);
   } else if (schedule?.kind === "checkpoints") {
-    first = vestingDate(schedule.checkpoints[0]!.timestamp_ms);
-    final = vestingDate(schedule.checkpoints.at(-1)!.timestamp_ms);
+    first = summaryDate(schedule.checkpoints[0]!.timestamp_ms);
+    final = summaryDate(schedule.checkpoints.at(-1)!.timestamp_ms);
   }
   return {
     customCount:
@@ -157,12 +157,12 @@ function ReleaseExplanation({
 
       {BigInt(cliffDays.trim() || "0") > ZERO_ATOMS ? (
         <p>
-          Cliff ends {vestingDate(linear.cliffEnd)}
+          Cliff ends {summaryDate(linear.cliffEnd)}
         </p>
       ) : null}
       <p>
         First claimable: {amount(linear.firstAmount)} on{" "}
-        {vestingDate(linear.first)}.
+        {summaryDate(linear.first)}.
       </p>
     </div>
   );

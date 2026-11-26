@@ -19,7 +19,8 @@ export function compactVestingAmount(atoms: bigint, decimals: number): string {
   return formatVestingAmount(atoms, decimals);
 }
 
-export function vestingDate(value: bigint | string): string {
+/** Short UTC date for the live summary, e.g. "4 Dec 2026, 12:00". */
+export function summaryDate(value: bigint | string): string {
   const ms = BigInt(value);
   if (ms > 8_640_000_000_000_000n) return `Unix ${ms} ms`;
   return new Intl.DateTimeFormat("en-GB", {
