@@ -398,10 +398,10 @@ function CoinSheetForm(props: CoinSheetProps & Readonly<{ titleId: string; onCon
           >
             <SwapIcon />Trade
           </Button>
-          <div className={styles.quietActs} data-three={bridge === null ? undefined : ""}>
+          <div className={styles.quietActs} data-three={bridge ? "" : undefined}>
             <Button className={styles.quietAct} onClick={() => go({ kind: "dep" })} variant="ghost"><ArrowDownIcon />Deposit</Button>
             <Button className={styles.quietAct} onClick={() => go({ kind: "wd", key: coin.key })} variant="ghost"><ArrowUpIcon />Withdraw</Button>
-            {bridge === null ? null : <Button className={styles.quietAct} onClick={() => go({ kind: "bridge" })} variant="ghost"><BridgeIcon />Bridge</Button>}
+            {bridge ? <Button className={styles.quietAct} onClick={() => go({ kind: "bridge" })} variant="ghost"><BridgeIcon />Bridge</Button> : null}
           </div>
         </div>
       </>
@@ -416,18 +416,17 @@ function CoinSheetForm(props: CoinSheetProps & Readonly<{ titleId: string; onCon
       </div>
       {!props.trading.signedIn ? <Button loading={props.trading.sessionPending === true} loadingLabel="Restoring session" onClick={props.trading.onSignIn} size="lg" variant="primary">Sign in to get your address</Button> : null}
       {fund ? <Button aria-label="Withdraw" onClick={() => go({ kind: "pick", mode: "withdraw" })} size="lg" variant="secondary"><ArrowUpIcon />Withdraw</Button> : null}
-      {fund && bridge !== null ? <Button onClick={() => go({ kind: "bridge" })} size="lg" variant="secondary"><BridgeIcon />Bridge</Button> : null}
+      {fund && bridge ? <Button onClick={() => go({ kind: "bridge" })} size="lg" variant="secondary"><BridgeIcon />Bridge</Button> : null}
     </>
   );
 
-  // Bridge to Sui: coins from Base, Ethereum, Arbitrum or Solana arrive in this Blast wallet.
+  // Bridge to Sui: coins from another chain arrive in this Blast wallet.
   // A new Blast session starts a new form (key), so nothing from the last account carries over.
-  const bridgeScreen = (): ReactNode => bridge === null ? depositScreen(false) : (
+  const bridgeScreen = (): ReactNode => !bridge ? depositScreen(false) : (
     <>
       {head("Bridge to Sui")}
       <BridgeScreen
         blastAddress={wallet.address}
-        config={bridge}
         key={wallet.address ?? "signed-out"}
         onSignIn={props.trading.onSignIn}
         signedIn={props.trading.signedIn}

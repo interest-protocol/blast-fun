@@ -4,8 +4,7 @@ import test from "node:test";
 
 import { takeProcessSingleton } from "@blast/core/lib/process-singleton.ts";
 
-import { readPresaleConfig } from "#web/components/presale/config.ts";
-import { bridgeConnectSources, MAYAN_ORIGINS, readBridgeConfig } from "#web/components/social/bridge/bridge-config.ts";
+import { BRIDGE_CHAINS, bridgeConnectSources, MAYAN_ORIGINS, mayanRpc, readBridgeEnabled } from "#web/components/social/bridge/bridge-config.ts";
 
 registerHooks({
   resolve(specifier, context, next) {
@@ -14,37 +13,25 @@ registerHooks({
   },
 });
 
-const RPCS = {
-  NEXT_PUBLIC_PRESALE_SOLANA_RPC_URL: "https://solana.rpc.test/key",
-  NEXT_PUBLIC_PRESALE_EVM_RPC_URLS: JSON.stringify({ base: "https://base.rpc.test/v2/key", ethereum: "https://eth.rpc.test" }),
-};
-const BRIDGE_SOURCES = [...MAYAN_ORIGINS, "https://base.rpc.test", "https://eth.rpc.test", "https://solana.rpc.test"];
-
 function connectSources(csp: string | null): string[] {
   return csp!.split("; ").find((part) => part.startsWith("connect-src "))!.split(" ").slice(1);
 }
 
-function bridge(environment: Record<string, string>) {
-  return readBridgeConfig(environment, readPresaleConfig(environment));
-}
-
-test("the flag and at least one source RPC turn the card on; its sources are Mayan and those RPCs", () => {
-  assert.equal(bridge(RPCS), null);
-  assert.equal(bridge({ ...RPCS, NEXT_PUBLIC_MAYAN_BRIDGE_ENABLED: "true" }), null);
-  assert.equal(bridge({ NEXT_PUBLIC_MAYAN_BRIDGE_ENABLED: "1" }), null, "no RPC: no chain to bridge from");
-  const on = bridge({ ...RPCS, NEXT_PUBLIC_MAYAN_BRIDGE_ENABLED: "1" });
-  assert.deepEqual(on, { rpcs: { base: "https://base.rpc.test/v2/key", ethereum: "https://eth.rpc.test/", solana: "https://solana.rpc.test/key" } });
-  assert.deepEqual(bridgeConnectSources(on), BRIDGE_SOURCES);
-  assert.deepEqual(bridgeConnectSources(null), []);
-  // A wildcard RPC is refused by configuration, so it never reaches the policy.
-  assert.equal(bridge({ NEXT_PUBLIC_MAYAN_BRIDGE_ENABLED: "1", NEXT_PUBLIC_PRESALE_SOLANA_RPC_URL: "https://*.rpc.test" }), null);
+test("only the flag set to 1 turns the card on; its sources are Mayan's hosts, RPC included", () => {
+  assert.equal(readBridgeEnabled({}), false);
+  assert.equal(readBridgeEnabled({ NEXT_PUBLIC_MAYAN_BRIDGE_ENABLED: "true" }), false);
+  assert.equal(readBridgeEnabled({ NEXT_PUBLIC_MAYAN_BRIDGE_ENABLED: "1" }), true);
+  assert.deepEqual(bridgeConnectSources(false), []);
+  assert.deepEqual(bridgeConnectSources(true), [...MAYAN_ORIGINS]);
+  assert.ok(MAYAN_ORIGINS.includes("https://front-rpc.mayan.finance"));
+  for (const chain of BRIDGE_CHAINS) assert.ok(bridgeConnectSources(true).includes(new URL(mayanRpc(chain)).origin), chain);
 });
 
 // Both builders read the process's `webConfig()`, so each case resets it and sets the environment.
 for (const enabled of [true, false]) {
   test(`proxy and partner answers carry the bridge sources only with the flag ${enabled ? "on" : "off"}`, async (t) => {
     const prior = { ...process.env };
-    Object.assign(process.env, RPCS, { NEXT_PUBLIC_MAYAN_BRIDGE_ENABLED: enabled ? "1" : "0" });
+    Object.assign(process.env, { NEXT_PUBLIC_MAYAN_BRIDGE_ENABLED: enabled ? "1" : "0" });
     takeProcessSingleton("webConfig");
     t.after(() => {
       for (const name of Object.keys(process.env)) if (!(name in prior)) delete process.env[name];

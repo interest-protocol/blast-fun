@@ -160,7 +160,7 @@ export function PortfolioView({
 }: Readonly<{ data: PortfolioViewData; nowMs: number; signIn?: ReactNode; initialTab?: PortfolioTab }>) {
   if (data.mode === "visitor" || data.mode === "no-account") data = { ...data, figures: NO_FIGURES, today: null, isPublic: null, coins: [], holdings: null };
   const run = useShellActions();
-  const bridge = useBridge() !== null;
+  const bridge = useBridge();
   const claims = useToastedClaims(useShellClaimPath(), { toastRefusals: true });
   const { tab, select, card, body } = useHoldingsSwitch(initialTab);
   useFeedbackReveal(`${tab}:${data.mode}:${data.portfolio}`, body);
@@ -238,7 +238,7 @@ function portfolioValueLabel(busy: boolean, subtotal: number | null, hidden: boo
 
 function Hero({ compact, data, signIn }: Readonly<{ compact: boolean; data: PortfolioViewData; signIn?: ReactNode }>) {
   const run = useShellActions();
-  const bridge = useBridge() !== null;
+  const bridge = useBridge();
   // Opens on 1W (owner, 2026-10-27): 1D has no line yet (one snapshot a day), so it would open on an empty chart.
   const [period, setPeriod] = usePortfolioState<PortfolioPeriod>("history-period", "1w");
   const { hidden, busy, figures, subtotal, figureRows, shares } = portfolioHeroFigures(data);

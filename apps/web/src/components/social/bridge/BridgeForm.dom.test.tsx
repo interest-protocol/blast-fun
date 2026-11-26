@@ -20,7 +20,6 @@ const QUOTE = QUOTES.baseUsdcToSui;
 const BLAST = `0x${"ab".repeat(32)}`;
 const SOURCE = `0x${"11".repeat(20)}`;
 const BEFORE_EXPIRY = Date.parse("2026-11-26T08:40:00Z");
-const CONFIG = { rpcs: { base: "https://base.example" } };
 
 type Calls = { quotes: Array<string | undefined>; sends: number; approves: number; arrived: number };
 
@@ -62,7 +61,6 @@ async function mount(sdk: BridgeSdk, calls: Calls, wallet: EvmWallet | null = ev
     <BridgeForm
       key={key}
       blastAddress={BLAST}
-      config={CONFIG}
       now={() => BEFORE_EXPIRY}
       onArrived={() => { calls.arrived += 1; }}
       onSignIn={() => undefined}

@@ -9,7 +9,7 @@ import {
 import { Connection, PublicKey, Transaction, VersionedTransaction } from "@solana/web3.js";
 import { BrowserProvider, Contract, JsonRpcProvider, type TransactionRequest } from "ethers";
 
-import type { BridgeChain, BridgeConfig } from "./bridge-config.ts";
+import { mayanRpc, type BridgeChain } from "./bridge-config.ts";
 import { CHAINS, transferState, type SourceToken } from "./bridge-model.ts";
 import { explorerRows, MAYAN_EXPLORER, type BridgeSdk, type EvmWallet, type SolanaWallet } from "./bridge-sdk.ts";
 
@@ -17,24 +17,19 @@ import { explorerRows, MAYAN_EXPLORER, type BridgeSdk, type EvmWallet, type Sola
 const BLINK_ONLY: QuoteOptions = { blink: true, swift: false, mctp: false, fastMctp: false, wormhole: false, shuttle: false, monoChain: false, gasless: false };
 const ERC20 = ["function balanceOf(address) view returns (uint256)"];
 
-/** The Mayan SDK, ethers and web3.js behind the card's `BridgeSdk`, on this deployment's RPCs. */
-export function mayanSdk(config: BridgeConfig): BridgeSdk {
+/** The Mayan SDK, ethers and web3.js behind the card's `BridgeSdk`, on Mayan's RPCs. */
+export function mayanSdk(): BridgeSdk {
   const evmProviders = new Map<BridgeChain, JsonRpcProvider>();
-  const rpc = (chain: BridgeChain): string => {
-    const url = config.rpcs[chain];
-    if (!url) throw new Error(`No RPC for ${chain}`);
-    return url;
-  };
   const evm = (chain: BridgeChain): JsonRpcProvider => {
     let provider = evmProviders.get(chain);
     if (!provider) {
-      provider = new JsonRpcProvider(rpc(chain), CHAINS[chain].chainId ?? undefined, { staticNetwork: true });
+      provider = new JsonRpcProvider(mayanRpc(chain), CHAINS[chain].chainId ?? undefined, { staticNetwork: true });
       evmProviders.set(chain, provider);
     }
     return provider;
   };
   let solana: Connection | null = null;
-  const solanaConnection = () => (solana ??= new Connection(rpc("solana"), "confirmed"));
+  const solanaConnection = () => (solana ??= new Connection(mayanRpc("solana"), "confirmed"));
 
   const evmSigner = async (wallet: EvmWallet) => new BrowserProvider(await wallet.provider()).getSigner(wallet.address);
 
@@ -89,7 +84,7 @@ export function mayanSdk(config: BridgeConfig): BridgeSdk {
         return hash;
       }
       const sign = solanaSigner(wallet);
-      // No extra RPCs: every Solana call goes to our configured endpoint only.
+      // No extra RPCs: every Solana call goes to Mayan's RPC only.
       const { signature } = await swapFromSolana(quote, wallet.address, request.blastAddress, null, sign, solanaConnection(), [], undefined, undefined, undefined, { onTransactionSigned: onSigned });
       return signature;
     },
