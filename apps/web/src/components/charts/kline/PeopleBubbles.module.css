@@ -31,14 +31,30 @@
   .bubble[data-page]:hover, .bubble[data-page]:active { transform: none; }
   .bubble[data-page]:active { opacity: .7; }
 }
-.bubble[data-side="buy"] { outline: 1.5px solid var(--coin-chart-up); }
-.bubble[data-side="sell"] { outline: 1.5px solid var(--coin-chart-down); }
+.bubble[data-side="buy"] { outline: .125rem solid var(--coin-chart-up); }
+.bubble[data-side="sell"] { outline: .125rem solid var(--coin-chart-down); }
 /* The viewer's own trades: a heavier ring in ink, above the rest. */
 .bubble[data-own] { z-index: 1; outline: .125rem solid var(--ink); }
 .bubble :global(img), .bubble :global(svg[data-avatar]) { inline-size: 100%; block-size: 100%; border-radius: 50%; }
 
 .anonymous { display: grid; place-items: center; inline-size: 100%; block-size: 100%; border-radius: 50%; background: var(--raised); color: var(--muted); }
 .anonymous svg { inline-size: 62%; block-size: 62%; }
+
+/* A wallet that traded more than once on the bar: the count over a veiled face, as one mark. */
+.count {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: color-mix(in oklab, var(--card) 58%, transparent);
+  color: var(--ink);
+  font-size: .75rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  letter-spacing: -.02em;
+}
 
 /* Creator, whale or sniper: a small corner badge, never a label on the plot. */
 .badge {
@@ -59,11 +75,15 @@
   border-radius: 62.4375rem;
   background: var(--ink);
   color: var(--card);
-  font-size: .625rem;
+  border: 0;
+  font: inherit;
+  font-size: .75rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+  line-height: 1;
   cursor: default;
 }
+.more:focus-visible { outline: .125rem solid var(--focus-color); outline-offset: .125rem; }
 
 .cardLayer { z-index: 30; }
 .card {
@@ -86,4 +106,24 @@
 .cardFigures dd { margin: 0; font-variant-numeric: tabular-nums; font-weight: 600; }
 .cardFigures dd[data-side="buy"] { color: var(--coin-chart-up); }
 .cardFigures dd[data-side="sell"] { color: var(--coin-chart-down); }
+/* A wallet's trades on the bar, and the traders a "+N" holds: one line each, scrolling past about eight. */
+.cardTrades, .cardPeople {
+  display: grid;
+  gap: .25rem;
+  max-block-size: 12rem;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+  font-variant-numeric: tabular-nums;
+}
+.cardTrades li, .cardPeople li { display: grid; grid-template-columns: auto 1fr auto; align-items: baseline; gap: .75rem; }
+.cardTrades time { color: var(--muted); }
+.cardTrades li > :last-child, .cardPeople li > :last-child { font-weight: 600; text-align: end; }
+.cardTrades [data-side="buy"], .cardPeople [data-side="buy"] { color: var(--coin-chart-up); }
+.cardTrades [data-side="sell"], .cardPeople [data-side="sell"] { color: var(--coin-chart-down); }
+.cardPeople li { grid-template-columns: minmax(0, 1fr) auto auto; }
+.cardPeople li > :first-child { overflow-wrap: anywhere; }
+.cardTrades:focus-visible, .cardPeople:focus-visible { outline: .125rem solid var(--focus-color); outline-offset: .125rem; border-radius: var(--r-inner); }
 .cardLabels { display: flex; flex-wrap: wrap; gap: .5rem; margin: 0; color: var(--ink-2); font-size: .75rem; }

@@ -19,12 +19,15 @@ import { SocialAccountContext } from "#web/components/social/use-social-account.
 import { useAppQueryClient } from "#web/lib/query/provider.tsx";
 import { readableUsd } from "#web/lib/market-format.ts";
 import type { Bar } from "./kline-model.ts";
-import { barPeople, layoutBubbles, mousePress, personIdentity, personTrades, profileAt, rememberProfiles, type Bubble, type Person, type SeenProfile } from "./people-bubbles.ts";
+import { barPeople, layoutBubbles, mousePress, personIdentity, personTrades, profileAt, rememberProfiles, type BarSpan, type Bubble, type Person, type PersonTrade, type SeenProfile } from "./people-bubbles.ts";
 import styles from "./PeopleBubbles.module.css";
 
-/** Bubble size in px: small enough to sit beside a candle, not over its neighbours; smaller still on phones. */
-const bubbleSize = (plotWidth: number) => plotWidth < 560 ? 16 : 20;
+/** Bubble size in px: a face you can tell apart, still narrow enough for neighbouring bars; a little smaller on phones. */
+export const BUBBLE_SIZE = 20;
+const bubbleSize = (plotWidth: number) => plotWidth < 560 ? 18 : BUBBLE_SIZE;
 const NO_PROFILES: ReadonlyMap<string, SeenProfile> = new Map();
+/** A card opens over its bubble, away from the price under it. */
+const CARD_POSITION = { side: "top", sideOffset: 6, collisionPadding: 12, className: styles.cardLayer } as const;
 
 /** The box the plot and its bubbles share. The bubbles sit beside the plot, not inside its image role. */
 export function BubbleStage({ children }: Readonly<{ children: ReactNode }>) {
@@ -57,10 +60,11 @@ export function PeopleBubbles({ chart, bars, quoteDecimals, quoteUsd, topInset =
   const layer = useRef<HTMLDivElement>(null);
   const { bubbles, size } = useBubbleLayout(chart, layer, people, topInset);
 
+  const profile = (person: Person) => person.own ? ownProfile : profileAt(seen, person.address, person.lastMs);
   return <div ref={layer} className={styles.layer}>
     {bubbles.map((bubble) => bubble.kind === "person"
-      ? <PersonBubble key={bubble.key} person={bubble.person} x={bubble.x} y={bubble.y} size={size} profile={bubble.person.own ? ownProfile : profileAt(seen, bubble.person.address, bubble.person.lastMs)} />
-      : <MoreBubble key={bubble.key} bubble={bubble} size={size} />)}
+      ? <PersonBubble key={bubble.key} person={bubble.person} x={bubble.x} y={bubble.y} size={size} profile={profile(bubble.person)} />
+      : <MoreBubble key={bubble.key} bubble={bubble} size={size} profile={profile} />)}
   </div>;
 }
 
@@ -100,10 +104,7 @@ function useBubbleLayout(chart: RefObject<Chart | null>, layer: RefObject<HTMLEl
       if (!current || !size) return;
       const target = current;
       const bubble = bubbleSize(size.width);
-      setLayout({ size: bubble, bubbles: layoutBubbles(latest.current.people, (person) => {
-        const point = target.convertToPixel({ timestamp: person.bar, value: person.value }, { paneId: "candle_pane" });
-        return Array.isArray(point) || point.x === undefined || point.y === undefined ? null : { x: point.x, y: point.y };
-      }, size.width, size.height, bubble, latest.current.topInset) });
+      setLayout({ size: bubble, bubbles: layoutBubbles(latest.current.people, (person) => barSpans(target, [{ timestamp: person.bar, high: person.high, low: person.low }])[0] ?? null, size.width, size.height, bubble, latest.current.topInset, visibleSpans(target)) });
     };
     const request = () => { if (!frame) frame = requestAnimationFrame(place); };
     // A drag that starts on the chart keeps following the pointer outside it, as the chart does.
@@ -157,10 +158,28 @@ function useBubbleLayout(chart: RefObject<Chart | null>, layer: RefObject<HTMLEl
   return layout;
 }
 
+type PricedBar = Readonly<{ timestamp: number; high: number; low: number }>;
+
+/** Each bar's x and the y of its high and low, in px over the price pane; null where the chart can't place it. */
+function barSpans(chart: Chart, bars: readonly PricedBar[]): (BarSpan | null)[] {
+  const points = chart.convertToPixel(bars.flatMap(({ timestamp, high, low }) => [{ timestamp, value: high }, { timestamp, value: low }]), { paneId: "candle_pane" });
+  return bars.map((_, index) => {
+    const top = Array.isArray(points) ? points[index * 2] : undefined, bottom = Array.isArray(points) ? points[index * 2 + 1] : undefined;
+    return top?.x === undefined || top.y === undefined || bottom?.y === undefined ? null : { x: top.x, top: top.y, bottom: bottom.y };
+  });
+}
+
+/** The bars on screen, so a bubble also clears its neighbours' prices, not only its own bar's. */
+function visibleSpans(chart: Chart): BarSpan[] {
+  const { realFrom, realTo } = chart.getVisibleRange();
+  return barSpans(chart, chart.getDataList().slice(Math.max(0, realFrom), Math.max(0, realTo))).filter((span) => span !== null);
+}
+
 const PersonBubble = memo(function PersonBubble({ person, x, y, size, profile }: Readonly<{ person: Person; x: number; y: number; size: number; profile: TraderProfile | null }>) {
   const who = personIdentity(person.address, profile);
   const explorer = useWalletExplorer(who.anonymous ? person.address : null);
   const badge = person.labels[0];
+  const count = person.buys + person.sells;
   const page = useBubblePage(who.anonymous ? explorer?.url : profilePagePath(who.callsign), who.anonymous);
   return <Popover.Root>
     <Popover.Trigger
@@ -172,16 +191,17 @@ const PersonBubble = memo(function PersonBubble({ person, x, y, size, profile }:
       data-side={person.side}
       data-own={person.own || undefined}
       data-anonymous={who.anonymous || undefined}
-      aria-label={who.name}
+      aria-label={count > 1 ? `${who.name}, ${tradeCount(count)}` : who.name}
       title={explorer?.label}
       {...dyn({ left: x - size / 2, top: y - size / 2, width: size, height: size })}
     >
       {who.anonymous
         ? <span className={styles.anonymous}><UserIcon /></span>
         : <Avatar accountId={who.callsign} avatarUrl={who.avatarUrl} size={size} />}
+      {count > 1 && <span className={styles.count} aria-hidden="true">{count > 99 ? "99+" : count}</span>}
       {badge && <span className={styles.badge}><WalletLabelIcon label={badge} /></span>}
     </Popover.Trigger>
-    <PopoverSurface positioner={{ side: person.side === "buy" ? "bottom" : "top", sideOffset: 6, collisionPadding: 12, className: styles.cardLayer }} popup={{ className: styles.card }}>
+    <PopoverSurface positioner={CARD_POSITION} popup={{ className: styles.card }}>
       <PersonCard person={person} who={who} />
     </PopoverSurface>
   </Popover.Root>;
@@ -196,9 +216,10 @@ function PersonCard({ person, who }: Readonly<{ person: Person; who: ReturnType<
     </Popover.Title>
     <TraderWallet address={person.address} />
     <dl className={styles.cardFigures}>
-      {person.buys > 0 && <div><dt>Bought</dt><dd data-side="buy">{usd(person.bought)}</dd></div>}
-      {person.sells > 0 && <div><dt>Sold</dt><dd data-side="sell">{usd(person.sold)}</dd></div>}
+      {person.buys > 0 && <div><dt>{person.buys === 1 ? "Bought" : `${person.buys} buys`}</dt><dd data-side="buy">{usd(person.bought)}</dd></div>}
+      {person.sells > 0 && <div><dt>{person.sells === 1 ? "Sold" : `${person.sells} sells`}</dt><dd data-side="sell">{usd(person.sold)}</dd></div>}
     </dl>
+    {person.trades.length > 1 && <TradeList trades={person.trades} />}
     {person.labels.length > 0 && <p className={styles.cardLabels}>
       {person.labels.map((label) => <span key={label}><WalletLabelIcon label={label} /> {WALLET_LABELS[label].name}</span>)}
     </p>}
@@ -227,19 +248,48 @@ function useBubblePage(href: string | undefined, external: boolean) {
   };
 }
 
-function MoreBubble({ bubble: { people, x, y }, size }: Readonly<{ bubble: Extract<Bubble, { kind: "more" }>; size: number }>) {
-  const buyers = people.filter((person) => person.side === "buy").length;
-  let who = "traders";
-  if (buyers === people.length) who = "buyers";
-  else if (buyers === 0) who = "sellers";
-  const text = `${people.length} more ${who}. Zoom in to see them.`;
-  return <span
-    className={styles.more}
-    role="note"
-    aria-label={text}
-    title={text}
-    {...dyn({ left: x - size / 2, top: y - size / 2, height: size, minWidth: size })}
-  >+{people.length > 99 ? "99" : people.length}</span>;
+/** Each of a wallet's trades on the bar, newest first: side, time and size. Scrolls when long. */
+function TradeList({ trades }: Readonly<{ trades: readonly PersonTrade[] }>) {
+  return <ol className={styles.cardTrades} aria-label="Trades" tabIndex={0}>
+    {trades.map((trade, index) => <li key={`${trade.timestampMs}:${index}`}>
+      <span data-side={trade.side}>{trade.side === "buy" ? "Buy" : "Sell"}</span>
+      <time dateTime={new Date(trade.timestampMs).toISOString()}>{tradeTime(trade.timestampMs)}</time>
+      <span>{usd(trade.usd)}</span>
+    </li>)}
+  </ol>;
 }
 
+/** The people one column has no room for, as a "+N" that lists them on hover or tap. */
+function MoreBubble({ bubble: { people, x, y }, size, profile }: Readonly<{ bubble: Extract<Bubble, { kind: "more" }>; size: number; profile: (person: Person) => TraderProfile | null }>) {
+  const text = `${people.length} more ${people.length === 1 ? "trader" : "traders"}`;
+  return <Popover.Root>
+    <Popover.Trigger
+      openOnHover
+      delay={80}
+      className={styles.more}
+      aria-label={text}
+      {...dyn({ left: x - size / 2, top: y - size / 2, height: size, minWidth: size })}
+    >+{people.length > 99 ? "99" : people.length}</Popover.Trigger>
+    <PopoverSurface positioner={CARD_POSITION} popup={{ className: styles.card }}>
+      <Popover.Title className={styles.cardName}>{text}</Popover.Title>
+      <ul className={styles.cardPeople} tabIndex={0} aria-label="Traders">
+        {people.map((person) => {
+          const count = person.buys + person.sells;
+          const spent = person.side === "buy" ? person.bought : person.sold;
+          return <li key={`${person.bar}:${person.address}`}>
+            <span>{personIdentity(person.address, profile(person)).name}</span>
+            <span data-side={person.side}>{person.side === "buy" ? "Bought" : "Sold"}{count > 1 ? ` · ${tradeCount(count)}` : ""}</span>
+            <span>{usd(spent)}</span>
+          </li>;
+        })}
+      </ul>
+    </PopoverSurface>
+  </Popover.Root>;
+}
+
+const tradeCount = (count: number) => `${count} trades`;
+const TRADE_TIME = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" });
+const TRADE_DAY_TIME = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+/** A trade's time in the viewer's zone, as the chart's axis reads; the day too when it isn't today. */
+const tradeTime = (ms: number) => (new Date(ms).toDateString() === new Date().toDateString() ? TRADE_TIME : TRADE_DAY_TIME).format(ms);
 const usd = (value: number | null) => value === null ? "—" : readableUsd(value.toFixed(6));

@@ -20,7 +20,8 @@ import {
 } from "./kline-model.ts";
 import { BLAST_FIB, BLAST_GRADUATION, BLAST_RSI, registerStudies } from "./kline-studies.ts";
 import { subscriptZeros } from "#web/lib/market-format.ts";
-import { BubbleStage, PeopleBubbles } from "./PeopleBubbles.tsx";
+import { BUBBLE_SIZE, BubbleStage, PeopleBubbles } from "./PeopleBubbles.tsx";
+import { bubbleHeadroom } from "./people-bubbles.ts";
 import styles from "./KLineCoinChart.module.css";
 
 const PERIODS: Readonly<Record<CandleInterval, Period>> = {
@@ -193,10 +194,11 @@ export default function KLineCoinChart({ sources, interval, memeDecimals, quoteD
       // Room for the pane's one legend row above its values.
       current.overrideYAxis({ paneId: `pane_${name}`, gap: { top: (LEGEND_ROW + 4) / layout.pane, bottom: .05 } });
     }
-    // Headroom above the highest price for the study legends, so they never sit on a candle.
-    current.overrideYAxis({ paneId: "candle_pane", gap: { top: (12 + LEGEND_ROW * legendRows) / layout.price, bottom: .06 } });
+    // Headroom above the highest price for the study legends, and for a trader's bubble over the top bar, so neither sits on a candle.
+    const traders = showWalletTags ? bubbleHeadroom(BUBBLE_SIZE) : 0;
+    current.overrideYAxis({ paneId: "candle_pane", gap: { top: (12 + LEGEND_ROW * legendRows + traders) / layout.price, bottom: .06 } });
     current.resize();
-  }, [settings.indicators, precision, theme, layout, legendRows, mobile]);
+  }, [settings.indicators, precision, theme, layout, legendRows, mobile, showWalletTags]);
 
   const graduationAt = migrationAt === undefined ? undefined : bars.findLast((bar) => bar.timestamp <= migrationAt)?.timestamp;
   useEffect(() => {
