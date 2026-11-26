@@ -454,13 +454,13 @@
 .topbar .deposit { width: 5rem; flex: 0 0 5rem; }
 .accountBalance { width: 14rem; flex: 0 0 14rem; justify-content: space-between; }
 .balanceCompact { display: none; }
-/* Narrower screens show only the short amount, on one line; the title and label still say Partial. */
+/* Narrower screens show the short amount, and Partial when it is a priced subtotal, on one line. */
 @media (max-width: 1200px) {
   .accountBalance { width: 10.5rem; flex-basis: 10.5rem; }
-  .balanceExact, .balancePartial { display: none; }
+  .balanceExact { display: none; }
   .balanceCompact { display: inline; }
 }
-.accountBalance b { font-weight: 600; white-space: nowrap; }
+.accountBalance b { min-width: 0; overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .accountBalance[data-popup-open] { background: var(--chip); }
 .accountPlaceholder {
   width: 4rem;
@@ -648,7 +648,6 @@
   .pageWallet[inert] { visibility: hidden; }
   .pageWallet .accountBalance { width: 8.5rem; flex: none; }
   .pageWallet .balancePlaceholder { width: 5.5rem; }
-  .pageWallet .accountBalance b { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .pageWallet > button { min-height: max(44px, 2.75rem); }
 
   /* OA-24: the collapsed-rail preference (on by default under 1400px) folds the rail only; the top bar keeps its wordmark. */

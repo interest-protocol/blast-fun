@@ -18,6 +18,8 @@
 .identity [data-page-head] { display: block; padding: 0; min-width: 0; }
 .coinName { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 .5rem; overflow-wrap: anywhere; }
 .coinName > * { min-width: 0; max-width: 100%; }
+/* The name opens whole on a press; its button keeps the title's line height. */
+.coinName > [data-inspect-value] { padding-block: 0; }
 .identity small { font-size: .875rem; font-weight: 500; letter-spacing: 0; color: var(--muted); }
 .byline { min-width: 0; padding-block-start: .375rem; display: flex; flex-wrap: wrap; align-items: center; gap: .625rem; }
 .creator { min-width: 0; overflow-wrap: anywhere; }
@@ -106,10 +108,10 @@
   .marketPriceRow { flex-wrap: nowrap; padding: .75rem 1.25rem; border-radius: var(--r-md); background: var(--card); }
   .marketPrice { display: flex; flex: 1 1 auto; flex-wrap: wrap; align-items: baseline; }
   .priceControls { flex: none; }
-  /* The coin's name stays on one line beside its mark; a long one ends in an ellipsis (its title holds it whole). */
+  /* The coin's name stays on one line beside its mark; a long one ends in an ellipsis, and a press shows it whole. */
   .coinName { flex-wrap: nowrap; }
   .coinName > small { flex: none; }
-  .coinName > :first-child:not(:global(.ticker)) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .coinNameText { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }
 /* The price row heads the chart card: the card's own padding and surface hold it. */
 .marketChart > .marketPriceRow { padding: 0 var(--coin-chart-heading-inset, 0) .75rem; background: none; }
@@ -140,7 +142,7 @@
    */
   .identity[data-compact] { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
   .identity[data-compact] [data-page-head] { flex: 1 1 0; min-width: 5.5rem; }
-  .identity[data-compact] .coinName > :first-child:not(:global(.ticker)) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .identity[data-compact] .coinNameText { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .identity[data-compact] .identityActions { margin-inline-start: auto; }
   .identity[data-compact] .heroMark { padding: .125rem; }
   .identity[data-compact] .heroMark > span { width: 2.5rem; height: 2.5rem; }
