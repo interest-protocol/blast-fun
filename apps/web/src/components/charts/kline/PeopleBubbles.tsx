@@ -22,8 +22,8 @@ import type { Bar } from "./kline-model.ts";
 import { barPeople, layoutBubbles, mousePress, personIdentity, personTrades, profileAt, rememberProfiles, type Bubble, type Person, type SeenProfile } from "./people-bubbles.ts";
 import styles from "./PeopleBubbles.module.css";
 
-/** Bubble size in px; phones get smaller ones so the price stays readable. */
-const bubbleSize = (plotWidth: number) => plotWidth < 560 ? 18 : 24;
+/** Bubble size in px: small enough to sit beside a candle, not over its neighbours; smaller still on phones. */
+const bubbleSize = (plotWidth: number) => plotWidth < 560 ? 16 : 20;
 const NO_PROFILES: ReadonlyMap<string, SeenProfile> = new Map();
 
 /** The box the plot and its bubbles share. The bubbles sit beside the plot, not inside its image role. */
@@ -37,11 +37,13 @@ export function BubbleStage({ children }: Readonly<{ children: ReactNode }>) {
  * own account. It makes no requests of its own, so the viewer's own trades show
  * when the account is loaded and the trade is among the activity rows.
  */
-export function PeopleBubbles({ chart, bars, quoteDecimals, quoteUsd }: Readonly<{
+export function PeopleBubbles({ chart, bars, quoteDecimals, quoteUsd, topInset = 0 }: Readonly<{
   chart: RefObject<Chart | null>;
   bars: readonly Bar[];
   quoteDecimals: number | null;
   quoteUsd: string | null;
+  /** Px at the top of the price pane kept clear for the study legends. */
+  topInset?: number;
 }>) {
   const activity = useWalletTrades();
   const deployer = useLaunchWallet();
@@ -53,7 +55,7 @@ export function PeopleBubbles({ chart, bars, quoteDecimals, quoteUsd }: Readonly
   const callsign = account?.callsign, avatarUrl = account?.avatar_url;
   const ownProfile = useMemo(() => callsign === undefined ? null : { callsign, avatarUrl: avatarUrl ?? null }, [callsign, avatarUrl]);
   const layer = useRef<HTMLDivElement>(null);
-  const { bubbles, size } = useBubbleLayout(chart, layer, people);
+  const { bubbles, size } = useBubbleLayout(chart, layer, people, topInset);
 
   return <div ref={layer} className={styles.layer}>
     {bubbles.map((bubble) => bubble.kind === "person"
@@ -85,9 +87,9 @@ function useSeenTraderProfiles(): ReadonlyMap<string, SeenProfile> {
  * resizes, gets new bars, or has its price axis dragged (KLineCharts reports no
  * action for that, so a drag over the plot counts).
  */
-function useBubbleLayout(chart: RefObject<Chart | null>, layer: RefObject<HTMLElement | null>, people: readonly Person[]): Readonly<{ bubbles: readonly Bubble[]; size: number }> {
-  const [layout, setLayout] = useState<Readonly<{ bubbles: readonly Bubble[]; size: number }>>({ bubbles: [], size: 24 });
-  const latest = useRef(people);
+function useBubbleLayout(chart: RefObject<Chart | null>, layer: RefObject<HTMLElement | null>, people: readonly Person[], topInset: number): Readonly<{ bubbles: readonly Bubble[]; size: number }> {
+  const [layout, setLayout] = useState<Readonly<{ bubbles: readonly Bubble[]; size: number }>>({ bubbles: [], size: 20 });
+  const latest = useRef({ people, topInset });
   const schedule = useRef<() => void>(() => {});
   useEffect(() => {
     let frame = 0;
@@ -98,10 +100,10 @@ function useBubbleLayout(chart: RefObject<Chart | null>, layer: RefObject<HTMLEl
       if (!current || !size) return;
       const target = current;
       const bubble = bubbleSize(size.width);
-      setLayout({ size: bubble, bubbles: layoutBubbles(latest.current, (person) => {
+      setLayout({ size: bubble, bubbles: layoutBubbles(latest.current.people, (person) => {
         const point = target.convertToPixel({ timestamp: person.bar, value: person.value }, { paneId: "candle_pane" });
         return Array.isArray(point) || point.x === undefined || point.y === undefined ? null : { x: point.x, y: point.y };
-      }, size.width, size.height, bubble) });
+      }, size.width, size.height, bubble, latest.current.topInset) });
     };
     const request = () => { if (!frame) frame = requestAnimationFrame(place); };
     // A drag that starts on the chart keeps following the pointer outside it, as the chart does.
@@ -148,10 +150,10 @@ function useBubbleLayout(chart: RefObject<Chart | null>, layer: RefObject<HTMLEl
     };
   }, [chart, layer]);
   useEffect(() => {
-    latest.current = people;
+    latest.current = { people, topInset };
     // Wait a frame so the chart has drawn the new bars and axis first.
     schedule.current();
-  }, [people]);
+  }, [people, topInset]);
   return layout;
 }
 

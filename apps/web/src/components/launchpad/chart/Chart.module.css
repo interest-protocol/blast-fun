@@ -244,6 +244,7 @@
 .chart .compactHead h2 { margin: 0; font-size: 1.0625rem; font-weight: 650; }
 .compactHead h2 span { color: var(--ink-2); font-weight: 400; white-space: nowrap; }
 .compactTools { display: flex; gap: .5rem; margin-inline-start: auto; }
+.stylePicker { display: inline-flex; }
 .compactTools .filterTrigger { --control-height: max(44px, 2.75rem); --control-hover: transparent; }
 .filters .filterClose,
 .chart .chartRetry { --control-height: max(44px, 2.75rem); }
@@ -274,7 +275,6 @@
     --coin-plot-height: var(--coin-line-plot-height);
     --coin-readout-height: 2.75rem;
   }
-  .compactTools .stylePicker { display: none; }
 }
 
 .chartState { min-block-size: calc(var(--coin-plot-height) + var(--coin-readout-height)); }
@@ -294,6 +294,3 @@
 .filters .control[data-live-range] { grid-column: 1 / -1; }
 .filterClose { grid-column: 1 / -1; justify-self: end; }
 
-@media (max-width: 760px) {
-  .chart:not([data-market-chart]) .filterInterval[data-line-interval] { display: none; }
-}

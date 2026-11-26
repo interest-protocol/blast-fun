@@ -1,5 +1,5 @@
 /* The plot and the bubbles share this box, so the bubbles stay outside the chart's image role. */
-.stage { position: relative; }
+.stage { position: relative; min-inline-size: 0; }
 
 /* Fills the plot over the canvas; only the bubbles take the pointer, so the chart still pans and zooms. */
 .layer { position: absolute; inset: 0; z-index: 2; overflow: hidden; pointer-events: none; }

@@ -94,7 +94,8 @@ export function CoinChart({
       expected,
       migration: () => committed ?? known.current,
       request: () => chartTailRequest(controls, Date.now()),
-      load: (pool, checkpoint) => readChartPool(pool, controls, atCheckpoint(dependencies, checkpoint), Date.now()),
+      // Live builds its page from the trade tape, which names no migration: hand it the known one.
+      load: (pool, checkpoint) => readChartPool(pool, controls, atCheckpoint(dependencies, checkpoint), Date.now(), committed ?? known.current),
       onSection: (pool, section, migration) => {
         if (stream.current !== client) return;
         const marker = committed ?? migration ?? known.current;
