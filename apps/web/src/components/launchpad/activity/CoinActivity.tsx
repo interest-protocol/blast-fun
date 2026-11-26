@@ -96,8 +96,7 @@ function CoinActivityFeed({ source, compact, initialActivity, start }: CoinActiv
   // The Last-trade pill skips dust, as the trades list does.
   const quoteUsd = dustQuoteUsd(source.units.quoteType, useCoinPriceCurrency(), source.units.quoteUsd);
   const isUnder = (row: ActivityRow, floor?: Exact) => isTradeUnderDollar({ usd: row.volumeUsd, quote: row.amounts.quote, decimals: source.units.quoteDecimals, quoteUsd }, floor);
-  const isDust = (row: ActivityRow) => isUnder(row);
-  const shownTrade = (row: ActivityRow) => isActivityTrade(row) && !isDust(row);
+  const shownTrade = (row: ActivityRow) => isActivityTrade(row) && !isUnder(row);
   const lastTrade = start === null
     ? activity.newer?.rows.find(shownTrade) ?? activity.view?.rows.find(shownTrade)
     : null;

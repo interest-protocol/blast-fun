@@ -4,9 +4,9 @@ import type { HomeEvent } from "@blast/core/web/contracts/home.ts";
 import { compareExact, exactAtoms, exactDecimal, multiplyExact, type Exact } from "@blast/core/web/exact-amount.ts";
 
 /** Dust: what the "Hide trades under $1" switch hides. */
-export const SMALL_TRADE: Exact = { n: BigInt(SMALL_TRADE_USD), scale: 0 };
+const SMALL_TRADE: Exact = { n: BigInt(SMALL_TRADE_USD), scale: 0 };
 /** Tiny: hidden from every trades list whatever the switch says, as the server drops them (`trade-size.ts`). */
-export const TINY_TRADE: Exact = exactDecimal(TINY_TRADE_USD)!;
+const TINY_TRADE: Exact = exactDecimal(TINY_TRADE_USD)!;
 
 /** The "Hide trades under $1" switch's state, owned by whatever reads the trades. */
 export type SmallTradeFilter = readonly [boolean, (hide: boolean) => void];
