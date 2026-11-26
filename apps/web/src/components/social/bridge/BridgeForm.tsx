@@ -1,9 +1,9 @@
 "use client";
 
-import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { track } from "@vercel/analytics";
 import clsx from "clsx";
-import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useCallback, useId, useRef, useState, type ReactNode } from "react";
 
 import type { Quote } from "@mayanfinance/swap-sdk";
 
@@ -51,7 +51,7 @@ import {
   type TransferState,
   usdBand,
 } from "./bridge-model.ts";
-import { explorerLink, mergeRows, type BridgeRow, type BridgeSdk, type EvmWallet, type SolanaWallet, type SourceWallet } from "./bridge-sdk.ts";
+import { explorerLink, mergeRows, type BridgeRow, type BridgeSdk, type EvmWallet, type SolanaWallet, type SourceWallet, type TransferStatus } from "./bridge-sdk.ts";
 import styles from "./bridge.module.css";
 
 /** The source wallets Privy has connected, and how to connect one. */
@@ -94,8 +94,7 @@ function rejected(error: unknown): boolean {
 
 type Selection = Readonly<{ chain: BridgeChain; info: ChainInfo; token: SourceToken; to: DestinationToken }>;
 
-/** Mayan's quote for what is typed, the source balance, the router allowance and the Blast address's history. */
-function useBridgeReads({ sdk, selection, wallet, blastAddress, atoms, paused, onPaused }: Readonly<{
+type ReadArgs = Readonly<{
   sdk: BridgeSdk;
   selection: Selection;
   wallet: SourceWallet | null;
@@ -103,8 +102,19 @@ function useBridgeReads({ sdk, selection, wallet, blastAddress, atoms, paused, o
   atoms: bigint | null;
   paused: boolean;
   onPaused: (error: unknown) => void;
-}>) {
-  const { chain, info, token, to } = selection;
+}>;
+
+/** Mayan's quote for what is typed, the source balance, the router allowance and the Blast address's history. */
+function useBridgeReads(args: ReadArgs) {
+  const quoted = useBridgeQuote(args);
+  const source = useSourceReads(args, quoted);
+  const history = useBridgeHistory(args.sdk, args.blastAddress);
+  return { ...quoted, ...source, history };
+}
+
+/** Mayan's quote for the settled amount, bound to the source wallet and the Blast address once both are known. */
+function useBridgeQuote({ sdk, selection, wallet, blastAddress, atoms, paused, onPaused }: ReadArgs) {
+  const { chain, token, to } = selection;
   const typed = atoms?.toString() ?? null;
   const settled = useDebouncedValue(typed, QUOTE_DEBOUNCE_MS);
   const typing = settled !== typed;
@@ -132,7 +142,12 @@ function useBridgeReads({ sdk, selection, wallet, blastAddress, atoms, paused, o
   });
   const shown: Quote | undefined = atoms === null ? undefined : quote.data;
   const current = shown !== undefined && !quote.isPlaceholderData && !typing;
+  return { typing, quote, quoteKey, shown, current, settled, bound: swapper !== undefined };
+}
 
+/** The source wallet's balance and, for an ERC-20 on the right chain, whether the router may spend the amount. */
+function useSourceReads({ sdk, selection, wallet }: ReadArgs, { quote, settled, current, bound }: ReturnType<typeof useBridgeQuote>) {
+  const { chain, info, token } = selection;
   const balanceKey = ["bridge", "balance", chain, token.mayan, wallet?.address ?? null] as const;
   const balance = useQuery({
     queryKey: balanceKey,
@@ -148,12 +163,16 @@ function useBridgeReads({ sdk, selection, wallet, blastAddress, atoms, paused, o
   const allowance = useQuery({
     queryKey: allowanceKey,
     queryFn: () => sdk.allowanceEnough(quote.data!, evmWallet!, chain),
-    enabled: evmWallet !== null && !token.native && !wrongChain && current && swapper !== undefined,
+    enabled: evmWallet !== null && !token.native && !wrongChain && current && bound,
     staleTime: Infinity,
     retry: 1,
   });
+  return { balance, evmWallet, wrongChain, allowance, allowanceKey };
+}
 
-  const history = useQuery({
+/** Bridges Mayan lists for the Blast address. */
+function useBridgeHistory(sdk: BridgeSdk, blastAddress: string | null) {
+  return useQuery({
     queryKey: ["bridge", "history", blastAddress],
     queryFn: () => sdk.history(blastAddress!),
     enabled: blastAddress !== null,
@@ -163,11 +182,9 @@ function useBridgeReads({ sdk, selection, wallet, blastAddress, atoms, paused, o
     refetchOnWindowFocus: false,
     retry: 1,
   });
-
-  return { typing, quote, quoteKey, shown, current, balance, balanceKey, evmWallet, wrongChain, allowance, allowanceKey, history };
 }
 
-type SendKeys = Readonly<{ quoteKey: readonly unknown[]; allowanceKey: readonly unknown[]; balanceKey: readonly unknown[] }>;
+type SendKeys = Readonly<{ quoteKey: readonly unknown[]; allowanceKey: readonly unknown[] }>;
 
 /** Approve, switch and bridge: each re-asks Mayan for a bound quote and checks it before any wallet call. */
 function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent }: Readonly<{
@@ -181,7 +198,6 @@ function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent }: R
 }>) {
   const { chain, info, token, to } = selection;
   const queryClient = useQueryClient();
-  const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
   // The quote inputs a lower fresh rate was found for; any new input clears the prompt.
   const [rateChangedFor, setRateChangedFor] = useState<string | null>(null);
@@ -207,22 +223,26 @@ function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent }: R
     return null;
   };
 
-  const run = async (work: () => Promise<void>) => {
-    if (running.current) return;
-    running.current = true;
-    setBusy(true);
-    setFailed(null);
-    try {
-      await work();
-    } catch (error) {
+  // One wallet step at a time; its pending state is the card's busy state.
+  const step = useMutation({
+    mutationFn: (work: () => Promise<void>) => work(),
+    onError: (error) => {
       if (rejected(error)) return;
       if (isPausedError(error)) onPaused(error);
       console.error("Bridge failed", error);
       setFailed(isPausedError(error) ? PAUSED_TEXT : SEND_FAILED_TEXT);
-    } finally {
-      running.current = false;
-      setBusy(false);
-    }
+    },
+    // An approval or a bridge spends from the source wallet, gas included.
+    // Not awaited, so the button frees up before the balance comes back.
+    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ["bridge", "balance"] }); },
+    onSettled: () => { running.current = false; },
+  });
+  const run = (work: () => Promise<void>) => {
+    // The ref also stops a second press that lands before the busy render.
+    if (running.current) return;
+    running.current = true;
+    setFailed(null);
+    step.mutate(work);
   };
 
   const approve = (ask: BridgeRequest, source: EvmWallet) => run(async () => {
@@ -250,14 +270,13 @@ function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent }: R
     routeEvent(fresh, chain, token);
     onSent();
     setRateChangedFor(null);
-    void queryClient.invalidateQueries({ queryKey: keys.balanceKey });
     // The send spent the allowance; the same amount again must check it afresh.
     queryClient.removeQueries({ queryKey: ["bridge", "allowance"] });
   });
 
   const switchTo = (source: EvmWallet) => run(() => source.switchChain(info.chainId!));
 
-  return { busy, failed, setFailed, rateChanged: rateChangedFor === inputs, sent, approve, bridge, switchTo };
+  return { busy: step.isPending, failed, setFailed, rateChanged: rateChangedFor === inputs, sent, approve, bridge, switchTo };
 }
 
 /**
@@ -279,27 +298,42 @@ function noteText(paused: boolean, failed: string | null, quoteError: string | n
   return failed ?? quoteError;
 }
 
-export function BridgeForm({ config, sdk, wallets, blastAddress, signedIn, onSignIn, onArrived, now = Date.now }: BridgeFormProps) {
-  const id = useId();
-  const chains = bridgeChains(config);
+/** The chain, coins and amount the user picked; a new coin starts with an empty amount. */
+function useBridgeInputs(chains: readonly BridgeChain[]) {
   const [chain, setChain] = useState<BridgeChain>(chains[0]!);
   const [tokenIndex, setTokenIndex] = useState<0 | 1>(0);
   const [toIndex, setToIndex] = useState<0 | 1>(0);
   const [amount, setAmount] = useState("");
-  const [paused, setPaused] = useState(false);
-  const onPaused = useCallback((error: unknown) => {
-    setPaused(true);
-    console.error("Mayan refused this SDK version: upgrade @mayanfinance/swap-sdk", error);
-  }, []);
-
   const info = CHAINS[chain];
   const token = info.tokens[tokenIndex];
   const selection: Selection = { chain, info, token, to: DESTINATIONS[toIndex]! };
-  const wallet: SourceWallet | null = info.kind === "evm" ? wallets.evm : wallets.solana;
-  const atoms = amountAtoms(amount, token);
-  const reads = useBridgeReads({ sdk, selection, wallet, blastAddress, atoms, paused, onPaused });
-  const send = useBridgeSend({ sdk, selection, keys: reads, shown: reads.shown, now, onPaused, onSent: () => setAmount("") });
+  const chooseChain = (next: BridgeChain) => {
+    setChain(next);
+    // 0.1 ETH is not 0.1 SOL: a new coin starts empty, the same coin keeps its amount.
+    if (CHAINS[next].tokens[tokenIndex].symbol !== token.symbol) setAmount("");
+  };
+  const chooseToken = (next: 0 | 1) => {
+    setTokenIndex(next);
+    setToIndex(info.tokens[next].symbol === "USDC" ? 1 : 0);
+    setAmount("");
+  };
+  return { selection, tokenIndex, toIndex, setToIndex, amount, setAmount, chooseChain, chooseToken };
+}
 
+type ActionInputs = Readonly<{
+  reads: ReturnType<typeof useBridgeReads>;
+  send: ReturnType<typeof useBridgeSend>;
+  selection: Selection;
+  wallet: SourceWallet | null;
+  atoms: bigint | null;
+  paused: boolean;
+  signedIn: boolean;
+  blastAddress: string | null;
+}>;
+
+/** What the button does now, and why the last quote failed if it did. */
+function formAction({ reads, send, selection, wallet, atoms, paused, signedIn, blastAddress }: ActionInputs) {
+  const { info, token } = selection;
   const quoteSettled = reads.quote.isError && !reads.quote.isFetching && atoms !== null && !reads.typing && !paused;
   const quoteError = quoteSettled ? quoteErrorText(reads.quote.error, info, token) : null;
   const action = bridgeAction({
@@ -317,15 +351,34 @@ export function BridgeForm({ config, sdk, wallets, blastAddress, signedIn, onSig
     needsApproval: reads.allowance.data === false,
     rateChanged: send.rateChanged,
   });
+  return { quoteError, action };
+}
+
+export function BridgeForm({ config, sdk, wallets, blastAddress, signedIn, onSignIn, onArrived, now = Date.now }: BridgeFormProps) {
+  const id = useId();
+  const chains = bridgeChains(config);
+  const { selection, tokenIndex, toIndex, setToIndex, amount, setAmount, chooseChain, chooseToken } = useBridgeInputs(chains);
+  const { chain, info, token } = selection;
+  const [paused, setPaused] = useState(false);
+  const onPaused = useCallback((error: unknown) => {
+    setPaused(true);
+    console.error("Mayan refused this SDK version: upgrade @mayanfinance/swap-sdk", error);
+  }, []);
+
+  const wallet: SourceWallet | null = info.kind === "evm" ? wallets.evm : wallets.solana;
+  const atoms = amountAtoms(amount, token);
+  const reads = useBridgeReads({ sdk, selection, wallet, blastAddress, atoms, paused, onPaused });
+  const send = useBridgeSend({ sdk, selection, keys: reads, shown: reads.shown, now, onPaused, onSent: () => setAmount("") });
+  const { quoteError, action } = formAction({ reads, send, selection, wallet, atoms, paused, signedIn, blastAddress });
 
   const request = (): BridgeRequest => ({ chain, token, to: selection.to, amountIn64: atoms!.toString(), blastAddress: blastAddress!, sourceAddress: wallet!.address });
   const press = () => pressAction(action.kind, {
     signIn: onSignIn,
     connect: () => wallets.connect(info.kind),
-    switch: () => { if (reads.evmWallet) void send.switchTo(reads.evmWallet); },
+    switch: () => { if (reads.evmWallet) send.switchTo(reads.evmWallet); },
     retry: () => { void reads.quote.refetch(); },
-    approve: () => { if (reads.evmWallet) void send.approve(request(), reads.evmWallet); },
-    bridge: () => { if (wallet) void send.bridge(request(), wallet, amount.replace(/,/g, "")); },
+    approve: () => { if (reads.evmWallet) send.approve(request(), reads.evmWallet); },
+    bridge: () => { if (wallet) send.bridge(request(), wallet, amount.replace(/,/g, "")); },
   });
 
   const facts = reads.shown ? quoteRows(quoteFacts(reads.shown, token), token, selection.to) : null;
@@ -337,12 +390,7 @@ export function BridgeForm({ config, sdk, wallets, blastAddress, signedIn, onSig
 
   return (
     <div className={styles.form}>
-      <ChainChoice chain={chain} chains={chains} disabled={locked} onChange={(next) => {
-        setChain(next);
-        // 0.1 ETH is not 0.1 SOL: a new coin starts empty, the same coin keeps its amount.
-        if (CHAINS[next].tokens[tokenIndex].symbol !== token.symbol) setAmount("");
-        send.setFailed(null);
-      }} />
+      <ChainChoice chain={chain} chains={chains} disabled={locked} onChange={(next) => { chooseChain(next); send.setFailed(null); }} />
       <div className={styles.panels}>
         <SendPanel
           amount={amount}
@@ -352,7 +400,7 @@ export function BridgeForm({ config, sdk, wallets, blastAddress, signedIn, onSig
           id={id}
           info={info}
           onAmount={(next) => { setAmount(next); send.setFailed(null); }}
-          onToken={(next) => { setTokenIndex(next); setToIndex(info.tokens[next].symbol === "USDC" ? 1 : 0); setAmount(""); send.setFailed(null); }}
+          onToken={(next) => { chooseToken(next); send.setFailed(null); }}
           token={token}
           tokenIndex={tokenIndex}
         />
@@ -591,9 +639,17 @@ function RecentBridges({ id, rows, sdk, onArrived, now }: Readonly<{ id: string;
 function BridgeRowView({ row, sdk, onArrived, now }: Readonly<{ row: BridgeRow; sdk: BridgeSdk; onArrived: BridgeFormProps["onArrived"]; now: () => number }>) {
   const age = now() - Date.parse(row.at);
   const watching = row.state === "pending" && age < STATUS_GIVE_UP_MS;
+  const queryClient = useQueryClient();
+  const statusKey = ["bridge", "status", row.hash] as const;
   const status = useQuery({
-    queryKey: ["bridge", "status", row.hash],
-    queryFn: () => sdk.status(row.hash),
+    queryKey: statusKey,
+    // Announced where the read lands, and only on a change to "done": a "done" cached from an earlier visit is not news.
+    queryFn: async () => {
+      const before = queryClient.getQueryData<TransferStatus>(statusKey)?.state;
+      const next = await sdk.status(row.hash);
+      if (next.state === "done" && before !== "done") onArrived(row, next.toAmount);
+      return next;
+    },
     enabled: watching,
     // Every 5 s while the page is visible; it stops once Mayan settles it.
     refetchInterval: (query) => (query.state.data?.state ?? "pending") === "pending" && now() - Date.parse(row.at) < STATUS_GIVE_UP_MS ? STATUS_POLL_MS : false,
@@ -601,13 +657,6 @@ function BridgeRowView({ row, sdk, onArrived, now }: Readonly<{ row: BridgeRow; 
   });
   const state = status.data?.state ?? row.state;
   const toAmount = status.data?.toAmount ?? row.toAmount;
-  // Announce only an arrival this row saw happen, not a "done" cached from an earlier visit.
-  const told = useRef(status.data?.state === "done");
-  useEffect(() => {
-    if (status.data?.state !== "done" || told.current) return;
-    told.current = true;
-    onArrived(row, status.data.toAmount);
-  }, [onArrived, row, status.data]);
   const info = row.chain ? CHAINS[row.chain] : null;
   const chain = info?.label ?? "another chain";
   const sentText = displayAmount(row.fromAmount, row.fromSymbol);

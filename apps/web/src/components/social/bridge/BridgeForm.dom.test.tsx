@@ -117,7 +117,7 @@ test("a checked quote bridges on one press, lists the row and reports the arriva
     await form.press();
     await waitFor(() => calls.arrived === 1, "the arrival");
     assert.equal(calls.sends, 1);
-    assert.match(form.text(), /Arrived · 29\.81 SUI/);
+    await waitFor(() => /Arrived · 29\.81\u00a0SUI/.test(form.text()), "the arrived row");
     await form.rerender(evm());
     assert.equal(calls.arrived, 1, "an arrival is told once, even when the rows render again");
   } finally {

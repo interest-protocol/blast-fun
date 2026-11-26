@@ -75,6 +75,7 @@ export function mayanSdk(config: BridgeConfig): BridgeSdk {
     async approve(quote, wallet, chain) {
       const provider = evm(chain);
       for (const transaction of await getEvmSwapApproveTxs(quote, wallet.address, provider)) {
+        // react-doctor-disable-next-line react-doctor/async-await-in-loop -- Approvals are ordered (a reset to zero comes before the new allowance); each must be mined before the next is signed.
         const hash = await sendEvm(wallet, chain, transaction);
         await provider.waitForTransaction(hash, 1, 120_000);
       }
