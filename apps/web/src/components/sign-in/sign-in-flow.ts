@@ -59,9 +59,6 @@ export const PRIVY_WALLET_LOGIN = Object.freeze({ loginMethods: ["wallet"], wall
 /** Privy's OAuth provider for each OAuth method. */
 export const PRIVY_OAUTH_PROVIDERS = { x: "twitter", google: "google" } as const;
 
-/** How long Privy may take to start before the sheet says it could not. */
-export const SIGN_IN_READY_TIMEOUT_MS = 15_000;
-
 /**
  * Where an OAuth attempt survives its redirect: the method, so the page it
  * returns to can say how it ended. Session storage, this tab only.

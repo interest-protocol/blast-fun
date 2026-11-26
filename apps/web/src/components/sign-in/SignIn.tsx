@@ -9,14 +9,14 @@ import { Button } from "#web/components/blast-ui/Button.tsx";
 import { GoogleLogo, HelmetMark, MahaloLogo, NightlyLogo, ScallopLogo, SlushLogo, WalletIcon, XLogo } from "#web/components/blast-ui/Icons.tsx";
 import { Sheet, SheetClose, SheetHeading } from "#web/components/blast-ui/Sheet.tsx";
 import { useShellAction } from "#web/components/blast-ui/shell-actions.tsx";
-import { usePrivyLoginEvents, usePrivySession } from "#web/components/auth/privy-session.ts";
+import { startPrivy, usePrivyLoginEvents, usePrivySession } from "#web/components/auth/privy-session.ts";
 import { usePreparePrivyWalletPicker } from "#web/components/auth/privy-wallet-picker.ts";
 import { usePrivySessionMounted } from "#web/components/presale/providers/PrivySessionProvider.tsx";
 import { useSocialViewer } from "#web/components/social/SignInGate.tsx";
 import { useWalletSession } from "#web/components/social/WalletSession.tsx";
 
 import styles from "./SignIn.module.css";
-import { isSuiSignInMethod, methodsDisabled, oauthErrorState, PRIVY_OAUTH_PROVIDERS, PRIVY_WALLET_LOGIN, SIGN_IN_ATTEMPT_STORAGE_KEY, SIGN_IN_IDLE, SIGN_IN_METHOD_LABELS, SIGN_IN_METHOD_NAMES, SIGN_IN_METHODS, SIGN_IN_READY_TIMEOUT_MS, SUI_SIGN_IN_METHODS, SUI_WALLET_INSTALL_URLS, signInMessage, storedAttempt, waitingMethod, walletLoginErrorState, type SignInMethod, type SignInState } from "./sign-in-flow";
+import { isSuiSignInMethod, methodsDisabled, oauthErrorState, PRIVY_OAUTH_PROVIDERS, PRIVY_WALLET_LOGIN, SIGN_IN_ATTEMPT_STORAGE_KEY, SIGN_IN_IDLE, SIGN_IN_METHOD_LABELS, SIGN_IN_METHOD_NAMES, SIGN_IN_METHODS, SUI_SIGN_IN_METHODS, SUI_WALLET_INSTALL_URLS, signInMessage, storedAttempt, waitingMethod, walletLoginErrorState, type SignInMethod, type SignInState } from "./sign-in-flow";
 
 type SuiWalletSignerModule = typeof import("./sui-wallet-signer");
 let suiWalletSignerModule: SuiWalletSignerModule | null = null;
@@ -152,13 +152,13 @@ function writeAttempt(method: SignInMethod | null): void {
 function useSignInFlow(
   onReturn: (outcome: Readonly<{ signedIn: true; method: SignInMethod } | { signedIn: false; state: SignInState }>) => void,
 ): SignInFlow {
-  const { runtime, load } = usePrivySession();
+  const { load } = usePrivySession();
   const viewer = useSocialViewer();
   const wallet = useWalletSession();
   const [state, setState] = useState<SignInState>(SIGN_IN_IDLE);
-  const live = useRef({ runtime, onReturn });
+  const live = useRef({ onReturn });
   useEffect(() => {
-    live.current = { runtime, onReturn };
+    live.current = { onReturn };
   });
 
   // Privy's login events are shared by every flow: only a wallet login this sheet opened is answered.
@@ -187,18 +187,6 @@ function useSignInFlow(
     }
   });
 
-  /** Polls `done` every 100 ms until it is true (answers true) or `timeoutMs` passes (false). */
-  const waitFor = (done: () => boolean, timeoutMs: number) =>
-    new Promise<boolean>((resolve) => {
-      const started = Date.now();
-      const tick = () => {
-        if (done()) resolve(true);
-        else if (Date.now() - started >= timeoutMs) resolve(false);
-        else window.setTimeout(tick, 100);
-      };
-      tick();
-    });
-
   const start = useCallback(
     (method: SignInMethod) => {
       setState({ status: "waiting", method });
@@ -221,10 +209,10 @@ function useSignInFlow(
           return;
         }
         // Privy's SDK loads with the first sign-in; the pressed method keeps waiting until it starts.
-        load();
-        await waitFor(() => live.current.runtime !== null, SIGN_IN_READY_TIMEOUT_MS);
-        const privy = live.current.runtime;
-        if (!privy) {
+        let privy;
+        try {
+          privy = await startPrivy(load);
+        } catch {
           setState({ status: "stalled" });
           return;
         }

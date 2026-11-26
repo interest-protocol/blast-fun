@@ -20,7 +20,8 @@ export function usePreparePrivyWalletPicker(visible: boolean) {
   const { load } = usePrivySession();
   const enable = useEnableWallets();
   useEffect(() => {
-    if (visible) load();
+    // A failed load leaves sign-in to report it when a method is pressed.
+    if (visible) load().catch(() => undefined);
   }, [load, visible]);
   useEffect(() => {
     if (visible) enable?.("picker");

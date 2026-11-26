@@ -9,7 +9,7 @@
 import { normalizeSuiAddress } from "@mysten/sui/utils";
 import type { User } from "@privy-io/react-auth";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { usePrivyLoginEvents, usePrivySession } from "#web/components/auth/privy-session.ts";
+import { startPrivy, usePrivyLoginEvents, usePrivySession } from "#web/components/auth/privy-session.ts";
 import { PrivySessionProvider, usePrivySessionMounted } from "#web/components/presale/providers/PrivySessionProvider.tsx";
 
 import type { SignerKind } from "./action-machine";
@@ -27,8 +27,6 @@ import type { LaunchpadSigner } from "./signer";
 
 type Part = Readonly<{ current(): LaunchpadSigner | null; connect(): Promise<LaunchpadSigner> }>;
 type PartReady = (kind: SignerKind, part: Part) => void;
-
-const PRIVY_READY_TIMEOUT_MS = 15_000;
 
 function useLatest<Value>(value: Value) {
   const ref = useRef(value);
@@ -86,25 +84,21 @@ function PrivyPart({ onReady, network }: Readonly<{ onReady: PartReady; network:
   const latest = useLatest(session.runtime);
   const { load } = session;
   // This bridge mounts for a signer request: start Privy's SDK now.
-  useEffect(load, [load]);
+  useEffect(() => {
+    load().catch(() => undefined); // `connect` and signing report a failed load.
+  }, [load]);
+  // Offer every wallet, including mobile pairing, as soon as Privy starts: it builds the
+  // WalletConnect entries asynchronously after the list changes, so they must not wait for login.
+  const enableWallets = session.runtime?.enableWallets;
+  useEffect(() => enableWallets?.("picker"), [enableWallets]);
 
   useEffect(() => {
-    const started = async () => {
-      const startedAt = Date.now();
-      while (!latest.current) {
-        if (Date.now() - startedAt > PRIVY_READY_TIMEOUT_MS)
-          throw new Error("Privy did not start. Try again.");
-        await new Promise((resolve) => setTimeout(resolve, 50));
-      }
-      return latest.current;
-    };
+    const started = async () => latest.current ?? startPrivy(load);
     const state = {
       network,
       ready: started,
       login: async () => {
         const privy = await started();
-        // Offer every wallet, including mobile pairing, for a launchpad sign-in.
-        privy.enableWallets("picker");
         return new Promise<User>((resolve, reject) => {
           pendingLogin.current = { resolve, reject };
           privy.login();
@@ -122,7 +116,7 @@ function PrivyPart({ onReady, network }: Readonly<{ onReady: PartReady; network:
           : null,
       connect: () => connectPrivySigner(state),
     });
-  }, [latest, network, onReady]);
+  }, [latest, load, network, onReady]);
   return null;
 }
 
