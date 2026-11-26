@@ -89,6 +89,21 @@ test("the chart keeps room for one bubble and its gap over the highest price, un
   assert.ok(bubble!.y - SIZE / 2 >= inset && gapOver(bubble!.y, px(high)) >= SIZE, String(bubble!.y));
 });
 
+test("a stack with room for only one bubble over the price folds into +N instead of covering it", () => {
+  // Three traders on a bar whose high leaves one slot under the legends and none under its low.
+  const inset = 20, high = 40 - (inset + bubbleHeadroom(SIZE)) / 10;
+  const crowd = [person(A, 0, { high, low: 0.5 }), person(B, 0, { high, low: 0.5 }), person(C, 0, { high, low: 0.5 })];
+  const bubbles = layoutBubbles(crowd, place, 1_000, 400, SIZE, { topInset: inset });
+  assert.deepEqual(bubbles.map((bubble) => bubble.kind === "more" && bubble.people.length), [3]);
+  assert.ok(gapOver(bubbles[0]!.y, px(high)) >= SIZE, String(bubbles[0]!.y));
+  // Two slots: one person and a +2. The viewer's own bubble still shows.
+  const two = layoutBubbles(crowd, place, 1_000, 400, SIZE, { topInset: inset - SIZE * .8 });
+  assert.deepEqual(two.map((bubble) => bubble.kind), ["person", "more"]);
+  assert.ok(two.every((bubble) => gapOver(bubble.y, px(high)) >= SIZE), two.map((bubble) => bubble.y).join());
+  const mine = layoutBubbles([...crowd.slice(1), person(ME, 0, { high, low: 0.5, own: true })], place, 1_000, 400, SIZE, { topInset: inset });
+  assert.ok(mine.some((bubble) => bubble.kind === "person" && bubble.person.own));
+});
+
 test("zoomed out, a crowded column shows its first people and folds the rest into +N", () => {
   // Bars 10 px apart, 24 px bubbles: minutes 0–2 share the first column.
   const crowd = [person(A, 0), person(B, 1), person(C, 1, { lastMs: T0 + 1.5 * MINUTE }), person(D, 2), person(E, 2, { labels: ["sniper"] })];

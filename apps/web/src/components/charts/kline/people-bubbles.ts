@@ -163,26 +163,35 @@ export function layoutBubbles(people: readonly Person[], place: (person: Person)
   return bubbles;
 }
 
-/** One column's bubbles: the ranked people that fit, then a "+N" for the rest. */
+/**
+ * One column's bubbles: the ranked people that fit, then a "+N" for the rest. Where the
+ * whole stack has no room over or under the price, more of it folds into the "+N" until
+ * it fits with its gap; the viewer's own bubbles always show.
+ */
 function stackColumn(placed: readonly Placed[], height: number, size: number, previousX: number, { topInset = 0, spans = [], halfBar = 0, line = false }: DrawnPrice): Bubble[] {
   const ranked = [...placed].sort((a, b) => Number(b.person.own) - Number(a.person.own) || b.person.labels.length - a.person.labels.length || b.person.lastMs - a.person.lastMs);
   const own = ranked.filter((entry) => entry.person.own).length;
-  const room = Math.max(own, ranked.length > STACK_LIMIT ? STACK_LIMIT - 1 : STACK_LIMIT);
-  const shown = ranked.slice(0, room);
-  const folded = ranked.slice(room).map((entry) => entry.person);
-  const slots = shown.length + (folded.length ? 1 : 0);
-  // Centred on the people shown, but never closer than one bubble to the column before.
-  const x = Math.max(shown.reduce((sum, entry) => sum + entry.point.x, 0) / shown.length, previousX + size);
+  const roomFor = (limit: number) => Math.max(own, ranked.length > limit ? limit - 1 : limit);
+  // Centred on the people a full stack shows, but never closer than one bubble to the column before.
+  const centred = ranked.slice(0, roomFor(STACK_LIMIT));
+  const x = Math.max(centred.reduce((sum, entry) => sum + entry.point.x, 0) / centred.length, previousX + size);
   // Every price the bubbles could cover: the column's own bars, and whatever is drawn under the bubble or its ring.
   const under = [...placed.map((entry) => entry.point), ...drawnUnder(spans, x, size / 2 + RING, halfBar, line)];
   const ceiling = Math.min(...under.map((span) => span.top));
   const floor = Math.max(...under.map((span) => span.bottom));
-  const step = size * .8, stack = (slots - 1) * step;
+  const step = size * .8;
   const top = Math.min(topInset, height / 2) + size / 2, bottom = Math.max(top, height - size / 2);
+  const above = Math.min(ceiling - clearance(size), bottom), below = Math.max(floor + clearance(size), top);
+  // Slots that fit over the price or under it, whichever holds more.
+  const fit = Math.max(above >= top ? Math.floor((above - top) / step) + 1 : 0, below <= bottom ? Math.floor((bottom - below) / step) + 1 : 0);
+  const room = roomFor(fit > own ? Math.min(STACK_LIMIT, fit) : STACK_LIMIT);
+  const shown = ranked.slice(0, room);
+  const folded = ranked.slice(room).map((entry) => entry.person);
+  const slots = shown.length + (folded.length ? 1 : 0);
+  const stack = (slots - 1) * step;
   // Over the price first, stacking up; under it, stacking down, when the top bar leaves no room;
   // otherwise from the top edge down, so the bubbles still never pile on one spot. A bar dragged
   // off the plot anchors at the edge it left by.
-  const above = Math.min(ceiling - clearance(size), bottom), below = Math.max(floor + clearance(size), top);
   let at = (slot: number) => clamp(top + stack - slot * step, top, bottom);
   if (above - stack >= top) at = (slot) => above - slot * step;
   else if (below + stack <= bottom) at = (slot) => below + slot * step;
