@@ -11,7 +11,6 @@ import { installRequestHeaders } from "../../test/fixtures/lib/request-headers.t
 import { useWebConfig } from "../../test/fixtures/lib/web-config.testing.ts";
 
 import * as robotsModule from "./robots";
-import * as sitemapModule from "./sitemap";
 import { sitemapEntries } from "#web/lib/sitemap-entries.ts";
 
 installRequestHeaders();
@@ -53,9 +52,8 @@ test("the sitemap lists Home, the listed coins, sales and profiles, and the lega
   );
 });
 
-test("the sitemap and robots.txt read the site origin the same way: both CDN-cached for an hour", async () => {
-  assert.equal(sitemapModule.revalidate, 3600);
-  assert.equal(robotsModule.revalidate, sitemapModule.revalidate);
+test("the sitemap and robots.txt read the site origin the same way; robots.txt is CDN-cached for an hour", async () => {
+  assert.equal(robotsModule.revalidate, 3600);
   const entries = sitemapEntries();
   const origin = new URL(entries[0]!.url).origin;
   const rules = robots();

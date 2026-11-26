@@ -13,7 +13,7 @@ const read = (text: string | null) => ({
   },
 });
 
-test("a visible post with its own words is indexed under its own address; links are followed on every post", () => {
+test("a visible post with its own words is indexed under its own address; links are followed on every post that renders", () => {
   assert.deepEqual(postMetadata(POST_ID, read("Bought the dip")), {
     title: "Post",
     robots: { index: true, follow: true },
@@ -23,9 +23,11 @@ test("a visible post with its own words is indexed under its own address; links 
     [postMetadata(POST_ID, read(null)), "Post"],
     [postMetadata(POST_ID, read("   ")), "Post"],
     [postMetadata(POST_ID, { status: "error" }), "Post"],
-    [postMetadata(POST_ID, { status: "not_found" }), "Nothing here"],
-    [postMetadata("not-a-post", null), "Nothing here"],
   ] as const) {
     assert.deepEqual(metadata, { title, robots: { index: false, follow: true } });
+  }
+  // A missing post renders not-found, which adds Next's own noindex: no second robots tag.
+  for (const metadata of [postMetadata(POST_ID, { status: "not_found" }), postMetadata("not-a-post", null)]) {
+    assert.deepEqual(metadata, { title: "Nothing here", robots: null });
   }
 });
