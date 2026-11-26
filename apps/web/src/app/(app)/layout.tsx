@@ -1,5 +1,4 @@
 import { mainnetIdentity } from "@blast/core/modules/presale/deployment/mainnet-identity.ts";
-import { testSuiPriceEnabled } from "@blast/core/modules/social/prices/test-sui.ts";
 import { backendPrivateServerRead } from "@blast/server/private/relay.ts";
 import { headers } from "next/headers";
 import type { ReactNode } from "react";
@@ -9,8 +8,6 @@ import { BlastUiRoot } from "#web/components/blast-ui/BlastUiRoot.tsx";
 import { PresaleProviders } from "#web/components/presale/providers/PresaleProviders.tsx";
 import { SocialSession } from "#web/components/social/SocialSession.tsx";
 import { SocialShell } from "#web/components/social/SocialShell.tsx";
-import { TestPricingNotice } from "#web/components/social/TestPricingNotice.tsx";
-import { TestPricingProvider } from "#web/components/social/test-pricing-context.tsx";
 import { requestLaunchFlags } from "#web/lib/launch-flags.server.ts";
 import { webConfig } from "#web/lib/server-config.ts";
 import { SITE_ORIGIN } from "#web/lib/site.ts";
@@ -36,16 +33,9 @@ export default async function AppLayout({
     config.privyAppId.status === "available",
   );
 
-  const testPricing = testSuiPriceEnabled();
-  const shellBanner = testPricing ? (
-    <>
-      <TestPricingNotice enabled />
-      {banner}
-    </>
-  ) : banner;
   const shell = (
     <SocialShell
-      banner={shellBanner}
+      banner={banner}
       initialSession={initialSession}
       presaleDeployed={mainnetIdentity(presaleDeployment) !== null}
       rail={rail}
@@ -59,7 +49,7 @@ export default async function AppLayout({
       <FeelProvider>
         <PresaleProviders config={config} nonce={nonce}>
           <SocialSession>
-            {testPricing ? <TestPricingProvider enabled>{shell}</TestPricingProvider> : shell}
+            {shell}
           </SocialSession>
         </PresaleProviders>
       </FeelProvider>

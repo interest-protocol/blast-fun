@@ -207,7 +207,6 @@ export default defineConfig([
       "packages/core/src/modules/read-routing/blast-infra.ts",
       "apps/workers/src/modules/social/claims/launch.ts",
       "packages/core/src/modules/social/create/test-quote.ts",
-      "packages/core/src/modules/social/prices/test-sui.ts",
       "packages/core/src/modules/web-security/route-limits.ts",
       "packages/core/src/modules/web-security/traffic-rate-limits.ts",
       // Flags: read live by web and the API alike.

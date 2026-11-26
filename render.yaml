@@ -72,8 +72,6 @@ projects:
                 sync: false
               - key: BLAST_SOCIAL_ENABLED
                 sync: false
-              - key: BLAST_TEST_SUI_PRICE_ENABLED
-                sync: false
               - key: BLAST_TRADE_FEE_BPS
                 sync: false
               - key: BLAST_TRADE_FEE_RECEIVER

@@ -3,8 +3,6 @@ import { createPortal } from "react-dom";
 import { CoinWorkspaceLayout } from "./WorkspaceLayout";
 import { DEFAULT_WORKSPACE_LAYOUT, type WorkspaceLayout } from "@blast/core/modules/social/blast-workspace/workspace-layout-model.ts";
 import { SkeletonBox, SkeletonRegion, SkeletonText } from "#web/components/blast-ui/Skeleton.tsx";
-import { TestPricingNotice } from "#web/components/social/TestPricingNotice.tsx";
-import { useTestPricing } from "#web/components/social/test-pricing-context.tsx";
 import { WorkspaceToolbarTarget } from "./frame-targets";
 import { discoverOpensOnScreen } from "./discover-default";
 import type { WorkspaceV1 } from "@blast/core/modules/social/blast-workspace/setup.ts";
@@ -74,7 +72,6 @@ export function StripSkeleton() {
 
 /** The header bar's controls at their 36px chip height and in their order: coin, Recent, search, then Portfolio, the balance, Layout and settings. */
 export function ToolbarSkeleton({ saved }: Readonly<{ saved: boolean }>) {
-  const testPricing = useTestPricing();
   return <div className={styles.toolbar} data-pending-toolbar="">
     <div className={styles.panelTools}>
       <SkeletonBox className={`${styles.pendingTool} ${styles.pendingCoin}`} />
@@ -83,7 +80,6 @@ export function ToolbarSkeleton({ saved }: Readonly<{ saved: boolean }>) {
     <SkeletonBox className={`${styles.pendingTool} ${styles.pendingSearch}`} />
     <span className={styles.toolbarSpacer} />
     <SkeletonBox className={`${styles.pendingTool} ${styles.pendingPortfolio}`} />
-    <TestPricingNotice compact enabled={testPricing} />
     <SkeletonBox className={`${styles.pendingTool} ${shellStyles.accountBalance}`} />
     <SkeletonBox className={`${styles.pendingTool} ${styles.pendingLayout}`} />
     <SkeletonBox className={`${styles.pendingTool} ${styles.pendingIcon}`} />
