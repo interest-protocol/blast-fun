@@ -157,7 +157,7 @@ function useBridgeReads({ sdk, selection, wallet, blastAddress, atoms, paused, o
     queryKey: ["bridge", "history", blastAddress],
     queryFn: () => sdk.history(blastAddress!),
     enabled: blastAddress !== null,
-    // Read once when the screen opens; arrivals refresh it.
+    // Read once when the screen opens; rows this card sends are added locally.
     staleTime: Infinity,
     refetchOnMount: "always",
     refetchOnWindowFocus: false,
@@ -189,8 +189,17 @@ function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent }: R
   const running = useRef(false);
   const inputs = keys.quoteKey.join("|");
 
+  // Quote errors get quote copy here; anything after this point gets the send copy in `run`.
   const freshQuote = async (ask: BridgeRequest): Promise<Quote | null> => {
-    const fresh = await sdk.quote({ chain, token, to, amountIn64: ask.amountIn64, swapper: ask.sourceAddress, destination: ask.blastAddress });
+    let fresh: Quote;
+    try {
+      fresh = await sdk.quote({ chain, token, to, amountIn64: ask.amountIn64, swapper: ask.sourceAddress, destination: ask.blastAddress });
+    } catch (error) {
+      if (isPausedError(error)) onPaused(error);
+      console.error("Bridge quote failed before signing", error);
+      setFailed(quoteErrorText(error, info, token));
+      return null;
+    }
     const checked = guardQuote(fresh, ask, now());
     if (checked.ok) return fresh;
     console.error("Bridge quote refused before signing", checked.reason);
@@ -209,7 +218,7 @@ function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent }: R
       if (rejected(error)) return;
       if (isPausedError(error)) onPaused(error);
       console.error("Bridge failed", error);
-      setFailed(typeof (error as { code?: unknown } | null)?.code === "string" ? quoteErrorText(error, info, token) : SEND_FAILED_TEXT);
+      setFailed(isPausedError(error) ? PAUSED_TEXT : SEND_FAILED_TEXT);
     } finally {
       running.current = false;
       setBusy(false);
@@ -242,6 +251,8 @@ function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent }: R
     onSent();
     setRateChangedFor(null);
     void queryClient.invalidateQueries({ queryKey: keys.balanceKey });
+    // The send spent the allowance; the same amount again must check it afresh.
+    queryClient.removeQueries({ queryKey: ["bridge", "allowance"] });
   });
 
   const switchTo = (source: EvmWallet) => run(() => source.switchChain(info.chainId!));
@@ -326,7 +337,12 @@ export function BridgeForm({ config, sdk, wallets, blastAddress, signedIn, onSig
 
   return (
     <div className={styles.form}>
-      <ChainChoice chain={chain} chains={chains} disabled={locked} onChange={(next) => { setChain(next); send.setFailed(null); }} />
+      <ChainChoice chain={chain} chains={chains} disabled={locked} onChange={(next) => {
+        setChain(next);
+        // 0.1 ETH is not 0.1 SOL: a new coin starts empty, the same coin keeps its amount.
+        if (CHAINS[next].tokens[tokenIndex].symbol !== token.symbol) setAmount("");
+        send.setFailed(null);
+      }} />
       <div className={styles.panels}>
         <SendPanel
           amount={amount}
@@ -585,7 +601,8 @@ function BridgeRowView({ row, sdk, onArrived, now }: Readonly<{ row: BridgeRow; 
   });
   const state = status.data?.state ?? row.state;
   const toAmount = status.data?.toAmount ?? row.toAmount;
-  const told = useRef(false);
+  // Announce only an arrival this row saw happen, not a "done" cached from an earlier visit.
+  const told = useRef(status.data?.state === "done");
   useEffect(() => {
     if (status.data?.state !== "done" || told.current) return;
     told.current = true;

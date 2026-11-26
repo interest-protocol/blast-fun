@@ -38,10 +38,14 @@ export function mayanSdk(config: BridgeConfig): BridgeSdk {
 
   const evmSigner = async (wallet: EvmWallet) => new BrowserProvider(await wallet.provider()).getSigner(wallet.address);
 
-  const sendEvm = async (wallet: EvmWallet, transaction: TransactionRequest): Promise<string> => {
+  // Returns the hash once the wallet sends. `sendTransaction` would then poll the
+  // wallet's own RPC with no time limit, which never ends for some smart-contract wallets.
+  const sendEvm = async (wallet: EvmWallet, chain: BridgeChain, transaction: TransactionRequest): Promise<string> => {
     const signer = await evmSigner(wallet);
-    const sent = await signer.sendTransaction(transaction);
-    return sent.hash;
+    const chainId = CHAINS[chain].chainId!;
+    const walletChainId = Number(await signer.provider.send("eth_chainId", []));
+    if (walletChainId !== chainId) throw new Error(`Wallet is on chain ${walletChainId}, not ${chain}`);
+    return signer.sendUncheckedTransaction({ ...transaction, chainId });
   };
 
   const solanaBalance = async (token: SourceToken, owner: string): Promise<bigint> => {
@@ -71,7 +75,7 @@ export function mayanSdk(config: BridgeConfig): BridgeSdk {
     async approve(quote, wallet, chain) {
       const provider = evm(chain);
       for (const transaction of await getEvmSwapApproveTxs(quote, wallet.address, provider)) {
-        const hash = await sendEvm(wallet, transaction);
+        const hash = await sendEvm(wallet, chain, transaction);
         await provider.waitForTransaction(hash, 1, 120_000);
       }
     },
@@ -79,7 +83,7 @@ export function mayanSdk(config: BridgeConfig): BridgeSdk {
       if (wallet.kind === "evm") {
         const chainId = CHAINS[request.chain].chainId!;
         const payload = await getSwapFromEvmTxPayload(quote, wallet.address, request.blastAddress, null, wallet.address, chainId, null, null, { evmProvider: evm(request.chain) });
-        const hash = await sendEvm(wallet, { to: payload.to, data: payload.data, value: payload.value, chainId: payload.chainId });
+        const hash = await sendEvm(wallet, request.chain, { to: payload.to, data: payload.data, value: payload.value });
         onSigned(hash);
         return hash;
       }

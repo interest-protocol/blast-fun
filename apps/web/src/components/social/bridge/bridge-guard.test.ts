@@ -52,6 +52,7 @@ test("the guard refuses every quote that is not exactly what was asked", () => {
   assert.equal(reason({ ...base, type: "SWIFT" }, BASE_USDC), "not a Blink quote");
   assert.equal(reason({ ...base, blinkQuote: undefined }, BASE_USDC), "no Blink order");
   assert.equal(reason(withOrder(base, (_, crossChain) => delete crossChain.quoteHash), BASE_USDC), "no Blink order");
+  assert.equal(reason({ ...base, gasless: true }, BASE_USDC), "gasless order");
   assert.equal(reason(base, { ...BASE_USDC, chain: "arbitrum" }), "wrong chains");
   assert.equal(reason(base, { ...BASE_USDC, token: CHAINS.base.tokens[0] }), "wrong source token");
   assert.equal(reason(base, { ...BASE_USDC, amountIn64: "20000001" }), "wrong amount");

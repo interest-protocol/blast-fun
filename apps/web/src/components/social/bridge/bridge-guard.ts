@@ -38,7 +38,8 @@ function sameCoinType(a: string, b: string): boolean {
 /**
  * Checks a bound Mayan quote before the wallet sees it: a Blink order, from the
  * chosen chain and token, for the typed amount, paying the Blast address on Sui
- * in the chosen coin, refunding the source wallet, no referrer, not expired.
+ * in the chosen coin, refunding the source wallet, no referrer, not gasless,
+ * not expired.
  * The SDK repeats the order checks when it builds the transaction; this keeps a
  * wrong quote from ever reaching a signing prompt.
  */
@@ -51,6 +52,8 @@ export function guardQuote(quote: Quote, request: BridgeRequest, now: number): G
   } catch {
     return { ok: false, reason: "unreadable Blink order" };
   }
+  // Gasless orders take another SDK path (Permit2 or a sponsored Solana deposit) that this card never builds.
+  if (quote.gasless || order.gasless) return { ok: false, reason: "gasless order" };
   const params = order.orderParams;
   if (params.srcChain !== request.chain || params.dstChain !== "sui") return { ok: false, reason: "wrong chains" };
   if (!sameSourceToken(request.chain, request.token, params.srcToken)) return { ok: false, reason: "wrong source token" };

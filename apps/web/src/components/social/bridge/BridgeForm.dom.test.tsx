@@ -6,7 +6,7 @@ import type { Quote } from "@mayanfinance/swap-sdk";
 
 import { installTestDom, setInputValue, testEvent, waitFor } from "../../../../test/fixtures/social/test-dom.ts";
 
-import type { BridgeSdk, EvmWallet } from "./bridge-sdk.ts";
+import type { BridgeRow, BridgeSdk, EvmWallet } from "./bridge-sdk.ts";
 
 const dom = installTestDom();
 const { act } = await import("react");
@@ -53,13 +53,14 @@ function evm(address = SOURCE): EvmWallet {
 
 const coded = (code: unknown) => Object.assign(new Error("refused"), { code });
 
-async function mount(sdk: BridgeSdk, calls: Calls, wallet: EvmWallet | null = evm()) {
+async function mount(sdk: BridgeSdk, calls: Calls, wallet: EvmWallet | null = evm(), queries: Record<string, unknown> = {}) {
   const container = dom.document.createElement("div");
   dom.document.body.appendChild(container);
   const root = createRoot(container);
-  const client = createTestQueryClient();
-  const render = (next: EvmWallet | null) => act(async () => root.render(withQueryClient(client,
+  const client = createTestQueryClient({ queries });
+  const render = (next: EvmWallet | null, key = "first") => act(async () => root.render(withQueryClient(client,
     <BridgeForm
+      key={key}
       blastAddress={BLAST}
       config={CONFIG}
       now={() => BEFORE_EXPIRY}
@@ -78,6 +79,8 @@ async function mount(sdk: BridgeSdk, calls: Calls, wallet: EvmWallet | null = ev
     button,
     text,
     rerender: render,
+    /** A fresh form on the same query cache, like closing and reopening Bridge. */
+    remount: () => render(wallet, "again"),
     /** USDC to send, then SUI to receive: USDC defaults the receiving coin to USDC. */
     async pickUsdc() {
       const option = (group: string, symbol: string) => [...container.querySelectorAll<HTMLButtonElement>(`[aria-label='${group}'] button`)].find((button) => button.textContent === symbol)!;
@@ -117,6 +120,38 @@ test("a checked quote bridges on one press, lists the row and reports the arriva
     assert.match(form.text(), /Arrived · 29\.81 SUI/);
     await form.rerender(evm());
     assert.equal(calls.arrived, 1, "an arrival is told once, even when the rows render again");
+  } finally {
+    await form.unmount();
+  }
+});
+
+test("reopening Bridge does not report an arrival again from the cache", async () => {
+  const calls = newCalls();
+  const listed: BridgeRow = { hash: "0xhash", chain: "base", fromAmount: "20", fromSymbol: "USDC", toAmount: "29.81", toSymbol: "SUI", state: "pending", at: new Date(BEFORE_EXPIRY).toISOString() };
+  // The app keeps finished queries for minutes; the test client's default drops them at once.
+  const form = await mount(fakeSdk(calls, [QUOTE], { history: async () => (calls.sends > 0 ? [listed] : []) }), calls, evm(), { gcTime: 5 * 60_000 });
+  try {
+    await form.pickUsdc();
+    await form.type("20");
+    await form.press();
+    await waitFor(() => calls.arrived === 1, "the arrival");
+    await form.remount();
+    await waitFor(() => /Arrived · 29\.81\u00a0SUI/.test(form.text()), "the listed row");
+    assert.equal(calls.arrived, 1, "the cached arrival is not told twice");
+  } finally {
+    await form.unmount();
+  }
+});
+
+test("a send error after the price shows the send copy, not a price error", async () => {
+  const calls = newCalls();
+  const form = await mount(fakeSdk(calls, [QUOTE], { send: async () => { throw coded("TIMEOUT"); } }), calls);
+  try {
+    await form.pickUsdc();
+    await form.type("20");
+    await form.press();
+    await waitFor(() => /Code: bridge_send_failed\./.test(form.text()), "the send line");
+    assert.doesNotMatch(form.text(), /bridge_quote_failed/);
   } finally {
     await form.unmount();
   }
