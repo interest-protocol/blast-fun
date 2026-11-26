@@ -32,8 +32,6 @@
   scroll-margin-top: calc(var(--shell-topbar-height, 4rem) + 0.75rem);
 }
 .section > * { grid-column: 1 / -1; min-width: 0; }
-.section[data-lifted] { z-index: 20; }
-.section[data-lifted] .sectionSurface { box-shadow: var(--sh-pop); }
 .sectionHead { min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 0.625rem; }
 .sectionHead h2 { margin: 0 0.5rem 0 0; font-size: 1.25rem; font-weight: 650; line-height: 1.45; letter-spacing: -.02em; }
 .sectionTools { margin-left: auto; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 0.625rem; }
@@ -44,21 +42,6 @@
 .coinHead > .coinSearch { flex: 1 0 9rem; max-width: 19rem; justify-content: flex-start; text-align: start; color: var(--muted); }
 .searchKey { margin-inline-start: auto; min-width: 1.25rem; border-radius: var(--r-inner); background: var(--raised); font: 600 0.75rem/1.25rem var(--mono); text-align: center; }
 .coinControls { margin-left: auto; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 0.625rem; }
-/* The grip and the hide (Customize Home's drag mode): quiet until the line is hovered or they are focused; always there for a finger. */
-.grip, .hide {
-  width: 1.75rem; height: 1.75rem; border-radius: var(--r-button); display: inline-flex; align-items: center; justify-content: center;
-  color: var(--muted); opacity: 0; transition: opacity var(--t2) var(--ease-std), background var(--t2) var(--ease-std), color var(--t2) var(--ease-std), transform var(--t1) var(--ease-std);
-}
-.grip { cursor: grab; touch-action: none; }
-.grip svg, .hide svg { width: 1rem; height: 1rem; }
-.grip:focus-visible, .hide:focus-visible, .section[data-lifted] .grip { opacity: 1; }
-@media (hover: hover) and (pointer: fine) {
-  .sectionHead:hover :is(.grip, .hide) { opacity: 1; }
-  .grip:hover, .hide:hover { background: var(--chip); color: var(--ink-2); }
-}
-.grip:active { cursor: grabbing; color: var(--ink); background: var(--chip); }
-.hide:active { transform: scale(.97); transition-duration: 0s; }
-@media (hover: none) { .grip, .hide { opacity: 1; } }
 
 /* ---------- the table card ---------- */
 /* The surface is its own layer, so a page turn can resize it with a transform while the rows never scale. */
@@ -504,13 +487,11 @@ a.name:active { opacity: .6; }
 }
 
 @media (pointer: coarse) {
-  .grip, .hide { opacity: 1; min-width: 44px; min-height: 44px; }
   .selectOption { min-height: 44px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .item, .row, .card, .rowActions, .grip, .hide { transition: none; }
+  .item, .row, .card, .rowActions { transition: none; }
   .tapeLive i, .metricLoading, .skLine { animation: none; }
-  .hide:active { transform: none; opacity: .7; }
   .sectionsMenu, .metricTip { transition: opacity var(--t1) linear; }
   .sectionsMenu[data-starting-style], .sectionsMenu[data-ending-style], .metricTip[data-starting-style], .metricTip[data-ending-style] { transform: none; }
 }

@@ -247,7 +247,6 @@ export function CoinHome({ initial, initialState, pinned, traders, posts = null,
     <RankingsSlot.Provider key="discovery" value={rankingsStore}>
       <HomeSections
         empty={<EmptyState framed title="Every section is hidden">Restore sections from Customize Home.</EmptyState>}
-        onChange={changeSections}
         prefs={prefs}
         sections={specs}
       />

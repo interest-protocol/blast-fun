@@ -83,7 +83,7 @@ test("hidden Posts never mounts or reads; Customize Home can restore it in its s
   const root = createRoot(container);
   t.after(async () => { await act(async () => root.unmount()); container.remove(); client.clear(); globalThis.fetch = originalFetch; });
   const render = (hidden: boolean) => act(async () => {
-    root.render(<QueryProvider client={client}><HomeSections prefs={parseHomeSections(`-coins.-traders.${hidden ? "-" : ""}posts`)} onChange={() => {}} empty={<p>Hidden</p>} sections={{ coins: { children: null }, bonding: { children: null }, traders: { children: null }, posts: { children: <PostsSection initial={null} nowMs={FIXTURE_NOW} /> } }} /></QueryProvider>);
+    root.render(<QueryProvider client={client}><HomeSections prefs={parseHomeSections(`-coins.-traders.${hidden ? "-" : ""}posts`)} empty={<p>Hidden</p>} sections={{ coins: { children: null }, bonding: { children: null }, traders: { children: null }, posts: { children: <PostsSection initial={null} nowMs={FIXTURE_NOW} /> } }} /></QueryProvider>);
     await new Promise(resolve => setTimeout(resolve, 30));
   });
   await render(true);

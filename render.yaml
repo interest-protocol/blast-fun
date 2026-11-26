@@ -86,8 +86,6 @@ projects:
                 sync: false
               - key: CARD_IMAGE_BLOB_ACCESS
                 sync: false
-              - key: COMPLETION_SESSION_TOKEN_KEY
-                sync: false
               - key: CREATOR_CLAIM_SIGNER_KEY
                 sync: false
               - key: CRON_SECRET

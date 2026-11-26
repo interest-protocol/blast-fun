@@ -43,12 +43,3 @@ export const ChevronIcon = (p: IconProps) => (
   </Line>
 );
 
-export const DismissIcon = (p: IconProps) => (
-  <Line {...p} strokeWidth="2.2">
-    <path d="M6 6l12 12M18 6 6 18" />
-  </Line>
-);
-
-/** The Sui and USDC coin marks the wallet card draws. */
-export const SUI_LOGO_SRC = "/blast-ui/coins/sui.svg";
-export const USDC_LOGO_SRC = "/blast-ui/coins/usdc.svg";

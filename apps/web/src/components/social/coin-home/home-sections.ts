@@ -1,8 +1,7 @@
 /**
  * Home's sections (coins, bonding curves, posts and traders, the Main board's
  * order): each movable
- * by its header (dragged, or walked with ArrowUp/ArrowDown on its grip) and
- * each hideable. The order and the hidden sections are **per device**, in
+ * and hideable from the Sections menu. The order and the hidden sections are **per device**, in
  * one cookie, `blast.home`, so the server lays the page out in the saved
  * order and reads nothing for a hidden section (its query never runs in the
  * browser either). The value is the order as the keys joined by `.`, a
@@ -101,7 +100,7 @@ export function moveHomeSection(prefs: HomeSectionPrefs, key: HomeSectionKey, de
   return placeHomeSection(prefs, key, from + delta);
 }
 
-/** `key` dropped at `to` among the sections showing (a drag); `to` is clamped. */
+/** `key` placed at `to` among the sections showing; `to` is clamped. */
 export function placeHomeSection(prefs: HomeSectionPrefs, key: HomeSectionKey, to: number): HomeSectionPrefs {
   const shown = shownHomeSections(prefs);
   const from = shown.indexOf(key);
@@ -131,50 +130,6 @@ function mergeHidden(shown: readonly HomeSectionKey[], previous: readonly HomeSe
 export function setHomeSectionShown(prefs: HomeSectionPrefs, key: HomeSectionKey, shown: boolean): HomeSectionPrefs {
   if (isHomeSectionShown(prefs, key) === shown) return prefs;
   return normalize({ order: prefs.order, hidden: shown ? prefs.hidden.filter((other) => other !== key) : [...prefs.hidden, key] });
-}
-
-export type SectionBox = Readonly<{ top: number; height: number }>;
-
-/**
- * The drag's swap rule, by the dragged section's leading edge (sections
- * differ in height, so a centre-to-centre rule would make a tall section
- * travel most of its own height before anything moved): its bottom past the
- * next section's centre takes that slot (`+1`); its top back above the
- * previous section's centre, that one (`-1`); else it stays (`0`). After a
- * swap the neighbour's centre lies half its height away from the dragged
- * edge, so a swap never oscillates.
- */
-export function sectionSlotStep(dragged: SectionBox, previous: SectionBox | undefined, next: SectionBox | undefined): -1 | 0 | 1 {
-  if (next && dragged.top + dragged.height > next.top + next.height / 2) return 1;
-  if (previous && dragged.top < previous.top + previous.height / 2) return -1;
-  return 0;
-}
-
-/**
- * A dragged section's settle: a critically damped spring from where it was
- * let go (`fromPx`) at the pointer's speed (`velocityPxPerS`) to its slot,
- * sampled as offsets for a keyframe animation (Apple's "response" is the
- * seconds to settle; damping 1 means no overshoot). The path starts from the
- * on-screen value and carries the finger's velocity, so release and settle
- * read as one motion.
- */
-export function springPath(fromPx: number, velocityPxPerS: number, responseS = 0.36, steps = 36): readonly number[] {
-  const omega = (2 * Math.PI) / responseS;
-  const total = responseS * 1.5;
-  return Array.from({ length: steps + 1 }, (_, index) => {
-    const t = (index / steps) * total;
-    return (fromPx + (velocityPxPerS + omega * fromPx) * t) * Math.exp(-omega * t);
-  });
-}
-
-/** What the live region says after a move: "Traders moved to position 1 of 3". */
-export function sectionMovedMessage(key: HomeSectionKey, index: number, total: number): string {
-  return `${HOME_SECTION_TITLES[key]} moved to position ${index + 1} of ${total}`;
-}
-
-/** The grip's label: "Move Traders. Use the up and down arrow keys". */
-export function sectionGripLabel(key: HomeSectionKey): string {
-  return `Move ${HOME_SECTION_TITLES[key]}. Use the up and down arrow keys`;
 }
 
 /** The cookie's value out of a `document.cookie` string (null when absent). */

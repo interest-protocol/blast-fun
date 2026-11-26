@@ -7,7 +7,6 @@ export const SITE_ORIGIN = normalizeSiteOrigin(process.env.NEXT_PUBLIC_SITE_URL)
 
 export const SITE_NAME = "BLAST.FUN";
 export const SITE_X_URL = "https://x.com/blastdotfun";
-export const SITE_X_FOLLOW_URL = "https://x.com/intent/follow?user_id=1946307922717179904";
 export const SITE_TELEGRAM_URL = "https://t.me/blastdofun";
 export const SITE_MAP_URL = "https://map.blast.fun/";
 export const SITE_DOCS_URL = "https://docs.blast.fun/";
