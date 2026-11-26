@@ -454,13 +454,16 @@
 .topbar .deposit { width: 5rem; flex: 0 0 5rem; }
 .accountBalance { width: 14rem; flex: 0 0 14rem; justify-content: space-between; }
 .balanceCompact { display: none; }
-/* Narrower screens show the short amount, and Partial when it is a priced subtotal, on one line. */
+/* Narrower screens show the short amount, and Partial when it is a priced subtotal, on one line; the pill grows rather than cut either. */
 @media (max-width: 1200px) {
-  .accountBalance { width: 10.5rem; flex-basis: 10.5rem; }
+  .accountBalance { width: auto; min-width: 10.5rem; flex: none; }
   .balanceExact { display: none; }
   .balanceCompact { display: inline; }
 }
-.accountBalance b { min-width: 0; overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+/* Only the long exact amount gives way, with an ellipsis; the short amount and Partial stay whole. */
+.accountBalance b { display: flex; gap: 0.25em; min-width: 0; font-weight: 600; white-space: nowrap; }
+.accountBalance b > span { flex: none; }
+.accountBalance b > .balanceExact { flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .accountBalance[data-popup-open] { background: var(--chip); }
 .accountPlaceholder {
   width: 4rem;
@@ -646,7 +649,7 @@
 
   .pageWallet { display: flex; align-items: center; gap: 0.5rem; margin-inline-start: auto; max-width: 100%; }
   .pageWallet[inert] { visibility: hidden; }
-  .pageWallet .accountBalance { width: 8.5rem; flex: none; }
+  .pageWallet .accountBalance { min-width: 8.5rem; }
   .pageWallet .balancePlaceholder { width: 5.5rem; }
   .pageWallet > button { min-height: max(44px, 2.75rem); }
 
