@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { MARKET_STREAM_BUDGET } from "@blast/core/modules/launchpad-contract/market-stream.ts";
 import { marketHintTransport } from "#web/lib/live-stream/market-hints.ts";
-import { HIDDEN_GRACE_MS, MarketStreamHub, STABLE_MS, type MarketEventSource, type MarketStreamState, type MarketTrade } from "./market-stream-hub.ts";
+import { HIDDEN_GRACE_MS, HOLD_MAX_MS, MarketStreamHub, OPEN_SETTLE_MS, STABLE_MS, type MarketEventSource, type MarketStreamState, type MarketTrade } from "./market-stream-hub.ts";
 
 const CURVE = `blast_curve:0x${"11".repeat(32)}`;
 const VENUE = `cetus:0x${"22".repeat(32)}`;
@@ -32,16 +32,23 @@ class Source implements MarketEventSource {
   pools(): string[] { return new URL(this.url, "https://blast.test").searchParams.getAll("pool"); }
 }
 
-function setup() {
+/** `settled`: a new stream waits `OPEN_SETTLE_MS` on the fake clock, as in the browser; otherwise it opens at once. */
+function setup({ settled = false } = {}) {
   const sources: Source[] = [];
   const timers: { run: () => void; ms: number; at: number }[] = [];
   let now = 0;
   let visible = true;
   let onVisibility: (() => void) | null = null;
+  const schedule = (run: () => void, ms: number) => { const timer = { run, ms, at: now + ms }; timers.push(timer); return () => { const index = timers.indexOf(timer); if (index >= 0) timers.splice(index, 1); }; };
   const hub = new MarketStreamHub({
     createSource: (url) => { const source = new Source(url); sources.push(source); return source; },
-    schedule: (run, ms) => { const timer = { run, ms, at: now + ms }; timers.push(timer); return () => { const index = timers.indexOf(timer); if (index >= 0) timers.splice(index, 1); }; },
+    schedule,
     defer: queueMicrotask, random: () => 0, visible: () => visible,
+    settle: (run) => {
+      if (settled) return schedule(run, OPEN_SETTLE_MS);
+      run();
+      return () => {};
+    },
     onVisibilityChange: (listener) => { onVisibility = listener; return () => { onVisibility = null; }; },
   });
   const fire = (ms: number) => { const timer = timers.find((entry) => entry.ms === ms)!; assert.ok(timer, `a ${ms} ms timer is pending`); timers.splice(timers.indexOf(timer), 1); timer.run(); };
@@ -744,4 +751,118 @@ test("a coin's newest stats win across its two pools, and a late subscriber gets
   s.hub.subscribe({ pools: [CURVE, VENUE], expected, listener: { state: () => {}, stats: (frame) => late.push(frame.holders) } });
   await settle();
   assert.deepEqual(late, [250]);
+});
+
+test("the screens a page load subscribes share one ticket and one socket", async () => {
+  const s = setup({ settled: true });
+  const chart = watcher([CURVE, VENUE]);
+  const coin = watcher([CURVE]);
+  s.hub.subscribe({ pools: coin.pools, expected, coin: "0x2::sui::SUI", listener: coin.listener });
+  s.hub.subscribe({ pools: chart.pools, expected, listener: chart.listener });
+  await settle();
+  assert.equal(s.sources.length, 0, "no ticket before the page's screens settle");
+  s.advance(OPEN_SETTLE_MS / 2);
+  const late = watcher([CURVE]);
+  s.hub.subscribe({ pools: late.pools, expected, listener: late.listener });
+  await settle();
+  s.advance(OPEN_SETTLE_MS / 2);
+  assert.equal(s.sources.length, 1, "a late screen on the same pools keeps the settle");
+  assert.deepEqual(s.source().pools().sort(), [CURVE, VENUE].sort());
+  assert.deepEqual(coin.states, ["connecting"]);
+});
+
+test("a held open waits for the sale's pool, then opens one socket with the sale and its pool", async () => {
+  const s = setup({ settled: true });
+  const presale = `0x${"44".repeat(32)}`;
+  const trades = watcher([]);
+  const release = s.hub.hold();
+  s.hub.subscribe({ pools: [], presale, expected: null, listener: trades.listener });
+  s.advance(HOLD_MAX_MS - 1_000);
+  assert.equal(s.sources.length, 0, "the presale-only stream waits for the market read");
+  const market = watcher([VENUE]);
+  s.hub.subscribe({ pools: market.pools, expected: null, listener: market.listener });
+  release();
+  await settle();
+  s.advance(OPEN_SETTLE_MS);
+  assert.equal(s.sources.length, 1);
+  const url = new URL(s.source().url, "https://blast.test");
+  assert.equal(url.searchParams.get("presale"), presale);
+  assert.deepEqual(url.searchParams.getAll("pool"), [VENUE]);
+  release();
+  s.advance(HOLD_MAX_MS);
+  assert.equal(s.sources.length, 1, "a release twice, or its expiry, changes nothing");
+});
+
+test("a hold never released opens the stream after HOLD_MAX_MS, and a hold never touches an open stream", async () => {
+  const s = setup({ settled: true });
+  const list = watcher();
+  s.hub.hold();
+  s.hub.subscribe({ pools: list.pools, expected, listener: list.listener });
+  s.advance(HOLD_MAX_MS - 1);
+  assert.equal(s.sources.length, 0);
+  s.advance(1 + OPEN_SETTLE_MS);
+  assert.equal(s.sources.length, 1);
+  s.hub.hold()();
+  s.hub.hold();
+  s.advance(HOLD_MAX_MS + OPEN_SETTLE_MS);
+  assert.equal(s.sources.length, 1);
+  assert.equal(s.source().closed, false);
+});
+
+test("a tab hidden before its stream settles pauses without a ticket and opens when shown", async () => {
+  const s = setup({ settled: true });
+  const list = watcher();
+  s.hub.subscribe({ pools: list.pools, expected, listener: list.listener });
+  s.setVisible(false);
+  s.advance(OPEN_SETTLE_MS);
+  assert.equal(s.sources.length, 0);
+  assert.equal(list.states.at(-1), "paused");
+  s.setVisible(true);
+  assert.equal(s.sources.length, 1);
+});
+
+test("a tab shown while a screen holds its stream still waits for the hold, then opens once", async () => {
+  const s = setup({ settled: true });
+  const list = watcher([]);
+  s.setVisible(false);
+  const release = s.hub.hold();
+  s.hub.subscribe({ pools: [], presale: `0x${"45".repeat(32)}`, expected: null, listener: list.listener });
+  await settle();
+  s.setVisible(true);
+  assert.equal(s.sources.length, 0, "shown, but the screen's read has not answered");
+  release();
+  s.advance(OPEN_SETTLE_MS);
+  assert.equal(s.sources.length, 1);
+  s.advance(HOLD_MAX_MS);
+  assert.equal(s.sources.length, 1);
+});
+
+test("a stream paused while held and hidden opens when the hold releases on a shown tab", async () => {
+  const s = setup({ settled: true });
+  const list = watcher([]);
+  s.hub.subscribe({ pools: [], presale: `0x${"45".repeat(32)}`, expected: null, listener: list.listener });
+  await settle();
+  s.setVisible(false);
+  s.advance(OPEN_SETTLE_MS);
+  assert.equal(s.sources.length, 0, "paused before it opened");
+  const release = s.hub.hold();
+  s.setVisible(true);
+  assert.equal(s.sources.length, 0);
+  release();
+  s.advance(OPEN_SETTLE_MS);
+  assert.equal(s.sources.length, 1);
+});
+
+test("a refused stream shown while held waits out its refusal, then opens one source", async () => {
+  const s = setup();
+  const chart = watcher();
+  s.hub.subscribe({ pools: chart.pools, expected, listener: chart.listener });
+  s.source().listeners.get("refused")![0]!({ data: "60000" });
+  const release = s.hub.hold();
+  s.setVisible(false);
+  s.setVisible(true);
+  release();
+  assert.equal(s.sources.length, 1, "shown while held: the refusal's wait still stands");
+  s.fire(60_000);
+  assert.equal(s.sources.length, 2, "the wait's own retry opens the stream");
 });

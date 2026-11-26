@@ -22,7 +22,8 @@ const { useSaleDetail } = await import("./presales-client");
 const { PresalesList } = await import("./PresalesList");
 const { fixtureList, fixtureDetail, FIXTURE_NOW } = await import("../../../../../packages/core/test/fixtures/presale-pages/presale-fixtures.ts");
 
-const ID = "0xsale";
+// A well-formed object id: a hint naming a malformed one is a plain look, which re-reads only sales still taking commits.
+const ID = `0x${"5a1e".repeat(16)}`;
 const sale = (raised: string, participants: number) =>
   ({ presale: { presale_id: ID, phase: "open", start_ms: 0, end_ms: Date.now() + 3_600_000, raised_usd: raised, participants }, raise: { points: [] }, backers: { top: [] } }) as never;
 

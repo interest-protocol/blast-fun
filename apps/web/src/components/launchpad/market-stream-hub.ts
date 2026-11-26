@@ -98,6 +98,8 @@ export type MarketStreamDependencies = Readonly<{
   schedule: (run: () => void, ms: number) => () => void;
   /** Runs after the current task's other subscription changes, so they reconnect once. */
   defer: (run: () => void) => void;
+  /** Runs `run` once the screens mounting with a new stream have subscribed (`OPEN_SETTLE_MS`); returns its cancel. */
+  settle: (run: () => void) => () => void;
   random: () => number;
   visible: () => boolean;
   onVisibilityChange: (listener: () => void) => () => void;
@@ -123,6 +125,13 @@ export const HELLO_DEADLINE_MS = 10_000;
 const LEGACY_HEARTBEAT_TIMEOUT_MS = 45_000;
 /** A hidden tab keeps its stream this long, so a quick tab flip costs no reconnect or history read. */
 export const HIDDEN_GRACE_MS = 15_000;
+/**
+ * A new stream waits this long before it asks for a ticket, so the screens that mount with it (one page
+ * load subscribes from several components) share one ticket and one socket.
+ */
+export const OPEN_SETTLE_MS = 100;
+/** A screen that will subscribe once its read answers (`hold`) delays the tab's next open at most this long. */
+export const HOLD_MAX_MS = 3_000;
 /** A socket open this long resets the reconnect backoff. */
 export const STABLE_MS = 20_000;
 /** The reconnect backoff starts here and doubles up to `RECONNECT_MAX_MS`, with up to half again of jitter (capped). */
@@ -280,6 +289,11 @@ export class MarketStreamHub {
   private cancelHidden: (() => void) | null = null;
   private cancelStable: (() => void) | null = null;
   private stopVisibility: (() => void) | null = null;
+  /** The settle before a new stream opens (`OPEN_SETTLE_MS`). */
+  private cancelOpen: (() => void) | null = null;
+  /** Screens holding the next open (`hold`); `openHeld`: a new stream waits for them. */
+  private holds = 0;
+  private openHeld = false;
 
   constructor(deps: MarketStreamDependencies) {
     this.deps = deps;
@@ -312,6 +326,34 @@ export class MarketStreamHub {
         this.queueReconcile();
       },
     };
+  }
+
+  /**
+   * A screen that will subscribe once its read answers (a sale page learns its pool from the coin's market read)
+   * holds the tab's next open until it releases or `HOLD_MAX_MS` passes, so the stream opens once with its pool
+   * rather than open without it and reopen. Returns the release. An open stream whose wanted set does not change
+   * is not touched; a change still closes it at once, and the new one waits for the release.
+   */
+  hold(): () => void {
+    let held = true;
+    this.holds += 1;
+    if (this.cancelOpen) {
+      this.cancelOpen();
+      this.cancelOpen = null;
+      this.openHeld = true;
+    }
+    const release = () => {
+      if (!held) return;
+      held = false;
+      cancelExpiry();
+      this.holds -= 1;
+      if (this.holds === 0 && this.openHeld) {
+        this.openHeld = false;
+        this.openSoon();
+      }
+    };
+    const cancelExpiry = this.deps.schedule(release, HOLD_MAX_MS);
+    return release;
   }
 
   /** Follows `coinType`'s trades on whatever the tab already streams; it never opens or widens a stream. */
@@ -394,9 +436,36 @@ export class MarketStreamHub {
       // The new pools need a new hint handshake. The new carrier replaces the old in one step, so hint
       // clients keep waiting for it (even while hidden) rather than open their own socket.
       this.hints = beginMarketHints();
-      if (this.deps.visible()) return this.connect();
+      if (this.deps.visible()) this.openSoon();
     }
     this.publish();
+  }
+
+  /** Opens the new stream after the settle, or once the holds release; a later change of what is wanted starts over. */
+  private openSoon(): void {
+    this.cancelOpen?.();
+    this.cancelOpen = null;
+    if (this.holds > 0) {
+      this.openHeld = true;
+      return;
+    }
+    const connection = this.connection;
+    let pending = true;
+    const cancel = this.deps.settle(() => {
+      if (!pending) return;
+      pending = false;
+      this.cancelOpen = null;
+      // A stream paused while hidden and held is still this one to open.
+      if (this.connection !== connection || !connection || connection.source || (this.socket !== "connecting" && this.socket !== "paused")) return;
+      if (this.deps.visible()) this.connect();
+      else this.pause();
+    });
+    if (pending) {
+      this.cancelOpen = () => {
+        pending = false;
+        cancel();
+      };
+    }
   }
 
   private replay(subscriber: Subscriber): void {
@@ -512,11 +581,17 @@ export class MarketStreamHub {
       this.cancelHidden?.();
       this.cancelHidden = null;
       if (this.connection && !this.connection.source) {
-        // Shown again: connect at once, past any pending backoff or refusal (a refusal still in force answers at once).
+        this.hints ??= beginMarketHints();
+        // A screen still holding the open opens it on release; a pending backoff or refusal keeps its own timer.
+        if (this.holds > 0) {
+          this.openHeld = true;
+          return;
+        }
+        // Shown again: connect at once, past any pending backoff or refusal (a refusal still in force answers at once),
+        // unless a settle under way is about to.
         this.cancelReconnect?.();
         this.cancelReconnect = null;
-        this.hints ??= beginMarketHints();
-        this.connect();
+        if (!this.cancelOpen) this.connect();
       }
     } else if (this.connection?.source && !this.cancelHidden) {
       if (!this.connection.pools.size) return this.pause();
@@ -549,6 +624,9 @@ export class MarketStreamHub {
   /** Ends the current source and every timer that belongs to it; pools lose their fences. */
   private drop(deadline = false): void {
     const connection = this.connection;
+    this.cancelOpen?.();
+    this.cancelOpen = null;
+    this.openHeld = false;
     this.cancelHello?.();
     this.cancelHello = null;
     this.cancelHeartbeat?.();
@@ -899,6 +977,7 @@ export function tabMarketStream(): MarketStreamHub | null {
     },
     schedule,
     defer: (run) => queueMicrotask(run),
+    settle: (run) => schedule(run, OPEN_SETTLE_MS),
     random: Math.random,
     visible: () => document.visibilityState === "visible",
     onVisibilityChange: (listener) => {
