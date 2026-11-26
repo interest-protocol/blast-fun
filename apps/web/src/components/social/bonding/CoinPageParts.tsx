@@ -24,7 +24,8 @@ export function CoinCover({ cover }: Readonly<{ cover: Readonly<{ url: string; w
   </div>;
 }
 
-export function CoinIdentityHeader({ coin, name, symbol, status, graduated, mark, actions, children }: Readonly<{
+/** `compact`: on a phone, one row of mark, name, stage and actions; the page shows the byline's creator and address elsewhere. */
+export function CoinIdentityHeader({ coin, name, symbol, status, graduated, mark, actions, children, compact = false }: Readonly<{
   coin: Parameters<typeof CoinMark>[0]["coin"];
   name: string | null;
   symbol: string | null;
@@ -33,10 +34,11 @@ export function CoinIdentityHeader({ coin, name, symbol, status, graduated, mark
   mark?: ReactNode;
   actions?: ReactNode;
   children?: ReactNode;
+  compact?: boolean;
 }>) {
   const tickerOnly = symbol && (!name || name.trim().toLowerCase() === symbol.trim().toLowerCase());
   return (
-    <div className={styles.identity} data-coin-identity="">
+    <div className={styles.identity} data-coin-identity="" data-compact={compact || undefined}>
       <span className={styles.heroMark}><CoinMark coin={coin} size={55} /></span>
       <PageHeader
         title={<span className={styles.coinName}>

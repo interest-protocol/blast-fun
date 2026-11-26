@@ -670,7 +670,11 @@
     grid-auto-rows: minmax(3.375rem, auto);
     align-items: stretch;
     gap: 0.25rem;
+    transition: transform var(--t3) var(--ease-drawer);
   }
+  /* A page that reads long (useTabBarAutoHide) slides the bar away while the reader scrolls down; focus brings it back. */
+  /* Keyboard focus in the bar brings it back, and docked page bars follow the same selector. */
+  :global(html[data-tabbar="hidden"]:not(:has([data-shell-tabbar] :focus-visible))) .tabbar { transform: translateY(100%); }
 
   /* Each cell centres a 22px icon over its 12px label (the 12px text floor), so every label shares one baseline (More's too). */
   .tabbar .tabSwap,
@@ -716,6 +720,7 @@
 /* Reduced motion: a press is `transform: none; opacity: .7` (OA-31), never a scale. */
 @media (prefers-reduced-motion: reduce) {
   .asideLayer { transition-delay: 0s !important; transform: none !important; }
+  .tabbar { transition: none; }
   .balancePopup { transition: opacity var(--t1) linear; }
   .balancePopup[data-starting-style],
   .balancePopup[data-ending-style] { transform: none; }

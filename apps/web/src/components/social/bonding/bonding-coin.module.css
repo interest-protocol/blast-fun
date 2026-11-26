@@ -123,6 +123,27 @@
   .identity:has(.identityActions) { grid-template-columns: auto minmax(0, 1fr); }
   .identityActions { grid-column: 2; }
   .heroMark > span { width: 3.25rem; height: 3.25rem; }
+  /* A compact head keeps the mark, name, stage and actions on one row; the page shows the creator and address elsewhere. */
+  /* When the name's longest word cannot sit beside the actions, they move to a row of their own; words never break to keep them. */
+  .identity[data-compact] { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem .625rem; container-type: inline-size; }
+  .identity[data-compact] [data-page-head] { flex: 1 1 0; min-width: min-content; }
+  .identity[data-compact] .coinName { overflow-wrap: break-word; }
+  /* Only a word wider than the row beside the mark breaks. */
+  .identity[data-compact] .coinName > * { max-width: calc(100cqi - 3.375rem); }
+  .identity[data-compact] .identityActions { margin-inline-start: auto; }
+  .identity[data-compact] .heroMark { padding: .125rem; }
+  .identity[data-compact] .heroMark > span { width: 2.5rem; height: 2.5rem; }
+  .identity[data-compact] h1 { font-size: 1.5rem; }
+  .identity[data-compact] .byline { padding-block-start: .125rem; }
+  .identity[data-compact] .byline > :not(:global(.status)) { display: none; }
+  /* A sale page stacks the price and its change in the left column beside the currency switch, and gives the last trade a full-width line below. */
+  :global([data-sale-page]) .marketPriceRow { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: .125rem 1rem; }
+  :global([data-sale-page]) .marketPrice { display: contents; }
+  :global([data-sale-page]) .marketPrice > * { grid-column: 1; }
+  :global([data-sale-page]) .marketPrice > [data-chart-last-trade="headline"] { grid-column: 1 / -1; }
+  :global([data-sale-page]) .priceControls { grid-column: 2; grid-row: 1; }
+  /* A sale page's price explains itself on a phone; the label stays for screen readers. */
+  :global([data-sale-page]) .marketPrice > span:first-child { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .layout { grid-template-columns: minmax(0, 1fr); gap: 1rem; grid-template-areas: "market" "details"; }
   .layout[data-no-market] { grid-template-areas: "details"; }
   .market { gap: 0.75rem; }
