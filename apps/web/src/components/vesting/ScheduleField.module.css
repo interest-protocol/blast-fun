@@ -103,11 +103,9 @@
   padding: 0;
   text-align: center;
 }
-/* The shared Button owns hover, press and focus; a day cell is a 34px square in the text's ink. */
+/* The shared IconButton owns geometry, hover, press and focus: a 34px square, 44px on touch, in the text's ink. */
 :global([data-blast-ui]) .day .dayButton {
   --control-height: 2.125rem;
-  --control-pad: 0;
-  width: 2.125rem;
   color: inherit;
   font: inherit;
   font-variant-numeric: tabular-nums;
@@ -140,6 +138,19 @@
   color: var(--down);
   font-size: 0.75rem;
   grid-column: 1 / -1;
+}
+/* Touch: 44px days and nav buttons; tighter gaps keep seven columns inside a 360px phone's popover. */
+@media (pointer: coarse) {
+  .popover {
+    padding: 0.5rem;
+  }
+  .caption {
+    height: 2.75rem;
+    padding-inline-end: 5.75rem;
+  }
+  .grid {
+    border-spacing: 0;
+  }
 }
 @media (max-width: 500px) {
   .field {

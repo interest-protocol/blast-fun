@@ -44,9 +44,12 @@ function CalendarSelect({ options, value, onChange, disabled, "aria-label": aria
   );
 }
 
-/** A calendar day on the shared button; every prop DayPicker 9.14 gives its DayButton is passed on. */
+/**
+ * A calendar day on the shared square button (34px, 44px on touch); every prop DayPicker 9.14
+ * gives its DayButton is passed on, and its label is DayPicker's full date.
+ */
 function CalendarDay({
-  modifiers, className, type, disabled, "aria-disabled": ariaDisabled, tabIndex, "aria-label": ariaLabel,
+  modifiers, className, type, disabled, "aria-disabled": ariaDisabled, tabIndex, "aria-label": ariaLabel = "",
   onClick, onBlur, onFocus, onKeyDown, onMouseEnter, onMouseLeave, children,
 }: DayButtonProps) {
   const ref = useRef<HTMLButtonElement>(null);
@@ -55,7 +58,7 @@ function CalendarDay({
     if (modifiers.focused) ref.current?.focus();
   }, [modifiers.focused]);
   return (
-    <Button
+    <IconButton
       ref={ref}
       variant="ghost"
       size="sm"
@@ -75,7 +78,7 @@ function CalendarDay({
       onMouseLeave={onMouseLeave}
     >
       {children}
-    </Button>
+    </IconButton>
   );
 }
 
