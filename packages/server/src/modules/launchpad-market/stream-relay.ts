@@ -278,8 +278,6 @@ export class MarketStreamRelay {
   #reopenAttempt = 0;
   /** Pools whose upstream resume is in flight, in the order the reader answers them. */
   #resumes: string[] = [];
-  /** Pings sent and pongs received on this process; one ping is in flight at a time, so pong n answers ping n. */
-  /** The last market log frame on this socket, and the pongs received before it. */
   /** The highest `market_checkpoint` a pong carried on this socket; a reader that sends none never makes the stream `stale`. */
   #marketCheckpoint: number | null = null;
   #progressAt = 0;
@@ -704,7 +702,7 @@ export class MarketStreamRelay {
     return false;
   }
 
-  /** Fences the pool at a snapshot's (or a whole checkpoint's) cursor and tells its clients. */
+  /** Fences the pool at a snapshot's cursor and tells its clients. */
   #fence(pool: string, topic: Topic, at: FencePoint): void {
     clearTimeout(topic.retry);
     Object.assign(topic, { retry: undefined, recovering: false, missing: false, fencedAt: Date.now() });
@@ -770,7 +768,6 @@ export class MarketStreamRelay {
       this.#end("upstream-unavailable");
     }
   }
-
 
   /**
    * The pool lost its fence (no fence in time, a failed or too old resume, a bad frame, or the

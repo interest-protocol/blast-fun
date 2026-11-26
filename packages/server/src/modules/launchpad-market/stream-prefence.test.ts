@@ -3,7 +3,7 @@ import test from "node:test";
 import { MarketStreamRelay } from "./stream-relay.ts";
 import type { RelaySocket } from "./stream-relay.ts";
 
-// The reader streams tracked venue pools (the SUI/USDC pool) but sends no snapshot for them.
+// A pool streams only from its snapshot; the reader sends one for every pool, tracked venue pools too.
 const fingerprint = "a".repeat(64);
 const POOL = `cetus:0x${"1".repeat(64)}`;
 const OTHER = `cetus:0x${"2".repeat(64)}`;
