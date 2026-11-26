@@ -9,158 +9,15 @@ import { presaleConnectSources, readPresaleConfig } from "#web/components/presal
 import { AdaptiveChallengeController, type AdaptiveDecisionAudit } from "@blast/server/lib/web-security/adaptive-challenge.ts";
 import { CSRF_COOKIE_NAME, CSRF_HEADER_NAME, assertTrustedMutationRequest, csrfCookie, opaqueSessionCookie, withTrustedMutation } from "@blast/core/lib/web-security/mutation-guard.ts";
 import { PostgresRateLimitEnforcer } from "@blast/core/modules/database/postgres-rate-limits.ts";
-import { DEFAULT_RATE_POLICIES, createRatePolicyRegistry, RATE_POLICY_REGISTRY_VERSION, ratePolicyOptionsFromEnvironment, rateLimitSubjectKey, walletChallengeRateLimiter, type RateLimitPort, type RateLimitSubject } from "@blast/core/lib/web-security/rate-limits.ts";
+import { DEFAULT_RATE_POLICIES, createRatePolicyRegistry, RATE_POLICY_REGISTRY_VERSION, ratePolicyOptionsFromEnvironment, rateLimitSubjectKey, walletChallengeRateLimiter, type RateLimitSubject } from "@blast/core/lib/web-security/rate-limits.ts";
 import { WebSecurityError } from "@blast/core/lib/web-security/errors.ts";
-import { X_OAUTH_COOKIE_NAME, createXOAuthRouteHandlers, type OAuthStateStore, type XOAuthProvider } from "#web/lib/web-security/oauth.ts";
 import { createContentSecurityPolicy, securityHeaders } from "#web/lib/web-security/browser-policy.ts";
-import { SECURITY_FIXTURES, SYNTHETIC_NORMALIZED_OAUTH_PROOF } from "../../../test/fixtures/lib/web-security/fixtures.ts";
+import { SECURITY_FIXTURES } from "../../../test/fixtures/lib/web-security/fixtures.ts";
 
 const ORIGIN = "https://blast.fun";
-const CALLBACK = `${ORIGIN}/api/auth/x/callback`;
 const TOKENS = [1, 2, 3].map((byte) =>
   Buffer.alloc(32, byte).toString("base64url"),
 );
-
-function sha256(value: string): string {
-  return createHash("sha256").update(value).digest("hex");
-}
-
-class MemoryStateStore implements OAuthStateStore {
-  records: Array<
-    Parameters<OAuthStateStore["create"]>[0] & { consumed: boolean }
-  > = [];
-
-  async create(record: Parameters<OAuthStateStore["create"]>[0]) {
-    this.records.push({ ...record, consumed: false });
-  }
-
-  async consume(input: Parameters<OAuthStateStore["consume"]>[0]) {
-    const record = this.records.find(
-      (candidate) => candidate.stateHash === sha256(input.state),
-    );
-    if (
-      !record ||
-      record.consumed ||
-      record.expiresAt <= input.now ||
-      record.nonceHash !== sha256(input.nonce) ||
-      record.pkceVerifierHash !== sha256(input.pkceVerifier) ||
-      record.origin !== input.origin ||
-      record.callbackUrl !== input.callbackUrl
-    ) {
-      return false;
-    }
-    record.consumed = true;
-    return true;
-  }
-}
-
-class SyntheticOAuthProvider implements XOAuthProvider {
-  authorizationOrigin = "https://auth.privy.io";
-  nonce = "";
-  exchangeNonce: string | null = null;
-  lastVerifier = "";
-
-  createAuthorizationUrl(input: {
-    callbackUrl: string;
-    codeChallenge: string;
-    nonce: string;
-    state: string;
-  }) {
-    this.nonce = input.nonce;
-    const url = new URL("https://auth.privy.io/x/authorize");
-    url.searchParams.set("redirect_uri", input.callbackUrl);
-    url.searchParams.set("code_challenge", input.codeChallenge);
-    url.searchParams.set("code_challenge_method", "S256");
-    url.searchParams.set("nonce", input.nonce);
-    url.searchParams.set("state", input.state);
-    return url.href;
-  }
-
-  async exchangeCode(input: {
-    callbackUrl: string;
-    code: string;
-    codeVerifier: string;
-  }) {
-    assert.equal(input.callbackUrl, CALLBACK);
-    assert.equal(input.code, "provider-code");
-    this.lastVerifier = input.codeVerifier;
-    return {
-      accessToken: "verified-privy-access-token",
-      nonce: this.exchangeNonce ?? this.nonce,
-    };
-  }
-}
-
-function cookiePair(response: Response): string {
-  return (response.headers.get("set-cookie") ?? "").split(";", 1)[0];
-}
-
-function stateFrom(response: Response): string {
-  return new URL(response.headers.get("location") ?? "").searchParams.get(
-    "state",
-  ) ?? "";
-}
-
-function replaceCookieField(cookie: string, field: string, value: string): string {
-  const [name, encoded] = cookie.split("=");
-  const payload = JSON.parse(
-    Buffer.from(encoded, "base64url").toString("utf8"),
-  ) as Record<string, string>;
-  payload[field] = value;
-  return `${name}=${Buffer.from(JSON.stringify(payload)).toString("base64url")}`;
-}
-
-function oauthHarness(options: { abnormal?: boolean } = {}) {
-  const store = new MemoryStateStore();
-  const provider = new SyntheticOAuthProvider();
-  const audits: AdaptiveDecisionAudit[] = [];
-  const adaptive = new AdaptiveChallengeController({
-    audit: { async record(decision) { audits.push(decision); } },
-    verifier: { async verify({ token }) { return token === "bot-pass"; } },
-    clock: () => new Date("2026-09-20T12:00:00.000Z"),
-  });
-  const limiter: RateLimitPort = {
-    async consume(bucket) {
-      return {
-        allowed: true,
-        bucket,
-        policyVersion: 1,
-        retryAfterSeconds: 0,
-      };
-    },
-  };
-  let tokenIndex = 0;
-  const handlers = createXOAuthRouteHandlers({
-    adaptiveChallenge: adaptive,
-    callbackUrl: CALLBACK,
-    clock: () => new Date("2026-09-20T12:00:00.000Z"),
-    limiter,
-    origin: ORIGIN,
-    privyAdapter: {
-      async verifyXIdentity(accessToken) {
-        assert.equal(accessToken, "valid-access-token");
-        return SYNTHETIC_NORMALIZED_OAUTH_PROOF.identity;
-      },
-      async verifyXIdentityAndGetExistingWallet(accessToken) {
-        assert.equal(accessToken, "verified-privy-access-token");
-        return SYNTHETIC_NORMALIZED_OAUTH_PROOF;
-      },
-      async verifyXIdentityAndResolveWallet(accessToken) {
-        assert.equal(accessToken, "verified-privy-access-token");
-        return SYNTHETIC_NORMALIZED_OAUTH_PROOF;
-      },
-    },
-    provider,
-    rateSubject: () => ({ ip: "203.0.113.20" }),
-    riskSignal: (request) => ({
-      challengeToken: request.headers.get("x-bot-challenge") ?? undefined,
-      recentFailures: options.abnormal ? 3 : 0,
-    }),
-    stateStore: store,
-    tokenFactory: () => TOKENS[tokenIndex++] ?? TOKENS[2],
-  });
-  return { audits, handlers, provider, store };
-}
 
 test("provider-compatible CSP is restrictive and nonce-bound", () => {
   const nonce = "a".repeat(32);
@@ -232,12 +89,6 @@ function connectSources(csp: string): string[] {
   return csp.split("; ").find((part) => part.startsWith("connect-src "))!.split(" ").slice(1);
 }
 
-const PRESALE_ENVIRONMENT = {
-  NEXT_PUBLIC_PRESALE_BRIDGE_ENABLED: "1",
-  NEXT_PUBLIC_PRESALE_SOLANA_RPC_URL: "https://solana.rpc.test/key",
-  NEXT_PUBLIC_PRESALE_EVM_RPC_URLS: JSON.stringify({ base: "https://base.rpc.test/v2/key", ethereum: "https://eth.rpc.test" }),
-};
-
 test("connect-src adds exactly the presale's mainnet origins, without wildcards", () => {
   const nonce = "a".repeat(32);
   const base = connectSources(createContentSecurityPolicy({ nonce }));
@@ -246,42 +97,20 @@ test("connect-src adds exactly the presale's mainnet origins, without wildcards"
     return { sources, csp: connectSources(createContentSecurityPolicy({ nonce, presaleConnectSources: sources })) };
   };
 
-  const mainnet = withPresale({ ...PRESALE_ENVIRONMENT, BLAST_NETWORK: "mainnet" });
-  assert.deepEqual(mainnet.sources, [
-    "https://fullnode.mainnet.sui.io:443",
-    "https://api-sui.cetus.zone",
-    "https://solana.rpc.test",
-    "https://base.rpc.test",
-    "https://eth.rpc.test",
-  ]);
+  const mainnet = withPresale({ BLAST_NETWORK: "mainnet" });
+  assert.deepEqual(mainnet.sources, ["https://fullnode.mainnet.sui.io:443", "https://api-sui.cetus.zone"]);
   // The mainnet fullnode is already a base source; it is listed once.
   assert.deepEqual(mainnet.csp, [...base, ...mainnet.sources.filter((source) => !base.includes(source))]);
 
-  // Bridge off: no source-chain RPCs. Swap without Cetus: no aggregator.
+  // Swap without Cetus: no aggregator.
   assert.deepEqual(
-    withPresale({
-      ...PRESALE_ENVIRONMENT,
-      BLAST_NETWORK: "mainnet",
-      NEXT_PUBLIC_PRESALE_BRIDGE_ENABLED: "0",
-      NEXT_PUBLIC_PRESALE_SWAP_PROVIDERS: "AFTERMATH",
-    }).sources,
-    ["https://fullnode.mainnet.sui.io:443"],
-  );
-  // A wildcard or invalid RPC is rejected by configuration, so it never reaches the policy.
-  assert.deepEqual(
-    withPresale({
-      ...PRESALE_ENVIRONMENT,
-      BLAST_NETWORK: "mainnet",
-      NEXT_PUBLIC_PRESALE_SWAP_PROVIDERS: "AFTERMATH",
-      NEXT_PUBLIC_PRESALE_SOLANA_RPC_URL: "https://*.rpc.test",
-      NEXT_PUBLIC_PRESALE_EVM_RPC_URLS: JSON.stringify({ base: "https://*.rpc.test" }),
-    }).sources,
+    withPresale({ BLAST_NETWORK: "mainnet", NEXT_PUBLIC_PRESALE_SWAP_PROVIDERS: "AFTERMATH" }).sources,
     ["https://fullnode.mainnet.sui.io:443"],
   );
   // blast-infra is never a source: the presale adds only its own origins.
   assert.ok(!mainnet.csp.some((source) => /infra/.test(source)));
-  // No network or bridge origins: nothing is added.
-  assert.deepEqual(withPresale({ ...PRESALE_ENVIRONMENT, NEXT_PUBLIC_PRESALE_BRIDGE_ENABLED: "0" }).csp, base);
+  // No network: nothing is added.
+  assert.deepEqual(withPresale({}).csp, base);
 
   for (const source of mainnet.csp.slice(1)) {
     if (base.includes(source)) continue;
@@ -408,14 +237,8 @@ test("all named versioned rate policies publish exact defaults and scopes", () =
         version: 2,
         windows: [{ limit: 5, windowSeconds: 600 }],
       },
-      recovery: {
-        scope: "ip_address",
-        version: 1,
-        windows: [{ limit: 5, windowSeconds: 600 }],
-      },
-      // Review L3: the client IP alone, beside `wallet` and `recovery`.
+      // Review L3: the client IP alone, beside `wallet`.
       wallet_ip: { scope: "ip", version: 1, windows: [{ limit: 30, windowSeconds: 600 }] },
-      recovery_ip: { scope: "ip", version: 1, windows: [{ limit: 20, windowSeconds: 600 }] },
       callsign: {
         scope: "attempt",
         version: 1,
@@ -499,12 +322,9 @@ test("all named versioned rate policies publish exact defaults and scopes", () =
       defillama_public_global: { scope: "global", version: 1, windows: [{ limit: 300, windowSeconds: 60 }] },
       launchpad_wallet_launches: { scope: "ip", version: 1, windows: [{ limit: 120, windowSeconds: 60 }] },
       launchpad_theses_read: { scope: "ip", version: 1, windows: [{ limit: 240, windowSeconds: 60 }] },
-      mission_control_owner_read: { scope: "ip", version: 1, windows: [{ limit: 240, windowSeconds: 60 }] },
-      mission_control_owner_card: { scope: "ip", version: 1, windows: [{ limit: 30, windowSeconds: 60 }] },
       // Review M3: the public card image (outside /api), per client IP.
       mission_control_card_image: { scope: "ip", version: 1, windows: [{ limit: 300, windowSeconds: 60 }] },
       // Review L5: a member's own writes that had no bucket.
-      mission_control_owner_write: { scope: "ip", version: 1, windows: [{ limit: 30, windowSeconds: 60 }] },
       // Presale web routes (T-008): account buckets are keyed by Privy DID.
       presale_sponsor: { scope: "account", version: 1, windows: [{ limit: 30, windowSeconds: 600 }] },
       presale_sponsor_exec: { scope: "account", version: 1, windows: [{ limit: 100, windowSeconds: 86_400 }] },
@@ -978,127 +798,6 @@ test("adaptive challenge is risk-triggered, ephemeral, and not identity", async 
     ],
   );
   assert.doesNotMatch(JSON.stringify(audits), /ip|device|user|address|session/i);
-});
-
-test("OAuth start and callback validate state nonce PKCE and return only normalized proof", async () => {
-  const { handlers, provider } = oauthHarness();
-  const start = await handlers.start(new Request(`${ORIGIN}/api/auth/x/start`));
-  assert.equal(start.status, 302);
-  assert.equal(new URL(start.headers.get("location") ?? "").origin, "https://auth.privy.io");
-  const cookie = cookiePair(start);
-  assert.match(cookie, new RegExp(`^${X_OAUTH_COOKIE_NAME}=`));
-  const callback = await handlers.callback(
-    new Request(
-      `${CALLBACK}?code=provider-code&state=${encodeURIComponent(stateFrom(start))}`,
-      { headers: { Cookie: cookie } },
-    ),
-  );
-  assert.equal(callback.status, 200);
-  const body = await callback.json();
-  assert.deepEqual(body, { proof: SYNTHETIC_NORMALIZED_OAUTH_PROOF });
-  assert.doesNotMatch(JSON.stringify(body), /access-token|provider-code|nonce|verifier/);
-  assert.ok(provider.lastVerifier.length >= 43);
-
-  const replay = await handlers.callback(
-    new Request(
-      `${CALLBACK}?code=provider-code&state=${encodeURIComponent(stateFrom(start))}`,
-      { headers: { Cookie: cookie } },
-    ),
-  );
-  assert.equal(replay.status, 400);
-  assert.equal((await replay.json()).error.code, "OAUTH_STATE_INVALID");
-});
-
-test("OAuth tampering wrong callback and adaptive challenge fail safely", async () => {
-  for (const tamper of ["state", "verifier"] as const) {
-    const { handlers } = oauthHarness();
-    const start = await handlers.start(new Request(`${ORIGIN}/api/auth/x/start`));
-    let state = stateFrom(start);
-    let cookie = cookiePair(start);
-    if (tamper === "state") state = TOKENS[2];
-    if (tamper === "verifier") {
-      cookie = replaceCookieField(
-        cookie,
-        "verifier",
-        Buffer.alloc(32, 4).toString("base64url"),
-      );
-    }
-    const response = await handlers.callback(
-      new Request(`${CALLBACK}?code=provider-code&state=${state}`, {
-        headers: { Cookie: cookie },
-      }),
-    );
-    assert.equal(response.status, 400);
-    assert.equal((await response.json()).error.code, "OAUTH_STATE_INVALID");
-  }
-
-  const wrongCallbackHarness = oauthHarness();
-  const callbackStart = await wrongCallbackHarness.handlers.start(
-    new Request(`${ORIGIN}/api/auth/x/start`),
-  );
-  const wrongCallback = await wrongCallbackHarness.handlers.callback(
-    new Request(
-      `${ORIGIN}/api/auth/x/not-callback?code=provider-code&state=${stateFrom(callbackStart)}`,
-      { headers: { Cookie: cookiePair(callbackStart) } },
-    ),
-  );
-  assert.equal(wrongCallback.status, 403);
-  assert.equal(wrongCallbackHarness.store.records[0]?.consumed, false);
-
-  const wrongOriginHarness = oauthHarness();
-  const wrongOrigin = await wrongOriginHarness.handlers.start(
-    new Request("https://evil.example/api/auth/x/start"),
-  );
-  assert.equal(wrongOrigin.status, 403);
-  assert.equal(wrongOriginHarness.store.records.length, 0);
-
-  const challenged = oauthHarness({ abnormal: true });
-  const required = await challenged.handlers.start(
-    new Request(`${ORIGIN}/api/auth/x/start`),
-  );
-  assert.equal(required.status, 403);
-  assert.equal((await required.json()).error.code, "BOT_CHALLENGE_REQUIRED");
-  assert.equal(challenged.store.records.length, 0);
-  const passed = await challenged.handlers.start(
-    new Request(`${ORIGIN}/api/auth/x/start`, {
-      headers: { "x-bot-challenge": "bot-pass" },
-    }),
-  );
-  assert.equal(passed.status, 302);
-});
-
-test("OAuth rejects multibyte state and nonce without throwing during constant-time comparison", async () => {
-  for (const field of ["state", "nonce"] as const) {
-    const { handlers, provider, store } = oauthHarness();
-    const start = await handlers.start(new Request(`${ORIGIN}/api/auth/x/start`));
-    const invalid = "é".repeat(43);
-    const state = field === "state" ? invalid : stateFrom(start);
-    if (field === "nonce") provider.exchangeNonce = invalid;
-    const response = await handlers.callback(new Request(`${CALLBACK}?code=provider-code&state=${encodeURIComponent(state)}`, {
-      headers: { Cookie: cookiePair(start) },
-    }));
-    assert.equal(response.status, 400, field);
-    assert.equal((await response.json()).error.code, "OAUTH_STATE_INVALID", field);
-    assert.equal(store.records[0]?.consumed, field === "nonce");
-  }
-});
-
-test("OAuth nonce mismatch retires state and exposes no provider detail", async () => {
-  const { handlers, provider } = oauthHarness();
-  const start = await handlers.start(new Request(`${ORIGIN}/api/auth/x/start`));
-  provider.exchangeNonce = TOKENS[2];
-  const response = await handlers.callback(
-    new Request(`${CALLBACK}?code=provider-code&state=${stateFrom(start)}`, {
-      headers: { Cookie: cookiePair(start) },
-    }),
-  );
-  assert.equal(response.status, 400);
-  const body = await response.json();
-  assert.deepEqual(body.error, {
-    code: "OAUTH_STATE_INVALID",
-    message: "Authentication could not be verified.",
-  });
-  assert.doesNotMatch(JSON.stringify(body), /nonce|privy|x-subject|did:/i);
 });
 
 test("review L5: readBoundedText reads at most maxBytes, refusing a larger declared or streamed body", async () => {

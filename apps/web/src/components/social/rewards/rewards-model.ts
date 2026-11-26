@@ -20,8 +20,6 @@ import type {
  * is known (R3-20's `price_usd`); otherwise the amounts stand alone.
  */
 
-/** The tab's "Latest": the newest payouts across every coin. */
-export const RW_LATEST = 5;
 /** A coin's rounds on the page: five, then ten more at a time. */
 export const RW_PAGE_N = 5;
 export const RW_MORE = 10;

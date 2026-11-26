@@ -2,7 +2,6 @@
 
 import type { ReactNode } from "react";
 
-import { DexIdentity } from "#web/components/blast-ui/DexIdentity.tsx";
 import type { HomeKind } from "@blast/core/web/contracts/home.ts";
 
 import { CoinMark } from "#web/components/blast-ui/CoinMark.tsx";
@@ -35,38 +34,6 @@ export function QuoteMark({ symbol }: Readonly<{ symbol: string }>) {
   const key = symbol.toLowerCase();
   if (key !== "usdc" && key !== "sui") return null;
   return <CoinMark coin={{ key, iconUrl: null, round: true, symbol }} size={18} />;
-}
-
-/** Where the coin trades or will: `Trading on` / `Launches on` and the venue's logo and name. */
-export function VenueChip({ prefix, venue }: Readonly<{ prefix: string; venue: string }>) {
-  return (
-    <span className={styles.venue}>
-      {prefix} <DexIdentity venue={venue} />
-    </span>
-  );
-}
-
-/** A section's grip (the right column's `I.grip`): two columns of three dots. */
-export function GripGlyph() {
-  return (
-    <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
-      <circle cx="9" cy="6" fill="currentColor" r="1.3" />
-      <circle cx="15" cy="6" fill="currentColor" r="1.3" />
-      <circle cx="9" cy="12" fill="currentColor" r="1.3" />
-      <circle cx="15" cy="12" fill="currentColor" r="1.3" />
-      <circle cx="9" cy="18" fill="currentColor" r="1.3" />
-      <circle cx="15" cy="18" fill="currentColor" r="1.3" />
-    </svg>
-  );
-}
-
-/** A section's hide control: a plain cross. */
-export function CloseGlyph() {
-  return (
-    <svg aria-hidden="true" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" viewBox="0 0 24 24">
-      <path d="M7 7l10 10M17 7L7 17" />
-    </svg>
-  );
 }
 
 const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

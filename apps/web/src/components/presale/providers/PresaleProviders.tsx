@@ -1,4 +1,3 @@
-import { presaleClientConfig } from "../config";
 import { ClientProvider } from "./ClientProvider";
 import { ConfigProvider } from "./ConfigProvider";
 import { SdkProvider } from "./SdkProvider";
@@ -8,8 +7,7 @@ import { ThemeProvider } from "./ThemeProvider";
 import { WalletProvider } from "./WalletProvider";
 
 /** The presale provider root: the six slots in their fixed order. Do not edit to fill a slot. */
-export function PresaleProviders({ config: serverConfig, nonce, privySession, children }: PresaleShellProps) {
-  const config = presaleClientConfig(serverConfig);
+export function PresaleProviders({ config, nonce, privySession, children }: PresaleShellProps) {
   return (
     <ConfigProvider config={config} nonce={nonce}>
       <ClientProvider config={config} nonce={nonce}>

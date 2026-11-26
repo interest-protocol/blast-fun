@@ -30,10 +30,6 @@ test("a secret under 32 characters stops boot, optional or not, without echoing 
         error.message === `${name} must be at least 32 characters.` && !error.message.includes(short),
     );
   }
-  assert.throws(
-    () => parseRuntimeConfig({ ...base, COMPLETION_SESSION_TOKEN_KEY: Buffer.alloc(31).toString("base64") }),
-    /^Error: COMPLETION_SESSION_TOKEN_KEY must be a base64 key of 32 bytes\.$/,
-  );
 });
 
 test("unset optionals pass, and secrets are kept exactly as set", () => {
@@ -48,33 +44,6 @@ test("the login admission token must differ from the admin token", () => {
   assert.throws(
     () => parseRuntimeConfig({ ...base, ADMIN_LOGIN_ADMISSION_TOKEN: base.PRESALE_ADMIN_TOKEN }),
     /^Error: ADMIN_LOGIN_ADMISSION_TOKEN must differ from PRESALE_ADMIN_TOKEN\.$/,
-  );
-});
-
-test("member session days that every session route would refuse stop boot", () => {
-  const invalid =
-    /^Error: MEMBER_SESSION_ABSOLUTE_DAYS must be at most 31 and at least MEMBER_SESSION_IDLE_DAYS\.$/;
-
-  assert.throws(() => parseRuntimeConfig({ ...base, MEMBER_SESSION_ABSOLUTE_DAYS: "32" }), invalid);
-  assert.throws(
-    () => parseRuntimeConfig({ ...base, MEMBER_SESSION_IDLE_DAYS: "8", MEMBER_SESSION_ABSOLUTE_DAYS: "7" }),
-    invalid,
-  );
-  assert.deepEqual(
-    parseRuntimeConfig({ ...base, MEMBER_SESSION_IDLE_DAYS: "31", MEMBER_SESSION_ABSOLUTE_DAYS: "31" })
-      .memberSessionPolicy,
-    { idleTtlMs: 2_678_400_000, absoluteTtlMs: 2_678_400_000 },
-  );
-});
-
-test("owner cursors keep their key: own key when set, else the completion session key", () => {
-  assert.equal(
-    parseRuntimeConfig(base).ownerCursorKey.toString("hex"),
-    "26b357780fd8d3ce176384b7919bec6c74dff830c2688a8258f61fd0c86a6232",
-  );
-  assert.equal(
-    parseRuntimeConfig({ ...base, OWNER_CURSOR_KEY: Buffer.alloc(32, "o").toString("base64") }).ownerCursorKey.toString("hex"),
-    "707c64a67d325b097f91e5c5cdce3deec2b7b0fc8b5d9910f03215594d518e2c",
   );
 });
 

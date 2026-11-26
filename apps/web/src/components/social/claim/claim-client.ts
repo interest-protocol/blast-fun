@@ -16,11 +16,6 @@ import { callSocialApi, type ApiResult, type SocialApiOptions } from "#web/compo
  * The sponsor's calls are `sponsored-transaction.ts`'s.
  */
 
-/** Whether `value` is a well-formed claim answer (everything the flow reads). */
-export function isSocialClaim(value: unknown): value is SocialClaim {
-  return socialClaimSchema.safeParse(value).success;
-}
-
 export function putClaim(options: SocialApiOptions, requestId: string, body: SocialClaimRequest): Promise<ApiResult<SocialClaim>> {
   return callSocialApi(options, socialClaimPath(requestId), { method: "PUT", body }, socialClaimSchema);
 }

@@ -3,12 +3,8 @@
 .grid::-webkit-scrollbar { display: none; }
 .tile, .skeleton { min-width: 0; border-radius: var(--r-md); scroll-snap-align: start; }
 .tile { display: flex; flex-direction: column; padding: 0; color: var(--ink); text-decoration: none; background: var(--card); border: 1px solid var(--hair); overflow: hidden; }
-.logoStage { display: flex; flex-direction: column; flex: none; min-width: 0; }
 .cover { display: block; flex: none; width: 100%; aspect-ratio: 3; contain: size;  }
 .cover img { display: block; width: 100%; height: 100%; object-fit: contain; }
-.artIdentity { display: flex; align-items: center; gap: 1rem; min-width: 0; height: 6.5rem; padding: 1.25rem; }
-:global([data-blast-ui]) .artIdentity > :global([data-artwork-size="72"]), :global([data-blast-ui]) .artIdentity > span:has(> img), :global([data-blast-ui]) .artIdentity > span:has(> svg[data-generated]) { width: 4rem; height: 4rem; flex: none; border-radius: var(--r-sm); }
-.artIdentity > :global(.status) { flex: none; margin-left: auto; font-size: 0.6875rem; }
 .identity { position: relative; padding-right: 0; display: flex; flex-direction: column; min-width: 0; gap: 0.125rem; margin-bottom: 0; }
 .identity b { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; font-family: var(--display); font-size: 1.5rem; font-weight: 700; line-height: 1.15; letter-spacing: -0.025em; overflow-wrap: anywhere; }
 .identity > span { color: var(--muted); font-size: 0.75rem; overflow-wrap: anywhere; }
@@ -22,21 +18,12 @@
 .skeleton { aspect-ratio: 2; background: var(--chip); }
 :global([data-blast-ui]) .tile:focus-visible, :global([data-blast-ui]) .tile a:focus-visible { outline: 0.125rem solid var(--focus-color, var(--ink)); outline-offset: -0.1875rem; box-shadow: none; }
 @media (hover: hover) and (pointer: fine) { .tile:hover { border-color: var(--pink-line); } }
-.homeLink { display: flex; flex: 1; flex-direction: column; min-width: 0; border-radius: inherit; color: inherit; text-decoration: none; }
-.homeFacts { padding: 0 1.25rem; display: flex; flex-direction: column; gap: 0.1875rem; font-size: 0.75rem; line-height: 1.4; color: var(--muted); overflow-wrap: anywhere; }
-.homeFooter { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: 0.5rem; margin: 0.75rem 1.25rem 1.25rem; }
 .homeMetric { display: flex; flex-direction: column; font-variant-numeric: tabular-nums; }
 .homeMetric b { font-family: var(--display); font-size: 1.25rem; font-weight: 700; letter-spacing: -0.02em; }
 .homeMetric > span { color: var(--muted); font-size: 0.75rem; }
-.homeFooter :global(.btn) { min-height: max(44px, 2.75rem); padding: 0 0.8125rem; font-size: 0.75rem; }
-.homeProgress { display: block; height: 0.25rem; margin: 0.75rem 1.25rem 0; background: var(--track); border-radius: 0.25rem; overflow: hidden; }
-.homeProgress i { display: block; width: 100%; height: 100%; background: var(--pink); border-radius: inherit; transform: scaleX(0); transform-origin: left center; }
 
 .tile[href] { transition: border-color 160ms var(--ease-std); }
-.homeLink { transition: transform 160ms var(--ease-std); }
-.homeLink:active:not(:focus-visible) { transform: scale(0.985); transition-duration: 100ms; }
-@media (hover: hover) and (pointer: fine) { .homeLink:hover .logoStage { box-shadow: inset 0 0 0 1px var(--pink-line); } }
-@media (prefers-reduced-motion: reduce) { .tile[href], .homeLink { transition: none; } .homeLink:active:not(:focus-visible) { transform: none; opacity: .7; } }
+@media (prefers-reduced-motion: reduce) { .tile[href] { transition: none; } }
 @media (prefers-contrast: more) { .tile { border-color: var(--muted); } }
 
 :global([data-recap="pinned"]) .grid { max-height: 55dvh; overflow-y: auto; }
@@ -52,13 +39,9 @@
 .next svg { transform: rotate(90deg); }
 :global([data-blast-ui]) .grid:focus-visible { outline: 0.125rem solid var(--focus-color, var(--ink)); outline-offset: 0.1875rem; border-radius: var(--r-md); }
 @container (max-width: 550px) {
-  .artIdentity { height: 6rem; padding: 1rem; gap: 0.75rem; flex-wrap: wrap; }
   .identity { flex: 1; }
   .identity b { font-size: 1.375rem; }
   .facts { padding: 0 1rem 1rem; }
-  .homeFacts { padding: 0 1rem; }
-  .homeProgress { margin-inline: 1rem; }
-  .homeFooter { margin: 0.75rem 1rem 1rem; }
 }
 .position { font-size: 0.75rem; color: var(--muted); font-variant-numeric: tabular-nums; }
 /* One thin segment per slide, neutral; the current one fills in ink over the slide's time. */
@@ -102,7 +85,6 @@
 .identity > .heroName { display: flex; align-items: center; gap: 0.5rem; min-width: 0; color: inherit; font-size: inherit; }
 .heroName b { min-width: 0; }
 .identity > .heroKicker { color: var(--pink-text); font-size: 0.75rem; font-weight: 600; line-height: 1.45; }
-.heroTagline { max-width: 46ch; color: var(--muted); font-size: 0.9375rem; line-height: 1.45; overflow-wrap: anywhere; }
 .heroSocial { display: flex; align-items: center; gap: 0.625rem; min-width: 0; color: var(--muted); font-size: 0.8125rem; line-height: 1.45; }
 .heroSocial b { color: var(--ink); font-weight: 600; }
 .heroFaces { display: flex; flex: none; }
@@ -133,7 +115,7 @@
   .catalogFeatured .heroCover { aspect-ratio: 2 / 1; border-radius: var(--r-inner); }
   .catalogFeatured .heroBody { gap: 0.25rem; padding: 0; }
   .catalogFeatured .heroIdentity .identity b { font-size: 1rem; }
-  :global([data-blast-ui]) .catalogFeatured .hero :is(.heroTagline, .heroSocial, .funding, .progress, .heroDeadline),
+  :global([data-blast-ui]) .catalogFeatured .hero :is(.heroSocial, .funding, .progress, .heroDeadline),
   .catalogFeatured .heroIdentity > :global([data-artwork-size]) { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {

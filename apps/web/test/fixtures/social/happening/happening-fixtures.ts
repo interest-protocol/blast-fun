@@ -45,7 +45,7 @@ export function tapeEvent(extra: Partial<HappeningTapeEvent> = {}): HappeningTap
   };
 }
 
-export const THEO_EVENT = tapeEvent({
+const THEO_EVENT = tapeEvent({
   activity_id: "101:0:0:0",
   occurred_at_ms: FIXTURE_NOW - 2_000,
   actor: { type: "account", callsign: "theopark", display_name: "Theo Park", avatar_url: null, x_handle: null, verified: false, path: "/@theopark" },

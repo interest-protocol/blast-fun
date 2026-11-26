@@ -5,18 +5,12 @@ type Environment = Readonly<Record<string, string | undefined>>;
 /** The presale runs on mainnet only. */
 export const PRESALE_NETWORKS = ["mainnet"] as const;
 export type PresaleNetwork = (typeof PRESALE_NETWORKS)[number];
-export const PRESALE_EVM_CHAINS = ["base", "arbitrum", "ethereum"] as const;
-export type PresaleEvmChain = (typeof PRESALE_EVM_CHAINS)[number];
 export const PRESALE_THEMES = ["system", "dark", "light"] as const;
 export type PresaleTheme = (typeof PRESALE_THEMES)[number];
 
-// Scope records the environment variable's name. PresaleClientConfig defines
-// which validated values cross the React Server Component boundary.
+// Scope records the environment variable's name.
 export const PRESALE_CONFIG_VARIABLES = {
   BLAST_NETWORK: { scope: "server", secret: false },
-  NEXT_PUBLIC_PRESALE_BRIDGE_ENABLED: { scope: "public", secret: false },
-  NEXT_PUBLIC_PRESALE_SOLANA_RPC_URL: { scope: "public", secret: false },
-  NEXT_PUBLIC_PRESALE_EVM_RPC_URLS: { scope: "public", secret: false },
   NEXT_PUBLIC_PRESALE_SWAP_PROVIDERS: { scope: "public", secret: false },
   NEXT_PUBLIC_PRESALE_SWAP_SLIPPAGE_BPS: { scope: "public", secret: false },
   NEXT_PUBLIC_PRESALE_GAS_RESERVE_MIST: { scope: "public", secret: false },
@@ -35,15 +29,9 @@ export type PresaleSetting<T> =
   | Readonly<{ status: "available"; value: T }>
   | Readonly<{ status: "unavailable"; variable: PresaleConfigVariable; reason: PresaleUnavailableReason }>;
 
+/** Every field is sent to the browser, so never put a server-only value here. */
 export type PresaleConfig = Readonly<{
   network: PresaleSetting<PresaleNetwork>;
-  bridge: Readonly<{
-    /** `NEXT_PUBLIC_PRESALE_BRIDGE_ENABLED=1` shows the cross-chain rail. */
-    enabled: boolean;
-    solanaRpcUrl: PresaleSetting<string>;
-    /** At least one of base, arbitrum and ethereum. */
-    evmRpcUrls: PresaleSetting<Readonly<Partial<Record<PresaleEvmChain, string>>>>;
-  }>;
   swap: Readonly<{
     providers: PresaleSetting<readonly string[]>;
     slippageBps: PresaleSetting<number>;
@@ -58,21 +46,6 @@ export type PresaleConfig = Readonly<{
   }>;
   privyAppId: PresaleSetting<string>;
 }>;
-
-export type PresaleClientConfig = Omit<PresaleConfig, "bridge"> &
-  Readonly<{ bridge: Readonly<{ enabled: boolean }> }>;
-
-export function presaleClientConfig(config: PresaleConfig): PresaleClientConfig {
-  return {
-    network: config.network,
-    bridge: { enabled: config.bridge.enabled },
-    swap: config.swap,
-    gasReserveMist: config.gasReserveMist,
-    defaultTheme: config.defaultTheme,
-    links: config.links,
-    privyAppId: config.privyAppId,
-  };
-}
 
 /**
  * The Cetus aggregator API (`DEFAULT_AGG_V3_ENDPOINT` in
@@ -117,26 +90,6 @@ function webUrl(raw: string): URL | null {
   return url;
 }
 
-function evmRpcUrls(raw: string): Partial<Record<PresaleEvmChain, string>> | null {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return null;
-  }
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return null;
-  const entries = Object.entries(parsed);
-  if (entries.length === 0) return null;
-  const urls: Partial<Record<PresaleEvmChain, string>> = {};
-  for (const [chain, value] of entries) {
-    if (!(PRESALE_EVM_CHAINS as readonly string[]).includes(chain) || typeof value !== "string") return null;
-    const url = webUrl(value);
-    if (!url) return null;
-    urls[chain as PresaleEvmChain] = url.href;
-  }
-  return urls;
-}
-
 function swapProviders(raw: string): string[] | null {
   const providers = [...new Set(raw.split(",").map((provider) => provider.trim()))];
   return providers.every((provider) => /^[A-Z][A-Z0-9_]*$/.test(provider)) ? providers : null;
@@ -158,11 +111,6 @@ export function readPresaleConfig(environment: Environment): PresaleConfig {
 
   return {
     network: setting(environment, "BLAST_NETWORK", oneOf(PRESALE_NETWORKS)),
-    bridge: {
-      enabled: environment.NEXT_PUBLIC_PRESALE_BRIDGE_ENABLED === "1",
-      solanaRpcUrl: setting(environment, "NEXT_PUBLIC_PRESALE_SOLANA_RPC_URL", url),
-      evmRpcUrls: setting(environment, "NEXT_PUBLIC_PRESALE_EVM_RPC_URLS", evmRpcUrls),
-    },
     swap: {
       providers: setting(environment, "NEXT_PUBLIC_PRESALE_SWAP_PROVIDERS", swapProviders, ["CETUS"]),
       slippageBps: setting(
@@ -193,9 +141,8 @@ export function readPresaleConfig(environment: Environment): PresaleConfig {
 
 /**
  * The origins browsers may connect to for the presale on mainnet: the Sui
- * fullnode, the Cetus aggregator, and the Solana and EVM RPCs while the
- * bridge rail is on. Never blast-infra: the browser reaches it only through
- * this app's routes. No wildcards: every configured RPC host passed `PLAIN_HOST`.
+ * fullnode and the Cetus aggregator. Never blast-infra: the browser reaches it
+ * only through this app's routes.
  */
 export function presaleConnectSources(config: PresaleConfig): string[] {
   const sources: string[] = [];
@@ -203,12 +150,6 @@ export function presaleConnectSources(config: PresaleConfig): string[] {
     sources.push(SUI_MAINNET_GRPC_URL);
     if (config.swap.providers.status === "available" && config.swap.providers.value.includes("CETUS")) {
       sources.push(CETUS_AGGREGATOR_ORIGIN);
-    }
-  }
-  if (config.bridge.enabled) {
-    if (config.bridge.solanaRpcUrl.status === "available") sources.push(new URL(config.bridge.solanaRpcUrl.value).origin);
-    if (config.bridge.evmRpcUrls.status === "available") {
-      for (const rpc of Object.values(config.bridge.evmRpcUrls.value)) sources.push(new URL(rpc).origin);
     }
   }
   return [...new Set(sources)];

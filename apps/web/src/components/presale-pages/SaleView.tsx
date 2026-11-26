@@ -72,7 +72,6 @@ import type { SocialSaleMetadata } from "@blast/core/web/contracts/sales.ts";
 import { PresaleCover } from "./PresaleCover";
 import { CoverButton, EditDetailsSheet, SaleLinks, useSaleDetails } from "./SaleDetails";
 
-
 /** "See all" in the right column asks the page to show the Backers tab with "Following only" on. */
 export const SHOW_FOLLOWING_EVENT = "blast:presale-show-following";
 
@@ -1112,12 +1111,6 @@ function tradeCoinOf(sale: SocialPresaleDetail["presale"]) {
     usd_price: sale.price_usd,
     presale_id: sale.presale_id,
   };
-}
-
-export function SaleTradeButton({ sale, primary = false }: Readonly<{ sale: SocialPresaleDetail["presale"]; primary?: boolean }>) {
-  const run = useShellActions();
-  if (!tradesInApp(sale.venue)) return null;
-  return <button className={cx("btn", primary ? "btn-primary" : "btn-quiet btn-block")} onClick={() => run("openTrade", encodeTradeAction({ side: "buy", coin: tradeCoinOf(sale) }))} type="button">Trade {sale.symbol}</button>;
 }
 
 /** The narrow-screen trade bar (the Mobile board): Sell beside Buy, each opening the shared trading sheet on its side. */

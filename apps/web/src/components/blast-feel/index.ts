@@ -64,7 +64,6 @@ export {
   markSoundSaved,
   motionAllowed,
   soundChangeMark,
-  useReducedMotion,
   useSoundEnabled,
 } from "./feel-sound-pref.ts";
 export { FEEL_FRESH_GESTURE_MS, FEEL_MONEY_EVENT_MS, FEEL_TAP_MIN_GAP_MS, type FeelPlayOptions } from "./feel-gate.ts";

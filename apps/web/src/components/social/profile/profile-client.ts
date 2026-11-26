@@ -1,6 +1,5 @@
 import { socialMePresalesSchema } from "@blast/core/web/contracts/me-presales.ts";
 import {
-  profilePresaleSchema,
   SOCIAL_ME_PRESALES_PATH,
   SOCIAL_PROFILE_EDIT_PATH,
   SOCIAL_PROFILE_PICTURE_PATH,
@@ -9,7 +8,6 @@ import {
   socialProfileMutualsSchema,
   socialProfileCallsPath,
   socialProfileMutualsPath,
-  type ProfilePresale,
   type SocialMePresales,
   type SocialProfileCalls,
   type SocialProfileEdit,
@@ -29,16 +27,8 @@ import { callSocialApi, type ApiResult, type SocialApiOptions, type SocialRespon
  * never half-rendered.
  */
 
-export function isProfilePresale(value: unknown): value is ProfilePresale {
-  return profilePresaleSchema.safeParse(value).success;
-}
-
 export function isProfileCalls(value: unknown): value is SocialProfileCalls {
   return socialProfileCallsSchema.safeParse(value).success;
-}
-
-export function isMePresales(value: unknown): value is SocialMePresales {
-  return socialMePresalesSchema.safeParse(value).success;
 }
 
 export type PublicReadResult<Body> = Readonly<{ status: "ok"; body: Body }> | Readonly<{ status: "refused"; code: string; httpStatus?: number; retryAfterSeconds?: number | null; requestId?: string }> | Readonly<{ status: "error"; code?: string; httpStatus?: number; requestId?: string }>;

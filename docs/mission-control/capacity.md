@@ -745,13 +745,9 @@ exactly and nothing from 0022–0027 was left in between.
 
 ## Card images
 
-Two routes serve card PNGs through one `CardImageService` per function instance
-(`card-images/service.ts`):
-
-- `GET /card/<id>/image`: the share image of a published card, public, for link
-  previews.
-- `GET /api/mission-control/owner/card`: the owner's own card in either format,
-  including before it is published. `Cache-Control: private, no-store`.
+`GET /card/<id>/image` serves the share image of a published card, public, for
+link previews, through one `CardImageService` per function instance
+(`card-images/service.ts`).
 
 Each render is keyed by card, format and a digest of the canonical record plus
 `CARD_RENDERER_VERSION`. A request is served from this instance's memory, then

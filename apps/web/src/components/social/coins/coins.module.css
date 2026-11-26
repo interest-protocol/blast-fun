@@ -381,7 +381,6 @@ button.tpChip.on { background: var(--chip); box-shadow: none; }
 /* The loading form (SwapLoading): the amount at the read-out's line height, the coin at the chip's size, the details row at the trigger's height. */
 .loadingValue { flex: 1; min-width: 0; line-height: 3.125rem; }
 .loadingChip { flex: none; display: inline-flex; align-items: center; min-height: 2.5rem; font-size: 0.9375rem; letter-spacing: normal; }
-.loadingTx { display: flex; align-items: center; min-height: 2.5rem; padding-inline: 0.5rem; font-size: 0.8125rem; }
 /* MA-8: the placeholders wait 300 ms, so a quick load never flashes them; the boxes hold their size from the start. */
 .swapLoading > [aria-hidden="true"] { animation: coinsWait var(--t4) step-end; }
 @keyframes coinsWait { from { visibility: hidden; } }
