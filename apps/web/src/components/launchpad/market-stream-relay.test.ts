@@ -99,7 +99,7 @@ function harness(t: import("node:test").TestContext, reader: Reader | null = nul
   const hub = new MarketStreamHub({
     createSource: (url) => { const source = new RelaySource(relay, url); sources.push(source); return source; },
     schedule: (run, ms) => { const id = setTimeout(run, ms); return () => clearTimeout(id); },
-    defer: queueMicrotask, random: () => 0, visible: () => true, onVisibilityChange: () => () => {},
+    defer: queueMicrotask, settle: (run) => { run(); return () => {}; }, random: () => 0, visible: () => true, onVisibilityChange: () => () => {},
   });
   const states = new Map<string, MarketStreamState>();
   const fences: [string, number][] = [];

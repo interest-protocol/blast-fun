@@ -47,7 +47,7 @@ function setup(pools = [CURVE], requestFrom?: number, migration: MigrationMarker
   const schedule = (run: () => void, ms: number) => { const timer = { run, ms }; timers.push(timer); return () => { const index = timers.indexOf(timer); if (index >= 0) timers.splice(index, 1); }; };
   const hub = new MarketStreamHub({
     createSource: (url) => { urls.push(url); const source = new Source(); sources.push(source); return source; },
-    schedule, defer: queueMicrotask, random: () => 0, visible: () => true, onVisibilityChange: () => () => {},
+    schedule, defer: queueMicrotask, settle: (run) => { run(); return () => {}; }, random: () => 0, visible: () => true, onVisibilityChange: () => () => {},
   });
   const client = new ChartStream({
     pools, expected, migration: () => migration, request: () => ({ ...chartRequest({ interval: "1s", range: "all" }, NOW), ...(requestFrom === undefined ? {} : { from: requestFrom }) }),
@@ -721,7 +721,7 @@ test("a tab shown after a long hide reads history at once, as a fresh chart did"
   const timers: { run: () => void; ms: number }[] = [];
   const schedule = (run: () => void, ms: number) => { const timer = { run, ms }; timers.push(timer); return () => { const index = timers.indexOf(timer); if (index >= 0) timers.splice(index, 1); }; };
   const hub = new MarketStreamHub({
-    createSource: () => new Source(), schedule, defer: queueMicrotask, random: () => 0, visible: () => visible,
+    createSource: () => new Source(), schedule, defer: queueMicrotask, settle: (run) => { run(); return () => {}; }, random: () => 0, visible: () => visible,
     onVisibilityChange: (listener) => { onVisibility = listener; return () => {}; },
   });
   const loads: string[] = [];
