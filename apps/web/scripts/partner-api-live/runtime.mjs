@@ -26,7 +26,8 @@ export function startupReport(error, stage) {
  * develop and production run the full check.
  */
 export function uiOnlyFeaturePreview(environment) {
-  return deploymentIdentity(environment).target === 'preview';
+  // `dev` is the dev.blast.fun custom environment: risky branches under test, never an operator credential.
+  return ['preview', 'dev'].includes(deploymentIdentity(environment).target);
 }
 
 /** Operator credentials a feature preview build must never be given (branch code runs with them). */
