@@ -35,7 +35,7 @@ import type { SectionState } from "../primitives/data-state";
 import primitives from "../primitives/primitives.module.css";
 import type { ChartSource } from "./chart-client";
 import { chartGeometry, type DrawnSeries } from "./chart-geometry";
-import { CHART_INTERVALS, LIVE_CHART_INTERVALS, CHART_RANGES, LIVE_CHART_CONTROLS, LIVE_CHART_SPAN_MS, candleGaps, chartLatestTimestamp, chartOpening, chartSources, pageTruncated, type ChartCandlePage, type ChartControls, type ChartRange, type ChartRequest, type ChartState, type CandleGap, type SourceState } from "./chart-model";
+import { CHART_RANGES, LIVE_CHART_CONTROLS, fitControls, rangeIntervals, LIVE_CHART_SPAN_MS, candleGaps, chartLatestTimestamp, chartOpening, chartSources, pageTruncated, type ChartCandlePage, type ChartControls, type ChartRange, type ChartRequest, type ChartState, type CandleGap, type SourceState } from "./chart-model";
 import { useChartClock } from "./use-chart-clock.ts";
 import styles from "./Chart.module.css";
 import { forcesLine, klineBars } from "#web/components/charts/kline/kline-model.ts";
@@ -47,7 +47,7 @@ export const PRICE_HISTORY_UNAVAILABLE = "Price history couldn’t load.";
 /** The coin page's chart library loads only when a chart is on screen. */
 const KLineCoinChart = dynamic(() => import("#web/components/charts/kline/KLineCoinChart.tsx"), {
   ssr: false,
-  loading: () => <SkeletonBox className={klineStyles.loading} />,
+  loading: () => <span className={klineStyles.loadingFrame}><SkeletonBox className={klineStyles.loading} /></span>,
 });
 
 export type ChartSourceName = "curve" | "venue";
@@ -67,6 +67,7 @@ const RANGE_LABEL: Readonly<Record<ChartRange, string>> = {
 
 type Row = Readonly<{ kind: "candle"; candle: ChartCandlePage["candles"][number] }> | Readonly<{ kind: "gap"; gap: CandleGap }>;
 
+const isBehind = (section: SourceState | null) => section?.state === "unavailable" || section?.state === "stale";
 const hasData = (section: SourceState | null): section is Extract<Section<ChartCandlePage>, { data: ChartCandlePage }> =>
   section !== null && (section.state === "available" || section.state === "stale");
 
@@ -167,9 +168,9 @@ function candleTableVolume(atoms: bigint, { quoteDecimals, quoteSymbol }: ChartV
   return `${shiftDecimal(atoms.toString(), -quoteDecimals)} ${quoteSymbol}`;
 }
 
-/** Says when a page may leave older candles unread: only a full page of a capped read. */
+/** Says when a page may leave older candles unread: only a full page of a capped read. Live reads a fixed five-minute tape, never older history. */
 function limitedNote(page: ChartCandlePage, request: ChartRequest, range: ChartRange): string | null {
-  if (!pageTruncated(page, request)) return null;
+  if (range === "live" || !pageTruncated(page, request)) return null;
   const count = `${page.candles.length.toLocaleString("en-US")} candle${page.candles.length === 1 ? "" : "s"}`;
   return range === "all"
     ? `Newest ${count} · older history not loaded.`
@@ -338,7 +339,7 @@ function ChartRangeFields({ view, compact = false }: Readonly<{ view: ReturnType
         <span>Range</span>
         <SelectField size={compact ? "lg" : "md"} value={controls.range} onChange={(event) => {
           const range = event.target.value as ChartRange;
-          onControls(range === "live" ? LIVE_CHART_CONTROLS : { ...controls, range });
+          onControls(range === "live" ? LIVE_CHART_CONTROLS : fitControls({ ...controls, range }));
         }}>
           {view.livePreset && <option value="live">Live · 5 min</option>}
           {CHART_RANGES.map((range) => (
@@ -349,7 +350,7 @@ function ChartRangeFields({ view, compact = false }: Readonly<{ view: ReturnType
       {controls.range !== "live" && <label className={styles.control}>
         <span>Interval</span>
         <SelectField size={compact ? "lg" : "md"} value={controls.interval} onChange={(event) => onControls({ ...controls, interval: event.target.value as ChartControls["interval"] })}>
-          {(view.source.curvePoolKey === null ? CHART_INTERVALS : LIVE_CHART_INTERVALS).map((interval) => (
+          {rangeIntervals(controls.range).map((interval) => (
             <option key={interval} value={interval}>{interval}</option>
           ))}
         </SelectField>
@@ -373,7 +374,7 @@ const CHART_STYLES = [
   ["line", <><ChartLineIcon /><span className={primitives.srOnly}>Line chart</span></>],
 ] as const;
 
-function ChartFilters({ view, style }: Readonly<{ view: ReturnType<typeof useChartViewControls>; style: "line" | "candles" }>) {
+function ChartFilters({ view }: Readonly<{ view: ReturnType<typeof useChartViewControls> }>) {
   const { range, interval } = view.controls;
   return (
     <Popover.Root>
@@ -383,7 +384,7 @@ function ChartFilters({ view, style }: Readonly<{ view: ReturnType<typeof useCha
         size="md"
         className={styles.filterTrigger}
       >
-        <span>{RANGE_LABEL[range]}{range !== "live" && <span className={styles.filterInterval} data-line-interval={style === "line" || undefined} aria-hidden="true"> · {interval}</span>}</span>
+        <span>{RANGE_LABEL[range]}{range !== "live" && <span className={styles.filterInterval} aria-hidden="true"> · {interval}</span>}</span>
       </DisclosureButton>} />
       <PopoverSurface
         positioner={{ align: "end", sideOffset: 8, collisionPadding: 12, className: styles.filterLayer }}
@@ -467,7 +468,7 @@ function ChartFigure({ drawn, migrationAt, venuePoolKey, geometry, latest, lates
       </p>}
       <div className={compact ? styles.compactCanvas : styles.canvas}>
         {compact
-          ? <KLineCoinChart sources={drawn} interval={controls.interval} memeDecimals={source.memeDecimals} quoteDecimals={source.quoteDecimals} quoteUsd={quoteUsd ?? null} latestAvailable={latestAvailable} label={label} style={line ? "line" : "candles"} trade={candleTrade} migrationAt={migrationAt} />
+          ? <KLineCoinChart sources={drawn} interval={controls.interval} memeDecimals={source.memeDecimals} quoteDecimals={source.quoteDecimals} quoteUsd={quoteUsd ?? null} quoteSymbol={source.quoteSymbol} latestAvailable={latestAvailable} label={label} style={line ? "line" : "candles"} trade={candleTrade} migrationAt={migrationAt} />
           : <PoolCandleChart latestAvailable={latestAvailable} walletTrades={walletTrades} ripple={walletRipple(walletTrades, liveTrade, controls.interval)} trade={candleTrade} label={label} compact={compact} rollingWindow={controls.range === "live"} presentation={presentation} memeDecimals={source.memeDecimals} quoteDecimals={source.quoteDecimals} quoteUsd={quoteUsd} sources={drawn} migrationAt={migrationAt} migrationLabel={venue ? <>Graduated to <DexIdentity venue={venue} /></> : graduation} quoteSymbol={source.quoteSymbol} from={geometry.start} to={geometry.end} />}
       </div>
     </figure>
@@ -540,38 +541,43 @@ function ChartLegend({ view, inFilters = false }: Readonly<{ view: ReturnType<ty
 type ChartViewControls = ReturnType<typeof useChartViewControls>;
 type ChartStyle = "line" | "candles";
 
-function useChartStyle() {
+function useChartStyle(fallback: ChartStyle) {
   const saved = useChartPreference("style");
   const [selected, setStyle] = useState<ChartStyle | null>(null);
-  const preferred = saved === "line" ? "line" : "candles";
+  const preferred = saved === "line" || saved === "candles" ? saved : fallback;
   return [selected ?? preferred, (next: ChartStyle) => {
     saveChartPreference("style", next);
     setStyle(next);
   }] as const;
 }
 
-/** The style the compact chart draws, and whether the viewer can choose it: Live, phones and a handful of trades are always a line. */
+/**
+ * The style the compact chart draws, and why candles are off when they are: Live and a
+ * handful of trades always draw a line. The picker stays in place on every screen; a
+ * phone starts on the line until the viewer picks candles.
+ */
 function useCompactStyle(view: ChartViewControls) {
   const mobile = useMobileChartLayout();
-  const [preferredStyle, setStyle] = useChartStyle();
+  const [preferredStyle, setStyle] = useChartStyle(mobile ? "line" : "candles");
   const { source, quoteUsd, geometry, drawn } = view;
   const live = view.controls.range === "live";
-  // The chart draws a line for a handful of trades, so the picker would offer a style it ignores.
   const fewTrades = drawn.length > 0 && forcesLine(klineBars(drawn, source.memeDecimals, source.quoteDecimals, quoteUsd ?? null));
-  const fixed = mobile || live || fewTrades;
-  return { style: fixed ? "line" as const : preferredStyle, choosable: Boolean(geometry) && !fixed, setStyle };
+  const lineOnly = live ? "Live draws a line" : fewTrades ? "Candles need 10 or more trades in range" : null;
+  return { style: lineOnly ? "line" as const : preferredStyle, choosable: Boolean(geometry), lineOnly, setStyle };
 }
 
 function CompactChart({ view }: Readonly<{ view: ChartViewControls }>) {
-  const { style, choosable, setStyle } = useCompactStyle(view);
+  const { style, choosable, lineOnly, setStyle } = useCompactStyle(view);
   const { source, quoteUsd, geometry } = view;
   const unit = geometry && (exactDecimal(quoteUsd) ? "USD" : source.quoteSymbol);
   return <div className={styles.chart} data-compact-chart="" data-chart-style={style}>
     <div className={styles.compactHead}>
       <h2>Price{unit ? <span> · {unit}</span> : null}</h2>
       <div className={styles.compactTools}>
-        {choosable && <Segmented className={styles.stylePicker} label="Chart style" size="touch" variant="outline" options={CHART_STYLES} value={style} onChange={setStyle} />}
-        <ChartFilters view={view} style={style} />
+        {choosable && <span className={styles.stylePicker} title={lineOnly ?? undefined}>
+          <Segmented label={lineOnly ? `Chart style. ${lineOnly}.` : "Chart style"} size="touch" variant="outline" options={CHART_STYLES} value={style} onChange={setStyle} optionDisabled={(key) => key === "candles" && lineOnly !== null} />
+        </span>}
+        <ChartFilters view={view} />
       </div>
     </div>
     <ChartLastTrade />
@@ -634,18 +640,32 @@ function compactOpeningPrice({ migration, hasPriceUnits, source, controls, shown
   return source.opening?.price ?? null;
 }
 
+const LAST_UPDATE_TIME = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+const LAST_UPDATE_DAY_TIME = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+
 /** The first source whose history is delayed or failed, with its Try again; null when every source is current. */
 function compactSourceAlert(view: ReturnType<typeof useChartViewControls>) {
-  const alert = view.sources.find(({ section }) => section?.state === "unavailable" || section?.state === "stale");
+  const alert = view.sources.find(({ section }) => isBehind(section));
   if (!alert) return null;
+  // The last checkpoint the delayed source answered for, so the trader knows how old its prices are.
+  const asOf = alert.section && "provenance" in alert.section ? alert.section.provenance?.timestampMs : null;
+  const today = asOf ? new Date(asOf).toDateString() === new Date().toDateString() : true;
+  const since = asOf ? ` Last update ${(today ? LAST_UPDATE_TIME : LAST_UPDATE_DAY_TIME).format(asOf)}.` : "";
+  const problem = alert.section?.state === "stale" ? "price updates delayed." : "price history couldn’t load.";
   return <>
-    {alert.section?.state === "stale" ? `${view.label(alert.name)} price updates delayed.` : `${view.label(alert.name)} price history couldn’t load.`}{" "}
+    {`${view.label(alert.name)} ${problem}${since}`}{" "}
     <Button size="sm" variant="ghost" disabled={view.pending} onClick={view.onRefresh}>Try again</Button>
     {view.diagnostic && <DiagnosticCode message={view.diagnostic} generic={PRICE_HISTORY_UNAVAILABLE} />}
   </>;
 }
 
+const noTrades = (page: ChartCandlePage) => page.candles.every((candle) => candle.volumeQuote === 0n);
+
 function CompactSourceNotices({ view }: Readonly<{ view: ReturnType<typeof useChartViewControls> }>) {
+  // A quiet Live window draws the last price carried in from before it: say so, so a flat line never reads as trades.
+  // A delayed source cannot say there were no trades, so its own alert speaks instead.
+  const quiet = view.controls.range === "live" && !view.sources.some(({ section }) => isBehind(section)) && view.drawn.every(({ page }) => noTrades(page));
+  if (quiet) return <p className={styles.note}>No trades in the last 5 min. The line holds the last traded price.</p>;
   return <>{view.sources.map(({ name, section }) => {
     if (!hasData(section)) return null;
     const note = limitedNote(section.data, view.request, view.controls.range);

@@ -2,6 +2,7 @@ import { candleBucketStart, candleIntervalMs, type CandleInterval } from "@blast
 import { shiftDecimal } from "#web/components/launchpad/coin/coin-format.ts";
 import type { DrawnSeries } from "#web/components/launchpad/chart/chart-geometry.ts";
 import { poolPrices } from "../candle-data.ts";
+import { chartNumber } from "../chart-price.ts";
 
 /** One KLineCharts bar: a bucket's start (ms), its prices in the shown unit and its quote volume. */
 export type Bar = Readonly<{ timestamp: number; open: number; high: number; low: number; close: number; volume: number }>;
@@ -173,6 +174,21 @@ export const PANE_INDICATORS = ["VOL", "MACD", "RSI"] as const;
 export type IndicatorName = (typeof MAIN_INDICATORS)[number] | (typeof PANE_INDICATORS)[number];
 const INDICATORS: readonly IndicatorName[] = [...MAIN_INDICATORS, ...PANE_INDICATORS];
 
+export const isPaneStudy = (name: IndicatorName) => (PANE_INDICATORS as readonly string[]).includes(name);
+
+/**
+ * Pane heights in px. The price pane keeps its room whatever studies are on; each study
+ * pane adds its own height (plus a 1 px separator) and the card grows to hold it.
+ */
+export const PANE_LAYOUT = { phone: { price: 200, pane: 80 }, desktop: { price: 290, pane: 100 } } as const;
+const TIME_AXIS = 25;
+
+/** The plot's height in px for these studies: price pane, each study pane with its separator, time axis. */
+export function plotHeightFor(indicators: readonly IndicatorName[], phone: boolean): number {
+  const layout = phone ? PANE_LAYOUT.phone : PANE_LAYOUT.desktop;
+  return layout.price + indicators.filter(isPaneStudy).length * (layout.pane + 1) + TIME_AXIS;
+}
+
 export type ChartSettings = Readonly<{ indicators: readonly IndicatorName[] }>;
 export const DEFAULT_CHART_SETTINGS: ChartSettings = { indicators: ["MA", "VOL"] };
 
@@ -194,4 +210,98 @@ export function readChartSettings(text: string | null): ChartSettings {
 export function toggleIndicator(settings: ChartSettings, name: IndicatorName): ChartSettings {
   const on = settings.indicators.includes(name);
   return { ...settings, indicators: on ? settings.indicators.filter((item) => item !== name) : INDICATORS.filter((item) => item === name || settings.indicators.includes(item)) };
+}
+
+/**
+ * A price as the readout writes it. Four or more zeros after the point are counted, not
+ * written: 0.0000812 is `{ zeros: 4, rest: "812" }`, shown as 0.0₄812.
+ */
+export function priceParts(value: number, precision: number): Readonly<{ text: string; zeros?: number; rest?: string }> {
+  const text = value.toFixed(precision);
+  const folded = /^0\.(0{4,})(\d+)$/.exec(text);
+  return folded ? { text, zeros: folded[1]!.length, rest: folded[2]! } : { text };
+}
+
+/** Volume in the quote coin: 0 when quiet, three significant digits under one (zeros folded), compact above. */
+export function volumeText(volume: number): string {
+  if (!(volume > 0)) return "0";
+  if (volume < 1) return chartNumber(volume, 3);
+  return new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: volume < 1_000 ? 2 : 1 }).format(volume);
+}
+
+/** The RSI the chart draws: Wilder's 14. */
+export const RSI_PERIOD = 14;
+/** Fibonacci level labels closer than this (px) to the one drawn above them are left out. */
+const FIB_LABEL_GAP = 14;
+
+/**
+ * RSI over `period` closes with Wilder's smoothing. Null until the period has passed,
+ * and null while the price has not moved at all: no gains and no losses is no reading,
+ * where the textbook formula (and KLineCharts' own RSI) says 100.
+ */
+export function rsiValues(closes: readonly number[], period = RSI_PERIOD): Array<number | null> {
+  let gain = 0;
+  let loss = 0;
+  return closes.map((close, index) => {
+    if (index === 0) return null;
+    const previous = closes[index - 1]!;
+    // A change below a billionth of the price is float noise, not a trade.
+    const change = Math.abs(close - previous) <= Math.abs(previous) * 1e-9 ? 0 : close - previous;
+    const up = Math.max(change, 0);
+    const down = Math.max(-change, 0);
+    if (index <= period) {
+      gain += up / period;
+      loss += down / period;
+      if (index < period) return null;
+    } else {
+      gain = (gain * (period - 1) + up) / period;
+      loss = (loss * (period - 1) + down) / period;
+    }
+    if (gain === 0 && loss === 0) return null;
+    return loss === 0 ? 100 : 100 - 100 / (1 + gain / loss);
+  });
+}
+
+/**
+ * The y of each Fibonacci level label that has room: a label within `FIB_LABEL_GAP` px of
+ * the last one kept is dropped, so a short retracement shows its ends and middle, not a pile.
+ */
+export function fibLabelRows(ys: readonly number[], gap = FIB_LABEL_GAP): boolean[] {
+  const kept: number[] = [];
+  return ys.map((y) => {
+    if (kept.some((other) => Math.abs(other - y) < gap)) return false;
+    kept.push(y);
+    return true;
+  });
+}
+
+/** The library's date templates, read as the viewer's own short dates: "Nov 26" on the axis, "Wed, Nov 26, 14:30" under the crosshair. */
+const CHART_DATE_OPTIONS: Readonly<Record<string, Intl.DateTimeFormatOptions>> = {
+  YYYY: { year: "numeric" },
+  "YYYY-MM": { month: "short", year: "numeric" },
+  "MM-DD": { month: "short", day: "numeric" },
+  "YYYY-MM-DD": { month: "short", day: "numeric", year: "numeric" },
+  "HH:mm": { hour: "2-digit", minute: "2-digit", hourCycle: "h23" },
+  "HH:mm:ss": { hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" },
+  "MM-DD HH:mm": { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" },
+  "YYYY-MM-DD HH:mm": { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" },
+};
+const chartDateFormats = new Map<string, Intl.DateTimeFormat>();
+
+export function chartDate(timestamp: number, template: string, timeZone?: string): string {
+  const key = `${template}|${timeZone ?? ""}`;
+  let format = chartDateFormats.get(key);
+  if (!format) {
+    format = new Intl.DateTimeFormat(undefined, { ...(CHART_DATE_OPTIONS[template] ?? CHART_DATE_OPTIONS["YYYY-MM-DD HH:mm"]), timeZone });
+    chartDateFormats.set(key, format);
+  }
+  return format.format(timestamp);
+}
+
+/** Axis labels whose text would run past either edge of the plot; the library centres each on its bar and lets the edge cut it. */
+export function ticksInside<T extends { coord: number; text: string | number }>(ticks: readonly T[], width: number, charWidth = 6.5): T[] {
+  return ticks.filter(({ coord, text }) => {
+    const half = (String(text).length * charWidth) / 2;
+    return coord - half >= 0 && coord + half <= width;
+  });
 }

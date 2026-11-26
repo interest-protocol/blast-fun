@@ -239,7 +239,8 @@ test("compact chart exposes controls and history notices without a chart disclos
   assert.doesNotMatch(html, /Source details|type="checkbox"/);
   assert.equal(count(html, /aria-label="Chart range and interval: All · 1m"/g), 1);
   assert.doesNotMatch(html, /<select|>Refresh chart</);
-  assert.doesNotMatch(text(html), /Candles & volume/, "a handful of candles is drawn as a line, so no style picker");
+  // A handful of candles is drawn as a line: the picker stays, its candles option says why it is off.
+  assert.match(html, /aria-label="Chart style\. Candles need 10 or more trades in range\."/);
   assert.doesNotMatch(text(html), /Source Network|Show 4 bonding curve candles/);
 });
 
@@ -250,6 +251,21 @@ test("delayed history with no known candles does not claim that there were no tr
   assert.match(html, /role="alert"/);
   assert.match(text(html), /Price history is delayed\. Try again/);
   assert.doesNotMatch(text(html), /No price history yet|No trades in this range/);
+});
+
+test("a delayed source says when it last updated, with the day when that was not today", () => {
+  const venue = { state: "stale", data: VENUE_PAGE, reason: "not_ready", provenance: PROVENANCE } as const;
+  const words = text(render({ ...MIGRATED, venue }, [], SOURCE, CONTROLS, true));
+  assert.match(words, /Cetus pool price updates delayed\. Last update [A-Za-z]+\.? \d+, \d{2}:\d{2}\./);
+});
+
+test("a quiet Live window says the line holds the last price only while every source is current", () => {
+  const live: ChartControls = { interval: "1s", range: "live" };
+  const flat = (data: PoolCandlePage) => ({ ...data, interval: "1s" as const, candles: data.candles.map((item) => ({ ...item, volumeQuote: 0n })) });
+  const quiet = { ...MIGRATED, key: "1s|live", curve: ready(flat(CURVE_PAGE)), venue: ready(flat(VENUE_PAGE)) };
+  assert.match(text(render(quiet, [], SOURCE, live, true)), /No trades in the last 5 min/);
+  const behind = { ...quiet, venue: { state: "stale", data: flat(VENUE_PAGE), reason: "not_ready", provenance: PROVENANCE } as const };
+  assert.doesNotMatch(text(render(behind, [], SOURCE, live, true)), /No trades in the last 5 min/);
 });
 
 test("before the first trade the price heading has no dangling unit and the opening price is visible", () => {

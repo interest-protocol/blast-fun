@@ -4,7 +4,7 @@ import test from "node:test";
 import type { Candle, MigratedChart, MigrationMarker, PoolCandlePage } from "@blast/core/modules/launchpad-contract/venue-history.ts";
 import type { Provenance } from "@blast/core/modules/launchpad-contract/read.ts";
 
-import { afterChartRead, candleGaps, denseInterval, chartRequest, chartSearch, initialChart, parseChartControls, preferredChartControls } from "./chart-model.ts";
+import { afterChartRead, candleGaps, denseInterval, chartRequest, chartSearch, fitControls, initialChart, parseChartControls, preferredChartControls, rangeIntervals } from "./chart-model.ts";
 
 import { chartPoolKeys } from "./chart-client.ts";
 
@@ -166,4 +166,17 @@ test("a quiet coin opens on the finest interval where a quarter of the buckets t
   assert.equal(denseInterval(quiet, { interval: "1m", range: "1h" }, now), "5m", "a bounded range keeps at least 12 buckets");
   assert.equal(denseInterval([], { interval: "5m", range: "24h" }, now), "5m");
   assert.equal(denseInterval(quiet, { interval: "1s", range: "live" }, now), "1s");
+});
+
+test("each range offers only intervals that draw at least 12 candles and fit one page", () => {
+  assert.deepEqual(rangeIntervals("1h"), ["1m", "5m"]);
+  assert.deepEqual(rangeIntervals("24h"), ["1m", "5m", "15m", "1h"]);
+  assert.deepEqual(rangeIntervals("7d"), ["15m", "1h", "4h"]);
+  assert.deepEqual(rangeIntervals("30d"), ["1h", "4h", "1d"]);
+  assert.deepEqual(rangeIntervals("live"), ["1s"]);
+  // A one-day candle on a one-hour range is a single bar: the link snaps to the range's own interval.
+  assert.deepEqual(fitControls({ range: "1h", interval: "1d" }), { range: "1h", interval: "1m" });
+  assert.deepEqual(parseChartControls({ range: "24h", interval: "1w" }).range, "24h");
+  assert.ok(rangeIntervals("24h").includes(parseChartControls({ range: "24h", interval: "1w" }).interval));
+  assert.deepEqual(fitControls({ range: "7d", interval: "1h" }), { range: "7d", interval: "1h" });
 });

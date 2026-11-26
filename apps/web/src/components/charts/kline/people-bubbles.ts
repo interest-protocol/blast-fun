@@ -102,8 +102,9 @@ export const STACK_LIMIT = 3;
  * closer than that (zoomed out); a column shows up to `STACK_LIMIT` people, the
  * viewer's own first and always, then tagged wallets, then the newest, and folds the
  * rest into one "+N". Buyers stack down from under the bar, sellers up from above it.
+ * Nothing goes above `topInset` px, where the study legends sit.
  */
-export function layoutBubbles(people: readonly Person[], place: (person: Person) => Point | null, width: number, height: number, size: number): Bubble[] {
+export function layoutBubbles(people: readonly Person[], place: (person: Person) => Point | null, width: number, height: number, size: number, topInset = 0): Bubble[] {
   if (width <= 0 || height <= 0 || size <= 0) return [];
   const visible: Placed[] = [];
   for (const person of people) {
@@ -121,7 +122,7 @@ export function layoutBubbles(people: readonly Person[], place: (person: Person)
     let column: Placed[] = [];
     const flush = () => {
       if (!column.length) return;
-      const stack = stackColumn(`${side}:${Math.round(column[0]!.point.x)}`, side, column, height, size, left);
+      const stack = stackColumn(`${side}:${Math.round(column[0]!.point.x)}`, side, column, height, size, left, topInset);
       left = stack[0]!.x;
       bubbles.push(...stack);
     };
@@ -135,7 +136,7 @@ export function layoutBubbles(people: readonly Person[], place: (person: Person)
 }
 
 /** One column's bubbles: the ranked people that fit, then a "+N" for the rest. */
-function stackColumn(key: string, side: Person["side"], placed: readonly Placed[], height: number, size: number, previousX: number): Bubble[] {
+function stackColumn(key: string, side: Person["side"], placed: readonly Placed[], height: number, size: number, previousX: number, topInset: number): Bubble[] {
   const ranked = [...placed].sort((a, b) => Number(b.person.own) - Number(a.person.own) || b.person.labels.length - a.person.labels.length || b.person.lastMs - a.person.lastMs);
   const own = ranked.filter((entry) => entry.person.own).length;
   const room = Math.max(own, ranked.length > STACK_LIMIT ? STACK_LIMIT - 1 : STACK_LIMIT);
@@ -145,11 +146,11 @@ function stackColumn(key: string, side: Person["side"], placed: readonly Placed[
   // Centred on the people shown, but never closer than one bubble to the column before.
   const x = Math.max(shown.reduce((sum, entry) => sum + entry.point.x, 0) / shown.length, previousX + size);
   const gap = size * .25, step = size * .8;
-  const top = size / 2, bottom = Math.max(size / 2, height - size / 2);
+  const top = Math.min(topInset, height / 2) + size / 2, bottom = Math.max(top, height - size / 2);
   // Anchor on the lowest low (buyers) or the highest high (sellers) in the column.
   // A bar dragged off the top or bottom anchors at that edge, so its stack still fans out.
   const ys = ranked.map((entry) => entry.point.y);
-  const anchor = clamp(side === "buy" ? Math.max(...ys) : Math.min(...ys), 0, height);
+  const anchor = clamp(side === "buy" ? Math.max(...ys) : Math.min(...ys), top - size / 2, height);
   // Buyers stack down from under the bar, sellers up from over it; a stack that would
   // run off the plot grows the other way, so its bubbles never pile on one spot.
   const from = (way: number) => anchor + way * (gap + size / 2);

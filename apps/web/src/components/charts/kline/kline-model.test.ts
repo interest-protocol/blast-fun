@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { DrawnSeries } from "#web/components/launchpad/chart/chart-geometry.ts";
-import { barChanges, fillGaps, foldTrade, foldTrades, MAX_FILLED_BARS, klineBars, pricePrecision, readChartSettings, toggleIndicator, tradedBars, forcesLine, DEFAULT_CHART_SETTINGS, type Bar } from "./kline-model.ts";
+import { barChanges, fillGaps, foldTrade, foldTrades, MAX_FILLED_BARS, klineBars, pricePrecision, readChartSettings, toggleIndicator, tradedBars, forcesLine, DEFAULT_CHART_SETTINGS, priceParts, volumeText, rsiValues, fibLabelRows, chartDate, ticksInside, plotHeightFor, PANE_INDICATORS, type Bar, type IndicatorName } from "./kline-model.ts";
 
 const MINUTE = 60_000;
 const T0 = 1_795_188_300_000; // a 5-minute boundary
@@ -105,4 +105,54 @@ test("an older quiet bucket the server fills later reloads the chart so the plot
   const shown = [bar(0, 2), bar(1, 2, 0), bar(2, 2)];
   assert.equal(barChanges(shown, [bar(0, 2), bar(1, 3), bar(2, 2)]).kind, "reset");
   assert.equal(barChanges(shown, [bar(0, 4), bar(1, 2, 0), bar(2, 2)]).kind, "reset", "a traded bar that changed still reloads");
+});
+
+test("the readout counts four or more leading zeros and gives volume short", () => {
+  assert.deepEqual(priceParts(0.0000812, 7), { text: "0.0000812", zeros: 4, rest: "812" });
+  assert.deepEqual(priceParts(0.000812, 6), { text: "0.000812" });
+  assert.deepEqual(priceParts(1.5, 2), { text: "1.50" });
+  assert.equal(volumeText(0), "0");
+  assert.equal(volumeText(-0), "0");
+  assert.equal(volumeText(0.004567), "0.00456");
+  assert.equal(volumeText(0.0000004567), "0.0₆456");
+  assert.equal(volumeText(12.345), "12.35");
+  assert.equal(volumeText(15_400), "15.4K");
+});
+
+test("RSI has no reading while the price stands still, and 100 when it only rises", () => {
+  const flat = rsiValues(Array.from({ length: 20 }, () => 0.0000812));
+  assert.ok(flat.every((value) => value === null));
+  const rising = rsiValues(Array.from({ length: 20 }, (_, index) => 1 + index));
+  assert.equal(rising[13], null);
+  assert.equal(rising[14], 100);
+  const mixed = rsiValues(Array.from({ length: 30 }, (_, index) => 10 + (index % 2 ? 1 : -1)));
+  assert.ok(mixed.slice(14).every((value) => value !== null && value > 40 && value < 60));
+});
+
+test("Fibonacci labels closer than 14 px to a kept one are left out", () => {
+  assert.deepEqual(fibLabelRows([0, 5, 30, 35, 50]), [true, false, true, false, true]);
+  assert.deepEqual(fibLabelRows([100, 80, 60, 40]), [true, true, true, true]);
+});
+
+test("axis dates read as short local dates, and a label that would run off the plot is dropped", () => {
+  const at = Date.UTC(2026, 10, 26, 14, 30);
+  assert.equal(chartDate(at, "HH:mm", "UTC"), "14:30");
+  assert.match(chartDate(at, "MM-DD", "UTC"), /Nov 26/);
+  assert.match(chartDate(at, "YYYY-MM-DD HH:mm", "UTC"), /Thu.*Nov 26.*14:30/);
+  const ticks = [{ coord: 5, text: "01:00" }, { coord: 100, text: "05:00" }, { coord: 196, text: "Nov 26" }];
+  assert.deepEqual(ticksInside(ticks, 200).map((tick) => tick.text), ["05:00"]);
+});
+
+test("the plot grows by one pane per study, whatever the mix, and its default matches the loading block", () => {
+  // The CSS fallback (--kline-plot-height: 26rem = 416px desktop at the default text size, 306px phone) assumes the default MA + VOL.
+  assert.equal(plotHeightFor(["MA", "VOL"], false), 416);
+  assert.equal(plotHeightFor(["MA", "VOL"], true), 306);
+  for (const phone of [false, true]) {
+    const base = plotHeightFor([], phone);
+    for (let mask = 0; mask < 8; mask++) {
+      const panes = PANE_INDICATORS.filter((_, i) => mask & (1 << i));
+      const all: IndicatorName[] = ["MA", "EMA", "BOLL", ...panes];
+      assert.equal(plotHeightFor(all, phone), base + panes.length * (phone ? 81 : 101), `${phone ? "phone" : "desktop"} ${panes.join("+") || "no panes"}`);
+    }
+  }
 });

@@ -21,9 +21,10 @@ function wire(checkpoint = 11, at = NOW + 100, price = "2", part = 2) {
   };
 }
 
-test("stream-enabled controls expose 1s without changing the history-only parser contract", () => {
+test("1s candles belong to Live; a 1s link on a history range takes that range's interval", () => {
   assert.equal(parseChartControls({ interval: "1s" }).interval, "5m");
-  assert.deepEqual(parseLiveChartControls({ interval: "1s", range: "1h" }), { interval: "1s", range: "1h" });
+  // 3,600 one-second candles do not fit one 2,000-candle page: the hour would be half drawn.
+  assert.deepEqual(parseLiveChartControls({ interval: "1s", range: "1h" }), { interval: "1m", range: "1h" });
   assert.deepEqual(chartRequest({ interval: "1s", range: "1h" }, NOW), { interval: "1s", from: NOW - 3_600_000, limit: 2000, capped: true });
 });
 

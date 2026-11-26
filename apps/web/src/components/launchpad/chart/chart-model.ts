@@ -25,8 +25,31 @@ export type ChartControls = Readonly<{ interval: ChartInterval; range: ChartRang
 export const DEFAULT_CHART_CONTROLS = { interval: "5m", range: "all" } as const satisfies ChartControls;
 const RANGE_INTERVALS = { "1h": "1m", "6h": "5m", "24h": "15m", "7d": "1h", "30d": "4h", all: "5m", live: "1s" } as const satisfies Record<ChartRange, ChartInterval>;
 
+/** A bounded range shows at least this many buckets. */
+const MIN_RANGE_BUCKETS = 12;
+
 export function rangeInterval(range: ChartRange): ChartInterval {
   return RANGE_INTERVALS[range];
+}
+
+/**
+ * The intervals a range can show: Live is 1s; a bounded range splits into at least
+ * `MIN_RANGE_BUCKETS` and at most one page of candles (1H/1d would be one bar);
+ * all history takes any history interval.
+ */
+export function rangeIntervals(range: ChartRange): readonly ChartInterval[] {
+  if (range === "live") return ["1s"];
+  const span = RANGE_MS[range];
+  if (span === null) return CHART_INTERVALS;
+  return CHART_INTERVALS.filter((interval) => {
+    const buckets = span / candleIntervalMs(interval);
+    return buckets >= MIN_RANGE_BUCKETS && buckets <= CANDLE_PAGE.max;
+  });
+}
+
+/** The controls with an interval their range can show; another interval becomes the range's default. */
+export function fitControls(controls: ChartControls): ChartControls {
+  return rangeIntervals(controls.range).includes(controls.interval) ? controls : { ...controls, interval: rangeInterval(controls.range) };
 }
 
 export function allChartInterval(launchAt: number | undefined, now: number, plotWidth = 360): ChartInterval {
@@ -37,8 +60,6 @@ export function allChartInterval(launchAt: number | undefined, now: number, plot
 
 /** A chart this sparse reads better one interval coarser: under a quarter of its buckets traded. */
 const DENSE_SHARE = 0.25;
-/** A coarser interval still leaves a bounded range this many buckets. */
-const MIN_RANGE_BUCKETS = 12;
 
 /**
  * The finest interval, from `interval` up, where at least a quarter of the buckets from the
@@ -78,10 +99,10 @@ export function parseChartControls(
 ): ChartControls {
   const pick = <T extends string>(value: SearchValue, allowed: readonly T[], fallback: T): T =>
     typeof value === "string" && allowed.includes(value as T) ? (value as T) : fallback;
-  return {
+  return fitControls({
     interval: pick(search.interval, CHART_INTERVALS, fallback.interval),
     range: pick(search.range, CHART_RANGES, fallback.range === "live" ? DEFAULT_CHART_CONTROLS.range : fallback.range),
-  };
+  });
 }
 
 /** Streaming charts build active 1s candles from trades and recover them over HTTP. */
@@ -92,7 +113,7 @@ export function parseLiveChartControls(
   if (search.range === "live" || (search.range === undefined && fallback.range === "live")) return LIVE_CHART_CONTROLS;
   const controls = parseChartControls(search, fallback);
   const interval = LIVE_CHART_INTERVALS.find(interval => interval === search.interval);
-  return { ...controls, interval: interval ?? (controls.range === fallback.range ? fallback.interval : rangeInterval(controls.range)) };
+  return fitControls({ ...controls, interval: interval ?? (controls.range === fallback.range ? fallback.interval : rangeInterval(controls.range)) });
 }
 
 export function preferredChartControls(saved: string, search: string, initial: ChartControls, live = true, livePreset = live): ChartControls {

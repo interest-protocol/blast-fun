@@ -1,4 +1,5 @@
-.chart { display: grid; gap: .5rem; min-inline-size: 0; }
+/* Sized by its column, never by the canvas inside it, so a narrower window narrows the chart. */
+.chart { display: grid; grid-template-columns: minmax(0, 1fr); gap: .5rem; min-inline-size: 0; container-type: inline-size; }
 
 .toolbar {
   display: flex;
@@ -8,12 +9,98 @@
   min-block-size: 2.75rem;
 }
 
-/* Candles and two panes need room; the phone keeps the line and a shorter plot. */
-.chart { --kline-plot-height: 26rem; }
-.plot { position: relative; inline-size: 100%; block-size: var(--kline-plot-height); }
-/* The loading block holds the toolbar and plot, so the chart arrives without a jump. */
-.loading { --kline-plot-height: 26rem; block-size: calc(2.75rem + .5rem + var(--kline-plot-height)); }
-@media (max-width: 760px) { .chart, .loading { --kline-plot-height: 20rem; } }
+/*
+ * The plot's height comes from the studies on it (price pane plus each study pane); this is
+ * the fallback before the chart measures. The loading block holds toolbar, readout and plot,
+ * so the chart arrives without a jump.
+ */
+.chart { --kline-plot-height: 26rem; --kline-readout-height: 1.5rem; }
+.plot { position: relative; inline-size: 100%; block-size: var(--kline-plot-height); overflow: hidden; }
+.loading {
+  /* The default plot, as the chart sizes it in px: price 290 + volume 100 + 1 + axis 25 = 416, which 26rem matches at the default text size (phone 200 + 80 + 1 + 25). */
+  --kline-plot-height: 26rem;
+  --kline-readout-height: 1.5rem;
+  block-size: calc(2.75rem + var(--kline-readout-height) + 1rem + var(--kline-plot-height));
+}
+@media (max-width: 760px), (pointer: coarse) {
+  .chart, .loading { --kline-plot-height: 306px; }
+}
+/* Sized by its column like the chart, so the readout it reserves matches the one that arrives. */
+.loadingFrame { display: block; container-type: inline-size; }
+.loadingFrame > .loading { display: block; }
+@container (max-width: 560px) { .loading { --kline-readout-height: 2.5rem; } }
+@container (max-width: 340px) { .loading { --kline-readout-height: 3.75rem; } }
+
+/*
+ * The bar under the pointer, else the newest: one row on a wide card, two on a narrow one,
+ * always the same height so moving across the chart never moves the page.
+ */
+.readout {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 .75rem;
+  block-size: var(--kline-readout-height);
+  margin: 0;
+  overflow: hidden;
+  color: var(--ink-2);
+  font-size: .8125rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5rem;
+  white-space: nowrap;
+}
+.readout abbr { color: var(--muted); font-weight: 600; text-decoration: none; }
+.readoutTime { display: inline-flex; align-items: center; gap: .375rem; color: var(--ink); font-weight: 600; }
+.readoutTag {
+  padding: 0 .375rem;
+  border-radius: var(--r-inner);
+  background: var(--raised);
+  color: var(--muted);
+  font-size: .6875rem;
+  font-weight: 600;
+  line-height: 1.125rem;
+}
+.readoutPrices { display: inline-flex; gap: .625rem; }
+.readoutPrices[data-side="up"] .price { color: var(--coin-chart-up); }
+.readoutPrices[data-side="down"] .price { color: var(--coin-chart-down); }
+.readoutPrices [data-side="up"] { color: var(--coin-chart-up); }
+.readoutPrices [data-side="down"] { color: var(--coin-chart-down); }
+.readoutVolume { margin-inline-start: auto; }
+.price sub { font-size: .75em; line-height: 0; }
+
+/* Narrow cards: time and volume on the first line, prices under them; the narrowest wrap the prices once more. */
+@container (max-width: 560px) {
+  .readout { --kline-readout-height: 2.5rem; gap: 0 .5rem; font-size: .75rem; line-height: 1.25rem; }
+  .readoutPrices { order: 3; flex-basis: 100%; flex-wrap: wrap; gap: 0 .5rem; }
+}
+/* While a drawing is selected on all but wide cards, Remove takes the volume's place so the row never grows. */
+@container (max-width: 900px) {
+  .readout[data-removing] .readoutVolume { display: none; }
+  .readoutRemove { margin-inline-start: auto; }
+}
+@container (max-width: 340px) {
+  .readout { --kline-readout-height: 3.75rem; }
+  .readout[data-removing] [data-tag="latest"] { display: none; }
+  /* Indicators, Draw and Traders keep one row on a 320 px phone. */
+  .toolbar { column-gap: .25rem; }
+}
+
+/* The hint's button is taller than the row; it may spill into the gaps around it rather than be cut. */
+.hintRow { overflow: visible; }
+.hint { overflow: hidden; color: var(--ink-2); text-overflow: ellipsis; }
+.hint strong { color: var(--ink); }
+.hintCancel { margin-inline-start: auto; }
+/* Remove for the selected drawing ends the readout's first line, after the volume. */
+.readoutRemove { order: 2; margin-block: -.25rem; }
+
+/* Back to the newest bar, floating over the plot's newest corner above the time axis. */
+.latest {
+  position: absolute;
+  inset-block-end: 2.25rem;
+  z-index: 3;
+}
+.latest > * { box-shadow: var(--sh-pop); }
+.latest svg { inline-size: 1rem; block-size: 1rem; }
 
 .walletToggle {
   display: inline-flex;
@@ -50,6 +137,7 @@
   font-size: .875rem;
   cursor: pointer;
 }
-@media (hover: hover) { .menuItem:hover { background: var(--raised); } }
+@media (hover: hover) and (pointer: fine) { .menuItem:hover { background: var(--raised); } }
 
 .menuButton { justify-content: flex-start; inline-size: 100%; }
+.menuRule { margin: .25rem .5rem; border: 0; border-block-start: 1px solid var(--hair); }
