@@ -32,33 +32,50 @@ export const REFERRAL_REVENUE_SQL = `SELECT * FROM (${RECRUITS_SQL}, cut AS (
  JOIN evidence e ON e.sender=w.address AND e.timestamp_ms>=extract(epoch FROM GREATEST(r.joined_at,w.linked_at))*1000
  WHERE e.kind IN ('curve','commit')
    AND ($2::text[] IS NULL OR COALESCE(a.profile_id,r.recruit_id)::text=ANY($2))
+), matched_curve AS MATERIALIZED (
+ SELECT e.*,c.checkpoint AS claim_checkpoint,c.digest AS claim_digest,c.event_index AS claim_event_index,
+   c.special_rate AS claim_special_rate,c.total_atoms AS claim_atoms,
+   c.quote_atoms AS collected_atoms
+ FROM owned e
+ LEFT JOIN LATERAL (SELECT c.* FROM evidence c WHERE c.entity_id=e.entity_id AND c.kind='curve_claim'
+   AND e.quote_atoms>0 AND c.checkpoint>=e.checkpoint
+   AND (c.checkpoint>e.checkpoint OR (c.checkpoint=e.checkpoint AND c.digest=e.digest AND c.event_index>e.event_index))
+   ORDER BY c.checkpoint,c.digest,c.event_index LIMIT 1) c ON true
+ WHERE e.kind='curve'
+-- Keep one settlement calculation per claim even when many referred swaps share it.
+), claim_windows AS MATERIALIZED (
+ SELECT c.entity_id,c.claim_digest,c.claim_event_index,previous.checkpoint AS previous_checkpoint,
+   previous.digest AS previous_digest,previous.event_index AS previous_event_index,
+   settled.quote_gross,
+   NOT EXISTS (SELECT 1 FROM evidence edge WHERE edge.entity_id=c.entity_id
+     AND edge.kind IN ('curve','graduation','curve_claim')
+     AND ((edge.checkpoint=c.claim_checkpoint AND edge.digest<>c.claim_digest)
+       OR (edge.checkpoint=previous.checkpoint AND edge.digest<>previous.digest))) AS unambiguous
+ FROM (SELECT DISTINCT entity_id,claim_checkpoint,claim_digest,claim_event_index FROM matched_curve
+   WHERE claim_checkpoint IS NOT NULL) c
+ LEFT JOIN LATERAL (SELECT p.checkpoint,p.digest,p.event_index FROM evidence p
+   WHERE p.entity_id=c.entity_id AND p.kind='curve_claim'
+     AND (p.checkpoint<c.claim_checkpoint
+       OR (p.checkpoint=c.claim_checkpoint AND p.digest=c.claim_digest AND p.event_index<c.claim_event_index))
+   ORDER BY p.checkpoint DESC,p.digest DESC,p.event_index DESC LIMIT 1) previous ON true
+ CROSS JOIN LATERAL (SELECT COALESCE(sum(g.quote_atoms),0) AS quote_gross
+   FROM evidence g WHERE g.entity_id=c.entity_id AND g.kind IN ('curve','graduation')
+     AND (g.checkpoint<c.claim_checkpoint
+       OR (g.checkpoint=c.claim_checkpoint AND g.digest=c.claim_digest AND g.event_index<c.claim_event_index))
+     AND (previous.checkpoint IS NULL OR g.checkpoint>previous.checkpoint
+       OR (g.checkpoint=previous.checkpoint AND g.digest=previous.digest AND g.event_index>previous.event_index))) settled
 ), curve AS (
  SELECT e.*,l.quote_type AS quote_coin,
-   e.special_reservation OR CASE WHEN l.partnered THEN claim.special_rate ELSE e.special_rate END AS special_revenue,
-   CASE WHEN settled.unambiguous AND settled.quote_gross=claim.total_atoms
-     THEN div(e.quote_atoms*claim.quote_atoms,NULLIF(claim.total_atoms,0)) END AS quote_revenue
- FROM owned e
+   e.special_reservation OR CASE WHEN l.partnered THEN e.claim_special_rate ELSE e.special_rate END AS special_revenue,
+   CASE WHEN w.unambiguous AND w.quote_gross=e.claim_atoms
+     AND NOT EXISTS (SELECT 1 FROM evidence edge WHERE edge.entity_id=e.entity_id
+       AND edge.kind='curve_claim' AND edge.checkpoint=e.checkpoint AND edge.digest<>e.digest)
+     AND (w.previous_checkpoint IS NULL OR e.checkpoint>w.previous_checkpoint
+       OR (e.checkpoint=w.previous_checkpoint AND e.digest=w.previous_digest AND e.event_index>w.previous_event_index))
+     THEN div(e.quote_atoms*e.collected_atoms,NULLIF(e.claim_atoms,0)) END AS quote_revenue
+ FROM matched_curve e
  LEFT JOIN social_referral_entities l ON l.entity_id=e.entity_id AND l.kind='launch'
- LEFT JOIN LATERAL (SELECT c.* FROM evidence c WHERE c.entity_id=e.entity_id AND c.kind='curve_claim'
-   AND e.quote_atoms>0
-   AND (c.checkpoint>e.checkpoint OR (c.checkpoint=e.checkpoint AND c.digest=e.digest AND c.event_index>e.event_index))
-   ORDER BY c.checkpoint,c.digest,c.event_index LIMIT 1) claim ON true
- LEFT JOIN LATERAL (SELECT p.* FROM evidence p WHERE p.entity_id=e.entity_id AND p.kind='curve_claim'
-   AND (p.checkpoint<claim.checkpoint OR (p.checkpoint=claim.checkpoint AND p.digest=claim.digest AND p.event_index<claim.event_index))
-   ORDER BY p.checkpoint DESC,p.digest DESC,p.event_index DESC LIMIT 1) previous ON true
- LEFT JOIN LATERAL (SELECT COALESCE(sum(g.quote_atoms),0) AS quote_gross,
-   (NOT EXISTS (SELECT 1 FROM evidence edge WHERE edge.entity_id=e.entity_id
-     AND edge.kind IN ('curve','graduation','curve_claim') AND
-       ((edge.checkpoint=claim.checkpoint AND edge.digest<>claim.digest)
-         OR (edge.checkpoint=previous.checkpoint AND edge.digest<>previous.digest)
-         OR (edge.kind='curve_claim' AND edge.checkpoint=e.checkpoint AND edge.digest<>e.digest)))
-    AND (previous.checkpoint IS NULL OR e.checkpoint>previous.checkpoint
-      OR (e.checkpoint=previous.checkpoint AND e.digest=previous.digest AND e.event_index>previous.event_index))) AS unambiguous
-   FROM evidence g WHERE g.entity_id=e.entity_id AND g.kind IN ('curve','graduation')
-     AND (g.checkpoint<claim.checkpoint OR (g.checkpoint=claim.checkpoint AND g.digest=claim.digest AND g.event_index<claim.event_index))
-     AND (previous.checkpoint IS NULL OR g.checkpoint>previous.checkpoint
-       OR (g.checkpoint=previous.checkpoint AND g.digest=previous.digest AND g.event_index>previous.event_index))) settled ON claim.checkpoint IS NOT NULL
- WHERE e.kind='curve'
+ LEFT JOIN claim_windows w ON w.entity_id=e.entity_id AND w.claim_digest=e.claim_digest AND w.claim_event_index=e.claim_event_index
 ), paid_sales AS (
  SELECT f.entity_id,f.total_atoms,f.accepted_atoms,sum(p.quote_atoms) AS paid,
    sum(p.quote_atoms) FILTER (WHERE p.special_rate) AS special_paid
