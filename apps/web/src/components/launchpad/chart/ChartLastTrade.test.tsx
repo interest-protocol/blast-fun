@@ -118,3 +118,39 @@ test("a stream trade under a dollar never becomes the Last-trade pill; the lates
   await render(2, 1_000_000n);
   assert.equal(host.querySelector("[data-trade-cue]")?.textContent, "Buy · 1 USDC", "a dollar is a trade");
 });
+
+test("the pill speaks the page's unit: dollars while the page shows USD, the quote otherwise", async t => {
+  const { CREATE_QUOTE_TYPE } = await import("@blast/core/web/contracts/create.ts");
+  const { CoinPriceCurrencyProvider, useCoinPriceCurrency } = await import("./CoinPriceCurrency.tsx");
+  const host = dom.document.createElement("div");
+  const root = createRoot(host);
+  t.after(async () => { await act(() => root.unmount()); });
+  function Picker() {
+    const currency = useCoinPriceCurrency();
+    return <button data-pick="quote" onClick={() => currency?.setCurrency("quote")} type="button" />;
+  }
+  const trade = { cursor: "10:0:1:0", timestampMs: TRADE_TIME, side: "buy", quoteAmount: 12_400_000n } as MarketTrade["trade"];
+  await act(async () => root.render(<CoinPriceCurrencyProvider quoteType={CREATE_QUOTE_TYPE} quoteSymbol="USDC">
+    <Picker />
+    <ChartTradeContext value={{ trade, poolKey: "venue", receivedAt: null, decimals: 6, symbol: "USDC", quoteType: CREATE_QUOTE_TYPE }}>
+      <ChartLastTrade />
+    </ChartTradeContext>
+  </CoinPriceCurrencyProvider>));
+  assert.equal(host.querySelector("[data-trade-cue]")?.textContent, "Buy · $12.4");
+  await act(async () => host.querySelector<HTMLButtonElement>("[data-pick]")!.click());
+  assert.equal(host.querySelector("[data-trade-cue]")?.textContent, "Buy · 12.4 USDC");
+});
+
+test("lastTradeUsd: recorded dollars first, then the page's rate for the page's own quote only", async () => {
+  const { lastTradeUsd } = await import("./last-trade-usd.ts");
+  const SUI = "0x2::sui::SUI";
+  const usd = { currency: "usd", quoteType: SUI, quoteUsd: "2.5" } as const;
+  const sui = { quoteType: SUI, decimals: 9 };
+  assert.equal(lastTradeUsd(4_000_000_000n, null, sui, usd), "$10", "4 SUI at $2.50");
+  assert.equal(lastTradeUsd(4_000_000_000n, "9.87", sui, usd), "$9.87", "the trade's recorded value wins");
+  assert.equal(lastTradeUsd(4_000_000_000n, null, { quoteType: "0xabc::other::OTHER", decimals: 9 }, usd), null, "another quote is never priced at this rate");
+  assert.equal(lastTradeUsd(4_000_000_000n, null, sui, { ...usd, quoteUsd: null }), null, "no rate keeps the quote amount");
+  assert.equal(lastTradeUsd(4_000_000_000n, "9.87", sui, { ...usd, currency: "quote" }), null, "a page in the quote shows the quote");
+  assert.equal(lastTradeUsd(4_000_000_000n, null, sui, null), null);
+  assert.equal(lastTradeUsd(4_000_000_000n, null, { quoteType: null, decimals: 9 }, usd), null, "a trade of unknown quote is never priced at this rate");
+});
