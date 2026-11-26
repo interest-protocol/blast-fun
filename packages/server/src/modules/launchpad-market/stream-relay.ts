@@ -391,6 +391,8 @@ export class MarketStreamRelay {
     const removed = client.pools.filter((pool) => !next.pools.includes(pool));
     const added = next.pools.filter((pool) => !client.pools.includes(pool));
     this.#releaseTopics(client, removed);
+    // A failed upstream `unsubscribe` ends the session; a refused `recovering` stops this client.
+    if (!this.#clients.has(client)) return;
     this.#setPrices(client, next.priceCoins);
     if (next.presale !== client.presale) {
       this.#leavePresale(client);

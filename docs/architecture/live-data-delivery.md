@@ -84,8 +84,10 @@ process tables. The sections below cover both.
 
 What it carries: only public market data (trades, candles, prices, presale
 fills, activity hints) for the pools, price coins and presale the socket holds:
-the ones its URL named at connect, then the ones its latest accepted `set`
-named. At any moment that is at most 2 pools, 20 price coins and 1 presale.
+the ones its URL named at connect, then whatever each `set` left it holding:
+an accepted `set` names it exactly, and a refused one may still have removed
+some of it (removals apply first). At any moment that is at most 2 pools,
+20 price coins and 1 presale.
 No account, no wallet, no write path. A leaked frame is not a confidentiality
 loss.
 
@@ -108,6 +110,9 @@ never write to Redis and a ticket is never burned on a refusal.
 7. One Redis step: fleet-wide per-IP sockets and opens → close 4429, then burn
    the ticket nonce → close 4401 if reused. Redis down → close 4503 (fail
    closed).
+8. Global capacity again, since another socket may have filled the tables
+   while Redis answered → close 4503 (the ticket is already burned). Nothing
+   awaits between this check and joining the relay.
 
 Clients treat a handshake that never opens like 4503: wait a random 1–30 s.
 After a 4429, or 3 sockets in a row that close before their first frame, the
@@ -178,9 +183,11 @@ streams after the answer. A refusal never closes the socket.
 - The `set` churn limit is per instance. One address whose sockets land on
   N instances can add up to 40 × N pools a minute fleet-wide. Each instance's
   reader cost is still bounded by its own limit and its 64 topics.
-- Worst case for `set` frames: 10 a minute per socket plus one `rate` refusal,
-  so about 1,800 frames a second at 10,000 sockets. Each is parsed in memory
-  with no I/O; a socket that keeps sending past the rate is closed.
+- `set` frames: 10 accepted a minute per socket averages about 1,667 a second
+  at 10,000 sockets. The window allows bursts: each socket can send its 10 at
+  once, plus one `rate` refusal (also parsed and answered), so a synchronized
+  burst is up to 11 frames per socket. Each is parsed in memory with no I/O; a
+  socket that keeps sending past the rate is closed.
 - Unsigned routes on the service: `/v1/socket`, plus the existing liveness
   (`/v1/live`), `/v1/health` and readiness.
   The last two are bounded by a 5 s cache and 8 requests in flight.

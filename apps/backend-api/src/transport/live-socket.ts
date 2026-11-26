@@ -499,6 +499,10 @@ export function createLiveSocket(options: LiveSocketOptions) {
       // The removal sent at close can reach Redis before the add (NOSCRIPT falls back to EVAL).
       return unclaim(data);
     }
+    // Another open may have filled the shared tables while Redis answered; nothing awaits from here.
+    if (!options.relay.fits(query.pools, query.priceCoins)) {
+      return shut(ws, LIVE_CLOSE.busy);
+    }
     const result = options.relay.subscribe(query.request, sink(ws), { resume: query.resume });
     if (result instanceof Response) {
       if (!data.closing) {

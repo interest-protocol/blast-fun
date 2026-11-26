@@ -472,15 +472,29 @@ test("a set on the real relay is answered before the added pool's catch-up, then
   }
 });
 
+test("an open whose pools stopped fitting while Redis answered closes busy and holds nothing", async () => {
+  const { live, server, subs, open, room } = harness();
+  try {
+    room.fits = false;
+    const client = open(`pool=${pool(1)}&price_coin=${coin(1)}`);
+    assert.equal((await client.closed).code, LIVE_CLOSE.busy);
+    assert.equal(subs.length, 0, "never subscribed");
+    await until(() => live.stats().addresses === 0 && live.stats().sockets === 0);
+  } finally {
+    server.stop(true);
+  }
+});
+
 test("a set past the per-IP pools is refused after its removals; a full process says busy", async () => {
   const { live, server, subs, open, room } = harness();
   try {
+    // Admitted one at a time, so subs[i] is client i.
     const one = open(`pool=${pool(1)}&pool=${pool(2)}`);
+    await admitted(one);
     const two = open(`pool=${pool(3)}&pool=${pool(4)}`);
+    await admitted(two);
     const three = open(`activity=true&price_coin=${coin(1)}`);
-    for (const client of [one, two, three]) {
-      await admitted(client);
-    }
+    await admitted(three);
     const refused = await set(three, 1, [pool(5)]);
     assert.equal(refused.ok, false);
     assert.equal(refused.reason, "per_ip");

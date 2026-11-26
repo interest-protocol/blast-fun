@@ -248,6 +248,27 @@ test("a client dropped by a refused send during set leaves no topic behind", (t)
   holder.sub.stop();
 });
 
+test("a client dropped by an upstream loss during set's removals starts no price reads", async (t) => {
+  t.mock.timers.enable({ apis: ["setInterval", "setTimeout"] });
+  const reads: string[][] = [];
+  const { relay, sockets, join, hello } = harness({
+    prices: async (coins) => {
+      reads.push([...coins]);
+      return { checkpoint: 11, prices: [] };
+    },
+  });
+  const client = join(`pool=${A}`);
+  hello(sockets[0]!);
+  sockets[0]!.receive(snapshot(A, 10));
+  sockets[0]!.send = () => { throw new Error("upstream closed"); };
+  client.fill();
+  client.sub.set({ pools: [], priceCoins: [coin("1")], presale: P1 });
+  t.mock.timers.tick(5_000);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(reads, [], "A's unsubscribe failed, `recovering` was refused and the client stopped");
+  assert.equal(topics(relay), 0);
+});
+
 test("a client dropped by a refused presale pong during set joins no pool", (t) => {
   t.mock.timers.enable({ apis: ["setInterval", "setTimeout", "Date"] });
   const { relay, sockets, join, hello } = harness();
