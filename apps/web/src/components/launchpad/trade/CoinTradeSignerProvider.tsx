@@ -1,7 +1,5 @@
 "use client";
 
-import { usePrivy } from "@privy-io/react-auth";
-import { useSignRawHash } from "@privy-io/react-auth/extended-chains";
 import { useQuery } from "@tanstack/react-query";
 import { normalizeSuiAddress } from "@mysten/sui/utils";
 import {
@@ -12,7 +10,7 @@ import {
   type ReactNode,
 } from "react";
 
-import { usePrivySessionMounted } from "#web/components/presale/providers/PrivySessionProvider.tsx";
+import { usePrivySession } from "#web/components/auth/privy-session.ts";
 import { useSocialViewer } from "#web/components/social/SignInGate.tsx";
 import { useWalletSession } from "#web/components/social/WalletSession.tsx";
 import { walletIdentityQuery, walletIdentityScope } from "#web/components/social/queries.ts";
@@ -47,26 +45,19 @@ type Props = Readonly<{
 
 export function CoinTradeSignerProvider(props: Props) {
   const session = useWalletSession();
-  const privyMounted = usePrivySessionMounted();
   if (!session.available) return <LaunchpadWalletSignerProvider {...props} />;
-  return privyMounted ? (
-    <PrivyTradeSignerProvider {...props} />
-  ) : (
-    <SharedTradeSignerProvider embedded={null} network={props.network}>
-      {props.children}
-    </SharedTradeSignerProvider>
-  );
+  return <PrivyTradeSignerProvider {...props} />;
 }
 
 function PrivyTradeSignerProvider({ network, children }: Props) {
-  const privy = usePrivy();
-  const { signRawHash } = useSignRawHash();
+  const privy = usePrivySession();
+  const runtime = privy.runtime;
   let embedded: LaunchpadSigner | null = null;
-  if (privy.ready && privy.authenticated) {
+  if (runtime?.authenticated) {
     try {
       embedded = currentPrivySigner(
-        { network, signRawHash, accessToken: privy.getAccessToken },
-        privy.user,
+        { network, signRawHash: runtime.signRawHash, accessToken: runtime.getAccessToken },
+        runtime.user,
       );
     } catch {
       // An incomplete embedded wallet must show recovery without crashing the coin page.

@@ -13,60 +13,40 @@
   font-size: 0.8125rem;
   font-weight: 550;
 }
-.dateGroup {
-  display: flex;
-  align-items: center;
-  height: 2.875rem;
-  border: 1px solid var(--hair-2);
-  border-radius: var(--r-button);
-  background: var(--field);
-  padding-left: 0.8125rem;
-}
-.dateGroup:focus-within {
-  box-shadow: var(--field-focus);
-}
-/* React Aria's autofill bridge must stay hidden when CSP blocks inline styles. */
-.field [aria-hidden="true"]:has(> input) {
-  display: none;
-}
-.dateGroup[data-invalid] {
-  border-color: var(--down);
-}
-.dateInput {
-  display: flex;
-  align-items: center;
-  flex: 1;
-  font-size: 1rem;
-  font-weight: 400;
-  min-width: 0;
-}
-.segment {
-  padding: 0.1875rem 1px;
-  border-radius: 0.1875rem;
-  outline: none;
+.field input[type="time"] {
   font-variant-numeric: tabular-nums;
-  white-space: pre;
 }
-.segment[data-focused] {
-  color: var(--ink);
-  background: var(--chip);
+/* The form's fields draw one hairline; the shared field's edge shadow would double it. */
+.field input[type="time"]:not(:focus-visible, [aria-invalid="true"]) {
+  box-shadow: none;
 }
-.segment[data-placeholder] {
-  color: var(--muted);
+/* The shared Button owns geometry and focus; the date trigger reads as a field beside the time input. */
+:global([data-blast-ui]) .trigger {
+  --control-height: 2.75rem;
+  --control-radius: 0.75rem;
+  --control-pad: 0.8125rem;
+  --control-surface: var(--field);
+  --control-shadow: inset 0 0 0 1px var(--hair-2);
+  justify-content: space-between;
+  width: 100%;
+  min-width: 0;
+  font-weight: 400;
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+  text-align: start;
 }
-.trigger {
-  display: grid;
-  place-items: center;
-  width: max(44px, 2.75rem);
-  height: max(44px, 2.75rem);
+.trigger svg {
   flex: none;
-  border-radius: var(--r-button);
   color: var(--ink-2);
 }
-:global([data-blast-ui]) .field .segment:focus-visible,
-:global([data-blast-ui]) .dateGroup .trigger:focus-visible {
-  box-shadow: none;
-  outline: none;
+.trigger [data-placeholder] {
+  color: var(--muted);
+}
+:global([data-blast-ui]) .trigger[data-invalid] {
+  --control-shadow: inset 0 0 0 1px var(--down);
+}
+.positioner {
+  z-index: 100;
 }
 .popover {
   background: var(--card);
@@ -77,60 +57,70 @@
   box-shadow: var(--sh-2);
   padding: 1rem;
   max-width: calc(100vw - 1.5rem);
-  z-index: 100;
-}
-.popover [role="dialog"] {
   outline: none;
-}
-.header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  margin-bottom: 0.5rem;
-}
-.header h2 {
-  font-size: 0.875rem;
-  font-weight: 600;
-  margin: 0;
-}
-.header button {
-  width: 2.25rem;
-  height: 2.25rem;
-  border-radius: var(--r-button);
-  font-size: 1.5rem;
 }
 .calendar {
-  border-spacing: 0.125rem;
+  position: relative;
   font-size: 0.8125rem;
 }
-.calendar th {
+.months,
+.month {
+  display: grid;
+  gap: 0.5rem;
+}
+.caption {
+  display: flex;
+  align-items: center;
+  height: 2.25rem;
+  padding-inline-end: 4.75rem;
+}
+.dropdowns {
+  display: flex;
+  gap: 0.25rem;
+}
+.nav {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-end: 0;
+  display: flex;
+  gap: 0.25rem;
+}
+/* The shared IconButton owns the nav buttons' 36px geometry, hover, focus and unavailable state. */
+.navButton .chevron {
+  fill: currentColor;
+}
+.grid {
+  border-collapse: separate;
+  border-spacing: 0.125rem;
+}
+.weekday {
+  height: 1.75rem;
+  color: var(--muted);
   font-size: 0.6875rem;
   font-weight: 500;
-  color: var(--muted);
-  height: 1.75rem;
 }
-.popover .day {
-  display: grid;
-  place-items: center;
-  width: 2.125rem;
-  height: 2.125rem;
-  border-radius: var(--r-button);
-  outline: none;
-  cursor: pointer;
+.day {
+  padding: 0;
+  text-align: center;
+}
+/* The shared IconButton owns geometry, hover, press and focus: a 34px square, 44px on touch, in the text's ink. */
+:global([data-blast-ui]) .day .dayButton {
+  --control-height: 2.125rem;
+  color: inherit;
+  font: inherit;
   font-variant-numeric: tabular-nums;
-  position: relative;
-  box-shadow: none;
 }
-:global([data-blast-ui]) .popover .day:focus-visible,
-:global([data-blast-ui]) .popover .header button:focus-visible {
-  box-shadow: none;
-  outline: none;
-}
-.day[data-outside-month] {
+.outside {
   color: var(--muted);
 }
-.day[data-today]::after {
+:global([data-blast-ui]) .day.disabled .dayButton {
+  background: transparent;
+  color: var(--muted);
+}
+.hidden {
+  visibility: hidden;
+}
+.today .dayButton::after {
   content: "";
   position: absolute;
   bottom: 0.25rem;
@@ -139,44 +129,28 @@
   border-radius: 50%;
   background: currentColor;
 }
-.day[data-selected] {
+/* The grid and cell classes lift these above the shared ghost variant and its hover. */
+:global([data-blast-ui]) .grid .day.selected .dayButton {
   background: var(--ink);
   color: var(--bg);
 }
-:global([data-blast-ui]) .popover .day[data-focus-visible],
-:global([data-blast-ui]) .popover .header button[data-focus-visible] {
-  outline: 0.125rem solid var(--ink);
-  outline-offset: 0.125rem;
-}
-.day[data-hovered]:not([data-selected]) {
-  background: var(--raised);
-}
-@media (hover:hover) and (pointer:fine) { .header button:hover {
-  background: var(--raised);
-} }
 .error {
   color: var(--down);
   font-size: 0.75rem;
   grid-column: 1 / -1;
 }
-.field .timezone {
-  grid-column: 1 / -1;
-  color: var(--muted);
-  font-size: 0.75rem;
-  font-weight: 400;
-}
-.occurrences {
-  grid-column: 1 / -1;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  font-size: 0.75rem;
-}
-.occurrences span {
-  width: 100%;
-}
-.occurrences button[aria-pressed="true"] {
-  box-shadow: inset 0 0 0 1px var(--ink);
+/* Touch: 44px days and nav buttons; tighter gaps keep seven columns inside a 360px phone's popover. */
+@media (pointer: coarse) {
+  .popover {
+    padding: 0.5rem;
+  }
+  .caption {
+    height: 2.75rem;
+    padding-inline-end: 5.75rem;
+  }
+  .grid {
+    border-spacing: 0;
+  }
 }
 @media (max-width: 500px) {
   .field {

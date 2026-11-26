@@ -176,3 +176,112 @@ test(
     assert.equal(verifications, 0, "Public reporting does not consult the partner key store.");
   },
 );
+
+test(
+  "an extra site's first-party reads spend their own namespace; partner proofs stay primary-only",
+  { skip: !redisUrl },
+  async (t) => {
+    assert.ok(redisUrl);
+    assert.equal(new URL(redisUrl).hostname, "127.0.0.1");
+    const redis = createRedisConnection(redisUrl, "quota");
+    // Fresh namespaces, so counters from other runs on this Redis cannot interfere.
+    const [namespace, dev, unknown] = Array.from({ length: 3 }, () =>
+      randomUUID().replaceAll("-", "").repeat(2),
+    ) as [string, string, string];
+    const secret = "s".repeat(32);
+    const keys: string[] = [];
+    const recording = {
+      async execute(command: string[]) {
+        keys.push(...command.filter((part) => part.includes(":")));
+        return redis.execute(command);
+      },
+    };
+    let reads = 0;
+    const read = async () => {
+      reads++;
+      return Response.json({ ok: true });
+    };
+    const handlers = Object.fromEntries(
+      [
+        "market",
+        "prices",
+        "presales",
+        "featured",
+        "presale",
+        "discovery",
+        "search",
+        "defillama",
+        "daily_stats",
+        "wallet_launches",
+        "presale_proof",
+        "presale_allowlist_csv",
+        "coin_metadata",
+      ].map((name) => [name, read]),
+    ) as unknown as PartnerV1Handlers;
+    const handle = createBackendApi({
+      redis: recording,
+      namespace,
+      extraNamespaces: [dev],
+      subjectPepper: "p".repeat(32),
+      handlers: () => handlers,
+      keys: {
+        verify: async () => assert.fail("no partner key reaches the store"),
+        allowsOrigin: async () => false,
+      },
+      policies: {
+        ...DEFAULT_RATE_POLICIES,
+        social_read_prices: {
+          ...DEFAULT_RATE_POLICIES.social_read_prices,
+          windows: [{ limit: 1, windowSeconds: 60 }],
+        },
+      },
+    });
+    const runtime = createBackendServer({
+      handle,
+      preparePartner: handle.preparePartner,
+      redis: recording,
+      namespace,
+      extraSites: [{ siteOrigin: "https://dev.frontend.test", namespace: dev }],
+      gatewaySecret: secret,
+      ready: async () => true,
+    });
+    t.after(async () => {
+      await runtime.drain();
+      redis.close();
+    });
+    const target = new Request(
+      `http://127.0.0.1:${runtime.server.port}/internal/public-read/api/v1/prices`,
+    );
+    const ip = "198.51.100.9";
+    const status = async (request: Request, headers: Headers) => {
+      const answer = await fetch(request.url, { headers });
+      await answer.body?.cancel();
+      return answer.status;
+    };
+
+    assert.equal(await status(target, signGatewayRequest(target, secret, ip, namespace)), 200);
+    const devHeaders = signGatewayRequest(target, secret, ip, dev);
+    const before = keys.length;
+    assert.equal(await status(target, devHeaders), 200, "prod's spent quota does not limit dev");
+    const devKeys = keys.slice(before);
+    assert.ok(devKeys.some((key) => key.startsWith(`${dev}:`)));
+    assert.ok(!devKeys.some((key) => key.includes(namespace)), "a dev read writes no primary key");
+    assert.equal(await status(target, devHeaders), 403, "a dev proof is single use");
+    assert.equal(
+      await status(target, signGatewayRequest(target, secret, ip, dev)),
+      429,
+      "dev's own quota is spent",
+    );
+    assert.equal(await status(target, signGatewayRequest(target, secret, ip, unknown)), 403);
+
+    const partner = new Request(`http://127.0.0.1:${runtime.server.port}/api/v1/prices`, {
+      headers: { "x-blast-partner-key": "malformed-" + randomUUID() },
+    });
+    assert.equal(
+      await status(partner, signGatewayRequest(partner, secret, ip, dev)),
+      403,
+      "an extra site never signs partner reads",
+    );
+    assert.equal(reads, 2);
+  },
+);

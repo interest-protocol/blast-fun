@@ -7,6 +7,9 @@ const nextConfig: NextConfig = {
     return [
       { source: "/mission", destination: "/", permanent: true },
       { source: "/closed", destination: "/", permanent: true },
+      // The previous site's coin addresses: a coin type opens its coin page, a retired ID gets its not-found page.
+      { source: "/token/:key", destination: "/coin/:key", permanent: true },
+      { source: "/meme/:key", destination: "/coin/:key", permanent: true },
     ];
   },
   outputFileTracingRoot: fileURLToPath(new URL("../..", import.meta.url)),

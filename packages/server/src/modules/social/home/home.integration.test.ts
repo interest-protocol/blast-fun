@@ -18,6 +18,7 @@ import { createSocialConfigReader } from "@blast/core/modules/social/config/read
 import { createSocialValidator } from "@blast/core/modules/social/contracts/validate.ts";
 import { createSocialRouteKit } from "@blast/server/modules/social/route-kit/route.ts";
 import {
+  HOME_PAGE_DEFAULT,
   HOME_THREAD_PAGE,
   type HomeCoin,
   type HomeCoinsByIds,
@@ -344,8 +345,13 @@ async function ok<T>(response: Response, schema: Parameters<typeof validator.val
 
 const symbols = (coins: readonly HomeCoin[]) => coins.map((coin) => coin.symbol);
 const keysOf = (rows: readonly { key: string }[]) => rows.map((row) => row.key);
-// The five tracked pools have no launch date. Their fallback order is by coin type.
-const TRACKED_SYMBOLS = ["HELMET", "BLAST", "Wheels", "ONE", "MANIFEST"];
+// The tracked pools have no launch date. Their fallback order is by coin type.
+const TRACKED = [...INDEXED_POOL_COINS].sort((a, b) => a.coinType.localeCompare(b.coinType));
+const TRACKED_SYMBOLS: readonly string[] = TRACKED.map((coin) => coin.symbol);
+// The fixture's own coins, in the default order, ahead of the idle tracked pools.
+const FIXTURE_SYMBOLS = ["CROWD", "ORBIT", "EMAN", "AFTR", "QUIET"];
+// The first default-size page of a list.
+const firstPage = (list: readonly string[]) => list.slice(0, HOME_PAGE_DEFAULT);
 
 test("Home origin cache spends the edge freshness budget, is one read for every process, and keeps trade-filtered results separate", { skip }, async () => {
   let elapsed = 0;
@@ -438,9 +444,16 @@ test("Home lists opt in to circulating market cap and rolling change from a know
     assert.equal(orbit(await ok<HomeCoinsPage>(await discover("?mobile_market=1"), "home-coins-page"))?.live_inputs, undefined);
     assert.deepEqual(orbit(watchlist)?.mobile_market, expected);
     assert.deepEqual(orbit(followed)?.mobile_market, expected);
-    assert.equal(enriched.coins.find((coin) => coin.presale_id === P.eman)?.mobile_market?.change_1h_bps, null);
+    // EMAN last traded 12 minutes before the hour and again inside it: the hour opens at that earlier price.
+    assert.equal(enriched.coins.find((coin) => coin.presale_id === P.eman)?.mobile_market?.change_1h_bps, 10000);
     assert.equal(enriched.coins.find((coin) => coin.presale_id === P.crowd)?.mobile_market?.change_1h_bps, 0);
     assert.equal(orbit(await ok<HomeCoinsPage>(await discover(), "home-coins-page"))?.mobile_market, undefined);
+    // Quiet for hours before the hour: the indexer's price at the hour's start opens it, for the figure and the stream.
+    const emanType = coinOf(P.eman, "EMAN");
+    await admin.query("DELETE FROM blast_infra_fixture.price_history WHERE coin_type = $1", [emanType]);
+    await admin.query("INSERT INTO blast_infra_fixture.native_coin_prices VALUES ($1, $2, '0.05', $3)", [emanType, hourStart, hourStart - 3 * HOUR]);
+    const quiet = await ok<HomeCoinsByIds>(await coins(`?presale=${P.eman}&mobile_market=1&live_inputs=1`), "home-coins-page");
+    assert.deepEqual([quiet.coins[0]?.mobile_market?.change_1h_bps, quiet.coins[0]?.live_inputs?.open_1h_usd], [30000, "0.05"]);
   }, { cached: true }));
 
 test("Home volume and Trending share a committed, full-window Cetus and Bluefin sum", { skip }, () =>
@@ -674,7 +687,7 @@ test("Sparse coins retain a full 24-hour comparison and Home labels shorter nati
 test("Discover: one item per coin, counts by identity, directions kept apart, honest market facts, the rank explained", { skip }, () =>
   withFixture(async ({ discover, replica, now }) => {
     const page = await ok<HomeCoinsPage>(await discover(), "home-coins-page");
-    assert.deepEqual(symbols(page.coins), ["CROWD", "ORBIT", "EMAN", "AFTR", "QUIET", ...TRACKED_SYMBOLS]);
+    assert.deepEqual(symbols(page.coins), firstPage([...FIXTURE_SYMBOLS, ...TRACKED_SYMBOLS]));
     assert.equal(page.clock_ms, now);
     const orbit = page.coins[1]!;
     // Maya's two wallets are one participant; priv and late are wallets; the split transaction is two events; the future, old and uncommitted rows are out.
@@ -725,7 +738,8 @@ test("Discover: one item per coin, counts by identity, directions kept apart, ho
     const quiet = page.coins[4]!;
     assert.deepEqual([quiet.activity.participants, quiet.rank.why], [0, "No activity in the last 24h"]);
     assert.equal(page.coins[3]!.tradable, false);
-    assert.equal(page.next_cursor, null);
+    // The default page ends the list only when every coin fits on it.
+    assert.equal(page.next_cursor === null, FIXTURE_SYMBOLS.length + TRACKED_SYMBOLS.length <= HOME_PAGE_DEFAULT);
     // No viewer field, no account id, no private identity.
     assert.doesNotMatch(JSON.stringify(page), /"(viewer|follows_you|following|relation|account_id)"/);
     assert.doesNotMatch(JSON.stringify(page), /00000000-0000-4000/);
@@ -745,9 +759,9 @@ test("Discover: the window, the sorts, the filters and the keyset page are coher
     assert.deepEqual([orbit.activity.window, orbit.activity.participants, orbit.activity.events], ["1h", 6, 10]);
     assert.equal(hour.coins.find((coin) => coin.symbol === "EMAN")!.activity.events, 1);
     assert.equal(hour.coins.find((coin) => coin.symbol === "CROWD")!.activity.participants, 23);
-    assert.deepEqual(symbols((await ok<HomeCoinsPage>(await discover("?sort=newest"), "home-coins-page")).coins), ["ORBIT", "CROWD", "AFTR", "EMAN", "QUIET", ...TRACKED_SYMBOLS]);
+    assert.deepEqual(symbols((await ok<HomeCoinsPage>(await discover("?sort=newest"), "home-coins-page")).coins), firstPage(["ORBIT", "CROWD", "AFTR", "EMAN", "QUIET", ...TRACKED_SYMBOLS]));
     const trending = await ok<HomeCoinsPage>(await discover("?sort=trending"), "home-coins-page");
-    assert.deepEqual(symbols(trending.coins), ["CROWD", "ORBIT", "EMAN", "AFTR", "QUIET", ...TRACKED_SYMBOLS]);
+    assert.deepEqual(symbols(trending.coins), firstPage([...FIXTURE_SYMBOLS, ...TRACKED_SYMBOLS]));
     // `ranked` only when asked for: a client loaded before the field, which never asks, never receives it.
     assert.equal("ranked" in trending, false);
     const counted = await ok<HomeCoinsPage>(await discover("?sort=trending&ranked=1"), "home-coins-page");
@@ -755,26 +769,30 @@ test("Discover: the window, the sorts, the filters and the keyset page are coher
     assert.deepEqual([symbols(counted.coins), counted.ranked], [symbols(trending.coins), 3]);
     assert.deepEqual(symbols((await ok<HomeCoinsPage>(await discover("?min_participants=2"), "home-coins-page")).coins), ["CROWD", "ORBIT"]);
     assert.deepEqual(symbols((await ok<HomeCoinsPage>(await discover("?age=7d"), "home-coins-page")).coins), ["CROWD", "ORBIT"]);
-    assert.deepEqual(symbols((await ok<HomeCoinsPage>(await discover("?tradable=1"), "home-coins-page")).coins), ["CROWD", "ORBIT", "EMAN", "QUIET", ...TRACKED_SYMBOLS]);
+    assert.deepEqual(symbols((await ok<HomeCoinsPage>(await discover("?tradable=1"), "home-coins-page")).coins), firstPage(["CROWD", "ORBIT", "EMAN", "QUIET", ...TRACKED_SYMBOLS]));
     const first = await ok<HomeCoinsPage>(await discover("?limit=2"), "home-coins-page");
     assert.deepEqual(symbols(first.coins), ["CROWD", "ORBIT"]);
     assert.ok(first.next_cursor);
     const second = await ok<HomeCoinsPage>(await discover(`?limit=2&cursor=${encodeURIComponent(first.next_cursor!)}`), "home-coins-page");
     assert.deepEqual(symbols(second.coins), ["EMAN", "AFTR"]);
-    const third = await ok<HomeCoinsPage>(await discover(`?limit=2&cursor=${encodeURIComponent(second.next_cursor!)}`), "home-coins-page");
-    assert.deepEqual(symbols(third.coins), ["QUIET", "HELMET"]);
-    assert.ok(third.next_cursor);
-    const fourth = await ok<HomeCoinsPage>(await discover(`?limit=2&cursor=${encodeURIComponent(third.next_cursor)}`), "home-coins-page");
-    assert.deepEqual(symbols(fourth.coins), ["BLAST", "Wheels"]);
-    assert.ok(fourth.next_cursor);
-    const fifth = await ok<HomeCoinsPage>(await discover(`?limit=2&cursor=${encodeURIComponent(fourth.next_cursor)}`), "home-coins-page");
-    assert.deepEqual([symbols(fifth.coins), fifth.next_cursor], [["ONE", "MANIFEST"], null]);
+    // The rest by cursor, two at a time: QUIET, then every tracked pool, and no cursor after the last.
+    const rest: string[][] = [];
+    for (let cursor = second.next_cursor; cursor !== null;) {
+      assert.ok(rest.length < TRACKED_SYMBOLS.length, "the cursor never ends");
+      const next = await ok<HomeCoinsPage>(await discover(`?limit=2&cursor=${encodeURIComponent(cursor)}`), "home-coins-page");
+      rest.push(symbols(next.coins));
+      cursor = next.next_cursor;
+    }
+    const after = ["QUIET", ...TRACKED_SYMBOLS];
+    assert.deepEqual(rest, Array.from({ length: Math.ceil(after.length / 2) }, (_, index) => after.slice(index * 2, index * 2 + 2)));
     // The same list by page number: the page, how many pages at this size, how many coins in all; past the end, an empty page.
-    assert.deepEqual([first.page, first.pages, first.total], [1, 5, 10]);
+    const total = FIXTURE_SYMBOLS.length + TRACKED_SYMBOLS.length;
+    const pages = Math.ceil(total / 2);
+    assert.deepEqual([first.page, first.pages, first.total], [1, pages, total]);
     const numbered = await ok<HomeCoinsPage>(await discover("?limit=2&page=2"), "home-coins-page");
-    assert.deepEqual([symbols(numbered.coins), numbered.page, numbered.pages, numbered.total], [symbols(second.coins), 2, 5, 10]);
-    const beyond = await ok<HomeCoinsPage>(await discover("?limit=2&page=9"), "home-coins-page");
-    assert.deepEqual([beyond.coins, beyond.page, beyond.pages], [[], 9, 5]);
+    assert.deepEqual([symbols(numbered.coins), numbered.page, numbered.pages, numbered.total], [symbols(second.coins), 2, pages, total]);
+    const beyond = await ok<HomeCoinsPage>(await discover(`?limit=2&page=${pages + 1}`), "home-coins-page");
+    assert.deepEqual([beyond.coins, beyond.page, beyond.pages], [[], pages + 1, pages]);
     for (const bad of ["?cursor=nope", `?sort=newest&cursor=${encodeURIComponent(first.next_cursor!)}`, "?window=7d", "?min_participants=x", "?limit=99", "?page=0", `?page=2&cursor=${encodeURIComponent(first.next_cursor!)}`]) {
       const response = await discover(bad);
       assert.equal(response.status, 400, bad);
@@ -794,7 +812,7 @@ test("Discover counts and paginates public markets while direct lookup still fin
 
     const first = await ok<HomeCoinsPage>(await discover("?sort=held&limit=5"), "home-coins-page");
     assert.deepEqual([symbols(first.coins), first.total, first.pages], [
-      ["ORBIT", "CROWD", "EMAN", "AFTR", "QUIET"], 10, 2,
+      ["ORBIT", "CROWD", "EMAN", "AFTR", "QUIET"], FIXTURE_SYMBOLS.length + TRACKED_SYMBOLS.length, Math.ceil((FIXTURE_SYMBOLS.length + TRACKED_SYMBOLS.length) / 5),
     ]);
     assert.ok(first.next_cursor);
     const byId = await ok<HomeCoinsByIds>(await coins(`?presale=${testSale}`), "home-coins-page");
@@ -1103,15 +1121,21 @@ test("Discover and saved coins fill missing price and supply from tracked pools 
     assert.equal(snapshots, 2);
     const page = await ok<HomeCoinsPage>(await discover("?page=2&limit=5&mobile_market=1&live_inputs=1&rolling_change=1&dex_volume=1"), "home-coins-page");
     // ONE's snapshot FDV ($12.50) lifts it to page 1, above the idle coins with no value.
-    assert.deepEqual([page.page, page.pages, page.total, symbols(page.coins)], [2, 2, 10, ["QUIET", "HELMET", "BLAST", "Wheels", "MANIFEST"]]);
-    assert.deepEqual(page.coins.slice(1).map((coin) => [coin.coin_type, coin.venue, coin.decimals, coin.verified_team]), [
-      [helmet.coinType, "cetus", 9, true], [blast.coinType, "bluefin", 9, true], [wheels.coinType, "bluefin", 9, true],
-      [manifest.coinType, "cetus", 9, true],
-    ]);
+    const idle = TRACKED.filter((coin) => coin !== one);
+    const total = FIXTURE_SYMBOLS.length + TRACKED.length;
+    assert.deepEqual([page.page, page.pages, page.total, symbols(page.coins)], [2, Math.ceil(total / 5), total, ["QUIET", ...idle.slice(0, 4).map((coin) => coin.symbol)]]);
+    // Each tracked row names its pool's venue, its decimals and its badge.
+    const identity = (coin: (typeof TRACKED)[number]) => [coin.coinType, coin.poolKey.split(":")[0], coin.decimals, "verifiedTeam" in coin ? coin.verifiedTeam : undefined];
+    assert.deepEqual(page.coins.slice(1).map((coin) => [coin.coin_type, coin.venue, coin.decimals, coin.verified_team]), idle.slice(0, 4).map(identity));
     const first = await ok<HomeCoinsPage>(await discover("?page=1&limit=5&mobile_market=1&live_inputs=1&rolling_change=1&dex_volume=1"), "home-coins-page");
     const oneRow = first.coins.find((coin) => coin.coin_type === one.coinType);
     assert.deepEqual([oneRow?.coin_type, oneRow?.venue, oneRow?.decimals, oneRow?.verified_team], [one.coinType, "cetus", 6, undefined]);
-    const [, , , wheelsRow, manifestRow] = page.coins;
+    assert.equal(snapshots, 4);
+    const every = await ok<HomeCoinsPage>(await discover("?limit=50&mobile_market=1&live_inputs=1&rolling_change=1&dex_volume=1"), "home-coins-page");
+    assert.deepEqual(every.coins.filter((coin) => TRACKED_SYMBOLS.includes(coin.symbol)).map((coin) => [coin.coin_type, coin.venue, coin.decimals, coin.verified_team]),
+      [one, ...idle].map(identity));
+    const wheelsRow = every.coins.find((coin) => coin.coin_type === wheels.coinType);
+    const manifestRow = every.coins.find((coin) => coin.coin_type === manifest.coinType);
     assert.ok(wheelsRow && oneRow && manifestRow);
     assert.deepEqual([wheelsRow.price_usd, wheelsRow.fdv_usd, wheelsRow.mobile_market?.market_cap_usd], ["0.01", null, null]);
     assert.deepEqual([oneRow.price_usd, oneRow.price_as_of_ms, oneRow.fdv_usd], ["0.000625", now - MINUTE, "12.50"]);
@@ -1119,7 +1143,6 @@ test("Discover and saved coins fill missing price and supply from tracked pools 
     assert.deepEqual([oneRow.live_inputs?.total_supply, oneRow.live_inputs?.circulating_supply], ["20000000000", "15000000000"]);
     assert.equal(oneRow.change_24h_bps, null);
     assert.equal(oneRow.live_inputs?.price_checkpoint, undefined);
-    assert.equal(snapshots, 4);
     assert.deepEqual([manifestRow.presale_id, manifestRow.sale, manifestRow.launch_id, manifestRow.launched_ms], [null, null, null, null]);
     assert.deepEqual([manifestRow.price_usd, manifestRow.holders, manifestRow.fdv_usd, manifestRow.spark], [null, null, null, []]);
     assert.equal(manifestRow.dex_volume, undefined);
@@ -1148,8 +1171,9 @@ test("Discover and saved coins fill missing price and supply from tracked pools 
       (vault_id,origin_kind,origin_id,meme_type,venue_type,venue,pool_id,quote_type,created_checkpoint,created_tx_slot)
       VALUES ($1,'launch',$1,$2,$3,'bluefin',$1,$4,40000,0)`,
     [hex("c003"), manifest.coinType, `${hex("f")}::bluefin::Venue`, QUOTE]);
-    const overlaps = await ok<HomeCoinsPage>(await discover("?mobile_market=1"), "home-coins-page");
-    assert.equal(overlaps.total, 8);
+    const overlaps = await ok<HomeCoinsPage>(await discover("?mobile_market=1&limit=50"), "home-coins-page");
+    // HELMET's and BLAST's presales take their pools off the list; Wheels and MANIFEST each keep one row.
+    assert.equal(overlaps.total, FIXTURE_SYMBOLS.length + TRACKED.length - 2);
     assert.deepEqual(overlaps.coins.filter((coin) => coin.coin_type === manifest.coinType)
       .map((coin) => [coin.venue, coin.quote.symbol, coin.verified_team]), [["bluefin", "USDC", true]]);
     assert.deepEqual(overlaps.coins.filter((coin) => coin.coin_type === wheels.coinType).map((coin) => [coin.presale_id, coin.price_usd]), [[shownPresaleId, null]]);

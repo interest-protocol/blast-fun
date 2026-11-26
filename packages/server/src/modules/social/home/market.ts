@@ -22,7 +22,7 @@ import { fdvOf, outstandingSaleTokensSql, presaleTotalSupply, supplyOf } from "@
 import { HOME_COIN_SOURCES } from "@blast/server/modules/social/home/sources.ts";
 import { readHomeBounds, visibleKinds } from "@blast/server/modules/social/home/sql.ts";
 import { readAsOf } from "@blast/server/modules/social/items/as-of.ts";
-import { recentPriceAtSql, rollingPriceAtSql } from "@blast/server/modules/social/prices/price-at.ts";
+import { rollingPriceAtSql } from "@blast/server/modules/social/prices/price-at.ts";
 
 /**
  * Redesign gaps 1, 2, 8 and 10: one coin's market (`HomeCoinMarket`,
@@ -38,9 +38,9 @@ import { recentPriceAtSql, rollingPriceAtSql } from "@blast/server/modules/socia
  *   wallet counts in every window that holds one of its trades. At launch
  *   scale's hot coin (60,000 trades in its day) this replaced 40 `FILTER`
  *   aggregates, eight of them `count(DISTINCT …)`.
- * - **Moves** (`MARKET_COIN_SQL`). The 24h window uses the same native baseline and
- *   fallback as Home's coin list. The shorter windows take the newest 5-minute
- *   history row observed in the hour before their cutoff.
+ * - **Moves** (`MARKET_COIN_SQL`). Every window opens at the last price at or
+ *   before its start (the native baseline, with the 5-minute history as its
+ *   fallback), as Home's coin list does.
  * - **Supply.** The sale's indexed currency supply (or its cached terms for
  *   fixed supply), less what its vesting schedules still hold: every
  *   `sale_token` schedule's `total − claimed`. What is left circulates. A
@@ -63,10 +63,9 @@ export function parseMarketCoin(params: URLSearchParams): string {
   return socialParameter(coinSchema, values.length === 1 ? values[0] : null, "coin");
 }
 
+/** Each window opens at the last price at or before its start, however long the coin was quiet before it. */
 function openJoin(index: number, ms: number): string {
-  const start = `$2::bigint - ${ms}`;
-  const price = ms === DAY_MS ? rollingPriceAtSql("c.sale_token", start) : recentPriceAtSql("c.sale_token", start);
-  return `LEFT JOIN LATERAL (${price}) open_${index} ON TRUE`;
+  return `LEFT JOIN LATERAL (${rollingPriceAtSql("c.sale_token", `$2::bigint - ${ms}`)}) open_${index} ON TRUE`;
 }
 
 /**

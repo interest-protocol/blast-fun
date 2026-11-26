@@ -488,17 +488,13 @@ type MobileMarketInputs = Readonly<{
   escrowed: string | null;
 }>;
 
-/** Read the opening price and outstanding vesting for the trading rows on this page. */
-const MOBILE_MARKET_SQL = `SELECT coin.presale_id, coin.coin_type, opening.open_usd, vesting.escrowed
+/**
+ * Read the opening price and outstanding vesting for the trading rows on this page. The hour opens at the last price
+ * at or before its start, however long the coin was quiet before it, as the day does.
+ */
+const MOBILE_MARKET_SQL = `SELECT coin.presale_id, coin.coin_type, trim_scale(opening.usd_price)::text AS open_usd, vesting.escrowed
   FROM unnest($1::text[], $2::text[]) AS coin(coin_type, presale_id)
-  LEFT JOIN LATERAL (
-    SELECT trim_scale(ph.usd_price)::text AS open_usd
-    FROM chain_read_v1.price_history ph
-    WHERE ph.coin_type = coin.coin_type AND ph.resolution = '5m'
-      AND ph.bucket_ms >= $3::bigint - ${2 * PRICE_TIER_SPAN_MS["5m"]}
-      AND ph.bucket_ms <= $3::bigint AND ph.as_of_ms <= $3::bigint
-    ORDER BY ph.bucket_ms DESC LIMIT 1
-  ) opening ON TRUE
+  LEFT JOIN LATERAL (${rollingPriceAtSql("coin.coin_type", "$3::bigint")}) opening ON TRUE
   LEFT JOIN LATERAL (
     ${outstandingSaleTokensSql("coin.presale_id")}
   ) vesting ON coin.presale_id IS NOT NULL`;

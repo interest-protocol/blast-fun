@@ -4,6 +4,7 @@ import { connection } from "next/server";
 import { cache } from "react";
 
 import { PostPage } from "#web/components/social/post/PostPage.tsx";
+import { postMetadata } from "#web/components/social/post/post-metadata.ts";
 import { recordMetric } from "@blast/core/lib/metrics.ts";
 import { entryIdOfPost, type SocialItemResponse } from "@blast/core/modules/social/contracts/item-routes.ts";
 import { readPostFromBackend } from "#web/lib/backend-api/social-reads.ts";
@@ -27,11 +28,9 @@ async function loadPost(entryId: string): Promise<Loaded> {
 }
 
 export async function generateMetadata({ params }: Readonly<{ params: Params }>): Promise<Metadata> {
-  const entryId = entryIdOfPost((await params).postId);
-  if (!entryId) return { title: "Nothing here" };
-  const loaded = await loadPost(entryId);
-  if (loaded.status === "not_found") return { title: "Nothing here" };
-  return { title: "Post" };
+  const { postId } = await params;
+  const entryId = entryIdOfPost(postId);
+  return postMetadata(postId, entryId === null ? null : await loadPost(entryId));
 }
 
 /**

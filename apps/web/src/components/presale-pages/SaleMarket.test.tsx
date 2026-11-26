@@ -534,3 +534,54 @@ test("on the live screen, a graduated sale's market reads slow down once the str
   await act(async () => socket.drop());
   await waitFor(() => timers().every((each) => each === 15_000), "the 15 s timers resume", 5_000);
 });
+
+test("on the live screen, a graduated sale opens one socket for its trades and its pool, not a trades-only one replaced once the pool is known", async (t) => {
+  const { LiveScreen } = await import("#web/components/launchpad/coin/LiveScreen.tsx");
+  const { usePresaleMarketStream } = await import("./use-presale-market-stream.ts");
+  const live = installLiveSocket();
+  const client = createTestQueryClient();
+  const detail = fixtureDetail("kstl");
+  const pool = { id: `0x${"7".repeat(64)}`, venue: "cetus", coin_atoms: "1", quote_atoms: "1", as_of_ms: FIXTURE_NOW };
+  const poolKey = `${pool.venue}:${pool.id}`;
+  let answer: (() => void) | null = null;
+  const answered = new Promise<void>((resolve) => { answer = resolve; });
+  let tickets = 0;
+  let asked: number | null = null;
+  t.mock.method(globalThis, "fetch", async (input: RequestInfo | URL) => {
+    if (String(input) === LIVE_TICKET_PATH) {
+      tickets += 1;
+      return liveTicket();
+    }
+    if (String(input).startsWith("/api/social/home/market?")) {
+      asked ??= performance.now();
+      await answered;
+      return Response.json(fixtureCoinMarket({ pool }));
+    }
+    return Response.json({ error: { code: "not_found" } }, { status: 404 });
+  });
+  // The sale's trade feed subscribes the sale (as SaleTradeFeed does) around the market, which learns the pool.
+  function Feed({ children }: Readonly<{ children: React.ReactNode }>) {
+    usePresaleMarketStream(detail.presale.presale_id, () => {});
+    return children;
+  }
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  t.after(async () => {
+    await act(async () => root.unmount());
+    client.clear();
+    container.remove();
+    live.restore();
+  });
+  await act(async () => root.render(withQueryClient(client, <LiveScreen enabled><Feed><SaleMarket nowMs={FIXTURE_NOW} sale={detail.presale} terms={detail.terms} /></Feed></LiveScreen>)));
+  const { OPEN_SETTLE_MS } = await import("#web/components/launchpad/market-stream-hub.ts");
+  // Nothing to wait for but time: a stream that did not wait would have asked for its ticket by now.
+  await waitFor(() => asked !== null && performance.now() - asked > OPEN_SETTLE_MS * 3, "past the stream's settle");
+  assert.equal(tickets, 0, "the stream waits for the pool read");
+  assert.equal(live.sockets.length, 0);
+  await act(async () => answer!());
+  await waitFor(() => live.sockets.some((socket) => socket.query.getAll("pool").includes(poolKey)), "the stream opens with the pool", 5_000);
+  assert.equal(tickets, 1, "one ticket");
+  assert.equal(live.sockets.length, 1, "one socket");
+  assert.equal(live.sockets[0]!.query.get("presale"), detail.presale.presale_id, "carrying the sale's trades too");
+});

@@ -19,21 +19,21 @@ export function compactVestingAmount(atoms: bigint, decimals: number): string {
   return formatVestingAmount(atoms, decimals);
 }
 
-export function localVestingDate(
-  value: bigint | string,
-  timezone: string,
-): string {
+const summaryFormat = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "UTC",
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+
+/** Short UTC date for the live summary, e.g. "4 Dec 2026, 12:00". */
+export function summaryDate(value: bigint | string): string {
   const ms = BigInt(value);
   if (ms > 8_640_000_000_000_000n) return `Unix ${ms} ms`;
-  return new Intl.DateTimeFormat("en-GB", {
-    timeZone: timezone,
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).format(new Date(Number(ms)));
+  return summaryFormat.format(new Date(Number(ms)));
 }
 
 /** Group only whole digits; token precision never passes through Number. */

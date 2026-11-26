@@ -59,7 +59,6 @@ test("a single checkpoint has one date and retains its exact amount", () => {
         ],
       }}
       coin={coin}
-      timezone="Europe/Lisbon"
     />,
   );
   assert.match(html, /≈ 124.9683M SUI/);

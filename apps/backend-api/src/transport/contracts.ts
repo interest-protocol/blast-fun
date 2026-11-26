@@ -6,6 +6,9 @@ import { PRIVATE_ROUTES } from "@blast/core/modules/backend-api/private-routes.t
 import type { CronApi } from "./cron.ts";
 import type { PrivateApi } from "./private.ts";
 
+/** A web deployment the backend trusts: the origin its relay signs, and its own quota namespace. */
+export type TrustedSite = Readonly<{ siteOrigin: string; namespace: string }>;
+
 export const TRANSPORT_LIMITS = Object.freeze({
   headerBytes: 16 * 1024,
   adminBodyBytes: 8 * 1024,
@@ -30,6 +33,8 @@ export type BackendHttpOptions = Readonly<{
   redis: RedisCommands;
   privateReplayRedis?: RedisCommands;
   namespace: string;
+  /** Other trusted sites; their gateway proofs are accepted for first-party reads only. */
+  extraSites?: readonly TrustedSite[];
   gatewaySecret: string;
   /** `PRESALE_ADMIN_TOKEN`: the bearer every `operator` route requires before admission. */
   adminToken?: string;

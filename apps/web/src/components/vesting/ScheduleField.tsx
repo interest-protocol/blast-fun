@@ -1,48 +1,90 @@
 "use client";
 
-import {
-  Button,
-  Calendar,
-  CalendarCell,
-  CalendarGrid,
-  CalendarGridBody,
-  CalendarGridHeader,
-  CalendarHeaderCell,
-  DateInput,
-  DatePicker,
-  DateSegment,
-  type DateSegmentProps,
-  Dialog,
-  Group,
-  Heading,
-  I18nProvider,
-  Label,
-  Popover,
-  TimeField,
-} from "react-aria-components";
-import {
-  parseDate,
-  parseDateTime,
-  parseTime,
-  toZoned,
-} from "@internationalized/date";
-import { usePortalContainer } from "#web/components/ui-libraries/portal.ts";
+import { useEffect, useRef, useState, type ComponentProps } from "react";
+import { DayPicker, type DayButtonProps, type DropdownProps } from "react-day-picker";
+import { Button, IconButton } from "#web/components/blast-ui/Button.tsx";
+import { Popover, PopoverSurface } from "#web/components/blast-ui/Popover.tsx";
+import { SelectField, TextField } from "#web/components/blast-ui/TextField.tsx";
 import styles from "./ScheduleField.module.css";
 
-const monthName = new Intl.DateTimeFormat("en-GB", {
+const dayText = new Intl.DateTimeFormat("en-GB", {
+  day: "numeric",
   month: "short",
+  year: "numeric",
   timeZone: "UTC",
 });
 
-function dateSegmentText(segment: DateSegmentProps["segment"]) {
-  if (segment.type === "literal") return " ";
-  if (segment.type !== "month") return segment.text;
-  if (segment.isPlaceholder || !segment.value) return "mmm";
-  return monthName.format(new Date(Date.UTC(2000, segment.value - 1, 1)));
+/** "YYYY-MM-DD" as the browser-local midnight the calendar works in, or undefined. */
+function calendarDay(date: string): Date | undefined {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  if (!match) return undefined;
+  const [year, month, day] = [Number(match[1]), Number(match[2]) - 1, Number(match[3])];
+  const value = new Date(year, month, day);
+  // Rolled-over input such as 2026-13-01 or 2026-02-30 highlights nothing.
+  return value.getFullYear() === year && value.getMonth() === month && value.getDate() === day
+    ? value
+    : undefined;
 }
 
-function TimezoneNote({ id, timezone }: Readonly<{ id: string; timezone: string }>) {
-  return <p className={timezone === "UTC" ? "sr" : styles.timezone} id={`${id}-timezone`}>{timezone}</p>;
+function dateText(day: Date): string {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${String(day.getFullYear()).padStart(4, "0")}-${pad(day.getMonth() + 1)}-${pad(day.getDate())}`;
+}
+
+/** DayPicker's month and year dropdowns, drawn by the shared select. */
+function CalendarSelect({ options, value, onChange, disabled, "aria-label": ariaLabel }: DropdownProps) {
+  return (
+    <SelectField size="sm" value={value} onChange={onChange} disabled={disabled} aria-label={ariaLabel}>
+      {options?.map(({ value, label, disabled }) => (
+        <option key={value} value={value} disabled={disabled}>
+          {label}
+        </option>
+      ))}
+    </SelectField>
+  );
+}
+
+/**
+ * A calendar day on the shared square button (34px, 44px on touch); every prop DayPicker 9.14
+ * gives its DayButton is passed on, and its label is DayPicker's full date.
+ */
+function CalendarDay({
+  modifiers, className, type, disabled, "aria-disabled": ariaDisabled, tabIndex, "aria-label": ariaLabel = "",
+  onClick, onBlur, onFocus, onKeyDown, onMouseEnter, onMouseLeave, children,
+}: DayButtonProps) {
+  const ref = useRef<HTMLButtonElement>(null);
+  // As in DayPicker's own DayButton: the focused day takes focus, so arrow keys move it.
+  useEffect(() => {
+    if (modifiers.focused) ref.current?.focus();
+  }, [modifiers.focused]);
+  return (
+    <IconButton
+      ref={ref}
+      variant="ghost"
+      size="sm"
+      className={className}
+      type={type}
+      disabled={disabled}
+      aria-disabled={ariaDisabled}
+      // DayPicker keeps a disabled day focusable only while it holds focus.
+      focusableDisabled={modifiers.focused}
+      tabIndex={tabIndex}
+      aria-label={ariaLabel}
+      onClick={onClick}
+      onBlur={onBlur}
+      onFocus={onFocus}
+      onKeyDown={onKeyDown}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+    >
+      {children}
+    </IconButton>
+  );
+}
+
+/** The previous and next month buttons on the shared icon button; DayPicker supplies the label. */
+function CalendarNav({ "aria-label": ariaLabel = "", ...props }: Omit<ComponentProps<"button">, "style">) {
+  return <IconButton {...props} aria-label={ariaLabel} variant="ghost" size="chip" />;
 }
 
 export function ScheduleField({
@@ -52,7 +94,6 @@ export function ScheduleField({
   onChange,
   onBlur,
   error,
-  timezone,
 }: Readonly<{
   id: string;
   label: string;
@@ -60,166 +101,114 @@ export function ScheduleField({
   onChange(value: string): void;
   onBlur(): void;
   error?: string;
-  timezone: string;
 }>) {
-  const portalContainer = usePortalContainer();
-  const timeLabel = label.replace(/date$/i, "time");
-  const describedBy = `${id}-timezone${error ? ` ${id}-error` : ""}`;
-  const wall = value.slice(0, 16);
-  const [date = "", time = "12:00"] = wall.split("T");
-  let parsed = null;
-  try {
-    if (date) parsed = parseDate(date);
-  } catch {
-    /* Keep incomplete entry editable. */
-  }
-  let parsedTime = null;
-  try {
-    if (time) parsedTime = parseTime(time);
-  } catch {
-    /* Keep incomplete entry editable. */
-  }
-  let choices: string[] = [];
-  try {
-    const local = parseDateTime(wall);
-    const first = toZoned(local, timezone, "earlier");
-    const last = toZoned(local, timezone, "later");
-    if (
-      first.toString() !== last.toString() &&
-      first.toDate().getTime() !== last.toDate().getTime() &&
-      first.hour === local.hour &&
-      last.hour === local.hour
-    ) {
-      choices = [first.toString(), last.toString()];
-    }
-  } catch {
-    /* The field validator supplies the actionable message. */
-  }
+  const [open, setOpen] = useState(false);
+  const timeLabel = `${label.replace(/date$/i, "time")} (UTC)`;
+  const describedBy = `${id}-utc${error ? ` ${id}-error` : ""}`;
+  // The value is "date", "dateTtime" or an ISO string, all UTC; only its date and minute are edited.
+  const split = value.indexOf("T");
+  const date = split < 0 ? value : value.slice(0, split);
+  const time = split < 0 ? "12:00" : value.slice(split + 1, split + 6);
+  const selected = calendarDay(date);
+  // The calendar works in browser-local midnights; "today" is the UTC calendar day.
+  const now = new Date();
+  const today = new Date(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const year = today.getFullYear();
   return (
-    <I18nProvider locale="en-GB">
-      <div className={styles.field} onBlur={onBlur}>
-        <DatePicker
-          className={styles.date}
-          value={parsed}
-          onChange={(next) =>
-            onChange(next ? `${next}T${time || "12:00"}` : "")
-          }
-          isInvalid={!!error}
-          validationBehavior="aria"
-          aria-describedby={describedBy}
-        >
-          <Label>{label}</Label>
-          <Group
-            className={styles.dateGroup}
+    <div className={styles.field} onBlur={onBlur}>
+      <div className={styles.date}>
+        <label htmlFor={id} id={`${id}-label`}>{label}</label>
+        <Popover.Root open={open} onOpenChange={setOpen}>
+          <Popover.Trigger
+            render={<Button size="md" className={styles.trigger} />}
             id={id}
-            tabIndex={-1}
-            aria-describedby={error ? `${id}-error` : undefined}
+            aria-labelledby={`${id}-label ${id}-value`}
+            aria-describedby={describedBy}
+            data-invalid={error ? "" : undefined}
           >
-            <DateInput className={styles.dateInput}>
-              {(segment) => (
-                <DateSegment segment={segment} className={styles.segment}>
-                  {dateSegmentText(segment)}
-                </DateSegment>
-              )}
-            </DateInput>
-            <Button
-              className={styles.trigger}
-              aria-label={`Open calendar for ${label}`}
+            <span id={`${id}-value`} data-placeholder={selected ? undefined : ""}>
+              {selected
+                ? dayText.format(Date.UTC(selected.getFullYear(), selected.getMonth(), selected.getDate()))
+                : "Choose date"}
+            </span>
+            <svg
+              viewBox="0 0 24 24"
+              width="18"
+              height="18"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              aria-hidden="true"
             >
-              <svg
-                viewBox="0 0 24 24"
-                width="18"
-                height="18"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                aria-hidden="true"
-              >
-                <rect x="3" y="5" width="18" height="16" rx="3" />
-                <path d="M7 3v4m10-4v4M3 11h18" />
-              </svg>
-            </Button>
-          </Group>
-          <Popover
-            UNSTABLE_portalContainer={portalContainer ?? undefined}
-            className={styles.popover}
-            placement="bottom start"
-            containerPadding={12}
+              <rect x="3" y="5" width="18" height="16" rx="3" />
+              <path d="M7 3v4m10-4v4M3 11h18" />
+            </svg>
+          </Popover.Trigger>
+          <PopoverSurface
+            positioner={{ align: "start", className: styles.positioner, collisionPadding: 12, side: "bottom", sideOffset: 6 }}
+            popup={{ className: styles.popover, "aria-label": `Choose ${label}` }}
           >
-            <Dialog aria-label={`Choose ${label}`}>
-              <Calendar>
-                <header className={styles.header}>
-                  <Button slot="previous" aria-label="Previous month">
-                    ‹
-                  </Button>
-                  <Heading />
-                  <Button slot="next" aria-label="Next month">
-                    ›
-                  </Button>
-                </header>
-                <CalendarGrid className={styles.calendar}>
-                  <CalendarGridHeader>
-                    {(day) => <CalendarHeaderCell>{day}</CalendarHeaderCell>}
-                  </CalendarGridHeader>
-                  <CalendarGridBody>
-                    {(day) => (
-                      <CalendarCell date={day} className={styles.day} />
-                    )}
-                  </CalendarGridBody>
-                </CalendarGrid>
-              </Calendar>
-            </Dialog>
-          </Popover>
-        </DatePicker>
-        <TimeField
-          className={styles.time}
-          value={parsedTime}
-          onChange={(next) =>
-            onChange(`${date}T${next?.toString().slice(0, 5) ?? ""}`)
-          }
-          hourCycle={24}
-          granularity="minute"
-          isInvalid={!!error}
-          validationBehavior="aria"
-          aria-describedby={describedBy}
-        >
-          <Label>{timeLabel}</Label>
-          <Group className={styles.dateGroup}>
-            <DateInput className={styles.dateInput} aria-label={timeLabel}>
-              {(segment) => (
-                <DateSegment segment={segment} className={styles.segment} />
-              )}
-            </DateInput>
-          </Group>
-        </TimeField>
-        <TimezoneNote id={id} timezone={timezone} />
-        {choices.length ? (
-          <div
-            className={styles.occurrences}
-            role="group"
-            aria-label="Choose daylight-saving occurrence"
-          >
-            <span>This time occurs twice. Choose its UTC offset:</span>
-            {choices.map((choice, index) => (
-              <button
-                type="button"
-                key={choice}
-                aria-pressed={value === choice}
-                className="btn btn-line btn-sm"
-                onClick={() => onChange(choice)}
-              >
-                {index === 0 ? "First" : "Second"} · UTC
-                {choice.split("[")[0]!.slice(-6)}
-              </button>
-            ))}
-          </div>
-        ) : null}
-        {error ? (
-          <span className={styles.error} id={`${id}-error`}>
-            {error}
-          </span>
-        ) : null}
+            <DayPicker
+              mode="single"
+              required
+              autoFocus
+              today={today}
+              selected={selected}
+              defaultMonth={selected}
+              onSelect={(day) => {
+                if (day) onChange(`${dateText(day)}T${time || "12:00"}`);
+                setOpen(false);
+              }}
+              weekStartsOn={1}
+              captionLayout="dropdown"
+              navLayout="after"
+              components={{ Dropdown: CalendarSelect, DayButton: CalendarDay, PreviousMonthButton: CalendarNav, NextMonthButton: CalendarNav }}
+              startMonth={new Date(Math.min(year - 1, selected?.getFullYear() ?? year), 0)}
+              endMonth={new Date(Math.max(year + 100, selected?.getFullYear() ?? year), 11)}
+              classNames={{
+                root: styles.calendar,
+                months: styles.months,
+                month: styles.month,
+                month_caption: styles.caption,
+                dropdowns: styles.dropdowns,
+                nav: styles.nav,
+                button_previous: styles.navButton,
+                button_next: styles.navButton,
+                chevron: styles.chevron,
+                month_grid: styles.grid,
+                weekdays: styles.weekdays,
+                weekday: styles.weekday,
+                week: styles.week,
+                day: styles.day,
+                day_button: styles.dayButton,
+                selected: styles.selected,
+                today: styles.today,
+                outside: styles.outside,
+                disabled: styles.disabled,
+                hidden: styles.hidden,
+              }}
+            />
+          </PopoverSurface>
+        </Popover.Root>
       </div>
-    </I18nProvider>
+      <div className={styles.time}>
+        <label htmlFor={`${id}-time`}>{timeLabel}</label>
+        <TextField
+          size="lg"
+          type="time"
+          id={`${id}-time`}
+          value={time}
+          onChange={(event) => onChange(`${date}T${event.currentTarget.value}`)}
+          aria-invalid={!!error || undefined}
+          aria-describedby={describedBy}
+        />
+      </div>
+      <span className="sr" id={`${id}-utc`}>UTC</span>
+      {error ? (
+        <span className={styles.error} id={`${id}-error`}>
+          {error}
+        </span>
+      ) : null}
+    </div>
   );
 }

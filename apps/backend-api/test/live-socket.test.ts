@@ -30,7 +30,9 @@ const store = () => ({
   failedRemovals: 0,
 });
 
-function harness(relay?: LiveRelay, redisDown = false, shared = store()) {
+const DEV = { siteOrigin: "https://dev.blast.fun", namespace: "dev" };
+
+function harness(relay?: LiveRelay, redisDown = false, shared = store(), extraSites = [DEV]) {
   const { burned, ipSets } = shared;
   const ipSet = (key: string) => ipSets.get(key) ?? ipSets.set(key, new Set()).get(key)!;
   const subs: Sub[] = [];
@@ -50,6 +52,7 @@ function harness(relay?: LiveRelay, redisDown = false, shared = store()) {
     siteOrigin: ORIGIN,
     gatewaySecret: SECRET,
     namespace: "test",
+    extraSites,
     ingress: { mode: "direct" },
     relay: fake,
     redis: {
@@ -70,8 +73,10 @@ function harness(relay?: LiveRelay, redisDown = false, shared = store()) {
         // EVALSHA admitScript: KEYS ticket, IP sockets, IP opens; ARGV ttl, id, socket cap, opens cap, life.
         assert.equal(args[0], "EVALSHA");
         const [ticketKey, socketsKey, opensKey, , id, socketCap, opensCap] = args.slice(3);
-        assert.match(ticketKey!, /^test:live-ticket:/);
-        assert.match(socketsKey!, /^test:live-ip:sockets:/);
+        const site = ticketKey!.split(":")[0]!;
+        assert.match(ticketKey!, /^(test|dev):live-ticket:/);
+        assert.equal(socketsKey!, `${site}:live-ip:sockets:${socketsKey!.split(":").at(-1)}`);
+        assert.equal(opensKey!, `${site}:live-ip:opens:${opensKey!.split(":").at(-1)}`);
         const open = ipSet(socketsKey!);
         const opens = ipSet(opensKey!);
         if (open.size >= Number(socketCap) || opens.size >= Number(opensCap)) {
@@ -115,7 +120,7 @@ function harness(relay?: LiveRelay, redisDown = false, shared = store()) {
     });
     return { ws, messages, closed, opened };
   };
-  return { live, server, subs, open, url };
+  return { live, server, subs, open, url, burned };
 }
 
 const until = async (check: () => boolean, ms = 1_000) => {
@@ -302,5 +307,44 @@ test("per-IP socket and open counts are shared by every instance", async () => {
   } finally {
     a.server.stop(true);
     b.server.stop(true);
+  }
+});
+
+test("an extra site opens with its own ticket origin and namespace; others stay refused", async () => {
+  const devTicket = () => mintLiveTicket(SECRET, DEV.siteOrigin).ticket;
+  const unset = harness(undefined, false, store(), []);
+  try {
+    assert.equal(
+      await unset.open(`pool=${pool(1)}`, devTicket(), DEV.siteOrigin).opened,
+      false,
+      "unset: only the primary origin upgrades",
+    );
+  } finally {
+    unset.server.stop(true);
+  }
+  const { server, open, burned } = harness();
+  try {
+    const dev = open(`pool=${pool(1)}`, devTicket(), DEV.siteOrigin);
+    assert.equal(await dev.opened, true);
+    await until(() => [...burned].some((key) => key.startsWith("dev:live-ticket:")));
+    assert.equal(
+      (await open(`pool=${pool(1)}`, mintLiveTicket(SECRET, ORIGIN).ticket, DEV.siteOrigin).closed)
+        .code,
+      LIVE_CLOSE.ticket,
+      "a primary ticket is not valid on the dev origin",
+    );
+    assert.equal(
+      (await open(`pool=${pool(1)}`, devTicket(), ORIGIN).closed).code,
+      LIVE_CLOSE.ticket,
+      "a dev ticket is not valid on the primary origin",
+    );
+    assert.equal(await open(`pool=${pool(1)}`, devTicket(), "https://evil.test").opened, false);
+    const primary = open(`pool=${pool(2)}`);
+    assert.equal(await primary.opened, true);
+    await until(() => [...burned].some((key) => key.startsWith("test:live-ticket:")));
+    dev.ws.close();
+    primary.ws.close();
+  } finally {
+    server.stop(true);
   }
 });

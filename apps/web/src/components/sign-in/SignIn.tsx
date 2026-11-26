@@ -1,6 +1,5 @@
 "use client";
 
-import { useLogin, useLoginWithOAuth, usePrivy } from "@privy-io/react-auth";
 import Link from "next/link";
 import { SIGN_IN_DRAFT_EVENT } from "#web/components/social/sign-in-draft.ts";
 import { redirect } from "next/navigation";
@@ -10,13 +9,14 @@ import { Button } from "#web/components/blast-ui/Button.tsx";
 import { GoogleLogo, HelmetMark, MahaloLogo, NightlyLogo, ScallopLogo, SlushLogo, WalletIcon, XLogo } from "#web/components/blast-ui/Icons.tsx";
 import { Sheet, SheetClose, SheetHeading } from "#web/components/blast-ui/Sheet.tsx";
 import { useShellAction } from "#web/components/blast-ui/shell-actions.tsx";
+import { startPrivy, usePrivyLoginEvents, usePrivySession } from "#web/components/auth/privy-session.ts";
 import { usePreparePrivyWalletPicker } from "#web/components/auth/privy-wallet-picker.ts";
 import { usePrivySessionMounted } from "#web/components/presale/providers/PrivySessionProvider.tsx";
 import { useSocialViewer } from "#web/components/social/SignInGate.tsx";
 import { useWalletSession } from "#web/components/social/WalletSession.tsx";
 
 import styles from "./SignIn.module.css";
-import { isSuiSignInMethod, methodsDisabled, oauthErrorState, PRIVY_OAUTH_PROVIDERS, PRIVY_WALLET_LOGIN, SIGN_IN_ATTEMPT_STORAGE_KEY, SIGN_IN_IDLE, SIGN_IN_METHOD_LABELS, SIGN_IN_METHOD_NAMES, SIGN_IN_METHODS, SIGN_IN_READY_TIMEOUT_MS, SUI_SIGN_IN_METHODS, SUI_WALLET_INSTALL_URLS, signInMessage, storedAttempt, waitingMethod, walletLoginErrorState, type SignInMethod, type SignInState } from "./sign-in-flow";
+import { isSuiSignInMethod, methodsDisabled, oauthErrorState, PRIVY_OAUTH_PROVIDERS, PRIVY_WALLET_LOGIN, SIGN_IN_ATTEMPT_STORAGE_KEY, SIGN_IN_IDLE, SIGN_IN_METHOD_LABELS, SIGN_IN_METHOD_NAMES, SIGN_IN_METHODS, SUI_SIGN_IN_METHODS, SUI_WALLET_INSTALL_URLS, signInMessage, storedAttempt, waitingMethod, walletLoginErrorState, type SignInMethod, type SignInState } from "./sign-in-flow";
 
 type SuiWalletSignerModule = typeof import("./sui-wallet-signer");
 let suiWalletSignerModule: SuiWalletSignerModule | null = null;
@@ -152,58 +152,40 @@ function writeAttempt(method: SignInMethod | null): void {
 function useSignInFlow(
   onReturn: (outcome: Readonly<{ signedIn: true; method: SignInMethod } | { signedIn: false; state: SignInState }>) => void,
 ): SignInFlow {
-  const { ready } = usePrivy();
+  const { load } = usePrivySession();
   const viewer = useSocialViewer();
   const wallet = useWalletSession();
   const [state, setState] = useState<SignInState>(SIGN_IN_IDLE);
-  const live = useRef({ ready, onReturn });
+  const live = useRef({ onReturn });
   useEffect(() => {
-    live.current = { ready, onReturn };
+    live.current = { onReturn };
   });
 
-  const { initOAuth } = useLoginWithOAuth({
-    onComplete: ({ wasAlreadyAuthenticated }) => {
+  // Privy's login events are shared by every flow: only a wallet login this sheet opened is answered.
+  const walletLoginOpen = useRef(false);
+  usePrivyLoginEvents((event) => {
+    if (event.kind === "oauth") {
       const method = readAttempt();
       writeAttempt(null);
-      if (method && !wasAlreadyAuthenticated) live.current.onReturn({ signedIn: true, method });
-    },
-    onError: (code) => {
+      if (method && !event.wasAlreadyAuthenticated) live.current.onReturn({ signedIn: true, method });
+    } else if (event.kind === "oauth-error") {
       const method = readAttempt();
       writeAttempt(null);
       if (!method) return;
-      const next = oauthErrorState(method, String(code));
+      const next = oauthErrorState(method, event.code);
       setState(next);
       live.current.onReturn({ signedIn: false, state: next });
-    },
-  });
-
-  // EVM and Solana wallets: Privy's own wallet list (OA-12).
-  // Privy's login events are shared by every flow: only a wallet login this sheet opened is answered.
-  const walletLoginOpen = useRef(false);
-  const { login } = useLogin({
-    onComplete: ({ wasAlreadyAuthenticated, loginMethod }) => {
-      if (!walletLoginOpen.current || wasAlreadyAuthenticated || (loginMethod !== "siwe" && loginMethod !== "siws")) return;
+    } else if (event.kind === "login") {
+      // EVM and Solana wallets: Privy's own wallet list (OA-12).
+      if (!walletLoginOpen.current || event.wasAlreadyAuthenticated || (event.loginMethod !== "siwe" && event.loginMethod !== "siws")) return;
       walletLoginOpen.current = false;
       live.current.onReturn({ signedIn: true, method: "wallet" });
-    },
-    onError: (code) => {
+    } else {
       if (!walletLoginOpen.current) return;
       walletLoginOpen.current = false;
-      setState(walletLoginErrorState(String(code)));
-    },
+      setState(walletLoginErrorState(event.code));
+    }
   });
-
-  /** Polls `done` every 100 ms until it is true (answers true) or `timeoutMs` passes (false). */
-  const waitFor = (done: () => boolean, timeoutMs: number) =>
-    new Promise<boolean>((resolve) => {
-      const started = Date.now();
-      const tick = () => {
-        if (done()) resolve(true);
-        else if (Date.now() - started >= timeoutMs) resolve(false);
-        else window.setTimeout(tick, 100);
-      };
-      tick();
-    });
 
   const start = useCallback(
     (method: SignInMethod) => {
@@ -226,26 +208,30 @@ function useSignInFlow(
           live.current.onReturn({ signedIn: true, method });
           return;
         }
-        if (!(await waitFor(() => live.current.ready, SIGN_IN_READY_TIMEOUT_MS))) {
+        // Privy's SDK loads with the first sign-in; the pressed method waits up to 15 s for it to start.
+        let privy;
+        try {
+          privy = await startPrivy(load);
+        } catch {
           setState({ status: "stalled" });
           return;
         }
         if (method === "wallet") {
           walletLoginOpen.current = true;
-          login({ ...PRIVY_WALLET_LOGIN, loginMethods: [...PRIVY_WALLET_LOGIN.loginMethods] });
+          privy.login({ ...PRIVY_WALLET_LOGIN, loginMethods: [...PRIVY_WALLET_LOGIN.loginMethods] });
           return;
         }
         document.dispatchEvent(new Event(SIGN_IN_DRAFT_EVENT));
         writeAttempt(method);
         try {
-          await initOAuth({ provider: PRIVY_OAUTH_PROVIDERS[method] });
+          await privy.initOAuth({ provider: PRIVY_OAUTH_PROVIDERS[method] });
         } catch {
           writeAttempt(null);
           setState({ status: "failed", method });
         }
       })();
     },
-    [initOAuth, login, wallet],
+    [load, wallet],
   );
 
   const reset = useCallback(() => setState(SIGN_IN_IDLE), []);

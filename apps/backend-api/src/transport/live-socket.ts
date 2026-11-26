@@ -14,6 +14,7 @@ import {
 import { POOL_KEY } from "@blast/core/modules/launchpad-contract/venues.ts";
 import type { HintSink, HintSubscription } from "@blast/server/lib/hint-subscription.ts";
 import type { Server, ServerWebSocket, WebSocketHandler } from "bun";
+import type { TrustedSite } from "./contracts.ts";
 import { randomUUID } from "node:crypto";
 
 /**
@@ -89,6 +90,8 @@ export type LiveSocketOptions = Readonly<{
   siteOrigin: string;
   gatewaySecret: string;
   namespace: string;
+  /** Other trusted sites: a socket's Origin picks its site, its ticket origin and its namespace. */
+  extraSites?: readonly TrustedSite[];
   /** The private-replay Redis: ticket nonces are burned here. */
   redis: RedisCommands;
   ingress: IngressTrust;
@@ -99,6 +102,8 @@ export type LiveSocketOptions = Readonly<{
 
 export type LiveSocketData = {
   ticket: string;
+  /** The trusted site this socket's Origin matched. */
+  site: TrustedSite;
   url: URL;
   rateKey: string;
   /** This socket's member in the shared per-IP set, once Redis admitted it. */
@@ -179,8 +184,12 @@ export function createLiveSocket(options: LiveSocketOptions) {
   let retry: ReturnType<typeof setTimeout> | undefined;
   let stopped = false;
 
-  const ipKey = (rateKey: string, kind: "sockets" | "opens") =>
-    `${options.namespace}:live-ip:${kind}:${rateKey}`;
+  const sites: readonly TrustedSite[] = [
+    { siteOrigin: options.siteOrigin, namespace: options.namespace },
+    ...(options.extraSites ?? []),
+  ];
+  const ipKey = (data: LiveSocketData, kind: "sockets" | "opens") =>
+    `${data.site.namespace}:live-ip:${kind}:${data.rateKey}`;
   const address = (key: string) => {
     let entry = addresses.get(key);
     if (!entry) {
@@ -252,7 +261,7 @@ export function createLiveSocket(options: LiveSocketOptions) {
   }
 
   const unclaim = (data: LiveSocketData) => {
-    forget(ipKey(data.rateKey, "sockets"), data.id);
+    forget(ipKey(data, "sockets"), data.id);
     void flush();
   };
 
@@ -336,9 +345,9 @@ export function createLiveSocket(options: LiveSocketOptions) {
       result = await admitScript(
         options.redis,
         [
-          `${options.namespace}:live-ticket:${ticket.nonce}`,
-          ipKey(data.rateKey, "sockets"),
-          ipKey(data.rateKey, "opens"),
+          `${data.site.namespace}:live-ticket:${ticket.nonce}`,
+          ipKey(data, "sockets"),
+          ipKey(data, "opens"),
         ],
         [
           String(Math.max(1, ticket.expiresAtMs - Date.now())),
@@ -364,7 +373,7 @@ export function createLiveSocket(options: LiveSocketOptions) {
 
   async function admit(ws: Socket) {
     const data = ws.data;
-    const ticket = verifyLiveTicket(options.gatewaySecret, data.ticket, options.siteOrigin);
+    const ticket = verifyLiveTicket(options.gatewaySecret, data.ticket, data.site.siteOrigin);
     data.ticket = "";
     if (!ticket) {
       return shut(ws, LIVE_CLOSE.ticket);
@@ -466,7 +475,8 @@ export function createLiveSocket(options: LiveSocketOptions) {
       } catch {
         return forbidden();
       }
-      if (host !== options.host || request.headers.get("origin") !== options.siteOrigin) {
+      const site = sites.find(({ siteOrigin }) => siteOrigin === request.headers.get("origin"));
+      if (host !== options.host || !site) {
         return forbidden();
       }
       const offered = (request.headers.get("sec-websocket-protocol") ?? "")
@@ -494,6 +504,7 @@ export function createLiveSocket(options: LiveSocketOptions) {
       const tickets = offered.filter((value) => value.startsWith(LIVE_SOCKET.ticketPrefix));
       const data: LiveSocketData = {
         ticket: tickets.length === 1 ? tickets[0]!.slice(LIVE_SOCKET.ticketPrefix.length) : "",
+        site,
         url: new URL(request.url),
         rateKey: client.rateKey,
         id: "",

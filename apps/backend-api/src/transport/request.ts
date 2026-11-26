@@ -5,6 +5,7 @@ import {
   INTERNAL_READ_PREFIX,
   stripGatewayHeaders,
   verifyGatewayRequest,
+  type GatewayContext,
 } from "@blast/core/modules/backend-api/gateway.ts";
 import {
   OPERATOR_METHODS,
@@ -81,13 +82,17 @@ export async function authenticate(
   if (operator && suppliedGateway) {
     return null;
   }
-  const gateway = suppliedGateway
-    ? verifyGatewayRequest(request, options.gatewaySecret, options.namespace)
-    : null;
-  if (
-    (suppliedGateway && !gateway) ||
-    (new URL(request.url).pathname.startsWith(INTERNAL_READ_PREFIX + "/") && !gateway)
-  ) {
+  const firstPartyRead = new URL(request.url).pathname.startsWith(INTERNAL_READ_PREFIX + "/");
+  // Partner proofs keep the primary namespace; an extra site relays first-party reads only.
+  const namespaces = [
+    options.namespace,
+    ...(firstPartyRead ? (options.extraSites ?? []).map((site) => site.namespace) : []),
+  ];
+  let gateway: GatewayContext | null = null;
+  for (const namespace of suppliedGateway ? namespaces : []) {
+    gateway ??= verifyGatewayRequest(request, options.gatewaySecret, namespace);
+  }
+  if (!gateway && (suppliedGateway || firstPartyRead)) {
     return null;
   }
   signal.throwIfAborted();
