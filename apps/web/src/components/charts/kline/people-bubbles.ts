@@ -5,8 +5,7 @@ import { tradeWalletLabels, WALLET_LABELS, type WalletLabel } from "#web/compone
 import { shiftDecimal } from "#web/components/launchpad/coin/coin-format.ts";
 import type { Bar } from "./kline-model.ts";
 
-/** One trade by one wallet: when, which way, its USD size when known, and its wallet tags. */
-/** `id` is the activity row's position, unique per event. */
+/** One trade by one wallet: when, which way, its USD size when known, and its wallet tags. `id` is the activity row's position, unique per event. */
 export type PersonTrade = Readonly<{ id: string; address: string; timestampMs: number; side: "buy" | "sell"; usd: number | null; labels: readonly WalletLabel[] }>;
 
 /** One wallet on one bar: everything it bought and sold there. `bought`/`sold` are USD, null when a trade's size is unknown. */
