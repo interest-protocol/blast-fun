@@ -31,7 +31,7 @@ import type { FeedItemActor } from "@blast/core/modules/social/contracts/items.t
  * the replica through `chain_read_v1` views, and one viewer read on the
  * primary for the Following source.
  *
- * - `GET /api/social/home?window=&sort=&stage=&page=&limit=&min_participants=&age=&tradable=`:
+ * - `GET /api/social/home?window=&sort=&stage=&page=&limit=&min_participants=&age=&tradable=&known_deployer=`:
  *   Discover, one page of coins (`page` is 1-based over the ranked list;
  *   `limit` rows per page; the answer carries `page`, `pages` and `total`;
  *   `cursor=` still names a keyset page for older readers). JSON Schema
@@ -391,6 +391,8 @@ export type HomeQuery = Readonly<{
   age: HomeAge;
   /** Only coins that trade in the app. */
   tradable: boolean;
+  /** Only coins with the Known deployer badge (`verified_team`). */
+  knownDeployer: boolean;
   limit: number;
   /** The page asked for, 1-based; ignored behind a cursor. */
   page: number;
@@ -408,6 +410,7 @@ export const HOME_DEFAULT_QUERY: HomeQuery = Object.freeze({
   minParticipants: 0,
   age: "all",
   tradable: false,
+  knownDeployer: false,
   limit: HOME_PAGE_DEFAULT,
   page: 1,
   cursor: null,
@@ -437,6 +440,7 @@ function setFilterParams(params: URLSearchParams, query: Partial<HomeQuery>) {
   if (query.age !== undefined && query.age !== "all")
     params.set("age", query.age);
   if (query.tradable) params.set("tradable", "1");
+  if (query.knownDeployer) params.set("known_deployer", "1");
   if (query.presales && (query.sort ?? HOME_DEFAULT_SORT) === "relevant")
     params.set(HOME_PRESALES_PARAM, "1");
 }

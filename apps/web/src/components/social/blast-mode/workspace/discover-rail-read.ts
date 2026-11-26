@@ -5,8 +5,7 @@ import { useQuery, type QueryFunction, type QueryFunctionContext, type SkipToken
 import type { HomeCoinsPage } from "@blast/core/web/contracts/home.ts";
 import { useAppQueryClient } from "#web/lib/query/provider.tsx";
 import { discoverQuery } from "../../coin-home/home-client";
-import type { HomeViewState } from "../../coin-home/home-state";
-import { workspaceDiscoverQuery } from "./coin-row-model";
+import { workspaceDiscoverQuery, workspaceViewState } from "./coin-row-model";
 import { useWorkspace } from "./workspace-context";
 
 function railRead<Data, Key extends readonly unknown[]>(options: { queryKey: Key; queryFn?: QueryFunction<Data, Key> | SkipToken }) {
@@ -24,8 +23,7 @@ export function useDiscoverRailCoins(enabled: boolean) {
   const { snapshot } = useWorkspace();
   const client = useAppQueryClient();
   const controls = snapshot.data.controls.Coins;
-  const state: HomeViewState = { ...controls, stage: "all", minParticipants: controls.min_participants };
-  const options = discoverQuery(workspaceDiscoverQuery(state, controls.rows));
+  const options = discoverQuery(workspaceDiscoverQuery(workspaceViewState(controls), controls.rows));
   return useQuery<HomeCoinsPage>(
     {
       enabled: enabled && controls.source === "discover",

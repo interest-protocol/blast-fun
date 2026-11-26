@@ -297,7 +297,7 @@ export function DiscoverList({ query, initial, props, freshness }: Readonly<{ qu
 type DiscoverEmptyProps = Readonly<{ query: HomeQuery; onReset?: () => void; compact?: boolean }>;
 
 export function DiscoverEmpty({ query, onReset, compact }: DiscoverEmptyProps) {
-  const filtered = query.minParticipants > 0 || query.age !== "all" || query.tradable;
+  const filtered = query.minParticipants > 0 || query.age !== "all" || query.tradable || query.knownDeployer;
   if (!filtered) return <DiscoverCatalogEmpty compact={compact} stage={query.stage} />;
   return <FilteredDiscoverEmpty compact={compact} onReset={onReset} query={query} />;
 }
@@ -315,7 +315,7 @@ function DiscoverCatalogEmpty({ compact, stage }: Readonly<{ compact?: boolean; 
 
 function FilteredDiscoverEmpty({ query, onReset, compact }: DiscoverEmptyProps) {
   const client = useAppQueryClient();
-  const unfiltered = useQuery(discoverQuery({ ...query, minParticipants: 0, age: "all", tradable: false, page: 1, cursor: null }), client);
+  const unfiltered = useQuery(discoverQuery({ ...query, minParticipants: 0, age: "all", tradable: false, knownDeployer: false, page: 1, cursor: null }), client);
   const total = settledHomePage(unfiltered)?.total;
   if (total === 0) return <DiscoverCatalogEmpty compact={compact} stage={query.stage} />;
   return <EmptyState

@@ -255,22 +255,30 @@ test("orders are total and deterministic; paging skips the cursor's position and
 test("filters: unknown data never passes a numeric filter", () => {
   const query = { ...HOME_DEFAULT_QUERY, minParticipants: 2, age: "7d" as const, tradable: true };
   const now = 100 * 86_400_000;
-  assert.equal(passesFilters(query, { participants: 2, launchedMs: now - 86_400_000, tradable: true, listed: true, progressBps: null, nowMs: now }), true);
-  assert.equal(passesFilters(query, { participants: 1, launchedMs: now - 86_400_000, tradable: true, listed: true, progressBps: null, nowMs: now }), false);
-  assert.equal(passesFilters(query, { participants: 2, launchedMs: null, tradable: true, listed: true, progressBps: null, nowMs: now }), false);
-  assert.equal(passesFilters(query, { participants: 2, launchedMs: now - 8 * 86_400_000, tradable: true, listed: true, progressBps: null, nowMs: now }), false);
-  assert.equal(passesFilters(query, { participants: 2, launchedMs: now - 86_400_000, tradable: false, listed: true, progressBps: null, nowMs: now }), false);
-  assert.equal(passesFilters(HOME_DEFAULT_QUERY, { participants: 0, launchedMs: null, tradable: false, listed: true, progressBps: null, nowMs: now }), true);
+  assert.equal(passesFilters(query, { participants: 2, launchedMs: now - 86_400_000, tradable: true, knownDeployer: false, listed: true, progressBps: null, nowMs: now }), true);
+  assert.equal(passesFilters(query, { participants: 1, launchedMs: now - 86_400_000, tradable: true, knownDeployer: false, listed: true, progressBps: null, nowMs: now }), false);
+  assert.equal(passesFilters(query, { participants: 2, launchedMs: null, tradable: true, knownDeployer: false, listed: true, progressBps: null, nowMs: now }), false);
+  assert.equal(passesFilters(query, { participants: 2, launchedMs: now - 8 * 86_400_000, tradable: true, knownDeployer: false, listed: true, progressBps: null, nowMs: now }), false);
+  assert.equal(passesFilters(query, { participants: 2, launchedMs: now - 86_400_000, tradable: false, knownDeployer: false, listed: true, progressBps: null, nowMs: now }), false);
+  assert.equal(passesFilters(HOME_DEFAULT_QUERY, { participants: 0, launchedMs: null, tradable: false, knownDeployer: false, listed: true, progressBps: null, nowMs: now }), true);
+});
+
+test("filters: Known deployer only keeps the coins with the badge", () => {
+  const query = { ...HOME_DEFAULT_QUERY, knownDeployer: true };
+  const candidate = { participants: 0, launchedMs: null, tradable: false, knownDeployer: false, listed: true, progressBps: null, nowMs: 0 };
+  assert.equal(passesFilters(query, { ...candidate, knownDeployer: true }), true);
+  assert.equal(passesFilters(query, candidate), false);
+  assert.equal(passesFilters(HOME_DEFAULT_QUERY, candidate), true);
 });
 
 test("the query: defaults, each parameter once, malformed ranges refused rather than clamped", () => {
   assert.deepEqual(parseHomeQuery(new URLSearchParams("")), HOME_DEFAULT_QUERY);
-  assert.deepEqual(parseHomeQuery(new URLSearchParams("window=1h&sort=newest&min_participants=3&age=7d&tradable=1&limit=5&page=4")), { window: "1h", sort: "newest", stage: "all", minParticipants: 3, age: "7d", tradable: true, limit: 5, page: 4, cursor: null });
+  assert.deepEqual(parseHomeQuery(new URLSearchParams("window=1h&sort=newest&min_participants=3&age=7d&tradable=1&known_deployer=1&limit=5&page=4")), { window: "1h", sort: "newest", stage: "all", minParticipants: 3, age: "7d", tradable: true, knownDeployer: true, limit: 5, page: 4, cursor: null });
   assert.equal(parseHomeQuery(new URLSearchParams("limit=50")).limit, 50);
   // `ranked=1` asks for the count; without it the query (and so the answer and cache key) is unchanged.
   assert.equal(parseHomeQuery(new URLSearchParams("sort=trending&ranked=1")).ranked, true);
   assert.equal("ranked" in parseHomeQuery(new URLSearchParams("ranked=0")), false);
-  for (const bad of ["ranked=yes", "ranked=1&ranked=1", "window=2h", "sort=cap", "min_participants=-1", "min_participants=1.5", "min_participants=99999999", "age=1d", "tradable=yes", "limit=0", "limit=51", "limit=abc", "window=1h&window=24h", "cursor=", "page=0", "page=1.5", "page=10000", "page=x", "page=2&cursor=abc"]) {
+  for (const bad of ["ranked=yes", "ranked=1&ranked=1", "window=2h", "sort=cap", "min_participants=-1", "min_participants=1.5", "min_participants=99999999", "age=1d", "tradable=yes", "known_deployer=yes", "known_deployer=1&known_deployer=1", "limit=0", "limit=51", "limit=abc", "window=1h&window=24h", "cursor=", "page=0", "page=1.5", "page=10000", "page=x", "page=2&cursor=abc"]) {
     assert.throws(() => parseHomeQuery(new URLSearchParams(bad)), invalid, bad);
   }
 });

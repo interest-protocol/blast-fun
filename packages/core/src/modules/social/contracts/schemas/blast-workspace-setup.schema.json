@@ -812,6 +812,9 @@
                     "expanded_ids"
                   ],
                   "additionalProperties": false
+                },
+                "known_deployer": {
+                  "type": "boolean"
                 }
               },
               "required": [

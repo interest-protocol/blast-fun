@@ -2,6 +2,7 @@ import { isValidStructTag, normalizeStructTag } from "@mysten/sui/utils";
 import type { HomeCoin, HomeQuery, HomeSort } from "@blast/core/web/contracts/home.ts";
 import { discoverQueryOf, type HomeViewState } from "../../coin-home/home-state";
 import type { useWorkspace } from "./workspace-context";
+import type { DataControls } from "@blast/core/modules/social/blast-workspace/setup.ts";
 
 type Snapshot = ReturnType<typeof useWorkspace>["snapshot"];
 
@@ -45,6 +46,11 @@ export function ecosystemSlot(
   const last = Math.max(1, Math.ceil(read.total / limit));
   const page = Math.min(Math.floor(before / limit) + 1, last);
   return read.page === page ? Math.min(before - (page - 1) * limit, count) : null;
+}
+
+/** Blast mode's saved Coins controls as Home's view state: every stage, the saved filters. */
+export function workspaceViewState(controls: DataControls["Coins"]): HomeViewState {
+  return { ...controls, stage: "all", minParticipants: controls.min_participants, knownDeployer: controls.known_deployer === true };
 }
 
 /**

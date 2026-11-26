@@ -149,6 +149,7 @@ export function CoinsListControls({ state, onChange }: ViewProps) {
         {HOME_AGES.map(key => <option key={key} value={key}>{AGE_LABELS[key]}</option>)}
       </SelectField></label>
       <label><Checkbox checked={state.tradable} onChange={event => onChange({ ...state, tradable: event.target.checked })} />Trades in the app only</label>
+      <label><Checkbox checked={state.knownDeployer} onChange={event => onChange({ ...state, knownDeployer: event.target.checked })} />Known deployer only</label>
     </> : null}
     {changed ? <Button onClick={() => onChange(discover ? { ...HOME_DEFAULT_FEED, source: state.source, stage: state.stage, sort: state.sort } : { ...state, window: HOME_DEFAULT_FEED.window })} size="sm">Reset filters</Button> : null}
   </FilterMenu>;

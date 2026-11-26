@@ -34,6 +34,8 @@ export type HomeViewState = Readonly<{
   minParticipants: number;
   age: HomeAge;
   tradable: boolean;
+  /** Only coins with the Known deployer badge. */
+  knownDeployer: boolean;
   /** The list's page, 1-based. */
   page: number;
 }>;
@@ -46,6 +48,7 @@ export const HOME_DEFAULT_VIEW: HomeViewState = Object.freeze({
   minParticipants: 0,
   age: "all",
   tradable: false,
+  knownDeployer: false,
   page: 1,
 });
 
@@ -56,7 +59,7 @@ export const HOME_DEFAULT_FEED: HomeViewState = Object.freeze({ ...HOME_DEFAULT_
 export const MIN_PARTICIPANT_CHOICES = [0, 2, 5, 10] as const;
 
 /** The URL's names: short, stable, nothing a reader would mistake for data. */
-const KEYS = { source: "src", stage: "stage", sort: "sort", window: "w", minParticipants: "min", age: "age", tradable: "tradable", page: "page" } as const;
+const KEYS = { source: "src", stage: "stage", sort: "sort", window: "w", minParticipants: "min", age: "age", tradable: "tradable", knownDeployer: "known", page: "page" } as const;
 
 export function hasHomeViewSearch(params: URLSearchParams): boolean {
   return Object.values(KEYS).some((key) => params.has(key));
@@ -83,6 +86,7 @@ export function viewStateOf(params: URLSearchParams): HomeViewState {
     minParticipants,
     age: isHomeAge(age) ? age : HOME_DEFAULT_VIEW.age,
     tradable: params.get(KEYS.tradable) === "1",
+    knownDeployer: params.get(KEYS.knownDeployer) === "1",
   };
   const page = pageOf(params.get(KEYS.page));
   return {
@@ -113,18 +117,19 @@ export function viewSearchOf(state: HomeViewState): string {
   if (state.minParticipants !== 0) params.set(KEYS.minParticipants, String(state.minParticipants));
   if (state.age !== "all") params.set(KEYS.age, state.age);
   if (state.tradable) params.set(KEYS.tradable, "1");
+  if (state.knownDeployer) params.set(KEYS.knownDeployer, "1");
   if (state.page > 1) params.set(KEYS.page, String(state.page));
   const text = params.toString();
   return text ? `?${text}` : "";
 }
 
-function hasRankedQueryFields(state: Pick<HomeViewState, "age" | "minParticipants" | "tradable" | "page" | "window">): boolean {
+function hasRankedQueryFields(state: Pick<HomeViewState, "age" | "minParticipants" | "tradable" | "knownDeployer" | "page" | "window">): boolean {
   return state.page > 1 || activeFilterCount(state) > 0 || state.window !== HOME_DEFAULT_VIEW.window;
 }
 
 /** Whether two states show the same list apart from its page (a new list starts on page 1; see `withView`). */
 export function sameListView(a: HomeViewState, b: HomeViewState): boolean {
-  return a.source === b.source && a.stage === b.stage && a.sort === b.sort && a.window === b.window && a.minParticipants === b.minParticipants && a.age === b.age && a.tradable === b.tradable;
+  return a.source === b.source && a.stage === b.stage && a.sort === b.sort && a.window === b.window && a.minParticipants === b.minParticipants && a.age === b.age && a.tradable === b.tradable && a.knownDeployer === b.knownDeployer;
 }
 
 /** The next state for a change: any change but the page itself starts the list on page 1. */
@@ -140,12 +145,12 @@ export function withView(current: HomeViewState, next: HomeViewState): HomeViewS
  * they ask for the same URL.
  */
 export function discoverQueryOf(state: HomeViewState, rows: number = HOME_PAGE_DEFAULT): HomeQuery {
-  return { ...HOME_DEFAULT_QUERY, stage: state.stage, sort: state.sort, window: state.window, minParticipants: state.minParticipants, age: state.age, tradable: state.tradable, limit: rows, page: state.page, presales: true };
+  return { ...HOME_DEFAULT_QUERY, stage: state.stage, sort: state.sort, window: state.window, minParticipants: state.minParticipants, age: state.age, tradable: state.tradable, knownDeployer: state.knownDeployer, limit: rows, page: state.page, presales: true };
 }
 
 /** How many filters are away from their default (the Filters button's badge). */
-export function activeFilterCount(state: Pick<HomeViewState, "age" | "minParticipants" | "tradable">): number {
-  return (state.minParticipants !== 0 ? 1 : 0) + (state.age !== "all" ? 1 : 0) + (state.tradable ? 1 : 0);
+export function activeFilterCount(state: Pick<HomeViewState, "age" | "minParticipants" | "tradable" | "knownDeployer">): number {
+  return (state.minParticipants !== 0 ? 1 : 0) + (state.age !== "all" ? 1 : 0) + (state.tradable ? 1 : 0) + (state.knownDeployer ? 1 : 0);
 }
 
 /** Whether the sort and the filters apply: Discover only (Following and the Watchlist have their own order). */

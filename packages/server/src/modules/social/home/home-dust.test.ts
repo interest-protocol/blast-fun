@@ -115,7 +115,7 @@ test("a cursor carries progress, market cap and last trade, and the idle bit (ve
 });
 
 test("stages: almost needs a known progress of 60% or more; graduated needs a DEX listing", () => {
-  const candidate = { participants: 0, launchedMs: null, tradable: false, listed: false, progressBps: null as number | null, nowMs: 0 };
+  const candidate = { participants: 0, launchedMs: null, tradable: false, knownDeployer: false, listed: false, progressBps: null as number | null, nowMs: 0 };
   const almost = { ...HOME_DEFAULT_QUERY, stage: "almost" as const };
   const graduated = { ...HOME_DEFAULT_QUERY, stage: "graduated" as const };
   assert.equal(passesFilters(almost, { ...candidate, progressBps: HOME_ALMOST_GRADUATED_BPS }), true);
