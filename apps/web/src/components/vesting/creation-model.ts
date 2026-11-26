@@ -250,7 +250,8 @@ export function regularCheckpointReleases(
   const amounts = splitReleaseAtoms(total, Number(count));
   return amounts.map((amount, index) => {
     const time = start + interval * BigInt(index + 1);
-    if (time > 8_640_000_000_000_000n)
+    // releaseTimestamp reads four-digit years only, so stop before 10000-01-01T00:00Z.
+    if (time >= 253_402_300_800_000n)
       throw new CreationFieldError("periods", "Choose a shorter schedule.");
     return {
       key: `regular-${index}`,

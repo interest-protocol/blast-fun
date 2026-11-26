@@ -201,6 +201,12 @@ test("generated checkpoint dates are exact UTC instants", () => {
     assert.equal(releaseTimestamp(release.date, "date"), start + DAY * BigInt(i + 1)),
   );
 });
+test("generated checkpoints stop before year 10000, which dates cannot be written in", () => {
+  fieldError(
+    () => regularCheckpointReleases({ ...draft, start: "9999-12-31T12:00", periodDays: "1", periods: "1" }, 1n),
+    "periods",
+  );
+});
 test("custom schedules use exact cumulative atoms and preserve input when validation fails", () => {
   const custom = {
     ...draft,

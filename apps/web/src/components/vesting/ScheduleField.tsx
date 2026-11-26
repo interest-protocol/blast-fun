@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { DayPicker } from "react-day-picker";
+import { DayPicker, type DropdownProps } from "react-day-picker";
+import { Button } from "#web/components/blast-ui/Button.tsx";
 import { Popover, PopoverSurface } from "#web/components/blast-ui/Popover.tsx";
-import { TextField } from "#web/components/blast-ui/TextField.tsx";
+import { SelectField, TextField } from "#web/components/blast-ui/TextField.tsx";
 import styles from "./ScheduleField.module.css";
 
 const dayText = new Intl.DateTimeFormat("en-GB", {
@@ -28,6 +29,19 @@ function calendarDay(date: string): Date | undefined {
 function dateText(day: Date): string {
   const pad = (value: number) => String(value).padStart(2, "0");
   return `${String(day.getFullYear()).padStart(4, "0")}-${pad(day.getMonth() + 1)}-${pad(day.getDate())}`;
+}
+
+/** DayPicker's month and year dropdowns, drawn by the shared select. */
+function CalendarSelect({ options, value, onChange, disabled, "aria-label": ariaLabel }: DropdownProps) {
+  return (
+    <SelectField size="sm" value={value} onChange={onChange} disabled={disabled} aria-label={ariaLabel}>
+      {options?.map(({ value, label, disabled }) => (
+        <option key={value} value={value} disabled={disabled}>
+          {label}
+        </option>
+      ))}
+    </SelectField>
+  );
 }
 
 export function ScheduleField({
@@ -63,8 +77,8 @@ export function ScheduleField({
         <label htmlFor={id} id={`${id}-label`}>{label}</label>
         <Popover.Root open={open} onOpenChange={setOpen}>
           <Popover.Trigger
+            render={<Button size="md" className={styles.trigger} />}
             id={id}
-            className={styles.trigger}
             aria-labelledby={`${id}-label ${id}-value`}
             aria-describedby={describedBy}
             data-invalid={error ? "" : undefined}
@@ -93,6 +107,7 @@ export function ScheduleField({
           >
             <DayPicker
               mode="single"
+              required
               autoFocus
               today={today}
               selected={selected}
@@ -103,6 +118,8 @@ export function ScheduleField({
               }}
               weekStartsOn={1}
               captionLayout="dropdown"
+              navLayout="after"
+              components={{ Dropdown: CalendarSelect }}
               startMonth={new Date(Math.min(year - 1, selected?.getFullYear() ?? year), 0)}
               endMonth={new Date(Math.max(year + 100, selected?.getFullYear() ?? year), 11)}
               classNames={{
@@ -111,9 +128,6 @@ export function ScheduleField({
                 month: styles.month,
                 month_caption: styles.caption,
                 dropdowns: styles.dropdowns,
-                dropdown_root: styles.dropdownRoot,
-                dropdown: styles.dropdown,
-                caption_label: styles.captionLabel,
                 nav: styles.nav,
                 button_previous: styles.navButton,
                 button_next: styles.navButton,
