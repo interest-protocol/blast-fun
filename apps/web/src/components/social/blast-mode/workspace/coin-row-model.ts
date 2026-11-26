@@ -48,15 +48,15 @@ export function ecosystemSlot(
   return read.page === page ? Math.min(before - (page - 1) * limit, count) : null;
 }
 
-/**
- * Blast mode Discover's read. Trending also asks for `ranked` (`ecosystemSlot`); the collapsed rail reads the same query, so both share one cache entry.
- * Presales not trading yet stay out: Blast mode lists them in its own Presales panel.
- */
 /** Blast mode's saved Coins controls as Home's view state: every stage, the saved filters. */
 export function workspaceViewState(controls: DataControls["Coins"]): HomeViewState {
   return { ...controls, stage: "all", minParticipants: controls.min_participants, knownDeployer: controls.known_deployer === true };
 }
 
+/**
+ * Blast mode Discover's read. Trending also asks for `ranked` (`ecosystemSlot`); the collapsed rail reads the same query, so both share one cache entry.
+ * Presales not trading yet stay out: Blast mode lists them in its own Presales panel.
+ */
 export function workspaceDiscoverQuery(state: HomeViewState, rows: number): HomeQuery {
   const query: HomeQuery = { ...discoverQueryOf(state, rows), presales: false };
   return query.sort === "trending" ? { ...query, ranked: true } : query;
