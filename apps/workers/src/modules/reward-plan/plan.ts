@@ -21,9 +21,14 @@ export const frozenSchema = z.object({
   globalWeight: z.string().regex(/^[0-9]+$/), qualifiers: z.number().int().min(0),
   sourceEvidence: z.record(z.string(), z.unknown()),
   // Published plans from earlier policies must retain their original commitment.
-  payoutPolicy: z.enum(["both-assets-to-holders", "combined-value-to-holders"]).optional(),
+  payoutPolicy: z.enum(["both-assets-to-holders", "combined-value-to-holders", "no-minimum"]).optional(),
 });
 export type Frozen = z.infer<typeof frozenSchema>;
+
+export function hasHolderAllocation(policy: Frozen["payoutPolicy"], memeAmount: string, quoteAmount: string): boolean {
+  return quoteAmount !== "0" || (policy === "no-minimum" && memeAmount !== "0");
+}
+
 export type Plan = {
   plan_id: string; period_id: string; number: string; stage: string; inputs: unknown;
   manifest: unknown; storage_url: string | null; storage_hash: string | null;

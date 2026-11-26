@@ -10,7 +10,7 @@ import { adminCapReference } from "#workers/modules/worker-runtime/admin.ts";
 import { sendOnce } from "#workers/modules/worker-runtime/attempt.ts";
 import { readDigestOutcome } from "#workers/modules/worker-runtime/outcome.ts";
 import { ProviderUnavailable } from "#workers/modules/worker-runtime/provider.ts";
-import { frozenSchema, json, planCommitment, readPlan, type Frozen, type Plan, type Cut, PAGE_SIZE, CLAIM_WINDOW_MS } from "#workers/modules/reward-plan/plan.ts";
+import { frozenSchema, hasHolderAllocation, json, planCommitment, readPlan, type Frozen, type Plan, type Cut, PAGE_SIZE, CLAIM_WINDOW_MS } from "#workers/modules/reward-plan/plan.ts";
 import { completeCut, MissingRewardHistory } from "#workers/modules/reward-plan/evidence.ts";
 import { manifestReader } from "#workers/modules/reward-plan/manifest-store.ts";
 import { assertAccountLeaves, ObjectBeneficiary, objectAddresses, type CheckIdentities } from "#workers/modules/reward-plan/beneficiaries.ts";
@@ -40,7 +40,7 @@ async function validatePlan(pool: Pool, intent: RewardIntent): Promise<void> {
   const commitment = (p.inputs as Record<string, unknown>).commitment;
   if (!p.storage_verified_at || p.storage_hash !== intent.storageHash || commitment !== expected || f.fingerprint !== intent.fingerprint || f.vaultId !== intent.vault.objectId || f.memeType !== intent.memeType || f.quoteType !== intent.quoteType || f.treasury !== intent.treasury || f.reserve !== intent.reserve || json(m) !== json(intent.manifest)) throw new Error("Reward action differs from its reserved immutable plan.");
   if (intent.kind === "schedule_round" || intent.kind === "publish_round") {
-    if (m.quoteAmount === "0") throw new Error("Reward publication requires a holder Quote payout.");
+    if (!hasHolderAllocation(f.payoutPolicy, m.memeAmount, m.quoteAmount)) throw new Error("Reward publication requires a holder Quote payout.");
     if (!f.payoutPolicy) throw new Error("Reward publication requires a plan under the current payout policy.");
     if (BigInt(m.memeAmount) > BigInt(f.grossMeme)) throw new Error("Reward publication exceeds its frozen Meme budget.");
     const treasuryLeaf = await autocommitRead(pool, "vault-rewards",
