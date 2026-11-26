@@ -27,8 +27,9 @@ export function usePriceTick(node: RefObject<HTMLSpanElement | null>, amount: st
 }
 
 /**
- * A trade on this coin alone, newer than the last one seen, washes the figure if its visible digits changed. The wash
- * is a background, like the chart's last trade, so the figure keeps its own green or red throughout.
+ * A trade on this coin alone, newer than the last one seen, washes the figure if its visible digits changed, or the
+ * cell when it has no figure to compare (a dash, or the first figure after one). The wash is a background, like the
+ * chart's last trade, so the figure keeps its own green or red throughout.
  */
 export function useTradeTick(node: RefObject<HTMLSpanElement | null>, display: string | null, trade: HomeTrade | null) {
   const prior = useRef({ display, at: trade?.at ?? null });
@@ -38,8 +39,8 @@ export function useTradeTick(node: RefObject<HTMLSpanElement | null>, display: s
     const previous = prior.current;
     prior.current = { display, at: trade?.at ?? previous.at };
     const price = node.current;
-    if (!trade || (previous.at !== null && trade.at <= previous.at) || !display || !previous.display ||
-      display === previous.display || !price?.animate || document.visibilityState !== "visible" || instantFeedback()) return;
+    if (!trade || (previous.at !== null && trade.at <= previous.at) || (display !== null && display === previous.display) ||
+      !price?.animate || document.visibilityState !== "visible" || instantFeedback()) return;
     cue(price, pulse, trade.direction, "wash");
   }, [node, display, trade]);
 }

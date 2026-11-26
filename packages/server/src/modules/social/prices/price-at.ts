@@ -10,7 +10,7 @@ export function recentPriceAtSql(coin: string, cutoff: string, requirePositive =
     ORDER BY ph.bucket_ms DESC LIMIT 1`;
 }
 
-/** USD price at the 24h cutoff, optionally shortened to the first priced observation. */
+/** USD price at a window's cutoff: the last price at or before it, optionally shortened to the first priced observation. */
 export function rollingPriceAtSql(coin: string, cutoff: string, windowEnd?: string): string {
   // Prefer the indexer's price at the cutoff even when no trades happened in the preceding hour.
   const prior = `WITH native AS MATERIALIZED (

@@ -438,9 +438,16 @@ test("Home lists opt in to circulating market cap and rolling change from a know
     assert.equal(orbit(await ok<HomeCoinsPage>(await discover("?mobile_market=1"), "home-coins-page"))?.live_inputs, undefined);
     assert.deepEqual(orbit(watchlist)?.mobile_market, expected);
     assert.deepEqual(orbit(followed)?.mobile_market, expected);
-    assert.equal(enriched.coins.find((coin) => coin.presale_id === P.eman)?.mobile_market?.change_1h_bps, null);
+    // EMAN last traded 12 minutes before the hour and again inside it: the hour opens at that earlier price.
+    assert.equal(enriched.coins.find((coin) => coin.presale_id === P.eman)?.mobile_market?.change_1h_bps, 10000);
     assert.equal(enriched.coins.find((coin) => coin.presale_id === P.crowd)?.mobile_market?.change_1h_bps, 0);
     assert.equal(orbit(await ok<HomeCoinsPage>(await discover(), "home-coins-page"))?.mobile_market, undefined);
+    // Quiet for hours before the hour: the indexer's price at the hour's start opens it, for the figure and the stream.
+    const emanType = coinOf(P.eman, "EMAN");
+    await admin.query("DELETE FROM blast_infra_fixture.price_history WHERE coin_type = $1", [emanType]);
+    await admin.query("INSERT INTO blast_infra_fixture.native_coin_prices VALUES ($1, $2, '0.05', $3)", [emanType, hourStart, hourStart - 3 * HOUR]);
+    const quiet = await ok<HomeCoinsByIds>(await coins(`?presale=${P.eman}&mobile_market=1&live_inputs=1`), "home-coins-page");
+    assert.deepEqual([quiet.coins[0]?.mobile_market?.change_1h_bps, quiet.coins[0]?.live_inputs?.open_1h_usd], [30000, "0.05"]);
   }, { cached: true }));
 
 test("Home volume and Trending share a committed, full-window Cetus and Bluefin sum", { skip }, () =>

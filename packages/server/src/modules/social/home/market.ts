@@ -22,7 +22,7 @@ import { fdvOf, outstandingSaleTokensSql, presaleTotalSupply, supplyOf } from "@
 import { HOME_COIN_SOURCES } from "@blast/server/modules/social/home/sources.ts";
 import { readHomeBounds, visibleKinds } from "@blast/server/modules/social/home/sql.ts";
 import { readAsOf } from "@blast/server/modules/social/items/as-of.ts";
-import { recentPriceAtSql, rollingPriceAtSql } from "@blast/server/modules/social/prices/price-at.ts";
+import { rollingPriceAtSql } from "@blast/server/modules/social/prices/price-at.ts";
 
 /**
  * Redesign gaps 1, 2, 8 and 10: one coin's market (`HomeCoinMarket`,
@@ -63,10 +63,9 @@ export function parseMarketCoin(params: URLSearchParams): string {
   return socialParameter(coinSchema, values.length === 1 ? values[0] : null, "coin");
 }
 
+/** Each window opens at the last price at or before its start, however long the coin was quiet before it. */
 function openJoin(index: number, ms: number): string {
-  const start = `$2::bigint - ${ms}`;
-  const price = ms === DAY_MS ? rollingPriceAtSql("c.sale_token", start) : recentPriceAtSql("c.sale_token", start);
-  return `LEFT JOIN LATERAL (${price}) open_${index} ON TRUE`;
+  return `LEFT JOIN LATERAL (${rollingPriceAtSql("c.sale_token", `$2::bigint - ${ms}`)}) open_${index} ON TRUE`;
 }
 
 /**
