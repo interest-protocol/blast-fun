@@ -226,6 +226,8 @@ function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent }: R
   // One wallet step at a time; its pending state is the card's busy state.
   const step = useMutation({
     mutationFn: (work: () => Promise<void>) => work(),
+    // Run now even offline: the quote fails with its copy, instead of pausing and prompting the wallet on reconnect.
+    networkMode: "always",
     onError: (error) => {
       if (rejected(error)) return;
       if (isPausedError(error)) onPaused(error);
@@ -647,7 +649,14 @@ function BridgeRowView({ row, sdk, onArrived, now }: Readonly<{ row: BridgeRow; 
     queryFn: async () => {
       const before = queryClient.getQueryData<TransferStatus>(statusKey)?.state;
       const next = await sdk.status(row.hash);
-      if (next.state === "done" && before !== "done") onArrived(row, next.toAmount);
+      if (next.state === "done" && before !== "done") {
+        // A failing announcement must not fail the read, or its retry would announce again.
+        try {
+          onArrived(row, next.toAmount);
+        } catch (error) {
+          console.error("Bridge arrival announcement failed", error);
+        }
+      }
       return next;
     },
     enabled: watching,
