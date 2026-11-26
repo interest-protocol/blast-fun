@@ -60,7 +60,7 @@ export default async function AppLayout({
       <FeelProvider>
         <PresaleProviders config={config} nonce={nonce}>
           <SocialSession>
-            <BridgeProvider config={bridge}>
+            <BridgeProvider enabled={bridge}>
               {testPricing ? <TestPricingProvider enabled>{shell}</TestPricingProvider> : shell}
             </BridgeProvider>
           </SocialSession>

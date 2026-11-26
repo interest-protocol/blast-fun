@@ -11,7 +11,7 @@ import { concurrencyFromEnvironment } from "@blast/server/lib/concurrency.ts";
 import { parseRelayConfig, type RelayConfig } from "@blast/server/private/relay-config.ts";
 
 import { readPresaleConfig, type PresaleConfig } from "../components/presale/config.ts";
-import { readBridgeConfig, type BridgeConfig } from "../components/social/bridge/bridge-config.ts";
+import { readBridgeEnabled } from "../components/social/bridge/bridge-config.ts";
 import { boostsLinkUrl } from "./launchpad/boosts-link.ts";
 
 type Environment = Readonly<Record<string, string | undefined>>;
@@ -48,8 +48,8 @@ export type WebConfig = Readonly<{
   signingChain: SigningChainConfig | null;
   presaleDeployment: PresaleDeploymentState;
   presale: PresaleConfig;
-  /** `NEXT_PUBLIC_MAYAN_BRIDGE_ENABLED=1` with at least one source RPC; null hides Bridge to Sui. */
-  bridge: BridgeConfig | null;
+  /** `NEXT_PUBLIC_MAYAN_BRIDGE_ENABLED=1`; false hides Bridge to Sui. */
+  bridge: boolean;
   /** `NODE_ENV` is development: the CSP allows the dev server's eval and websocket. */
   development: boolean;
   /** The direct market socket, or null when it is off and tabs have no live stream. */
@@ -78,7 +78,7 @@ export function parseWebConfig(environment: Environment): WebConfig {
     signingChain: configuredSigningChain(environment),
     presaleDeployment: readPresaleDeploymentIdentity(environment),
     presale,
-    bridge: readBridgeConfig(environment, presale),
+    bridge: readBridgeEnabled(environment),
     development: environment.NODE_ENV === "development",
     liveSocket: liveSocketConfig(environment, relay),
   };

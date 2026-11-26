@@ -4,21 +4,19 @@ import { createContext, useContext, type ReactNode } from "react";
 
 import { usePrivySessionMounted } from "#web/components/presale/providers/PrivySessionProvider.tsx";
 
-import type { BridgeConfig } from "./bridge-config.ts";
+const BridgeContext = createContext(false);
 
-const BridgeContext = createContext<BridgeConfig | null>(null);
-
-/** The server's validated Bridge to Sui settings, or null while the flag is off. */
-export function BridgeProvider({ config, children }: Readonly<{ config: BridgeConfig | null; children: ReactNode }>) {
-  return <BridgeContext value={config}>{children}</BridgeContext>;
+/** Whether the server turned Bridge to Sui on. */
+export function BridgeProvider({ enabled, children }: Readonly<{ enabled: boolean; children: ReactNode }>) {
+  return <BridgeContext value={enabled}>{children}</BridgeContext>;
 }
 
 /**
- * The bridge settings when the card can work: the flag is on and Privy is
- * mounted (source wallets connect through Privy). Null hides every Bridge button.
+ * Whether the card can work: the flag is on and Privy is mounted (source
+ * wallets connect through Privy). False hides every Bridge button.
  */
-export function useBridge(): BridgeConfig | null {
-  const config = useContext(BridgeContext);
+export function useBridge(): boolean {
+  const enabled = useContext(BridgeContext);
   const privy = usePrivySessionMounted();
-  return privy ? config : null;
+  return enabled && privy;
 }

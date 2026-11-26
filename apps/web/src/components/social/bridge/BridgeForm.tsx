@@ -23,7 +23,7 @@ import { useDebouncedValue } from "#web/lib/use-debounced-value.ts";
 import coinStyles from "../coins/coins.module.css";
 import { atomsToField, fmtLive } from "../trade/trade-ticket.ts";
 
-import type { BridgeChain, BridgeConfig } from "./bridge-config.ts";
+import { BRIDGE_CHAINS, type BridgeChain } from "./bridge-config.ts";
 import { guardQuote, quoteFacts, type BridgeRequest } from "./bridge-guard.ts";
 import {
   actionDisabled,
@@ -32,7 +32,6 @@ import {
   amountAtoms,
   bridgeAction,
   type BridgeAction,
-  bridgeChains,
   CHAINS,
   DESTINATIONS,
   displayAmount,
@@ -62,7 +61,6 @@ export type BridgeWallets = Readonly<{
 }>;
 
 export type BridgeFormProps = Readonly<{
-  config: BridgeConfig;
   sdk: BridgeSdk;
   wallets: BridgeWallets;
   /** The Blast account's Sui address; null while it loads or when signed out. */
@@ -301,8 +299,8 @@ function noteText(paused: boolean, failed: string | null, quoteError: string | n
 }
 
 /** The chain, coins and amount the user picked; a new coin starts with an empty amount. */
-function useBridgeInputs(chains: readonly BridgeChain[]) {
-  const [chain, setChain] = useState<BridgeChain>(chains[0]!);
+function useBridgeInputs() {
+  const [chain, setChain] = useState<BridgeChain>(BRIDGE_CHAINS[0]);
   const [tokenIndex, setTokenIndex] = useState<0 | 1>(0);
   const [toIndex, setToIndex] = useState<0 | 1>(0);
   const [amount, setAmount] = useState("");
@@ -356,10 +354,9 @@ function formAction({ reads, send, selection, wallet, atoms, paused, signedIn, b
   return { quoteError, action };
 }
 
-export function BridgeForm({ config, sdk, wallets, blastAddress, signedIn, onSignIn, onArrived, now = Date.now }: BridgeFormProps) {
+export function BridgeForm({ sdk, wallets, blastAddress, signedIn, onSignIn, onArrived, now = Date.now }: BridgeFormProps) {
   const id = useId();
-  const chains = bridgeChains(config);
-  const { selection, tokenIndex, toIndex, setToIndex, amount, setAmount, chooseChain, chooseToken } = useBridgeInputs(chains);
+  const { selection, tokenIndex, toIndex, setToIndex, amount, setAmount, chooseChain, chooseToken } = useBridgeInputs();
   const { chain, info, token } = selection;
   const [paused, setPaused] = useState(false);
   const onPaused = useCallback((error: unknown) => {
@@ -392,7 +389,7 @@ export function BridgeForm({ config, sdk, wallets, blastAddress, signedIn, onSig
 
   return (
     <div className={styles.form}>
-      <ChainChoice chain={chain} chains={chains} disabled={locked} onChange={(next) => { chooseChain(next); send.setFailed(null); }} />
+      <ChainChoice chain={chain} disabled={locked} onChange={(next) => { chooseChain(next); send.setFailed(null); }} />
       <div className={styles.panels}>
         <SendPanel
           amount={amount}
@@ -462,8 +459,8 @@ function pressAction(kind: BridgeAction["kind"], handlers: PressHandlers): void 
   }
 }
 
-/** The source chain: four choices, so a menu (a tab row holds three at most). */
-function ChainChoice({ chain, chains, disabled, onChange }: Readonly<{ chain: BridgeChain; chains: readonly BridgeChain[]; disabled: boolean; onChange: (chain: BridgeChain) => void }>) {
+/** The source chain: six choices, so a menu (a tab row holds three at most). */
+function ChainChoice({ chain, disabled, onChange }: Readonly<{ chain: BridgeChain; disabled: boolean; onChange: (chain: BridgeChain) => void }>) {
   const chosen = CHAINS[chain];
   return (
     <BlastMenu
@@ -480,7 +477,7 @@ function ChainChoice({ chain, chains, disabled, onChange }: Readonly<{ chain: Br
       }
     >
       <BlastMenuRadioGroup onValueChange={(next: string) => onChange(next as BridgeChain)} value={chain}>
-        {chains.map((key) => (
+        {BRIDGE_CHAINS.map((key) => (
           <BlastMenuRadioItem closeOnClick className={styles.chainOption} key={key} label={CHAINS[key].label} value={key}>
             <Logo size={24} src={CHAINS[key].logo} />
             <b>{CHAINS[key].label}</b>

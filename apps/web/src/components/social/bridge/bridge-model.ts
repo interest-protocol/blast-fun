@@ -2,8 +2,7 @@ import { USDC_COIN_TYPE } from "@blast/core/lib/sui/coin-types.ts";
 
 import { atomsToField, parseAtoms } from "../trade/trade-ticket.ts";
 
-import type { BridgeChain, BridgeConfig } from "./bridge-config.ts";
-import { BRIDGE_CHAINS } from "./bridge-config.ts";
+import type { BridgeChain } from "./bridge-config.ts";
 
 /** A token people can send from a source chain. `mayan` is the address Mayan quotes it by. */
 export type SourceToken = Readonly<{
@@ -20,11 +19,13 @@ export type ChainInfo = Readonly<{ label: string; logo: string; kind: "evm" | "s
 
 const NATIVE = "0x0000000000000000000000000000000000000000";
 
-/** Local brand marks (public/blast-ui): Ethereum's mark is also ETH's on every EVM chain, Solana's is SOL's. */
+/** Local brand marks (public/blast-ui): Ethereum's mark is also ETH's on every EVM chain, Polygon's is POL's, Solana's is SOL's. */
 const LOGO = {
   base: "/blast-ui/chains/base.svg",
   ethereum: "/blast-ui/chains/ethereum.svg",
   arbitrum: "/blast-ui/chains/arbitrum.svg",
+  optimism: "/blast-ui/chains/optimism.svg",
+  polygon: "/blast-ui/chains/polygon.svg",
   solana: "/blast-ui/chains/solana.svg",
   usdc: "/blast-ui/coins/usdc.svg",
   sui: "/blast-ui/coins/sui.svg",
@@ -43,6 +44,14 @@ export const CHAINS: Readonly<Record<BridgeChain, ChainInfo>> = {
   base: { label: "Base", logo: LOGO.base, kind: "evm", chainId: 8453, tokens: [eth(20_000_000_000_000n), usdc("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913")] },
   ethereum: { label: "Ethereum", logo: LOGO.ethereum, kind: "evm", chainId: 1, tokens: [eth(2_000_000_000_000_000n), usdc("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")] },
   arbitrum: { label: "Arbitrum", logo: LOGO.arbitrum, kind: "evm", chainId: 42161, tokens: [eth(50_000_000_000_000n), usdc("0xaf88d065e77c8cC2239327C5EDb3A432268e5831")] },
+  optimism: { label: "Optimism", logo: LOGO.optimism, kind: "evm", chainId: 10, tokens: [eth(20_000_000_000_000n), usdc("0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85")] },
+  polygon: {
+    label: "Polygon",
+    logo: LOGO.polygon,
+    kind: "evm",
+    chainId: 137,
+    tokens: [{ symbol: "POL", decimals: 18, mayan: NATIVE, native: true, reserve: 300_000_000_000_000_000n, logo: LOGO.polygon }, usdc("0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359")],
+  },
   solana: {
     label: "Solana",
     logo: LOGO.solana,
@@ -58,11 +67,6 @@ export const DESTINATIONS: readonly DestinationToken[] = [
   { symbol: "SUI", decimals: 9, coinType: "0x2::sui::SUI", logo: LOGO.sui },
   { symbol: "USDC", decimals: 6, coinType: USDC_COIN_TYPE, logo: LOGO.usdc },
 ];
-
-/** The chains this deployment has an RPC for, in picker order. */
-export function bridgeChains(config: BridgeConfig): BridgeChain[] {
-  return BRIDGE_CHAINS.filter((chain) => config.rpcs[chain] !== undefined);
-}
 
 /** Typed text as atoms; null when empty, unreadable or zero. */
 export function amountAtoms(text: string, token: SourceToken): bigint | null {

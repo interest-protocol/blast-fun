@@ -70,7 +70,7 @@ export function createContentSecurityPolicy(input: {
   development?: boolean;
   /** The presale's origins for the configured network (`presaleConnectSources`), while it is on. */
   presaleConnectSources?: readonly string[];
-  /** Mayan and the source-chain RPCs (`bridgeConnectSources`), while the Bridge to Sui card is on. */
+  /** Mayan's hosts, its RPC included (`bridgeConnectSources`), while the Bridge to Sui card is on. */
   bridgeConnectSources?: readonly string[];
   /** The direct market socket's origin (`wss://…`), while it is configured. */
   liveSocketOrigin?: string | null;

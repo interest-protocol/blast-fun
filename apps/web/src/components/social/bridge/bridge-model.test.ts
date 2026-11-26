@@ -8,7 +8,6 @@ import {
   actionReason,
   amountAtoms,
   bridgeAction,
-  bridgeChains,
   CHAINS,
   DESTINATIONS,
   exceedsBalance,
@@ -21,11 +20,7 @@ import {
 } from "./bridge-model.ts";
 
 const [ETH, USDC] = CHAINS.base.tokens;
-
-test("only chains with an RPC are offered, in picker order", () => {
-  assert.deepEqual(bridgeChains({ rpcs: { solana: "https://s", base: "https://b" } }), ["base", "solana"]);
-  assert.deepEqual(bridgeChains({ rpcs: { arbitrum: "https://a", ethereum: "https://e", base: "https://b", solana: "https://s" } }), ["base", "ethereum", "arbitrum", "solana"]);
-});
+const [POL] = CHAINS.polygon.tokens;
 
 test("typed amounts become atoms; Max and the balance check keep gas back for native tokens", () => {
   assert.equal(amountAtoms("20", USDC), 20_000_000n);
@@ -38,6 +33,7 @@ test("typed amounts become atoms; Max and the balance check keep gas back for na
   assert.equal(maxField(5_000_000n, USDC), "5");
   assert.equal(maxField(1_000_000_000_000_000n, ETH), "0.00098", "0.001 ETH less the 0.00002 reserve");
   assert.equal(maxField(10_000_000_000_000n, ETH), "0", "balance under the reserve");
+  assert.equal(maxField(1_000_000_000_000_000_000n, POL), "0.7", "1 POL less the 0.3 reserve");
   assert.equal(exceedsBalance(5_000_000n, 5_000_000n, USDC), false);
   assert.equal(exceedsBalance(980_000_000_000_000n, 1_000_000_000_000_000n, ETH), false);
   assert.equal(exceedsBalance(980_000_000_000_001n, 1_000_000_000_000_000n, ETH), true);

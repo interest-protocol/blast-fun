@@ -5,8 +5,8 @@ builds it behind the flag; PR 2 (token list) is not built.
 
 ## Goal
 
-A person on Base, Ethereum, Arbitrum or Solana holds ETH, SOL, USDC, BONK or
-another token Mayan can route. They open Deposit in Blast, pick the chain and
+A person on Base, Ethereum, Arbitrum, Optimism, Polygon or Solana holds ETH,
+POL, SOL, USDC, BONK or another token Mayan can route. They open Deposit in Blast, pick the chain and
 token, type an amount, connect their wallet, sign once (twice for an ERC-20
 that needs approval) and soon after SUI or USDC is in their Blast wallet. The
 card is Blast's own UI on `@mayanfinance/swap-sdk`; nothing is framed or loaded
@@ -108,7 +108,7 @@ Jose, 2026-11-26: its own **Bridge** button, beside Deposit and Withdraw.
 
 From the top, Aftermath's order minus what a deposit does not need:
 
-1. **From**: a chain menu (four chains, so a menu, not a tab row), a token
+1. **From**: a chain menu (six chains, so a menu, not a tab row), a token
    chip, the amount field, and the connected wallet's balance with Max (Max
    keeps gas back for native tokens; hidden until a wallet is connected).
 2. **To**: SUI or USDC, "Your Blast wallet" with the shortened address through
@@ -189,7 +189,7 @@ happens only for signed-out people (`SignIn.tsx:271, 325`). The bridge screen
 calls it while open so WalletConnect QR and Coinbase show.
 
 - **EVM:** the SDK builds the request with `getSwapFromEvmTxPayload(..., {
-  evmProvider })` on our configured RPC; the wallet sends it through its
+  evmProvider })` on Mayan's RPC for that chain; the wallet sends it through its
   EIP-1193 provider (viem wallet client). Approvals use `getEvmSwapApproveTxs`
   only. No permits in v1: `Erc20Permit` is `{v, r, s}`, which smart-contract
   wallets (Coinbase Smart Wallet, Base Account) cannot produce. Never set
@@ -197,8 +197,8 @@ calls it while open so WalletConnect QR and Coinbase show.
   `isEvmSwapAllowanceEnough` on the fresh quote before the deposit (slow
   Ethereum approvals can outlive the price).
 - **Solana:** `swapFromSolana(quote, swapper, dest, null, sign, connection,
-  ..., { onTransactionSigned })`. Always pass our `Connection`; without it the
-  SDK falls back to `rpc.ankr.com`. `sign` serializes the SDK's web3.js
+  ..., { onTransactionSigned })`. Always pass our `Connection` (on Mayan's
+  Solana RPC); without it the SDK falls back to `rpc.ankr.com`. `sign` serializes the SDK's web3.js
   transaction, has Privy sign the bytes, and deserializes it.
   `onTransactionSigned` records the signature at once so the pending row
   exists even if sending is slow.
@@ -237,17 +237,19 @@ calls it while open so WalletConnect QR and Coinbase show.
 
 ## Configuration
 
-Server-validated like `components/presale/config.ts`, passed to the client as
-a prop (the presale client config deliberately strips RPC URLs, so the bridge
-gets its own validated prop rather than reading `process.env` in the client):
+Read on the server (`lib/web-config.ts`) and passed to the client as a
+boolean:
 
 - `NEXT_PUBLIC_MAYAN_BRIDGE_ENABLED=1` shows the Bridge buttons (ship dark).
-- RPCs: reuse `NEXT_PUBLIC_PRESALE_EVM_RPC_URLS` (base, arbitrum, ethereum) and
-  `NEXT_PUBLIC_PRESALE_SOLANA_RPC_URL`. A chain with no RPC is hidden. No new
-  RPC variables.
+- RPCs: Mayan's own, `https://front-rpc.mayan.finance/<chain>`, the one its
+  widget uses (open CORS, no key). Jose's ruling 2026-11-26: no custom RPCs and
+  no RPC variables, so every chain is always shown.
+- Chains: Base, Ethereum, Arbitrum, Optimism, Polygon and Solana. Each has a
+  BLINK route to Sui (checked against live quotes 2026-11-26). Unichain, Linea,
+  Avalanche and Monad quote only FAST_MCTP; BSC has no route.
 - Referrer fee: **0%, Jose's ruling 2026-11-26.** v1 sends no referrer and has
   no fee setting. If a fee is wanted later, Mayan's `ChainReferrers` needs an
-  `evm` address (Base, Ethereum, Arbitrum sources) and a `solana` address,
+  `evm` address (Base, Ethereum, Arbitrum, Optimism, Polygon sources) and a `solana` address,
   passed identically to `fetchQuote` (`QuoteOptions.referrers`, without
   `referrerBps`) and to the swap call.
 
@@ -261,8 +263,7 @@ input beside `presaleConnectSources`, set in both, only while the flag is on:
 - `https://price-api.mayan.finance` (quotes, token lists)
 - `https://blink-api.mayan.finance` (BLINK orders, Solana instructions)
 - `https://explorer-api.mayan.finance` (status, history, Jito submit)
-- The presale EVM and Solana RPC origins (already added when the presale
-  bridge flag is on; add them for this flag too).
+- `https://front-rpc.mayan.finance` (balances, gas, the Solana send)
 - Exactly the further hosts the SDK reaches on our paths, captured from a
   browser run of EVM ETH, EVM USDC and Solana SOL. No wildcards.
 
@@ -300,7 +301,7 @@ PR line (to be filled with measured values):
 | Blast origin | 0; 4 reads per completed bridge | ~0 rps | ~0 rps |
 | price-api.mayan.finance | ≤ 2.5 rps while typing (debounced), 0 at rest | ≤ 250 rps bursts, ~0 at rest | unmeasured |
 | explorer-api (status) | 0.2 rps per pending bridge | bridges in flight × 0.2 | — |
-| Source RPC | balance reads per input change; Solana send + SDK retries (`submitTransactionWithRetry`) per bridge | per committed action | — |
+| Source RPC (Mayan's `front-rpc`) | balance reads per input change; Solana send + SDK retries (`submitTransactionWithRetry`) per bridge | per committed action | — |
 
 Mayan's rate limits are unknown: mark unmeasured and ask Mayan for an API key
 (`QuoteOptions.apiKey`) and limits before turning the flag on for everyone.
@@ -354,8 +355,7 @@ and shows Mayan's max. FAST_MCTP lands in its own PR, only with all of:
 
 Node test runner (`npm test -w apps/web`), as the coin sheet tests do:
 
-- `bridge-model.test.ts` (pure): amount → `amountIn64`; chain list (BSC off,
-  chain hidden without RPC); quote → rows; `clientStatus` → row state; button label for
+- `bridge-model.test.ts` (pure): amount → `amountIn64`; Max keeps each native coin's gas reserve; quote → rows; `clientStatus` → row state; button label for
   every state above.
 - Guard: refuse a non-BLINK quote, a quote without a Blink order, a recipient
   other than the Blast address, a refund address other than the source wallet,

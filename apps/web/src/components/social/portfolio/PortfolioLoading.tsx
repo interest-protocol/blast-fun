@@ -29,7 +29,7 @@ const ACTION_ICONS = { Deposit: ArrowDownIcon, Withdraw: ArrowUpIcon, Bridge: Br
 
 /** The live rows' buttons, disabled: Deposit, Withdraw and Bridge (while it is on), primary at the trailing edge on desktop. */
 function PortfolioActions({ mobile = false }: Readonly<{ mobile?: boolean }>) {
-  const bridge = useBridge() !== null;
+  const bridge = useBridge();
   const labels = (["Deposit", "Withdraw", ...(bridge ? ["Bridge"] as const : [])] as const);
   return (
     <div className={mobile ? portfolio.actsM : portfolio.actsD} data-three={(mobile && bridge) || undefined}>
