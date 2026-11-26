@@ -7,6 +7,7 @@ import type { ReactNode } from "react";
 import { FeelProvider } from "#web/components/blast-feel/index.ts";
 import { BlastUiRoot } from "#web/components/blast-ui/BlastUiRoot.tsx";
 import { PresaleProviders } from "#web/components/presale/providers/PresaleProviders.tsx";
+import { BridgeProvider } from "#web/components/social/bridge/bridge-context.tsx";
 import { SocialSession } from "#web/components/social/SocialSession.tsx";
 import { SocialShell } from "#web/components/social/SocialShell.tsx";
 import { TestPricingNotice } from "#web/components/social/TestPricingNotice.tsx";
@@ -27,7 +28,7 @@ export default async function AppLayout({
     return children;
   }
 
-  const { presale: config, presaleDeployment } = webConfig();
+  const { presale: config, presaleDeployment, bridge } = webConfig();
   const requestHeaders = await headers();
   const nonce = requestHeaders.get("x-nonce");
   const initialSession = await readHeaderSession(
@@ -59,7 +60,9 @@ export default async function AppLayout({
       <FeelProvider>
         <PresaleProviders config={config} nonce={nonce}>
           <SocialSession>
-            {testPricing ? <TestPricingProvider enabled>{shell}</TestPricingProvider> : shell}
+            <BridgeProvider config={bridge}>
+              {testPricing ? <TestPricingProvider enabled>{shell}</TestPricingProvider> : shell}
+            </BridgeProvider>
           </SocialSession>
         </PresaleProviders>
       </FeelProvider>
