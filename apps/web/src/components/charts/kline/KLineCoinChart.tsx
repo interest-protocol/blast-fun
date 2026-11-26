@@ -15,7 +15,7 @@ import { useMobileChartLayout } from "../use-mobile-chart-layout.ts";
 import { poolPrices } from "../candle-data.ts";
 import type { CandleTrade } from "../candle-trade.ts";
 import {
-  barChanges, chartDate, fillGaps, foldTrades, isPaneStudy, klineBars, MAIN_INDICATORS, PANE_INDICATORS, PANE_LAYOUT, plotHeightFor, priceParts, pricePrecision, readChartSettings, ticksInside, toggleIndicator, forcesLine, volumeText,
+  barChanges, chartDate, fillGaps, foldTrades, isPaneStudy, klineBars, MAIN_INDICATORS, PANE_INDICATORS, PANE_LAYOUT, plotHeightFor, priceParts, pricePrecision, readChartSettings, ticksInside, toggleIndicator, topGap, forcesLine, volumeText,
   type Bar, type ChartSettings, type IndicatorName,
 } from "./kline-model.ts";
 import { BLAST_FIB, BLAST_GRADUATION, BLAST_RSI, registerStudies } from "./kline-studies.ts";
@@ -192,15 +192,15 @@ export default function KLineCoinChart({ sources, interval, memeDecimals, quoteD
     for (const name of settings.indicators) if (isPaneStudy(name)) {
       current.setPaneOptions({ id: `pane_${name}`, height: layout.pane, minHeight: Math.round(layout.pane * .6) });
       // Room for the pane's one legend row above its values.
-      current.overrideYAxis({ paneId: `pane_${name}`, gap: { top: (LEGEND_ROW + 4) / layout.pane, bottom: .05 } });
+      current.overrideYAxis({ paneId: `pane_${name}`, gap: { top: topGap(LEGEND_ROW + 4, layout.pane, .05), bottom: .05 } });
     }
     current.resize();
   }, [settings.indicators, precision, theme, layout, mobile]);
 
-  // Headroom above the highest price for the study legends, and for a trader's bubble over the top bar, so neither sits on a candle.
+  // Headroom above the highest price for the study legends, and for a trader's bubble and its gap over the top bar, so neither sits on the price.
   useEffect(() => {
     const traders = showWalletTags ? bubbleHeadroom(BUBBLE_SIZE) : 0;
-    chart.current?.overrideYAxis({ paneId: "candle_pane", gap: { top: (12 + LEGEND_ROW * legendRows + traders) / layout.price, bottom: .06 } });
+    chart.current?.overrideYAxis({ paneId: "candle_pane", gap: { top: topGap(12 + LEGEND_ROW * legendRows + traders, layout.price, .06), bottom: .06 } });
   }, [layout.price, legendRows, showWalletTags]);
 
   const graduationAt = migrationAt === undefined ? undefined : bars.findLast((bar) => bar.timestamp <= migrationAt)?.timestamp;
@@ -233,7 +233,7 @@ export default function KLineCoinChart({ sources, interval, memeDecimals, quoteD
       <BubbleStage>
         <div ref={host} className={styles.plot} role="group" aria-label={`${label}. Arrow keys step through the bars.`} tabIndex={0} data-kline-plot=""
           onKeyDown={step} onBlur={() => { setStepping(false); view.hovered.set(null); }} {...dyn({ blockSize: plotHeight })} />
-        {showWalletTags && <PeopleBubbles chart={chart} bars={bars} quoteDecimals={quoteDecimals} quoteUsd={quoteUsd} topInset={8 + LEGEND_ROW * legendRows} />}
+        {showWalletTags && <PeopleBubbles chart={chart} bars={bars} quoteDecimals={quoteDecimals} quoteUsd={quoteUsd} topInset={8 + LEGEND_ROW * legendRows} line={drawn === "line"} />}
         <LatestButton away={view.away} onLatest={() => {
           const current = chart.current;
           if (!current) return;

@@ -27,7 +27,7 @@ import {
   whenText,
 } from "./rewards-model";
 import { REWARDS_FIXTURE_NOW, rewardsFixture } from "../../../../test/fixtures/social/rewards/rewards-fixture.ts";
-import { newPayouts } from "./use-rewards";
+import { PAYOUT_TOAST_MAX_AGE_MS, newPayouts } from "./use-rewards";
 import { isRewardsPage } from "./rewards-client";
 
 /** OA-45, OA-46: Rewards' strings against the gate's (oa46 `rwWhen`, `rwQuote`, `rwAmts`, `rwGrandTxt`, `rwCoinHTML`, `rwTabSum`). */
@@ -248,16 +248,38 @@ test("OA-45: the toast announces only payouts newer than this device last saw, a
     })),
     meta,
   );
-  assert.deepEqual(newPayouts(latest, undefined), []);
+  assert.deepEqual(newPayouts(latest, undefined, NOW), []);
   assert.deepEqual(
-    newPayouts(latest, NOW - 8 * 60_000).map((p) => p.round),
+    newPayouts(latest, NOW - 8 * 60_000, NOW).map((p) => p.round),
     [4],
   );
   assert.deepEqual(
-    newPayouts(latest, 0).map((p) => p.round),
+    newPayouts(latest, 0, NOW).map((p) => p.round),
     [4, 3, 2],
   );
-  assert.deepEqual(newPayouts(latest, NOW), []);
+  assert.deepEqual(newPayouts(latest, NOW, NOW), []);
+});
+
+test("a payout older than PAYOUT_TOAST_MAX_AGE_MS is never toasted, however old this device's mark", () => {
+  const meta = rewardCoinMeta([coin(KSTL, "KSTL")]);
+  const paidAt = [NOW - 10 * 60_000, NOW - PAYOUT_TOAST_MAX_AGE_MS, NOW - PAYOUT_TOAST_MAX_AGE_MS - 1, NOW - 8 * 3_600_000];
+  const latest = rewardPayouts(
+    paidAt.map((timestamp_ms, n) => ({
+      presale_id: KSTL,
+      round_id: `0x${String(n + 1).repeat(64)}`,
+      round_number: String(10 - n),
+      meme_amount: "1",
+      quote_amount: "1",
+      digest: "4vJ9JU1bJJE96FWSJKvHsmmFADCg4gpZQff4P3bkLKi",
+      timestamp_ms,
+      relayed_by: "0x1",
+      self_claimed: false,
+    })),
+    meta,
+  );
+  // Another site or device announced these hours ago; this one last read before they arrived.
+  assert.deepEqual(newPayouts(latest, NOW - 24 * 3_600_000, NOW).map((p) => p.round), [11, 10]);
+  assert.deepEqual(newPayouts(latest.slice(2), 0, NOW), []);
 });
 
 test("canonical daily fixture queues positive quote-only shares without a delivery threshold", () => {

@@ -8,7 +8,7 @@ import type { FeedFreshnessSource, FreshnessSignal } from "../home/feed-freshnes
 import { infraProvenanceFixture } from "../../../../../../packages/server/test/fixtures/modules/launchpad-contract/fixtures.ts";
 import { ActivityHints, activityHints, HINT_GAP_MS, type HintSocket } from "../home/activity-hints";
 import { anyFreshness } from "../home/feed-freshness";
-import { biggestBuy, buyCueOf, homeHintReads, type HomeCueBuy } from "./home-model";
+import { buyCueOf, homeHintReads, tradeCueOf, type HomeCueTrade } from "./home-model";
 
 const { document } = installTestDom();
 const { act } = await import("react");
@@ -100,9 +100,9 @@ async function mountLive() {
   });
   let poll: FreshnessSignal = () => undefined;
   const source = anyFreshness(activityHints("home", hints, homeHintReads), { name: "poll", subscribe: (next) => ((poll = next), () => undefined) });
-  const batches: HomeCueBuy[][] = [];
+  const batches: HomeCueTrade[][] = [];
   function Live() {
-    useHomeLive(query, true, source, (buys) => batches.push([...buys]));
+    useHomeLive(query, true, source, (trades) => batches.push([...trades]));
     return null;
   }
   const container = document.createElement("div");
@@ -127,8 +127,8 @@ async function mountLive() {
   };
 }
 
-// Fails if a burst loses its biggest buy, or a priced buy hint re-reads the list.
-test("three hints in one second (a sell, a buy, a bigger buy) show the bigger buy's cue, with no read", async () => {
+// Fails if a burst loses a trade, or a priced buy or sell hint re-reads the list.
+test("three hints in one second (a sell, a buy, a bigger buy) land as one batch of pops, with no read", async () => {
   const live = await mountLive();
   try {
     const before = live.reads();
@@ -136,13 +136,20 @@ test("three hints in one second (a sell, a buy, a bigger buy) show the bigger bu
     live.send(trade({ usd: "3" }));
     live.send(trade({ usd: "42.5" }));
     await live.cued();
-    await live.readsReach(before + 1);
-    assert.equal(live.batches.length, 1, "collected for 250 ms, then shown once");
-    const buy = biggestBuy(live.batches[0]);
-    assert.equal(buy?.coin_key, COIN);
-    assert.deepEqual(buy && buyCueOf(buy), { text: "+$43", tier: "small" });
-    // The sell is not priced for the cue, so it keeps today's read.
-    assert.equal(live.reads() - before, 1, "only the sell reads");
+    assert.equal(live.batches.length, 1, "collected for 250 ms, then handed over once");
+    assert.deepEqual(live.batches[0].map(tradeCueOf).map(cue => [cue?.side, cue?.text]), [["sell", "\u2212$500"], ["buy", "+$3"], ["buy", "+$43"]]);
+    assert.ok(live.batches[0].every(each => each.coin_key === COIN));
+    assert.equal(live.reads(), before, "priced trades make no read");
+  } finally { await live.done(); }
+});
+
+// Fails if an unpriced sell loses today's read, or pops with no dollars to show.
+test("a sell hint with no usd: one read, no pop", async () => {
+  const live = await mountLive();
+  try {
+    live.send(trade({ kind: "trade_sell", usd: undefined }));
+    await live.readsReach(1);
+    assert.equal(live.batches.length, 0);
   } finally { await live.done(); }
 });
 

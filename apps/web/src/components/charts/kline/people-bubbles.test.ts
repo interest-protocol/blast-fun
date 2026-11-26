@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Bar } from "./kline-model.ts";
-import { barPeople, bubbleHeadroom, layoutBubbles, MAX_PEOPLE, mousePress, personIdentity, profileAt, rememberProfiles, STACK_LIMIT, type Person, type PersonTrade } from "./people-bubbles.ts";
+import { barPeople, bubbleHeadroom, layoutBubbles, MAX_PEOPLE, mousePress, personIdentity, profileAt, rememberProfiles, RING, STACK_LIMIT, type Person, type PersonTrade } from "./people-bubbles.ts";
 
 const MINUTE = 60_000;
 const T0 = 1_795_188_300_000;
@@ -39,37 +39,75 @@ test("the viewer's own wallets are marked whatever the address case", () => {
 const px = (price: number) => (40 - price) * 10;
 const place = (person: Person) => ({ x: (person.bar - T0) / MINUTE * 10, top: px(person.high), bottom: px(person.low) });
 const person = (address: string, minute: number, extra: Partial<Person> = {}): Person =>
-  ({ address, bar: T0 + minute * MINUTE, side: "buy", high: 20, low: 10, bought: 1, sold: null, buys: 1, sells: 0, labels: [], own: false, lastMs: T0 + minute * MINUTE, trades: [], ...extra });
+  ({ address, bar: T0 + minute * MINUTE, side: "buy", high: 20, low: 10, close: 15, bought: 1, sold: null, buys: 1, sells: 0, labels: [], own: false, lastMs: T0 + minute * MINUTE, trades: [], ...extra });
+const SIZE = 24;
+/** Empty px between a bubble (ring included) and the price at y `price` under it, or over it for `under`. */
+const gapOver = (y: number, price: number) => price - (y + SIZE / 2 + RING);
+const gapUnder = (y: number, price: number) => (y - SIZE / 2 - RING) - price;
 
-test("zoomed in, every person has a bubble on their own bar, clear above its high, buyers and sellers alike", () => {
-  const bubbles = layoutBubbles([person(A, 0), person(B, 30), person(C, 60, { side: "sell" })], place, 1_000, 400, 24);
+test("zoomed in, every person floats one bubble height over their own bar's high, buyers and sellers alike", () => {
+  const bubbles = layoutBubbles([person(A, 0), person(B, 30), person(C, 60, { side: "sell" })], place, 1_000, 400, SIZE);
   assert.equal(bubbles.length, 3);
   assert.ok(bubbles.every((bubble) => bubble.kind === "person"));
-  // The high is at y 200: each bubble's bottom edge sits at least half a bubble over it.
-  assert.ok(bubbles.every((bubble) => bubble.y + 12 <= 200 - 12), bubbles.map((bubble) => bubble.y).join());
+  // The high is at y 200: a full bubble height of empty space under each bubble, and no more than a pixel past it.
+  assert.ok(bubbles.every((bubble) => gapOver(bubble.y, px(20)) >= SIZE && gapOver(bubble.y, px(20)) < SIZE + 1), bubbles.map((bubble) => bubble.y).join());
 });
 
-test("a bubble also clears a taller neighbouring bar under it, so the line stays readable", () => {
+test("a bubble keeps its gap over a taller neighbouring bar under it, so the line stays readable", () => {
   // The next bar, 10 px to the right, reaches price 30 (y 100): the bubble rises over it too.
-  const [bubble] = layoutBubbles([person(A, 0)], place, 1_000, 400, 24, 0, [{ x: 10, top: px(30), bottom: px(25) }, { x: 200, top: 0, bottom: 10 }]);
-  assert.ok(bubble!.y + 12 <= px(30) - 12, String(bubble!.y));
+  const [bubble] = layoutBubbles([person(A, 0)], place, 1_000, 400, SIZE, { spans: [{ x: 10, top: px(30), bottom: px(25) }, { x: 200, top: 0, bottom: 10 }] });
+  assert.ok(gapOver(bubble!.y, px(30)) >= SIZE, String(bubble!.y));
   // A bar far away changes nothing.
-  assert.equal(layoutBubbles([person(A, 0)], place, 1_000, 400, 24, 0, [{ x: 200, top: 0, bottom: 10 }])[0]!.y, layoutBubbles([person(A, 0)], place, 1_000, 400, 24)[0]!.y);
+  assert.equal(layoutBubbles([person(A, 0)], place, 1_000, 400, SIZE, { spans: [{ x: 200, top: 0, bottom: 10 }] })[0]!.y, layoutBubbles([person(A, 0)], place, 1_000, 400, SIZE)[0]!.y);
 });
 
-test("a bar at the top of the plot puts its stack under the low instead, still clear of the price", () => {
+test("on a line, the bubble keeps its gap over the line itself, also where it climbs to a bar just out of reach", () => {
+  // Line view: each point is the bar's close. The bubble sits on bar 0 (close y 250); the line climbs to
+  // y 50 at x 30, beyond the bubble's reach, but crosses its right edge (x 14) near y 157.
+  const line = (y: number) => ({ top: y, bottom: y });
+  const spans = [{ x: -10, ...line(250) }, { x: 0, ...line(250) }, { x: 30, ...line(50) }];
+  const onLine = (one: Person) => ({ x: (one.bar - T0) / MINUTE * 10, ...line(250) });
+  const [bubble] = layoutBubbles([person(A, 0)], onLine, 1_000, 400, SIZE, { spans, line: true });
+  const edge = SIZE / 2 + RING;
+  const crossing = 250 + (50 - 250) * edge / 30;
+  assert.ok(gapOver(bubble!.y, crossing) >= SIZE, String(bubble!.y));
+  // Read as candles, the same points are out of reach and the bubble stays down at its own bar.
+  assert.ok(layoutBubbles([person(A, 0)], onLine, 1_000, 400, SIZE, { spans })[0]!.y > crossing);
+});
+
+test("a bar at the top of the plot puts its stack the same gap under the low instead", () => {
   const top = [person(A, 0, { high: 39.5, low: 30 }), person(B, 0, { high: 39.5, low: 30 })];
-  const ys = layoutBubbles(top, place, 1_000, 400, 24).map((bubble) => bubble.y);
-  assert.ok(ys.every((y) => y - 12 >= px(30) + 12), ys.join());
+  const ys = layoutBubbles(top, place, 1_000, 400, SIZE).map((bubble) => bubble.y);
+  assert.ok(ys.every((y) => gapUnder(y, px(30)) >= SIZE), ys.join());
   assert.equal(new Set(ys).size, 2);
-  // The chart keeps room for one bubble over the highest price.
-  assert.ok(bubbleHeadroom(24) >= 24 * 1.5);
+});
+
+test("the chart keeps room for one bubble and its gap over the highest price, under the legends", () => {
+  // A bar whose high sits the headroom below the legends' inset gets its bubble above it, not under.
+  const inset = 20, high = 40 - (inset + bubbleHeadroom(SIZE)) / 10;
+  const [bubble] = layoutBubbles([person(A, 0, { high, low: high - 1 })], place, 1_000, 400, SIZE, { topInset: inset });
+  assert.ok(bubble!.y - SIZE / 2 >= inset && gapOver(bubble!.y, px(high)) >= SIZE, String(bubble!.y));
+});
+
+test("a stack with room for only one bubble over the price folds into +N instead of covering it", () => {
+  // Three traders on a bar whose high leaves one slot under the legends and none under its low.
+  const inset = 20, high = 40 - (inset + bubbleHeadroom(SIZE)) / 10;
+  const crowd = [person(A, 0, { high, low: 0.5 }), person(B, 0, { high, low: 0.5 }), person(C, 0, { high, low: 0.5 })];
+  const bubbles = layoutBubbles(crowd, place, 1_000, 400, SIZE, { topInset: inset });
+  assert.deepEqual(bubbles.map((bubble) => bubble.kind === "more" && bubble.people.length), [3]);
+  assert.ok(gapOver(bubbles[0]!.y, px(high)) >= SIZE, String(bubbles[0]!.y));
+  // Two slots: one person and a +2. The viewer's own bubble still shows.
+  const two = layoutBubbles(crowd, place, 1_000, 400, SIZE, { topInset: inset - SIZE * .8 });
+  assert.deepEqual(two.map((bubble) => bubble.kind), ["person", "more"]);
+  assert.ok(two.every((bubble) => gapOver(bubble.y, px(high)) >= SIZE), two.map((bubble) => bubble.y).join());
+  const mine = layoutBubbles([...crowd.slice(1), person(ME, 0, { high, low: 0.5, own: true })], place, 1_000, 400, SIZE, { topInset: inset });
+  assert.ok(mine.some((bubble) => bubble.kind === "person" && bubble.person.own));
 });
 
 test("zoomed out, a crowded column shows its first people and folds the rest into +N", () => {
   // Bars 10 px apart, 24 px bubbles: minutes 0–2 share the first column.
   const crowd = [person(A, 0), person(B, 1), person(C, 1, { lastMs: T0 + 1.5 * MINUTE }), person(D, 2), person(E, 2, { labels: ["sniper"] })];
-  const bubbles = layoutBubbles(crowd, place, 1_000, 400, 24);
+  const bubbles = layoutBubbles(crowd, place, 1_000, 400, SIZE);
   const shown = bubbles.filter((bubble) => bubble.kind === "person");
   const more = bubbles.find((bubble) => bubble.kind === "more");
   assert.equal(shown.length, STACK_LIMIT - 1);
@@ -77,18 +115,18 @@ test("zoomed out, a crowded column shows its first people and folds the rest int
   // Tagged wallets rank first, then the newest.
   assert.deepEqual(shown.map((bubble) => bubble.kind === "person" && bubble.person.address), [E, D]);
   // A column that fits shows everyone and no +N.
-  assert.equal(layoutBubbles(crowd.slice(0, STACK_LIMIT), place, 1_000, 400, 24).filter((bubble) => bubble.kind === "more").length, 0);
+  assert.equal(layoutBubbles(crowd.slice(0, STACK_LIMIT), place, 1_000, 400, SIZE).filter((bubble) => bubble.kind === "more").length, 0);
 });
 
 test("a buyer and a seller on one busy bar share a column, both clear above the bar's high", () => {
-  const ys = layoutBubbles([person(A, 0), person(B, 0, { side: "sell", buys: 0, sells: 2, bought: null, sold: 5 })], place, 1_000, 400, 24).map((bubble) => bubble.y);
+  const ys = layoutBubbles([person(A, 0), person(B, 0, { side: "sell", buys: 0, sells: 2, bought: null, sold: 5 })], place, 1_000, 400, SIZE).map((bubble) => bubble.y);
   assert.equal(new Set(ys).size, 2);
-  assert.ok(ys.every((y) => y + 12 <= px(20) - 12), ys.join());
+  assert.ok(ys.every((y) => gapOver(y, px(20)) >= SIZE), ys.join());
 });
 
 test("a +N keeps its identity while the chart scrolls, so its open card stays open", () => {
   const crowd = [person(A, 0), person(B, 0), person(C, 0), person(D, 0)];
-  const key = (shift: number) => layoutBubbles(crowd, (one) => ({ ...place(one), x: place(one).x + shift }), 1_000, 400, 24).find((bubble) => bubble.kind === "more")?.key;
+  const key = (shift: number) => layoutBubbles(crowd, (one) => ({ ...place(one), x: place(one).x + shift }), 1_000, 400, SIZE).find((bubble) => bubble.kind === "more")?.key;
   assert.ok(key(100));
   assert.equal(key(100), key(137.4));
 });
@@ -96,21 +134,21 @@ test("a +N keeps its identity while the chart scrolls, so its open card stays op
 test("a wide candle next to a column counts as under it when the chart is zoomed in", () => {
   // The neighbour sits 30 px away: out of reach of a 24 px bubble on thin candles, under it once candles are 40 px wide.
   const tall = [{ x: 30, top: px(30), bottom: px(25) }];
-  const thin = layoutBubbles([person(A, 0)], place, 1_000, 400, 24, 0, tall, 2)[0]!;
-  const wide = layoutBubbles([person(A, 0)], place, 1_000, 400, 24, 0, tall, 20)[0]!;
+  const thin = layoutBubbles([person(A, 0)], place, 1_000, 400, SIZE, { spans: tall, halfBar: 2 })[0]!;
+  const wide = layoutBubbles([person(A, 0)], place, 1_000, 400, SIZE, { spans: tall, halfBar: 20 })[0]!;
   assert.ok(thin.y > px(30), String(thin.y));
-  assert.ok(wide.y + 12 <= px(30) - 12, String(wide.y));
+  assert.ok(gapOver(wide.y, px(30)) >= SIZE, String(wide.y));
 });
 
 test("the viewer's own trades always show, even in a full column", () => {
   const crowd = [person(A, 0), person(B, 0), person(C, 1), person(D, 1), person(ME, 2, { own: true }), person(E, 2, { own: true, address: `${E}0` })];
-  const bubbles = layoutBubbles(crowd, place, 1_000, 400, 24);
+  const bubbles = layoutBubbles(crowd, place, 1_000, 400, SIZE);
   const own = bubbles.filter((bubble) => bubble.kind === "person" && bubble.person.own);
   assert.equal(own.length, 2);
   const more = bubbles.find((bubble) => bubble.kind === "more");
   assert.ok(more?.kind === "more" && more.people.every((folded) => !folded.own));
   // Off-plot people are skipped; own trades are kept in the people list past the cap.
-  assert.equal(layoutBubbles([person(A, 200)], place, 1_000, 400, 24).length, 0);
+  assert.equal(layoutBubbles([person(A, 200)], place, 1_000, 400, SIZE).length, 0);
   const many = Array.from({ length: 300 }, (_, index) => trade(`0x${index.toString(16).padStart(64, "0")}`, 0, "buy"));
   assert.ok(barPeople([...many, trade(ME, 0, "buy")], bars, new Set([ME])).some((kept) => kept.own));
 });
@@ -119,14 +157,14 @@ test("the bubble cap counts only people on screen, so scrolling back still shows
   // Newest first, as barPeople returns them: 300 off-screen newer people, then 5 visible older ones.
   const offscreen = Array.from({ length: 300 }, (_, index) => person(`0x${index.toString(16).padStart(64, "0")}`, 500, { lastMs: T0 + 900 * MINUTE }));
   const visible = [person(A, 0), person(B, 10), person(C, 20), person(D, 30), person(E, 40)];
-  assert.equal(layoutBubbles([...offscreen, ...visible], place, 1_000, 400, 24).length, 5);
+  assert.equal(layoutBubbles([...offscreen, ...visible], place, 1_000, 400, SIZE).length, 5);
   const crowd = Array.from({ length: MAX_PEOPLE + 50 }, (_, index) => person(`0x${index.toString(16).padStart(64, "0")}`, index % 99));
-  assert.ok(layoutBubbles(crowd, place, 1_000, 10_000, 24).length <= MAX_PEOPLE);
+  assert.ok(layoutBubbles(crowd, place, 1_000, 10_000, SIZE).length <= MAX_PEOPLE);
 });
 
 test("neighbouring columns never overlap, however the bars fall", () => {
   // x = 0, 20, 30, 40: fixed 24 px bins would put bubbles 10 px apart.
-  const xs = layoutBubbles([person(A, 0), person(B, 2), person(C, 3), person(D, 4)], place, 1_000, 400, 24)
+  const xs = layoutBubbles([person(A, 0), person(B, 2), person(C, 3), person(D, 4)], place, 1_000, 400, SIZE)
     .map((bubble) => bubble.x).sort((a, b) => a - b);
   assert.ok(xs.every((x, index) => index === 0 || x === xs[index - 1] || x - xs[index - 1]! >= 24), xs.join());
 });
@@ -134,12 +172,12 @@ test("neighbouring columns never overlap, however the bars fall", () => {
 test("a bar that fills the plot still fans its stack out on the plot instead of piling up", () => {
   // No room over the high or under the low: the stack hangs from the top edge, each bubble on its own spot.
   const tall = [person(A, 0, { high: 39.5, low: 0.5 }), person(B, 0, { high: 39.5, low: 0.5 }), person(C, 0, { high: 39.5, low: 0.5 })];
-  const ys = layoutBubbles(tall, place, 1_000, 400, 24).map((bubble) => bubble.y);
+  const ys = layoutBubbles(tall, place, 1_000, 400, SIZE).map((bubble) => bubble.y);
   assert.equal(new Set(ys).size, 3);
   assert.ok(ys.every((y) => y >= 12 && y <= 388), ys.join());
   // A bar dragged above the plot still fans its stack out.
   const off = [person(A, 0, { high: 90, low: 60 }), person(B, 0, { high: 90, low: 60 }), person(C, 0, { high: 90, low: 60 })];
-  assert.equal(new Set(layoutBubbles(off, place, 1_000, 400, 24).map((bubble) => bubble.y)).size, 3);
+  assert.equal(new Set(layoutBubbles(off, place, 1_000, 400, SIZE).map((bubble) => bubble.y)).size, 3);
 });
 
 test("no profile shows an anonymous circle and a short address", () => {
