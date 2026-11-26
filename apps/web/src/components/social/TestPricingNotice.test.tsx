@@ -9,7 +9,4 @@ test("the test-pricing notice identifies simulated values without changing token
   assert.match(html, /aria-label="Test pricing"/);
   assert.match(html, /1 TSUI uses SUI’s current USD price/);
   assert.match(html, /TSUI has no real value/);
-  const compact = renderToStaticMarkup(<TestPricingNotice enabled compact />);
-  assert.match(compact, /<button[^>]*>Test pricing<\/button>/);
-  assert.doesNotMatch(compact, /uses SUI’s current USD price/);
 });

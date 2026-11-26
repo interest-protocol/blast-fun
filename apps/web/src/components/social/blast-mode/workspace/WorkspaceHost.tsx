@@ -80,8 +80,6 @@ import { compareAvailablePageSize, comparePage, comparePageSize } from "./compar
 import { WorkspaceLayoutProvider, WorkspaceLayoutTools } from "./WorkspaceLayout";
 import { WorkspaceShortcuts } from "./WorkspaceShortcuts";
 import { openWorkspaceSearch } from "./workspace-search";
-import { TestPricingNotice } from "#web/components/social/TestPricingNotice.tsx";
-import { useTestPricing } from "#web/components/social/test-pricing-context.tsx";
 import { rememberWorkspacePreview } from "./workspace-preview";
 
 /** A failed or unresolved identity never selects guest storage. */
@@ -1263,10 +1261,7 @@ function WorkspaceBalance() {
   const signedIn = !!useCurrentBlastAccount().accountState?.account;
   const portfolio = useShellPortfolioContext();
   const hidden = useShellPrefs().amountsHidden;
-  const testPricing = useTestPricing();
   return <>
-    {/* The page's test-pricing notice sits under Blast mode; its compact form keeps the context beside the balance, for guests' prices too (audit 31). */}
-    <TestPricingNotice compact enabled={testPricing} />
     {signedIn ? <span className={styles.balance}><AccountBalance hidden={hidden} portfolio={portfolio.state} onRetry={portfolio.refresh} /></span> : null}
   </>;
 }

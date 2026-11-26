@@ -10,7 +10,6 @@ import { PresaleProviders } from "#web/components/presale/providers/PresaleProvi
 import { SocialSession } from "#web/components/social/SocialSession.tsx";
 import { SocialShell } from "#web/components/social/SocialShell.tsx";
 import { TestPricingNotice } from "#web/components/social/TestPricingNotice.tsx";
-import { TestPricingProvider } from "#web/components/social/test-pricing-context.tsx";
 import { requestLaunchFlags } from "#web/lib/launch-flags.server.ts";
 import { webConfig } from "#web/lib/server-config.ts";
 import { SITE_ORIGIN } from "#web/lib/site.ts";
@@ -59,7 +58,7 @@ export default async function AppLayout({
       <FeelProvider>
         <PresaleProviders config={config} nonce={nonce}>
           <SocialSession>
-            <TestPricingProvider enabled={testPricing}>{shell}</TestPricingProvider>
+            {shell}
           </SocialSession>
         </PresaleProviders>
       </FeelProvider>

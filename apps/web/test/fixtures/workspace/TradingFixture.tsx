@@ -30,7 +30,6 @@ import { proofCoins, proofHistory, proofThread, proofHomeCoins, proofPresales } 
 import { homeCoinRows } from "./coin-fixtures";
 
 import { discoveryCoins, discoveryResponse } from "./discovery-fixtures";
-import { TestPricingProvider } from "#web/components/social/test-pricing-context.tsx";
 import { PresalePanel } from "../../../src/components/social/blast-mode/workspace/panels/PresalePanel";
 import { createCommitQuotes } from "../../../src/components/social/commit/commit-quote";
 import type { CommitKit } from "../../../src/components/social/commit/commit-kit";
@@ -86,8 +85,6 @@ const holderPreviewSnapshot = () => new URLSearchParams(location.search).has("ho
 const serverHolderPreviewSnapshot = () => false;
 const tradePreviewSnapshot = () => new URLSearchParams(location.search).has("tradeSignals");
 const portfolioPreviewSnapshot = () => new URLSearchParams(location.search).has("portfolioPreview");
-/** `?testPricing` mirrors a deployment with simulated TSUI prices (`testSuiPriceEnabled`). */
-const testPricingSnapshot = () => new URLSearchParams(location.search).has("testPricing");
 /** `?shellPortfolio` gives the Blast mode bar a priced subtotal with unpriced assets (audit F35). */
 const shellPortfolioSnapshot = () => new URLSearchParams(location.search).has("shellPortfolio");
 const UNPRICED_SHELL_PORTFOLIO = { refresh: () => undefined, portfolio: null, state: { status: "ready", summary: { total_usd: null, known_value_usd: 209.24, unpriced_assets: true, today: null, breakdown: { coins: null, committed: null, claimable: null }, known_breakdown: { coins: 104.24, committed: 100, claimable: 5 } } } } as const;
@@ -96,7 +93,6 @@ export function TradingFixture() {
   const tradePreview = useSyncExternalStore(subscribeToLocation, tradePreviewSnapshot, serverHolderPreviewSnapshot);
   const portfolioPreview = useSyncExternalStore(subscribeToLocation, portfolioPreviewSnapshot, serverHolderPreviewSnapshot);
   const shellPortfolio = useSyncExternalStore(subscribeToLocation, shellPortfolioSnapshot, serverHolderPreviewSnapshot);
-  const testPricing = useSyncExternalStore(subscribeToLocation, testPricingSnapshot, serverHolderPreviewSnapshot);
   const holderPreview = useSyncExternalStore(subscribeToLocation, holderPreviewSnapshot, serverHolderPreviewSnapshot);
   const [holderSignedIn, setHolderSignedIn] = useState(true);
   const [kolCallsigns, setKols] = useState(["maralin"]);
@@ -108,7 +104,7 @@ export function TradingFixture() {
   const [states, setStates] = useState<Record<string, Scenario>>({ A: "ready", B: "empty", C: "zero", D: "stale" });
   const setState = useCallback((id: string, state: Scenario) => setStates(previous => ({ ...previous, [id]: state })), []);
   const resolve = useCallback<WorkspaceOwnerResolver>(async () => ({ kind: "guest" }), []);
-  return <Context value={{ states, setState }}><div className={`${geist.variable} ${geistMono.variable} ${bricolage.variable}`} data-blast-ui="" data-theme="light" suppressHydrationWarning><ShellPrefsBoot nonce={null} /><TestPricingProvider enabled={testPricing}><QueryProvider><ListedKolsContext value={(holderPreview || tradePreview) ? kolCallsigns : []}><ViewerStateProvider active={(holderPreview || tradePreview) && holderSignedIn} getAccessToken={holderToken} resetKey={holderScope}><ShellPortfolioProvider value={shellPortfolio ? UNPRICED_SHELL_PORTFOLIO : NO_SHELL_PORTFOLIO}><AppShell signedIn={false} viewer={null} portfolio={{ status: "unavailable" }} signInHref="/sign-in" overlays={<BlastModeHost accountState={portfolioPreview ? holderSignedIn ? { ...portfolioActor, sessionIdentity: holderScope } : { status: "ready", sessionStatus: "signed_out", account: null } : undefined} getAccessToken={portfolioPreview ? holderToken : undefined} resolveOwner={resolve} ownerKey="trading-fixture" slots={slots} />}><Entry /></AppShell></ShellPortfolioProvider></ViewerStateProvider></ListedKolsContext></QueryProvider></TestPricingProvider></div></Context>;
+  return <Context value={{ states, setState }}><div className={`${geist.variable} ${geistMono.variable} ${bricolage.variable}`} data-blast-ui="" data-theme="light" suppressHydrationWarning><ShellPrefsBoot nonce={null} /><QueryProvider><ListedKolsContext value={(holderPreview || tradePreview) ? kolCallsigns : []}><ViewerStateProvider active={(holderPreview || tradePreview) && holderSignedIn} getAccessToken={holderToken} resetKey={holderScope}><ShellPortfolioProvider value={shellPortfolio ? UNPRICED_SHELL_PORTFOLIO : NO_SHELL_PORTFOLIO}><AppShell signedIn={false} viewer={null} portfolio={{ status: "unavailable" }} signInHref="/sign-in" overlays={<BlastModeHost accountState={portfolioPreview ? holderSignedIn ? { ...portfolioActor, sessionIdentity: holderScope } : { status: "ready", sessionStatus: "signed_out", account: null } : undefined} getAccessToken={portfolioPreview ? holderToken : undefined} resolveOwner={resolve} ownerKey="trading-fixture" slots={slots} />}><Entry /></AppShell></ShellPortfolioProvider></ViewerStateProvider></ListedKolsContext></QueryProvider></div></Context>;
 }
 function Entry() {
   const run = useShellActions();
