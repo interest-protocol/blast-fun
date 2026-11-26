@@ -234,7 +234,13 @@ async function verifyPortfolio(call: SocialCall, curvePnl = false): Promise<void
 }
 
 async function verifyPersonal(call: SocialCall, logs: readonly string[]): Promise<void> {
-  for (const path of ["me/transactions", "me/rewards", "me/referrals", "me/referrals/invitees", "me/referrals?view=monthly"]) {
+  for (const path of [
+    "me/transactions",
+    "me/rewards",
+    "me/referrals",
+    "me/referrals/invitees",
+    "me/referrals?view=monthly",
+  ]) {
     const response = await call(path);
     assert.equal(
       response.status,
