@@ -149,6 +149,8 @@ test("the top gap leaves the asked px free over the highest value, as KLineChart
   for (const [px, height, bottom] of [[76, 290, .06], [72, 200, .06], [22, 101, .05]] as const)
     assert.ok(Math.abs(freePx(topGap(px, height, bottom), bottom, height) - px) < 1e-9, `${px}px of ${height}`);
   assert.ok(freePx(76 / 290, .06, 290) < 60, "the plain px share leaves far less room");
+  // KLineCharts reads 1 or more as pixels, so the share stays under 1 however much is asked.
+  for (const px of [112, 200, 300]) assert.ok(topGap(px, 200, .06) < 1, `${px}px of 200`);
 });
 
 test("the plot grows by one pane per study, whatever the mix, and its default matches the loading block", () => {

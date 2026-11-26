@@ -197,15 +197,14 @@ const clamp = (value: number, low: number, high: number) => Math.min(high, Math.
  * What is drawn within `reach` px either side of `x`. Candles count when their body
  * (`halfBar` px either side of the bar) reaches in. A line counts its points in reach
  * and where it crosses either edge, so a steep segment from a bar just outside still
- * counts: a straight segment is highest and lowest at its ends.
+ * counts: a straight segment is highest and lowest at its ends. `spans` run left to right.
  */
 function drawnUnder(spans: readonly BarSpan[], x: number, reach: number, halfBar: number, line: boolean): BarSpan[] {
   const body = line ? 0 : halfBar, from = x - reach - body, to = x + reach + body;
   const inside = spans.filter((span) => span.x >= from && span.x <= to);
   if (!line) return inside;
-  const points = [...spans].sort((a, b) => a.x - b.x);
-  const crossings = points.slice(1).flatMap((next, index) => {
-    const last = points[index]!;
+  const crossings = spans.slice(1).flatMap((next, index) => {
+    const last = spans[index]!;
     return [from, to].filter((edge) => last.x < edge && edge < next.x).map((edge) => {
       const share = (edge - last.x) / (next.x - last.x);
       return { x: edge, top: last.top + (next.top - last.top) * share, bottom: last.bottom + (next.bottom - last.bottom) * share };
