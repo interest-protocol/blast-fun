@@ -341,7 +341,28 @@ test("a graduated pool shows a dash until its current close is confirmed", () =>
   const html = renderToStaticMarkup(withQueryClient(client, <SaleMarket nowMs={FIXTURE_NOW} sale={sale} terms={detail.terms} />));
   assert.match(html, /<span>Price<\/span><strong>—<\/strong>/);
   assert.doesNotMatch(html, /\+\$0\.0137/);
+  // The currency switch names the unit, so the chart beside the row may drop its unit title.
+  assert.match(html, /data-unit-shown/);
   client.clear();
+});
+
+test("the price row says it shows the unit only when a visible figure or the currency switch names it", async (t) => {
+  const { MarketPriceRow } = await import("#web/components/social/bonding/CoinPageParts.tsx");
+  const unitShown = (html: string) => /data-unit-shown/.test(html);
+  assert.equal(unitShown(renderToStaticMarkup(<MarketPriceRow price="—" />)), false);
+  assert.equal(unitShown(renderToStaticMarkup(<MarketPriceRow price="$0.40" priceNamesUnit />)), true);
+  // Hidden amounts cover the figure, and its unit with it.
+  const page = document.createElement("div");
+  page.setAttribute("data-blast-ui", "");
+  page.setAttribute("data-amounts", "hidden");
+  document.body.append(page);
+  const root = createRoot(page);
+  t.after(async () => {
+    await act(async () => root.unmount());
+    page.remove();
+  });
+  await act(async () => root.render(<MarketPriceRow price="••••" priceNamesUnit />));
+  assert.equal(page.querySelector("[data-unit-shown]"), null);
 });
 
 test("before its first trade read, the headline keeps the width of the sale quote's largest trade", () => {

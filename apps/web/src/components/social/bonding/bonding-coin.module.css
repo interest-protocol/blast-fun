@@ -124,12 +124,13 @@
   .identityActions { grid-column: 2; }
   .heroMark > span { width: 3.25rem; height: 3.25rem; }
   /* A compact head keeps the mark, name, stage and actions on one row; the page shows the creator and address elsewhere. */
-  /* When the name's longest word cannot sit beside the actions, they move to a row of their own; words never break to keep them. */
-  .identity[data-compact] { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem .625rem; container-type: inline-size; }
-  .identity[data-compact] [data-page-head] { flex: 1 1 0; min-width: min-content; }
-  .identity[data-compact] .coinName { overflow-wrap: break-word; }
-  /* Only a word wider than the row beside the mark breaks. */
-  .identity[data-compact] .coinName > * { max-width: calc(100cqi - 3.375rem); }
+  /*
+   * The actions keep the row while the name has 5.5rem beside them (a 360 px phone); narrower, they take a row of their own.
+   * A name wider than its space ends in an ellipsis (its title holds it whole); a ticker never does, it breaks inside itself (blast-ui `.ticker`).
+   */
+  .identity[data-compact] { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+  .identity[data-compact] [data-page-head] { flex: 1 1 0; min-width: 5.5rem; }
+  .identity[data-compact] .coinName > :first-child:not(:global(.ticker)) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .identity[data-compact] .identityActions { margin-inline-start: auto; }
   .identity[data-compact] .heroMark { padding: .125rem; }
   .identity[data-compact] .heroMark > span { width: 2.5rem; height: 2.5rem; }

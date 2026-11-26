@@ -512,7 +512,7 @@ function PresaleMarketPrice({ market, move }: Readonly<{ market: HomeCoinMarket;
   const last = useLastPrice(live?.price);
   const prices = poolPrices(market.decimals, market.quote.decimals, currency?.quoteUsd);
   const quoteSymbol = prices.usd ? undefined : market.quote.symbol;
-  return <MarketPriceRow showCurrency={currency?.rate != null}
+  return <MarketPriceRow showCurrency={currency?.rate != null} priceNamesUnit={live != null}
     activity={<ChartLastTrade placement="headline" playSound />}
     price={live ? <CoinPriceFigure price={prices.price(live.price)} quoteSymbol={quoteSymbol} tradeId={live.cursor} /> : NO_VALUE}
     reserve={!live && last != null ? <CoinPriceFigure price={prices.price(last)} quoteSymbol={quoteSymbol} tradeId={null} /> : null}

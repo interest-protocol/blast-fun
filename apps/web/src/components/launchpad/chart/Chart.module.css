@@ -246,6 +246,16 @@
 .compactTools { display: flex; gap: .5rem; margin-inline-start: auto; }
 .stylePicker { display: inline-flex; }
 .compactTools .filterTrigger { --control-height: max(44px, 2.75rem); --control-hover: transparent; }
+/*
+ * On a sale page on a phone, the chart's view controls fill its head row: the style picker over
+ * Indicators, the range over Traders. When the price row above shows the unit, the chart's
+ * title goes from sight (screen readers keep it); otherwise the title stays to name the unit.
+ */
+@media (max-width: 760px) {
+  :global([data-sale-page]) :global([data-unit-shown]) ~ * .compactHead h2 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  :global([data-sale-page]) .compactTools { flex-grow: 1; margin-inline-start: 0; }
+  :global([data-sale-page]) .compactTools > :last-child { margin-inline-start: auto; }
+}
 .filters .filterClose,
 .chart .chartRetry { --control-height: max(44px, 2.75rem); }
 
