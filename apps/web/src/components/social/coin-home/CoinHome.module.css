@@ -160,6 +160,8 @@
 .mcap[data-stale] { color: var(--muted); }
 .changeWindow { font-size: 0.75rem; color: var(--muted); font-weight: 400; }
 .change { font-size: 0.875rem; color: var(--ink-2); }
+/* Room for a trade's brief wash, without moving the figure. */
+.changeFigure { border-radius: var(--r-inner); padding-inline: 0.1875rem; margin-inline: -0.1875rem; }
 .vol, .holders { color: var(--muted); }
 /* The top 10's share, a quiet line under the holders. */
 .holders { text-align: end; }

@@ -47,7 +47,7 @@ test("streamed prices revalue the existing row's market cap without reordering i
 
   const type = (id: string) => `0x${id.repeat(64)}::coin::COIN`;
   // A million whole coins in circulation: market cap = price × 1M.
-  const supply = { total_supply: "1000000000000000", circulating_supply: "1000000000000000", open_1h_usd: null, open_24h_usd: null, baselines_until_ms: 1000 };
+  const supply = { total_supply: "1000000000000000", circulating_supply: "1000000000000000", open_1h_usd: null, open_24h_usd: "3.9", baselines_until_ms: 1000 };
   const coins = [
     { ...coin, coin_type: type("1"), price_usd: "0.05", price_as_of_ms: 500, mobile_market: { market_cap_usd: "50000", change_1h_bps: null }, live_inputs: supply },
     { ...coin, coin_type: type("2"), price_usd: "0.01", price_as_of_ms: 500, mobile_market: { market_cap_usd: "10000", change_1h_bps: null }, live_inputs: supply },
@@ -93,8 +93,42 @@ test("streamed prices revalue the existing row's market cap without reordering i
   await send(12, "4", 700);
   assert.equal(mcap(), "$4M");
   assert.ok(animations.all.length > 0);
-  assert.ok(animations.all.every(animation => rows[1]?.querySelector(".mcap")?.contains(animation.target)),
-    "only the changing market cap pulses");
+  assert.ok(animations.all.every(animation => rows[1]?.contains(animation.target)), "only the changing row pulses");
+  const change = () => rows[1]?.querySelector<HTMLElement>('[data-slot="coin-change"]');
+  assert.equal(change()?.textContent, "+2.56%");
+  animations.finishAll();
+  const before = animations.all.length;
+  await send(12, "4.001", 800);
+  assert.equal(mcap(), "$4M");
+  assert.equal(change()?.textContent, "+2.59%");
+  assert.deepEqual(animations.all.slice(before).map(animation => animation.target), [change()],
+    "a trade the rounded market cap hides still pulses the change figure, and only it");
+  assert.equal(change()?.style.getPropertyValue("--home-price-direction"), "var(--up-soft)");
+  animations.finishAll();
+  const quiet = animations.all.length;
+  // SUI moves: both coins move by the same ratio in one read. The change figure moves, with no trade cue.
+  await act(() => stream.emit("prices", { checkpoint: 13, prices: [
+    { coin_type: type("1"), usd_price: "0.05", as_of_ms: 900 },
+    { coin_type: type("2"), usd_price: "4.001", as_of_ms: 900 },
+  ] }));
+  await act(() => stream.emit("prices", { checkpoint: 14, prices: [
+    { coin_type: type("1"), usd_price: "0.05005", as_of_ms: 950 },
+    { coin_type: type("2"), usd_price: "4.005001", as_of_ms: 950 },
+  ] }));
+  assert.equal(change()?.textContent, "+2.69%");
+  assert.ok(animations.all.slice(quiet).every(animation => animation.target.getAttribute("data-slot") !== "coin-change"),
+    "a quote move changes the figure without a trade cue");
+  // Home rereads and its HTTP price ties the live one; the next trade, a sell, still cues, down.
+  await renderRows(14, coins.map(row => row.coin_type === type("2") ? { ...row, price_usd: "4.005001", price_as_of_ms: 950, change_24h_bps: 269 } : row));
+  animations.finishAll();
+  const reread = animations.all.length;
+  await send(15, "4", 990);
+  assert.equal(change()?.textContent, "+2.56%");
+  assert.equal(animations.all.slice(reread).filter(animation => animation.target === change()).length, 1, "the first trade after a reread cues");
+  assert.equal(change()?.style.getPropertyValue("--home-price-direction"), "var(--down-soft)");
+  const wash = animations.all.slice(reread).find(animation => animation.target === change());
+  assert.deepEqual(Object.keys(wash?.keyframes[0] ?? {}).sort(), ["backgroundColor", "offset"], "the trade washes the background, never the figure's own colour");
+  assert.equal(change()?.closest(".change")?.className, "num change up", "the figure keeps its steady green");
   assert.equal(streams.length, 1);
 });
 
