@@ -38,3 +38,7 @@
 
 Target `main`. Use the [contributor checks](README.md#check-a-change) to verify
 the affected workspace.
+
+Before enqueueing a PR, the CodeRabbit check passes and every CodeRabbit comment
+is fixed, or answered in its thread with the reason it stays. The Fable review
+still applies.
