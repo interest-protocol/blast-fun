@@ -27,6 +27,11 @@
  *   engine's `feed`); a frame of any other shape is still just a signal, so
  *   neither a malformed nor a malicious message can paint anything.
  *   `resync_required` is a look too (`resync`).
+ * - **One exception: Home's buy cue** (cue only, never data). A trade hint's
+ *   quote atoms, quote coin and dollars (bounded by `hintOf`) reach raw hint
+ *   listeners (`subscribeHints`) after the repeat check and before any
+ *   coalescer, so Home flashes a priced buy on its row without a read. The
+ *   cue is decoration: never a balance, a price or an input to a trade.
  * - **Coalesced per surface:** at most one look per `HINT_GAP_MS`; a burst
  *   looks once at once and once at the end of the second. Each reader's own
  *   5 s floor stays (`hintedGap`).
@@ -120,9 +125,19 @@ function selectedBy(hint: Hint | null): Selected {
   switch (hint?.type) {
     case "activity": {
       const checkpoint = Number(hint.activity_id.split(":", 1)[0]);
-      return hint.kind && Number.isSafeInteger(checkpoint)
-        ? { trade: { presaleId: hint.presale_id, coinType: hint.coin_type, checkpoint, cursor: hint.activity_id, kind: hint.kind, ...(hint.actor ? { actor: hint.actor } : {}) } }
-        : {};
+      if (!hint.kind || !Number.isSafeInteger(checkpoint)) return {};
+      return { trade: {
+        presaleId: hint.presale_id,
+        coinType: hint.coin_type,
+        checkpoint,
+        cursor: hint.activity_id,
+        kind: hint.kind,
+        ...(hint.actor ? { actor: hint.actor } : {}),
+        // Home's buy cue (cue only, never data), as `hintOf` bounded them.
+        ...(hint.quote_atoms ? { quoteAtoms: hint.quote_atoms } : {}),
+        ...(hint.quote_type ? { quoteType: hint.quote_type } : {}),
+        ...(hint.usd ? { usd: hint.usd } : {}),
+      } };
     }
     case "presale_lifecycle":
       return { presaleId: hint.presale_id, lifecycle: hint.state };
@@ -167,6 +182,16 @@ export class ActivityHints {
   #refused = false;
   readonly #seen = new Set<string>();
   readonly #connectionListeners = new Set<() => void>();
+  readonly #hintListeners = new Set<(hint: FreshnessHint) => void>();
+
+  /**
+   * Every new hint as it arrives: after the repeat check, before any surface's filter or coalescer, so no hint in
+   * a burst is lost. For a cue only (Home's buy cue), never data. It does not open the socket: a surface does.
+   */
+  subscribeHints = (listener: (hint: FreshnessHint) => void): (() => void) => {
+    this.#hintListeners.add(listener);
+    return () => { this.#hintListeners.delete(listener); };
+  };
 
   connected = (): boolean => this.#socket !== null && this.#phase === "live";
   subscribeConnection = (signal: () => void): (() => void) => {
@@ -312,7 +337,14 @@ export class ActivityHints {
     }
     this.#metric({ event: "hint", kind: String(frame.type) });
     // A malformed hint is still a look; only a well-formed one selects reads.
-    this.#look("hint", selectedBy(hintOf(frame)));
+    const selected = selectedBy(hintOf(frame));
+    if (this.#deps.visible() && this.#hintListeners.size > 0) {
+      const hint: FreshnessHint = Object.freeze({ atMs: this.#deps.now(), cause: "hint", ...selected });
+      for (const listener of this.#hintListeners) {
+        try { listener(hint); } catch { /* A cue's failure never costs a surface its look. */ }
+      }
+    }
+    this.#look("hint", selected);
   }
 
   /** Tells every surface to look, through its coalescer. */
@@ -414,7 +446,7 @@ export class ActivityHints {
 
 /** One surface's view of the hint socket, as a freshness source. */
 export function activityHints(surface: string, hints: ActivityHints, accepts?: HintFilter): FeedFreshnessSource {
-  return { name: "activity", subscribe: (signal) => hints.subscribe(surface, signal, accepts) };
+  return { name: "activity", subscribe: (signal) => hints.subscribe(surface, signal, accepts), hints: hints.subscribeHints };
 }
 
 /**

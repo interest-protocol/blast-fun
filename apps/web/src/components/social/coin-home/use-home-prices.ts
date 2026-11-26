@@ -13,17 +13,35 @@ import type { HomeCoin } from "@blast/core/web/contracts/home.ts";
 
 type Observation = DisplayPrice & Readonly<{ checkpoint: number }>;
 
+/**
+ * The coins a Home list streams prices for, at most `maxPriceCoinsPerClient` migrated coins on the page. Sticky,
+ * so a poll that swaps rows 20 and 21 does not resubscribe every tab: a coin already streamed stays while it is
+ * still a migrated row on the page, and free slots fill in row order, so the visible rows get live prices.
+ * Sorted, so the result changes only when the membership does.
+ */
+export function homePriceCoins(coins: readonly HomeCoin[], previous: readonly string[] = []): readonly string[] {
+  const onPage: string[] = [];
+  for (const coin of coins) {
+    if (coin.lifecycle !== "migrated") continue;
+    const type = coinKey(coin.coin_type);
+    if (type && displayPriceCoinSchema.safeParse(type).success && !onPage.includes(type)) onPage.push(type);
+  }
+  const max = MARKET_STREAM_BUDGET.maxPriceCoinsPerClient;
+  const kept = new Set(previous.filter((type) => onPage.includes(type)).slice(0, max));
+  for (const type of onPage) {
+    if (kept.size >= max) break;
+    kept.add(type);
+  }
+  return [...kept].sort();
+}
+
 export function useHomePrices(coins: readonly HomeCoin[], enabled: boolean) {
   const [latest, setLatest] = useState<ReadonlyMap<string, Observation>>(() => new Map());
-  const keys = new Set<string>();
-  if (enabled) {
-    for (const coin of coins) {
-      if (coin.lifecycle !== "migrated") continue;
-      const type = coinKey(coin.coin_type);
-      if (type && displayPriceCoinSchema.safeParse(type).success) keys.add(type);
-    }
-  }
-  const subscriptionKey = [...keys].sort().slice(0, MARKET_STREAM_BUDGET.maxPriceCoinsPerClient).join("|");
+  const [streamed, setStreamed] = useState<readonly string[]>([]);
+  const picked = enabled ? homePriceCoins(coins, streamed) : [];
+  const subscriptionKey = picked.join("|");
+  // Remembered for the next render's pick (React's "adjust state while rendering"): set only on a change.
+  if (subscriptionKey !== streamed.join("|")) setStreamed(picked);
 
   useEffect(() => {
     if (!subscriptionKey) return;

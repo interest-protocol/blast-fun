@@ -80,8 +80,9 @@ export function useMarketStream(
           shown = Math.max(shown, latest.current?.provenance.checkpoint ?? 0);
           frames = [...frames.filter((item) => item.checkpoint > shown), frame];
           if (frames.length > MAX_FRAMES) {
+            // Too many frames past the last read: drop them and read history through this one instead.
             frames = [];
-            subscription.restart();
+            update(() => ({ fence: frame.checkpoint, frames }));
             return;
           }
           update(() => ({ frames, floor: shown }));

@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { MARKET_STREAM_BUDGET } from "@blast/core/modules/launchpad-contract/market-stream.ts";
 import { marketHintTransport } from "#web/lib/live-stream/market-hints.ts";
-import { HIDDEN_GRACE_MS, MarketStreamHub, STABLE_MS, UNSERVED_RETRY_MS, type MarketEventSource, type MarketStreamState, type MarketTrade } from "./market-stream-hub.ts";
+import { HIDDEN_GRACE_MS, MarketStreamHub, STABLE_MS, type MarketEventSource, type MarketStreamState, type MarketTrade } from "./market-stream-hub.ts";
 
 const CURVE = `blast_curve:0x${"11".repeat(32)}`;
 const VENUE = `cetus:0x${"22".repeat(32)}`;
@@ -33,25 +34,59 @@ class Source implements MarketEventSource {
 
 function setup() {
   const sources: Source[] = [];
-  const timers: { run: () => void; ms: number }[] = [];
+  const timers: { run: () => void; ms: number; at: number }[] = [];
+  let now = 0;
   let visible = true;
   let onVisibility: (() => void) | null = null;
   const hub = new MarketStreamHub({
     createSource: (url) => { const source = new Source(url); sources.push(source); return source; },
-    schedule: (run, ms) => { const timer = { run, ms }; timers.push(timer); return () => { const index = timers.indexOf(timer); if (index >= 0) timers.splice(index, 1); }; },
+    schedule: (run, ms) => { const timer = { run, ms, at: now + ms }; timers.push(timer); return () => { const index = timers.indexOf(timer); if (index >= 0) timers.splice(index, 1); }; },
     defer: queueMicrotask, random: () => 0, visible: () => visible,
     onVisibilityChange: (listener) => { onVisibility = listener; return () => { onVisibility = null; }; },
   });
   const fire = (ms: number) => { const timer = timers.find((entry) => entry.ms === ms)!; assert.ok(timer, `a ${ms} ms timer is pending`); timers.splice(timers.indexOf(timer), 1); timer.run(); };
+  /** Moves the fake clock on, running each timer that falls due, in order. */
+  const advance = (ms: number) => {
+    const end = now + ms;
+    for (;;) {
+      const due = timers.filter((timer) => timer.at <= end).sort((a, b) => a.at - b.at)[0];
+      if (!due) break;
+      timers.splice(timers.indexOf(due), 1);
+      now = due.at;
+      due.run();
+    }
+    now = end;
+  };
   const setVisible = (value: boolean) => { visible = value; onVisibility?.(); };
-  return { hub, sources, timers, fire, setVisible, source: () => sources.at(-1)!, listening: () => onVisibility !== null };
+  return { hub, sources, timers, fire, advance, setVisible, source: () => sources.at(-1)!, listening: () => onVisibility !== null };
 }
 
 function watcher(pools: string[] = [CURVE]) {
   const states: MarketStreamState[] = [];
+  const poolStates: [string, MarketStreamState][] = [];
   const fences: [string, number][] = [];
   const trades: MarketTrade[] = [];
-  return { pools, states, fences, trades, listener: { state: (state: MarketStreamState) => states.push(state), fence: (pool: string, checkpoint: number) => fences.push([pool, checkpoint]), trade: (value: MarketTrade) => trades.push(value) } };
+  const last = (pool: string) => poolStates.filter(([key]) => key === pool).at(-1)?.[1];
+  return {
+    pools, states, poolStates, fences, trades, last,
+    listener: {
+      state: (state: MarketStreamState) => states.push(state),
+      pool: (pool: string, state: MarketStreamState) => poolStates.push([pool, state]),
+      fence: (pool: string, checkpoint: number) => fences.push([pool, checkpoint]),
+      trade: (value: MarketTrade) => trades.push(value),
+    },
+  };
+}
+
+/** A venue trade frame for `pool`. */
+function poolTrade(pool: string, checkpoint: number, part = 2) {
+  const frame = trade(checkpoint, part);
+  return { ...frame, trade: { ...frame.trade, pool_key: pool, venue: pool.split(":")[0], kind: pool.startsWith("blast_curve") ? "buy" : "swap" } };
+}
+
+/** A hello from a relay that sends heartbeats every 4 s. */
+function heartbeatHello(source: Source) {
+  source.emit("hint", { type: "hello", provenance: wireProvenance(1), heartbeat: true, heartbeat_ms: MARKET_STREAM_BUDGET.heartbeatMs });
 }
 
 const settle = () => Promise.resolve();
@@ -166,108 +201,352 @@ test("a pool set change reconnects once and never holds two streams", async () =
   assert.equal(coin.states.at(-1), "live", "a stopped subscriber hears nothing more");
 });
 
-test("a third pool beyond the two-pool budget stays on its polls", async () => {
+test("a third pool beyond the two-pool budget is over budget, the rest is served, and it clears when a slot frees", async () => {
   const s = setup();
   const chart = watcher([CURVE, VENUE]);
   s.hub.subscribe({ pools: chart.pools, expected, listener: chart.listener });
   const other = watcher([OTHER]);
-  s.hub.subscribe({ pools: other.pools, expected, listener: other.listener });
+  const newest = s.hub.subscribe({ pools: other.pools, expected, listener: other.listener });
   await settle();
-  assert.deepEqual(s.source().pools(), [OTHER]);
-  assert.equal(chart.states.at(-1), "unavailable", "the newest screen wins the stream");
-  assert.equal(other.states.at(-1), "connecting");
-  assert.equal(s.sources.length, 2);
-  assert.equal(s.sources[0].closed, true);
+  assert.deepEqual(s.source().pools(), [OTHER, CURVE], "the newest screen first, then what fits of the older one");
+  s.source().hello();
+  s.source().fence(10, OTHER);
+  s.source().fence(10);
+  assert.equal(chart.last(CURVE), "live");
+  assert.equal(chart.last(VENUE), "over_budget");
+  assert.equal(chart.states.at(-1), "over_budget");
+  assert.equal(other.states.at(-1), "live");
+  newest.stop();
+  await settle();
+  assert.deepEqual(s.source().pools().sort(), [CURVE, VENUE].sort(), "the freed slot goes to the waiting pool");
+  s.source().hello();
+  s.source().fence(11);
+  s.source().fence(11, VENUE);
+  assert.equal(chart.last(VENUE), "live");
+  assert.equal(chart.states.at(-1), "live");
 });
 
-test("a pool the stream never fences stays on its polls without fast retries; the other pool keeps streaming", async () => {
+// This fails if one pool the reader never answers (or does not know) ends the socket, marks the
+// other pool unavailable, or keeps a retry loop running.
+test("a pool the relay never fences waits on its own; the socket and the other pool stream on", async () => {
   const s = setup();
-  const chart = watcher([CURVE]);
+  const chart = watcher([CURVE, VENUE]);
+  const subscription = s.hub.subscribe({ pools: chart.pools, expected, listener: chart.listener });
+  heartbeatHello(s.source());
+  s.source().fence(10);
+  for (let second = 0; second < 600; second += 4) {
+    s.source().emit("heartbeat");
+    s.advance(4_000);
+  }
+  assert.equal(s.sources.length, 1, "no reconnect in ten minutes");
+  assert.equal(s.source().closed, false);
+  assert.equal(chart.last(CURVE), "live");
+  assert.equal(chart.last(VENUE), "connecting");
+  assert.equal(subscription.ready(CURVE), true);
+  assert.equal(subscription.ready(VENUE), false);
+  assert.equal(subscription.state(VENUE), "connecting");
+  assert.equal(subscription.state(OTHER), "over_budget", "a pool it never asked for");
+  assert.equal(chart.states.includes("unavailable"), false);
+});
+
+test("not_found: the relay names one pool unavailable, keeps the socket, and may fence it later", async () => {
+  const s = setup();
+  const chart = watcher([CURVE, VENUE]);
   s.hub.subscribe({ pools: chart.pools, expected, listener: chart.listener });
-  const unindexed = watcher([VENUE]);
-  const subscription = s.hub.subscribe({ pools: unindexed.pools, expected, listener: unindexed.listener });
-  await settle();
-  assert.deepEqual(s.source().pools().sort(), [CURVE, VENUE].sort());
   s.source().hello();
   s.source().fence(10);
-  s.fire(10_000); // The market engine never snapshots VENUE (it may not index that coin).
-  assert.equal(unindexed.states.at(-1), "unavailable");
-  assert.equal(s.sources[0].closed, true);
-  assert.deepEqual(s.source().pools(), [CURVE]);
-  assert.deepEqual(s.timers.map((timer) => timer.ms).sort(), [10_000, UNSERVED_RETRY_MS], "no backoff retry, one slow retry");
-  s.source().hello();
-  s.source().fence(11);
-  assert.equal(chart.states.at(-1), "live");
-  const opened = s.sources.length;
-  subscription.restart();
-  assert.equal(s.sources.length, opened, "an unserved subscriber never restarts the stream");
-  const again = watcher([VENUE]);
-  s.hub.subscribe({ pools: again.pools, expected, listener: again.listener });
-  await settle();
-  assert.deepEqual(s.source().pools().sort(), [CURVE, VENUE].sort(), "subscribing again tries the pool again");
-});
-
-test("the relay's unavailable status names one pool: only its subscribers fall back to polls", async () => {
-  const s = setup();
-  const unindexed = watcher([VENUE]);
-  s.hub.subscribe({ pools: unindexed.pools, expected, listener: unindexed.listener });
-  s.source().hello();
   s.source().emit("status", { state: "unavailable", pool_key: VENUE });
-  assert.deepEqual(unindexed.states, ["connecting", "unavailable"]);
-  assert.equal(s.source().closed, true);
-  assert.equal(s.sources.length, 1);
-  assert.deepEqual(s.timers.map((timer) => timer.ms), [UNSERVED_RETRY_MS]);
-  s.fire(UNSERVED_RETRY_MS); // The engine may index the coin by now.
-  assert.equal(s.sources.length, 2);
-  assert.deepEqual(s.source().pools(), [VENUE]);
-  s.source().hello();
-  s.source().fence(10, VENUE);
-  assert.equal(unindexed.states.at(-1), "live");
-  assert.equal(s.listening(), true, "the reopened stream still pauses in a hidden tab");
-});
-
-test("the unserved retry never restarts a live stream for other pools, backs off, and ends with the last subscriber", async () => {
-  const s = setup();
-  const chart = watcher([CURVE]);
-  const chartSubscription = s.hub.subscribe({ pools: chart.pools, expected, listener: chart.listener });
-  const unindexed = watcher([VENUE]);
-  const subscription = s.hub.subscribe({ pools: unindexed.pools, expected, listener: unindexed.listener });
-  await settle();
-  s.source().hello();
-  s.source().fence(10);
-  s.fire(10_000);
-  s.source().hello();
-  s.source().fence(11);
-  const opened = s.sources.length;
-  s.fire(UNSERVED_RETRY_MS);
-  assert.equal(s.sources.length, opened, "the live CURVE stream is not restarted");
+  assert.equal(chart.last(VENUE), "unavailable");
+  assert.equal(chart.last(CURVE), "live");
+  assert.equal(s.source().closed, false);
+  assert.equal(s.timers.some((timer) => timer.ms > 30_000), false, "no slow retry of the hub's own");
+  s.source().emit("market", poolTrade(CURVE, 11));
+  assert.equal(chart.trades.length, 1);
+  s.source().fence(70, VENUE); // The relay asked again a minute later, and the reader knows it now.
+  assert.equal(chart.last(VENUE), "live");
   assert.equal(chart.states.at(-1), "live");
-  assert.ok(s.timers.some((timer) => timer.ms === UNSERVED_RETRY_MS), "the probe waits for its turn");
-  chartSubscription.stop();
-  await settle();
-  s.fire(UNSERVED_RETRY_MS); // Nothing healthy to disturb: the probe runs.
-  assert.deepEqual(s.source().pools(), [VENUE]);
-  s.source().hello();
-  s.fire(10_000);
-  assert.equal(unindexed.states.at(-1), "unavailable");
-  assert.ok(s.timers.some((timer) => timer.ms === 2 * UNSERVED_RETRY_MS), "each failed probe doubles the wait");
-  subscription.stop();
-  await settle();
-  assert.equal(s.timers.length, 0, "no retry outlives the last subscriber");
-  assert.equal(s.listening(), false);
+  assert.equal(s.sources.length, 1);
 });
 
-test("before the hint handshake a pool-named unavailable is an upstream fault, and the fence deadline runs from the hello", async () => {
+test("before the hello, a pool-named unavailable marks that pool alone; the hello deadline still guards the socket", async () => {
   const s = setup();
   const chart = watcher();
   s.hub.subscribe({ pools: chart.pools, expected, listener: chart.listener });
   s.source().emit("status", { state: "unavailable", pool_key: CURVE });
-  assert.deepEqual(chart.states, ["connecting", "reconnecting"]);
-  s.fire(500);
-  s.source().hello(); // A late hello: the pool still gets a full deadline for its fence.
-  s.fire(10_000);
+  assert.deepEqual(chart.states, ["connecting"]);
+  s.source().hello();
   assert.equal(chart.states.at(-1), "unavailable");
-  assert.equal(s.timers.some((timer) => timer.ms === 10_000), false, "the handshake deadline was replaced");
+  assert.equal(s.timers.some((timer) => timer.ms === 10_000), false, "the handshake deadline is gone after the hello");
+});
+
+test("quiet pools stay live for ten minutes on heartbeats alone", async () => {
+  const s = setup();
+  const chart = watcher([CURVE, VENUE]);
+  s.hub.subscribe({ pools: chart.pools, expected, listener: chart.listener });
+  heartbeatHello(s.source());
+  s.source().fence(10);
+  s.source().fence(10, VENUE);
+  for (let second = 0; second < 600; second += 4) {
+    s.source().emit("heartbeat");
+    s.advance(4_000);
+  }
+  assert.equal(s.sources.length, 1);
+  assert.deepEqual(chart.states, ["connecting", "live"]);
+  assert.deepEqual(chart.fences, [[CURVE, 10], [VENUE, 10]], "no fence again");
+});
+
+test("a busy pool and a quiet pool: every trade of the busy one arrives once and the quiet one stays live", async () => {
+  const s = setup();
+  const chart = watcher([CURVE, VENUE]);
+  s.hub.subscribe({ pools: chart.pools, expected, listener: chart.listener });
+  heartbeatHello(s.source());
+  s.source().fence(10);
+  s.source().fence(10, VENUE);
+  for (let checkpoint = 11; checkpoint < 311; checkpoint++) {
+    s.source().emit("market", poolTrade(CURVE, checkpoint));
+    s.source().emit("heartbeat");
+    s.advance(1_000);
+  }
+  assert.equal(chart.trades.length, 300);
+  assert.equal(chart.last(VENUE), "live");
+  assert.equal(s.sources.length, 1);
+});
+
+// This fails if an upstream loss on the relay drops fences, closes the socket, or never comes back live.
+test("an upstream drop makes fenced pools stale, keeps the socket, and fresh or a new fence brings them back", async () => {
+  const s = setup();
+  const chart = watcher([CURVE, VENUE]);
+  const subscription = s.hub.subscribe({ pools: chart.pools, expected, listener: chart.listener });
+  heartbeatHello(s.source());
+  s.source().fence(10);
+  s.source().fence(10, VENUE);
+  for (let second = 0; second < 600; second += 4) { // A long quiet spell first, on heartbeats.
+    s.source().emit("heartbeat");
+    s.advance(4_000);
+  }
+  s.source().emit("status", { state: "recovering" });
+  assert.equal(chart.last(CURVE), "stale");
+  assert.equal(chart.last(VENUE), "stale");
+  assert.equal(subscription.ready(CURVE), false, "a stale pool polls");
+  s.source().emit("heartbeat"); // The relay keeps heartbeats for 30 s.
+  s.source().fence(20); // Resumed with a snapshot: a new fence for that pool.
+  s.source().emit("status", { state: "fresh" });
+  assert.equal(chart.last(CURVE), "live");
+  assert.equal(chart.last(VENUE), "live", "a pool resumed by cursor keeps its fence");
+  assert.deepEqual(chart.fences, [[CURVE, 10], [VENUE, 10], [CURVE, 20]]);
+  assert.equal(s.sources.length, 1);
+  assert.equal(s.source().closed, false);
+});
+
+test("stale, then recovery: a lagging relay marks pools stale while frames keep flowing", async () => {
+  const s = setup();
+  const chart = watcher([CURVE]);
+  s.hub.subscribe({ pools: chart.pools, expected, listener: chart.listener });
+  s.source().hello();
+  s.source().fence(10);
+  s.source().emit("status", { state: "stale" });
+  assert.equal(chart.states.at(-1), "stale");
+  s.source().emit("market", trade(11));
+  assert.equal(chart.trades.length, 1);
+  s.source().emit("status", { state: "fresh" });
+  assert.equal(chart.states.at(-1), "live");
+  assert.deepEqual(chart.fences, [[CURVE, 10]]);
+});
+
+test("a pool the relay re-fences is recovering while the other pool streams", async () => {
+  const s = setup();
+  const chart = watcher([CURVE, VENUE]);
+  s.hub.subscribe({ pools: chart.pools, expected, listener: chart.listener });
+  s.source().hello();
+  s.source().fence(10);
+  s.source().fence(10, VENUE);
+  s.source().emit("status", { state: "recovering", pool_key: VENUE });
+  assert.equal(chart.last(VENUE), "recovering");
+  s.source().emit("market", poolTrade(VENUE, 11));
+  s.source().emit("market", poolTrade(CURVE, 11));
+  assert.deepEqual(chart.trades.map(({ poolKey }) => poolKey), [CURVE], "a frame for an unfenced pool is dropped");
+  s.source().fence(12, VENUE);
+  assert.equal(chart.last(VENUE), "live");
+  assert.equal(s.sources.length, 1);
+});
+
+test("an oversized or bad frame re-fences only its pool, on the same socket", async () => {
+  const s = setup();
+  const chart = watcher([CURVE, VENUE]);
+  s.hub.subscribe({ pools: chart.pools, expected, listener: chart.listener });
+  s.source().hello();
+  s.source().fence(10);
+  s.source().fence(10, VENUE);
+  s.source().emit("market", { ...poolTrade(CURVE, 15), padding: "x".repeat(MARKET_STREAM_BUDGET.maxUpstreamFrameChars) });
+  assert.deepEqual(chart.fences.at(-1), [CURVE, 15], "the pool reads history through the lost frame");
+  s.source().emit("market", { ...poolTrade(VENUE, 16), trade: { ...poolTrade(VENUE, 16).trade, side: "sideways" } });
+  assert.deepEqual(chart.fences.at(-1), [VENUE, 16]);
+  s.source().emit("market", poolTrade(CURVE, 17));
+  assert.equal(chart.trades.length, 1, "frames after the new fence still stream");
+  assert.equal(s.sources.length, 1);
+  assert.equal(s.source().closed, false);
+  assert.equal(chart.last(CURVE), "live");
+  s.source().listeners.get("market")![0]!({ data: "{not json" });
+  assert.equal(s.source().closed, false, "a frame no pool can be blamed for re-fences, never reconnects");
+});
+
+test("repeated bad frames on one pool back off its local re-fences (0, 5, 10, 30 s) and reset once a fence holds a minute", async () => {
+  const s = setup();
+  const chart = watcher([CURVE, VENUE]);
+  s.hub.subscribe({ pools: chart.pools, expected, listener: chart.listener });
+  s.source().hello();
+  s.source().fence(10);
+  s.source().fence(10, VENUE);
+  const bad = (checkpoint: number) => s.source().emit("market", { ...poolTrade(CURVE, checkpoint), trade: { ...poolTrade(CURVE, checkpoint).trade, side: "sideways" } });
+  const curveFences = () => chart.fences.filter(([pool]) => pool === CURVE).length;
+  bad(11);
+  assert.equal(curveFences(), 2, "the first re-fence is at once");
+  bad(12);
+  assert.equal(curveFences(), 2);
+  assert.equal(chart.last(CURVE), "recovering", "while it waits the pool polls");
+  assert.equal(chart.last(VENUE), "live");
+  bad(13); // frames while it waits are dropped, not re-fenced again
+  s.source().emit("market", poolTrade(CURVE, 14));
+  assert.equal(chart.trades.length, 0);
+  s.advance(5_000);
+  assert.deepEqual(chart.fences.at(-1), [CURVE, 14]);
+  assert.equal(chart.last(CURVE), "live");
+  bad(15);
+  s.advance(9_999);
+  assert.equal(curveFences(), 3);
+  s.advance(1);
+  assert.equal(curveFences(), 4);
+  s.advance(60_000); // the fence held: the count resets
+  bad(16);
+  assert.equal(curveFences(), 5, "at once again");
+  assert.equal(s.sources.length, 1);
+});
+
+test("a candle interval no chart reads (1s) is skipped, not a bad frame", async () => {
+  const s = setup();
+  const chart = watcher();
+  s.hub.subscribe({ pools: chart.pools, expected, migration: () => null, listener: chart.listener });
+  s.source().hello();
+  s.source().fence(10);
+  s.source().emit("market", { type: "candle_closed", pool_key: CURVE, cursor: "11:1:0:2", checkpoint: 11, timestamp_ms: NOW + 11, provenance: wireProvenance(11), interval: "1s", candle: {} });
+  assert.deepEqual(chart.fences, [[CURVE, 10]]);
+  s.source().emit("market", trade(12));
+  assert.equal(chart.trades.length, 1);
+});
+
+test("a listener that throws harms only itself", async () => {
+  const s = setup();
+  const good = watcher();
+  s.hub.subscribe({ pools: [CURVE], expected, listener: { state: () => { throw new Error("state"); }, fence: () => { throw new Error("fence"); }, trade: () => { throw new Error("trade"); } } });
+  s.hub.subscribe({ pools: good.pools, expected, listener: good.listener });
+  await settle();
+  s.source().hello();
+  s.source().fence(10);
+  s.source().emit("market", trade(11));
+  assert.deepEqual(good.fences, [[CURVE, 10]]);
+  assert.equal(good.trades.length, 1);
+  assert.equal(good.states.at(-1), "live");
+  assert.equal(s.sources.length, 1);
+  assert.equal(s.source().closed, false);
+});
+
+test("heartbeat silence over 9 s reconnects with backoff and fences again", async () => {
+  const s = setup();
+  const chart = watcher();
+  s.hub.subscribe({ pools: chart.pools, expected, listener: chart.listener });
+  heartbeatHello(s.source());
+  s.source().fence(10);
+  s.advance(MARKET_STREAM_BUDGET.heartbeatTimeoutMs);
+  assert.equal(s.sources[0].closed, true);
+  assert.equal(s.sources[0].failed, true);
+  assert.equal(chart.states.at(-1), "reconnecting");
+  s.advance(500);
+  assert.equal(s.sources.length, 2);
+  s.source().hello();
+  s.source().fence(12);
+  assert.equal(chart.states.at(-1), "live");
+});
+
+test("socket rotation: the relay closes, the hub reconnects at once with a short backoff and fences each pool again", async () => {
+  const s = setup();
+  const chart = watcher([CURVE, VENUE]);
+  s.hub.subscribe({ pools: chart.pools, expected, listener: chart.listener });
+  s.source().hello();
+  s.source().fence(10);
+  s.source().fence(10, VENUE);
+  s.advance(45 * 60_000);
+  s.source().emit("error");
+  assert.equal(chart.states.at(-1), "reconnecting");
+  s.advance(500);
+  s.source().hello();
+  s.source().fence(30);
+  s.source().fence(30, VENUE);
+  assert.equal(chart.states.at(-1), "live");
+  assert.deepEqual(chart.fences.slice(2), [[CURVE, 30], [VENUE, 30]]);
+  assert.equal(chart.states.includes("unavailable"), false);
+});
+
+test("the backoff runs 500 ms doubling up to 30 s", async () => {
+  const s = setup();
+  s.hub.subscribe({ pools: [CURVE], expected, listener: watcher().listener });
+  const waits: number[] = [];
+  for (let attempt = 0; attempt < 8; attempt++) {
+    s.source().emit("error");
+    const wait = s.timers.find((timer) => timer.ms !== 10_000)!.ms;
+    waits.push(wait);
+    s.advance(wait);
+  }
+  assert.deepEqual(waits, [500, 1_000, 2_000, 4_000, 8_000, 16_000, 30_000, 30_000]);
+});
+
+test("a tab hidden over 15 s pauses; shown during a backoff it reconnects at once", async () => {
+  const s = setup();
+  const chart = watcher();
+  s.hub.subscribe({ pools: chart.pools, expected, listener: chart.listener });
+  s.source().hello();
+  s.source().fence(10);
+  for (let attempt = 0; attempt < 5; attempt++) {
+    s.source().emit("error");
+    s.advance(s.timers.find((timer) => timer.ms !== 10_000)!.ms);
+  }
+  s.source().emit("error");
+  assert.ok(s.timers.some((timer) => timer.ms === 16_000), "a long backoff is pending");
+  s.setVisible(false);
+  s.advance(HIDDEN_GRACE_MS + 1_000);
+  assert.equal(chart.states.at(-1), "paused", "the backoff ends in a hidden tab: it pauses");
+  const opened = s.sources.length;
+  s.setVisible(true);
+  assert.equal(s.sources.length, opened + 1, "shown again: at once");
+  s.source().emit("error");
+  s.setVisible(false);
+  s.setVisible(true);
+  assert.equal(s.sources.length, opened + 2, "shown during a backoff: at once, the backoff cancelled");
+  assert.equal(s.timers.some((timer) => timer.ms >= 500 && timer.ms !== 10_000), false);
+});
+
+// This fails if the new hub cannot live with the relay already deployed: it sends only live and
+// unavailable, ends the socket after a stalled pool, and sends resync.
+test("the old relay: a pool's unavailable then close waits a minute before reopening, and resync ends the socket", async () => {
+  const s = setup();
+  const chart = watcher([CURVE, VENUE]);
+  s.hub.subscribe({ pools: chart.pools, expected, listener: chart.listener });
+  s.source().hello();
+  s.source().fence(10);
+  s.source().emit("status", { state: "unavailable", pool_key: VENUE });
+  s.source().emit("error"); // The old relay stops the client after a stall.
+  assert.equal(chart.states.at(-1), "reconnecting");
+  s.advance(30_000);
+  assert.equal(s.sources.length, 1, "no quick reopen loop against an old relay");
+  s.advance(30_000);
+  assert.equal(s.sources.length, 2);
+  s.source().hello();
+  s.source().fence(11);
+  assert.equal(chart.last(CURVE), "live");
+  s.source().emit("resync", { state: "resync", pool_key: CURVE });
+  assert.equal(s.source().closed, true);
+  assert.equal(chart.states.at(-1), "reconnecting");
+  s.advance(1_000);
+  assert.equal(s.sources.length, 3);
 });
 
 test("without the hint handshake the deadline reconnects with backoff, as an upstream fault", async () => {
@@ -315,43 +594,24 @@ test("a refused stream is unavailable for the wait it names, then the socket is 
   const s = setup();
   const chart = watcher();
   s.hub.subscribe({ pools: chart.pools, expected, listener: chart.listener });
-  s.source().listeners.get("refused")![0]!({ data: "600000" });
+  s.source().listeners.get("refused")![0]!({ data: "60000" });
   assert.equal(s.source().closed, true);
   assert.deepEqual(chart.states, ["connecting", "unavailable"]);
-  assert.deepEqual(s.timers.map(({ ms }) => ms), [600_000], "one retry, at the end of the wait");
+  assert.deepEqual(s.timers.map(({ ms }) => ms), [60_000], "one retry, at the end of the wait");
   const late = watcher();
   s.hub.subscribe({ pools: late.pools, expected, listener: late.listener });
   await settle();
   assert.deepEqual(late.states, ["unavailable"], "a later subscriber to the same pools is told the truth");
-  s.setVisible(false);
-  s.setVisible(true);
-  assert.equal(s.sources.length, 1, "a returning tab waits out the window too");
-  s.fire(600_000);
+  s.fire(60_000);
   assert.equal(s.sources.length, 2, "the socket is tried again after the wait");
   assert.equal(chart.states.at(-1), "connecting");
   s.source().fence(10);
   s.source().hello();
   assert.equal(chart.states.at(-1), "live");
-});
-
-test("a subscriber's restart drops the stream once and reconnects with backoff", async () => {
-  const s = setup();
-  const chart = watcher();
-  const subscription = s.hub.subscribe({ pools: chart.pools, expected, listener: chart.listener });
-  s.source().fence(10);
-  s.source().hello();
-  subscription.restart();
-  subscription.restart();
-  assert.equal(s.sources.length, 1);
-  assert.equal(s.timers.filter((timer) => timer.ms === 500).length, 1);
-  s.fire(500);
-  s.source().fence(10);
-  s.source().hello();
-  subscription.restart(); // a chart whose history keeps overflowing its buffer
-  assert.ok(s.timers.some((timer) => timer.ms === 1_000), "repeated restarts of a live stream back off");
-  subscription.stop();
-  await settle();
-  assert.equal(s.timers.length, 0);
+  s.source().listeners.get("refused")![0]!({ data: "60000" });
+  s.setVisible(false);
+  s.setVisible(true);
+  assert.equal(s.sources.length, 3, "a tab shown again asks the source at once (it answers at once while the wait lasts)");
 });
 
 function legacy() {
@@ -394,7 +654,8 @@ test("a coin observer follows the stream's trades without opening or widening it
   const coinType = `0x${"44".repeat(32)}::meme::MEME`;
   const live: boolean[] = [];
   const seen: MarketTrade[] = [];
-  const stop = s.hub.observe(coinType, { live: (value) => live.push(value), trade: (value) => seen.push(value) });
+  // `live` is a level, told on every pool state change: the test keeps its changes.
+  const stop = s.hub.observe(coinType, { live: (value) => { if (live.at(-1) !== value) live.push(value); }, trade: (value) => seen.push(value) });
   await settle();
   assert.equal(s.sources.length, 0, "observing alone opens nothing");
   assert.deepEqual(live, [false]);

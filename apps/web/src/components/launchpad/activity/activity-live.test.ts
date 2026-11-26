@@ -80,7 +80,7 @@ function fakeHub() {
   const hub = {
     subscribe: (request: MarketStreamRequest) => {
       subscribed.push(request);
-      return { restart: () => {}, stop: () => void stopped++ };
+      return { state: () => "live" as const, ready: () => true, stop: () => void stopped++ };
     },
   };
   const listener = (): MarketStreamListener => subscribed.at(-1)!.listener;

@@ -75,3 +75,27 @@ test("a held coin retains its streamed price until a newer read actually include
   await render([first, { ...held, price_usd: "4" }], 12);
   assert.deepEqual(texts(), ["1", "4"], "a read containing that coin supersedes the older stream frame");
 });
+
+// Fails if the price stream follows sorted coin types instead of the rows on screen.
+test("Home streams prices for the first 20 migrated coins by row order, not by sorted coin type", async () => {
+  const { homePriceCoins } = await import("./use-home-prices");
+  const hex = (index: number) => (0xff - index).toString(16).padStart(2, "0").repeat(32);
+  // Row order runs against sorted order: the top row has the largest coin type.
+  const rows = Array.from({ length: 25 }, (_, index) => ({ ...standalone(`C${index}`, "cetus"), coin_type: `0x${hex(index)}::coin::C${index}` }));
+  const curve = { ...rows[0], coin_type: `0x${"0".repeat(64)}::coin::CURVE`, lifecycle: "opened" as const };
+  const picked = homePriceCoins([curve, ...rows]);
+  assert.equal(picked.length, 20);
+  assert.deepEqual(new Set(picked), new Set(rows.slice(0, 20).map(coin => coin.coin_type)), "the top 20 rows, not a coin that is not migrated");
+  assert.deepEqual(homePriceCoins([...rows.slice(0, 20)].reverse()), picked, "a reorder of the same rows keeps the subscription");
+
+  // A poll swaps rows 20 and 21: the streamed set stays, so no tab resubscribes.
+  const swapped = [...rows.slice(0, 19), rows[20], rows[19], ...rows.slice(21)];
+  assert.deepEqual(homePriceCoins(swapped, picked), picked, "a swap across row 20/21 keeps the key");
+  // A streamed coin leaves the page: its slot goes to the first unstreamed row, in row order.
+  const left = swapped.filter(coin => coin !== rows[3]);
+  const refilled = homePriceCoins(left, picked);
+  assert.equal(refilled.length, 20);
+  assert.equal(refilled.includes(rows[3].coin_type), false, "the coin that left is dropped");
+  assert.equal(refilled.includes(rows[20].coin_type), true, "its slot goes to the next row");
+  assert.equal(refilled.includes(rows[21].coin_type), false);
+});

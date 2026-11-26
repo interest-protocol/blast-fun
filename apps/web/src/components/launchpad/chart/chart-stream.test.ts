@@ -97,6 +97,22 @@ test("stream opens before REST, shows behind-fence history, then applies only la
   assert.equal(s.timers.length, 0);
 });
 
+test("a chart shown stale while the relay's upstream lags streams again when it is fresh", async () => {
+  const s = setup();
+  s.client.start();
+  s.source().emit("hint", { type: "hello", provenance: wireProvenance(1) });
+  s.source().ready(10);
+  s.loads.shift()!.resolve(answer(10));
+  await settle();
+  assert.equal(s.statuses.at(-1), "streaming");
+  s.source().emit("status", { state: "stale" });
+  assert.equal(s.statuses.at(-1), "recovering");
+  s.source().emit("status", { state: "fresh" });
+  assert.equal(s.statuses.at(-1), "streaming", "no fence or read comes: the fresh upstream alone resumes streaming");
+  assert.equal(s.loads.length, 0);
+  s.client.stop();
+});
+
 test("a seeded pool starts from its own fence and only a behind pool reads again", async () => {
   const s = setup([CURVE, VENUE]);
   s.client.start([[CURVE, answer(10)], [VENUE, answer(18, VENUE)]]);
@@ -269,16 +285,29 @@ test("disconnect invalidates prices, settles late reads harmlessly and retries w
   unsubscribe();
 });
 
-test("overflow and malformed deployment frames close the stream and preserve recovery requirements", async () => {
-  const s = setup();
-  s.client.start(); s.source().ready(10);
-  for (let i = 0; i < 129 && !s.source().closed; i++) s.source().emit("market", trade(11 + i));
-  assert.equal(s.source().closed, true);
-  assert.equal(s.statuses.at(-1), "reconnecting");
-  s.loads.shift()!.resolve(answer(10)); await settle(); s.client.stop();
+// This fails if a chart whose history read lags behind a busy pool ends the tab's socket, or
+// re-fences its other pool, instead of reading that one pool again through its newest frame.
+test("a buffer overflow re-fences only its pool, and a foreign deployment's fence ends nothing", async () => {
+  const s = setup([CURVE, VENUE]);
+  s.client.start(); s.source().ready(10); s.source().ready(10, VENUE);
+  s.source().emit("hint", { type: "hello", provenance: wireProvenance(10) });
+  for (let i = 0; i < 129; i++) s.source().emit("market", trade(11 + i));
+  assert.equal(s.source().closed, false, "the socket stays");
+  assert.equal(s.sources.length, 1);
+  assert.equal(s.statuses.at(-1), "recovering");
+  s.loads.find((load) => load.pool === CURVE)!.resolve(answer(10));
+  s.loads.find((load) => load.pool === VENUE)!.resolve(answer(10, VENUE));
+  await settle();
+  const retry = s.timers.find((timer) => timer.ms === 2_000)!;
+  s.timers.splice(s.timers.indexOf(retry), 1); retry.run();
+  assert.deepEqual(s.loads.filter((load) => load.at !== null).map(({ pool, at }) => [pool, at]).at(-1), [CURVE, 114], "the pool reads through the frame that overflowed (the 64 KiB bound comes first)");
+  assert.equal(s.loads.filter((load) => load.pool === VENUE).length, 1, "the other pool reads nothing more");
+  s.client.stop();
   const foreign = setup(); foreign.client.start();
   foreign.source().emit("status", { state: "live", pool_key: CURVE, checkpoint: 10, cursor: "10:0:0:0", provenance: { ...wireProvenance(10), deployment_fingerprint: "cd".repeat(32) } });
-  assert.equal(foreign.source().closed, true);
+  assert.equal(foreign.source().closed, false);
+  foreign.source().emit("market", trade(11));
+  assert.equal(foreign.loads.length, 1, "a frame for a pool without a fence is dropped");
   foreign.loads.shift()!.resolve(answer(10)); await settle(); foreign.client.stop();
 });
 
@@ -373,13 +402,13 @@ test("a quiet pool with no close after the checkpoint still shows the price", as
   assert.ok(shown.sections.every(({ section }) => section.state === "available"));
 });
 
-test("all pool fences and valid hint hello are required before clearing the connection deadline", async () => {
+test("the hello clears the connection deadline, a pool waiting for its fence does not end the socket, and a missing hello reconnects", async () => {
   const s = setup([CURVE, VENUE]);
   s.client.start(); s.source().ready(10, CURVE);
-  s.source().emit("hint", { type: "hello", provenance: wireProvenance(10) });
   assert.ok(s.timers.some((timer) => timer.ms === 10_000));
+  s.source().emit("hint", { type: "hello", provenance: wireProvenance(10) });
+  assert.equal(s.timers.some((timer) => timer.ms === 10_000), false, "VENUE's fence is its own: the socket is up");
   s.source().ready(20, VENUE);
-  assert.equal(s.timers.some((timer) => timer.ms === 10_000), false);
   for (const load of s.loads) load.resolve(answer(load.pool === CURVE ? 10 : 20, load.pool));
   await settle(); s.client.stop();
   const stalled = setup(); stalled.client.start();
@@ -503,6 +532,27 @@ test("the live screen reads no history on the poll while the stream is live, and
   s.loads.splice(0);
   poll();
   assert.deepEqual(s.loads.map((load) => load.pool), [CURVE]);
+  s.client.stop();
+});
+
+// This fails if one pool the relay cannot serve stops the chart's other pool from streaming, or
+// leaves that pool without polls.
+test("the live screen polls only the pool that is not live; the other streams without reads", async () => {
+  const s = setup([CURVE, VENUE], undefined, null, false);
+  s.client.start();
+  s.source().ready(10);
+  s.source().emit("hint", { type: "hello", provenance: wireProvenance(10) });
+  s.source().emit("status", { state: "unavailable", pool_key: VENUE });
+  for (const load of s.loads.splice(0)) load.resolve(answer(10, load.pool));
+  await settle();
+  const poll = () => s.timers.find((timer) => timer.ms === 15_000)!.run();
+  poll();
+  assert.deepEqual(s.loads.map((load) => load.pool), [VENUE]);
+  for (const load of s.loads.splice(0)) load.resolve(answer(11, load.pool));
+  await settle();
+  s.source().emit("market", trade(12));
+  assert.equal(s.source().closed, false);
+  assert.equal(s.statuses.includes("reconnecting"), false);
   s.client.stop();
 });
 

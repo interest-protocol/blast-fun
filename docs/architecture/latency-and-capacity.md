@@ -14,7 +14,12 @@ combined ingestion/read acceptance remain blocked pending coordinator decision.
 | Trade quotes | Request/response while the trade view needs them; bounded busy recovery | Validated route and fullnode results |
 | Financial actions and balances used for a transaction | Explicit authenticated operation and subsequent authoritative read | Existing financial rules and chain state |
 
-Hints never supply balances, quote prices or financial state. Hidden tabs own
+Hints never supply balances, quote prices or financial state. One exception,
+cue only, never data: a priced trade hint's quote amount and dollar value draw
+Home's passing buy cue on the coin's row without a Home list read. The cue is
+never a balance, a price or an input to a trade; a priced buy's rank, volume
+and counts wait for the thirty-second poll, and prices keep moving rows through
+the price stream. Every other hint still triggers a read. Hidden tabs own
 no hint connection or retry timer. A process fans out one upstream subscription;
 its clients share one heartbeat timer. Each client retains its own deadline,
 backpressure limit and cancellation ownership.

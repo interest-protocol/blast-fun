@@ -2,7 +2,7 @@ import { coinPagePath } from "@blast/core/modules/launchpad-coin/page-key.ts";
 import { ago, bxSigned, fillPercent, qs, qsRaised, qm, raisedShort, short, shortAddress, signPct, timeUntil, usd0 } from "@blast/core/web/format.ts";
 import { amtExact, atLeastPow10, bxUsdExact, compareExact, exactAtoms, exactDecimal, groupedExact, numShortExact, shortQtyExact, unitsAt } from "@blast/core/web/exact-amount.ts";
 import type { FeedItemActor } from "@blast/core/web/contracts/items.ts";
-import type { HomeTapeEvent, HomeActivity, HomeAmount, HomeCoin, HomeEvent, HomeKind, HomeParticipant, HomeRecentBuy, HomeSide, HomeWindow } from "@blast/core/web/contracts/home.ts";
+import { HOME_RECENT_BUY_MIN_USD, type HomeTapeEvent, type HomeActivity, type HomeAmount, type HomeCoin, type HomeEvent, type HomeKind, type HomeParticipant, type HomeRecentBuy, type HomeSide, type HomeWindow } from "@blast/core/web/contracts/home.ts";
 import type { DiscoveryResponse, DiscoveryRow } from "@blast/core/modules/launchpad-discovery/rows.ts";
 import { HOME_BONDING_ROWS } from "@blast/core/modules/launchpad-discovery/bonding.ts";
 import { BLAST_V1_COINS } from "@blast/core/modules/social/portfolio/core-coins.ts";
@@ -11,6 +11,7 @@ import { presaleHref } from "../feed-ui/shell-bridge-model";
 import { numberDecimal, readablePrice, readableUsd } from "#web/lib/market-format.ts";
 import { ALMOST_GRADUATED_BPS, compactQuoteAmount } from "#web/components/launchpad/discovery/discovery-model.ts";
 import { saleLifecycleAt } from "@blast/core/web/contracts/presales.ts";
+import type { FreshnessHint } from "../home/feed-freshness";
 
 /**
  * Every word and figure the coin-centred Home draws, as plain values. Pure,
@@ -94,11 +95,18 @@ export type HomeBuyTier = "small" | "big" | "huge";
 export type HomeBuyCue = Readonly<{ text: string; tier: HomeBuyTier }>;
 
 /**
+ * A buy the cue can draw: a read's `recent_buys` entry, or a priced trade hint,
+ * which names no quote symbol or decimals (it always carries dollars).
+ */
+export type HomeCueBuy = Pick<HomeRecentBuy, "coin_key" | "activity_id" | "occurred_at_ms" | "quote_atoms" | "usd"> &
+  Readonly<{ quote_symbol: string | null; quote_decimals: number | null }>;
+
+/**
  * A live buy as its row flashes it, short enough to read in a glance: dollars
  * when the indexer priced it (`+$0.42`, `+$13`, `+$1.2K`), else the coin it
  * was paid in (`+13.5 SUI`). Null for an amount the web cannot read.
  */
-export function buyCueOf(buy: Pick<HomeRecentBuy, "quote_atoms" | "quote_decimals" | "quote_symbol" | "usd">): HomeBuyCue | null {
+export function buyCueOf(buy: Pick<HomeCueBuy, "quote_atoms" | "quote_decimals" | "quote_symbol" | "usd">): HomeBuyCue | null {
   const usd = exactDecimal(buy.usd);
   if (usd) {
     const text = atLeastPow10(usd, 1) ? `$${numShortExact(usd)}` : bxUsdExact(usd);
@@ -108,14 +116,44 @@ export function buyCueOf(buy: Pick<HomeRecentBuy, "quote_atoms" | "quote_decimal
     return { text: `+${text}`, tier: dollars >= 100n ? "big" : "small" };
   }
   const paid = exactAtoms(buy.quote_atoms, buy.quote_decimals);
-  if (!paid) return null;
+  if (!paid || !buy.quote_symbol) return null;
   return { text: `+${atLeastPow10(paid, 0) ? shortQtyExact(paid) : amtExact(paid)} ${buy.quote_symbol}`, tier: "small" };
 }
 
 /** The buy worth showing from one read: the most dollars, the newest among equals; an unpriced buy only when none is priced. */
-export function biggestBuy(buys: readonly HomeRecentBuy[]): HomeRecentBuy | undefined {
-  const usd = (buy: HomeRecentBuy) => exactDecimal(buy.usd) ?? { n: 0n, scale: 0 };
+export function biggestBuy<T extends HomeCueBuy>(buys: readonly T[]): T | undefined {
+  const usd = (buy: T) => exactDecimal(buy.usd) ?? { n: 0n, scale: 0 };
   return [...buys].sort((a, b) => compareExact(usd(b), usd(a)) || b.occurred_at_ms - a.occurred_at_ms)[0];
+}
+
+/** Whether a trade hint is a priced buy (quote atoms and dollars both kept by `hintOf`). */
+function pricedBuy(hint: FreshnessHint): boolean {
+  return hint.trade?.kind === "trade_buy" && hint.trade.usd !== undefined && hint.trade.quoteAtoms !== undefined;
+}
+
+/**
+ * Whether Home re-reads its list for a hint. A priced buy goes to the cue only
+ * (cue only, never data): its rank, volume and counts wait for the 30 s poll.
+ * Every other hint (unpriced, a bad amount, a sell, not a trade) reads as before.
+ */
+export function homeHintReads(hint: FreshnessHint): boolean {
+  return !pricedBuy(hint);
+}
+
+const MIN_CUE_USD = exactDecimal(HOME_RECENT_BUY_MIN_USD)!;
+
+/**
+ * The buy a priced hint stands for, keyed like Home's rows (`presale_id ?? coin_type`),
+ * when it clears the server's `recent_buys` floor as an exact decimal: atoms above
+ * zero and at least `HOME_RECENT_BUY_MIN_USD`. Null otherwise.
+ */
+export function hintBuy(hint: FreshnessHint): HomeCueBuy | null {
+  const trade = hint.trade;
+  if (!trade || !pricedBuy(hint)) return null;
+  const coinKey = trade.presaleId ?? trade.coinType;
+  const usd = exactDecimal(trade.usd);
+  if (!coinKey || !usd || !/[1-9]/.test(trade.quoteAtoms ?? "") || compareExact(usd, MIN_CUE_USD) < 0) return null;
+  return { coin_key: coinKey, activity_id: trade.cursor, occurred_at_ms: hint.atMs, quote_atoms: trade.quoteAtoms!, usd: trade.usd, quote_symbol: null, quote_decimals: null };
 }
 
 /**

@@ -11,6 +11,10 @@ import { COIN_TYPE, SUI_OBJECT_ID_PATTERN } from "@blast/core/lib/sui/ids.ts";
  * reads it affects. Nothing else of the engine's frame crosses, so neither a
  * malformed nor a malicious upstream frame can paint anything; the page reads
  * its own route.
+ *
+ * One exception: a trade's bounded `quote_atoms`, `quote_type` and `usd` feed
+ * Home's buy cue without a read. Cue only, never data: the cue is a passing
+ * figure on a row, never a balance, a price or an input to a trade.
  */
 
 /** A canonical coin type, as blast-infra names one: `0x<64 hex>::<module>::<Name>`. */

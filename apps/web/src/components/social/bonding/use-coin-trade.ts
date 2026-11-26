@@ -62,9 +62,10 @@ export function useCoinTrade(coin: string | null, poolKey: string | null, checkp
     const hub = tabMarketStream();
     if (!hub || !coin || !poolKey) return;
     const stop = hub.observe(coin, {
-      live(connected) {
-        live.current = connected;
-        if (!connected) setLatest((prior) => prior?.showCue ? { ...prior, showCue: false } : prior);
+      // The card's own pool: a cue shows once its trades stream, whatever the coin's other pool does.
+      live(connected, pools) {
+        live.current = pools ? pools.get(poolKey) === "live" : connected;
+        if (!live.current) setLatest((prior) => prior?.showCue ? { ...prior, showCue: false } : prior);
       },
       trade: (frame) => receive(frame, poolKey),
     });

@@ -3,8 +3,8 @@ import type { MarketEventSource } from "#web/components/launchpad/market-stream-
 export const LIVE_TICKET_PATH = "/api/launchpad/market/ticket";
 export const LIVE_PROTOCOL = "blast-live.v1";
 
-/** After a per-address refusal or repeated failures, the tab asks for no ticket this long (times 1–1.5, see `spreadWait`). */
-export const LIVE_BACKOFF_MS = 10 * 60_000;
+/** After a per-address refusal or repeated failures, the tab asks for no ticket this long (times 1–1.5, see `spreadWait`): one minute, so a refused tab streams again soon. */
+export const LIVE_BACKOFF_MS = 60_000;
 /** While the socket is off (the ticket route answers 204), the tab asks again after this long (times 1–1.5): one small request per tab per half hour. */
 export const LIVE_OFF_MS = 30 * 60_000;
 export const LIVE_MAX_FAILURES = 3;
