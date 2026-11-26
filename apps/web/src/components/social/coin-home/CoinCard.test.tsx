@@ -123,6 +123,9 @@ test("Home distinguishes first-observation changes from full 24-hour changes and
     assert.equal(flat.window.document.querySelector(".change")?.textContent, "0%");
     assert.equal(flat.window.document.querySelector(".change")?.getAttribute("title"), null);
     assert.equal(down.window.document.querySelector(".change")?.textContent, "−77.39%");
+    assert.equal(change?.className, "num change up");
+    assert.equal(flat.window.document.querySelector(".change")?.className, "num change");
+    assert.equal(down.window.document.querySelector(".change")?.className, "num change down");
   } finally {
     young.window.close();
     mature.window.close();
@@ -138,14 +141,15 @@ test("Home distinguishes first-observation changes from full 24-hour changes and
 
 test("the selected change window determines which percentage appears", () => {
   const quoted = { ...coin, price_usd: "1", change_24h_bps: -3200, mobile_market: { market_cap_usd: null, change_1h_bps: 1200 } };
-  for (const [window, value, expected] of [
-    ["1h", quoted, "+12%"],
-    ["24h", quoted, "−32%"],
-    ["1h", { ...quoted, mobile_market: { ...quoted.mobile_market, change_1h_bps: null } }, "—Price change unknown"],
+  for (const [window, value, expected, tone] of [
+    ["1h", quoted, "+12%", "num change up"],
+    ["24h", quoted, "−32%", "num change down"],
+    ["1h", { ...quoted, mobile_market: { ...quoted.mobile_market, change_1h_bps: null } }, "—Price change unknown", "num change"],
   ] as const) {
     const dom = render(value, false, 1, window);
     try {
       assert.equal(dom.window.document.querySelector(".change")?.textContent, expected);
+      assert.equal(dom.window.document.querySelector(".change")?.className, tone);
     } finally {
       dom.window.close();
     }
