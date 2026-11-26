@@ -13,60 +13,47 @@
   font-size: 0.8125rem;
   font-weight: 550;
 }
-.dateGroup {
+.field input[type="time"] {
+  font-variant-numeric: tabular-nums;
+}
+/* The form's fields draw one hairline; the shared field's edge shadow would double it. */
+.field input[type="time"]:not(:focus-visible, [aria-invalid="true"]) {
+  box-shadow: none;
+}
+.trigger {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  min-width: 0;
   height: 2.875rem;
   border: 1px solid var(--hair-2);
   border-radius: var(--r-button);
+  padding: 0 0.8125rem;
   background: var(--field);
-  padding-left: 0.8125rem;
-}
-.dateGroup:focus-within {
-  box-shadow: var(--field-focus);
-}
-/* React Aria's autofill bridge must stay hidden when CSP blocks inline styles. */
-.field [aria-hidden="true"]:has(> input) {
-  display: none;
-}
-.dateGroup[data-invalid] {
-  border-color: var(--down);
-}
-.dateInput {
-  display: flex;
-  align-items: center;
-  flex: 1;
-  font-size: 1rem;
-  font-weight: 400;
-  min-width: 0;
-}
-.segment {
-  padding: 0.1875rem 1px;
-  border-radius: 0.1875rem;
-  outline: none;
-  font-variant-numeric: tabular-nums;
-  white-space: pre;
-}
-.segment[data-focused] {
   color: var(--ink);
-  background: var(--chip);
+  font: 400 1rem var(--font);
+  font-variant-numeric: tabular-nums;
+  text-align: start;
+  cursor: pointer;
 }
-.segment[data-placeholder] {
-  color: var(--muted);
-}
-.trigger {
-  display: grid;
-  place-items: center;
-  width: max(44px, 2.75rem);
-  height: max(44px, 2.75rem);
+.trigger svg {
   flex: none;
-  border-radius: var(--r-button);
   color: var(--ink-2);
 }
-:global([data-blast-ui]) .field .segment:focus-visible,
-:global([data-blast-ui]) .dateGroup .trigger:focus-visible {
-  box-shadow: none;
+.trigger [data-placeholder] {
+  color: var(--muted);
+}
+.trigger[aria-invalid="true"] {
+  border-color: var(--down);
+}
+:global([data-blast-ui]) .trigger:focus-visible {
   outline: none;
+  box-shadow: var(--focus);
+}
+.positioner {
+  z-index: 100;
 }
 .popover {
   background: var(--card);
@@ -77,60 +64,121 @@
   box-shadow: var(--sh-2);
   padding: 1rem;
   max-width: calc(100vw - 1.5rem);
-  z-index: 100;
-}
-.popover [role="dialog"] {
   outline: none;
 }
-.header {
+.calendar {
+  position: relative;
+  font-size: 0.8125rem;
+}
+.months,
+.month {
+  display: grid;
+  gap: 0.5rem;
+}
+.caption {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  margin-bottom: 0.5rem;
+  height: 2.25rem;
+  padding-inline-end: 4.75rem;
 }
-.header h2 {
+.dropdowns {
+  display: flex;
+  gap: 0.25rem;
+}
+.dropdownRoot {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+/* The native select sits invisibly over its label: the browser draws the list, the label shows the value. */
+.dropdown {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  opacity: 0;
+  cursor: pointer;
+  appearance: none;
+  font: inherit;
+}
+.captionLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.375rem 0.5rem;
+  border-radius: var(--r-button);
   font-size: 0.875rem;
   font-weight: 600;
-  margin: 0;
 }
-.header button {
+.captionLabel .chevron {
+  width: 0.75rem;
+  height: 0.75rem;
+  fill: var(--muted);
+}
+.dropdownRoot:has(.dropdown:focus-visible) .captionLabel {
+  box-shadow: var(--focus);
+}
+.nav {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-end: 0;
+  display: flex;
+  gap: 0.25rem;
+}
+.navButton {
+  display: grid;
+  place-items: center;
   width: 2.25rem;
   height: 2.25rem;
   border-radius: var(--r-button);
-  font-size: 1.5rem;
+  color: var(--ink);
+  cursor: pointer;
 }
-.calendar {
+.navButton .chevron {
+  width: 1rem;
+  height: 1rem;
+  fill: currentColor;
+}
+.navButton:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+.grid {
+  border-collapse: separate;
   border-spacing: 0.125rem;
-  font-size: 0.8125rem;
 }
-.calendar th {
+.weekday {
+  height: 1.75rem;
+  color: var(--muted);
   font-size: 0.6875rem;
   font-weight: 500;
-  color: var(--muted);
-  height: 1.75rem;
 }
-.popover .day {
+.day {
+  padding: 0;
+  text-align: center;
+}
+.dayButton {
+  position: relative;
   display: grid;
   place-items: center;
   width: 2.125rem;
   height: 2.125rem;
   border-radius: var(--r-button);
-  outline: none;
-  cursor: pointer;
+  color: inherit;
+  font: inherit;
   font-variant-numeric: tabular-nums;
-  position: relative;
-  box-shadow: none;
+  cursor: pointer;
 }
-:global([data-blast-ui]) .popover .day:focus-visible,
-:global([data-blast-ui]) .popover .header button:focus-visible {
-  box-shadow: none;
-  outline: none;
-}
-.day[data-outside-month] {
+.outside {
   color: var(--muted);
 }
-.day[data-today]::after {
+.disabled .dayButton {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+.hidden {
+  visibility: hidden;
+}
+.today .dayButton::after {
   content: "";
   position: absolute;
   bottom: 0.25rem;
@@ -139,21 +187,22 @@
   border-radius: 50%;
   background: currentColor;
 }
-.day[data-selected] {
+.selected .dayButton {
   background: var(--ink);
   color: var(--bg);
 }
-:global([data-blast-ui]) .popover .day[data-focus-visible],
-:global([data-blast-ui]) .popover .header button[data-focus-visible] {
+:global([data-blast-ui]) .popover :is(.dayButton, .navButton):focus-visible {
   outline: 0.125rem solid var(--ink);
   outline-offset: 0.125rem;
+  box-shadow: none;
 }
-.day[data-hovered]:not([data-selected]) {
-  background: var(--raised);
+@media (hover: hover) and (pointer: fine) {
+  .navButton:not(:disabled):hover,
+  .captionLabel:hover,
+  .day:not(.selected) .dayButton:hover {
+    background: var(--raised);
+  }
 }
-@media (hover:hover) and (pointer:fine) { .header button:hover {
-  background: var(--raised);
-} }
 .error {
   color: var(--down);
   font-size: 0.75rem;

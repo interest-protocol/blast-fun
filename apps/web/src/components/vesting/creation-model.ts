@@ -1,10 +1,4 @@
 import {
-  fromAbsolute,
-  parseDateTime,
-  parseZonedDateTime,
-  toZoned,
-} from "@internationalized/date";
-import {
   linearVestedAt,
   validateCheckpointSchedule,
   validateLinearSchedule,
@@ -19,6 +13,7 @@ import {
   SUI_FEE_RESERVE_ATOMS,
 } from "#web/components/social/coins/coin-model.ts";
 import { SUI_COIN_TYPE } from "@blast/core/lib/sui/coin-types.ts";
+import { wallInstants, zonedInstant, zonedString } from "./zoned-time";
 
 const DAY = 86_400_000n;
 export type Release = Readonly<{ key: string; date: string; amount: string }>;
@@ -68,11 +63,10 @@ export function releaseTimestamp(
   timezone = "UTC",
 ): bigint {
   try {
-    const date = text.includes("[")
-      ? parseZonedDateTime(text, "reject")
-      : toZoned(parseDateTime(text), timezone, "reject");
-    const value = date.toDate().getTime();
-    if (!Number.isSafeInteger(value) || value <= 0) throw new RangeError();
+    // A wall time in a daylight-saving gap or overlap is refused unless it names its offset.
+    const local = text.includes("[") ? null : wallInstants(text, timezone);
+    const value = local ? (local.length === 1 ? local[0] : null) : zonedInstant(text);
+    if (value == null || !Number.isSafeInteger(value) || value <= 0) throw new RangeError();
     return BigInt(value);
   } catch {
     throw new CreationFieldError(
@@ -258,7 +252,7 @@ export function regularCheckpointReleases(
     return {
       key: `regular-${index}`,
       // Keep the instant and UTC offset through DST changes and local editing.
-      date: fromAbsolute(Number(time), timezone).toString(),
+      date: zonedString(Number(time), timezone),
       amount: formatVestingAmount(amount, input.decimals),
     };
   });
