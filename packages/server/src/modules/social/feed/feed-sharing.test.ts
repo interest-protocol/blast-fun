@@ -8,6 +8,7 @@ import { forYouNewEntries, forYouNewEntriesFromHead, forYouNewHead } from "@blas
 import { createAfterResponseScheduler, createRequestWork, runWithRequestWork, trackRequestWork } from "@blast/server/lib/request-work.ts";
 import { createForYouNewReader } from "@blast/server/modules/social/feed/feed-reader.ts";
 import { createSocialFeedRoute } from "@blast/server/modules/social/feed/route.ts";
+import { createPublicPresaleReader } from "@blast/server/modules/social/presales/public-reads.ts";
 import { createSocialRouteKit } from "@blast/server/modules/social/route-kit/route.ts";
 import { testClient } from "../../../../../core/test/fixtures/lib/web-security/client-address.ts";
 import { deferred } from "../../../../../core/test/kit.ts";
@@ -274,4 +275,55 @@ test("a complete head can scan farther than a high-since query when eligible can
   assert.equal(head.entries.length, 51);
   assert.equal(global.scans(), 3);
   assert.equal(direct.scans(), 1);
+});
+
+test("processes share one first-page read, and past ten seconds readers get the last page at once while one refresh runs", async () => {
+  let now = NOW;
+  let scans = 0;
+  let gate: Promise<void> = Promise.resolve();
+  const db: ReadableDatabase = {
+    async read<Row extends QueryResultRow>(sql: string): Promise<QueryResult<Row>> {
+      let rows: unknown[] = [];
+      if (sql.includes("FROM chain_read_v1.watermark")) {
+        rows = [{ market_checkpoint: String(now), market_timestamp_ms: "900", presale_checkpoint: "11", presale_timestamp_ms: "950", observed_ms: "1000" }];
+      } else if (sql.includes("LIMIT $8")) {
+        scans += 1;
+        await gate;
+        rows = [{ entry_id: "a:10:0:0:0", occurred_at_ms: "900", rank_ms: "900", source: "activity", kind: "presale_commit", named_account_id: null, presale_id: null, usd_price_as_of_ms: null }];
+      }
+      return { rows, rowCount: rows.length, command: "SELECT", oid: 0, fields: [] } as QueryResult<Row>;
+    },
+  };
+  const origin = "https://blast.fun";
+  const unexpected = () => { throw new Error("unexpected authentication or primary access"); };
+  const kit = createSocialRouteKit({
+    expectedOrigin: origin, tradingVisible: () => true, verifyAccessToken: unexpected,
+    limiter: { async consume(bucket) { return { allowed: true, bucket, policyVersion: 1, retryAfterSeconds: 0 }; } },
+    accounts: { resolve: unexpected, resolveWallet: unexpected }, primary: unexpected,
+  });
+  const shared = createPublicPresaleReader(() => now);
+  const process = () => createSocialFeedRoute({ kit, config: async () => config, now: () => now, database: () => db, shared });
+  const [a, b] = [process(), process()];
+  const get = async (route: typeof a) => {
+    const reply = await route.GET(new Request(`${origin}/api/social/feed`), testClient());
+    assert.equal(reply.status, 200);
+    return { control: reply.headers.get("cache-control"), checkpoint: ((await reply.json()) as { as_of: { checkpoint: number } }).as_of.checkpoint };
+  };
+
+  const first = await get(a);
+  now += 4_000;
+  assert.deepEqual(await get(b), { ...first, control: "public, s-maxage=6, stale-while-revalidate=20" }, "the other process reuses the read with its real age");
+  assert.equal(scans, 1);
+
+  now += 8_000;
+  const refresh = deferred();
+  gate = refresh.promise;
+  assert.deepEqual(await get(b), { ...first, control: "no-store" }, "a stale page goes out at once, never cached downstream");
+  assert.equal(scans, 2, "while one refresh runs");
+  refresh.resolve();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.deepEqual(await get(a), { ...first, control: "no-store" }, "the first process's own refresh starts from the shared tier");
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.deepEqual(await get(a), { checkpoint: now, control: "public, s-maxage=10, stale-while-revalidate=20" }, "so one refresh serves every process");
+  assert.equal(scans, 2);
 });

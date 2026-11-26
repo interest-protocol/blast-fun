@@ -239,14 +239,15 @@ test("T-007-AC-4: as_of is the slowest pipeline's watermark; 61 s of lag is repo
     assert.ok(body.as_of.lag_ms >= 61_000 && body.as_of.lag_ms < 120_000, String(body.as_of.lag_ms));
     assert.ok(body.items.length > 0);
     await admin.query(advanceWatermark(39_000, 3_600_000, "presale"));
-    advanceFeedClock(10_000);
+    // Past the 30 s a held page may be served, readers wait for a fresh read.
+    advanceFeedClock(30_000);
     const later = await page(await get());
     assert.equal(later.as_of.checkpoint, 39_000);
     assert.ok(later.as_of.lag_ms >= 3_600_000);
     assert.deepEqual(later.items.map((item) => item.entry_id), body.items.map((item) => item.entry_id));
     // With no readable watermark the freshness is unknown: 503, not stale data presented as fresh.
     await admin.query("DELETE FROM watermarks");
-    advanceFeedClock(10_000);
+    advanceFeedClock(30_000);
     const unknown = await get();
     assert.equal(unknown.status, 503);
     assert.equal(unknown.headers.get("cache-control"), "no-store");
@@ -285,8 +286,18 @@ test("overlapping default feed requests share one page and its remaining freshne
     assert.deepEqual(await almostStale.json(), body);
     assert.equal(feedLoads(), 3);
 
+    // Past ten seconds the held page still goes out, uncached downstream, while one refresh reads the new watermark.
     advanceFeedClock(500);
-    assert.equal((await page(await get())).as_of.checkpoint, 41_000);
+    const stale = await get();
+    assert.equal(stale.headers.get("cache-control"), "no-store");
+    assert.deepEqual(await stale.json(), body);
+    assert.equal(feedLoads(), 4);
+    let refreshed = await get();
+    for (let wait = 0; wait < 100 && refreshed.headers.get("cache-control") === "no-store"; wait++) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 20));
+      refreshed = await get();
+    }
+    assert.equal((await page(refreshed)).as_of.checkpoint, 41_000);
     assert.equal(feedLoads(), 4);
   }, 40);
 });

@@ -52,7 +52,7 @@ import {
   sponsorConfigFromEnvironment,
   type SponsorConfig,
 } from "@blast/server/modules/sponsor/service.ts";
-import { publicReadNamespace } from "@blast/server/modules/public-reads/namespace.ts";
+import { publicReadNamespace, type PublicReadScope } from "@blast/server/modules/public-reads/namespace.ts";
 import { configuredFeePolicy } from "@blast/server/modules/social/create/chain.ts";
 import { DEFAULT_PRESALE_FOLLOW_LIMITS, type PresaleFollowLimits } from "@blast/server/modules/social/presales/follow-reader.ts";
 import {
@@ -125,7 +125,7 @@ export type RuntimeConfig = Readonly<{
   /** Null while `DEFILLAMA_READ_DATABASE_URL` is unset. */
   defillama: DefillamaSettings | null;
   /** Null when shared public caching is not configured: reads go uncached. */
-  publicReadNamespaces: Readonly<Record<"presales" | "prices" | "market", string>> | null;
+  publicReadNamespaces: Readonly<Record<PublicReadScope, string>> | null;
   presaleFollow: PresaleFollowLimits;
   /** The partner quota namespace, hashed from the raw `BLAST_REDIS_NAMESPACE` and deployment identity. */
   quotaNamespace: string;
@@ -278,13 +278,14 @@ function defillamaSettings(environment: Environment, deployment: ExpectedDeploym
  */
 function publicReadNamespaces(
   environment: Environment,
-): Readonly<Record<"presales" | "prices" | "market", string>> | null {
+): Readonly<Record<PublicReadScope, string>> | null {
   try {
     const identity = deploymentIdentity(environment);
     return {
       presales: publicReadNamespace("presales", identity, environment),
       prices: publicReadNamespace("prices", identity, environment),
       market: publicReadNamespace("market", identity, environment),
+      social: publicReadNamespace("social", identity, environment),
     };
   } catch {
     return null;
