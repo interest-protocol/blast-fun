@@ -21,11 +21,18 @@ import {
 } from "../../../src/components/social/profile/ProfileInvites";
 import { InvitesPage } from "../../../src/components/social/referrals/InvitesPage";
 import type { ReferralStatement, ReferralSummary } from "@blast/core/modules/social/referrals/contracts.ts";
+const viewer = {
+  accountId: "fixture-referrer",
+  callsign: "kaleo_on_blast",
+  displayName: "Kaleo",
+  avatarUrl: null,
+  verified: true,
+};
 const monthly: readonly ReferralStatement[] = [
-  { month: "2026-11", revenue_atoms: "3577132109", share_bps: 3429, payment: null },
-  { month: "2026-10", revenue_atoms: "12500000000", share_bps: 3000,
-    payment: { amount_atoms: "3750000000", digest: "4vJ9JU1bJJE96FWSJKvHsmmFADCg4gpZQff4P3bkLKi" } },
-  { month: "2026-09", revenue_atoms: "0", share_bps: 6000, payment: null },
+  { month: "2026-12", revenue_atoms: "42600000000", earnings_atoms: "12780000000", share_bps: 3000, payment: null },
+  { month: "2026-11", revenue_atoms: "25000000000", earnings_atoms: "7500000000", share_bps: 3000,
+    payment: { amount_atoms: "7500000000", digest: "4vJ9JU1bJJE96FWSJKvHsmmFADCg4gpZQff4P3bkLKi" } },
+  { month: "2026-10", revenue_atoms: "0", earnings_atoms: "0", share_bps: 3000, payment: null },
 ];
 
 export function ReferralFixture({
@@ -35,8 +42,10 @@ export function ReferralFixture({
 }: Readonly<{ view?: string; theme?: string; state?: string }>) {
   const [client] = useState(() => {
     const client = makeQueryClient({ defaultOptions: { queries: { refetchOnMount: false } } });
-    client.setQueryData(queryKeys.me.referralMonths("kaleo_on_blast"), {
-      months: state === "empty" ? [] : monthly,
+    client.setQueryData(queryKeys.me.referralMonths(viewer.callsign), {
+      months: state === "empty" ? [] : state === "precision" ? [
+        { month: "2026-12", revenue_atoms: "42600000001", earnings_atoms: "12780000001", share_bps: 3000, payment: null },
+      ] : monthly,
     });
     return client;
   });
@@ -76,8 +85,8 @@ export function ReferralFixture({
     >
       <QueryProvider client={client}>
         <AppShell
-          signedIn={false}
-          viewer={null}
+          signedIn
+          viewer={viewer}
           portfolio={{ status: "unavailable" }}
           signInHref="/sign-in"
         >
@@ -95,7 +104,7 @@ export function ReferralFixture({
           ) : state === "error" ? (
             <EmptyState framed role="alert" title="Referral payments couldn’t load" />
           ) : (
-            <SocialViewerProvider callsign="kaleo_on_blast" signedIn>
+            <SocialViewerProvider callsign={viewer.callsign} signedIn>
               <InvitesPage />
             </SocialViewerProvider>
           )}

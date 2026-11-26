@@ -36,6 +36,7 @@ export const referralMonthSchema = z.string().regex(/^[2-9][0-9]{3}-(0[1-9]|1[0-
 const referralStatementSchema = z.object({
   month: referralMonthSchema,
   revenue_atoms: atomicTotal.nullable(),
+  earnings_atoms: atomicTotal.nullable(),
   share_bps: z.number().int().min(STANDARD_REFERRAL_SHARE_BPS).max(SPECIAL_REFERRAL_SHARE_BPS).nullable(),
   payment: z.object({
     amount_atoms: atomicTotal,

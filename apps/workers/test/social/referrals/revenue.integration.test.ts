@@ -266,7 +266,7 @@ test(
     await collect();
     const first = (await readReferralSummary(db, owner)).accounting!;
     assert.deepEqual((await readReferralMonths(db, owner)).months.find(({ month }) => month === "2026-10"), {
-      month: "2026-10", revenue_atoms: "1000000000", share_bps: 6000, payment: null,
+      month: "2026-10", revenue_atoms: "1000000000", earnings_atoms: "600000000", share_bps: 6000, payment: null,
     });
     assert.deepEqual(first.assets, [
       {
@@ -584,7 +584,7 @@ test(
     await collect();
     const standard = (await readReferralSummary(db, standardOwner)).accounting!;
     assert.deepEqual((await readReferralMonths(db, standardOwner)).months.find(({ month }) => month === "2026-10"), {
-      month: "2026-10", revenue_atoms: "21", share_bps: 3429, payment: null,
+      month: "2026-10", revenue_atoms: "21", earnings_atoms: "7", share_bps: 3429, payment: null,
     });
     assert.equal(standard.assets[0].revenue_atoms, "21");
     assert.equal(standard.assets[0].earnings_atoms, "7"); // floor(3 × .6 + (4 + 11 + 3) × .3)
@@ -636,7 +636,7 @@ test(
     lookupAvailable = true;
     await assert.rejects(payment("2026-09"), { code: "OPERATOR_CONFLICT" });
     assert.deepEqual((await readReferralMonths(db, owner)).months.find(({ month }) => month === "2026-10"), {
-      month: "2026-10", revenue_atoms: "1900000000", share_bps: 6000,
+      month: "2026-10", revenue_atoms: "1900000000", earnings_atoms: "1140000000", share_bps: 6000,
       payment: { amount_atoms: "1140000000", digest: payoutDigest },
     });
     assert.ok((await readReferralMonths(db, impersonator)).months.every(({ payment }) => payment === null));
@@ -652,7 +652,17 @@ test(
     ], 3004);
     await advance(3005, november);
     await receipt([feePayment("launch", { origin: nextCurve, quote_amount: 9n })], 3005, true, sender, november);
+    await receipt(unpartneredBuy(3n), 3005, true, standardWallet, november);
     await collect();
+    const standardMonths = (await readReferralMonths(db, standardOwner)).months;
+    assert.deepEqual(standardMonths.find(({ month }) => month === "2026-11"), {
+      month: "2026-11", revenue_atoms: "3", earnings_atoms: "2", share_bps: 6000, payment: null,
+    });
+    assert.equal(
+      String(standardMonths.reduce((total, month) => total + BigInt(month.earnings_atoms ?? 0), 0n)),
+      (await readReferralSummary(db, standardOwner)).accounting!.assets[0].earnings_atoms,
+      "sub-mist fractions carry across month boundaries",
+    );
     const { months } = await readReferralMonths(db, owner);
     assert.equal(months.find(({ month }) => month === "2026-10")?.revenue_atoms, "1900000000");
     assert.equal(months.find(({ month }) => month === "2026-11")?.revenue_atoms, "9");
@@ -679,7 +689,7 @@ test(
       "a reapply starts with unpublished accounting until receipts replay",
     );
     assert.deepEqual((await readReferralMonths(db, owner)).months.find(({ month }) => month === "2026-10"), {
-      month: "2026-10", revenue_atoms: null, share_bps: null,
+      month: "2026-10", revenue_atoms: null, earnings_atoms: null, share_bps: null,
       payment: { amount_atoms: "1140000000", digest: payoutDigest },
     });
     // Presale-only accounting retains exact amounts without requiring market coverage.

@@ -58,7 +58,7 @@ test("referral amounts hide unavailable figures and copy readable amounts with t
   assert.ok([...container.querySelectorAll("dt")].some((label) => label.textContent === "Earnings"));
 });
 
-test("the private referral page renders one row per month and links only confirmed SUI payments", async (t) => {
+test("the private referral page renders one entry per month and links only confirmed SUI payments", async (t) => {
   const digest = "4vJ9JU1bJJE96FWSJKvHsmmFADCg4gpZQff4P3bkLKi";
   const reads: string[] = [];
   let failed = true;
@@ -67,9 +67,10 @@ test("the private referral page renders one row per month and links only confirm
     if (failed) return Response.json({ error: { code: "service_unavailable" } }, { status: 503 });
     return Response.json({
       months: [
-        { month: "2026-11", revenue_atoms: "2300000000", share_bps: 3429, payment: null },
-        { month: "2026-10", revenue_atoms: "1000000000", share_bps: 3000, payment: { amount_atoms: "300000000", digest } },
-        { month: "2026-09", revenue_atoms: "0", share_bps: 6000, payment: null },
+        { month: "2026-12", revenue_atoms: null, earnings_atoms: null, share_bps: null, payment: null },
+        { month: "2026-11", revenue_atoms: "21", earnings_atoms: "7", share_bps: 3429, payment: null },
+        { month: "2026-10", revenue_atoms: "1000000000", earnings_atoms: "300000000", share_bps: 3000, payment: { amount_atoms: "500000000", digest } },
+        { month: "2026-09", revenue_atoms: "0", earnings_atoms: "0", share_bps: 6000, payment: null },
       ],
     });
   });
@@ -102,21 +103,28 @@ test("the private referral page renders one row per month and links only confirm
     [...container.querySelectorAll("button")].find((button) => button.textContent === "Try again")!.click();
     await settleQueries(client);
   });
-  const rows = [...container.querySelectorAll("tbody tr")];
-  assert.deepEqual(rows.map((row) => [...row.querySelectorAll("th, td")].map((cell) => cell.textContent)), [
-    ["Nov 2026", "2.3", "34.29%", "Pending", ""],
-    ["Oct 2026", "1", "30%", "0.3", ""],
-    ["Sept 2026", "0", "60%", "—", ""],
+  const statement = container.querySelector('[aria-label="Monthly referral payments"]')!;
+  const months = [...statement.querySelectorAll("li")];
+  const fields = months.map((row) => [...row.querySelectorAll("h2, p, dt, dd")].map((field) => {
+    const value = field.querySelector("[data-amount-fit] > span") ?? field;
+    return value.textContent?.trim().replaceAll("\u00a0", " ");
+  }));
+  assert.deepEqual(fields, [
+    ["December 2026", "Not yet paid", "SUI contributed", "—", "Your share", "—"],
+    ["November 2026", "Not yet paid", "SUI contributed", "0.000000021 SUI", "Your share · 34.29%", "0.000000007 SUI"],
+    ["October 2026", "Paid", "SUI contributed", "1 SUI", "Your share · 30%", "0.3 SUI", "0.5 SUI received"],
+    ["September 2026", "No payout due", "SUI contributed", "0 SUI", "Your share · 60%", "0 SUI"],
   ]);
-  assert.deepEqual([...container.querySelectorAll("tbody a")].map((link) => link.getAttribute("href")), [
-    `https://suiscan.xyz/mainnet/tx/${digest}`,
-  ]);
+  const links = statement.querySelectorAll("a");
+  assert.equal(links.length, 1);
+  assert.equal(links[0].textContent?.trim(), "Transaction");
+  assert.equal(links[0].getAttribute("href"), `https://suiscan.xyz/mainnet/tx/${digest}`);
   assert.equal(container.querySelector("h1")?.textContent, "Invites");
   assert.equal(container.querySelector('[data-back-bar] a')?.getAttribute("href"), "/@kai_9");
   assert.ok(reads.every((url) => url.endsWith("/me/referrals?view=monthly")));
   assert.doesNotMatch(container.textContent!, /People you invited|4,820/);
 
   await act(async () => root.render(render(false)));
-  assert.equal(container.querySelector("table"), null);
+  assert.equal(container.querySelector('[aria-label="Monthly referral payments"]'), null);
   assert.match(container.textContent!, /Sign in to see your invites/);
 });

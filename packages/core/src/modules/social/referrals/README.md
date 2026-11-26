@@ -4,8 +4,10 @@ The owner's profile shows lifetime referral activity. `/invites` shows one row
 per UTC month with native SUI collected by Blast from referred bonding-curve
 trades and funded, non-cancelled presales. Revenue belongs to the month Blast
 collected the fee. If the applicable rates differ within a month, the displayed
-share is weighted by each receipt's contribution. A dash indicates that the
-contribution total is still unavailable, or that there is no payment due.
+share is weighted by each receipt's contribution. Earnings use the applicable
+rates and carry fractions of a mist into later months for each invitee. A dash indicates
+that the figures are still unavailable. The month shows the confirmed amount and
+transaction once a payout is recorded.
 
 The private APIs derive the owner from the authenticated session. Operators pay
 outside Blast and can record one confirmed native SUI transfer per account and

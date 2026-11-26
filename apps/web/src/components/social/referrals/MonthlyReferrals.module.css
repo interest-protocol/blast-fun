@@ -1,65 +1,102 @@
-.statement {
-  padding: .5rem clamp(.5rem, 1.6vw, 1rem);
+.months {
+  display: grid;
+  gap: .75rem;
+  max-inline-size: 40rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-.statement table {
-  width: 100%;
-  table-layout: fixed;
-  border-collapse: collapse;
-  font-size: .875rem;
+.month {
+  min-inline-size: 0;
+  padding: clamp(.875rem, 3.5vw, 1.5rem);
 }
 
-.statement th,
-.statement td {
-  padding: .5rem .25rem;
-  text-align: start;
+.heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem .75rem;
+}
+
+.heading h2 {
+  margin: 0;
+  font-size: clamp(1.0625rem, .95rem + .65vw, 1.3125rem);
+  line-height: 1.2;
+  font-weight: 650;
+  letter-spacing: -.025em;
+}
+
+.status {
+  margin: 0;
+}
+
+.status svg {
+  width: .875rem;
+  height: .875rem;
+}
+
+.figures {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .75rem;
+  margin: 1.125rem 0 0;
+}
+
+.figures dt {
+  color: var(--muted);
+  font-size: .8125rem;
+  line-height: 1.25;
+}
+
+.figures dd {
+  --amount-max-size: clamp(1.125rem, 1rem + .7vw, 1.5rem);
+  margin: .1875rem 0 0;
+  font-size: var(--amount-max-size);
+  font-variant-numeric: tabular-nums;
+  font-weight: 550;
+  letter-spacing: -.035em;
+  line-height: 1.15;
   overflow-wrap: anywhere;
 }
 
-.statement thead th {
+.fitAmount {
+  font-size: max(.875rem, var(--amount-font-size));
+}
+
+.figures .earnings {
+  font-weight: 700;
+}
+
+.unit {
   color: var(--muted);
-  font-size: .75rem;
+  font-size: .8125rem;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.payment {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  column-gap: .75rem;
+  margin-block-start: .875rem;
+  padding-block-start: .25rem;
+  border-block-start: 1px solid var(--hair);
+}
+
+.paidAmount {
+  margin: .25rem 0;
+  font-size: .875rem;
   font-weight: 600;
-  vertical-align: bottom;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
 }
 
-.statement th[scope="row"] {
-  font-weight: 600;
-}
-
-.statement th:first-child { width: 22%; }
-.statement th:nth-child(3) { width: 16%; }
-
-.statement .link {
-  width: 2.75rem;
-  padding-inline: 0;
-  text-align: end;
-}
-
-@media (max-width: 27rem) {
-  .statement {
-    padding-inline: .375rem;
-  }
-
-  .statement table {
-    font-size: .75rem;
-  }
-
-  .statement th,
-  .statement td {
-    padding-inline: .125rem;
-  }
-
-  .statement th,
-  .statement td:nth-child(3) {
-    overflow-wrap: normal;
-  }
-
-  .statement td:nth-child(3) {
-    font-family: inherit;
-  }
-
-  .statement th:first-child { width: 17%; }
-  .statement th:nth-child(2) { width: 32%; }
-  .statement th:nth-child(3) { width: 15.5%; }
+.payment a[data-ui-button] {
+  --control-pad-start: .375rem;
+  --control-pad-end: .375rem;
+  font-size: .8125rem;
 }

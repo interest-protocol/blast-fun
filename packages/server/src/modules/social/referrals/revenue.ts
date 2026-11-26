@@ -130,17 +130,27 @@ const MONTHLY_REFERRAL_SQL = `SELECT * FROM (${REFERRAL_RECEIPTS_SQL}, commitmen
  GROUP BY f.entity_id,f.total_atoms,month
 ), contributions AS (
  SELECT date_trunc('month',to_timestamp(collected_at_ms/1000.0) AT TIME ZONE 'UTC')::date AS month,
-   quote_revenue AS atoms,CASE WHEN special_revenue THEN quote_revenue ELSE 0 END AS special_atoms
+   person_id,quote_revenue AS atoms,CASE WHEN special_revenue THEN quote_revenue ELSE 0 END AS special_atoms
  FROM curve WHERE quote_coin=$6 AND quote_revenue>0
  UNION ALL
- SELECT p.month,div(c.atoms*p.paid,p.total_atoms),
+ SELECT p.month,c.person_id,div(c.atoms*p.paid,p.total_atoms),
    div(c.atoms*CASE WHEN c.special_reservation THEN p.paid ELSE p.special_paid END,p.total_atoms)
  FROM commitments c JOIN presale_receipts p ON p.entity_id=c.entity_id
+), invitee_totals AS (
+ SELECT month,person_id,sum(atoms) AS atoms,sum(special_atoms) AS special_atoms,
+   sum(atoms)*${STANDARD_REFERRAL_SHARE_BPS}
+     +sum(special_atoms)*${SPECIAL_REFERRAL_SHARE_BPS - STANDARD_REFERRAL_SHARE_BPS} AS weighted_atoms
+ FROM contributions WHERE atoms>0 GROUP BY month,person_id
+-- Carry fractional mist forward so the monthly shares sum to the lifetime share.
+), invitee_earnings AS (
+ SELECT *,sum(weighted_atoms) OVER (PARTITION BY person_id ORDER BY month) AS cumulative
+ FROM invitee_totals
 ), totals AS (
  SELECT month,sum(atoms) AS atoms,
+   sum(div(cumulative,10000)-div(cumulative-weighted_atoms,10000)) AS earnings,
    (${STANDARD_REFERRAL_SHARE_BPS}
      +round(sum(special_atoms)*${SPECIAL_REFERRAL_SHARE_BPS - STANDARD_REFERRAL_SHARE_BPS}/sum(atoms)))::int AS share_bps
- FROM contributions WHERE atoms>0 GROUP BY month
+ FROM invitee_earnings GROUP BY month
 ), payments AS (
  SELECT month,amount_atoms,digest FROM social_referral_payments WHERE account_id=$1
 ), calendar AS (
@@ -151,6 +161,8 @@ const MONTHLY_REFERRAL_SQL = `SELECT * FROM (${REFERRAL_RECEIPTS_SQL}, commitmen
 SELECT to_char(c.month,'YYYY-MM') AS month,
  CASE WHEN c.month <= (to_timestamp($7::float8/1000) AT TIME ZONE 'UTC')::date
    THEN COALESCE(t.atoms,0)::text END AS revenue_atoms,
+ CASE WHEN c.month <= (to_timestamp($7::float8/1000) AT TIME ZONE 'UTC')::date
+   THEN COALESCE(t.earnings,0)::text END AS earnings_atoms,
  CASE WHEN c.month <= (to_timestamp($7::float8/1000) AT TIME ZONE 'UTC')::date
    THEN COALESCE(t.share_bps,CASE WHEN $3::bigint IS NULL
    OR LEAST(c.month+interval '1 month'-interval '1 millisecond',now() AT TIME ZONE 'UTC') < to_timestamp($3/1000.0) AT TIME ZONE 'UTC'
