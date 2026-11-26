@@ -38,9 +38,9 @@ import { rollingPriceAtSql } from "@blast/server/modules/social/prices/price-at.
  *   wallet counts in every window that holds one of its trades. At launch
  *   scale's hot coin (60,000 trades in its day) this replaced 40 `FILTER`
  *   aggregates, eight of them `count(DISTINCT …)`.
- * - **Moves** (`MARKET_COIN_SQL`). The 24h window uses the same native baseline and
- *   fallback as Home's coin list. The shorter windows take the newest 5-minute
- *   history row observed in the hour before their cutoff.
+ * - **Moves** (`MARKET_COIN_SQL`). Every window opens at the last price at or
+ *   before its start (the native baseline, with the 5-minute history as its
+ *   fallback), as Home's coin list does.
  * - **Supply.** The sale's indexed currency supply (or its cached terms for
  *   fixed supply), less what its vesting schedules still hold: every
  *   `sale_token` schedule's `total − claimed`. What is left circulates. A

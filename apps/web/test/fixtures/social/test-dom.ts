@@ -88,6 +88,10 @@ export class TestAnimation {
     });
   }
 
+  /** The element it animates, as a browser's `KeyframeEffect` names it. */
+  get effect(): Readonly<{ target: TestElement }> {
+    return { target: this.target };
+  }
   /** It still applies to its element: running, or held at its end by `fill`. */
   get inEffect(): boolean {
     return this.playState === "running" || (this.playState === "finished" && (this.fill === "forwards" || this.fill === "both"));

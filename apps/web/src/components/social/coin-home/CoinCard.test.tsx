@@ -94,7 +94,7 @@ test("streamed prices revalue the existing row's market cap without reordering i
   assert.equal(mcap(), "$4M");
   assert.ok(animations.all.length > 0);
   // Row 2's trades also washed its dash before its figure arrived; that dash has since been replaced.
-  assert.ok(animations.all.every(animation => !rows[0]?.contains(animation.target)), "only the trading row cues");
+  assert.ok(animations.all.every(animation => rows[1]?.contains(animation.target) || !animation.target.isConnected), "only the trading row cues");
   const change = () => rows[1]?.querySelector<HTMLElement>('[data-slot="coin-change"]');
   assert.equal(change()?.textContent, "+2.56%");
   animations.finishAll();
