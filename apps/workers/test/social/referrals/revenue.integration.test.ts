@@ -361,7 +361,9 @@ test(
     boundary.timestampMs++;
     await collect();
     const next = (await readReferralSummary(db, owner)).accounting!;
-    assert.deepEqual(next.assets.map(({ coin_type }) => coin_type), [quote]);
+    assert.deepEqual(next.assets.map(({ coin_type }) => coin_type), [quote, USDC_COIN_TYPE]);
+    assert.equal(next.assets[1].volume_atoms, String(110n * SUI)); // USDC presale 100 + buy 10
+    assert.equal(next.assets[1].revenue_atoms, String(2n * SUI)); // USDC presale fee + claimed USDC swap fee
     assert.equal(next.assets[0].volume_atoms, String(290n * SUI)); // 100 + 80 + funded/unpaid100 + buy10
     assert.equal(next.assets[0].revenue_atoms, "1800000000"); // Two successful SUI presales. The trade fee is still uncollected.
     assert.equal(next.assets[0].earnings_atoms, "1080000000");
@@ -438,7 +440,7 @@ test(
     );
     await collect();
     const collected = (await readReferralSummary(db, owner)).accounting!;
-    assert.deepEqual(collected.assets.map(({ coin_type }) => coin_type), [quote]);
+    assert.deepEqual(collected.assets.map(({ coin_type }) => coin_type), [quote, USDC_COIN_TYPE]);
     assert.equal(collected.assets[0].revenue_atoms, "1900000000");
     assert.equal(collected.assets[0].earnings_atoms, "1140000000");
     assert.equal(collected.pending_events, 1);

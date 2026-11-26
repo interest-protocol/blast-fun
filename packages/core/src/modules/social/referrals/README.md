@@ -1,7 +1,7 @@
 # Account referrals and revenue tracking
 
-`/invites` and the owner's profile show the invited people, their referred SUI
-volume, Blast revenue and lifetime earnings in SUI, plus the current
+`/invites` and the owner's profile show the invited people, their referred
+volume, Blast revenue and lifetime earnings per quote coin, plus the current
 referral rate. The standard share is 30% after activation. Approved special
 referrers keep 60%.
 Both private APIs derive the owner from the authenticated session; per-person
@@ -48,17 +48,18 @@ checkpoint and timestamp advance together after completing a cut. No chain
 scan runs on a page request. Wallets must have unambiguous proven ownership;
 activity predating either signup attribution or wallet verification is excluded.
 
-- **Presales:** only funded, non-cancelled SUI sales count accepted volume. Each
+- **Presales:** only funded, non-cancelled sales count accepted volume. Each
   invitee's accepted volume is its commitments divided by all commitments,
   multiplied by accepted quote. Revenue uses the same proportion of actual
-  `ProtocolFeesPaid.quote`. Refunded overflow, `partner_quote` and minted token
+  `ProtocolFeesPaid.quote` paid in the sale's quote coin. Refunded overflow, `partner_quote` and minted token
   allocations are excluded. Funded sales without fee payment retain accepted
   volume and stay pending for revenue. Failed/cancelled sales earn nothing.
-- **Bonding curves:** confirmed buys and sells count executed SUI quote volume
-  (sell proceeds net of quote fees). Revenue uses swap fees paid to Blast's
-  treasury in SUI. Each claim is allocated over its gross SUI quote fee accrual
-  window, after the partner's cut where applicable. Creator fees, meme-token
-  fees, and separate SUI creation fees are excluded. Graduation accrual
+- **Bonding curves:** confirmed buys and sells count executed quote volume
+  (sell proceeds net of quote fees). Revenue uses quote-coin swap fees paid to Blast's
+  treasury. Each claim is allocated over its gross quote fee accrual window,
+  after the partner's cut where applicable. Each quote coin stays a separate
+  total. Creator fees, meme-token fees, and separate SUI creation fees are
+  excluded. Graduation accrual
   participates in the denominator, but is not attributed as swap revenue.
   Same-transaction event order is supported. When cross-transaction ordering at a
   boundary checkpoint cannot be proven by the source view, affected fees stay

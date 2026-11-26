@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { SUI_COIN_TYPE } from "@blast/core/lib/sui/coin-types.ts";
 import type { ReadableDatabase } from "@blast/core/modules/database/transaction.ts";
 import { assertChainReadThroughViews } from "@blast/core/modules/database/modules.ts";
 import {
@@ -31,7 +30,7 @@ export const REFERRAL_REVENUE_SQL = `SELECT * FROM (${RECRUITS_SQL}, cut AS (
  JOIN social_accounts a ON a.account_id=r.account_id
  JOIN social_wallet_owners w ON w.account_id=r.account_id
  JOIN evidence e ON e.sender=w.address AND e.timestamp_ms>=extract(epoch FROM GREATEST(r.joined_at,w.linked_at))*1000
- WHERE (e.kind='curve' OR (e.kind='commit' AND e.quote_type=$6))
+ WHERE e.kind IN ('curve','commit')
    AND ($2::text[] IS NULL OR COALESCE(a.profile_id,r.recruit_id)::text=ANY($2))
 ), curve AS (
  SELECT e.*,l.quote_type AS quote_coin,
@@ -41,7 +40,7 @@ export const REFERRAL_REVENUE_SQL = `SELECT * FROM (${RECRUITS_SQL}, cut AS (
  FROM owned e
  LEFT JOIN social_referral_entities l ON l.entity_id=e.entity_id AND l.kind='launch'
  LEFT JOIN LATERAL (SELECT c.* FROM evidence c WHERE c.entity_id=e.entity_id AND c.kind='curve_claim'
-   AND l.quote_type=$6 AND e.quote_atoms>0
+   AND e.quote_atoms>0
    AND (c.checkpoint>e.checkpoint OR (c.checkpoint=e.checkpoint AND c.digest=e.digest AND c.event_index>e.event_index))
    ORDER BY c.checkpoint,c.digest,c.event_index LIMIT 1) claim ON true
  LEFT JOIN LATERAL (SELECT p.* FROM evidence p WHERE p.entity_id=e.entity_id AND p.kind='curve_claim'
@@ -59,13 +58,13 @@ export const REFERRAL_REVENUE_SQL = `SELECT * FROM (${RECRUITS_SQL}, cut AS (
      AND (g.checkpoint<claim.checkpoint OR (g.checkpoint=claim.checkpoint AND g.digest=claim.digest AND g.event_index<claim.event_index))
      AND (previous.checkpoint IS NULL OR g.checkpoint>previous.checkpoint
        OR (g.checkpoint=previous.checkpoint AND g.digest=previous.digest AND g.event_index>previous.event_index))) settled ON claim.checkpoint IS NOT NULL
- WHERE e.kind='curve' AND (l.quote_type=$6 OR l.quote_type IS NULL)
+ WHERE e.kind='curve'
 ), paid_sales AS (
  SELECT f.entity_id,f.total_atoms,f.accepted_atoms,sum(p.quote_atoms) AS paid,
    sum(p.quote_atoms) FILTER (WHERE p.special_rate) AS special_paid
  FROM evidence f LEFT JOIN evidence p ON p.entity_id=f.entity_id AND p.kind='presale_fee'
-   AND p.quote_type=$6 AND p.checkpoint>=f.checkpoint
- WHERE f.kind='funded' AND f.quote_type=$6 AND f.total_atoms>0 AND f.accepted_atoms<=f.total_atoms
+   AND p.quote_type=f.quote_type AND p.checkpoint>=f.checkpoint
+ WHERE f.kind='funded' AND f.total_atoms>0 AND f.accepted_atoms<=f.total_atoms
    AND NOT EXISTS (SELECT 1 FROM evidence x WHERE x.entity_id=f.entity_id AND x.kind='cancelled')
  GROUP BY f.entity_id,f.total_atoms,f.accepted_atoms
 ), commitments AS (
@@ -146,7 +145,6 @@ export async function readReferralAccounting(
     standardRateFrom,
     specialRateFrom,
     specialReservation,
-    SUI_COIN_TYPE,
   ]);
   const assets = new Map<string, ReferralAsset>();
   for (const { person_id, pending, ...asset } of rows) {
