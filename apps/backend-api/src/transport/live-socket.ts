@@ -133,6 +133,8 @@ export type LiveSocketData = {
   lastPing: number;
   /** When this socket's recent `set`s arrived, oldest first. */
   sets: number[];
+  /** This socket was refused `rate` in the current window; one more over-rate `set` closes it. */
+  rateRefused: boolean;
   /** What the socket holds now; always matches the address tables. */
   pools: readonly string[];
   priceCoins: readonly string[];
@@ -549,8 +551,13 @@ export function createLiveSocket(options: LiveSocketOptions) {
     }
     const sets = recent(data.sets, now);
     if (sets.length >= LIVE_SOCKET.setsPerMinute) {
+      if (data.rateRefused) {
+        return shut(ws, LIVE_CLOSE.message);
+      }
+      data.rateRefused = true;
       return answer("rate", sets[0]! + MINUTE_MS - now);
     }
+    data.rateRefused = false;
     sets.push(now);
 
     const kept: MarketSet = {
@@ -689,6 +696,7 @@ export function createLiveSocket(options: LiveSocketOptions) {
         slow: false,
         lastPing: 0,
         sets: [],
+        rateRefused: false,
         pools: [],
         priceCoins: [],
         presale: null,

@@ -517,7 +517,7 @@ test("a set past the per-IP pools is refused after its removals; a full process 
   }
 });
 
-test("one address adds at most 40 pools a minute; one socket sends at most 10 sets a minute", async () => {
+test("one address adds at most 40 pools a minute; one socket sends at most 10 sets a minute, then one refusal", async () => {
   const { live, server, open } = harness();
   try {
     const [one, two, three] = [open("activity=true"), open("activity=true"), open("activity=true")];
@@ -531,6 +531,8 @@ test("one address adds at most 40 pools a minute; one socket sends at most 10 se
     assert.equal(rate.reason, "rate");
     assert.ok(rate.retry_ms! > 0 && rate.retry_ms! <= 60_000);
     assert.equal(rate.held.pools.length, 2, "a rate refusal changes nothing");
+    sendSet(one, 12, []);
+    assert.equal((await one.closed).code, LIVE_CLOSE.message, "a second set over the rate closes");
     for (let i = 1; i < 10; i++) {
       assert.equal((await set(two, i, [pool(100 + 2 * i), pool(101 + 2 * i)])).ok, true);
     }
