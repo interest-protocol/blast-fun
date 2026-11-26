@@ -76,6 +76,12 @@ type Topic = {
   snapshotless?: boolean;
   /** Pings sent when the pool was subscribed: a later ping's pong proves the reader holds the subscription. */
   joinedAt?: number;
+  /**
+   * The fence deadline passed after the reader took the subscribe (a tracked pool, or a pool an older
+   * reader does not know yet): browsers were told `recovering`; the pool stays subscribed until traffic
+   * or a snapshot fences it, and its `deadline` re-subscribes it every `WAITING_RETRY_MS`.
+   */
+  waiting?: boolean;
   /** A wait before the pool's next upstream subscribe, after a failed one; its frames are dropped meanwhile. */
   retry?: ReturnType<typeof setTimeout>;
   /** Re-fences since the last fence: picks the next wait from `RETRY_MS`. */
@@ -105,6 +111,8 @@ const RETRY_MS = [0, 5_000, 10_000, 30_000] as const;
 const STABLE_MS = 60_000;
 /** A pool the reader does not know is asked again this often. */
 const MISSING_RETRY_MS = 60_000;
+/** A pool waiting for traffic is asked again this often, in case the reader only now knows it. */
+const WAITING_RETRY_MS = 30_000;
 /** With no market progress for this long, browsers are told the stream is `stale`. */
 const STALE_MS = 30_000;
 /** While the upstream reconnects, browsers keep getting heartbeats this long, then fall back on their own. */
@@ -496,7 +504,7 @@ export class MarketStreamRelay {
           const topic = this.#topics.get(pool);
           if (topic && !topic.fence && !topic.deadline) {
             topic.joinedAt = this.#pings;
-            topic.deadline = setTimeout(() => this.#refence(pool), FENCE_MS);
+            topic.deadline = setTimeout(() => this.#fenceLate(pool), FENCE_MS);
           }
         }
     } catch {
@@ -751,7 +759,7 @@ export class MarketStreamRelay {
   /** Fences the pool at a snapshot's (or a whole checkpoint's) cursor and tells its clients. */
   #fence(pool: string, topic: Topic, at: FencePoint): void {
     clearTimeout(topic.retry);
-    Object.assign(topic, { retry: undefined, recovering: false, missing: false, fencedAt: Date.now() });
+    Object.assign(topic, { retry: undefined, recovering: false, missing: false, waiting: false, fencedAt: Date.now() });
     topic.unfenced = undefined;
     topic.snapshotless = undefined;
     topic.cursor = at.cursor;
@@ -841,6 +849,37 @@ export class MarketStreamRelay {
     this.#retry(pool, topic, RETRY_MS[Math.min(attempt, RETRY_MS.length - 1)]!);
   }
 
+  /**
+   * No fence 10 s after a subscribe. If the reader took it (a pong to a later ping) and sent no error,
+   * the pool is a tracked one it streams without a snapshot, or one an older reader does not know yet.
+   * A backoff would leave it deaf to traffic, so a quiet pool on a quiet socket would never fence:
+   * browsers are told `recovering` once, the next market frame fences it (`#fenceQuiet`), and it is
+   * re-subscribed back to back every `WAITING_RETRY_MS` for a snapshot. A subscribe the reader has
+   * not acknowledged is re-fenced.
+   */
+  #fenceLate(pool: string): void {
+    const topic = this.#topics.get(pool);
+    if (!topic) return;
+    if (topic.joinedAt === undefined || this.#pongs <= topic.joinedAt) return this.#refence(pool);
+    topic.waiting = true;
+    topic.deadline = setTimeout(() => this.#askAgain(pool, topic), WAITING_RETRY_MS);
+    if (topic.recovering) return;
+    topic.recovering = true;
+    this.#tell(topic, { state: "recovering", pool_key: pool });
+  }
+
+  /** A waiting pool's periodic subscribe: unsubscribing first makes a reader that now knows it send a snapshot. */
+  #askAgain(pool: string, topic: Topic): void {
+    topic.deadline = undefined;
+    if (!this.#ready || this.#topics.get(pool) !== topic || topic.fence) return;
+    // Its frames between the two may be missed: a partial checkpoint is no fence. Until the reader
+    // takes the new subscribe it is a pending one, which a `not_ready` re-fences.
+    Object.assign(topic, { unfenced: undefined, waiting: false });
+    this.#subscribe("unsubscribe", [pool]);
+    if (!this.#ready) return;
+    this.#subscribe("subscribe", [pool]);
+  }
+
   /** The reader refused a pool's resume; it may already be re-fencing for another reason. */
   #resumeFailed(pool: string): void {
     if (this.#topics.get(pool)?.resuming) this.#refence(pool);
@@ -871,6 +910,7 @@ export class MarketStreamRelay {
       deadline: undefined, retry: undefined, fence: undefined, cursor: undefined, floor: undefined,
       ring: [], ringBytes: 0, unfenced: undefined, snapshotless: undefined, resuming: false,
       resumeChanged: false, joinedAt: undefined, priceMissing: undefined, fencedAt: undefined,
+      waiting: false,
     });
     return topic;
   }
@@ -901,7 +941,7 @@ export class MarketStreamRelay {
     if (this.#helloPending) return this.#end("upstream-resync");
     const error = frame.error;
     if (error && typeof error === "object" && (error as Frame).code === "not_ready") {
-      for (const [pool, topic] of this.#topics) if (!topic.fence && topic.deadline !== undefined) this.#refence(pool);
+      for (const [pool, topic] of this.#topics) if (!topic.fence && !topic.waiting && topic.deadline !== undefined) this.#refence(pool);
       return;
     }
     this.#end("upstream-resync");
@@ -1028,6 +1068,7 @@ export class MarketStreamRelay {
       clearTimeout(topic.retry);
       topic.deadline = undefined;
       topic.retry = undefined;
+      topic.waiting = false;
       topic.resumeChanged = false;
       // Frames lost with the upstream may sit between the last one seen and the next.
       topic.unfenced = undefined;
