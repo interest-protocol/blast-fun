@@ -22,8 +22,9 @@ export function useLiveScreen(): boolean {
 }
 
 /**
- * Whether the screen's stream is live and carrying the coin's stats, so timed page and market
- * reads can rest. False whenever the stream drops, so those reads resume on their own.
+ * Whether the screen's stream is live, so timed page and market reads can rest. The stream sends
+ * the coin's stats whenever they change, so a quiet coin with none yet is current too. False
+ * whenever the stream drops, so those reads resume on their own.
  */
 export function useLiveListening(): boolean {
   return use(LiveScreenContext).listening;

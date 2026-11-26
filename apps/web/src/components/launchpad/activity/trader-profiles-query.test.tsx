@@ -9,7 +9,7 @@ const dom = installTestDom();
 const { act } = await import("react");
 const { createRoot } = await import("react-dom/client");
 const { createTestQueryClient, withQueryClient, settleQueries } = await import("#web/lib/query/test-client.ts");
-const { useTraderProfiles } = await import("./trader-profiles.ts");
+const { useTraderProfiles, profilesPollMs } = await import("./trader-profiles.ts");
 const { parseInfraProvenance } = await import("@blast/core/modules/launchpad-contract/provenance.ts");
 const { classifiedActivityBody } = await import("../../../../../../packages/core/test/fixtures/modules/launchpad-coin/activity-fixtures.ts");
 const { parseClassifiedActivityPage } = await import("@blast/core/modules/launchpad-contract/activity.ts");
@@ -82,4 +82,15 @@ test("public profile links stay visible during refresh and clear on errors, stal
     client.clear();
     container.remove();
   }
+});
+
+// This fails if the live screen keeps reading profiles every 15 s, or stops reading for a new trader.
+test("profiles rest at 60 s while the live screen listens and every shown trader has an answer", () => {
+  const alice = { address: "0x1", timestampMs: 1 };
+  const bob = { address: "0x2", timestampMs: 2 };
+  const answered = { [traderProfileKey(alice)]: null };
+  assert.equal(profilesPollMs(true, [alice], answered), 60_000);
+  assert.equal(profilesPollMs(true, [alice, bob], answered), 15_000, "a new trader is asked for on the fast pace");
+  assert.equal(profilesPollMs(false, [alice], answered), 15_000);
+  assert.equal(profilesPollMs(true, [alice], undefined), 15_000);
 });

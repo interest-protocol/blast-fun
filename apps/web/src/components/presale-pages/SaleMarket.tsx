@@ -416,7 +416,7 @@ export function SaleMarket({
   // The chart's own pool, so the tab's stream does not widen; a pool the stream cannot key is never joined.
   const streamed = poolKey !== null && MIGRATOR_POOL_KEY.test(poolKey);
   const live = useLiveCoin({ coin: sale.sale_token, pools: streamed ? [poolKey] : [], expected: null, enabled: useLiveScreen() && streamed });
-  useReportListening(live.live && live.stats !== null);
+  useReportListening(live.live);
   const coin =
     query.data?.coins.find(
       (item) =>
