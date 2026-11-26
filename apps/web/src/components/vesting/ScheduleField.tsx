@@ -134,8 +134,8 @@ export function ScheduleField({
           </PopoverSurface>
         </Popover.Root>
       </div>
-      <label className={styles.time}>
-        {timeLabel}
+      <div className={styles.time}>
+        <label htmlFor={`${id}-time`}>{timeLabel}</label>
         <TextField
           size="lg"
           type="time"
@@ -145,7 +145,7 @@ export function ScheduleField({
           aria-invalid={!!error || undefined}
           aria-describedby={describedBy}
         />
-      </label>
+      </div>
       <span className="sr" id={`${id}-utc`}>UTC</span>
       {error ? (
         <span className={styles.error} id={`${id}-error`}>
