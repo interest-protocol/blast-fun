@@ -96,7 +96,10 @@ export function createAdmission(dependencies: AdmissionDependencies): Admission 
   const shared = enforcer(policies);
   // First-party proofs from an extra trusted site spend their nonce and quotas in its own namespace.
   const extraSites = new Map(
-    (dependencies.extraNamespaces ?? []).map((namespace) => [namespace, enforcer(policies, namespace)]),
+    (dependencies.extraNamespaces ?? []).map((namespace) => [
+      namespace,
+      enforcer(policies, namespace),
+    ]),
   );
   const proofStore = (gateway: GatewayContext | undefined) =>
     (gateway && extraSites.get(gateway.namespace)) || shared;

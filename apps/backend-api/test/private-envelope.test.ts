@@ -197,7 +197,11 @@ test("an extra site is trusted only with its own namespace, which also keys its 
     });
     return new Request(url, {
       method: "PUT",
-      headers: signPrivateRequest(source, bytes, secret, { ...site, purpose: "browser", ip: "192.0.2.1" }),
+      headers: signPrivateRequest(source, bytes, secret, {
+        ...site,
+        purpose: "browser",
+        ip: "192.0.2.1",
+      }),
       body: bytes,
     });
   };
@@ -205,7 +209,9 @@ test("an extra site is trusted only with its own namespace, which also keys its 
   // Unset: the primary site alone, keyed exactly as before.
   assert.equal((await run(signed({ siteOrigin, namespace }))).status, 204);
   assert.equal((await run(signed(dev))).status, 403, "no extra site configured");
-  assert.deepEqual(keys, [`${namespace}:{partner-quota}:private-replay:${keys[0]!.split(":").at(-1)}`]);
+  assert.deepEqual(keys, [
+    `${namespace}:{partner-quota}:private-replay:${keys[0]!.split(":").at(-1)}`,
+  ]);
 
   // Configured: dev is accepted under its own namespace, and handlers see it as the primary site.
   const devRequest = signed(dev);

@@ -529,7 +529,13 @@ test("extra trusted sites are optional, each keyed by its own namespace, and fai
     JSON.stringify([{ ...dev, branch: "" }]),
     JSON.stringify([{ ...dev, extra: true }]),
     JSON.stringify([dev, { ...dev, origin: "https://other.blast.test" }]),
-    JSON.stringify([dev, { ...dev, target: "qa" }, { ...dev, target: "a" }, { ...dev, target: "b" }, { ...dev, target: "c" }]),
+    JSON.stringify([
+      dev,
+      { ...dev, target: "qa" },
+      { ...dev, target: "a" },
+      { ...dev, target: "b" },
+      { ...dev, target: "c" },
+    ]),
   ]) {
     assert.throws(
       () => backendConfig({ ...production, BLAST_BACKEND_EXTRA_SITES: value }),
