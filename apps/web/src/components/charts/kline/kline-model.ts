@@ -305,3 +305,13 @@ export function ticksInside<T extends { coord: number; text: string | number }>(
     return coord - half >= 0 && coord + half <= width;
   });
 }
+
+/**
+ * The y-axis `gap.top` that keeps `px` free above the highest value in a `height` px pane.
+ * KLineCharts adds the gap as a share of the value range, not of the pane, and `bottom`
+ * (a share too) widens the range as well, so `px / height` alone leaves less room.
+ * Capped under 1, since KLineCharts reads a gap of 1 or more as pixels.
+ */
+export function topGap(px: number, height: number, bottom: number): number {
+  return px < height ? Math.min(.99, px * (1 + bottom) / (height - px)) : .99;
+}
