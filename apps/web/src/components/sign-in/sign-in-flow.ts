@@ -59,9 +59,6 @@ export const PRIVY_WALLET_LOGIN = Object.freeze({ loginMethods: ["wallet"], wall
 /** Privy's OAuth provider for each OAuth method. */
 export const PRIVY_OAUTH_PROVIDERS = { x: "twitter", google: "google" } as const;
 
-/** How long Privy may take to start before the sheet says it could not. */
-export const SIGN_IN_READY_TIMEOUT_MS = 15_000;
-
 /**
  * Where an OAuth attempt survives its redirect: the method, so the page it
  * returns to can say how it ended. Session storage, this tab only.
@@ -99,7 +96,7 @@ export function signInMessage(state: SignInState): Readonly<{ text: string; aler
     case "rate-limited":
       return { text: diagnosticMessage("Too many sign-in attempts. Wait a few minutes, then try again.", { code: "rate_limited" }), alert: true };
     case "stalled":
-      return { text: diagnosticMessage("Sign-in could not start. Check your connection, then reload the page.", { code: "network_unavailable" }), alert: true };
+      return { text: diagnosticMessage("Sign-in could not start. Check your connection, then try again.", { code: "network_unavailable" }), alert: true };
     default:
       return null;
   }

@@ -22,15 +22,10 @@ const privy = {
 Object.assign(globalThis, { t013Privy: privy });
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "@privy-io/react-auth")
+    if (specifier.endsWith("/privy-session.ts"))
       return {
         shortCircuit: true,
-        url: "data:text/javascript,export const usePrivy=()=>globalThis.t013Privy;",
-      };
-    if (specifier.endsWith("/PrivySessionProvider.tsx"))
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export const usePrivySessionMounted=()=>true;",
+        url: "data:text/javascript,export const usePrivySession=()=>globalThis.t013Privy;",
       };
     return nextResolve(specifier, context);
   },

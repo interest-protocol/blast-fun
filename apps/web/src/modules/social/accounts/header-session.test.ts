@@ -7,7 +7,7 @@ import { SignJWT } from "jose";
 import { createPrivyTokenVerifier } from "@blast/core/lib/privy-adapter/token-verifier.ts";
 import type { SocialAccount } from "@blast/core/modules/social/contracts/me.ts";
 import { createSocialRouteKit } from "@blast/server/modules/social/route-kit/route.ts";
-import { readHeaderSession } from "./header-session.ts";
+import { hasPrivySessionCookie, readHeaderSession } from "./header-session.ts";
 import { createSocialMeRoute } from "@blast/server/modules/social/accounts/me-route.ts";
 
 const origin = "https://blast.fun";
@@ -160,4 +160,14 @@ test("Me denies the verified caller's quota before either compound account reade
     assert.equal(response.headers.has("set-cookie"), false);
   }
   assert.deepEqual(calls, [`social_me_read:${did}`, "social_me_read:sui:0xwallet"]);
+});
+
+test("a Privy access or session cookie, and only that, starts Privy's SDK with the page", () => {
+  const has = (cookie?: string) => hasPrivySessionCookie(new Headers(cookie === undefined ? {} : { cookie }));
+  assert.equal(has(), false);
+  assert.equal(has("theme=dark"), false);
+  assert.equal(has("privy-token=a.b.c"), true);
+  assert.equal(has("theme=dark; privy-session=t"), true);
+  assert.equal(has("theme=dark;privy-token=a.b.c"), true);
+  assert.equal(has("privy-caid=x; not-privy-token=y; privy-tokens=z"), false);
 });

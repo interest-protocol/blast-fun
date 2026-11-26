@@ -11,7 +11,7 @@ import { SocialShell } from "#web/components/social/SocialShell.tsx";
 import { requestLaunchFlags } from "#web/lib/launch-flags.server.ts";
 import { webConfig } from "#web/lib/server-config.ts";
 import { SITE_ORIGIN } from "#web/lib/site.ts";
-import { readHeaderSession } from "#web/modules/social/accounts/header-session.ts";
+import { hasPrivySessionCookie, readHeaderSession } from "#web/modules/social/accounts/header-session.ts";
 
 /** Shared shell and session survive navigation between social, presale, settings and sign-in pages. */
 export default async function AppLayout({
@@ -47,7 +47,7 @@ export default async function AppLayout({
   return (
     <BlastUiRoot nonce={nonce}>
       <FeelProvider>
-        <PresaleProviders config={config} nonce={nonce}>
+        <PresaleProviders config={config} nonce={nonce} privySession={hasPrivySessionCookie(requestHeaders)}>
           <SocialSession>
             {shell}
           </SocialSession>

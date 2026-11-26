@@ -406,7 +406,7 @@ export function CoinsHost({ inlineSale, inlineTrade, opening, active = true }: R
         onRetry={() => {
           if (unheldKey !== null) void selectedCoin.refetch();
           setRead({ status: "loading", owner: accountId });
-          void load();
+          load().catch(() => undefined);
         }}
         onScreen={setScreen}
         holdingsOwner={accountId}

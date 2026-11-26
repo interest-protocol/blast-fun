@@ -57,7 +57,7 @@ test("public startup discovers extensions, restores the paired chain, and expand
   }
   const render = (picker: boolean, restore: Saved) => act(async () => root.render(
     <PrivyAuthProvider appId="blast" nonce={null} deferWalletPicker>
-      <PrivyAuthProvider appId="blast" nonce={null}><Surface picker={picker} restore={restore} /></PrivyAuthProvider>
+      <Surface picker={picker} restore={restore} />
     </PrivyAuthProvider>,
   ));
   try {
