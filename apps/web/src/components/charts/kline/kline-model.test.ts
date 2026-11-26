@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { DrawnSeries } from "#web/components/launchpad/chart/chart-geometry.ts";
-import { barChanges, fillGaps, foldTrade, foldTrades, MAX_FILLED_BARS, klineBars, pricePrecision, readChartSettings, toggleIndicator, tradedBars, forcesLine, DEFAULT_CHART_SETTINGS, priceParts, volumeText, rsiValues, fibLabelRows, chartDate, ticksInside, plotHeightFor, PANE_INDICATORS, type Bar, type IndicatorName } from "./kline-model.ts";
+import { barChanges, fillGaps, foldTrade, foldTrades, MAX_FILLED_BARS, klineBars, pricePrecision, readChartSettings, toggleIndicator, tradedBars, forcesLine, DEFAULT_CHART_SETTINGS, priceParts, volumeText, rsiValues, fibLabelRows, chartDate, ticksInside, plotHeightFor, topGap, PANE_INDICATORS, type Bar, type IndicatorName } from "./kline-model.ts";
 
 const MINUTE = 60_000;
 const T0 = 1_795_188_300_000; // a 5-minute boundary
@@ -141,6 +141,14 @@ test("axis dates read as short local dates, and a label that would run off the p
   assert.match(chartDate(at, "YYYY-MM-DD HH:mm", "UTC"), /Thu.*Nov 26.*14:30/);
   const ticks = [{ coord: 5, text: "01:00" }, { coord: 100, text: "05:00" }, { coord: 196, text: "Nov 26" }];
   assert.deepEqual(ticksInside(ticks, 200).map((tick) => tick.text), ["05:00"]);
+});
+
+test("the top gap leaves the asked px free over the highest value, as KLineCharts widens the range", () => {
+  // KLineCharts (YAxisImp.calcRange): the gaps are shares of the value range, added to both ends.
+  const freePx = (top: number, bottom: number, height: number) => height * top / (1 + top + bottom);
+  for (const [px, height, bottom] of [[76, 290, .06], [72, 200, .06], [22, 101, .05]] as const)
+    assert.ok(Math.abs(freePx(topGap(px, height, bottom), bottom, height) - px) < 1e-9, `${px}px of ${height}`);
+  assert.ok(freePx(76 / 290, .06, 290) < 60, "the plain px share leaves far less room");
 });
 
 test("the plot grows by one pane per study, whatever the mix, and its default matches the loading block", () => {
