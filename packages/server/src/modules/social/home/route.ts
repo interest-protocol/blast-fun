@@ -171,7 +171,7 @@ export function createSocialHomeRoutes(dependencies: SocialHomeRouteDependencies
       const params = new URL(ctx.request.url).searchParams;
       const coin = parseMarketCoin(params);
       const limit = parseHoldersLimit(params);
-      const ctxRead = context(ctx);
+      const ctxRead = { ...context(ctx), trackedPoolMarket };
       return cachedResponse(ctx, dependencies.caches?.holders, JSON.stringify([coin, limit, ctxRead.hiddenKinds]), () => readHomeHolders(database(), coin, limit, ctxRead), { fresh: true });
     }),
     TRADES: kit.route({ name: SOCIAL_HOME_TRADES_ROUTE, ...publicRead }, async (ctx) => {
