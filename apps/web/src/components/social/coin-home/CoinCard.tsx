@@ -191,13 +191,16 @@ function MarketCap({ amount, at, loading, nowMs }: Readonly<{ amount: string | n
  * The price move over the window, signed and coloured like every price move: green up, red down, neutral when flat.
  * Its two decimals show a trade the rounded market cap hides, so a trade on this coin alone washes it briefly in the
  * trade's direction, as the chart's last trade does. A SUI move, a window switch or a baseline rollover changes it quietly.
+ * A row without a figure yet washes its dash on each trade, so every row shows its own trades.
  */
 function PriceChange({ coin, trade, window }: Readonly<{ coin: HomeCoin; trade: HomeTrade | null; window: HomeWindow }>) {
   const node = useRef<HTMLSpanElement>(null);
   const bps = window === "1h" ? coin.mobile_market?.change_1h_bps : coin.change_24h_bps;
   const display = coin.price_usd === null || bps == null ? null : changeText(bps);
   useTradeTick(node, display, trade);
-  if (display === null || bps == null) return <span className={clsx("num", styles.change)} role="cell"><Missing what="Price change" /></span>;
+  if (display === null || bps == null) return <span className={clsx("num", styles.change)} role="cell">
+    <span className={styles.changeFigure} data-slot="coin-change" ref={node}><Missing what="Price change" /></span>
+  </span>;
   const since = window === "24h" && coin.change_24h_from_ms !== undefined
     ? `Since the first price on ${utc(coin.change_24h_from_ms)}`
     : undefined;
