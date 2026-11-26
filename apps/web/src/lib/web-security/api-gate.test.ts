@@ -244,7 +244,7 @@ test("the allowlist: cron with its bearer, the manifest, receipt images, agent k
     "refuse",
   );
   assert.equal(
-    exempt(api("/api/mission-control/owner", { headers: bearer })),
+    exempt(api("/api/analytics/activity", { headers: bearer })),
     "refuse",
     "the bearer opens only the cron paths",
   );

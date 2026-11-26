@@ -29,6 +29,7 @@ export type PresaleSetting<T> =
   | Readonly<{ status: "available"; value: T }>
   | Readonly<{ status: "unavailable"; variable: PresaleConfigVariable; reason: PresaleUnavailableReason }>;
 
+/** Every field is sent to the browser, so never put a server-only value here. */
 export type PresaleConfig = Readonly<{
   network: PresaleSetting<PresaleNetwork>;
   swap: Readonly<{

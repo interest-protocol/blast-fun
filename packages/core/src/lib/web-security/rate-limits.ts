@@ -22,7 +22,6 @@ export type RateBucket =
   | "wallet"
   | "recovery"
   | "wallet_ip"
-  | "recovery_ip"
   | "callsign"
   | "completion"
   | "telemetry"
@@ -292,21 +291,15 @@ export function createRatePolicyRegistry(
         Object.freeze({ limit: 5, windowSeconds: 600 }),
       ]),
     }),
-    // Review L3: `wallet` and `recovery` are keyed by the client IP and an
-    // address the client chooses, so rotating addresses multiplied them. These
-    // count the client IP alone, beside them: about a dozen wallet sign-ins
-    // (an issue and a verify each) or crew restores per ten minutes per address.
+    // Review L3: `wallet` is keyed by the client IP and an address the client
+    // chooses, so rotating addresses multiplied it. This counts the client IP
+    // alone, beside it: about a dozen wallet sign-ins (an issue and a verify
+    // each) per ten minutes per address.
     wallet_ip: Object.freeze({
       bucket: "wallet_ip",
       version: 1,
       subjectScope: "ip",
       windows: Object.freeze([Object.freeze({ limit: 30, windowSeconds: 600 })]),
-    }),
-    recovery_ip: Object.freeze({
-      bucket: "recovery_ip",
-      version: 1,
-      subjectScope: "ip",
-      windows: Object.freeze([Object.freeze({ limit: 20, windowSeconds: 600 })]),
     }),
     callsign: Object.freeze({
       bucket: "callsign",

@@ -367,9 +367,9 @@ dashboard's traffic for the rule, then switch to `rate_limit` / `challenge` /
   per IP before the read; misses are remembered, hits and revocations never.
 - `apps/web/src/modules/mission-control/card-images/card-images.test.ts`: only the
   canonical card image URL is served, everything else is redirected to it.
-- `apps/web/src/lib/web-security/web-security.test.ts`, `crew-access.test.ts`,
+- `apps/web/src/lib/web-security/web-security.test.ts`,
   `social/route-kit/route-kit.test.ts`, `presale/bridge/bridge.test.ts`:
-  the per-IP wallet and recovery budgets, failed sessions, the open
+  the per-IP wallet budget, failed sessions, the open
   registration cap, bounded bodies, the limiter's eviction.
 - `apps/web/src/lib/web-security/web-security.test.ts`: the registry (version 29),
   the platform-wide subject, configurable caps, IPv6 /64 grouping.
