@@ -70,10 +70,10 @@ test("UI-99: with the feed on, /sign-in and /settings carry the social title for
   const before = process.env.BLAST_SOCIAL_ENABLED;
   try {
     process.env.BLAST_SOCIAL_ENABLED = "true";
-    assert.deepEqual(await signInMetadata(), { title: { absolute: "Sign in · Blast" } });
+    assert.deepEqual(await signInMetadata(), { title: { absolute: "Sign in · Blast" }, alternates: { canonical: "/sign-in" } });
     assert.deepEqual(await settingsMetadata(), { title: { absolute: "Settings · Blast" } });
     delete process.env.BLAST_SOCIAL_ENABLED;
-    assert.deepEqual(await signInMetadata(), {});
+    assert.deepEqual(await signInMetadata(), { alternates: { canonical: "/sign-in" } });
     assert.deepEqual(await settingsMetadata(), {});
   } finally {
     if (before === undefined) delete process.env.BLAST_SOCIAL_ENABLED;

@@ -6,7 +6,7 @@ import { PublicTraderPortfolio } from "#web/components/social/coin-home/PublicTr
 import { ProfileView } from "#web/components/social/ProfileView.tsx";
 import { SocialProfileUnavailable } from "#web/components/social/SocialPlaceholders.tsx";
 import { recordMetric } from "@blast/core/lib/metrics.ts";
-import { isProfileCallsign } from "@blast/core/modules/social/contracts/profiles.ts";
+import { isProfileCallsign, profilePagePath } from "@blast/core/modules/social/contracts/profiles.ts";
 
 import { profileCallsOf, profileOf, requestNow } from "./profile-reads";
 
@@ -19,7 +19,7 @@ export async function generateMetadata({ params }: Readonly<{ params: Params }>)
   const profile = await profileOf(callsign);
   if (profile === null) return { title: "Page not found" };
   // FEATURE-MAP §0.3: `<Display name> · Blast` (the layout adds " · Blast").
-  return { title: profile.display_name ?? `@${callsign}` };
+  return { title: profile.display_name ?? `@${callsign}`, alternates: { canonical: profilePagePath(callsign) } };
 }
 
 /**
