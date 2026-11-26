@@ -217,12 +217,12 @@ test("the age follows the name and the top 10's share sits under the holders, ea
     assert.equal(document.querySelector(".coinMeta")?.textContent, "A long fixture token name");
     assert.equal(document.querySelector(".holders")?.textContent, "412");
   } finally { unknown.window.close(); }
-  // A name that only repeats the ticker leaves the age alone; an unknown holder count drops the share with it.
-  const bare = render({ ...coin, name: "test", launched_ms: now - 2 * 3_600_000, top_holders: { holders: [], share_bps: 3800 } }, false, now);
+  // A name that only repeats the ticker leaves the age alone; an unknown holder count keeps a known share under its dash.
+  const bare = render({ ...coin, name: "test", launched_ms: now - 2 * 3_600_000, top_holders: { holders: [], share_bps: 3401 } }, false, now);
   try {
     const { document } = bare.window;
     assert.equal(document.querySelector(".coinMeta")?.textContent, "Age 2h");
-    assert.equal(document.querySelector(".holders")?.textContent, "—Holders unknown");
+    assert.equal(document.querySelector(".holders")?.textContent, "—Holders unknowntop 10 · 34%, top 10 hold 34%");
   } finally { bare.window.close(); }
 });
 

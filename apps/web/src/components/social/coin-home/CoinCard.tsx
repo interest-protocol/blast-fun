@@ -114,15 +114,16 @@ function tradeCoinOf(coin: HomeCoin): SocialTradeCoin {
 }
 
 /**
- * Holders, over the top 10's share when it is known (phones drop it). The line is kept even when empty, so every
- * known count sits at the same height.
+ * Holders, over the top 10's share when it is known (phones drop it), even when the count is not. The line is kept
+ * even when empty, so every known count sits at the same height.
  */
 function HoldersCell({ coin }: Readonly<{ coin: HomeCoin }>) {
-  if (coin.holders === null) return <span className={clsx("num", styles.holders)} role="cell"><Missing what="Holders" /></span>;
   const topTen = shareText(coin.top_holders.share_bps);
+  const count = coin.holders === null ? <Missing what="Holders" /> : coin.holders.toLocaleString("en-US");
+  if (coin.holders === null && topTen === null) return <span className={clsx("num", styles.holders)} role="cell">{count}</span>;
   return (
     <span className={clsx("num", styles.holders)} role="cell">
-      {coin.holders.toLocaleString("en-US")}
+      {count}
       <span className={styles.topTen}>
         {topTen === null ? null : <><span aria-hidden="true">top 10 · {topTen}</span><span className="sr-only">, top 10 hold {topTen}</span></>}
       </span>
