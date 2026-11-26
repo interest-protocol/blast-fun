@@ -88,9 +88,18 @@ export class TestAnimation {
     });
   }
 
-  /** The element it animates, as a browser's `KeyframeEffect` names it. */
-  get effect(): Readonly<{ target: TestElement }> {
-    return { target: this.target };
+  /** Its `KeyframeEffect`: the element it animates and the timing it was started with (Base UI and Home read both). */
+  get effect(): Readonly<{ target: TestElement; getTiming(): Readonly<Record<string, unknown>>; getComputedTiming(): Readonly<{ endTime: number }> }> {
+    const timing = this.timing;
+    return {
+      target: this.target,
+      getTiming: () => timing,
+      getComputedTiming: () => ({
+        endTime: timing.iterations === Infinity
+          ? Infinity
+          : Number(timing.delay ?? 0) + Number(timing.duration ?? 0) * Number(timing.iterations ?? 1) + Number(timing.endDelay ?? 0),
+      }),
+    };
   }
   /** It still applies to its element: running, or held at its end by `fill`. */
   get inEffect(): boolean {
