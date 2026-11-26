@@ -150,6 +150,7 @@ const SOCIAL_FEED_GRANTS: Readonly<Record<string, readonly string[]>> = {
   social_referral_reservations: ["blast_social:SELECT", "blast_watcher:SELECT", "blast_web:SELECT"],
   social_referral_entities: ["blast_social:SELECT", "blast_watcher:INSERT,SELECT", "blast_web:SELECT"],
   social_referral_events: ["blast_social:SELECT", "blast_watcher:INSERT,SELECT", "blast_web:SELECT"],
+  social_referral_payments: [],
   social_blast_workspaces: ["blast_web:INSERT,SELECT,UPDATE"],
   social_blast_workspace_writers: ["blast_web:INSERT,SELECT,UPDATE"],
   social_accounts: ["blast_replica:SELECT", "blast_watcher:SELECT", "blast_web:INSERT,SELECT,UPDATE"],
@@ -341,7 +342,7 @@ test("the web migration shares blast-infra's roles and leaves CREATE on public t
       Object.fromEntries(presale.rows.map((row) => [row.table_name, row.grants])),
       PRESALE_TABLE_GRANTS,
     );
-    // The social feed's tables and views: exactly the grants of its contract, and nothing on a column.
+    // Social tables and views have exactly the table and column grants in their contract.
     const socialFeed = await admin.query<{ table_name: string; grants: string[] }>(
       `SELECT t.table_name::text,
               coalesce(array_agg(g.grantee || ':' || g.privileges ORDER BY g.grantee)
@@ -377,11 +378,12 @@ test("the web migration shares blast-infra's roles and leaves CREATE on public t
       socialColumns.rows.map((row) => row.grant).sort(),
       [
         "blast_watcher:social_wallet_balance_requests:owner:UPDATE",
+        ...["account_id", "month", "amount_atoms", "digest"].map((column) => `blast_web:social_referral_payments:${column}:SELECT`),
         // 0165: the admin website's verified mark, never the audited flag.
         ...["presale_id", "verified_team", "verified_by", "verified_at_ms", "note", "updated_at_ms"].map((column) => `blast_web:social_sale_trust:${column}:INSERT`),
         ...["verified_team", "verified_by", "verified_at_ms", "note", "updated_at_ms"].map((column) => `blast_web:social_sale_trust:${column}:UPDATE`),
       ].sort(),
-      "only the registration lock and the verified mark need column-level grants",
+      "social column-level privileges are limited to the named fields",
     );
     // T-026 Q-013: a holder-reward round's only updatable columns are its progress, never its stored header.
     const roundProgress = await admin.query<{ grant: string }>(

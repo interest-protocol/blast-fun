@@ -1,0 +1,65 @@
+.statement {
+  padding: .5rem clamp(.5rem, 1.6vw, 1rem);
+}
+
+.statement table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: .875rem;
+}
+
+.statement th,
+.statement td {
+  padding: .5rem .25rem;
+  text-align: start;
+  overflow-wrap: anywhere;
+}
+
+.statement thead th {
+  color: var(--muted);
+  font-size: .75rem;
+  font-weight: 600;
+  vertical-align: bottom;
+}
+
+.statement th[scope="row"] {
+  font-weight: 600;
+}
+
+.statement th:first-child { width: 22%; }
+.statement th:nth-child(3) { width: 16%; }
+
+.statement .link {
+  width: 2.75rem;
+  padding-inline: 0;
+  text-align: end;
+}
+
+@media (max-width: 27rem) {
+  .statement {
+    padding-inline: .375rem;
+  }
+
+  .statement table {
+    font-size: .75rem;
+  }
+
+  .statement th,
+  .statement td {
+    padding-inline: .125rem;
+  }
+
+  .statement th,
+  .statement td:nth-child(3) {
+    overflow-wrap: normal;
+  }
+
+  .statement td:nth-child(3) {
+    font-family: inherit;
+  }
+
+  .statement th:first-child { width: 17%; }
+  .statement th:nth-child(2) { width: 32%; }
+  .statement th:nth-child(3) { width: 15.5%; }
+}

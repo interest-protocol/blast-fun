@@ -6,6 +6,7 @@ import {
 } from "../contracts/primitives.ts";
 
 export const REFERRALS_PATH = "/api/social/me/referrals";
+export const REFERRAL_MONTHS_PATH = `${REFERRALS_PATH}?view=monthly`;
 export const REFERRAL_INVITEES_PATH = `${REFERRALS_PATH}/invitees`;
 export const REFERRAL_PAGE_SIZE = 50;
 export const REFERRAL_COOKIE = "__Host-blast_referral";
@@ -30,6 +31,19 @@ export const referralAccountingSchema = z.object({
 });
 export type ReferralAsset = z.infer<typeof referralAssetSchema>;
 export type ReferralAccounting = z.infer<typeof referralAccountingSchema>;
+
+export const referralMonthSchema = z.string().regex(/^[2-9][0-9]{3}-(0[1-9]|1[0-2])$/);
+const referralStatementSchema = z.object({
+  month: referralMonthSchema,
+  revenue_atoms: atomicTotal.nullable(),
+  share_bps: z.number().int().min(STANDARD_REFERRAL_SHARE_BPS).max(SPECIAL_REFERRAL_SHARE_BPS).nullable(),
+  payment: z.object({
+    amount_atoms: atomicTotal,
+    digest: z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/),
+  }).nullable(),
+});
+export type ReferralStatement = z.infer<typeof referralStatementSchema>;
+export const referralMonthsSchema = z.object({ months: z.array(referralStatementSchema) });
 
 export type ReferralSummary = Readonly<{
   invited: number;

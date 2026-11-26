@@ -19,6 +19,10 @@ import {
 } from "@blast/server/modules/social/referrals/read.ts";
 import { insertNewAccount } from "@blast/server/modules/social/accounts/creation.ts";
 import { readReferralInviter } from "@blast/server/modules/social/referrals/share-read.ts";
+import { ADMIN_CONSOLE_OPERATOR } from "@blast/server/modules/mission-control/operator/auth.ts";
+import { readReferralMonths } from "@blast/server/modules/social/referrals/revenue.ts";
+import { referralPaymentRecord } from "@blast/server/modules/social/referrals/operator.ts";
+import { parseSocialOperatorInvocation, runSocialOperatorInvocation } from "@blast/server/modules/social/operator/framework.ts";
 import {
   urlAs,
   FIXTURE_FINGERPRINT,
@@ -189,6 +193,7 @@ test(
       checkpoint = 110 + index,
       success = true,
       wallet = sender,
+      timestampMs = start + checkpoint,
     ) {
       const digest = `referral-receipt-${String(index++).padStart(3, "0")}`;
       await admin.query(
@@ -198,7 +203,7 @@ test(
         [
           digest,
           checkpoint,
-          start + checkpoint,
+          timestampMs,
           wallet,
           success,
           JSON.stringify(
@@ -260,6 +265,9 @@ test(
       );
     await collect();
     const first = (await readReferralSummary(db, owner)).accounting!;
+    assert.deepEqual((await readReferralMonths(db, owner)).months.find(({ month }) => month === "2026-10"), {
+      month: "2026-10", revenue_atoms: "1000000000", share_bps: 6000, payment: null,
+    });
     assert.deepEqual(first.assets, [
       {
         coin_type: quote,
@@ -361,6 +369,7 @@ test(
     boundary.timestampMs++;
     await collect();
     const next = (await readReferralSummary(db, owner)).accounting!;
+    assert.equal((await readReferralMonths(db, owner)).months.find(({ month }) => month === "2026-10")?.revenue_atoms, "1800000000");
     assert.deepEqual(next.assets.map(({ coin_type }) => coin_type), [quote, USDC_COIN_TYPE]);
     assert.equal(next.assets[1].volume_atoms, String(110n * SUI)); // USDC presale 100 + buy 10
     assert.equal(next.assets[1].revenue_atoms, String(2n * SUI)); // USDC presale fee + claimed USDC swap fee
@@ -402,19 +411,19 @@ test(
         partner_meme_amount: 0n,
       });
     }
-    async function advance(cp: number) {
+    async function advance(cp: number, timestampMs = start + cp) {
       await admin.query(
         `INSERT INTO checkpoint_journal (checkpoint,network,digest,epoch,timestamp_ms,total_transactions,format_version,payload,payload_hash)
       VALUES ($1,'mainnet',$2,0,$3,0,1,''::bytea,decode(repeat('00',32),'hex'))`,
-        [cp, `referral-checkpoint-${cp}`, start + cp],
+        [cp, `referral-checkpoint-${cp}`, timestampMs],
       );
       await admin.query(
         "INSERT INTO blast_infra_fixture.checkpoint_headers(checkpoint,digest,timestamp_ms) VALUES ($1,$2,$3)",
-        [cp, `referral-checkpoint-${cp}`, start + cp],
+        [cp, `referral-checkpoint-${cp}`, timestampMs],
       );
       boundary.checkpoint = cp;
       boundary.checkpointDigest = `referral-checkpoint-${cp}`;
-      boundary.timestampMs = start + cp;
+      boundary.timestampMs = timestampMs;
     }
     await advance(202);
     await receipt([feePayment("launch", {
@@ -440,6 +449,7 @@ test(
     );
     await collect();
     const collected = (await readReferralSummary(db, owner)).accounting!;
+    assert.equal((await readReferralMonths(db, owner)).months.find(({ month }) => month === "2026-10")?.revenue_atoms, "1900000000");
     assert.deepEqual(collected.assets.map(({ coin_type }) => coin_type), [quote, USDC_COIN_TYPE]);
     assert.equal(collected.assets[0].revenue_atoms, "1900000000");
     assert.equal(collected.assets[0].earnings_atoms, "1140000000");
@@ -573,6 +583,9 @@ test(
     ], 3002, true, reservationWallet);
     await collect();
     const standard = (await readReferralSummary(db, standardOwner)).accounting!;
+    assert.deepEqual((await readReferralMonths(db, standardOwner)).months.find(({ month }) => month === "2026-10"), {
+      month: "2026-10", revenue_atoms: "21", share_bps: 3429, payment: null,
+    });
     assert.equal(standard.assets[0].revenue_atoms, "21");
     assert.equal(standard.assets[0].earnings_atoms, "7"); // floor(3 × .6 + (4 + 11 + 3) × .3)
     assert.deepEqual((await readReferralInvitees(db, standardOwner, null)).invitees[0].accounting, standard);
@@ -589,6 +602,60 @@ test(
     const claimed = (await readReferralSummary(db, standardOwner)).accounting!;
     assert.equal(claimed.share_bps, 6000);
     assert.equal(claimed.assets[0].earnings_atoms, "13"); // prior 7 + new direct 3 + pre-claim reservation 3
+
+    const payoutRecipient = objectId("e");
+    const payoutSender = objectId("1");
+    const payoutDigest = "4vJ9JU1bJJE96FWSJKvHsmmFADCg4gpZQff4P3bkLKi";
+    await admin.query(
+      "INSERT INTO social_account_wallets(address,account_id,verified_at) VALUES ($1,$2,now())",
+      [payoutRecipient, owner],
+    );
+    let balanceCoin = USDC_COIN_TYPE;
+    let lookupAvailable = true;
+    const command = referralPaymentRecord({
+      executed: async () => lookupAvailable ? ({
+        success: true,
+        sender: payoutSender,
+        balanceChanges: [{ address: payoutRecipient, coinType: balanceCoin, amount: "1140000000" }],
+      }) : null,
+    });
+    const payment = (month: string, accountId = owner) => runSocialOperatorInvocation(
+      parseSocialOperatorInvocation([
+        "referral", "record", accountId, month, payoutSender, payoutRecipient, payoutDigest, "1140000000", "--reason", "Manual payout",
+      ], [command]),
+      ADMIN_CONSOLE_OPERATOR,
+      (operation, options) => withTransaction(admin, operation, options),
+    );
+    await assert.rejects(payment("2026-10"), { code: "OPERATOR_INPUT_INVALID" });
+    balanceCoin = quote;
+    await assert.rejects(payment("2026-10", impersonator), { code: "OPERATOR_INPUT_INVALID" });
+    const recorded = { month: "2026-10", recipient: payoutRecipient, digest: payoutDigest, amount_atoms: "1140000000" };
+    assert.deepEqual((await payment("2026-10")).result, { ...recorded, recorded: true });
+    lookupAvailable = false;
+    assert.deepEqual((await payment("2026-10")).result, { ...recorded, recorded: false });
+    lookupAvailable = true;
+    await assert.rejects(payment("2026-09"), { code: "OPERATOR_CONFLICT" });
+    assert.deepEqual((await readReferralMonths(db, owner)).months.find(({ month }) => month === "2026-10"), {
+      month: "2026-10", revenue_atoms: "1900000000", share_bps: 6000,
+      payment: { amount_atoms: "1140000000", digest: payoutDigest },
+    });
+    assert.ok((await readReferralMonths(db, impersonator)).months.every(({ payment }) => payment === null));
+    await assert.rejects(web.query("SELECT recipient FROM social_referral_payments"), { code: "42501" });
+    await assert.rejects(web.query("DELETE FROM social_referral_payments"), { code: "42501" });
+
+    const november = Date.UTC(2026, 10, 1);
+    const nextCurve = objectId("9");
+    await advance(3004);
+    await receipt([
+      launchEvent("LaunchCreated", { launch_id: nextCurve, quote }),
+      launchEvent("Bought", { launch_id: nextCurve, quote_in: SUI, protocol_quote_fee: 9n }),
+    ], 3004);
+    await advance(3005, november);
+    await receipt([feePayment("launch", { origin: nextCurve, quote_amount: 9n })], 3005, true, sender, november);
+    await collect();
+    const { months } = await readReferralMonths(db, owner);
+    assert.equal(months.find(({ month }) => month === "2026-10")?.revenue_atoms, "1900000000");
+    assert.equal(months.find(({ month }) => month === "2026-11")?.revenue_atoms, "9");
 
     const migration =
       "../../../../../packages/core/src/modules/database/migrations/0143_x_referral_revenue";
@@ -611,6 +678,10 @@ test(
       null,
       "a reapply starts with unpublished accounting until receipts replay",
     );
+    assert.deepEqual((await readReferralMonths(db, owner)).months.find(({ month }) => month === "2026-10"), {
+      month: "2026-10", revenue_atoms: null, share_bps: null,
+      payment: { amount_atoms: "1140000000", digest: payoutDigest },
+    });
     // Presale-only accounting retains exact amounts without requiring market coverage.
     await admin.query("DELETE FROM watermarks WHERE pipeline='market'");
     const presaleOnly = parseReferralAccountingProfile({

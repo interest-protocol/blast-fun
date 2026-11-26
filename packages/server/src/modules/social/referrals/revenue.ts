@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SUI_COIN_TYPE } from "@blast/core/lib/sui/coin-types.ts";
 import type { ReadableDatabase } from "@blast/core/modules/database/transaction.ts";
 import { assertChainReadThroughViews } from "@blast/core/modules/database/modules.ts";
 import {
@@ -6,6 +7,7 @@ import {
   STANDARD_REFERRAL_SHARE_BPS,
   type ReferralAccounting,
   type ReferralAsset,
+  type ReferralStatement,
 } from "@blast/core/modules/social/referrals/contracts.ts";
 import { RECRUITS_SQL } from "./recruits.ts";
 
@@ -15,8 +17,8 @@ const ratePolicySchema = z.object({
   special_reservation_codes: z.array(z.string().regex(/^[a-z0-9_]{3,20}$/)),
 });
 
-// Floor the combined share once per invitee/asset. A null standard rate start keeps all fees at 60%.
-export const REFERRAL_REVENUE_SQL = `SELECT * FROM (${RECRUITS_SQL}, cut AS (
+// A null standard rate start keeps all fees at 60%.
+const REFERRAL_RECEIPTS_SQL = `${RECRUITS_SQL}, cut AS (
  SELECT (value->>'complete_checkpoint')::bigint AS checkpoint,(value->>'as_of_ms')::bigint AS as_of_ms
  FROM social_worker_state WHERE name='referral-accounting'
 ), evidence AS NOT MATERIALIZED (
@@ -34,7 +36,7 @@ export const REFERRAL_REVENUE_SQL = `SELECT * FROM (${RECRUITS_SQL}, cut AS (
    AND ($2::text[] IS NULL OR COALESCE(a.profile_id,r.recruit_id)::text=ANY($2))
 ), matched_curve AS MATERIALIZED (
  SELECT e.*,c.checkpoint AS claim_checkpoint,c.digest AS claim_digest,c.event_index AS claim_event_index,
-   c.special_rate AS claim_special_rate,c.total_atoms AS claim_atoms,
+   c.timestamp_ms AS collected_at_ms,c.special_rate AS claim_special_rate,c.total_atoms AS claim_atoms,
    c.quote_atoms AS collected_atoms
  FROM owned e
  LEFT JOIN LATERAL (SELECT c.* FROM evidence c WHERE c.entity_id=e.entity_id AND c.kind='curve_claim'
@@ -77,7 +79,10 @@ export const REFERRAL_REVENUE_SQL = `SELECT * FROM (${RECRUITS_SQL}, cut AS (
  FROM matched_curve e
  LEFT JOIN social_referral_entities l ON l.entity_id=e.entity_id AND l.kind='launch'
  LEFT JOIN claim_windows w ON w.entity_id=e.entity_id AND w.claim_digest=e.claim_digest AND w.claim_event_index=e.claim_event_index
-), paid_sales AS (
+)`;
+
+// Floor the combined share once per invitee and asset in the lifetime report.
+export const REFERRAL_REVENUE_SQL = `SELECT * FROM (${REFERRAL_RECEIPTS_SQL}, paid_sales AS (
  SELECT f.entity_id,f.total_atoms,f.accepted_atoms,sum(p.quote_atoms) AS paid,
    sum(p.quote_atoms) FILTER (WHERE p.special_rate) AS special_paid
  FROM evidence f LEFT JOIN evidence p ON p.entity_id=f.entity_id AND p.kind='presale_fee'
@@ -108,16 +113,60 @@ FROM amounts r LEFT JOIN chain_read_v1.coin_metadata m ON m.coin_type=r.coin_typ
 GROUP BY r.person_id,r.coin_type,m.symbol,m.decimals ORDER BY r.person_id,r.coin_type) economics`;
 assertChainReadThroughViews(REFERRAL_REVENUE_SQL);
 
+const MONTHLY_REFERRAL_SQL = `SELECT * FROM (${REFERRAL_RECEIPTS_SQL}, commitments AS (
+ SELECT entity_id,person_id,special_reservation,sum(volume_atoms) AS atoms
+ FROM owned WHERE kind='commit' AND quote_type=$6
+ GROUP BY entity_id,person_id,special_reservation
+), presale_receipts AS (
+ SELECT f.entity_id,f.total_atoms,
+   date_trunc('month',to_timestamp(p.timestamp_ms/1000.0) AT TIME ZONE 'UTC')::date AS month,
+   sum(p.quote_atoms) AS paid,
+   COALESCE(sum(p.quote_atoms) FILTER (WHERE p.special_rate),0) AS special_paid
+ FROM evidence f JOIN evidence p ON p.entity_id=f.entity_id AND p.kind='presale_fee'
+   AND p.quote_type=$6 AND p.checkpoint>=f.checkpoint
+ WHERE f.kind='funded' AND f.quote_type=$6 AND f.total_atoms>0 AND f.accepted_atoms<=f.total_atoms
+   AND EXISTS (SELECT 1 FROM commitments c WHERE c.entity_id=f.entity_id)
+   AND NOT EXISTS (SELECT 1 FROM evidence x WHERE x.entity_id=f.entity_id AND x.kind='cancelled')
+ GROUP BY f.entity_id,f.total_atoms,month
+), contributions AS (
+ SELECT date_trunc('month',to_timestamp(collected_at_ms/1000.0) AT TIME ZONE 'UTC')::date AS month,
+   quote_revenue AS atoms,CASE WHEN special_revenue THEN quote_revenue ELSE 0 END AS special_atoms
+ FROM curve WHERE quote_coin=$6 AND quote_revenue>0
+ UNION ALL
+ SELECT p.month,div(c.atoms*p.paid,p.total_atoms),
+   div(c.atoms*CASE WHEN c.special_reservation THEN p.paid ELSE p.special_paid END,p.total_atoms)
+ FROM commitments c JOIN presale_receipts p ON p.entity_id=c.entity_id
+), totals AS (
+ SELECT month,sum(atoms) AS atoms,
+   (${STANDARD_REFERRAL_SHARE_BPS}
+     +round(sum(special_atoms)*${SPECIAL_REFERRAL_SHARE_BPS - STANDARD_REFERRAL_SHARE_BPS}/sum(atoms)))::int AS share_bps
+ FROM contributions WHERE atoms>0 GROUP BY month
+), payments AS (
+ SELECT month,amount_atoms,digest FROM social_referral_payments WHERE account_id=$1
+), calendar AS (
+ SELECT generate_series(LEAST((SELECT min(month) FROM totals),(SELECT min(month) FROM payments),current_month),
+   current_month,interval '1 month')::date AS month
+ FROM (SELECT date_trunc('month',now() AT TIME ZONE 'UTC') AS current_month) bounds
+)
+SELECT to_char(c.month,'YYYY-MM') AS month,
+ CASE WHEN c.month <= (to_timestamp($7::float8/1000) AT TIME ZONE 'UTC')::date
+   THEN COALESCE(t.atoms,0)::text END AS revenue_atoms,
+ CASE WHEN c.month <= (to_timestamp($7::float8/1000) AT TIME ZONE 'UTC')::date
+   THEN COALESCE(t.share_bps,CASE WHEN $3::bigint IS NULL
+   OR LEAST(c.month+interval '1 month'-interval '1 millisecond',now() AT TIME ZONE 'UTC') < to_timestamp($3/1000.0) AT TIME ZONE 'UTC'
+   OR LEAST(c.month+interval '1 month'-interval '1 millisecond',now() AT TIME ZONE 'UTC') >= to_timestamp($4::bigint/1000.0) AT TIME ZONE 'UTC'
+   THEN ${SPECIAL_REFERRAL_SHARE_BPS} ELSE ${STANDARD_REFERRAL_SHARE_BPS} END) END AS share_bps,
+ CASE WHEN p.digest IS NOT NULL THEN jsonb_build_object('amount_atoms',p.amount_atoms::text,'digest',p.digest) END AS payment
+FROM calendar c LEFT JOIN totals t USING (month) LEFT JOIN payments p USING (month)
+ORDER BY c.month DESC) statement`;
+assertChainReadThroughViews(MONTHLY_REFERRAL_SQL);
+
 type Row = Omit<ReferralAsset, "coin_type"> & {
   coin_type: string | null;
   person_id: string;
   pending: number;
 };
-export async function readReferralAccounting(
-  db: ReadableDatabase,
-  accountId: string,
-  people?: readonly string[],
-) {
+async function readReferralRates(db: ReadableDatabase, accountId: string) {
   const { rows: [state] } = await db.read<{
     as_of_ms: number | null;
     now_ms: number;
@@ -143,9 +192,26 @@ export async function readReferralAccounting(
     ? state.reservation_code
     : null;
   const specialRateFrom = specialReservation ? state?.reservation_claimed_at_ms ?? null : null;
-  const shareBps = standardRateFrom === null || specialRateFrom !== null
+  const shareBps: ReferralAccounting["share_bps"] = standardRateFrom === null || specialRateFrom !== null
     ? SPECIAL_REFERRAL_SHARE_BPS
     : STANDARD_REFERRAL_SHARE_BPS;
+  return { asOf, standardRateFrom, specialRateFrom, specialReservation, shareBps };
+}
+
+export async function readReferralMonths(db: ReadableDatabase, accountId: string) {
+  const { asOf, standardRateFrom, specialRateFrom, specialReservation } = await readReferralRates(db, accountId);
+  const { rows } = await db.read<ReferralStatement>(MONTHLY_REFERRAL_SQL, [
+    accountId, null, standardRateFrom, specialRateFrom, specialReservation, SUI_COIN_TYPE, asOf,
+  ]);
+  return { months: rows };
+}
+
+export async function readReferralAccounting(
+  db: ReadableDatabase,
+  accountId: string,
+  people?: readonly string[],
+) {
+  const { asOf, standardRateFrom, specialRateFrom, specialReservation, shareBps } = await readReferralRates(db, accountId);
   const empty = (): ReferralAccounting => ({
     assets: [],
     share_bps: shareBps,
@@ -158,11 +224,7 @@ export async function readReferralAccounting(
   );
   if (asOf === null || people?.length === 0) return { total, people: byPerson };
   const { rows } = await db.read<Row>(REFERRAL_REVENUE_SQL, [
-    accountId,
-    people ?? null,
-    standardRateFrom,
-    specialRateFrom,
-    specialReservation,
+    accountId, people ?? null, standardRateFrom, specialRateFrom, specialReservation,
   ]);
   const assets = new Map<string, ReferralAsset>();
   for (const { person_id, pending, ...asset } of rows) {

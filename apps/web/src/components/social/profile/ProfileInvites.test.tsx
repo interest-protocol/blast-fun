@@ -6,51 +6,9 @@ import { installTestDom } from "../../../../test/fixtures/social/test-dom.ts";
 const { document } = installTestDom();
 const { act } = await import("react");
 const { createRoot } = await import("react-dom/client");
-const { ProfileInvitesView } = await import("./ProfileInvites");
-
-test("Invite copies a callsign link and shows only combined volume, with a manual copy fallback", async (t) => {
-  const writeText = t.mock.fn<(text: string) => Promise<void>>(async () => {});
-  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  t.after(async () => { await act(async () => root.unmount()); container.remove(); });
-  await act(async () => root.render(<ProfileInvitesView callsign="kai_9" failed={false} onRetry={() => {}} summary={{ invited: 10, volume_usd: "10000.00", unvalued_trades: 1 }} />));
-  assert.match(container.textContent!, /10 invited/);
-  assert.match(container.textContent!, /Total referred volume/);
-  assert.equal(container.querySelector(".inviteVolume > strong")!.textContent, "$10,000.00");
-  // #518 moved the privacy note into the inspectable "Total referred volume ⓘ" (#526).
-  assert.match(container.querySelector("[data-inspect-value]")!.getAttribute("aria-label")!, /visible only to you/);
-  assert.match(container.textContent!, /without a USD value are excluded/);
-  const invite = container.querySelector("button")!;
-  await act(async () => invite.click());
-  assert.equal(writeText.mock.calls[0].arguments[0], new URL("/?ref=kai_9", window.location.origin).href);
-  assert.match(container.textContent!, /Copied to clipboard/);
-  writeText.mock.mockImplementation(async () => { throw new Error("Denied"); });
-  await act(async () => invite.click());
-  assert.equal(container.querySelector("input")!.value, new URL("/?ref=kai_9", window.location.origin).href);
-  assert.ok([...container.querySelectorAll('[role="status"]')].some((status) => status.textContent?.includes("Select and copy")));
-});
-
-test("Invite remains available while totals load or fail, and failed totals can be retried", async (t) => {
-  const retry = t.mock.fn();
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  t.after(async () => { await act(async () => root.unmount()); container.remove(); });
-  await act(async () => root.render(<ProfileInvitesView callsign="kai_9" failed={false} onRetry={retry} />));
-  assert.ok(container.querySelector('[role="status"][aria-label="Loading invite activity"]'));
-  assert.ok(container.querySelector('.inviteTotals [aria-hidden="true"]'));
-  assert.ok(container.querySelector('[aria-label="Copy your invite link"]'));
-  await act(async () => root.render(<ProfileInvitesView callsign="kai_9" failed onRetry={retry} />));
-  assert.match(container.textContent!, /Invite totals unavailable/);
-  assert.ok(container.querySelector('[aria-label="Copy your invite link"]'));
-  await act(async () => container.querySelectorAll("button")[1]!.click());
-  assert.equal(retry.mock.callCount(), 1);
-});
+const { ProfileInvitesCardView } = await import("./ProfileInvites");
 
 test("the own profile's Invites card shows who joined, copies the link and leads to Invites", async (t) => {
-  const { ProfileInvitesCardView } = await import("./ProfileInvites");
   const writeText = t.mock.fn<(text: string) => Promise<void>>(async () => {});
   Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
   const container = document.createElement("div");
@@ -110,10 +68,9 @@ test("reserved link stays bound to the X identity and exact 60% lifetime earning
   };
   await act(async () =>
     root.render(
-      <ProfileInvitesView
+      <ProfileInvitesCardView
         callsign="irene_changed"
-        failed={false}
-        onRetry={() => {}}
+        loading={false}
         summary={summary}
       />,
     ),
@@ -150,10 +107,9 @@ test("reserved link stays bound to the X identity and exact 60% lifetime earning
   };
   await act(async () =>
     root.render(
-      <ProfileInvitesView
+      <ProfileInvitesCardView
         callsign="irene_changed"
-        failed={false}
-        onRetry={() => {}}
+        loading={false}
         summary={tiny}
       />,
     ),
@@ -161,10 +117,9 @@ test("reserved link stays bound to the X identity and exact 60% lifetime earning
   assert.match(container.textContent!, /0.000000001 SUI/);
   await act(async () =>
     root.render(
-      <ProfileInvitesView
+      <ProfileInvitesCardView
         callsign="irene_changed"
-        failed={false}
-        onRetry={() => {}}
+        loading={false}
         summary={{
           ...summary,
           accounting: { ...summary.accounting, as_of_ms: null, assets: [] },
@@ -175,10 +130,9 @@ test("reserved link stays bound to the X identity and exact 60% lifetime earning
   assert.match(container.textContent!, /Updating referral earnings/);
   assert.doesNotMatch(container.textContent!, /Blast revenue0/);
   for (const [pending_events, message] of [[0, "No referral earnings yet"], [1, "Checking referral earnings"]] as const) {
-    await act(async () => root.render(<ProfileInvitesView
+    await act(async () => root.render(<ProfileInvitesCardView
       callsign="irene_changed"
-      failed={false}
-      onRetry={() => {}}
+      loading={false}
       summary={{ ...summary, accounting: { ...summary.accounting, assets: [], pending_events } }}
     />));
     assert.ok(container.textContent!.includes(message));
