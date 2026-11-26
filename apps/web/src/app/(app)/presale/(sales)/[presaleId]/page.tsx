@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { isPresaleId } from "@blast/core/modules/presale/presale-id.ts";
 import { PageHeader } from "#web/components/blast-ui/PageHeader.tsx";
+import { LiveScreen } from "#web/components/launchpad/coin/LiveScreen.tsx";
 import { requestLaunchFlags } from "#web/lib/launch-flags.server.ts";
 import { presaleShareMetadata } from "#web/modules/presale/share/metadata.ts";
 
@@ -22,11 +23,14 @@ export async function generateMetadata({ params }: Readonly<{ params: Params }>)
 }
 
 // While the social feed is on: the canonical UI's sale page, server rendered
-// from the replica. With it off it stays the presale placeholder.
+// from the replica. With it off it stays the presale placeholder. The live screen
+// (`BLAST_LIVE_SCREEN_ENABLED`, as on `/coin/<key>`) lets a graduated sale's chart and
+// market reads rest while the tab's stream carries the coin.
 export default async function PresalePage({ params }: Readonly<{ params: Params }>) {
   const { presaleId } = await params;
   if (!isPresaleId(presaleId)) notFound();
-  if (!(await requestLaunchFlags()).social) {
+  const flags = await requestLaunchFlags();
+  if (!flags.social) {
     return (
       <main>
         <PageHeader title="Presale" />
@@ -34,5 +38,5 @@ export default async function PresalePage({ params }: Readonly<{ params: Params 
     );
   }
   const { SaleDetailPage } = await loadPresaleComponents();
-  return <SaleDetailPage presaleId={presaleId} />;
+  return <LiveScreen enabled={flags.liveScreen}><SaleDetailPage presaleId={presaleId} /></LiveScreen>;
 }

@@ -396,3 +396,120 @@ test("a graduated sale on a venue the shared market feed does not index shows th
   assert.ok(!asked.includes(shared), "the shared read is never asked for a pool it cannot key");
   assert.ok(!asked.includes(SWAP_CHART), "never the database swap candles");
 });
+
+test("the market reads slow to a minute while the live screen hears the coin's stats, and keep 15 s when it drops or a read fails", async () => {
+  const { marketPoll } = await import("./SaleMarket.tsx");
+  const query = (status: "success" | "error") => ({ state: { status, dataUpdatedAt: FIXTURE_NOW, errorUpdatedAt: 0, dataUpdateCount: 5, errorUpdateCount: 0 } }) as never;
+  const within = (ms: number, base: number) => ms >= base && ms <= base * 1.2;
+  assert.ok(within(marketPoll(true)(query("success")) as number, 60_000));
+  assert.ok(within(marketPoll(true)(query("error")) as number, 15_000), "a failed read retries at the usual pace");
+  assert.ok(within(marketPoll(false)(query("success")) as number, 15_000));
+});
+
+test("a resting read's age is no delay while the live screen hears the coin; a failed read still says so", () => {
+  const late = FIXTURE_NOW + 61_000;
+  assert.match(renderToStaticMarkup(view(fixtureMarket(), { nowMs: late })), /Updates delayed/);
+  assert.doesNotMatch(renderToStaticMarkup(view(fixtureMarket(), { nowMs: late, listening: true })), /Updates delayed/);
+  assert.match(renderToStaticMarkup(view(fixtureMarket(), { nowMs: late, listening: true, failed: true })), /Updates delayed/);
+});
+
+test("the live coin's FDV, holders and day's volume replace the last read's", () => {
+  const coin = fixtureMarket();
+  const live = { poolKey: "cetus:0x9", checkpoint: 9, lifecycle: "migrated", holders: 1_204, fdvUsd: "1250000.5", volumeUsd: "8400.25" };
+  const html = renderToStaticMarkup(view(coin, { market: fixtureCoinMarket(), live, chart: () => <section>Chart fixture</section> }));
+  assert.match(html, /<dt>FDV<\/dt><dd>.*\$1\.25M/);
+  assert.match(html, /<dt>Holders<\/dt><dd>[^<]*1,204/);
+  assert.match(html, /<dt>Volume 24h<\/dt><dd>\$8\.4K<\/dd>/);
+  // Missing live figures keep the read's.
+  const partial = renderToStaticMarkup(view(coin, { market: fixtureCoinMarket(), live: { ...live, fdvUsd: null, volumeUsd: null }, chart: () => null }));
+  assert.match(partial, /<dt>FDV<\/dt><dd>.*\$412\.7M/);
+});
+
+test("a graduated pool's price names its move as the last 24 hours", async (t) => {
+  const { publishChartPrice } = await import("#web/components/launchpad/chart/chart-live-price.ts");
+  const client = createTestQueryClient();
+  const detail = fixtureDetail("kstl");
+  const pool = { id: `0x${"9".repeat(64)}`, venue: "aftermath", coin_atoms: "1", quote_atoms: "1", as_of_ms: FIXTURE_NOW };
+  const poolKey = `${pool.venue}:${pool.id}`;
+  const market = fixtureCoinMarket({ pool });
+  client.setQueryData([...queryKeys.home.all, "market", detail.presale.sale_token], market);
+  t.mock.method(globalThis, "fetch", async (input: RequestInfo | URL) => {
+    if (String(input).startsWith("/api/social/home/market?")) return Response.json(market);
+    return Response.json({ error: { code: "not_found" } }, { status: 404 });
+  });
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  t.after(async () => {
+    await act(async () => root.unmount());
+    publishChartPrice(poolKey, null);
+    client.clear();
+    container.remove();
+  });
+  await act(async () => publishChartPrice(poolKey, {
+    poolKey, cursor: null, price: "0.4",
+    provenance: { source: "blast-infra", network: "mainnet", deployment: null, checkpoint: 5, timestampMs: FIXTURE_NOW + 1, observedAt: FIXTURE_NOW + 1, lagMs: 0 } as never,
+  }));
+  await act(async () => root.render(withQueryClient(client, <SaleMarket nowMs={FIXTURE_NOW} sale={detail.presale} terms={detail.terms} />)));
+  await waitFor(() => /\+\$0\.0137/.test(container.textContent ?? ""), "the day's move", 5_000);
+  assert.match(container.textContent!, /\+\$0\.0137 \(3\.42%\) 24h/);
+  assert.doesNotMatch(container.textContent!, /today/);
+});
+
+test("on the live screen, a graduated sale's market reads slow down once the stream carries the coin's stats, and speed up when it drops", async (t) => {
+  const { LiveScreen } = await import("#web/components/launchpad/coin/LiveScreen.tsx");
+  const live = installLiveSocket();
+  const client = createTestQueryClient();
+  const detail = fixtureDetail("kstl");
+  const pool = { id: `0x${"9".repeat(64)}`, venue: "cetus", coin_atoms: "1", quote_atoms: "1", as_of_ms: FIXTURE_NOW };
+  const poolKey = `${pool.venue}:${pool.id}`;
+  const market = fixtureCoinMarket({ pool });
+  const marketKey = [...queryKeys.home.all, "market", detail.presale.sale_token];
+  const coins = {
+    coins: [fixtureMarket()], missing: [], clock_ms: FIXTURE_NOW, window: "24h",
+    as_of: { checkpoint: 1, timestamp_ms: FIXTURE_NOW, lag_ms: 0 }, pool_volumes: {},
+  };
+  client.setQueryData(marketKey, market);
+  t.mock.method(globalThis, "fetch", async (input: RequestInfo | URL) => {
+    if (String(input) === LIVE_TICKET_PATH) return liveTicket();
+    if (String(input).startsWith("/api/social/home/market?")) return Response.json(market);
+    if (String(input).startsWith("/api/social/home/coins?")) return Response.json(coins);
+    return Response.json({ error: { code: "not_found" } }, { status: 404 });
+  });
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  t.after(async () => {
+    await act(async () => root.unmount());
+    client.clear();
+    container.remove();
+    live.restore();
+  });
+  const { pollInterval } = await import("#web/lib/query/polling.ts");
+  // The period each market read's timer follows now: 15 or 60 (s).
+  const timers = () => [marketKey, coinsByIdsQuery([detail.presale.presale_id], "24h", 100).queryKey].map((key) => {
+    const query = client.getQueryCache().find({ queryKey: key, exact: true })!;
+    const interval = query.observers[0]!.options.refetchInterval;
+    const ms = typeof interval === "function" ? interval(query as never) : interval;
+    return [15_000, 60_000].find((base) => ms === pollInterval(base, query)) ?? ms;
+  });
+  await act(async () => root.render(withQueryClient(client, <LiveScreen enabled><SaleMarket nowMs={FIXTURE_NOW} sale={detail.presale} terms={detail.terms} /></LiveScreen>)));
+  await waitFor(() => live.sockets.some((socket) => socket.query.getAll("pool").includes(poolKey)), "the stream joins the chart's pool", 5_000);
+  assert.deepEqual(timers(), [15_000, 15_000], "connecting: the reads keep their timer");
+  const socket = live.sockets.find((each) => each.query.getAll("pool").includes(poolKey))!;
+  const provenance = (checkpoint: number) => ({ network: "mainnet", deployment_fingerprint: null, checkpoint, timestamp_ms: FIXTURE_NOW + checkpoint, observed_ms: FIXTURE_NOW + checkpoint, lag_ms: 0 });
+  await act(async () => {
+    socket.emit("status", { state: "live", pool_key: poolKey, checkpoint: 10, cursor: "10:0:0:0", provenance: provenance(10) });
+    socket.emit("hint", { type: "hello", provenance: provenance(1) });
+    socket.emit("stats", {
+      type: "coin_stats", coin: detail.presale.sale_token, pool_key: poolKey, checkpoint: 11, timestamp_ms: FIXTURE_NOW + 11, cursor: "11:0:0:0",
+      provenance: provenance(11), holders: 1_204, market: { fdv_usd: "1250000.5" }, window_24h: { volume_usd: "8400.25" },
+    });
+  });
+  await waitFor(() => /FDV\$1\.25M/.test(container.textContent ?? ""), "the live FDV", 5_000);
+  assert.deepEqual(timers(), [60_000, 60_000], "live with the coin's stats: a read a minute");
+  assert.equal(live.sockets.length, 1, "the chart's socket, not a second one");
+  assert.deepEqual(socket.query.getAll("pool"), [poolKey], "the stream is not widened");
+  await act(async () => socket.drop());
+  await waitFor(() => timers().every((each) => each === 15_000), "the 15 s timers resume", 5_000);
+});

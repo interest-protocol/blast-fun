@@ -47,6 +47,8 @@ import { ChartCard, CoinPriceFigure, MarketOverview, MarketPriceRow, useLastPric
 import coinStyles from "#web/components/social/bonding/bonding-coin.module.css";
 import { ChartLastTrade } from "#web/components/launchpad/chart/ChartLastTrade.tsx";
 import { CoinPriceCurrencyProvider, useCoinPriceCurrency } from "#web/components/launchpad/chart/CoinPriceCurrency.tsx";
+import { useLiveListening, useLiveScreen, useReportListening } from "#web/components/launchpad/coin/LiveScreen.tsx";
+import { statsAfterRead, useLiveCoin, type LiveCoinStats } from "#web/components/launchpad/coin/live-coin.ts";
 import { cx } from "./cx";
 import { createQuoteOf } from "@blast/core/web/contracts/create.ts";
 import { atomsText, NO_VALUE } from "@blast/core/web/format.ts";
@@ -240,10 +242,13 @@ function dayMove(market: HomeCoinMarket | null): PriceMove | null {
   return day?.change_usd != null && day.change_bps != null ? { usd: day.change_usd, bps: day.change_bps } : null;
 }
 
-/** A notice only when the market read is behind: routine freshness is not narrated. */
-function delayNote(coin: HomeCoin | null, failed: boolean, asOf: AsOf | null, nowMs: number): ReactNode {
+/**
+ * A notice only when the market read is behind: routine freshness is not narrated. While the
+ * live screen hears the coin, the read's age says nothing: it rests on purpose.
+ */
+function delayNote(coin: HomeCoin | null, failed: boolean, asOf: AsOf | null, nowMs: number, listening: boolean): ReactNode {
   if (!coin || !asOf) return null;
-  const stale = failed || asOf.lag_ms > 60_000 || nowMs - asOf.timestamp_ms > 60_000;
+  const stale = failed || (!listening && (asOf.lag_ms > 60_000 || nowMs - asOf.timestamp_ms > 60_000));
   if (!stale) return null;
   return (
     <p className={cx("trading-chart-caption")}>
@@ -266,6 +271,8 @@ export function SaleMarketView({
   onRetry,
   chart,
   activity,
+  live = null,
+  listening = false,
   children,
 }: Readonly<{
   /** The Coin board's Activity card, handed the holders' content for its Holders tab; without it the holders keep a card of their own. */
@@ -283,24 +290,28 @@ export function SaleMarketView({
   nowMs: number;
   onRetry: () => void;
   chart?: (extras: MarketExtras) => ReactNode;
+  /** The coin's stats from the tab's market stream, newer than the reads: they replace FDV, holders and the day's volume. */
+  live?: LiveCoinStats | null;
+  /** The live screen hears the coin (`useLiveListening`), so the reads rest and their age is no delay. */
+  listening?: boolean;
   children?: ReactNode;
 }>) {
-  const fdv = market?.fdv_usd;
+  const fdv = live?.fdvUsd ?? market?.fdv_usd;
   const tradeId = market?.price_as_of_ms == null ? null : String(market.price_as_of_ms);
   const overview = <MarketOverview
     fdv={fdv}
     fdvFigure={fdv != null
       ? <InspectValue value={`$${fdv}`} label="FDV in USD">{readableUsd(fdv)}</InspectValue>
       : marketLoading ? <SkeletonText>0000</SkeletonText> : null}
-    holders={coin?.holders}
+    holders={live?.holders ?? coin?.holders}
     holdersFigure={loading ? <SkeletonText>0000</SkeletonText> : null}
-    volumeFigure={volumeFigure(coin, volume, loading)}
+    volumeFigure={live?.volumeUsd != null ? readableUsd(live.volumeUsd) : volumeFigure(coin, volume, loading)}
     venue={venue ?? market?.pool?.venue}
     tradeId={tradeId}
   />;
   const poolLiquidity = market?.liquidity_usd == null ? null
     : <PoolLiquidity usd={market.liquidity_usd} market={market} symbol={coin?.symbol ?? null} />;
-  const note = delayNote(coin, failed, asOf, nowMs);
+  const note = delayNote(coin, failed, asOf, nowMs, listening);
   const holders = <SaleHolders coin={coin} liquidity={liquidity} loading={loading} failed={failed} summary={!!activity} onRetry={onRetry} />;
   return (
     <>
@@ -381,10 +392,12 @@ export function SaleMarket({
   children?: ReactNode;
 }>) {
   const client = useAppQueryClient();
+  const listening = useLiveListening();
+  const refetchInterval = marketPoll(listening);
   const query = useQuery(
     {
       ...coinsByIdsQuery([sale.presale_id], "24h", HOME_MAX_HOLDERS),
-      refetchInterval: (query) => pollInterval(15_000, query),
+      refetchInterval,
     },
     client,
   );
@@ -394,11 +407,16 @@ export function SaleMarket({
       queryKey: [...queryKeys.home.all, "market", sale.sale_token],
       queryFn: ({ signal }) => fetchCoinMarket(sale.sale_token, signal),
       staleTime: PUBLIC_STALE_MS,
-      refetchInterval: (query) => pollInterval(15_000, query),
+      refetchInterval,
     },
     client,
   );
   const market = marketQuery.data?.coin_type === sale.sale_token ? marketQuery.data : null;
+  const poolKey = market?.pool ? `${market.pool.venue}:${market.pool.id}` : null;
+  // The chart's own pool, so the tab's stream does not widen; a pool the stream cannot key is never joined.
+  const streamed = poolKey !== null && MIGRATOR_POOL_KEY.test(poolKey);
+  const live = useLiveCoin({ coin: sale.sale_token, pools: streamed ? [poolKey] : [], expected: null, enabled: useLiveScreen() && streamed });
+  useReportListening(live.live && live.stats !== null);
   const coin =
     query.data?.coins.find(
       (item) =>
@@ -431,6 +449,8 @@ export function SaleMarket({
       nowMs={nowMs}
       onRetry={() => void query.refetch()}
       activity={activity}
+      live={statsAfterRead(live.stats, query.data?.as_of.checkpoint ?? null)}
+      listening={listening}
       chart={(extras) => market?.pool ? (
         <CoinPriceCurrencyProvider quoteType={market.quote.type} quoteSymbol={market.quote.symbol}>
           <div className={coinStyles.market} data-sale-market="">
@@ -444,6 +464,15 @@ export function SaleMarket({
       {children}
     </SaleMarketView>
   );
+}
+
+/**
+ * The market reads' timer: every 15 s, or every 60 s while the tab's stream is live and carrying the
+ * coin's stats (the live screen). The stream moves FDV, holders and volume; the slow read keeps the
+ * day's move, liquidity and top holders from going stale. A failed read retries at the 15 s pace.
+ */
+export function marketPoll(listening: boolean) {
+  return (query: Parameters<typeof pollInterval>[1] & Readonly<{ state: Readonly<{ status: string }> }>) => pollInterval(listening && query.state.status !== "error" ? 60_000 : 15_000, query);
 }
 
 const POOL_CHART_CONTROLS = { range: "24h", interval: "5m" } as const;
@@ -496,5 +525,5 @@ function PresaleMarketPrice({ market, move }: Readonly<{ market: HomeCoinMarket;
     activity={<ChartLastTrade placement="headline" playSound />}
     price={live ? <CoinPriceFigure price={prices.price(live.price)} quoteSymbol={quoteSymbol} tradeId={live.cursor} /> : NO_VALUE}
     reserve={!live && last != null ? <CoinPriceFigure price={prices.price(last)} quoteSymbol={quoteSymbol} tradeId={null} /> : null}
-    change={move && last != null && prices.usd ? { value: <>{formatMove(move)} <span>today</span></>, direction: priceDirection(move.bps) } : null} />;
+    change={move && last != null && prices.usd ? { value: <>{formatMove(move)} <span>24h</span></>, direction: priceDirection(move.bps) } : null} />;
 }

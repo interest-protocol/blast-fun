@@ -2,8 +2,8 @@
 
 import { useContext, useEffect, useLayoutEffect, useMemo, useRef, type RefObject } from "react";
 import { HIDDEN_AMOUNT } from "@blast/core/web/format.ts";
-import { atLeastPow10, exactAtoms, exactDecimal, multiplyExact } from "@blast/core/web/exact-amount.ts";
-import { createQuoteOf } from "@blast/core/web/contracts/create.ts";
+import { atLeastPow10, exactAtoms, exactDecimal, exactText, multiplyExact } from "@blast/core/web/exact-amount.ts";
+import { createQuoteOf, quotePriceType } from "@blast/core/web/contracts/create.ts";
 import { compareEventCursors } from "@blast/core/modules/launchpad-contract/cursor.ts";
 import { bxAgo } from "@blast/core/lib/format.ts";
 import { EASE_OUT, T1, T3 } from "#web/components/blast-ui/motion-tokens.ts";
@@ -15,6 +15,7 @@ import { dustQuoteUsd, isTradeUnderDollar } from "../activity/small-trades.ts";
 import { ChartTradeContext, type ChartTradeCue, type TradePlacement } from "./chart-trade-context.ts";
 import { useCoinPriceCurrency } from "./CoinPriceCurrency.tsx";
 import { useChartClock } from "./use-chart-clock.ts";
+import { readableUsd } from "#web/lib/market-format.ts";
 import styles from "./ChartLastTrade.module.css";
 
 const FADE_OUT_START_MS = 1_000;
@@ -41,8 +42,28 @@ export function ChartLastTrade({ placement = "chart", playSound = false }: Reado
   const trade = latestTrade(history, observed);
   const cue = trade === observed && source.receivedAt !== null ? observed : null;
   const largeBuy = placement === "headline" && isLargeBuy(cue, source, currency);
-  return <LastTradeSlot trade={trade} cue={cue} decimals={source.decimals} symbol={source.symbol}
+  const usd = trade && lastTradeUsd(trade.quoteAmount, trade === observed ? source.tradeUsd : null, source, currency);
+  return <LastTradeSlot trade={trade} usd={usd} cue={cue} decimals={source.decimals} symbol={source.symbol}
     placement={placement} playSound={playSound} largeBuy={largeBuy} />;
+}
+
+/**
+ * The trade in dollars when the page shows USD: its recorded value, else its quote amount at the
+ * page's rate when the trade is in the page's quote. Null keeps the quote amount.
+ */
+export function lastTradeUsd(
+  quoteAmount: bigint,
+  recordedUsd: string | null | undefined,
+  source: Readonly<{ quoteType?: string | null; decimals: number | null }>,
+  currency: Readonly<{ currency: "usd" | "quote"; quoteType: string | null; quoteUsd: string | null }> | null,
+): string | null {
+  if (currency?.currency !== "usd") return null;
+  if (recordedUsd && exactDecimal(recordedUsd)) return readableUsd(recordedUsd);
+  // Only a trade known to be in the page's quote takes the page's rate.
+  const samePair = !!source.quoteType && currency.quoteType !== null && quotePriceType(source.quoteType) === quotePriceType(currency.quoteType);
+  const rate = samePair ? exactDecimal(currency.quoteUsd) : null;
+  const amount = exactAtoms(quoteAmount, source.decimals);
+  return rate && amount ? readableUsd(exactText(multiplyExact(amount, rate))) : null;
 }
 
 function latestTrade(history: ReturnType<typeof useLatestActivityTrade>, observed: ChartTradeCue | null): LastTrade | null {
@@ -66,8 +87,9 @@ function isLargeBuy(cue: ChartTradeCue | null, source: Readonly<{ quoteType?: st
   return amount !== null && rate !== null && atLeastPow10(multiplyExact(amount, rate), 3);
 }
 
-function LastTradeSlot({ trade, cue, decimals, symbol, placement, playSound, largeBuy }: Readonly<{
+function LastTradeSlot({ trade, usd, cue, decimals, symbol, placement, playSound, largeBuy }: Readonly<{
   trade: LastTrade | null;
+  usd: string | null;
   cue: ChartTradeCue | null;
   decimals: number | null;
   symbol: string;
@@ -90,17 +112,19 @@ function LastTradeSlot({ trade, cue, decimals, symbol, placement, playSound, lar
   return <div className={styles.slot} data-chart-last-trade={placement} data-idle={!trade || undefined}>
     <span className={styles.label} data-idle={!trade || undefined}>Last trade{trade && <> <TradeAge at={trade.timestampMs} /></>}</span>
     <span aria-hidden="true" className={styles.measure} data-width-sample={widthSample} />
-    {trade && <LastTradeValue trade={trade} decimals={decimals} symbol={symbol} hidden={amountsHidden} highlight={highlight} fill={fill} />}
+    {trade && <LastTradeValue trade={trade} usd={usd} decimals={decimals} symbol={symbol} hidden={amountsHidden} highlight={highlight} fill={fill} />}
     {headline && <span className="sr-only" role="status" ref={status} />}
   </div>;
 }
 
-function LastTradeValue({ trade, decimals, symbol, hidden, highlight, fill }: Readonly<{
-  trade: LastTrade; decimals: number | null; symbol: string; hidden: boolean; highlight: boolean;
+function LastTradeValue({ trade, usd, decimals, symbol, hidden, highlight, fill }: Readonly<{
+  trade: LastTrade; usd: string | null; decimals: number | null; symbol: string; hidden: boolean; highlight: boolean;
   fill: RefObject<HTMLSpanElement | null>;
 }>) {
   const side = trade.side === "sell" ? "Sell" : highlight ? "Large buy" : "Buy";
-  const amount = decimals === null ? null : hidden ? HIDDEN_AMOUNT : formatAmountShort(trade.quoteAmount, decimals) + " " + symbol;
+  const quote = decimals === null ? null : formatAmountShort(trade.quoteAmount, decimals) + " " + symbol;
+  const shown = usd ?? quote;
+  const amount = shown !== null && hidden ? HIDDEN_AMOUNT : shown;
   return <span className={styles.value} data-trade-cue={trade.side}>
     <span aria-hidden="true" className={styles.fill} ref={fill} />
     <span className={styles.text}>{side}{amount === null ? null : " · " + amount}</span>
