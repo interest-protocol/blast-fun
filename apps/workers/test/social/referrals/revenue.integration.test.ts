@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
 import { Pool } from "pg";
+import { USDC_COIN_TYPE } from "@blast/core/lib/sui/coin-types.ts";
 import { migrateDatabase } from "@blast/core/modules/database/migrations.ts";
 import {
   autocommitReader,
@@ -302,7 +303,12 @@ test(
       ],
       201,
     );
-    await receipt([commit(unpaid), funded(unpaid)], 201);
+    const wrongCoinPayment = paid(unpaid);
+    await receipt([
+      commit(unpaid),
+      funded(unpaid),
+      { ...wrongCoinPayment, event_type: wrongCoinPayment.event_type.replace(quote, USDC_COIN_TYPE) },
+    ], 201);
     await receipt(
       [
         commit(cancelled),
@@ -323,6 +329,20 @@ test(
       true,
       objectId("f"),
     );
+    const usdcSale = objectId("1");
+    const usdcLaunch = objectId("2");
+    await receipt(
+      [
+        commit(usdcSale), funded(usdcSale), paid(usdcSale),
+        launchEvent("LaunchCreated", { launch_id: usdcLaunch }),
+        launchEvent("Bought", { launch_id: usdcLaunch, quote_in: 10n * SUI, protocol_quote_fee: SUI }),
+        feePayment("launch", { origin: usdcLaunch, quote_amount: SUI }),
+      ].map((event) => ({
+        ...event,
+        event_type: event.event_type.replace(quote, USDC_COIN_TYPE),
+      })),
+      201,
+    );
     await receipt(
       [
         launchEvent("LaunchTicketCreated", { ticket_id: objectId("e"), meme }),
@@ -330,6 +350,7 @@ test(
         launchEvent("Bought", {
           quote_in: 10n * SUI,
           protocol_quote_fee: 100_000_000n,
+          protocol_meme_fee: 200_000_000n,
           creator_quote_fee: 50_000_000n,
         }),
       ],
@@ -340,10 +361,11 @@ test(
     boundary.timestampMs++;
     await collect();
     const next = (await readReferralSummary(db, owner)).accounting!;
+    assert.deepEqual(next.assets.map(({ coin_type }) => coin_type), [quote]);
     assert.equal(next.assets[0].volume_atoms, String(290n * SUI)); // 100 + 80 + funded/unpaid100 + buy10
-    assert.equal(next.assets[0].revenue_atoms, "1900000000"); // 1 + .8 + .1; partner and creator fees excluded.
-    assert.equal(next.assets[0].earnings_atoms, "1140000000");
-    assert.equal(next.pending_events, 1);
+    assert.equal(next.assets[0].revenue_atoms, "1800000000"); // Two successful SUI presales. The trade fee is still uncollected.
+    assert.equal(next.assets[0].earnings_atoms, "1080000000");
+    assert.equal(next.pending_events, 2);
     assert.equal(
       (await readReferralSummary(db, impersonator)).accounting?.assets.length,
       0,
@@ -393,6 +415,11 @@ test(
       boundary.timestampMs = start + cp;
     }
     await advance(202);
+    await receipt([feePayment("launch", {
+      quote_amount: 100_000_000n,
+      meme_amount: 200_000_000n,
+      sui_amount: 2n * SUI,
+    })], 202);
     await receipt(
       [
         launchEvent("LaunchTicketCreated", { ticket_id: partnerTicket, meme }),
@@ -410,6 +437,11 @@ test(
       partnerWallet,
     );
     await collect();
+    const collected = (await readReferralSummary(db, owner)).accounting!;
+    assert.deepEqual(collected.assets.map(({ coin_type }) => coin_type), [quote]);
+    assert.equal(collected.assets[0].revenue_atoms, "1900000000");
+    assert.equal(collected.assets[0].earnings_atoms, "1140000000");
+    assert.equal(collected.pending_events, 1);
     assert.equal(
       (await readReferralSummary(db, partnerOwner)).accounting!.assets[0]
         .revenue_atoms,
@@ -492,12 +524,17 @@ test(
     const laterSale = objectId("a");
     const laterPartnerLaunch = objectId("b");
     const laterPartnerTicket = objectId("c");
-    const unpartneredBuy = (fee: bigint) => launchEvent("Bought", {
-      quote_in: 10n * SUI,
-      protocol_quote_fee: fee,
-    });
+    const reservationLaunch = objectId("5");
+    const unpartneredBuy = (fee: bigint, launch = objectId("4")) => [
+      launchEvent("Bought", {
+        launch_id: launch,
+        quote_in: 10n * SUI,
+        protocol_quote_fee: fee,
+      }),
+      feePayment("launch", { origin: launch, quote_amount: fee }),
+    ];
     await advance(3001);
-    await receipt([unpartneredBuy(3n), commit(laterSale), funded(laterSale)], 3001, true, standardWallet);
+    await receipt([...unpartneredBuy(3n), commit(laterSale), funded(laterSale)], 3001, true, standardWallet);
     await receipt([
       launchEvent("LaunchTicketCreated", { ticket_id: laterPartnerTicket, meme }),
       launchEvent("LaunchCreated", { launch_id: laterPartnerLaunch, ticket_id: laterPartnerTicket, quote, partner_id: objectId("6") }),
@@ -520,7 +557,7 @@ test(
     assert.equal(standardBeforeSettlement.share_bps, 3000);
     assert.deepEqual(standardBeforeSettlement.assets, beforeRateChange.assets);
     await advance(3002);
-    await receipt([unpartneredBuy(4n), paid(laterSale, 11n)], 3002, true, standardWallet);
+    await receipt([...unpartneredBuy(4n), paid(laterSale, 11n)], 3002, true, standardWallet);
     await receipt([feePayment("launch", {
       origin: laterPartnerLaunch,
       quote_amount: 3n,
@@ -528,7 +565,10 @@ test(
       meme_amount: 0n,
       partner_meme_amount: 0n,
     })], 3002, true, standardWallet);
-    await receipt([unpartneredBuy(5n)], 3002, true, reservationWallet);
+    await receipt([
+      launchEvent("LaunchCreated", { launch_id: reservationLaunch, quote }),
+      ...unpartneredBuy(5n, reservationLaunch),
+    ], 3002, true, reservationWallet);
     await collect();
     const standard = (await readReferralSummary(db, standardOwner)).accounting!;
     assert.equal(standard.assets[0].revenue_atoms, "21");
@@ -542,7 +582,7 @@ test(
       [reservationCode, start + 3003],
     );
     await advance(3003);
-    await receipt([unpartneredBuy(5n)], 3003, true, standardWallet);
+    await receipt(unpartneredBuy(5n), 3003, true, standardWallet);
     await collect();
     const claimed = (await readReferralSummary(db, standardOwner)).accounting!;
     assert.equal(claimed.share_bps, 6000);
