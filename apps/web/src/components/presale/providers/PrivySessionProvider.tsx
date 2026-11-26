@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ComponentType, type ReactNode } from "react";
+import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useState, useSyncExternalStore, type ComponentType, type ReactNode } from "react";
 import { useHydrated } from "#web/components/ui-libraries/use-hydrated.tsx";
 import {
   PrivySessionContext,
@@ -33,10 +33,6 @@ function runtimeLoader(): RuntimeComponent {
   );
   return runtime;
 }
-
-// Privy's API client sets no request timeout, so a hung startup request leaves it neither
-// ready nor failed. Nothing else would end that wait.
-const PRIVY_START_TIMEOUT_MS = 15_000;
 
 /**
  * Whether a `PrivySessionProvider` is above: `WalletProvider` mounts it only
@@ -73,9 +69,11 @@ function browserPrivySession(): boolean {
  * (`sessionCookie` from the request, Privy's own storage, or a sign-in
  * returning to the page) or when a sign-in asks for it (`load`). Until it has
  * started, readers see a stable signed-out value: not ready while a session
- * is expected. A failed start (the code did not load, Privy reported an
- * error, or it was not ready within 15 s) unmounts the SDK and leaves the
- * page signed out; the next `load` mounts it again.
+ * is expected. A failed start (the code did not load or Privy reported an
+ * error) unmounts the SDK and leaves the page signed out; the next `load`
+ * mounts it again. A slow start is never cut short: a restored session ends
+ * signed in whenever Privy is ready. Only a click gives up waiting
+ * (`startPrivy`).
  *
  * Privy's hooks need its provider above them, and `next/dynamic` cannot keep
  * the page mounted while that provider loads above it; swapping it in would
@@ -101,17 +99,13 @@ export function PrivySessionProvider({
   const [listeners] = useState(() => new Set<PrivyLoginListener>());
   const [start] = useState(() => new PrivyStart());
   const { runtime, failed, attempt } = useSyncExternalStore(start.subscribe, start.state, start.state);
-  useEffect(() => () => start.stop(), [start]);
+  // A layout effect, so a Strict Mode remount reopens the start before any child's effect calls `load`.
+  useLayoutEffect(() => start.mount(), [start]);
   const load = useCallback(() => {
     setRequested(true);
     return start.wait(() => setRuntimeComponent({ component: latestRuntime }));
   }, [start]);
   const active = !failed && (requested || expected);
-  useEffect(() => {
-    if (!active || runtime) return;
-    const timer = setTimeout(() => start.fail(), PRIVY_START_TIMEOUT_MS);
-    return () => clearTimeout(timer);
-  }, [active, attempt, runtime, start]);
   const subscribe = useCallback((listener: PrivyLoginListener) => {
     listeners.add(listener);
     return () => void listeners.delete(listener);

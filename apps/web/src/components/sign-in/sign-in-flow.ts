@@ -96,7 +96,7 @@ export function signInMessage(state: SignInState): Readonly<{ text: string; aler
     case "rate-limited":
       return { text: diagnosticMessage("Too many sign-in attempts. Wait a few minutes, then try again.", { code: "rate_limited" }), alert: true };
     case "stalled":
-      return { text: diagnosticMessage("Sign-in could not start. Check your connection, then reload the page.", { code: "network_unavailable" }), alert: true };
+      return { text: diagnosticMessage("Sign-in could not start. Check your connection, then try again.", { code: "network_unavailable" }), alert: true };
     default:
       return null;
   }

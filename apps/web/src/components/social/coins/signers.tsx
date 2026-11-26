@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 
-import { usePrivySession } from "#web/components/auth/privy-session.ts";
+import { startPrivy, usePrivySession } from "#web/components/auth/privy-session.ts";
 
 import { findEmbeddedSuiWallet } from "#web/components/mission-control/privy-embedded-wallet.ts";
 
@@ -35,7 +35,7 @@ export function PrivyCoinSignerBridge({ onChange }: Readonly<{ onChange: (signer
   });
   useEffect(() => {
     const embedded = () => (latest.current?.authenticated ? findEmbeddedSuiWallet(latest.current.user) : null);
-    const started = async () => latest.current ?? load();
+    const started = async () => latest.current ?? startPrivy(load);
     onChange({
       address: () => embedded()?.address ?? null,
       async createWallet() {

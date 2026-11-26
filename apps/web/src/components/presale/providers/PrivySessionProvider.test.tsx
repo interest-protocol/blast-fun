@@ -8,8 +8,10 @@ import { waitFor } from "#web/test/fixtures/social/test-dom.ts";
 
 // The SDK stands in for Privy: it counts mounts and starts signed in as principal-A.
 // While `fail` is set, its chunk does not load. `start` is how a mounted SDK ends:
-// ready, a reported error, or never answering.
-const sdk = { mounts: 0, fail: false, start: "ready" as "ready" | "error" | "hang" };
+// ready, a reported error, or no answer yet (`live` lets the test answer later).
+type Start = Readonly<{ publish: (runtime: unknown) => void }>;
+const sdk = { mounts: 0, fail: false, start: "ready" as "ready" | "error" | "hang", live: null as Start | null };
+const signedIn = { authenticated: true, user: { id: "principal-A" }, getAccessToken: async () => "token-A" };
 Object.assign(globalThis, { privySessionSdk: sdk });
 const reactUrl = import.meta.resolve("react");
 let attempts = 0;
@@ -26,6 +28,7 @@ registerHooks({
           export default function Runtime({ start }) {
             useEffect(() => {
               globalThis.privySessionSdk.mounts++;
+              globalThis.privySessionSdk.live = start;
               const outcome = globalThis.privySessionSdk.start;
               if (outcome === "error") start.fail();
               if (outcome === "ready") start.publish({ authenticated: true, user: { id: "principal-A" }, getAccessToken: async () => "token-A" });
@@ -42,7 +45,7 @@ registerHooks({
 // next/dynamic decides at import whether it runs in a browser.
 Object.assign(globalThis, { window: new JSDOM("").window });
 const { PrivySessionProvider } = await import("./PrivySessionProvider.tsx");
-const { usePrivySession } = await import("#web/components/auth/privy-session.ts");
+const { PRIVY_CLICK_TIMEOUT_MS, startPrivy, usePrivySession } = await import("#web/components/auth/privy-session.ts");
 
 type Session = ReturnType<typeof usePrivySession>;
 
@@ -127,43 +130,102 @@ async function settle(condition: () => unknown, description: string) {
   assert.fail(`timed out waiting for ${description}`);
 }
 
-for (const [name, start] of [["reports an error", "error"], ["is not ready in time", "hang"]] as const) {
-  test(`a Privy that ${name} rejects the waiting sign-in, and the next sign-in mounts a fresh one`, async () => {
-    mock.timers.enable({ apis: ["setTimeout"] });
-    sdk.start = start;
-    const page = await mount("https://blast.test/feed", {});
-    try {
-      const mounts = sdk.mounts;
-      let failure: unknown = null;
-      await act(async () => {
-        page.current().load().catch((error: unknown) => (failure = error));
-      });
-      await settle(() => sdk.mounts > mounts, "the SDK to mount");
-      if (start === "hang") {
-        await act(async () => mock.timers.tick(14_999));
-        assert.equal(failure, null);
-        await act(async () => mock.timers.tick(1));
-      }
-      await settle(() => failure, "the start to fail");
-      assert.match(String(failure), /Privy did not start/);
-      assert.equal(page.current().ready, true);
-      assert.equal(page.current().authenticated, false);
-
-      sdk.start = "ready";
-      let second!: ReturnType<Session["load"]>;
-      await act(async () => {
-        second = page.current().load();
-      });
-      await settle(() => page.current().runtime, "the SDK to start");
-      assert.equal((await second).authenticated, true);
-      assert.equal(sdk.mounts, mounts + 2);
-    } finally {
-      sdk.start = "ready";
-      mock.timers.reset();
-      await page.close();
-    }
-  });
+/** Lets every pending render and promise run. */
+async function flush() {
+  for (let round = 0; round < 20; round++) await act(async () => new Promise((resolve) => setImmediate(resolve)));
 }
+
+test("a Privy that reports an error rejects the waiting sign-in, and the next sign-in mounts a fresh one", async () => {
+  sdk.start = "error";
+  const page = await mount("https://blast.test/feed", {});
+  try {
+    const mounts = sdk.mounts;
+    let failure: unknown = null;
+    await act(async () => {
+      page.current().load().catch((error: unknown) => (failure = error));
+    });
+    await waitFor(() => failure, "the start to fail");
+    assert.match(String(failure), /Privy did not start/);
+    assert.equal(page.current().ready, true);
+    assert.equal(page.current().authenticated, false);
+
+    sdk.start = "ready";
+    let second!: ReturnType<Session["load"]>;
+    await act(async () => {
+      second = page.current().load();
+    });
+    await waitFor(() => page.current().runtime, "the SDK to start");
+    assert.equal((await second).authenticated, true);
+    assert.equal(sdk.mounts, mounts + 2);
+  } finally {
+    sdk.start = "ready";
+    await page.close();
+  }
+});
+
+test("a click gives up after 15 s, but Privy keeps starting and the page ends signed in", async () => {
+  mock.timers.enable({ apis: ["setTimeout"] });
+  sdk.start = "hang";
+  const page = await mount("https://blast.test/feed", {});
+  try {
+    const mounts = sdk.mounts;
+    let failure: unknown = null;
+    await act(async () => {
+      startPrivy(page.current().load).catch((error: unknown) => (failure = error));
+    });
+    await settle(() => sdk.mounts > mounts, "the SDK to mount");
+    await act(async () => mock.timers.tick(PRIVY_CLICK_TIMEOUT_MS - 1));
+    await flush();
+    assert.equal(failure, null);
+    await act(async () => mock.timers.tick(1));
+    await settle(() => failure, "the click to time out");
+    assert.match(String(failure), /taking too long/);
+
+    // The SDK was not unmounted or marked failed: its late answer signs the page in.
+    await act(async () => sdk.live!.publish(signedIn));
+    assert.equal(page.current().authenticated, true);
+    assert.equal(sdk.mounts, mounts + 1);
+  } finally {
+    sdk.start = "ready";
+    mock.timers.reset();
+    await page.close();
+  }
+});
+
+test("a restored session whose Privy takes over 15 s stays pending, then ends signed in", async () => {
+  mock.timers.enable({ apis: ["setTimeout"] });
+  sdk.start = "hang";
+  const mounts = sdk.mounts;
+  const page = await mount("https://blast.test/feed", {}, true);
+  try {
+    await settle(() => sdk.mounts > mounts, "the SDK to mount");
+    await act(async () => mock.timers.tick(60_000));
+    await flush();
+    assert.equal(page.current().ready, false);
+
+    await act(async () => sdk.live!.publish(signedIn));
+    assert.equal(page.current().authenticated, true);
+    assert.equal(sdk.mounts, mounts + 1);
+  } finally {
+    sdk.start = "ready";
+    mock.timers.reset();
+    await page.close();
+  }
+});
+
+test("a click that starts Privy in time clears its timer", async () => {
+  const set = mock.method(globalThis, "setTimeout");
+  const clear = mock.method(globalThis, "clearTimeout");
+  try {
+    const runtime = await startPrivy(async () => signedIn as never);
+    assert.equal(runtime, signedIn);
+    assert.equal(set.mock.callCount(), 1);
+    assert.deepEqual(clear.mock.calls.map((call) => call.arguments[0]), [set.mock.calls[0]!.result]);
+  } finally {
+    set.mock.restore();
+    clear.mock.restore();
+  }
+});
 
 test("a session cookie whose Privy fails to start ends signed out, not pending", async () => {
   sdk.start = "error";

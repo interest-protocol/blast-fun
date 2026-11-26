@@ -18,6 +18,7 @@ export class PrivyStart {
   #state: PrivyStartState = { runtime: null, failed: false, attempt: 0 };
   #listeners = new Set<() => void>();
   #waiting = new Set<Readonly<{ resolve: (runtime: PrivyRuntime) => void; reject: (error: Error) => void }>>();
+  #stopped = false;
 
   readonly subscribe = (listener: () => void): (() => void) => {
     this.#listeners.add(listener);
@@ -28,6 +29,7 @@ export class PrivyStart {
 
   /** Resolves once Privy is ready. After a failed start, `retry` runs and a fresh SDK mounts. */
   wait(retry: () => void): Promise<PrivyRuntime> {
+    if (this.#stopped) return Promise.reject(new Error("Privy stopped."));
     const { runtime, failed, attempt } = this.#state;
     if (runtime) return Promise.resolve(runtime);
     if (failed) {
@@ -37,9 +39,9 @@ export class PrivyStart {
     return new Promise((resolve, reject) => this.#waiting.add({ resolve, reject }));
   }
 
-  /** Privy is ready (its runtime) or has stopped (null). */
+  /** Privy is ready (its runtime) or has stopped (null). A failed start's SDK is unmounting, so its late ready is ignored. */
   publish(runtime: PrivyRuntime | null): void {
-    if (this.#state.runtime === runtime) return;
+    if (this.#state.runtime === runtime || (runtime && this.#state.failed)) return;
     this.#set({ ...this.#state, runtime });
     if (runtime) this.#settle((waiter) => waiter.resolve(runtime));
   }
@@ -51,8 +53,15 @@ export class PrivyStart {
     this.#settle((waiter) => waiter.reject(new Error("Privy did not start. Try again.")));
   }
 
-  /** The provider unmounted: nothing will answer the waiting `load` calls. */
+  /** The provider mounted (again, under Strict Mode); returns its unmount. */
+  mount(): () => void {
+    this.#stopped = false;
+    return () => this.stop();
+  }
+
+  /** The provider unmounted: nothing will answer the waiting `load` calls, or later ones. */
   stop(): void {
+    this.#stopped = true;
     this.#settle((waiter) => waiter.reject(new Error("Privy stopped.")));
   }
 

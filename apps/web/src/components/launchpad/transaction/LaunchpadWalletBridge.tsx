@@ -9,7 +9,7 @@
 import { normalizeSuiAddress } from "@mysten/sui/utils";
 import type { User } from "@privy-io/react-auth";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { usePrivyLoginEvents, usePrivySession } from "#web/components/auth/privy-session.ts";
+import { startPrivy, usePrivyLoginEvents, usePrivySession } from "#web/components/auth/privy-session.ts";
 import { PrivySessionProvider, usePrivySessionMounted } from "#web/components/presale/providers/PrivySessionProvider.tsx";
 
 import type { SignerKind } from "./action-machine";
@@ -95,7 +95,7 @@ function PrivyPart({ onReady, network }: Readonly<{ onReady: PartReady; network:
   useEffect(() => enableWallets?.("picker"), [enableWallets]);
 
   useEffect(() => {
-    const started = async () => latest.current ?? load();
+    const started = async () => latest.current ?? startPrivy(load);
     const state = {
       network,
       ready: started,

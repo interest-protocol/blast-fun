@@ -46,8 +46,9 @@ export type PrivySession = Readonly<{
   runtime: PrivyRuntime | null;
   /**
    * Starts loading the SDK and resolves with its runtime once Privy is ready.
-   * Rejects if Privy does not start (its code did not load, it reported an error, or it
-   * was not ready within 15 s); the next call mounts it again.
+   * Rejects if Privy does not start (its code did not load or it reported an error);
+   * the next call mounts it again. It never gives up on a slow start: a click wraps it in
+   * `startPrivy`.
    */
   load: () => Promise<PrivyRuntime>;
   subscribe: (listener: PrivyLoginListener) => () => void;
@@ -84,6 +85,21 @@ export function privySessionValue(
   if (!runtime) return { ...PRIVY_ABSENT, ready, load, subscribe };
   const { authenticated, user, getAccessToken, logout } = runtime;
   return { ready: true, authenticated, user, getAccessToken, logout, runtime, load, subscribe };
+}
+
+// Privy's API client sets no request timeout, so a hung startup request leaves it neither
+// ready nor failed. A click stops waiting after this; Privy keeps starting in the background.
+export const PRIVY_CLICK_TIMEOUT_MS = 15_000;
+
+/**
+ * `load` for a click: rejects after 15 s so the button can say "try again". The
+ * timeout ends only this click's wait; it never stops Privy or marks its start failed.
+ */
+export function startPrivy(load: PrivySession["load"]): Promise<PrivyRuntime> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("Privy is taking too long to start. Try again.")), PRIVY_CLICK_TIMEOUT_MS);
+    load().finally(() => clearTimeout(timer)).then(resolve, reject);
+  });
 }
 
 /** The Privy session above (`PrivySessionProvider`), or a signed-out one without it. */
