@@ -46,6 +46,7 @@ export function CoinsOverlay() {
   useShellAction("openFund", () => open({ kind: "fund" }));
   useShellAction("openDeposit", () => open(firstScreen("deposit", null)));
   useShellAction("openWithdraw", () => open(firstScreen("withdraw", null)));
+  useShellAction("openBridge", () => open(firstScreen("bridge", null)));
   useShellAction("openCoin", (key) => open(firstScreen("coin", key ?? null)));
   useShellAction("openAllCoins", () => open({ kind: "all" }));
   useShellAction("openTrade", (argument) => {

@@ -2,6 +2,7 @@ import { referralCallsign, REFERRAL_COOKIE, REFERRAL_MAX_AGE } from "@blast/core
 import { NextResponse, userAgent, type NextRequest } from "next/server";
 import { publicErrorResponse } from "@blast/core/lib/http-errors.ts";
 import { presaleConnectSources } from "#web/components/presale/config.ts";
+import { bridgeConnectSources } from "#web/components/social/bridge/bridge-config.ts";
 import { isBlastExperienceEnabled } from "#web/lib/experience.ts";
 import { isSocialEnabled } from "@blast/core/lib/social-flag.ts";
 import {
@@ -33,6 +34,7 @@ function browserSecurityHeaders(nonce: string | null): Readonly<Record<string, s
     development: webConfig().development,
     // Every page carries them, so a client-side navigation into the presale keeps working.
     presaleConnectSources: presaleConnectSources(webConfig().presale),
+    bridgeConnectSources: bridgeConnectSources(webConfig().bridge),
     liveSocketOrigin: webConfig().liveSocket?.origin ?? null,
   });
 }

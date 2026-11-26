@@ -27,7 +27,7 @@ import clsx from "clsx";
 import type { SocialTransferFee } from "@blast/core/web/contracts/coins.ts";
 import { bpsToPct } from "@blast/core/modules/social/prices/change.ts";
 
-import { ArrowDownIcon, ArrowUpIcon, PreviousIcon } from "#web/components/blast-ui/Icons.tsx";
+import { ArrowDownIcon, ArrowUpIcon, BridgeIcon, PreviousIcon } from "#web/components/blast-ui/Icons.tsx";
 import { usePrice } from "../prices/price-client";
 import { CopyButton } from "#web/components/blast-ui/CopyButton.tsx";
 import {
@@ -74,6 +74,8 @@ import { SUI_COIN_TYPE, USDC_COIN_TYPE } from "@blast/core/lib/sui/coin-types.ts
 import { decimalText, dropDecimal, pasteDecimal } from "#web/lib/decimal-input.ts";
 import { useWalletCoinBalance, type WalletCoinBalance } from "./use-wallet-coin-balance";
 import { DiagnosticText } from "#web/components/blast-ui/DiagnosticText.tsx";
+import { useBridge } from "../bridge/bridge-context.tsx";
+import { BridgeScreen } from "../bridge/BridgeScreen.tsx";
 import { SUI_ADDRESS_PLACEHOLDER, SUI_NAME_LOOKUP_LABEL, useSuiAddressLookup } from "#web/lib/sui-address-input.ts";
 
 export type { CoinSheetTrading, TradeAsk, TradeOutcome } from "./SwapForm";
@@ -312,6 +314,7 @@ function CoinSheetForm(props: CoinSheetProps & Readonly<{ titleId: string; onCon
 
   const balanceKnown = props.wallet.status === "ready";
   const wallet = props.wallet.status === "ready" ? props.wallet : { address: null, fee: "wallet" as const, coins: PUBLIC_PREFERRED_COINS };
+  const bridge = useBridge();
   // Favourite shortcuts keep their saved order; the browser ranks holdings by USD value.
   const pins = storedPins;
   const coins = pinSort(withPreferredCoins(wallet.coins), pins);
@@ -395,9 +398,10 @@ function CoinSheetForm(props: CoinSheetProps & Readonly<{ titleId: string; onCon
           >
             <SwapIcon />Trade
           </Button>
-          <div className={styles.quietActs}>
+          <div className={styles.quietActs} data-three={bridge === null ? undefined : ""}>
             <Button className={styles.quietAct} onClick={() => go({ kind: "dep" })} variant="ghost"><ArrowDownIcon />Deposit</Button>
             <Button className={styles.quietAct} onClick={() => go({ kind: "wd", key: coin.key })} variant="ghost"><ArrowUpIcon />Withdraw</Button>
+            {bridge === null ? null : <Button className={styles.quietAct} onClick={() => go({ kind: "bridge" })} variant="ghost"><BridgeIcon />Bridge</Button>}
           </div>
         </div>
       </>
@@ -412,6 +416,22 @@ function CoinSheetForm(props: CoinSheetProps & Readonly<{ titleId: string; onCon
       </div>
       {!props.trading.signedIn ? <Button loading={props.trading.sessionPending === true} loadingLabel="Restoring session" onClick={props.trading.onSignIn} size="lg" variant="primary">Sign in to get your address</Button> : null}
       {fund ? <Button aria-label="Withdraw" onClick={() => go({ kind: "pick", mode: "withdraw" })} size="lg" variant="secondary"><ArrowUpIcon />Withdraw</Button> : null}
+      {fund && bridge !== null ? <Button onClick={() => go({ kind: "bridge" })} size="lg" variant="secondary"><BridgeIcon />Bridge</Button> : null}
+    </>
+  );
+
+  // Bridge to Sui: coins from Base, Ethereum, Arbitrum or Solana arrive in this Blast wallet.
+  // A new Blast session starts a new form (key), so nothing from the last account carries over.
+  const bridgeScreen = (): ReactNode => bridge === null ? depositScreen(false) : (
+    <>
+      {head("Bridge to Sui")}
+      <BridgeScreen
+        blastAddress={wallet.address}
+        config={bridge}
+        key={wallet.address ?? "signed-out"}
+        onSignIn={props.trading.onSignIn}
+        signedIn={props.trading.signedIn}
+      />
     </>
   );
 
@@ -499,6 +519,7 @@ function CoinSheetForm(props: CoinSheetProps & Readonly<{ titleId: string; onCon
       case "coin": return coinScreen(shown);
       case "fund": return depositScreen(true);
       case "dep": return depositScreen(false);
+      case "bridge": return bridgeScreen();
       case "wd": return withdrawScreen(shown);
       case "trade": return tradeScreen();
       case "pickt": return tradePickerScreen(shown);
