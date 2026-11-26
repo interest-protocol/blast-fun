@@ -154,7 +154,7 @@
 .coinAge { flex: none; }
 .ageDot { margin-inline-end: 0.375rem; }
 .coinName img { width: 0.875rem; height: 0.875rem; }
-/* The figures: tabular, right-aligned, never wrapped, uncoloured: the row's one colour is its progress bar (Shibui). */
+/* The figures: tabular, right-aligned, never wrapped. Only the price change takes a colour: green up, red down. */
 .mcap, .change, .vol, .holders { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .mcap { font-weight: 600; }
 .mcap[data-stale] { color: var(--muted); }

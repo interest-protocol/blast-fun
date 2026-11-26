@@ -184,14 +184,14 @@ function MarketCap({ amount, at, loading, nowMs }: Readonly<{ amount: string | n
   </span>;
 }
 
-/** The price move over the window, signed and uncoloured: the row's one colour is its progress bar (Shibui). */
+/** The price move over the window, signed and coloured like every price move: green up, red down, neutral when flat. */
 function PriceChange({ coin, window }: Readonly<{ coin: HomeCoin; window: HomeWindow }>) {
   const bps = window === "1h" ? coin.mobile_market?.change_1h_bps : coin.change_24h_bps;
   if (coin.price_usd === null || bps == null) return <span className={clsx("num", styles.change)} role="cell"><Missing what="Price change" /></span>;
   const since = window === "24h" && coin.change_24h_from_ms !== undefined
     ? `Since the first price on ${utc(coin.change_24h_from_ms)}`
     : undefined;
-  return <span className={clsx("num", styles.change)} role="cell" title={since}>
+  return <span className={clsx("num", styles.change, bps > 0 && styles.up, bps < 0 && styles.down)} role="cell" title={since}>
     {since ? <>
       <span className="sr-only">{since} </span>
       <span aria-hidden="true" className={styles.changeWindow}>≤24h </span>
