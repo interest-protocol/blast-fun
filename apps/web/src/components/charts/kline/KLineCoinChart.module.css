@@ -14,11 +14,11 @@
  * the fallback before the chart measures. The loading block holds toolbar, readout and plot,
  * so the chart arrives without a jump.
  */
-.chart { --kline-plot-height: 416px; --kline-readout-height: 1.5rem; }
+.chart { --kline-plot-height: 26rem; --kline-readout-height: 1.5rem; }
 .plot { position: relative; inline-size: 100%; block-size: var(--kline-plot-height); overflow: hidden; }
 .loading {
-  /* The default plot in px, as the chart sizes it: price 290 + volume 100 + 1 + axis 25 (phone 200 + 80 + 1 + 25). */
-  --kline-plot-height: 416px;
+  /* The default plot, as the chart sizes it in px: price 290 + volume 100 + 1 + axis 25 = 416, which 26rem matches at the default text size (phone 200 + 80 + 1 + 25). */
+  --kline-plot-height: 26rem;
   --kline-readout-height: 1.5rem;
   block-size: calc(2.75rem + var(--kline-readout-height) + 1rem + var(--kline-plot-height));
 }

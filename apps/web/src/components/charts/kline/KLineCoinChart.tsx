@@ -271,27 +271,31 @@ function Readout({ bars, hovered, interval, precision, unit, quoteSymbol, spoken
   const bar = bars[index];
   const dateTime = useMemo(() => readoutDate(interval), [interval]);
   if (!bar) return <p className={styles.readout} aria-hidden="true" />;
-  const previous = bars[index - 1]?.close ?? bar.open;
-  const change = previous > 0 ? (bar.close - previous) / previous : 0;
-  const side = bar.close > bar.open ? "up" : bar.close < bar.open ? "down" : undefined;
-  const changeSide = change > 0 ? "up" : change < 0 ? "down" : undefined;
   return <p className={`${styles.readout} ${remove ? styles.hintRow : ""}`} aria-live={spoken ? "polite" : "off"} data-latest={index === bars.length - 1 || undefined} data-removing={remove ? "" : undefined}>
     <span className={styles.readoutTime}>
       <time dateTime={new Date(bar.timestamp).toISOString()}>{dateTime.format(bar.timestamp)}</time>
       {found < 0 && <span className={styles.readoutTag} data-tag="latest">Latest</span>}
       {bar.volume === 0 && <span className={styles.readoutTag}>No trades</span>}
     </span>
-    <span className={styles.readoutPrices} data-side={side}>
-      {(["O", "H", "L", "C"] as const).map((key) => <span key={key}>
-        <abbr title={{ O: "Open", H: "High", L: "Low", C: "Close" }[key]}>{key}</abbr>{" "}
-        <PriceText value={bar[({ O: "open", H: "high", L: "low", C: "close" } as const)[key]]} precision={precision} />
-      </span>)}
-      <span data-side={changeSide}>{change > 0 ? "+" : ""}{(change * 100).toFixed(2)}%</span>
-    </span>
+    <ReadoutPrices bar={bar} previous={bars[index - 1]?.close ?? bar.open} precision={precision} />
     <span className={styles.readoutVolume}><abbr title="Volume">Vol</abbr> {volumeText(bar.volume)} {quoteSymbol}</span>
     <span className="sr-only"> Prices in {unit}.</span>
     {remove && <span className={styles.readoutRemove}><Button variant="ghost" size="sm" onClick={remove.onRemove} aria-label={`Remove ${remove.name.toLowerCase()}`}>Remove</Button></span>}
   </p>;
+}
+
+const direction = (delta: number) => delta > 0 ? "up" : delta < 0 ? "down" : undefined;
+
+/** Open, high, low and close, coloured by the bar's direction, then the change from the close before. */
+function ReadoutPrices({ bar, previous, precision }: Readonly<{ bar: Bar; previous: number; precision: number }>) {
+  const change = previous > 0 ? (bar.close - previous) / previous : 0;
+  return <span className={styles.readoutPrices} data-side={direction(bar.close - bar.open)}>
+    {(["O", "H", "L", "C"] as const).map((key) => <span key={key}>
+      <abbr title={{ O: "Open", H: "High", L: "Low", C: "Close" }[key]}>{key}</abbr>{" "}
+      <PriceText value={bar[({ O: "open", H: "high", L: "low", C: "close" } as const)[key]]} precision={precision} />
+    </span>)}
+    <span data-side={direction(change)}>{change > 0 ? "+" : ""}{(change * 100).toFixed(2)}%</span>
+  </span>;
 }
 
 /** Daily and weekly candles start at 00:00 UTC, so their dates read in UTC; shorter ones in the viewer's own zone. */

@@ -144,7 +144,7 @@ test("axis dates read as short local dates, and a label that would run off the p
 });
 
 test("the plot grows by one pane per study, whatever the mix, and its default matches the loading block", () => {
-  // The CSS fallback (--kline-plot-height: 416px desktop, 306px phone) assumes the default MA + VOL.
+  // The CSS fallback (--kline-plot-height: 26rem = 416px desktop at the default text size, 306px phone) assumes the default MA + VOL.
   assert.equal(plotHeightFor(["MA", "VOL"], false), 416);
   assert.equal(plotHeightFor(["MA", "VOL"], true), 306);
   for (const phone of [false, true]) {

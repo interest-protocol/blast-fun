@@ -640,6 +640,9 @@ function compactOpeningPrice({ migration, hasPriceUnits, source, controls, shown
   return source.opening?.price ?? null;
 }
 
+const LAST_UPDATE_TIME = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+const LAST_UPDATE_DAY_TIME = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+
 /** The first source whose history is delayed or failed, with its Try again; null when every source is current. */
 function compactSourceAlert(view: ReturnType<typeof useChartViewControls>) {
   const alert = view.sources.find(({ section }) => isBehind(section));
@@ -647,8 +650,7 @@ function compactSourceAlert(view: ReturnType<typeof useChartViewControls>) {
   // The last checkpoint the delayed source answered for, so the trader knows how old its prices are.
   const asOf = alert.section && "provenance" in alert.section ? alert.section.provenance?.timestampMs : null;
   const today = asOf ? new Date(asOf).toDateString() === new Date().toDateString() : true;
-  const day: Intl.DateTimeFormatOptions = today ? {} : { month: "short", day: "numeric" };
-  const since = asOf ? ` Last update ${new Intl.DateTimeFormat(undefined, { ...day, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(asOf)}.` : "";
+  const since = asOf ? ` Last update ${(today ? LAST_UPDATE_TIME : LAST_UPDATE_DAY_TIME).format(asOf)}.` : "";
   const problem = alert.section?.state === "stale" ? "price updates delayed." : "price history couldn’t load.";
   return <>
     {`${view.label(alert.name)} ${problem}${since}`}{" "}
@@ -657,10 +659,12 @@ function compactSourceAlert(view: ReturnType<typeof useChartViewControls>) {
   </>;
 }
 
+const noTrades = (page: ChartCandlePage) => page.candles.every((candle) => candle.volumeQuote === 0n);
+
 function CompactSourceNotices({ view }: Readonly<{ view: ReturnType<typeof useChartViewControls> }>) {
   // A quiet Live window draws the last price carried in from before it: say so, so a flat line never reads as trades.
   // A delayed source cannot say there were no trades, so its own alert speaks instead.
-  const quiet = view.controls.range === "live" && !view.sources.some(({ section }) => isBehind(section)) && view.drawn.every(({ page }) => page.candles.every((candle) => candle.volumeQuote === 0n));
+  const quiet = view.controls.range === "live" && !view.sources.some(({ section }) => isBehind(section)) && view.drawn.every(({ page }) => noTrades(page));
   if (quiet) return <p className={styles.note}>No trades in the last 5 min. The line holds the last traded price.</p>;
   return <>{view.sources.map(({ name, section }) => {
     if (!hasData(section)) return null;
