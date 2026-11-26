@@ -110,7 +110,7 @@ export const API_GATE_EXEMPTIONS: readonly ApiGateExemption[] = Object.freeze<Ap
   {
     name: "wallet-metadata",
     methods: READ,
-    path: /^\/api\/(?:social\/sign-in\/slush-metadata|mission-control\/slush-wallet-metadata)$/,
+    path: /^\/api\/social\/sign-in\/slush-metadata$/,
     why: "Fetched by the Slush wallet (dApp Kit metadata), not by our pages.",
   },
   {

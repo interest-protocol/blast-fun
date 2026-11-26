@@ -194,7 +194,6 @@ function Home({ empty }: Readonly<{ empty: boolean }>) {
         <div className={homeStyles.board}>
           <HomeSections
             empty={null}
-            onChange={noop}
             prefs={{ order: ["bonding", "coins", "posts", "traders"], hidden: ["posts", "traders"] }}
             sections={{
               bonding: { children: null },

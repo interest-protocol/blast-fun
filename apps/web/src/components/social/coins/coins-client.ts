@@ -23,15 +23,6 @@ import { callSocialApi, type ApiResult, type SocialApiOptions } from "#web/compo
  * (`sponsored-transaction.ts`).
  */
 
-/** Whether `value` is a well-formed wallet answer (everything the sheet renders). */
-export function isSocialWallet(value: unknown): value is SocialWallet {
-  return socialWalletSchema.safeParse(value).success;
-}
-
-export function isSocialTransfer(value: unknown): value is SocialTransfer {
-  return socialTransferSchema.safeParse(value).success;
-}
-
 /** `fresh` skips the server's few-second balance cache: the read follows the owner's own trade or a wallet hint. */
 export function fetchWallet(options: SocialApiOptions, listing?: Readonly<{ page: number; q?: string; hide_small?: boolean; hide_test_markets?: boolean; mode?: string; key?: string; keys?: string }>, fresh = false): Promise<ApiResult<SocialWallet>> {
   const params = new URLSearchParams(listing ? Object.entries(listing).map(([key, value]) => [key, String(value)]) : []);

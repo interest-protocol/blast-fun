@@ -75,7 +75,6 @@
 .wait .t b { font-size: 0.8125rem; font-weight: 600; letter-spacing: 0; color: var(--ink-2); }
 .wait .t b :global(.num) { font-weight: 500; color: var(--muted); }
 .wait .t > span { font-size: 0.75rem; white-space: normal; overflow: visible; }
-.tot { margin: 0.375rem 0.6875rem 0.125rem; font-size: 0.75rem; color: var(--muted); }
 .more { width: 100%; margin-top: 0.5rem; }
 .panel .more { width: calc(100% - 0.6875rem); margin: 0.375rem 0 0 0.6875rem; }
 .panelNote { margin: 0.375rem 0.6875rem 0.125rem; font-size: 0.75rem; color: var(--muted); }
@@ -111,13 +110,12 @@
   .row + .row::before { left: 3.9375rem; }
   .row.c { grid-template-columns: minmax(0, 1fr) minmax(4.75rem, auto) 1rem; }
   .panel { padding-left: 0; }
-  .panel .wait, .tot { margin-left: 0.6875rem; }
+  .panel .wait { margin-left: 0.6875rem; }
   .figs { grid-template-columns: minmax(0, 1fr); }
   .fig + .fig { border-left: 0; border-top: 1px solid var(--hair); }
   .fig { padding: 0.875rem 1.3125rem 1rem; }
   .coins { padding: 1.125rem 0.8125rem 0.375rem; }
 }
-.rewardMark { border-radius: var(--r-sm); }
 
 /* Page-only refinements: Portfolio's Rewards tab and right rail share the rules above. */
 .section :global(.card) { border-radius: var(--r-sm); }
@@ -157,7 +155,6 @@
 .section .panel .list { margin: 0; }
 .section .panel .row { grid-template-columns: minmax(0, 1fr) auto 1rem; min-height: max(44px, 2.75rem); padding: 0.25rem 0; }
 .section .panel .row > svg:last-child { width: 0.875rem; height: 0.875rem; }
-.section .tot { margin: 0 0 0.5rem; }
 .section .panelNote { margin: 0; }
 .section .panel .wait { margin: 0 0 0.375rem; }
 .section .panel .more { width: 100%; margin: 0.375rem 0 0; }

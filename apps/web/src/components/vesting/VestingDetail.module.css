@@ -354,16 +354,6 @@
   overflow-wrap: anywhere;
   font-size: 0.6875rem !important;
 }
-.releaseDisclosure {
-  margin-top: 0.75rem;
-}
-.releaseDisclosure > summary {
-  color: var(--ink-2);
-  font-size: 0.75rem;
-  cursor: pointer;
-  padding-block: 0.875rem;
-  min-height: max(44px, 2.75rem);
-}
 .tableScroll {
   overflow: auto;
   max-height: 22.5rem;
@@ -416,9 +406,6 @@
 }
 .tableScroll td:first-child {
   min-width: 11.25rem;
-}
-.tableScroll .exactScroll {
-  overflow: visible;
 }
 .pagination {
   margin-top: 0.75rem;
@@ -505,6 +492,4 @@
   .chartCard {
     padding: var(--s4);
   }
-}
-@media (prefers-reduced-motion: reduce) {
 }

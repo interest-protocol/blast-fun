@@ -122,7 +122,7 @@ the backend, which checks the operator bearer.
 | `reward-manifest` | `GET/HEAD /api/presale/rewards/rounds/{round_id}/manifest` | Public by contract (docs/presale/rewards.md). |
 | `receipt-image` | `GET/HEAD /api/presale/receipts/{presale_id}/{wallet}/image` | Share image fetched by X, Telegram and other unfurlers. |
 | `presale-agent-key` | `POST /api/presale/allowlists`, `GET/HEAD /api/presale/allowlists/{id}`, `POST /api/presale/allowlists/{id}/bind`, each with an `X-Blast-Api-Key` of the key's shape (`blast_ak_` + 43 base64url) | AI agents; the route kit verifies the key (one indexed hash lookup). A forged key of the right shape passes the gate, so the kit counts every lookup per client IP first (`presale_api_key_ip`, in memory) and remembers an unknown key for a minute; the Firewall's agent-key rule (below) bounds it at the edge. |
-| `wallet-metadata` | `GET/HEAD /api/social/sign-in/slush-metadata`, `/api/mission-control/slush-wallet-metadata` | Fetched by the Slush wallet (dApp Kit), not by our pages. |
+| `wallet-metadata` | `GET/HEAD /api/social/sign-in/slush-metadata` | Fetched by the Slush wallet (dApp Kit), not by our pages. |
 | `og-image` | `GET/HEAD /api/og` | The social card (an `apps/web/vercel.json` rewrite). |
 | `gate-refresh` | `GET /api/gate` with `Sec-Fetch-Site: same-origin` | Re-issues the cookie (below). |
 
@@ -222,11 +222,7 @@ or malformed client identity is refused at ingress rather than sharing an
 | `launchpad_wallet_launches` | IP | 120 / min | `GET /api/launchpad/wallets/{address}/launches` |
 | `launchpad_theses_read` | IP | 240 / min | `GET /api/launchpad/theses` |
 | `mission_control_read` | IP, **per instance** | 240 / min | `GET /api/mission-control/season-zero` |
-| `mission_control_owner_read` | IP | 240 / min | `GET /api/mission-control/owner`, `/owner/recruits`, `/owner/wallets` |
-| `mission_control_owner_write` | IP | 30 / min | `PATCH /api/mission-control/owner/display-name` (whose body is now read at most 1 KiB, `readBoundedText`), `PATCH /owner/wallets/primary`, `POST /api/auth/logout` |
-| `wallet_ip` | IP | 30 / 10 min | Every wallet challenge issue and verify (`walletChallengeRateLimiter`: account links, crew restore, social wallet sign-in and links), before `wallet` (IP + address + operation), so rotating the address cannot multiply it |
-| `recovery_ip` | IP | 20 / 10 min | `PUT/POST /api/mission-control/restore`, before `recovery` (IP + address) |
-| `mission_control_owner_card` | IP | 30 / min | `GET /api/mission-control/owner/card` (renders an image) |
+| `wallet_ip` | IP | 30 / 10 min | Every wallet challenge issue and verify (`walletChallengeRateLimiter`: social wallet sign-in and links), before `wallet` (IP + address + operation), so rotating the address cannot multiply it |
 | `mission_control_card_image` | IP | 300 / min | `GET /card/{id}/image`, outside `/api` (no gate): a URL that is not exactly the one the app emits (lowercase id, `format=card` or a share image's `recruits`, the current `v`) is first redirected (307, `no-store`) to it, so a random query cannot miss the CDN; only canonical requests count and read the card |
 | `presale_api_key_ip` | IP, **per instance** | 300 / min | Every `X-Blast-Api-Key` lookup on the agent routes, before the key is read; an unknown key is then remembered for 60 s |
 | `presale_bridge_status` | IP | 120 / min | `GET /api/presale/bridge/transfers/{id}` |

@@ -327,20 +327,6 @@ export function shareText(bps: number | null): string | null {
   return `${Math.round(bps / 100)}%`;
 }
 
-/** The past tense of a direction: `bought`, `sold`, `backed`, `claimed`. */
-export function verbOf(kind: HomeKind, past = true): string {
-  switch (kind) {
-    case "trade_buy":
-      return past ? "bought" : "buy";
-    case "trade_sell":
-      return past ? "sold" : "sell";
-    case "presale_commit":
-      return past ? "backed" : "back";
-    case "presale_claim":
-      return past ? "claimed" : "claim";
-  }
-}
-
 /** The person's name as a row shows it: the display name, else the callsign; a wallet by its short address. */
 export function actorName(actor: FeedItemActor): string {
   return actor.type === "account" ? ((actor.display_name ?? "").trim() || actor.callsign) : actor.short;

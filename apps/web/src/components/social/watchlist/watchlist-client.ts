@@ -17,9 +17,6 @@ import { callSocialApi, type ApiResult, type SocialApiOptions } from "#web/compo
  * call (`callSocialApi`: a Privy token or the wallet session, OA-16), never
  * cached.
  */
-export function isWatchlistPage(value: unknown): value is SocialWatchlistPage {
-  return socialWatchlistPageSchema.safeParse(value).success;
-}
 
 /** A `204` has no body. */
 const noBodySchema = z.null();

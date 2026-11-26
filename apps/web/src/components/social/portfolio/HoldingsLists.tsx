@@ -50,13 +50,13 @@ function Right({ right, presaleId, claims, label }: Readonly<{ right: HoldingRig
   );
 }
 
-function HoldingTop({ presale, title, sub, figures = false }: Readonly<{ presale: ProfilePresale; title: string; sub: ReactNode; figures?: boolean }>) {
+function HoldingTop({ presale, title, sub }: Readonly<{ presale: ProfilePresale; title: string; sub: ReactNode }>) {
   return (
     <Link className={styles.posTop} href={presalePath(presale.presale_id)}>
       <PresaleMark presale={presale} />
       <span className={styles.t}>
         {presale.verified_team ? <span className={styles.named}><b>{title}</b><CoinVerifiedMark /></span> : <b>{title}</b>}
-        <span className={figures ? "num" : undefined}>{sub}</span>
+        <span>{sub}</span>
       </span>
     </Link>
   );

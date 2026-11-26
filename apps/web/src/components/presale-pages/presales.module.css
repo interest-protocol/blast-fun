@@ -59,8 +59,6 @@
 :global([data-blast-ui]) .catalog-amount { min-width: 0; display: inline-flex; align-items: baseline; gap: 0.375rem; text-align: left; }
 :global([data-blast-ui]) .catalog-amount > :first-child { flex: none; align-self: flex-start; margin-top: 0.1875rem; }
 :global([data-blast-ui]) .funding-values { min-width: 0; overflow-wrap: anywhere; }
-:global([data-blast-ui]) .oversubscription { display: flex; flex-direction: column; gap: 0.1875rem; font-size: 0.75rem; line-height: 1.4; color: var(--muted); font-variant-numeric: normal; }
-:global([data-blast-ui]) .oversubscription b { color: var(--ink); font-family: inherit; font-size: 0.75rem; font-weight: 600; letter-spacing: normal; }
 :global([data-blast-ui]) .presale-tile:active:not(:focus-visible) { transform: scale(.985); transition-duration: 100ms; }
 :global([data-presale-browse]) .srow2 { border-radius: var(--r-button); border: 0; box-shadow: none; min-height: 4rem; display: grid; grid-template-columns: 2.5rem minmax(0px, 1.5fr) minmax(0px, 1.1fr) minmax(0px, 1.2fr) minmax(8.5rem, .9fr); align-items: center; column-gap: 0.8125rem; row-gap: .375rem; padding: .75rem 0.9375rem; transition: background-color var(--t1) ease; }
 @media (hover: hover) and (pointer: fine) { :global([data-presale-browse]) .srow2:hover { background: var(--raised); } }
@@ -383,12 +381,11 @@
 @media (prefers-reduced-transparency: reduce) { :global([data-blast-ui]) .trading-entry { background: var(--card); backdrop-filter: none; } }
 
 /* Scope and ordering remain separate at every width. */
-:global([data-blast-ui]) .discovery-toolbar { flex: 0 1 auto; min-width: 0; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; }
-:global([data-blast-ui]) .discovery-toolbar svg, :global([data-blast-ui]) .discovery-option svg { width: 1rem; height: 1rem; flex: none; }
+:global([data-blast-ui]) .discovery-option svg { width: 1rem; height: 1rem; flex: none; }
 :global([data-blast-ui]) .discovery-menu { min-width: 12.5rem; max-width: calc(100vw - 1.5rem); padding: 0.3125rem; border-radius: var(--r-sm); background: var(--card); box-shadow: var(--sh-pop); }
 :global([data-blast-ui]) .discovery-option { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; min-height: max(44px, 2.75rem); padding: 0.625rem 0.75rem; border-radius: var(--r-button); font-size: 0.8125rem; color: var(--ink-2); }
 :global([data-blast-ui]) .discovery-option[aria-checked="true"] { color: var(--ink); font-weight: 600; background: var(--bg); }
-@media (hover: hover) and (pointer: fine) { :global([data-blast-ui]) .discovery-option:hover { background: var(--hair); } :global([data-blast-ui]) .watch-toggle[aria-pressed="true"]:hover { background: var(--ink-2); } }
+@media (hover: hover) and (pointer: fine) { :global([data-blast-ui]) .discovery-option:hover { background: var(--hair); } }
 :global([data-blast-ui]) .discovery-option:active { background: var(--hair); }
 :global([data-blast-ui]) .discovery-option:focus-visible { outline: 0.125rem solid var(--focus-color,var(--ink)); outline-offset: -0.125rem; }
 :global([data-blast-ui]) .legacy-scope { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; color: var(--muted); font-size: 0.75rem; }
@@ -398,7 +395,6 @@
   :global([data-blast-ui]) .presale-layout { width: 100%; }
   :global([data-blast-ui]) .presale-layout .list-view { width: 100%; grid-auto-columns: 1fr; }
   :global([data-blast-ui]) .presale-layout .list-view :is(button, a) { min-width: max(44px, 2.75rem); min-height: max(44px, 2.75rem); padding-inline: 0.625rem; font-size: 0.75rem; }
-  :global([data-blast-ui]) .discovery-toolbar { justify-content: flex-start; }
   :global([data-blast-ui]) .presale-discovery :is(a, button) { scroll-margin-block: calc(7.5rem + env(safe-area-inset-top, 0px)) calc(6.25rem + env(safe-area-inset-bottom, 0px)); }
 }
 
@@ -491,8 +487,6 @@
 @container (max-width: 52rem) {
   .catalog-tools { flex-basis: 100%; }
 }
-:global([data-presale-browse]) .discovery-toolbar { flex: none; justify-content: flex-start; }
-:global([data-presale-browse]) .watch-toggle[aria-pressed="true"] { background: var(--ink); color: var(--card); box-shadow: none; }
 :global([data-presale-browse]) .result-layout :is(button, a) { width: 2.25rem; padding: 0; }
 :global([data-presale-browse]) .result-layout svg { width: 1rem; height: 1rem; }
 @media (pointer: coarse) {
@@ -500,13 +494,11 @@
   :global([data-presale-browse]) .result-layout :is(button, a) { width: 44px; }
 }
 @media (max-width: 760px) {
-  .catalog-feature-desktop { display: none; }
   :global([data-presale-browse]) .presale-views { display: grid; width: 100%; }
   :global([data-presale-browse]) .presale-view { padding-inline: 0.625rem; }
   .catalog-tools { flex: 0 1 auto; }
   :global([data-presale-browse]) .catalog-search { flex: 1 1 0; }
   :global([data-presale-browse]) .catalog-search input { font-size: 1rem; }
-  :global([data-presale-browse]) .discovery-toolbar { flex: 1 1 0; }
 }
 @media (prefers-reduced-motion: reduce) { :global([data-presale-browse]) .presale-view-ind { transition: none; } }
 

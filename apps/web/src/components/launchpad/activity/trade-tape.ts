@@ -42,8 +42,6 @@ const browser: TapePorts = {
   },
 };
 
-export type TradeTape = ReturnType<typeof createTradeTape>;
-
 /** Pace the compact list independently of ingestion, which still sees every frame immediately. */
 export function createTradeTape(feed: Pick<ActivityFeed, "state" | "subscribe">, ports = browser) {
   const seedRows = feed.state().activity.view?.rows.filter(isActivityTrade);

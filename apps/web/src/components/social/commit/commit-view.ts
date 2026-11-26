@@ -5,7 +5,6 @@ import { exactDecimal } from "@blast/core/web/exact-amount.ts";
 import { atomsValue, qm, qp, qs, qty, quoteOf, readsInCoin, timeLeft, usd, venueName } from "@blast/core/web/format.ts";
 import { vestingDurationText } from "@blast/core/web/contracts/vesting.ts";
 import { short } from "@blast/core/lib/compact-dollars.ts";
-import type { CommitBlocker } from "@blast/core/web/contracts/commit.ts";
 import type { SocialWallet } from "@blast/core/web/contracts/coins.ts";
 import type { FeedItem } from "@blast/core/web/contracts/items.ts";
 import { SOCIAL_ENTRY_ID_PATTERN } from "@blast/core/web/contracts/viewer-state.ts";
@@ -370,10 +369,3 @@ export function saleFooterLinkStyle(phase: PresalePhase): "quiet" | "button" {
   return phase === "pending" ? "quiet" : "button";
 }
 
-/** The reasons a host's reads make into blockers, in the published order. */
-export function readBlockers(input: Readonly<{ wallet: SocialWallet | null; allowlistUnreadable: boolean }>): readonly CommitBlocker[] {
-  const reasons: CommitBlocker[] = [];
-  if (!input.wallet?.address) reasons.push("wallet_missing");
-  if (input.allowlistUnreadable) reasons.push("allowlist_unavailable");
-  return reasons;
-}

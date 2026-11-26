@@ -10,7 +10,6 @@ export function Sparkline({
   points,
   width,
   height,
-  fill = false,
   up,
   ink = false,
   className,
@@ -19,8 +18,6 @@ export function Sparkline({
   points: readonly SparkPoint[] | null | undefined;
   width: number;
   height: number;
-  /** Stretch to the slot's width (Blast mode's panel). */
-  fill?: boolean;
   /** Green or red by a result (a call's multiple) instead of the line's own ends. */
   up?: boolean;
   /** The text's own colour, no green or red (a ledger row whose only coloured figure is the move). */
@@ -33,7 +30,7 @@ export function Sparkline({
     <span aria-hidden="true" className={className} data-slot={slot}>
       {points && points.length >= 2 ? (
         <ClientOnly>
-          <SparklinePlot fill={fill} height={height} ink={ink} points={points} up={up} width={width} />
+          <SparklinePlot height={height} ink={ink} points={points} up={up} width={width} />
         </ClientOnly>
       ) : null}
     </span>

@@ -104,10 +104,6 @@
   vector-effect: non-scaling-stroke;
 }
 
-.hatch {
-  stroke: var(--lp-muted);
-  stroke-width: 1;
-}
 
 .gap {
   opacity: 0.35;

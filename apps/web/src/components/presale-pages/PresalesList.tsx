@@ -129,7 +129,7 @@ function SaleTitle({ sale }: Readonly<{ sale: SocialPresaleSummary }>) {
 }
 
 /** A list row (`a.card.srow2`): mark, name, when, fill, backers and up to three followed backers. */
-export function PresaleRow({ sale, now, viewer, showStatus = false }: Readonly<{ sale: SocialPresaleSummary; now: number; viewer: ViewerPresales | null; showStatus?: boolean }>) {
+export function PresaleRow({ sale, now, viewer }: Readonly<{ sale: SocialPresaleSummary; now: number; viewer: ViewerPresales | null }>) {
   const following = viewer?.[sale.presale_id]?.following ?? [];
   const followed = following.slice(0, 3);
   const attribution = following.length === 1
@@ -144,7 +144,7 @@ export function PresaleRow({ sale, now, viewer, showStatus = false }: Readonly<{
         <SaleTitle sale={sale} />
         <span>
           <span className={cx("sr-symbol")} title={sale.symbol}>{sale.symbol}</span>
-          {showStatus || ended(sale.phase) ? <span className={cx(`status ${sale.phase}`)}>{PHASE_LABEL[sale.phase]}</span> : null}
+          {ended(sale.phase) ? <span className={cx(`status ${sale.phase}`)}>{PHASE_LABEL[sale.phase]}</span> : null}
         </span>
         <span className={cx("sr-tags")}>
           {catalogTags(sale).filter(tag => tag !== "Above target").map(tag => <span className={cx("catalog-tag")} key={tag}>{tag}</span>)}

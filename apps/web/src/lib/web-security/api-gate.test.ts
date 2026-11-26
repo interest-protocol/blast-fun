@@ -339,10 +339,6 @@ test("the allowlist: cron with its bearer, the manifest, receipt images, agent k
     exempt(api("/api/social/sign-in/slush-metadata")),
     "wallet-metadata",
   );
-  assert.equal(
-    exempt(api("/api/mission-control/slush-wallet-metadata")),
-    "wallet-metadata",
-  );
   assert.equal(exempt(api("/api/og")), "og-image");
   assert.equal(exempt(api("/api/og/x")), "refuse");
 
@@ -763,9 +759,6 @@ const WIRED: ReadonlyArray<readonly [RateBucket, string]> = [
   ["launchpad_discovery", "modules/backend-api/public-read-routes.ts"],
   ["launchpad_wallet_launches", "modules/backend-api/public-read-routes.ts"],
   ["launchpad_theses_read", "private/viewer-theses.ts"],
-  ["mission_control_owner_read", "modules/mission-control/route-kit.ts"],
-  ["mission_control_owner_card", "modules/mission-control/route-kit.ts"],
-  ["mission_control_owner_write", "modules/mission-control/route-kit.ts"],
   ["presale_bridge_status", "modules/presale/bridge/routes.ts"],
   ["presale_allowlist_read", "modules/presale/allowlists/routes.ts"],
   ["presale_sponsor_ip", "modules/sponsor/service.ts"],
@@ -783,7 +776,6 @@ const WIRED: ReadonlyArray<readonly [RateBucket, string]> = [
   ],
   // Review L3 to L6: the lows' buckets.
   ["wallet_ip", "lib/web-security/rate-limits.ts"],
-  ["recovery_ip", "modules/mission-control/crew-access/route.ts"],
   ["social_auth_failure", "modules/social/route-kit/route.ts"],
   ["social_deposit_register", "modules/social/deposits/route.ts"],
   ["social_read_search", "modules/social/search/route.ts"],

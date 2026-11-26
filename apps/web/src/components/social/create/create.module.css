@@ -6,8 +6,6 @@
  * rule is scoped under the Blast UI root; components emit both the module
  * class and its plain name (`cx`). Lengths are the boards' px ÷ 16.
  */
-:global([data-blast-ui]) .cr-list-upload { flex-wrap: wrap; }
-:global([data-blast-ui]) .cr-list-upload .cr-ctl { flex: 1 0 100%; flex-wrap: wrap; gap: 0.5rem; }
 :global([data-blast-ui]) .cr-list-body { min-width: 0; overflow-wrap: anywhere; }
 :global([data-blast-ui]) .cr-list-header { min-width: 0; padding: 2.125rem var(--sheet-px) 1.0625rem; display: flex; flex-direction: column; gap: 0.5rem; overflow-wrap: anywhere; }
 :global([data-blast-ui]) .cr-list-header p { margin: 0; font-size: 0.875rem; line-height: 1.5; }

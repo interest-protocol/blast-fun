@@ -219,7 +219,6 @@
 
 /* ---------- holdings (Coins, Vestings, Presales) ---------- */
 .pfList { padding: 0 0.5rem; }
-.pfEmpty { padding: 2.125rem 1.3125rem; }
 .posRow { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 0.5rem 0.8125rem; padding: 0.75rem 0.8125rem 0.875rem; border-bottom: 1px solid var(--hair); }
 .posRow:last-child { border-bottom: 0; }
 .posTop { display: flex; align-items: center; gap: 0.75rem; min-width: 0; }
@@ -271,7 +270,6 @@ a.posTop:active { opacity: .6; } /* OA-31: a link inside a row, not the row, dip
 .listCard { padding: 1rem 0.5rem 0.5rem; }
 .lcH { margin: 0; padding: 0 0.625rem 0.5rem; font-size: 0.9375rem; font-weight: 650; color: var(--ink); display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; }
 .lcH .num { font-size: 0.8125rem; font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; }
-.lcEmpty { margin: 0; padding: 0.125rem 0.625rem 0.75rem; font-size: 0.8125rem; color: var(--muted); }
 /* A list card's own empty or failed state: the shared EmptyState, compact. */
 /* The System board's empty box at the list's 8px inset, its words centred both ways: equal padding above and below. */
 .listCard .compactEmpty { padding: 1rem 0.625rem; }

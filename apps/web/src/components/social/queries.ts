@@ -14,7 +14,6 @@ import {
   PRESALE_COMMIT_FIELDS_HEADER,
   PRESALE_LIST_SORTS,
   SOCIAL_PRESALE_VIEWER_PATH,
-  SOCIAL_CREATED_PRESALES_PATH,
   socialPresaleListPath,
   socialPresalePath,
   type PresaleListStatus,
@@ -85,16 +84,6 @@ export function featuredPresalesQuery() {
     },
     staleTime: PUBLIC_STALE_MS,
     refetchInterval: (query) => pollInterval(30_000, query),
-  });
-}
-
-/** Private creator discovery, invalidated with the account’s presale reads. */
-export function createdPresalesQuery(getAccessToken: Token) {
-  return queryOptions({
-    queryKey: queryKeys.me.createdPresales(),
-    queryFn: async () => unwrapApiResult(await callSocialApi({ getAccessToken }, SOCIAL_CREATED_PRESALES_PATH, { method: "GET" },
-      socialPresaleRowsSchema)),
-    staleTime: VIEWER_STALE_MS,
   });
 }
 

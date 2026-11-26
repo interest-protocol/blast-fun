@@ -109,8 +109,6 @@
   animation: notifications-pulse 1.2s var(--ease-std) infinite alternate;
 }
 
-.skeletonIcon { width: 2.625rem; height: 2.625rem; border-radius: 0.8125rem; }
-
 @keyframes notifications-pulse { to { opacity: .45; } }
 
 @media (prefers-reduced-motion: reduce) {

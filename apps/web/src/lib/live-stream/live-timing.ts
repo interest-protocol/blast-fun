@@ -179,4 +179,3 @@ export function createLiveTiming(deps: LiveTimingDependencies) {
   };
 }
 
-export type LiveTiming = ReturnType<typeof createLiveTiming>;

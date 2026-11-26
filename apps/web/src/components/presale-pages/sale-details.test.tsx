@@ -16,7 +16,6 @@ import {
   editRequestOf,
   editValuesOf,
   fetchSaleDetails,
-  removeSaleCover,
   saleDetailsRefusal,
   saveSaleDetails,
   uploadSaleCover,
@@ -254,18 +253,16 @@ test("R3-28 (OA-16): every call goes through callSocialApi: a wallet session sen
   const answer = { presale_id: id, metadata: FULL, editable: true };
   const fetch = (async (url: string, init: RequestInit) => {
     calls.push({ url, init });
-    return init.method === "DELETE" ? new Response(null, { status: 204 }) : Response.json(answer);
+    return Response.json(answer);
   }) as typeof globalThis.fetch;
   const options = { getAccessToken: async () => null, fetch };
   assert.equal((await fetchSaleDetails(options, id)).status, "ok");
   assert.equal((await saveSaleDetails(options, id, { tagline: "x" })).status, "ok");
   assert.equal((await uploadSaleCover(options, id, new Blob([new Uint8Array([1])], { type: "image/png" }))).status, "ok");
-  assert.deepEqual(await removeSaleCover(options, id), { status: "ok", body: null, httpStatus: 204 });
   assert.deepEqual(calls.map((call) => [call.init.method, call.url]), [
     ["GET", `/api/social/sales/${id}/metadata`],
     ["PUT", `/api/social/sales/${id}/metadata`],
     ["POST", `/api/social/sales/${id}/cover`],
-    ["DELETE", `/api/social/sales/${id}/cover`],
   ]);
   for (const call of calls) {
     assert.equal(call.init.credentials, "same-origin");

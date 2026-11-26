@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import test from "node:test";
 
 import { createPool } from "@blast/core/modules/database/pool.ts";
@@ -10,7 +9,6 @@ import {
 import { AdaptiveChallengeController, PostgresAdaptiveDecisionAuditSink } from "@blast/server/lib/web-security/adaptive-challenge.ts";
 import { PostgresRateLimitEnforcer } from "@blast/core/modules/database/postgres-rate-limits.ts";
 import { createRatePolicyRegistry, DEFAULT_RATE_POLICIES, PRESALE_RATE_BUCKETS, withRateLimit, type RateBucket, type RateLimitSubject } from "@blast/core/lib/web-security/rate-limits.ts";
-import { PostgresOAuthStateStore } from "#web/lib/web-security/oauth.ts";
 import { WebSecurityError } from "@blast/core/lib/web-security/errors.ts";
 import { SECURITY_FIXTURES } from "../../../test/fixtures/lib/web-security/fixtures.ts";
 
@@ -18,12 +16,8 @@ const databaseUrl = process.env.MISSION_CONTROL_TEST_DATABASE_URL;
 const baseTime = new Date("2026-09-20T12:00:00.000Z");
 const pepper = "web-security-test-pepper-is-at-least-32-characters";
 
-function sha256(value: string): string {
-  return createHash("sha256").update(value).digest("hex");
-}
-
 test(
-  "durable OAuth state rate boundaries and identifier-free audits are authoritative",
+  "durable rate boundaries and identifier-free audits are authoritative",
   { skip: databaseUrl ? false : "MISSION_CONTROL_TEST_DATABASE_URL is not set" },
   async () => {
     assert.ok(databaseUrl);
@@ -94,52 +88,6 @@ test(
         JSON.stringify(persistedSubjects.rows),
         /203\.0\.113|attempt-fixture|admission-fixture|0x1111|0x2222/,
       );
-
-      const stateStore = new PostgresOAuthStateStore(pool);
-      const state = "s".repeat(43);
-      const nonce = "n".repeat(43);
-      const verifier = "v".repeat(43);
-      await stateStore.create({
-        callbackUrl: "https://blast.fun/api/auth/x/callback",
-        expiresAt: new Date(baseTime.getTime() + 10 * 60_000),
-        issuedAt: baseTime,
-        nonceHash: sha256(nonce),
-        origin: "https://blast.fun",
-        pkceVerifierHash: sha256(verifier),
-        stateHash: sha256(state),
-      });
-      const consumeInput = {
-        callbackUrl: "https://blast.fun/api/auth/x/callback",
-        nonce,
-        now: baseTime,
-        origin: "https://blast.fun",
-        pkceVerifier: verifier,
-        state,
-      };
-      assert.equal(await stateStore.consume(consumeInput), true);
-      assert.equal(await stateStore.consume(consumeInput), false);
-
-      const tamperedState = "t".repeat(43);
-      await stateStore.create({
-        callbackUrl: consumeInput.callbackUrl,
-        expiresAt: new Date(baseTime.getTime() + 10 * 60_000),
-        issuedAt: baseTime,
-        nonceHash: sha256(nonce),
-        origin: consumeInput.origin,
-        pkceVerifierHash: sha256(verifier),
-        stateHash: sha256(tamperedState),
-      });
-      assert.equal(
-        await stateStore.consume({ ...consumeInput, state: tamperedState, nonce: "x".repeat(43) }),
-        false,
-      );
-      const untouched = await pool.query(
-        `SELECT consumed_at
-         FROM mission_control_oauth_states
-         WHERE state_hash = $1`,
-        [sha256(tamperedState)],
-      );
-      assert.equal(untouched.rows[0].consumed_at, null);
 
       const audit = new PostgresAdaptiveDecisionAuditSink(pool);
       const controller = new AdaptiveChallengeController({

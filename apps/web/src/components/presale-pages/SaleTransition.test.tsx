@@ -9,10 +9,8 @@ const { createRoot } = await import("react-dom/client");
 const { createTestQueryClient, withQueryClient } = await import("#web/lib/query/test-client.ts");
 const { queryKeys } = await import("#web/lib/query/keys.ts");
 const { SocialViewerProvider } = await import("#web/components/social/SignInGate.tsx");
-const { ShellActionsProvider, useShellAction } = await import("#web/components/blast-ui/shell-actions.tsx");
 const { useViewerPresales } = await import("./presales-client");
 const { SaleTransition } = await import("./SaleTransition");
-const { SaleTradeButton } = await import("./SaleView");
 const { fixtureDetail } = await import("../../../../../packages/core/test/fixtures/presale-pages/presale-fixtures.ts");
 
 test("migration masks both columns until the viewer allocation refreshes; ordinary updates stay visible", async (t) => {
@@ -52,22 +50,4 @@ test("migration masks both columns until the viewer allocation refreshes; ordina
   await act(async () => render("trading", "0.003"));
   assert.equal(container.querySelector("[aria-busy]"), null);
   assert.equal(reads, 1, "a market price update does not restart the transition");
-});
-
-test("the Bluefin trade action opens the existing trade sheet with this coin selected", async (t) => {
-  const client = createTestQueryClient();
-  const sale = { ...fixtureDetail("kstl").presale, venue: "bluefin" };
-  let opened: string | undefined;
-  function TradeAction() { useShellAction("openTrade", (value) => { opened = value; }); return <SaleTradeButton sale={sale} />; }
-  const container = document.createElement("div");
-  const root = createRoot(container);
-  t.after(async () => { await act(async () => root.unmount()); client.clear(); });
-  for (const signedIn of [true, false]) {
-    opened = undefined;
-    await act(async () => root.render(withQueryClient(client, <ShellActionsProvider><SocialViewerProvider signedIn={signedIn}><TradeAction /></SocialViewerProvider></ShellActionsProvider>)));
-    await act(async () => container.querySelector("button")!.click());
-    assert.ok(opened);
-    assert.match(opened, new RegExp(sale.presale_id));
-    assert.match(opened, /buy/);
-  }
 });

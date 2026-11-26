@@ -72,13 +72,6 @@ function LineIcon({ children }: Readonly<{ children: ReactNode }>) {
     </svg>
   );
 }
-export const RewardIcon = () => (
-  <LineIcon>
-    <ellipse cx="12" cy="6.5" rx="7" ry="3" />
-    <path d="M5 6.5v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5" />
-    <path d="M5 11.5v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5" />
-  </LineIcon>
-);
 export const ClockIcon = () => (
   <LineIcon>
     <circle cx="12" cy="12" r="8.5" />
@@ -214,7 +207,6 @@ function WaitRow({
     </div>
   );
 }
-
 
 /** A coin's rounds, as the open panel draws them; the live page reads them, a fixture hands them over. */
 export type CoinRounds = Readonly<{

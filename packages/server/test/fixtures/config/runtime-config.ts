@@ -3,8 +3,6 @@ import { readPresaleDeploymentIdentity } from "@blast/core/modules/presale/deplo
 import { parseRuntimeConfig, type RuntimeConfig } from "@blast/server/config/runtime-config.ts";
 import { bridgeConfigurationFromEnvironment } from "@blast/server/modules/presale/bridge/activation.ts";
 
-const key = (fill: string) => Buffer.alloc(32, fill).toString("base64");
-
 /** Every value `parseRuntimeConfig` requires, synthetic and valid. Tests only. */
 export const RUNTIME_TEST_ENVIRONMENT = {
   NEXT_PUBLIC_SITE_URL: "https://blast.test",
@@ -17,7 +15,6 @@ export const RUNTIME_TEST_ENVIRONMENT = {
   PRIVY_APP_ID: "synthetic-privy-app",
   PRIVY_APP_SECRET: "synthetic-privy-secret",
   PRIVY_JWT_VERIFICATION_KEY: "synthetic-privy-verification-key",
-  COMPLETION_SESSION_TOKEN_KEY: key("s"),
   BLAST_NETWORK: "mainnet",
   BLAST_DEPLOYMENT_FINGERPRINT: "f".repeat(64),
   BLAST_INFRA_ORIGIN: "https://infra.blast.test",
