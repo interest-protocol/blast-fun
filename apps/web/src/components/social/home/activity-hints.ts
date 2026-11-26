@@ -57,7 +57,7 @@ import { DEPLOYMENT_NETWORKS } from "@blast/core/web/launchpad-read.ts";
 import { MARKET_STREAM_BUDGET, MARKET_STREAM_PATH } from "@blast/core/modules/launchpad-contract/market-stream.ts";
 import { HELLO_DEADLINE_MS, type MarketEventSource } from "#web/components/launchpad/market-stream-hub.ts";
 import { browserLiveSource } from "#web/lib/live-stream/live-socket-source.ts";
-import { marketHintTransport } from "#web/lib/live-stream/market-hints.ts";
+import { ACTIVITY_ONLY_GRACE_MS, marketHintTransport } from "#web/lib/live-stream/market-hints.ts";
 import { hintOf, type Hint } from "@blast/core/modules/live/hint-frames.ts";
 
 import { anyFreshness, NEW_POSTS_POLL_MS, pollingFreshness, type FeedFreshnessSource, type FreshnessHint, type FreshnessSignal } from "./feed-freshness";
@@ -518,7 +518,7 @@ export function tabActivityHints(): ActivityHints | null {
   return (tabHints ??= tabClient((url) => marketHintTransport(url, (path) => socketHintStream(browserLiveSource(path), (run, ms) => {
     const timer = window.setTimeout(run, ms);
     return () => window.clearTimeout(timer);
-  }))));
+  }), (run) => void window.setTimeout(run, ACTIVITY_ONLY_GRACE_MS))));
 }
 
 /**

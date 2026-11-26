@@ -20,6 +20,7 @@ import {
   type HintSocket,
 } from "./activity-hints.ts";
 import { HELLO_DEADLINE_MS, type MarketEventSource } from "#web/components/launchpad/market-stream-hub.ts";
+import { ACTIVITY_ONLY_GRACE_MS } from "#web/lib/live-stream/market-hints.ts";
 import { MARKET_STREAM_BUDGET } from "@blast/core/modules/launchpad-contract/market-stream.ts";
 import { anyFreshness, hintedGap, pollingFreshness, type FreshnessEnvironment, type FreshnessHint } from "./feed-freshness.ts";
 
@@ -628,6 +629,7 @@ test("a tab without a market stream gets its hints over an activity-only market 
     assert.equal(tabActivityHints(), shared);
     assert.deepEqual(asked, [], "the tab's socket is lazy until a surface subscribes");
     const off = shared.subscribe("happening", () => undefined);
+    await new Promise((resolve) => setTimeout(resolve, ACTIVITY_ONLY_GRACE_MS)); // no market stream starts in the grace
     await new Promise((resolve) => setImmediate(resolve));
     assert.deepEqual(asked, ["/api/launchpad/market/ticket"]);
     assert.deepEqual(opened.map(({ url }) => url), ["wss://live.blast.test/v1/socket?activity=true"]);

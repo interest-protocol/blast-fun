@@ -83,13 +83,17 @@ test("a market stream that starts within the grace takes the hints: the activity
   const frames: string[] = [];
   hints.onmessage = ({ data }) => frames.push(String(data));
   const carrier = beginMarketHints(); // Home's prices subscribe once its rows render
-  carrier.frame(HELLO);
-  pending!(); // the grace ends after the market stream began
-  carrier.frame(ACTIVITY);
-  assert.equal(fallback.opened(), 0, "one socket in the tab");
-  assert.deepEqual(frames, [HELLO, ACTIVITY]);
-  hints.close();
-  carrier.stop();
+  try {
+    carrier.frame(HELLO);
+    carrier.frame(PONG);
+    pending!(); // the grace ends after the market stream began
+    carrier.frame(ACTIVITY);
+    assert.equal(fallback.opened(), 0, "one socket in the tab");
+    assert.deepEqual(frames, [HELLO, PONG, ACTIVITY]);
+  } finally {
+    hints.close();
+    carrier.stop();
+  }
   const alone = marketHintTransport("/hints", fallback.create, (run) => { pending = run; });
   assert.equal(fallback.opened(), 0, "nothing opens before the grace ends");
   pending!();

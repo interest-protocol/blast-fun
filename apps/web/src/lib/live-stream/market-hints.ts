@@ -53,16 +53,16 @@ export function beginMarketHints() {
 }
 
 /**
- * While the tab has a market stream, hints ride it, and a client waits for its hello however long it takes:
- * the tab never holds two sockets. The activity-only socket opens only while no market stream exists.
- */
-/**
  * How long a hint client with no market stream waits before it opens the activity-only socket. A page whose
  * market stream starts a moment after its hint client (Home subscribes its prices once its rows render)
  * then opens one socket, not an activity-only one closed before it connects.
  */
 export const ACTIVITY_ONLY_GRACE_MS = 1_000;
 
+/**
+ * While the tab has a market stream, hints ride it, and a client waits for its hello however long it takes:
+ * the tab never holds two sockets. The activity-only socket opens only while no market stream exists.
+ */
 export function marketHintTransport(
   url: string,
   fallback: (url: string) => HintSocket,
