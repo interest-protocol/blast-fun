@@ -33,10 +33,9 @@
 .set .group .box {
   --box-px: 1.125rem;
   --box-py: 0.375rem;
-  --box-r: 1.25rem;
   overflow: hidden;
   padding: var(--box-py) var(--box-px);
-  border-radius: var(--box-r);
+  border-radius: 1.25rem;
 }
 
 .row {
@@ -82,8 +81,8 @@ button.action::before {
   inset: 0 calc(-1 * var(--box-px, 0px));
   transition: background var(--t1) var(--ease-std);
 }
-.box > button.action:first-child::before { top: calc(-1 * var(--box-py, 0px)); border-top-left-radius: var(--box-r, 0); border-top-right-radius: var(--box-r, 0); }
-.box > button.action:last-child::before { bottom: calc(-1 * var(--box-py, 0px)); border-bottom-left-radius: var(--box-r, 0); border-bottom-right-radius: var(--box-r, 0); }
+.box > button.action:first-child::before { top: calc(-1 * var(--box-py, 0px)); border-radius: 1.25rem 1.25rem 0 0; }
+.box > button.action:last-child::before { bottom: calc(-1 * var(--box-py, 0px)); border-radius: 0 0 1.25rem 1.25rem; }
 button.action[disabled] { cursor: default; }
 @media (hover: hover) and (pointer: fine) { button.action:not([disabled]):hover::before { background: var(--raised); } }
 button.action:not([disabled]):active::before { background: var(--hair); }
