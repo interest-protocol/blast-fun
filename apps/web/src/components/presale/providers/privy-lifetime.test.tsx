@@ -5,7 +5,11 @@ import { JSDOM } from "jsdom";
 import { act, StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
+import { PrivyStart } from "./privy-start.ts";
 import { setShellPref } from "#web/components/blast-ui/use-shell-prefs.ts";
+
+// The page's start; these tests only watch the SDK's wallet clients.
+const start = new PrivyStart();
 
 const resources = { factories: 0, listeners: 0 };
 Object.assign(globalThis, { privyLifetimeResources: resources });
@@ -30,6 +34,9 @@ registerHooks({
         `)}`,
       };
     }
+    if (specifier === "@privy-io/react-auth/extended-chains") {
+      return { shortCircuit: true, url: "data:text/javascript,export const useCreateWallet=()=>({createWallet:async()=>({})});export const useSignRawHash=()=>({signRawHash:async()=>({})});" };
+    }
     if (specifier === "@privy-io/react-auth") {
       return {
         shortCircuit: true,
@@ -43,16 +50,20 @@ registerHooks({
             }, [connectors]);
             return createElement("section", { "data-app": appId, "data-wallets": connectors?.get().map(c => c.wallet.name).join(","), "data-theme": config.appearance?.theme }, children);
           }
+          export const usePrivy = () => ({ ready: false, authenticated: false, user: null, getAccessToken: async () => null, logout: async () => {} });
+          export const useLogin = () => ({ login() {} });
+          export const useLoginWithOAuth = () => ({ initOAuth: async () => {} });
         `)}`,
       };
     }
     return nextResolve(specifier, context);
   },
 });
-const { PrivySessionProvider, usePrivySessionMounted } = await import("./PrivySessionProvider.tsx");
+const { default: PrivySessionRuntime } = await import("./PrivySessionRuntime.tsx");
 
-function Readiness() {
-  return <span>{usePrivySessionMounted() ? "session mounted" : "session absent"}</span>;
+const noop = () => undefined;
+function Runtime({ appId }: Readonly<{ appId: string }>) {
+  return <PrivySessionRuntime appId={appId} emit={noop} nonce={null} start={start} />;
 }
 
 test("the wallet picker follows Blast's theme while the wallet session stays mounted", async () => {
@@ -63,7 +74,7 @@ test("the wallet picker follows Blast's theme while the wallet session stays mou
   Object.assign(globalThis, { window: dom.window, document: dom.window.document, IS_REACT_ACT_ENVIRONMENT: true });
   const root = createRoot(document.getElementById("mount")!);
   try {
-    await act(async () => root.render(<PrivySessionProvider appId="theme-app" nonce={null}><Readiness /></PrivySessionProvider>));
+    await act(async () => root.render(<Runtime appId="theme-app" />));
     const picker = document.querySelector("section");
     assert.equal(picker?.getAttribute("data-theme"), "light");
     const factories = resources.factories;
@@ -91,16 +102,12 @@ test("T-008: Strict Mode navigation and remounting retain bounded connectors and
     for (let visit = 0; visit < 8; visit++) {
       await act(async () => root.render(
         <StrictMode>
-          <PrivySessionProvider appId="app-A" nonce={null}>
-            <Readiness />
-            <span>{visit % 2 ? "presale" : "social"}</span>
-          </PrivySessionProvider>
+          <Runtime appId="app-A" />
         </StrictMode>,
       ));
       assert.equal(resources.factories, before + 1, "navigation and discarded renders reuse the document's connectors");
       assert.equal(resources.listeners, 2);
       assert.equal(document.querySelector("section")?.getAttribute("data-wallets"), "WalletConnect");
-      assert.match(document.body.textContent!, /session mounted/);
       await act(async () => root.render(null));
       assert.equal(resources.listeners, 0, "leaving the provider releases its registry listeners");
     }
@@ -115,7 +122,7 @@ test("T-008: Strict Mode navigation and remounting retain bounded connectors and
 test("T-008: server requests create no wallet registries and browser documents and app IDs stay isolated", async () => {
   const before = resources.factories;
   for (const appId of ["server-A", "server-B"]) {
-    renderToStaticMarkup(<PrivySessionProvider appId={appId} nonce={null}><Readiness /></PrivySessionProvider>);
+    renderToStaticMarkup(<Runtime appId={appId} />);
   }
   assert.equal(resources.factories, before, "server renders must not cache wallets or install registry listeners");
   assert.equal(resources.listeners, 0);
@@ -126,7 +133,7 @@ test("T-008: server requests create no wallet registries and browser documents a
     const root = createRoot(document.getElementById("mount")!);
     try {
       for (const appId of ["app-A", "app-B", "app-A"]) {
-        await act(async () => root.render(<PrivySessionProvider appId={appId} nonce={null}><Readiness /></PrivySessionProvider>));
+        await act(async () => root.render(<Runtime appId={appId} />));
         assert.equal(document.querySelector("section")?.getAttribute("data-app"), appId);
         assert.equal(resources.listeners, 2, "only the active app's registry is subscribed");
       }

@@ -19,16 +19,10 @@ const privy = {
 Object.assign(globalThis, { activityFixturePrivy: privy });
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "@privy-io/react-auth") {
+    if (specifier.endsWith("/privy-session.ts")) {
       return {
         shortCircuit: true,
-        url: "data:text/javascript,export const usePrivy=()=>globalThis.activityFixturePrivy;",
-      };
-    }
-    if (specifier.endsWith("/PrivySessionProvider.tsx")) {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export const usePrivySessionMounted=()=>true;",
+        url: "data:text/javascript,export const usePrivySession=()=>globalThis.activityFixturePrivy;",
       };
     }
     return nextResolve(specifier, context);

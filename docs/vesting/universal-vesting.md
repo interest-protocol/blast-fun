@@ -170,8 +170,8 @@ RPC concurrency.
 Amount shortcuts (25%, 50%, 75%, Max) use integer atoms and the existing native
 SUI fee reserve. “Use my wallet” fills the authenticated Blast wallet. Linear
 and Checkpoint drafts survive mode changes. Preview and preparation use the same
-SDK-validated schedule builder; review freezes the intent, coin metadata,
-entry timezone and prepared gas budget before signing.
+SDK-validated schedule builder; review freezes the intent, coin metadata
+and prepared gas budget before signing.
 
 If the vesting projection is not ready, the wallet-list route returns HTTP 503
 with `vesting_index_unavailable`. The overview explains that indexed history

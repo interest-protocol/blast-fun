@@ -7,10 +7,10 @@ import type { PresaleSlotProps } from "./slot";
  * `PRIVY_APP_ID` is set, and passes through otherwise. The presale wallet
  * ticket extends this file with dapp-kit and the Privy login configuration.
  */
-export function WalletProvider({ config, nonce, children }: PresaleSlotProps) {
+export function WalletProvider({ config, nonce, privySession, children }: PresaleSlotProps) {
   if (config.privyAppId.status !== "available") return <>{children}</>;
   return (
-    <PrivySessionProvider appId={config.privyAppId.value} nonce={nonce}>
+    <PrivySessionProvider appId={config.privyAppId.value} nonce={nonce} sessionCookie={privySession}>
       {children}
     </PrivySessionProvider>
   );

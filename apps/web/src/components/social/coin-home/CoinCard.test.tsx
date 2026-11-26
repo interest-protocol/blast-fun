@@ -93,7 +93,8 @@ test("streamed prices revalue the existing row's market cap without reordering i
   await send(12, "4", 700);
   assert.equal(mcap(), "$4M");
   assert.ok(animations.all.length > 0);
-  assert.ok(animations.all.every(animation => rows[1]?.contains(animation.target)), "only the changing row pulses");
+  // Row 2's trades also washed its dash before its figure arrived; that dash has since been replaced.
+  assert.ok(animations.all.every(animation => rows[1]?.contains(animation.target) || !animation.target.isConnected), "only the trading row cues");
   const change = () => rows[1]?.querySelector<HTMLElement>('[data-slot="coin-change"]');
   assert.equal(change()?.textContent, "+2.56%");
   animations.finishAll();
@@ -130,6 +131,42 @@ test("streamed prices revalue the existing row's market cap without reordering i
   assert.deepEqual(Object.keys(wash?.keyframes[0] ?? {}).sort(), ["backgroundColor", "offset"], "the trade washes the background, never the figure's own colour");
   assert.equal(change()?.closest(".change")?.className, "num change up", "the figure keeps its steady green");
   assert.equal(streams.length, 1);
+});
+
+test("a row with no change figure still washes on its own trade, and on the first figure a trade brings", async (t) => {
+  const dom = installTestDom();
+  const { act } = await import("react");
+  const { createRoot } = await import("react-dom/client");
+  const client = new QueryClient();
+  const host = dom.document.createElement("div");
+  dom.document.body.append(host);
+  const root = createRoot(host);
+  const animations = recordAnimations();
+  t.after(async () => {
+    await act(() => root.unmount());
+    host.remove();
+    client.clear();
+  });
+  const dash = { ...coin, price_usd: "0.05", price_as_of_ms: 500, mobile_market: { market_cap_usd: "50000", change_1h_bps: null } };
+  const show = (value: HomeCoin, trade: { at: number; direction: 1 | -1 } | null) => act(() => root.render(
+    <AppRouterContext value={router}><QueryProvider client={client}>
+      <CoinCard coin={value} nowMs={1000} trade={trade} trading window="1h" />
+    </QueryProvider></AppRouterContext>,
+  ));
+  const change = () => host.querySelector<HTMLElement>('[data-slot="coin-change"]');
+  const cues = () => animations.all.filter(animation => animation.target === change());
+  await show(dash, null);
+  assert.equal(change()?.textContent, "—Price change unknown");
+  await show(dash, { at: 600, direction: -1 });
+  assert.equal(cues().length, 1, "a sell on a row without a figure washes its dash");
+  assert.equal(change()?.style.getPropertyValue("--home-price-direction"), "var(--down-soft)");
+  animations.finishAll();
+  await show(dash, { at: 600, direction: -1 });
+  assert.equal(cues().length, 1, "the same trade cues once");
+  await show({ ...dash, mobile_market: { market_cap_usd: "60000", change_1h_bps: 2000 } }, { at: 700, direction: 1 });
+  assert.equal(change()?.textContent, "+20%");
+  assert.equal(cues().length, 1, "the first figure a trade brings washes too");
+  assert.equal(change()?.style.getPropertyValue("--home-price-direction"), "var(--up-soft)");
 });
 
 function render(value: HomeCoin, loading = false, nowMs = 1, window: HomeWindow = "24h", buy?: HomeBuyCue) {

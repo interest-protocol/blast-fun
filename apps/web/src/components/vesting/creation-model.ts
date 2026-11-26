@@ -1,10 +1,4 @@
 import {
-  fromAbsolute,
-  parseDateTime,
-  parseZonedDateTime,
-  toZoned,
-} from "@internationalized/date";
-import {
   linearVestedAt,
   validateCheckpointSchedule,
   validateLinearSchedule,
@@ -62,24 +56,28 @@ function integer(text: string, field: string, minimum: bigint): bigint {
   return BigInt(text);
 }
 
-export function releaseTimestamp(
-  text: string,
-  field: string,
-  timezone = "UTC",
-): bigint {
-  try {
-    const date = text.includes("[")
-      ? parseZonedDateTime(text, "reject")
-      : toZoned(parseDateTime(text), timezone, "reject");
-    const value = date.toDate().getTime();
-    if (!Number.isSafeInteger(value) || value <= 0) throw new RangeError();
-    return BigInt(value);
-  } catch {
-    throw new CreationFieldError(
-      field,
-      `Choose a valid date and time in ${timezone}. For a time in another zone, include its zone and explicit UTC offset.`,
-    );
+/** "YYYY-MM-DDTHH:mm[:ss[.sss]][Z]", always read as UTC. */
+const UTC_WALL = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{3}))?)?Z?$/;
+
+export function releaseTimestamp(text: string, field: string): bigint {
+  const parts = UTC_WALL.exec(text)?.slice(1).map((part) => Number(part ?? 0));
+  if (parts) {
+    const [year, month, day, hour, minute, second, ms] = parts as [number, number, number, number, number, number, number];
+    const value = Date.UTC(year, month - 1, day, hour, minute, second, ms);
+    const date = new Date(value);
+    // Date.UTC rolls 30 Feb into March and 24:00 into the next day; refuse those.
+    if (
+      value > 0 &&
+      date.getUTCFullYear() === year &&
+      date.getUTCMonth() === month - 1 &&
+      date.getUTCDate() === day &&
+      date.getUTCHours() === hour &&
+      date.getUTCMinutes() === minute &&
+      date.getUTCSeconds() === second
+    )
+      return BigInt(value);
   }
+  throw new CreationFieldError(field, "Choose a valid date and time in UTC.");
 }
 
 export function amountAtoms(
@@ -243,7 +241,6 @@ export function linearReleaseSummary(
 export function regularCheckpointReleases(
   input: ScheduleInput,
   total: bigint,
-  timezone = "UTC",
 ): readonly Release[] {
   const count = integer(input.periods, "periods", 1n);
   if (count > 256n)
@@ -253,12 +250,12 @@ export function regularCheckpointReleases(
   const amounts = splitReleaseAtoms(total, Number(count));
   return amounts.map((amount, index) => {
     const time = start + interval * BigInt(index + 1);
-    if (time > 8_640_000_000_000_000n)
+    // releaseTimestamp reads four-digit years only, so stop before 10000-01-01T00:00Z.
+    if (time >= 253_402_300_800_000n)
       throw new CreationFieldError("periods", "Choose a shorter schedule.");
     return {
       key: `regular-${index}`,
-      // Keep the instant and UTC offset through DST changes and local editing.
-      date: fromAbsolute(Number(time), timezone).toString(),
+      date: new Date(Number(time)).toISOString(),
       amount: formatVestingAmount(amount, input.decimals),
     };
   });

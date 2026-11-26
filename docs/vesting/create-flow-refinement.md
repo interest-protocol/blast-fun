@@ -46,11 +46,11 @@ Funding a wallet remains an external prerequisite; no funds were added.
   fixed refund recipient. Prior claims are not paid twice. Transferable
   capability terminology lives in secondary help. Disabled roles are omitted
   from the intent while their draft values remain available when toggled on.
-- React Aria provides keyboard date segments, calendar navigation, Escape and
-  focus return, plus a coordinated 24-hour time field. Both schedule modes use
-  the same control. `@internationalized/date` rejects nonexistent local times;
-  repeated times need an explicit UTC offset. Review shows local dates with
-  secondary UTC. Dates are never advanced automatically.
+- All schedule times are UTC. The date is a react-day-picker calendar in the
+  shared popover, with arrow-key navigation, Escape and focus return. The time
+  is a native time input. Both schedule modes use the same control. Invalid
+  calendar times such as 30 February are refused, never rolled over. Review
+  shows UTC dates. Dates are never advanced automatically.
 - Spacing groups the editable form; a single raised summary anchors review.
   Existing Blast typography, pink, buttons, switch and segmented controls stay
   consistent with Home. The summary stops sticking in short viewports and
