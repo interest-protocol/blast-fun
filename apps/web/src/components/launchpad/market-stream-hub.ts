@@ -262,7 +262,9 @@ function unfence(pool: Pool, relay: Pool["relay"]): void {
  */
 export class MarketStreamHub {
   private readonly deps: MarketStreamDependencies;
+  /** Newest first. */
   private readonly subscribers: Subscriber[] = [];
+  private readonly active = new Set<Subscriber>();
   private readonly observers = new Set<Observer>();
   private connection: Connection | null = null;
   private hints: ReturnType<typeof beginMarketHints> | null = null;
@@ -294,6 +296,7 @@ export class MarketStreamHub {
     }
     const subscriber: Subscriber = { request, pools: new Set(request.pools), state: null, poolStates: new Map() };
     this.subscribers.unshift(subscriber);
+    this.active.add(subscriber);
     this.stopVisibility ??= this.deps.onVisibilityChange(() => this.visibility());
     if (this.connection) {
       this.queueReconcile();
@@ -301,12 +304,11 @@ export class MarketStreamHub {
       this.deps.defer(() => this.replay(subscriber));
     } else this.reconcile();
     return {
-      state: (pool) => this.subscribers.includes(subscriber) && subscriber.pools.has(pool) ? this.poolState(subscriber, pool) : "over_budget",
-      ready: (pool) => this.subscribers.includes(subscriber) && subscriber.pools.has(pool) && this.poolState(subscriber, pool) === "live",
+      state: (pool) => this.active.has(subscriber) && subscriber.pools.has(pool) ? this.poolState(subscriber, pool) : "over_budget",
+      ready: (pool) => this.active.has(subscriber) && subscriber.pools.has(pool) && this.poolState(subscriber, pool) === "live",
       stop: () => {
-        const index = this.subscribers.indexOf(subscriber);
-        if (index < 0) return;
-        this.subscribers.splice(index, 1);
+        if (!this.active.delete(subscriber)) return;
+        this.subscribers.splice(this.subscribers.indexOf(subscriber), 1);
         this.queueReconcile();
       },
     };
@@ -344,16 +346,16 @@ export class MarketStreamHub {
    * the part that fits, and the rest is `over_budget` until a slot frees.
    */
   private wanted(): { pools: string[]; priceCoins: Set<string>; presale?: string; expected: ExpectedDeployment | null } {
-    const pools: string[] = [];
+    const pools = new Set<string>();
     const priceCoins = new Set<string>();
     const presale = this.subscribers.find(({ request }) => request.presale !== undefined)?.request.presale;
     const expected = this.subscribers.find(({ request }) => request.pools.length > 0 || request.expected !== null)?.request.expected ?? null;
     for (const { request } of this.subscribers) {
       if (!fitsExpected(request, expected)) continue;
-      for (const pool of request.pools) if (!pools.includes(pool) && pools.length < MARKET_STREAM_BUDGET.maxPoolsPerClient) pools.push(pool);
+      for (const pool of request.pools) if (pools.size < MARKET_STREAM_BUDGET.maxPoolsPerClient) pools.add(pool);
       for (const coin of request.priceCoins ?? []) if (priceCoins.size < MARKET_STREAM_BUDGET.maxPriceCoinsPerClient) priceCoins.add(coin);
     }
-    return { pools, priceCoins, presale, expected };
+    return { pools: [...pools], priceCoins, presale, expected };
   }
 
   /** Each pool's coin, as its subscribers name it. */
@@ -399,13 +401,13 @@ export class MarketStreamHub {
 
   private replay(subscriber: Subscriber): void {
     const connection = this.connection;
-    if (!connection?.source || !this.subscribers.includes(subscriber)) return;
+    if (!connection?.source || !this.active.has(subscriber)) return;
     const { request } = subscriber;
     if (request.presale && request.presale === connection.presale && connection.presaleFence !== null)
       safely(() => request.listener.presaleReady?.(Math.max(connection.presaleFence!, connection.presaleSeen)));
     for (const key of request.pools) {
       const pool = connection.pools.get(key);
-      if (!pool || pool.fence === null || !this.serves(subscriber, key) || !this.subscribers.includes(subscriber)) continue;
+      if (!pool || pool.fence === null || !this.serves(subscriber, key) || !this.active.has(subscriber)) continue;
       this.notifyFence(subscriber, key, pool);
       if (pool.stats) safely(() => request.listener.stats?.(pool.stats!));
     }
@@ -420,7 +422,7 @@ export class MarketStreamHub {
   private fenced(connection: Connection, key: string, pool: Pool): void {
     for (const subscriber of [...this.subscribers]) {
       if (this.connection !== connection || pool.fence === null) return;
-      if (subscriber.pools.has(key) && this.subscribers.includes(subscriber) && this.serves(subscriber, key)) this.notifyFence(subscriber, key, pool);
+      if (subscriber.pools.has(key) && this.active.has(subscriber) && this.serves(subscriber, key)) this.notifyFence(subscriber, key, pool);
     }
   }
 
@@ -455,7 +457,7 @@ export class MarketStreamHub {
   /** Tells every subscriber each pool state that changed, then its summary, then the coin observers. */
   private publish(): void {
     for (const subscriber of [...this.subscribers]) {
-      if (!this.subscribers.includes(subscriber)) continue;
+      if (!this.active.has(subscriber)) continue;
       const { listener } = subscriber.request;
       const states: MarketStreamState[] = [];
       for (const key of subscriber.request.pools) {
@@ -465,7 +467,7 @@ export class MarketStreamHub {
         subscriber.poolStates.set(key, state);
         if (listener.pool) safely(() => listener.pool!(key, state));
       }
-      if (!this.subscribers.includes(subscriber)) continue;
+      if (!this.active.has(subscriber)) continue;
       const state = this.summaryState(subscriber, states);
       if (subscriber.state === state) continue;
       subscriber.state = state;
@@ -479,7 +481,7 @@ export class MarketStreamHub {
     connection.presaleFence = checkpoint;
     for (const subscriber of [...this.subscribers]) {
       const { request } = subscriber;
-      if (request.presale && request.presale === connection.presale && this.subscribers.includes(subscriber)) safely(() => request.listener.presaleReady?.(checkpoint));
+      if (request.presale && request.presale === connection.presale && this.active.has(subscriber)) safely(() => request.listener.presaleReady?.(checkpoint));
     }
   }
 
@@ -618,7 +620,7 @@ export class MarketStreamHub {
       }
       for (const subscriber of [...this.subscribers]) {
         const { priceCoins, listener } = subscriber.request;
-        if (!priceCoins?.length || !listener.prices || !this.subscribers.includes(subscriber) || !fitsExpected(subscriber.request, connection.expected) || !current()) continue;
+        if (!priceCoins?.length || !listener.prices || !this.active.has(subscriber) || !fitsExpected(subscriber.request, connection.expected) || !current()) continue;
         const requested = new Set(priceCoins);
         const prices = frame.prices.filter((price) => requested.has(price.coin_type));
         if (prices.length) safely(() => listener.prices!({ ...frame, prices }));
@@ -644,7 +646,7 @@ export class MarketStreamHub {
       target.stats = frame;
       for (const subscriber of [...this.subscribers]) {
         const { listener } = subscriber.request;
-        if (listener.stats && subscriber.pools.has(frame.pool_key) && this.subscribers.includes(subscriber) && this.serves(subscriber, frame.pool_key) && current()) safely(() => listener.stats!(frame));
+        if (listener.stats && subscriber.pools.has(frame.pool_key) && this.active.has(subscriber) && this.serves(subscriber, frame.pool_key) && current()) safely(() => listener.stats!(frame));
       }
     });
     // A deployment mismatch (or an older relay giving up): the relay ends this socket; reconnect with backoff.
@@ -660,7 +662,7 @@ export class MarketStreamHub {
       if (frame.presale_id !== connection.presale) return;
       connection.presaleSeen = Math.max(connection.presaleSeen, Number(frame.cursor.split(":", 1)[0]));
       for (const subscriber of [...this.subscribers]) {
-        if (current() && this.subscribers.includes(subscriber) && subscriber.request.presale === frame.presale_id) {
+        if (current() && this.active.has(subscriber) && subscriber.request.presale === frame.presale_id) {
           safely(() => subscriber.request.listener.presale?.(frame));
         }
       }
@@ -824,7 +826,7 @@ export class MarketStreamHub {
     if (!frame) return passed(pool, checkpoint);
     if (!fresh(pool, frame, wire.summary)) return;
     // A listener may stop its subscription or replace the stream: later listeners then get nothing from this frame.
-    const current = (subscriber: Subscriber) => this.connection === connection && connection.source !== null && pool.fence !== null && this.subscribers.includes(subscriber);
+    const current = (subscriber: Subscriber) => this.connection === connection && connection.source !== null && pool.fence !== null && this.active.has(subscriber);
     for (const [subscriber, chartFrame] of frames) if (current(subscriber)) safely(() => subscriber.request.listener.frame?.(chartFrame, data.length));
     if (frame.type !== "trade") return;
     const trade: MarketTrade = { poolKey: key, checkpoint: frame.checkpoint, trade: frame.trade, summary: pool.summary };

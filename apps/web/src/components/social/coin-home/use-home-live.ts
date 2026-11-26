@@ -93,7 +93,7 @@ export function useHomeLive(
       if (!buy) return;
       if (!remember(buy.activity_id)) return;
       collected.push(buy);
-      flush ??= window.setTimeout(() => {
+      if (flush === undefined) flush = window.setTimeout(() => {
         flush = undefined;
         const buys = collected;
         collected = [];

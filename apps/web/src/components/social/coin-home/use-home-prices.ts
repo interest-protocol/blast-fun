@@ -20,14 +20,14 @@ type Observation = DisplayPrice & Readonly<{ checkpoint: number }>;
  * Sorted, so the result changes only when the membership does.
  */
 export function homePriceCoins(coins: readonly HomeCoin[], previous: readonly string[] = []): readonly string[] {
-  const onPage: string[] = [];
+  const onPage = new Set<string>();
   for (const coin of coins) {
     if (coin.lifecycle !== "migrated") continue;
     const type = coinKey(coin.coin_type);
-    if (type && displayPriceCoinSchema.safeParse(type).success && !onPage.includes(type)) onPage.push(type);
+    if (type && displayPriceCoinSchema.safeParse(type).success ) onPage.add(type);
   }
   const max = MARKET_STREAM_BUDGET.maxPriceCoinsPerClient;
-  const kept = new Set(previous.filter((type) => onPage.includes(type)).slice(0, max));
+  const kept = new Set(previous.filter((type) => onPage.has(type)).slice(0, max));
   for (const type of onPage) {
     if (kept.size >= max) break;
     kept.add(type);
