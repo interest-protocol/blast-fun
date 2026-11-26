@@ -3,9 +3,11 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { track } from "@vercel/analytics";
 import clsx from "clsx";
-import { useCallback, useId, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 
 import type { Quote } from "@mayanfinance/swap-sdk";
+
+import { NO_VALUE } from "@blast/core/web/format.ts";
 
 import { AmountFit } from "#web/components/blast-ui/AmountFit.tsx";
 import { BlastMenu, BlastMenuRadioGroup, BlastMenuRadioItem, BlastMenuTrigger } from "#web/components/blast-ui/BlastMenu.tsx";
@@ -201,6 +203,12 @@ function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent }: R
   const [rateChangedFor, setRateChangedFor] = useState<string | null>(null);
   const [sent, setSent] = useState<readonly BridgeRow[]>([]);
   const running = useRef(false);
+  // Closing the screen while a quote is on its way must not open the wallet afterwards.
+  const open = useRef(true);
+  useEffect(() => {
+    open.current = true;
+    return () => { open.current = false; };
+  }, []);
   const inputs = keys.quoteKey.join("|");
 
   // Quote errors get quote copy here; anything after this point gets the send copy in `run`.
@@ -214,6 +222,7 @@ function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent }: R
       setFailed(quoteErrorText(error, info, token));
       return null;
     }
+    if (!open.current) return null;
     const checked = guardQuote(fresh, ask, now());
     if (checked.ok) return fresh;
     console.error("Bridge quote refused before signing", checked.reason);
@@ -265,6 +274,7 @@ function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent }: R
       queryClient.setQueryData(keys.allowanceKey, false);
       return;
     }
+    if (!open.current) return;
     const record = (hash: string) => setSent((rows) => rows.some((row) => row.hash === hash) ? rows : [{ hash, chain, fromAmount, fromSymbol: token.symbol, toAmount: String(fresh.expectedAmountOut), toSymbol: to.symbol, state: "pending", at: new Date(now()).toISOString() }, ...rows]);
     record(await sdk.send(fresh, ask, source, record));
     routeEvent(fresh, chain, token);
@@ -409,6 +419,7 @@ export function BridgeForm({ sdk, wallets, blastAddress, signedIn, onSignIn, onA
           facts={facts}
           onTo={setToIndex}
           refreshing={refreshing}
+          failed={atoms !== null && message !== null}
           toIndex={toIndex}
           waiting={atoms !== null && !message}
         />
@@ -552,10 +563,12 @@ function SendPanel({ id, amount, onAmount, balance, busy, connected, info, token
   );
 }
 
-function GetPanel({ facts, waiting, refreshing, toIndex, onTo, busy, blastAddress }: Readonly<{
+function GetPanel({ facts, waiting, failed, refreshing, toIndex, onTo, busy, blastAddress }: Readonly<{
   facts: QuoteRows | null;
   /** An amount is typed and nothing went wrong: a quote is on its way. */
   waiting: boolean;
+  /** An amount is typed and the quote or send failed: there is no amount to show. */
+  failed: boolean;
   refreshing: boolean;
   toIndex: 0 | 1;
   onTo: (index: 0 | 1) => void;
@@ -565,13 +578,14 @@ function GetPanel({ facts, waiting, refreshing, toIndex, onTo, busy, blastAddres
   let value: ReactNode = "0";
   if (facts) value = facts.amount;
   else if (waiting) value = <SkeletonText>0.0000</SkeletonText>;
+  else if (failed) value = NO_VALUE;
   return (
     <div aria-live="polite" className={clsx(coinStyles.amt, coinStyles.amtOut)}>
       <div className={coinStyles.amtTop}>
         <span className={coinStyles.lbl}>You get on Sui</span>
       </div>
       <div className={coinStyles.amtRow}>
-        <AmountFit value={facts?.amount ?? "0"}>
+        <AmountFit value={facts?.amount ?? (failed ? NO_VALUE : "0")}>
           <b className={clsx(coinStyles.amtVal, "num", !facts && coinStyles.zero, refreshing && coinStyles.pending)}>{value}</b>
         </AmountFit>
         <Segmented
@@ -647,6 +661,8 @@ function BridgeRowView({ row, sdk, onArrived, now }: Readonly<{ row: BridgeRow; 
       const before = queryClient.getQueryData<TransferStatus>(statusKey)?.state;
       const next = await sdk.status(row.hash);
       if (next.state === "done" && before !== "done") {
+        // The source transaction is mined by now; the balance read right after sending was too early.
+        void queryClient.invalidateQueries({ queryKey: ["bridge", "balance"] });
         // A failing announcement must not fail the read, or its retry would announce again.
         try {
           onArrived(row, next.toAmount);

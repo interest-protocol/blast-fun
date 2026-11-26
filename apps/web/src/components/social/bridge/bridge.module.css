@@ -43,7 +43,7 @@
 .rowText { flex: 1; display: flex; flex-direction: column; gap: 0.125rem; min-width: 0; font-size: 0.8125rem; font-variant-numeric: tabular-nums; }
 .rowText b { font-weight: 600; color: var(--ink); overflow-wrap: anywhere; }
 .rowText span { color: var(--muted); transition: color var(--t2) var(--ease-std); }
-.row[data-state="done"] .rowText span { color: var(--up); }
+.row[data-state="done"] .rowText span { color: var(--ink); }
 .row > :last-child { flex: none; }
 
 /*

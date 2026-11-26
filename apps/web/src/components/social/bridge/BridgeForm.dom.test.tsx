@@ -141,6 +141,62 @@ test("reopening Bridge does not report an arrival again from the cache", async (
   }
 });
 
+test("closing Bridge while the fresh quote is on its way opens no wallet", async () => {
+  const calls = newCalls();
+  let hold = false;
+  let release: (quote: Quote) => void = () => undefined;
+  const sdk = fakeSdk(calls, [QUOTE]);
+  const form = await mount({ ...sdk, quote: (input) => hold ? new Promise<Quote>((resolve) => { calls.quotes.push(input.swapper); release = resolve; }) : sdk.quote(input) }, calls);
+  await form.pickUsdc();
+  await form.type("20");
+  hold = true;
+  const asked = calls.quotes.length;
+  await act(async () => form.button().click());
+  await waitFor(() => calls.quotes.length > asked, "the fresh quote is asked");
+  await form.unmount();
+  await act(async () => release(QUOTE));
+  assert.equal(calls.sends, 0);
+});
+
+test("closing Bridge while the allowance is checked opens no wallet", async () => {
+  const calls = newCalls();
+  let hold = false;
+  let release: (enough: boolean) => void = () => undefined;
+  const sdk = fakeSdk(calls, [QUOTE]);
+  const form = await mount({ ...sdk, allowanceEnough: (...args) => hold ? new Promise<boolean>((resolve) => { release = resolve; }) : sdk.allowanceEnough(...args) }, calls);
+  await form.pickUsdc();
+  await form.type("20");
+  hold = true;
+  await act(async () => form.button().click());
+  await waitFor(() => form.button().hasAttribute("aria-busy"), "the press is running");
+  await form.unmount();
+  await act(async () => release(true));
+  assert.equal(calls.sends, 0);
+});
+
+test("an arrival reads the source balance again", async () => {
+  const calls = newCalls();
+  let balances = 0;
+  let arrive: () => void = () => undefined;
+  const arrived = new Promise<void>((resolve) => { arrive = resolve; });
+  const form = await mount(fakeSdk(calls, [QUOTE], {
+    balance: async () => { balances += 1; return 1_000_000_000n; },
+    status: async () => { await arrived; return { state: "done", toAmount: "29.81" }; },
+  }), calls);
+  try {
+    await form.pickUsdc();
+    await form.type("20");
+    await form.press();
+    await waitFor(() => balances >= 2, "the read right after sending");
+    const afterSend = balances;
+    await act(async () => arrive());
+    await waitFor(() => calls.arrived === 1, "the arrival");
+    await waitFor(() => balances > afterSend, "a balance read after the arrival");
+  } finally {
+    await form.unmount();
+  }
+});
+
 test("a send error after the price shows the send copy, not a price error", async () => {
   const calls = newCalls();
   const form = await mount(fakeSdk(calls, [QUOTE], { send: async () => { throw coded("TIMEOUT"); } }), calls);
@@ -242,6 +298,7 @@ test("a failed price offers Try again, which asks Mayan once more", async () => 
     await form.type("20");
     await waitFor(() => /Code: bridge_quote_failed\./.test(form.text()), "the failed line");
     assert.equal(form.button().textContent, "Try again");
+    assert.match(form.text(), /\u2014SUIUSDC/, "a failed price shows a dash, not a zero");
     assert.equal(form.button().disabled, false);
     await form.press();
     await waitFor(() => /You get at least/.test(form.text()), "the new price");

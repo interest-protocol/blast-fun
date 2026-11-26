@@ -72,7 +72,7 @@ export type TransferStatus = Readonly<{ state: TransferState; toAmount: string |
 export const MAYAN_EXPLORER = "https://explorer-api.mayan.finance";
 
 /** Mayan's explorer names chains by Wormhole id. */
-const WORMHOLE_CHAINS: Readonly<Record<string, BridgeChain>> = { "1": "solana", "2": "ethereum", "23": "arbitrum", "30": "base" };
+const WORMHOLE_CHAINS: Readonly<Record<string, BridgeChain>> = { "1": "solana", "2": "ethereum", "5": "polygon", "23": "arbitrum", "24": "optimism", "30": "base" };
 const SUI_WORMHOLE_ID = "21";
 
 type ExplorerSwap = Readonly<{
