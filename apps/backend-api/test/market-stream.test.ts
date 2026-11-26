@@ -298,7 +298,10 @@ test("a pool the engine never snapshots re-fences only itself and never resets o
     assert.deepEqual(recovering.data, { state: "recovering", pool_key: pool(2) });
     await new Promise((resolve) => original(resolve, 0));
     // The reader took the subscribe: the pool stays subscribed for the next traffic; the browser keeps its stream.
-    assert.equal(socket.sent.some((op) => op.op === "unsubscribe"), false);
+    assert.equal(
+      socket.sent.some((op) => op.op === "unsubscribe"),
+      false,
+    );
     assert.equal(socket.closed, 0);
     socket.receive(trade());
     assert.equal((await read(served)).event, "market");
