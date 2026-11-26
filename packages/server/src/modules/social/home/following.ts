@@ -1,11 +1,12 @@
 import { z } from "zod";
+import { COIN_TYPE } from "@blast/core/lib/sui/ids.ts";
 import { socialAddressSchema, socialCountSchema } from "@blast/core/modules/social/contracts/primitives.ts";
 import { socialInput } from "@blast/server/modules/social/route-kit/validation.ts";
 import { assertChainReadThroughViews } from "@blast/core/modules/database/modules.ts";
 import type { ReadableDatabase } from "@blast/core/modules/database/transaction.ts";
 import { coinLabel } from "@blast/core/modules/social/contracts/financial-wire.ts";
 import { toUsd } from "@blast/core/modules/social/items/decimal.ts";
-import { SHOWN_PRESALES } from "@blast/core/modules/social/read-model/chain-presales.ts";
+import { verifiedTeamSql } from "@blast/server/modules/social/read-model/verified-team.ts";
 import { SocialRouteError } from "@blast/core/modules/social/route-kit/errors.ts";
 
 import {
@@ -34,7 +35,11 @@ import { Params, ROW_ORDER, homeSpan, readHomeBounds, rowsWithSql, selectHome, v
  * primary for the signed-in viewer (so a follow just written counts) and
  * never cached:
  *
- * - `coins`: every shown sale (any lifecycle) with a named confirmed event
+ * Every mode but `thread` covers every listed coin: shown presales, launch
+ * vault coins, live curves and tracked pools (`includeStandalone`), keyed by
+ * presale id or coin type as Discover's rows are.
+ *
+ * - `coins`: every listed coin (any lifecycle) with a named confirmed event
  *   by an account the viewer follows in the window (`activity`), or with a
  *   why written by one in the window (`discussion`, labelled so and never
  *   counted as buying), ordered by the latest followed activity, then by
@@ -82,7 +87,7 @@ export const homeFollowingRequestSchema = z.union([
   }).refine((value) => value.cursor === null || value.page === 1),
   z.strictObject({
     mode: z.literal("preview"), window: homeWindowSchema,
-    presale_ids: z.array(socialAddressSchema).min(1).max(HOME_COINS_MAX_IDS)
+    presale_ids: z.array(z.union([socialAddressSchema, z.string().regex(COIN_TYPE)])).min(1).max(HOME_COINS_MAX_IDS)
       .transform((ids) => [...new Set(ids)]),
   }),
   z.strictObject({
@@ -145,12 +150,13 @@ async function readFollowingCoins(
   const { bounds, span, asOf, kinds, actors } = await setup(db, viewerAccountId, request.window, context);
   const [following, sides, discussed] = await Promise.all([
     db.read<{ following: number }>(FOLLOW_COUNT_SQL, [viewerAccountId]),
-    readSides(db, { span, bounds, kinds, sales: { kind: "all" }, actors }),
+    readSides(db, { span, bounds, kinds, sales: { kind: "all", includeStandalone: true }, actors }),
     db.read<{ sale: string; posts: number; latest_ms: string }>(DISCUSSED_SQL, [viewerAccountId, span.fromMs, span.toMs]),
   ]);
   const counts = countsOf(sides);
   const discussedOf = new Map(discussed.rows.map((row) => [row.sale, row]));
-  const facts = await readCoinFacts(db, { kind: "ids", presaleIds: [...new Set([...counts.keys(), ...discussedOf.keys()])] }, span, context);
+  const ids = [...new Set([...counts.keys(), ...discussedOf.keys()])];
+  const facts = await readCoinFacts(db, { kind: "ids", presaleIds: ids, includeStandalone: ids.some(isCoinType) }, span, context);
   const ordered = qualifiedOf(facts, counts, discussedOf, span).sort(byFollowedRecency);
   const after = cursor === null ? ordered : ordered.filter((candidate) => byFollowedRecency(candidate, { ...candidate, orderMs: cursor.latestMs, coinType: cursor.coinType }) > 0);
   const pageNumber = cursor === null ? request.page ?? 1 : 1;
@@ -181,7 +187,7 @@ async function readFollowingPreview(
   context: HomeReadContext,
 ): Promise<HomeFollowingResponse> {
   const { bounds, span, asOf, kinds, actors } = await setup(db, viewerAccountId, request.window, context);
-  const rows = { span, bounds, kinds, sales: { kind: "ids" as const, presaleIds: request.presale_ids }, actors };
+  const rows = { span, bounds, kinds, sales: { kind: "ids" as const, presaleIds: request.presale_ids, includeStandalone: request.presale_ids.some(isCoinType) }, actors };
   const [sides, grouped] = await Promise.all([readSides(db, rows), readTopParticipants(db, rows, HOME_PREVIEW_ROWS * 2)]);
   const people = await readPeople(db, grouped.flatMap((row) => (row.account_id === null ? [] : [row.account_id])));
   const counts = countsOf(sides);
@@ -194,11 +200,11 @@ async function readFollowingPreview(
   return { mode: "preview", window: request.window, clock_ms: bounds.clockMs, previews, as_of: asOf };
 }
 
-type TapeRow = EventRow & Readonly<{ market_cap_usd: string | null; account_id: string | null; actor: string; presale_id: string; sale_token: string; sale_symbol: string; sale_name: string; sale_icon_url: string | null; lifecycle: string; verified_team: boolean }>;
+type TapeRow = EventRow & Readonly<{ market_cap_usd: string | null; account_id: string | null; actor: string; presale_id: string | null; sale_token: string; sale_symbol: string; sale_name: string; sale_icon_url: string | null; lifecycle: string; verified_team: boolean }>;
 
 /**
  * The tape: the newest `HOME_TAPE_LIMIT` events by the people the viewer
- * follows, across every shown coin, in the window (one statement over the
+ * follows, across every listed coin, in the window (one statement over the
  * followed rows, newest first), each with who did it and on which coin.
  */
 async function readFollowingTape(
@@ -210,15 +216,14 @@ async function readFollowingTape(
   const { bounds, span, asOf, kinds, actors } = await setup(db, viewerAccountId, request.window, context);
   const params = new Params();
   const limit = params.add(HOME_TAPE_LIMIT);
-  const text = selectHome(rowsWithSql({ span, bounds, kinds, sales: { kind: "all" }, actors }, params), `SELECT w.who, w.account_id::text AS account_id, w.actor, w.activity_id, w.kind, w.timestamp_ms::text AS timestamp_ms, w.digest,
+  const text = selectHome(rowsWithSql({ span, bounds, kinds, sales: { kind: "all", includeStandalone: true }, actors }, params), `SELECT w.who, w.account_id::text AS account_id, w.actor, w.activity_id, w.kind, w.timestamp_ms::text AS timestamp_ms, w.digest,
     w.quote_type, w.sale_quote, w.sale_quote_symbol, w.sale_quote_decimals,
     w.quote_amount::text AS quote_amount, w.coin_amount::text AS coin_amount, w.quote_refund::text AS quote_refund, w.usd_value::text AS usd_value,
     w.market_cap_usd::text AS market_cap_usd,
     EXISTS (SELECT 1 FROM social_whys wy WHERE wy.entry_id = 'a:' || w.activity_id AND wy.state = 'active') AS has_why,
-    w.sale AS presale_id, p.sale_token, p.sale_symbol, p.sale_name, p.sale_icon_url, p.lifecycle,
-    coalesce(trust.verified_team, false) AS verified_team
-  FROM home_who w JOIN ${SHOWN_PRESALES} p ON p.presale_id = w.sale
-  LEFT JOIN social_sale_trust trust ON trust.presale_id = w.sale
+    s.presale_id, s.coin_type AS sale_token, s.sale_symbol, s.sale_name, s.sale_icon_url, s.lifecycle,
+    ${verifiedTeamSql("s.presale_id", "s.coin_type")} AS verified_team
+  FROM home_who w JOIN home_sales s ON s.source_id = w.sale
   WHERE w.account_id IS NOT NULL
   ORDER BY ${ROW_ORDER("w")}
   LIMIT ${limit}::int`);
@@ -229,10 +234,13 @@ async function readFollowingTape(
     const event = eventOf(row);
     const actor = actorOf({ account_id: row.account_id, wallet: row.actor }, people.identities);
     if (!event || actor.type !== "account") return [];
-    return [{ ...event, actor, coin: { presale_id: row.presale_id, ...coinLabel({ coinType: row.sale_token, symbol: row.sale_symbol, name: row.sale_name }), icon_url: row.sale_icon_url || null, ...(row.verified_team ? { verified_team: true } : {}), lifecycle: row.lifecycle }, market_cap_usd: row.market_cap_usd === null ? null : toUsd(row.market_cap_usd) }];
+    return [{ ...event, actor, coin: { presale_id: row.presale_id, coin_type: row.sale_token, ...coinLabel({ coinType: row.sale_token, symbol: row.sale_symbol, name: row.sale_name }), icon_url: row.sale_icon_url || null, ...(row.verified_team ? { verified_team: true } : {}), lifecycle: row.lifecycle }, market_cap_usd: row.market_cap_usd === null ? null : toUsd(row.market_cap_usd) }];
   });
   return { mode: "tape", window: request.window, clock_ms: bounds.clockMs, events, as_of: asOf };
 }
+
+/** A standalone coin's key (a coin type), as against a presale id. */
+const isCoinType = (id: string) => id.includes("::");
 
 /** The whole Following route body, by mode. */
 export async function readHomeFollowing(
