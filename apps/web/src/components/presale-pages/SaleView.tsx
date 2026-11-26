@@ -8,9 +8,11 @@ import { pageLabel, PRESALES_PATH } from "#web/components/blast-ui/nav.ts";
 import { Button, DisclosureButton, DisclosureSummary, IconButton, IconButtonLink } from "#web/components/blast-ui/Button.tsx";
 import { CoinTypeTag } from "#web/components/blast-ui/CoinTypeTag.tsx";
 import { CopyAddress } from "#web/components/blast-ui/CopyAddress.tsx";
+import { CopyButton } from "#web/components/blast-ui/CopyButton.tsx";
 import { CoinCover, CoinIdentityHeader, CoinTradingActivity } from "#web/components/social/bonding/CoinPageParts.tsx";
 import { BlastMenu, BlastMenuItem, BlastMenuLinkItem, BlastMenuTrigger } from "#web/components/blast-ui/BlastMenu.tsx";
 import { usePhoneLayout } from "#web/components/blast-ui/use-shell-prefs.ts";
+import { useTabBarAutoHide } from "#web/components/blast-ui/use-tabbar-autohide.ts";
 import { EmptyState } from "#web/components/blast-ui/EmptyState.tsx";
 import { Segmented } from "#web/components/blast-ui/Segmented.tsx";
 import { SkeletonText } from "#web/components/blast-ui/Skeleton.tsx";
@@ -237,16 +239,20 @@ function SaleCreator({ creator }: Readonly<{ creator: SocialPresaleDetail["creat
   );
 }
 
-function SaleIdentityMeta({ detail }: Readonly<{ detail: SocialPresaleDetail }>) {
+function SaleIdentityMeta({ detail, className }: Readonly<{ detail: SocialPresaleDetail; className?: string }>) {
   if (!detail.creator && !detail.presale.sale_token) return null;
-  return <span className={cx("sale-meta")}>
+  return <span className={cx("sale-meta", className)}>
     <SaleCreator creator={detail.creator} />
     <CoinTypeTag coinType={detail.presale.sale_token} />
   </span>;
 }
 
-function SaleLinksMenu({ sale, metadata }: Readonly<{ sale: SocialPresaleDetail["presale"]; metadata: SocialSaleMetadata | null }>) {
+/** The "…" menu. A compact head on a phone adds the watchlist here and leaves the coin address to its copy icon. */
+function SaleLinksMenu({ sale, metadata, watch, compact = false }: Readonly<{ sale: SocialPresaleDetail["presale"]; metadata: SocialSaleMetadata | null; watch?: SaleWatch; compact?: boolean }>) {
   const toast = useToast();
+  // The menu mounts on open, so reading the width here cannot shift the server markup.
+  const phone = usePhoneLayout();
+  const folded = compact && phone;
   const url = presalePreviewUrl({ ...sale, metadata });
   async function copy(value: string, message: string) {
     try {
@@ -275,31 +281,36 @@ function SaleLinksMenu({ sale, metadata }: Readonly<{ sale: SocialPresaleDetail[
         placement={() => ({ side: "bottom", align: "end", sideOffset: 6, avoid: "flip", originX: "calc(100% - 18px)" })}
         trigger={<BlastMenuTrigger aria-label="Presale links" render={<IconButton aria-label="Presale links" size="touch" variant="secondary"><DotsIcon /></IconButton>} />}
       >
+        {folded && watch ? <BlastMenuItem className={cx("discovery-option")} closeOnClick onClick={watch.toggle}>{watch.on ? "Remove from watchlist" : "Add to watchlist"}</BlastMenuItem> : null}
         <BlastMenuItem className={cx("discovery-option")} closeOnClick onClick={share}>Share…</BlastMenuItem>
         <BlastMenuItem className={cx("discovery-option")} closeOnClick onClick={() => copy(url, "Link copied")}>Copy link</BlastMenuItem>
-        <BlastMenuItem className={cx("discovery-option")} closeOnClick onClick={() => copy(sale.sale_token, "Coin address copied")}>Copy coin address</BlastMenuItem>
+        {folded ? null : <BlastMenuItem className={cx("discovery-option")} closeOnClick onClick={() => copy(sale.sale_token, "Coin address copied")}>Copy coin address</BlastMenuItem>}
         <BlastMenuLinkItem className={cx("discovery-option")} href={presaleXIntent({ ...sale, metadata })} rel="noopener noreferrer" target="_blank">Share on X</BlastMenuLinkItem>
       </BlastMenu>
     </span>
   );
 }
 
-function SaleWatchButton({ watch }: Readonly<{ watch?: SaleWatch }>) {
+function SaleWatchButton({ watch, folds = false }: Readonly<{ watch?: SaleWatch; folds?: boolean }>) {
   if (!watch) return null;
   const label = watch.on ? "On your watchlist" : "Add to watchlist";
-  return <IconButton aria-label={label} aria-pressed={watch.on} className={cx("watchlist")} onClick={watch.toggle} size="touch" title={label} variant="secondary">
+  return <IconButton aria-label={label} aria-pressed={watch.on} className={cx("watchlist", folds && "not-phone")} onClick={watch.toggle} size="touch" title={label} variant="secondary">
     <StarIcon />
   </IconButton>;
 }
 
-/** The identity's actions: Watchlist, links and Follow (ink); a creator gets the cover and details editing instead of Follow. */
-function SaleActions({ detail, watch, details, onEdit }: Readonly<{ detail: SocialPresaleDetail; watch?: SaleWatch; details: ReturnType<typeof useSaleDetails>; onEdit: () => void }>) {
+/**
+ * The identity's actions: Watchlist, links and Follow (ink); a creator gets the cover and details editing instead of Follow.
+ * A compact head on a phone leads with the coin address's copy icon and folds the watchlist into the links menu.
+ */
+function SaleActions({ detail, watch, details, onEdit, compact = false }: Readonly<{ detail: SocialPresaleDetail; watch?: SaleWatch; details: ReturnType<typeof useSaleDetails>; onEdit: () => void; compact?: boolean }>) {
   const sale = detail.presale;
   const { metadata, editable } = details;
   return (
     <span className={cx("sale-actions")}>
-      <SaleWatchButton watch={watch} />
-      <SaleLinksMenu metadata={metadata} sale={sale} />
+      {compact ? <CoinAddressCopy coinType={sale.sale_token} /> : null}
+      <SaleWatchButton folds={compact} watch={watch} />
+      <SaleLinksMenu compact={compact} metadata={metadata} sale={sale} watch={watch} />
       {editable ? (
         <>
           <CoverButton details={details} sale={sale} />
@@ -309,6 +320,20 @@ function SaleActions({ detail, watch, details, onEdit }: Readonly<{ detail: Soci
       {sale.phase === "pending" || editable ? null : <FollowSale detail={detail} />}
     </span>
   );
+}
+
+/** The phone head's copy icon for the coin address; wider screens show the address in the byline. */
+function CoinAddressCopy({ coinType }: Readonly<{ coinType: string }>) {
+  return <CopyButton
+    className={cx("phone-only")}
+    failureMessage="Couldn’t copy the address."
+    label="Copy full coin address"
+    onCopy={async () => {
+      await navigator.clipboard.writeText(coinType);
+      return true;
+    }}
+    size="sm"
+  />;
 }
 
 /**
@@ -356,8 +381,9 @@ function CoinHead({ detail, watch }: Readonly<{ detail: SocialPresaleDetail; wat
       symbol={sale.symbol.replace(/^\$/, "")}
       status="Graduated"
       graduated
+      compact
       mark={sale.verified_team ? <CoinVerifiedMark /> : null}
-      actions={<SaleActions details={details} detail={detail} onEdit={() => setEditing(true)} watch={watch} />}
+      actions={<SaleActions compact details={details} detail={detail} onEdit={() => setEditing(true)} watch={watch} />}
     >
       <SaleCreator creator={detail.creator} />
     </CoinIdentityHeader>
@@ -1053,7 +1079,7 @@ function aboutArtwork(sale: SocialPresaleDetail["presale"], cover: SocialSaleMet
   return phone ? <PresaleCover className={cx("sale-about-cover")} cover={cover} presaleId={sale.presale_id} /> : null;
 }
 
-/** About: the creator's tagline, artwork and links. */
+/** About: the creator's tagline, artwork and links; on a trading coin's phone page, also the creator and coin address its compact head leaves out. */
 function AboutCard({ detail }: Readonly<{ detail: SocialPresaleDetail }>) {
   const sale = detail.presale;
   const { metadata } = useSaleDetails(sale);
@@ -1061,10 +1087,13 @@ function AboutCard({ detail }: Readonly<{ detail: SocialPresaleDetail }>) {
   const artwork = aboutArtwork(sale, metadata?.cover, phone);
   const tagline = metadata?.tagline?.trim();
   const hasLinks = Boolean(metadata?.site || metadata?.x_handle || metadata?.telegram || metadata?.docs_url || metadata?.audit_url);
-  if (!tagline && !hasLinks && !artwork) return null;
+  const identity = sale.phase === "trading";
+  const content = Boolean(tagline || hasLinks || artwork);
+  if (!content && !identity) return null;
   return (
-    <section aria-labelledby={`about-${sale.presale_id.slice(-6)}`} className={cx("card sale-card sale-about")}>
+    <section aria-labelledby={`about-${sale.presale_id.slice(-6)}`} className={cx("card sale-card sale-about", !content && "phone-only")}>
       <h2 id={`about-${sale.presale_id.slice(-6)}`}>About</h2>
+      {identity ? <SaleIdentityMeta className="phone-only" detail={detail} /> : null}
       {tagline && <p className={cx("sale-tag")}>{tagline}</p>}
       {artwork}
       {hasLinks && <span className={cx("links")}><SaleLinks about metadata={metadata} sale={sale} /></span>}
@@ -1373,6 +1402,7 @@ export function SaleView({
     const timer = window.setInterval(() => setNow(Date.now()), 1_000);
     return () => window.clearInterval(timer);
   }, []);
+  useTabBarAutoHide();
   const now = nowState;
   const sale = detail.presale;
   const trading = sale.phase === "trading";

@@ -324,7 +324,7 @@ function ShellFrame({
           {aside}
         </PageAside>
 
-        <nav aria-label="Tabs" className={styles.tabbar}>
+        <nav aria-label="Tabs" className={styles.tabbar} data-shell-tabbar="">
           <TabItem current={current} href={HOME_PATH} icon={<HomeIcon />} item="home" label="Home" />
           <button aria-haspopup="dialog" aria-label="Swap" className={styles.tabSwap} onClick={runOr("openTrade")} type="button">
             <SwapIcon />
