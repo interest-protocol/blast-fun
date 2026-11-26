@@ -94,12 +94,19 @@ export function createAdmission(dependencies: AdmissionDependencies): Admission 
       }
     : selectedPolicies;
   const shared = enforcer(policies);
+  // First-party proofs from an extra trusted site spend their nonce and quotas in its own namespace.
+  const extraSites = new Map(
+    (dependencies.extraNamespaces ?? []).map((namespace) => [namespace, enforcer(policies, namespace)]),
+  );
+  const proofStore = (gateway: GatewayContext | undefined) =>
+    (gateway && extraSites.get(gateway.namespace)) || shared;
   const enforcersByPolicy = new Map<string, RedisRateLimitEnforcer>();
   const prepaidByEndpoint = new Map<RateBucket, RateLimitPort>();
 
   return {
     admit,
-    claimUnspentProof: (response, gateway) => gatewayProof(shared, gateway).claimUnspent(response),
+    claimUnspentProof: (response, gateway) =>
+      gatewayProof(proofStore(gateway), gateway).claimUnspent(response),
     recognizesPartners: !!scheduler,
     operatorLoginQuota: quotaPort(async (buckets, subject) => {
       if (buckets.some((bucket) => !OPERATOR_LOGIN_BUCKETS.has(bucket))) {
@@ -123,7 +130,7 @@ export function createAdmission(dependencies: AdmissionDependencies): Admission 
     gatewayAuthenticated: boolean,
     gateway: GatewayContext | undefined,
   ): Promise<Admitted | Answered> {
-    const proof = gatewayProof(shared, gateway);
+    const proof = gatewayProof(proofStore(gateway), gateway);
     if (!gatewayAuthenticated || request.headers.has(PARTNER_KEY_HEADER)) {
       return answered(
         await proof.claimUnspent(
@@ -354,10 +361,13 @@ export function createAdmission(dependencies: AdmissionDependencies): Admission 
     return created;
   }
 
-  function enforcer(selected: Readonly<Record<RateBucket, RatePolicy>>) {
+  function enforcer(
+    selected: Readonly<Record<RateBucket, RatePolicy>>,
+    namespace = dependencies.namespace,
+  ) {
     return new RedisRateLimitEnforcer({
       redis: dependencies.redis,
-      namespace: dependencies.namespace,
+      namespace,
       operationalNamespace: recognition?.store.namespace,
       subjectPepper: dependencies.subjectPepper,
       policies: selected,

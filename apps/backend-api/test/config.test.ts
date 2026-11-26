@@ -496,3 +496,47 @@ test("on Render the API refuses to start unless its drain fits the 300-second sh
     /180000–280000/,
   );
 });
+
+test("extra trusted sites are optional, each keyed by its own namespace, and fail boot by name only", () => {
+  const expected = quotaNamespace(base.BLAST_REDIS_NAMESPACE, deploymentIdentity(base));
+  const production = { ...base, BLAST_BACKEND_EXPECTED_QUOTA_NAMESPACE: expected };
+  assert.deepEqual(backendConfig(production).extraSites, []);
+  assert.deepEqual(backendConfig({ ...production, BLAST_BACKEND_EXTRA_SITES: " " }).extraSites, []);
+
+  const dev = { origin: "https://dev.blast.test", target: "dev", branch: "dev" };
+  const config = backendConfig({ ...production, BLAST_BACKEND_EXTRA_SITES: JSON.stringify([dev]) });
+  assert.equal(config.namespace, expected, "the primary namespace is unchanged");
+  // The same hash the dev web relay signs from its own deployment identity.
+  const devNamespace = parseRelayConfig({
+    ...RUNTIME_TEST_ENVIRONMENT,
+    BLAST_REDIS_NAMESPACE: base.BLAST_REDIS_NAMESPACE,
+    VERCEL: "1",
+    VERCEL_ENV: "preview",
+    VERCEL_TARGET_ENV: "dev",
+    VERCEL_GIT_COMMIT_REF: "dev",
+  }).quotaNamespace;
+  assert.deepEqual(config.extraSites, [{ siteOrigin: dev.origin, namespace: devNamespace }]);
+  assert.notEqual(devNamespace, expected);
+
+  for (const value of [
+    "not json",
+    "[]",
+    JSON.stringify(dev),
+    JSON.stringify([{ ...dev, origin: "https://dev.blast.test/" }]),
+    JSON.stringify([{ ...dev, origin: "http://dev.blast.test" }]),
+    JSON.stringify([{ ...dev, origin: "https://blast.test" }]),
+    JSON.stringify([{ ...dev, target: "production" }]),
+    JSON.stringify([{ ...dev, branch: "" }]),
+    JSON.stringify([{ ...dev, extra: true }]),
+    JSON.stringify([dev, { ...dev, origin: "https://other.blast.test" }]),
+    JSON.stringify([dev, { ...dev, target: "qa" }, { ...dev, target: "a" }, { ...dev, target: "b" }, { ...dev, target: "c" }]),
+  ]) {
+    assert.throws(
+      () => backendConfig({ ...production, BLAST_BACKEND_EXTRA_SITES: value }),
+      (error: Error) =>
+        error.message.startsWith("BLAST_BACKEND_EXTRA_SITES must be") &&
+        !error.message.includes("dev.blast.test"),
+      value,
+    );
+  }
+});

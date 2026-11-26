@@ -10,9 +10,12 @@ import {
 import type { PrivateRouteContract } from "@blast/core/modules/backend-api/private-routes.ts";
 import type { PrivateHandler } from "@blast/server/private/handler.ts";
 import { boundedPrivateBody } from "./body.ts";
+import type { TrustedSite } from "./contracts.ts";
 
 export type PrivateApi = Readonly<{
   siteOrigin: string;
+  /** Other trusted sites; each envelope must match one site's origin and namespace together. */
+  extraSites?: readonly TrustedSite[];
   handle: PrivateHandler;
 }>;
 
@@ -34,10 +37,12 @@ export async function privateRequest(
       { error: { code } },
       { status, headers: { "Cache-Control": "private, no-store" } },
     );
-  const proof = verifyPrivateEnvelope(request, options.gatewaySecret, {
-    namespace: options.namespace,
-    siteOrigin: options.privateApi.siteOrigin,
-  });
+  const primary = { namespace: options.namespace, siteOrigin: options.privateApi.siteOrigin };
+  // A site that does not match the signed origin and namespace is refused before any HMAC.
+  let proof: VerifiedPrivateProof | null = null;
+  for (const site of [primary, ...(options.privateApi.extraSites ?? [])]) {
+    proof ??= verifyPrivateEnvelope(request, options.gatewaySecret, site);
+  }
   // The envelope admits only a canonical proof.ip, so a null client here is a broken proof.
   const client = attestClientAddress(proof?.ip ?? null);
   if (!proof || !client || proof.route.id !== contract.id) {
@@ -50,7 +55,8 @@ export async function privateRequest(
   }
   const accepted = await options.redis.execute([
     "SET",
-    `${options.namespace}:{partner-quota}:private-replay:${proof.nonce}`,
+    // The verified proof's namespace is its site's own: one site's nonces never touch another's.
+    `${proof.namespace}:{partner-quota}:private-replay:${proof.nonce}`,
     "1",
     "NX",
     "EX",
@@ -65,11 +71,16 @@ export async function privateRequest(
   stripPrivateHeaders(headers);
   headers.delete("host");
   headers.delete("content-length");
+  // Handlers check same-origin against the primary site. The proof already names the signing site,
+  // so an extra site's request reaches them as the primary's; a browser Origin naming any other
+  // site is left as sent and still refused there.
   if (proof.purpose === "ssr-read") {
-    headers.set("origin", proof.siteOrigin);
+    headers.set("origin", primary.siteOrigin);
     headers.set("sec-fetch-site", "same-origin");
+  } else if (headers.get("origin") === proof.siteOrigin) {
+    headers.set("origin", primary.siteOrigin);
   }
-  const canonical = new Request(proof.siteOrigin + source.pathname + source.search, {
+  const canonical = new Request(primary.siteOrigin + source.pathname + source.search, {
     method: request.method,
     headers,
     signal,

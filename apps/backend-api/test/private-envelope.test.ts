@@ -153,3 +153,76 @@ test("multipart bytes and boundary survive authenticated transport exactly", asy
   assert.deepEqual(new Uint8Array(await response.arrayBuffer()), body);
   assert.deepEqual(f.counts(), { nonces: 1, business: 1 });
 });
+
+test("an extra site is trusted only with its own namespace, which also keys its replays", async () => {
+  const dev = { siteOrigin: "https://dev.frontend.test", namespace: "b".repeat(64) };
+  const keys: string[] = [];
+  const reached: string[] = [];
+  const run = (request: Request, extraSites?: (typeof dev)[]) =>
+    privateRequest(
+      request,
+      privateRoute("PUT", "/api/social/me/settings", "browser")!,
+      {
+        namespace,
+        gatewaySecret: secret,
+        redis: {
+          async execute(args: string[]) {
+            if (keys.includes(args[1]!)) {
+              return null;
+            }
+            keys.push(args[1]!);
+            return "OK";
+          },
+        },
+        privateApi: {
+          siteOrigin,
+          extraSites,
+          async handle(request) {
+            reached.push(`${new URL(request.url).origin} ${request.headers.get("origin")}`);
+            return new Response(null, { status: 204 });
+          },
+        },
+      },
+      new AbortController().signal,
+    );
+  const signed = (site: { siteOrigin: string; namespace: string }, origin = site.siteOrigin) => {
+    const source = new Request(site.siteOrigin + "/api/social/me/settings", {
+      method: "PUT",
+      headers: { origin, "content-type": "application/json" },
+      body: bytes,
+    });
+    return new Request(url, {
+      method: "PUT",
+      headers: signPrivateRequest(source, bytes, secret, { ...site, purpose: "browser", ip: "192.0.2.1" }),
+      body: bytes,
+    });
+  };
+
+  // Unset: the primary site alone, keyed exactly as before.
+  assert.equal((await run(signed({ siteOrigin, namespace }))).status, 204);
+  assert.equal((await run(signed(dev))).status, 403, "no extra site configured");
+  assert.deepEqual(keys, [`${namespace}:{partner-quota}:private-replay:${keys[0]!.split(":").at(-1)}`]);
+
+  // Configured: dev is accepted under its own namespace, and handlers see it as the primary site,
+  // except a browser Origin naming some other site, which stays for their same-origin check.
+  const devRequest = signed(dev);
+  assert.equal((await run(devRequest.clone(), [dev])).status, 204);
+  assert.match(keys[1]!, new RegExp(`^${dev.namespace}:\\{partner-quota\\}:private-replay:`));
+  assert.equal((await run(devRequest, [dev])).status, 403, "a dev nonce is single use");
+  assert.equal((await run(signed(dev, "https://evil.test"), [dev])).status, 204);
+  assert.deepEqual(reached, [
+    `${siteOrigin} ${siteOrigin}`,
+    `${siteOrigin} ${siteOrigin}`,
+    `${siteOrigin} https://evil.test`,
+  ]);
+
+  // An unknown origin, or a site's origin paired with another site's namespace, is refused.
+  for (const site of [
+    { siteOrigin: "https://evil.test", namespace: dev.namespace },
+    { siteOrigin: dev.siteOrigin, namespace },
+    { siteOrigin, namespace: dev.namespace },
+  ]) {
+    assert.equal((await run(signed(site), [dev])).status, 403);
+  }
+  assert.equal(keys.length, 3, "refused envelopes burn no nonce");
+});

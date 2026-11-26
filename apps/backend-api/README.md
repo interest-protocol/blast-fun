@@ -146,6 +146,24 @@ primary. Production startup requires `BLAST_DEPLOYMENT_TARGET`, a
 `BLAST_BACKEND_EXPECTED_QUOTA_NAMESPACE`. The latter is the existing derived
 `quotaNamespace`, rather than a newly chosen value.
 
+`BLAST_BACKEND_EXTRA_SITES` (optional, API and hints) lets another web
+deployment, such as `https://dev.blast.fun`, use this backend. It is a JSON
+array of `{"origin","target","branch"}` entries, for example
+`[{"origin":"https://dev.blast.fun","target":"dev","branch":"dev"}]`. `target`
+and `branch` are that site's Vercel `VERCEL_TARGET_ENV` and
+`VERCEL_GIT_COMMIT_REF`. Its namespace is `quotaNamespace` of this backend's
+`BLAST_REDIS_NAMESPACE` with them, which matches what that site's relays sign
+only when the site has the same `BLAST_REDIS_NAMESPACE` and gateway secrets.
+
+The backend then accepts that site's first-party read proofs, private
+envelopes and live-socket tickets. Each must match one site's origin and
+namespace together, and its nonces, read quotas and per-IP socket counts use
+that site's namespace. Partner proofs stay primary-only. After the envelope
+check, private handlers see the request as the primary site's, so their
+same-origin checks still compare against `NEXT_PUBLIC_SITE_URL`, and their own
+route limits still count under the primary namespace. Unset or blank keeps one
+site. An invalid value stops startup and names only the variable.
+
 The web server requires `BLAST_BACKEND_API_ORIGIN` for partner admission and
 explicit first-party public-read adapters. Local workflows run the same Bun
 backend at a loopback origin. Missing or invalid configuration returns a bounded
