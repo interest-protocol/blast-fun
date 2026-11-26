@@ -39,6 +39,7 @@
 Target `main`. Use the [contributor checks](README.md#check-a-change) to verify
 the affected workspace.
 
-Before enqueueing a PR, the CodeRabbit check passes and every CodeRabbit comment
-is fixed, or answered in its thread with the reason it stays. The Fable review
-still applies.
+Before adding a PR to the merge queue, the CodeRabbit check has passed on the
+head commit; no check or a pending one means wait. Fix every CodeRabbit review
+thread, or answer it in the thread with the reason it stays. A Fable review of
+the diff is still required.
