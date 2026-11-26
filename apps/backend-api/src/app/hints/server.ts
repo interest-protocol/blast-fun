@@ -42,6 +42,7 @@ export function createHintsServer(
           siteOrigin: config.siteOrigin,
           gatewaySecret: config.gatewaySecret,
           namespace: config.namespace,
+          extraSites: config.extraSites,
           redis: privateReplayRedis,
           ingress: config.ingress,
           relay: processSingleton(
