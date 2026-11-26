@@ -1,7 +1,6 @@
 "use client";
 
 import { DateStamp } from "#web/components/blast-ui/DateStamp.tsx";
-import { pollInterval } from "#web/lib/query/polling.ts";
 import type { AsOf } from "@blast/core/web/contracts/items.ts";
 import { useQuery } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
@@ -50,6 +49,7 @@ import { CoinPriceCurrencyProvider, useCoinPriceCurrency } from "#web/components
 import { useLiveListening, useLiveScreen, useReportListening } from "#web/components/launchpad/coin/LiveScreen.tsx";
 import { statsAfterRead, useLiveCoin, type LiveCoinStats } from "#web/components/launchpad/coin/live-coin.ts";
 import { cx } from "./cx";
+import { marketPoll } from "./sale-market-poll";
 import { createQuoteOf } from "@blast/core/web/contracts/create.ts";
 import { atomsText, NO_VALUE } from "@blast/core/web/format.ts";
 import { atLeastPow10, exactAtoms, shortFloorExact } from "@blast/core/web/exact-amount.ts";
@@ -464,15 +464,6 @@ export function SaleMarket({
       {children}
     </SaleMarketView>
   );
-}
-
-/**
- * The market reads' timer: every 15 s, or every 60 s while the tab's stream is live and carrying the
- * coin's stats (the live screen). The stream moves FDV, holders and volume; the slow read keeps the
- * day's move, liquidity and top holders from going stale. A failed read retries at the 15 s pace.
- */
-export function marketPoll(listening: boolean) {
-  return (query: Parameters<typeof pollInterval>[1] & Readonly<{ state: Readonly<{ status: string }> }>) => pollInterval(listening && query.state.status !== "error" ? 60_000 : 15_000, query);
 }
 
 const POOL_CHART_CONTROLS = { range: "24h", interval: "5m" } as const;

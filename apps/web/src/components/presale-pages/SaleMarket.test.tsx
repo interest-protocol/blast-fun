@@ -398,7 +398,7 @@ test("a graduated sale on a venue the shared market feed does not index shows th
 });
 
 test("the market reads slow to a minute while the live screen hears the coin's stats, and keep 15 s when it drops or a read fails", async () => {
-  const { marketPoll } = await import("./SaleMarket.tsx");
+  const { marketPoll } = await import("./sale-market-poll.ts");
   const query = (status: "success" | "error") => ({ state: { status, dataUpdatedAt: FIXTURE_NOW, errorUpdatedAt: 0, dataUpdateCount: 5, errorUpdateCount: 0 } }) as never;
   const within = (ms: number, base: number) => ms >= base && ms <= base * 1.2;
   assert.ok(within(marketPoll(true)(query("success")) as number, 60_000));

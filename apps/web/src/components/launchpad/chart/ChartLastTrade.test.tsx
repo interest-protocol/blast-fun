@@ -142,7 +142,7 @@ test("the pill speaks the page's unit: dollars while the page shows USD, the quo
 });
 
 test("lastTradeUsd: recorded dollars first, then the page's rate for the page's own quote only", async () => {
-  const { lastTradeUsd } = await import("./ChartLastTrade.tsx");
+  const { lastTradeUsd } = await import("./last-trade-usd.ts");
   const SUI = "0x2::sui::SUI";
   const usd = { currency: "usd", quoteType: SUI, quoteUsd: "2.5" } as const;
   const sui = { quoteType: SUI, decimals: 9 };
