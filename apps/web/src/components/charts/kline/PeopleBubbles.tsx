@@ -3,7 +3,7 @@
 import Link from "next/link";
 import type { Chart } from "klinecharts";
 import type { BaseUIEvent } from "@base-ui/react/types";
-import { memo, useContext, useEffect, useMemo, useRef, useState, type ComponentProps, type MouseEvent, type PointerEvent, type ReactNode, type RefObject } from "react";
+import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState, type ComponentProps, type MouseEvent, type PointerEvent, type ReactNode, type RefObject } from "react";
 import { profilePagePath } from "@blast/core/modules/social/contracts/profiles.ts";
 import type { TraderProfile } from "@blast/core/modules/social/contracts/trader-profiles.ts";
 import { Avatar } from "#web/components/blast-ui/Avatar.tsx";
@@ -60,7 +60,7 @@ export function PeopleBubbles({ chart, bars, quoteDecimals, quoteUsd, topInset =
   const layer = useRef<HTMLDivElement>(null);
   const { bubbles, size } = useBubbleLayout(chart, layer, people, topInset);
 
-  const profile = (person: Person) => person.own ? ownProfile : profileAt(seen, person.address, person.lastMs);
+  const profile = useCallback((person: Person) => person.own ? ownProfile : profileAt(seen, person.address, person.lastMs), [ownProfile, seen]);
   return <div ref={layer} className={styles.layer}>
     {bubbles.map((bubble) => bubble.kind === "person"
       ? <PersonBubble key={bubble.key} person={bubble.person} x={bubble.x} y={bubble.y} size={size} profile={profile(bubble.person)} />
@@ -104,7 +104,11 @@ function useBubbleLayout(chart: RefObject<Chart | null>, layer: RefObject<HTMLEl
       if (!current || !size) return;
       const target = current;
       const bubble = bubbleSize(size.width);
-      setLayout({ size: bubble, bubbles: layoutBubbles(latest.current.people, (person) => barSpans(target, [{ timestamp: person.bar, high: person.high, low: person.low }])[0] ?? null, size.width, size.height, bubble, latest.current.topInset, visibleSpans(target)) });
+      const { people, topInset } = latest.current;
+      // One conversion for every person's bar, read back by position.
+      const spans = barSpans(target, people.map(({ bar, high, low }) => ({ timestamp: bar, high, low })));
+      const at = new Map(people.map((person, index) => [person, spans[index] ?? null]));
+      setLayout({ size: bubble, bubbles: layoutBubbles(people, (person) => at.get(person) ?? null, size.width, size.height, bubble, topInset, visibleSpans(target), target.getBarSpace().halfBar) });
     };
     const request = () => { if (!frame) frame = requestAnimationFrame(place); };
     // A drag that starts on the chart keeps following the pointer outside it, as the chart does.
@@ -198,7 +202,7 @@ const PersonBubble = memo(function PersonBubble({ person, x, y, size, profile }:
       {who.anonymous
         ? <span className={styles.anonymous}><UserIcon /></span>
         : <Avatar accountId={who.callsign} avatarUrl={who.avatarUrl} size={size} />}
-      {count > 1 && <span className={styles.count} aria-hidden="true">{count > 99 ? "99+" : count}</span>}
+      {count > 1 && <span className={styles.count} aria-hidden="true">{count > 9 ? "9+" : count}</span>}
       {badge && <span className={styles.badge}><WalletLabelIcon label={badge} /></span>}
     </Popover.Trigger>
     <PopoverSurface positioner={CARD_POSITION} popup={{ className: styles.card }}>
@@ -250,7 +254,7 @@ function useBubblePage(href: string | undefined, external: boolean) {
 
 /** Each of a wallet's trades on the bar, newest first: side, time and size. Scrolls when long. */
 function TradeList({ trades }: Readonly<{ trades: readonly PersonTrade[] }>) {
-  return <ol className={styles.cardTrades} aria-label="Trades" tabIndex={0}>
+  return <ol className={styles.cardTrades} aria-label="Trades" tabIndex={scrollable(trades.length)}>
     {trades.map((trade, index) => <li key={`${trade.timestampMs}:${index}`}>
       <span data-side={trade.side}>{trade.side === "buy" ? "Buy" : "Sell"}</span>
       <time dateTime={new Date(trade.timestampMs).toISOString()}>{tradeTime(trade.timestampMs)}</time>
@@ -260,19 +264,20 @@ function TradeList({ trades }: Readonly<{ trades: readonly PersonTrade[] }>) {
 }
 
 /** The people one column has no room for, as a "+N" that lists them on hover or tap. */
-function MoreBubble({ bubble: { people, x, y }, size, profile }: Readonly<{ bubble: Extract<Bubble, { kind: "more" }>; size: number; profile: (person: Person) => TraderProfile | null }>) {
+const MoreBubble = memo(function MoreBubble({ bubble: { people, x, y }, size, profile }: Readonly<{ bubble: Extract<Bubble, { kind: "more" }>; size: number; profile: (person: Person) => TraderProfile | null }>) {
   const text = `${people.length} more ${people.length === 1 ? "trader" : "traders"}`;
+  const shown = people.length > 99 ? "99" : String(people.length);
   return <Popover.Root>
     <Popover.Trigger
       openOnHover
       delay={80}
       className={styles.more}
-      aria-label={text}
+      aria-label={`+${shown} more ${people.length === 1 ? "trader" : "traders"}`}
       {...dyn({ left: x - size / 2, top: y - size / 2, height: size, minWidth: size })}
-    >+{people.length > 99 ? "99" : people.length}</Popover.Trigger>
+    >+{shown}</Popover.Trigger>
     <PopoverSurface positioner={CARD_POSITION} popup={{ className: styles.card }}>
       <Popover.Title className={styles.cardName}>{text}</Popover.Title>
-      <ul className={styles.cardPeople} tabIndex={0} aria-label="Traders">
+      <ul className={styles.cardPeople} tabIndex={scrollable(people.length)} aria-label="Traders">
         {people.map((person) => {
           const count = person.buys + person.sells;
           const spent = person.side === "buy" ? person.bought : person.sold;
@@ -285,8 +290,10 @@ function MoreBubble({ bubble: { people, x, y }, size, profile }: Readonly<{ bubb
       </ul>
     </PopoverSurface>
   </Popover.Root>;
-}
+});
 
+/** A list past about eight lines scrolls, so the keyboard can reach it; a short one needs no stop. */
+const scrollable = (rows: number) => rows > 8 ? 0 : undefined;
 const tradeCount = (count: number) => `${count} trades`;
 const TRADE_TIME = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" });
 const TRADE_DAY_TIME = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });

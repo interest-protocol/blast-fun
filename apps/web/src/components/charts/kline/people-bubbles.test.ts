@@ -79,6 +79,28 @@ test("zoomed out, a crowded column shows its first people and folds the rest int
   assert.equal(layoutBubbles(crowd.slice(0, STACK_LIMIT), place, 1_000, 400, 24).filter((bubble) => bubble.kind === "more").length, 0);
 });
 
+test("a buyer and a seller on one busy bar share a column, both clear above the bar's high", () => {
+  const ys = layoutBubbles([person(A, 0), person(B, 0, { side: "sell", buys: 0, sells: 2, bought: null, sold: 5 })], place, 1_000, 400, 24).map((bubble) => bubble.y);
+  assert.equal(new Set(ys).size, 2);
+  assert.ok(ys.every((y) => y + 12 <= px(20) - 12), ys.join());
+});
+
+test("a +N keeps its identity while the chart scrolls, so its open card stays open", () => {
+  const crowd = [person(A, 0), person(B, 0), person(C, 0), person(D, 0)];
+  const key = (shift: number) => layoutBubbles(crowd, (one) => ({ ...place(one), x: place(one).x + shift }), 1_000, 400, 24).find((bubble) => bubble.kind === "more")?.key;
+  assert.ok(key(100));
+  assert.equal(key(100), key(137.4));
+});
+
+test("a wide candle next to a column counts as under it when the chart is zoomed in", () => {
+  // The neighbour sits 30 px away: out of reach of a 24 px bubble on thin candles, under it once candles are 40 px wide.
+  const tall = [{ x: 30, top: px(30), bottom: px(25) }];
+  const thin = layoutBubbles([person(A, 0)], place, 1_000, 400, 24, 0, tall, 2)[0]!;
+  const wide = layoutBubbles([person(A, 0)], place, 1_000, 400, 24, 0, tall, 20)[0]!;
+  assert.ok(thin.y > px(30), String(thin.y));
+  assert.ok(wide.y + 12 <= px(30) - 12, String(wide.y));
+});
+
 test("the viewer's own trades always show, even in a full column", () => {
   const crowd = [person(A, 0), person(B, 0), person(C, 1), person(D, 1), person(ME, 2, { own: true }), person(E, 2, { own: true, address: `${E}0` })];
   const bubbles = layoutBubbles(crowd, place, 1_000, 400, 24);

@@ -104,6 +104,8 @@ export type Bubble =
 export const STACK_LIMIT = 3;
 /** Space between a bubble and the price it sits over, as a share of the bubble's size. */
 const CLEARANCE = .5;
+/** Px of the ring drawn around each bubble. */
+const RING = 2;
 /** Px above the highest price the chart keeps free, so one bubble fits over the top bar: the clearance plus the bubble. */
 export const bubbleHeadroom = (size: number) => Math.ceil(size * (1 + CLEARANCE)) + 4;
 
@@ -114,9 +116,10 @@ export const bubbleHeadroom = (size: number) => Math.ceil(size * (1 + CLEARANCE)
  * rest into one "+N". Every column stacks up from above the highest price under it,
  * its own bars' and any `spans` (the bars on screen) within reach, so the price line
  * and candles stay clear; a column with no room above goes under the lowest price
- * instead. Nothing goes above `topInset` px, where the study legends sit.
+ * instead. Nothing goes above `topInset` px, where the study legends sit. `halfBar` is
+ * half a candle's width in px, so a wide candle beside the column counts as under it.
  */
-export function layoutBubbles(people: readonly Person[], place: (person: Person) => BarSpan | null, width: number, height: number, size: number, topInset = 0, spans: readonly BarSpan[] = []): Bubble[] {
+export function layoutBubbles(people: readonly Person[], place: (person: Person) => BarSpan | null, width: number, height: number, size: number, topInset = 0, spans: readonly BarSpan[] = [], halfBar = 0): Bubble[] {
   if (width <= 0 || height <= 0 || size <= 0) return [];
   const visible: Placed[] = [];
   for (const person of people) {
@@ -133,7 +136,7 @@ export function layoutBubbles(people: readonly Person[], place: (person: Person)
   let column: Placed[] = [];
   const flush = () => {
     if (!column.length) return;
-    const stack = stackColumn(column, { height, size, previousX: left, topInset, spans });
+    const stack = stackColumn(column, { height, size, previousX: left, topInset, spans, halfBar });
     left = stack[0]!.x;
     bubbles.push(...stack);
   };
@@ -146,7 +149,7 @@ export function layoutBubbles(people: readonly Person[], place: (person: Person)
 }
 
 /** One column's bubbles: the ranked people that fit, then a "+N" for the rest. */
-function stackColumn(placed: readonly Placed[], { height, size, previousX, topInset, spans }: Readonly<{ height: number; size: number; previousX: number; topInset: number; spans: readonly BarSpan[] }>): Bubble[] {
+function stackColumn(placed: readonly Placed[], { height, size, previousX, topInset, spans, halfBar }: Readonly<{ height: number; size: number; previousX: number; topInset: number; spans: readonly BarSpan[]; halfBar: number }>): Bubble[] {
   const ranked = [...placed].sort((a, b) => Number(b.person.own) - Number(a.person.own) || b.person.labels.length - a.person.labels.length || b.person.lastMs - a.person.lastMs);
   const own = ranked.filter((entry) => entry.person.own).length;
   const room = Math.max(own, ranked.length > STACK_LIMIT ? STACK_LIMIT - 1 : STACK_LIMIT);
@@ -155,8 +158,8 @@ function stackColumn(placed: readonly Placed[], { height, size, previousX, topIn
   const slots = shown.length + (folded.length ? 1 : 0);
   // Centred on the people shown, but never closer than one bubble to the column before.
   const x = Math.max(shown.reduce((sum, entry) => sum + entry.point.x, 0) / shown.length, previousX + size);
-  // Every bar the bubbles could cover: the column's own, and any drawn under the bubble's width.
-  const reach = size * .75;
+  // Every bar the bubbles could cover: the column's own, and any whose candle reaches under the bubble or its ring.
+  const reach = size / 2 + RING + halfBar;
   const under = [...placed.map((entry) => entry.point), ...spans.filter((span) => Math.abs(span.x - x) <= reach)];
   const ceiling = Math.min(...under.map((span) => span.top));
   const floor = Math.max(...under.map((span) => span.bottom));
@@ -170,7 +173,7 @@ function stackColumn(placed: readonly Placed[], { height, size, previousX, topIn
   if (above - stack >= top) at = (slot) => above - slot * step;
   else if (below + stack <= bottom) at = (slot) => below + slot * step;
   const bubbles: Bubble[] = shown.map(({ person }, slot) => ({ kind: "person", key: `${person.bar}:${person.address}`, person, x, y: at(slot) }));
-  if (folded.length) bubbles.push({ kind: "more", key: `more:${Math.round(placed[0]!.point.x)}`, people: folded, x, y: at(shown.length) });
+  if (folded.length) bubbles.push({ kind: "more", key: `more:${placed[0]!.person.bar}`, people: folded, x, y: at(shown.length) });
   return bubbles;
 }
 

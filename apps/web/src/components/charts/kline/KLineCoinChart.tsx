@@ -194,11 +194,14 @@ export default function KLineCoinChart({ sources, interval, memeDecimals, quoteD
       // Room for the pane's one legend row above its values.
       current.overrideYAxis({ paneId: `pane_${name}`, gap: { top: (LEGEND_ROW + 4) / layout.pane, bottom: .05 } });
     }
-    // Headroom above the highest price for the study legends, and for a trader's bubble over the top bar, so neither sits on a candle.
-    const traders = showWalletTags ? bubbleHeadroom(BUBBLE_SIZE) : 0;
-    current.overrideYAxis({ paneId: "candle_pane", gap: { top: (12 + LEGEND_ROW * legendRows + traders) / layout.price, bottom: .06 } });
     current.resize();
-  }, [settings.indicators, precision, theme, layout, legendRows, mobile, showWalletTags]);
+  }, [settings.indicators, precision, theme, layout, mobile]);
+
+  // Headroom above the highest price for the study legends, and for a trader's bubble over the top bar, so neither sits on a candle.
+  useEffect(() => {
+    const traders = showWalletTags ? bubbleHeadroom(BUBBLE_SIZE) : 0;
+    chart.current?.overrideYAxis({ paneId: "candle_pane", gap: { top: (12 + LEGEND_ROW * legendRows + traders) / layout.price, bottom: .06 } });
+  }, [layout.price, legendRows, showWalletTags]);
 
   const graduationAt = migrationAt === undefined ? undefined : bars.findLast((bar) => bar.timestamp <= migrationAt)?.timestamp;
   useEffect(() => {
