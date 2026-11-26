@@ -255,7 +255,7 @@ function useBubblePage(href: string | undefined, external: boolean) {
 /** Each of a wallet's trades on the bar, newest first: side, time and size. Scrolls when long. */
 function TradeList({ trades }: Readonly<{ trades: readonly PersonTrade[] }>) {
   return <ol className={styles.cardTrades} aria-label="Trades" tabIndex={scrollable(trades.length)}>
-    {trades.map((trade, index) => <li key={`${trade.timestampMs}:${index}`}>
+    {trades.map((trade) => <li key={trade.id}>
       <span data-side={trade.side}>{trade.side === "buy" ? "Buy" : "Sell"}</span>
       <time dateTime={new Date(trade.timestampMs).toISOString()}>{tradeTime(trade.timestampMs)}</time>
       <span>{usd(trade.usd)}</span>

@@ -6,7 +6,8 @@ import { shiftDecimal } from "#web/components/launchpad/coin/coin-format.ts";
 import type { Bar } from "./kline-model.ts";
 
 /** One trade by one wallet: when, which way, its USD size when known, and its wallet tags. */
-export type PersonTrade = Readonly<{ address: string; timestampMs: number; side: "buy" | "sell"; usd: number | null; labels: readonly WalletLabel[] }>;
+/** `id` is the activity row's position, unique per event. */
+export type PersonTrade = Readonly<{ id: string; address: string; timestampMs: number; side: "buy" | "sell"; usd: number | null; labels: readonly WalletLabel[] }>;
 
 /** One wallet on one bar: everything it bought and sold there. `bought`/`sold` are USD, null when a trade's size is unknown. */
 export type Person = Readonly<{
@@ -37,7 +38,7 @@ export function personTrades(rows: readonly ActivityRow[], deployer: string | nu
     if (row.volumeUsd !== undefined) usd = Number(row.volumeUsd);
     else if (quote !== undefined && quoteDecimals !== null && quoteUsd !== null) usd = Number(shiftDecimal(quote.toString(), -quoteDecimals)) * Number(quoteUsd);
     const side = row.kind === "curve_buy" || row.kind === "venue_buy" ? "buy" : "sell";
-    return [{ address: row.actor, timestampMs: row.timestampMs, side, usd: usd !== null && Number.isFinite(usd) ? usd : null, labels: tradeWalletLabels(row, deployer) }];
+    return [{ id: row.position, address: row.actor, timestampMs: row.timestampMs, side, usd: usd !== null && Number.isFinite(usd) ? usd : null, labels: tradeWalletLabels(row, deployer) }];
   });
 }
 

@@ -7,8 +7,9 @@ const MINUTE = 60_000;
 const T0 = 1_795_188_300_000;
 const A = `0x${"a".repeat(64)}`, B = `0x${"b".repeat(64)}`, C = `0x${"c".repeat(64)}`, D = `0x${"d".repeat(64)}`, E = `0x${"e".repeat(64)}`, ME = `0x${"f".repeat(64)}`;
 const bar = (minute: number, low = 1, high = 2): Bar => ({ timestamp: T0 + minute * MINUTE, open: low, high, low, close: high, volume: 1 });
+let nextTradeId = 0;
 const trade = (address: string, minute: number, side: "buy" | "sell", usd: number | null = 10, labels: PersonTrade["labels"] = []): PersonTrade =>
-  ({ address, timestampMs: T0 + minute * MINUTE + 1_000, side, usd, labels });
+  ({ id: String(nextTradeId++), address, timestampMs: T0 + minute * MINUTE + 1_000, side, usd, labels });
 const bars = [bar(0), bar(1, 3, 5), bar(2)];
 
 test("one person per wallet per bar, with what it bought and sold there", () => {
