@@ -19,7 +19,6 @@ export type CreationReviewState = Readonly<{
   intent: CreateVesting;
   attempt: VestingAttempt;
   coin: WalletCoinView;
-  timezone: string;
   sender: string | null;
 }>;
 

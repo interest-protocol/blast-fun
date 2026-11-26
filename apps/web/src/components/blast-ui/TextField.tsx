@@ -5,7 +5,7 @@ import { ControlChevron } from "./ControlChevron";
 import styles from "./Controls.module.css";
 
 type InputProps = Omit<ComponentPropsWithRef<"input">, "type" | "size" | "style"> & {
-  type?: "text" | "search" | "email" | "number" | "password" | "url" | "tel" | "datetime-local";
+  type?: "text" | "search" | "email" | "number" | "password" | "url" | "tel" | "datetime-local" | "time";
   size?: ControlSize;
 };
 

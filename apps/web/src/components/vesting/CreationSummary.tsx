@@ -10,7 +10,7 @@ import {
   linearReleaseSummary,
   type CreationInput,
 } from "./creation-model";
-import { compactVestingAmount, localVestingDate } from "./creation-display";
+import { compactVestingAmount, summaryDate } from "./creation-display";
 import { VestingChart } from "./VestingChart";
 import styles from "./Vesting.module.css";
 import createStyles from "./Creation.module.css";
@@ -20,7 +20,6 @@ const ZERO_ATOMS = 0n;
 function summaryOf(
   draft: CreationInput,
   coin: WalletCoinView | null,
-  timezone: string,
 ) {
   let total: bigint | null = null;
   let schedule: CreateVesting["schedule"] | null = null;
@@ -41,14 +40,11 @@ function summaryOf(
   let first = "Complete schedule";
   let final = "Complete schedule";
   if (linear) {
-    first = localVestingDate(linear.start, timezone);
-    final = localVestingDate(linear.final, timezone);
+    first = summaryDate(linear.start);
+    final = summaryDate(linear.final);
   } else if (schedule?.kind === "checkpoints") {
-    first = localVestingDate(schedule.checkpoints[0]!.timestamp_ms, timezone);
-    final = localVestingDate(
-      schedule.checkpoints.at(-1)!.timestamp_ms,
-      timezone,
-    );
+    first = summaryDate(schedule.checkpoints[0]!.timestamp_ms);
+    final = summaryDate(schedule.checkpoints.at(-1)!.timestamp_ms);
   }
   return {
     customCount:
@@ -69,13 +65,11 @@ function summaryOf(
 export function LiveSummary({
   draft,
   coin,
-  timezone = "UTC",
 }: Readonly<{
   draft: CreationInput;
   coin: WalletCoinView | null;
-  timezone?: string;
 }>) {
-  const summary = summaryOf(draft, coin, timezone);
+  const summary = summaryOf(draft, coin);
   const recipient =
     /^0x[\da-f]{64}$/i.test(draft.beneficiary.trim()) &&
     !/^0x0{64}$/i.test(draft.beneficiary.trim())
@@ -91,7 +85,7 @@ export function LiveSummary({
     <>
       <div className={createStyles.summaryHeading}>
         <h2>Your vesting</h2>
-        <span>Sui Mainnet · All times {timezone}</span>
+        <span>Sui Mainnet · All times UTC</span>
       </div>
       <div className={createStyles.summaryAmount}>
         <SummaryAmount compact={summary.compact} exact={summary.totalLabel} />
@@ -139,7 +133,6 @@ export function LiveSummary({
         <ReleaseExplanation
           summary={summary}
           cliffDays={draft.cliffDays}
-          timezone={timezone}
         />
       </div>
     </>
@@ -153,11 +146,9 @@ function SummaryAmount({ compact, exact }: Readonly<{ compact: string; exact: st
 function ReleaseExplanation({
   summary,
   cliffDays,
-  timezone,
 }: Readonly<{
   summary: ReturnType<typeof summaryOf>;
   cliffDays: string;
-  timezone: string;
 }>) {
   const { linear, amount } = summary;
   if (!linear) return null;
@@ -166,12 +157,12 @@ function ReleaseExplanation({
 
       {BigInt(cliffDays.trim() || "0") > ZERO_ATOMS ? (
         <p>
-          Cliff ends {localVestingDate(linear.cliffEnd, timezone)}
+          Cliff ends {summaryDate(linear.cliffEnd)}
         </p>
       ) : null}
       <p>
         First claimable: {amount(linear.firstAmount)} on{" "}
-        {localVestingDate(linear.first, timezone)}.
+        {summaryDate(linear.first)}.
       </p>
     </div>
   );

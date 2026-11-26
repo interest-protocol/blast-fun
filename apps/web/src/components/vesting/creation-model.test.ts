@@ -167,7 +167,6 @@ test("regular steps generate exact checkpoint intents, never continuous linear t
   const releases = regularCheckpointReleases(
     { ...draft, periods: "3", periodDays: "7" },
     101n,
-    "UTC",
   );
   const schedule = createIntent(
     { ...draft, kind: "checkpoints", releases },
@@ -193,38 +192,20 @@ test("regular steps generate exact checkpoint intents, never continuous linear t
     regularCheckpointReleases({ ...draft, periods: "3" }, 2n),
   );
 });
-test("generated checkpoint instants remain exact across local DST transitions", () => {
-  const input = {
-    ...draft,
-    start: "2030-03-09T12:00-05:00[America/New_York]",
-    periodDays: "1",
-    periods: "3",
-  };
-  const releases = regularCheckpointReleases(input, 101n, "America/New_York");
+test("generated checkpoint dates are exact UTC instants", () => {
+  const input = { ...draft, start: "2030-03-09T12:00", periodDays: "1", periods: "3" };
+  const releases = regularCheckpointReleases(input, 101n);
   const start = releaseTimestamp(input.start, "start");
-  assert.match(releases[0]!.date, /T13:00:00-04:00/);
+  assert.equal(releases[0]!.date, "2030-03-10T12:00:00.000Z");
   releases.forEach((release, i) =>
-    assert.equal(
-      releaseTimestamp(release.date, "date"),
-      start + DAY * BigInt(i + 1),
-    ),
+    assert.equal(releaseTimestamp(release.date, "date"), start + DAY * BigInt(i + 1)),
   );
 });
-test("local timezone conversion is explicit and rejects the daylight-saving gap", () => {
-  const previous = process.env.TZ;
-  try {
-    process.env.TZ = "America/New_York";
-    assert.equal(
-      new Date(
-        Number(releaseTimestamp("2030-01-01T12:00", "start", "America/New_York")),
-      ).toISOString(),
-      "2030-01-01T17:00:00.000Z",
-    );
-    fieldError(() => releaseTimestamp("2030-03-10T02:30", "start", "America/New_York"), "start");
-  } finally {
-    if (previous === undefined) delete process.env.TZ;
-    else process.env.TZ = previous;
-  }
+test("generated checkpoints stop before year 10000, which dates cannot be written in", () => {
+  fieldError(
+    () => regularCheckpointReleases({ ...draft, start: "9999-12-31T12:00", periodDays: "1", periods: "1" }, 1n),
+    "periods",
+  );
 });
 test("custom schedules use exact cumulative atoms and preserve input when validation fails", () => {
   const custom = {

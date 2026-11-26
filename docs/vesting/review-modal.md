@@ -30,9 +30,7 @@ the form or invokes a transaction.
 Continuous schedules reuse `linearReleaseSummary`, showing first claimable,
 cliff and fully vested instants with exact atomic rounding. Historical stepped
 schedule counts retain cliff catch-up and skipped zero-atom releases. Custom payouts remain differences between cumulative
-amounts using bigint. The selected IANA timezone appears once; exact UTC
-values live in a separate disclosure. The existing timestamp formatters retain
-DST conversion. Cancellation consequences remain visible, while a disclosure
+amounts using bigint. All times are UTC, labelled once. Cancellation consequences remain visible, while a disclosure
 explains the transferable CancelCap, its initial recipient, and the fixed
 refund destination.
 
