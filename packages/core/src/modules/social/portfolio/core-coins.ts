@@ -76,6 +76,8 @@ export function blastV1Coin(coinType: string) {
 
 /** These pages use a verified SUI-paired pool registered in blast-infra. */
 export const INDEXED_POOL_COINS = CORE_COINS.filter((coin) => "poolKey" in coin);
+/** The curated coins listed as ecosystem coins: a coin with a tracked pool already has its own Home row, so it is left out. */
+export const ECOSYSTEM_LIST_COINS = CORE_COINS.filter((coin) => !("poolKey" in coin));
 
 /** The coin a pool page prices against. */
 export type PoolQuote = Readonly<{ coinType: string; symbol: string; decimals: number }>;
