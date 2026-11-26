@@ -42,7 +42,7 @@ export function CoinIdentityHeader({ coin, name, symbol, status, graduated, mark
       <span className={styles.heroMark}><CoinMark coin={coin} size={55} /></span>
       <PageHeader
         title={<span className={styles.coinName}>
-          {tickerOnly ? <span className="ticker">${symbol}</span> : <span title={compact && name ? name : undefined}>{name}</span>}
+          {tickerOnly ? <span className="ticker">${symbol}</span> : <span title={name || undefined}>{name}</span>}
           <small className="coinNamed">
             {symbol && !tickerOnly ? <span className="ticker">${symbol}</span> : null}
             {mark}
@@ -149,8 +149,9 @@ export function MarketOverview({
   </section>;
 }
 
-export function ChartCard({ children }: Readonly<{ children: ReactNode }>) {
-  return <section className={`${styles.card} ${styles.marketChart}`} aria-label="Price chart">{children}</section>;
+/** The price chart's card; `head` is the price row, so the price and the candles read as one block. */
+export function ChartCard({ head, children }: Readonly<{ head?: ReactNode; children: ReactNode }>) {
+  return <section className={`${styles.card} ${styles.marketChart}`} aria-label="Price chart">{head}{children}</section>;
 }
 
 type ActivityTab = "trades" | "holders" | "posts";

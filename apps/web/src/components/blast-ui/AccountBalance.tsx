@@ -73,7 +73,7 @@ function BalanceChip({ amount, compactAmount, loading, partial }: Readonly<{ amo
       {loading ? <span aria-hidden="true" className={styles.balancePlaceholder} /> : <>
         <span className={styles.balanceExact}>{amount}</span>
         <span className={styles.balanceCompact}>{compactAmount}</span>
-        {partial ? " · Partial" : null}
+        {partial ? <span className={styles.balancePartial}> · Partial</span> : null}
       </>}
     </b>
   );

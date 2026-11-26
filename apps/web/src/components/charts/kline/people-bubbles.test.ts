@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Bar } from "./kline-model.ts";
-import { barPeople, bubbleHeadroom, layoutBubbles, MAX_PEOPLE, mousePress, personIdentity, profileAt, rememberProfiles, RING, STACK_LIMIT, type Person, type PersonTrade } from "./people-bubbles.ts";
+import { barPeople, bubbleHeadroom, bubblePitch, layoutBubbles, MAX_PEOPLE, moreWidth, mousePress, personIdentity, profileAt, rememberProfiles, RING, STACK_LIMIT, type Bubble, type Person, type PersonTrade } from "./people-bubbles.ts";
 
 const MINUTE = 60_000;
 const T0 = 1_795_188_300_000;
@@ -97,7 +97,7 @@ test("a stack with room for only one bubble over the price folds into +N instead
   assert.deepEqual(bubbles.map((bubble) => bubble.kind === "more" && bubble.people.length), [3]);
   assert.ok(gapOver(bubbles[0]!.y, px(high)) >= SIZE, String(bubbles[0]!.y));
   // Two slots: one person and a +2. The viewer's own bubble still shows.
-  const two = layoutBubbles(crowd, place, 1_000, 400, SIZE, { topInset: inset - SIZE * .8 });
+  const two = layoutBubbles(crowd, place, 1_000, 400, SIZE, { topInset: inset - bubblePitch(SIZE) });
   assert.deepEqual(two.map((bubble) => bubble.kind), ["person", "more"]);
   assert.ok(two.every((bubble) => gapOver(bubble.y, px(high)) >= SIZE), two.map((bubble) => bubble.y).join());
   const mine = layoutBubbles([...crowd.slice(1), person(ME, 0, { high, low: 0.5, own: true })], place, 1_000, 400, SIZE, { topInset: inset });
@@ -162,11 +162,40 @@ test("the bubble cap counts only people on screen, so scrolling back still shows
   assert.ok(layoutBubbles(crowd, place, 1_000, 10_000, SIZE).length <= MAX_PEOPLE);
 });
 
-test("neighbouring columns never overlap, however the bars fall", () => {
+/** A bubble's box on the plot, its ring included: a "+N" grows to the right from where a face would start. */
+const box = (bubble: Bubble, size: number) => {
+  const width = bubble.kind === "more" ? moreWidth(bubble.people.length, size) : size;
+  return { left: bubble.x - size / 2 - RING, right: bubble.x - size / 2 + width + RING, top: bubble.y - size / 2 - RING, bottom: bubble.y + size / 2 + RING };
+};
+const overlaps = (a: ReturnType<typeof box>, b: ReturnType<typeof box>) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+
+test("no two bubbles ever overlap, rings and +N included, however the trades fall", () => {
   // x = 0, 20, 30, 40: fixed 24 px bins would put bubbles 10 px apart.
-  const xs = layoutBubbles([person(A, 0), person(B, 2), person(C, 3), person(D, 4)], place, 1_000, 400, SIZE)
-    .map((bubble) => bubble.x).sort((a, b) => a - b);
-  assert.ok(xs.every((x, index) => index === 0 || x === xs[index - 1] || x - xs[index - 1]! >= 24), xs.join());
+  const few = layoutBubbles([person(A, 0), person(B, 2), person(C, 3), person(D, 4)], place, 1_000, 400, SIZE);
+  assert.equal(few.length, 4);
+  // Busy charts: up to 40 wallets per bar on bars 1–12 px apart, prices anywhere on the plot, both bubble sizes.
+  let seed = 7;
+  const random = () => (seed = (seed * 16_807) % 2_147_483_647) / 2_147_483_647;
+  for (let round = 0; round < 200; round++) {
+    const size = round % 2 ? 18 : 20;
+    const spacing = 1 + Math.floor(random() * 12);
+    const crowd = Array.from({ length: 20 + Math.floor(random() * 180) }, (_, index) => {
+      const at = Math.floor(random() * 60), high = 2 + random() * 36, low = high - random() * Math.min(high - 1, 10);
+      return { ...person(`0x${index.toString(16).padStart(64, "0")}`, at, { high, low, own: random() < .03, labels: random() < .1 ? ["whale"] : [] }), bar: T0 + at * MINUTE };
+    });
+    const placeAt = (one: Person) => ({ x: (one.bar - T0) / MINUTE * spacing, top: px(one.high), bottom: px(one.low) });
+    const bubbles = layoutBubbles(crowd, placeAt, 1_000, 400, size, { topInset: 20 });
+    const boxes = bubbles.map((bubble) => box(bubble, size));
+    for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) {
+      assert.ok(!overlaps(boxes[i]!, boxes[j]!), `round ${round}: ${bubbles[i]!.key} and ${bubbles[j]!.key} overlap`);
+    }
+    // Each column sits over its own traders: never pushed past them, however many "+NN" columns come before.
+    const columns = Map.groupBy(bubbles, (bubble) => bubble.x);
+    for (const [x, column] of columns) {
+      const xs = column.flatMap((bubble) => bubble.kind === "more" ? bubble.people : [bubble.person]).map((one) => placeAt(one).x);
+      assert.ok(x >= Math.min(...xs) && x <= Math.max(...xs), `round ${round}: column at ${x} is off its traders (${Math.min(...xs)}–${Math.max(...xs)})`);
+    }
+  }
 });
 
 test("a bar that fills the plot still fans its stack out on the plot instead of piling up", () => {

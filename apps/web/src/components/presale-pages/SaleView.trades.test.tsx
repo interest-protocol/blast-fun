@@ -119,7 +119,7 @@ test("confirmed presale trades update the list and headline without a read, incl
     assert.ok(headline);
     const status = () => headline.querySelector('[role="status"]')?.textContent;
     assert.equal(status(), "", "history never announces a trade");
-    assert.equal(chart.querySelector("[data-chart-last-trade]"), null);
+    assert.equal(chart.querySelector("[data-chart-last-trade]:not([data-chart-last-trade=\"headline\"])"), null);
     assert.equal(container.querySelector('[data-sale-market] button[aria-label="Sound"]'), null);
     const chartCues = () => animations.all.filter(({ target, timing }) =>
       target.closest("[data-chart-last-trade]") && timing.duration === 1_280);

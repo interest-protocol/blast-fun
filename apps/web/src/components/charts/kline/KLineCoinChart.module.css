@@ -15,21 +15,27 @@
  * so the chart arrives without a jump.
  */
 .chart { --kline-plot-height: 26rem; --kline-readout-height: 1.5rem; }
-.plot { position: relative; inline-size: 100%; block-size: var(--kline-plot-height); overflow: hidden; }
-.loading {
+/*
+ * `--kline-base` is the studies' height in px, set by the chart; `--kline-grow` (the coin chart's
+ * card, Chart.module.css) is the window's spare height the price pane takes on a large screen.
+ */
+.plot { position: relative; inline-size: 100%; block-size: calc(var(--kline-base, var(--kline-plot-height)) + var(--kline-grow, 0rem)); overflow: hidden; }
+.loading, .sized {
   /* The default plot, as the chart sizes it in px: price 290 + volume 100 + 1 + axis 25 = 416, which 26rem matches at the default text size (phone 200 + 80 + 1 + 25). */
   --kline-plot-height: 26rem;
   --kline-readout-height: 1.5rem;
-  block-size: calc(2.75rem + var(--kline-readout-height) + 1rem + var(--kline-plot-height));
+  block-size: calc(2.75rem + var(--kline-readout-height) + 1rem + var(--kline-plot-height) + var(--kline-grow, 0rem));
 }
+/* A state in the chart's place (empty, error) keeps its height, and grows only for its own content. */
+.sized { block-size: auto; min-block-size: calc(2.75rem + var(--kline-readout-height) + 1rem + var(--kline-plot-height) + var(--kline-grow, 0rem)); }
 @media (max-width: 760px), (pointer: coarse) {
-  .chart, .loading { --kline-plot-height: 306px; }
+  .chart, .loading, .sized { --kline-plot-height: 306px; }
 }
 /* Sized by its column like the chart, so the readout it reserves matches the one that arrives. */
 .loadingFrame { display: block; container-type: inline-size; }
 .loadingFrame > .loading { display: block; }
-@container (max-width: 560px) { .loading { --kline-readout-height: 2.5rem; } }
-@container (max-width: 340px) { .loading { --kline-readout-height: 3.75rem; } }
+@container (max-width: 560px) { .loading, .sized { --kline-readout-height: 2.5rem; } }
+@container (max-width: 340px) { .loading, .sized { --kline-readout-height: 3.75rem; } }
 
 /*
  * The bar under the pointer, else the newest: one row on a wide card, two on a narrow one,
