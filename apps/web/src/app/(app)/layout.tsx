@@ -59,7 +59,7 @@ export default async function AppLayout({
       <FeelProvider>
         <PresaleProviders config={config} nonce={nonce}>
           <SocialSession>
-            {testPricing ? <TestPricingProvider enabled>{shell}</TestPricingProvider> : shell}
+            <TestPricingProvider enabled={testPricing}>{shell}</TestPricingProvider>
           </SocialSession>
         </PresaleProviders>
       </FeelProvider>
