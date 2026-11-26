@@ -261,8 +261,11 @@ test(
 
     assert.equal(await status(target, signGatewayRequest(target, secret, ip, namespace)), 200);
     const devHeaders = signGatewayRequest(target, secret, ip, dev);
+    const before = keys.length;
     assert.equal(await status(target, devHeaders), 200, "prod's spent quota does not limit dev");
-    assert.ok(keys.some((key) => key.startsWith(`${dev}:`)));
+    const devKeys = keys.slice(before);
+    assert.ok(devKeys.some((key) => key.startsWith(`${dev}:`)));
+    assert.ok(!devKeys.some((key) => key.includes(namespace)), "a dev read writes no primary key");
     assert.equal(await status(target, devHeaders), 403, "a dev proof is single use");
     assert.equal(
       await status(target, signGatewayRequest(target, secret, ip, dev)),

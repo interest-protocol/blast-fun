@@ -45,7 +45,12 @@ export async function privateRequest(
   }
   // The envelope admits only a canonical proof.ip, so a null client here is a broken proof.
   const client = attestClientAddress(proof?.ip ?? null);
-  if (!proof || !client || proof.route.id !== contract.id) {
+  // An extra site's browser request may carry only its own Origin. Any other one, the primary's
+  // included, would match the handlers' same-origin check after the rewrite below.
+  const origin = request.headers.get("origin");
+  const foreignOrigin =
+    proof?.siteOrigin !== primary.siteOrigin && origin !== null && origin !== proof?.siteOrigin;
+  if (!proof || !client || proof.route.id !== contract.id || foreignOrigin) {
     return refuse(403, "private_gateway_forbidden");
   }
   options.onAuthenticated?.(proof);
@@ -72,8 +77,7 @@ export async function privateRequest(
   headers.delete("host");
   headers.delete("content-length");
   // Handlers check same-origin against the primary site. The proof already names the signing site,
-  // so an extra site's request reaches them as the primary's; a browser Origin naming any other
-  // site is left as sent and still refused there.
+  // so an extra site's request reaches them as the primary's.
   if (proof.purpose === "ssr-read") {
     headers.set("origin", primary.siteOrigin);
     headers.set("sec-fetch-site", "same-origin");

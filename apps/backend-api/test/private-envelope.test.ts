@@ -158,10 +158,14 @@ test("an extra site is trusted only with its own namespace, which also keys its 
   const dev = { siteOrigin: "https://dev.frontend.test", namespace: "b".repeat(64) };
   const keys: string[] = [];
   const reached: string[] = [];
-  const run = (request: Request, extraSites?: (typeof dev)[]) =>
+  const run = (
+    request: Request,
+    extraSites?: (typeof dev)[],
+    contract = privateRoute("PUT", "/api/social/me/settings", "browser")!,
+  ) =>
     privateRequest(
       request,
-      privateRoute("PUT", "/api/social/me/settings", "browser")!,
+      contract,
       {
         namespace,
         gatewaySecret: secret,
@@ -203,17 +207,32 @@ test("an extra site is trusted only with its own namespace, which also keys its 
   assert.equal((await run(signed(dev))).status, 403, "no extra site configured");
   assert.deepEqual(keys, [`${namespace}:{partner-quota}:private-replay:${keys[0]!.split(":").at(-1)}`]);
 
-  // Configured: dev is accepted under its own namespace, and handlers see it as the primary site,
-  // except a browser Origin naming some other site, which stays for their same-origin check.
+  // Configured: dev is accepted under its own namespace, and handlers see it as the primary site.
   const devRequest = signed(dev);
   assert.equal((await run(devRequest.clone(), [dev])).status, 204);
   assert.match(keys[1]!, new RegExp(`^${dev.namespace}:\\{partner-quota\\}:private-replay:`));
   assert.equal((await run(devRequest, [dev])).status, 403, "a dev nonce is single use");
-  assert.equal((await run(signed(dev, "https://evil.test"), [dev])).status, 204);
+  // A dev envelope whose browser Origin names another site, the primary included, never reaches them.
+  for (const origin of ["https://evil.test", siteOrigin]) {
+    assert.equal((await run(signed(dev, origin), [dev])).status, 403, origin);
+  }
+  // A dev SSR read reaches them as a same-origin primary read too.
+  const ssrSource = new Request(dev.siteOrigin + "/api/social/me");
+  const ssr = new Request(siteOrigin + "/api/social/me", {
+    headers: signPrivateRequest(ssrSource, new Uint8Array(), secret, {
+      ...dev,
+      purpose: "ssr-read",
+      ip: "192.0.2.1",
+    }),
+  });
+  assert.equal(
+    (await run(ssr, [dev], privateRoute("GET", "/api/social/me", "ssr-read")!)).status,
+    204,
+  );
   assert.deepEqual(reached, [
     `${siteOrigin} ${siteOrigin}`,
     `${siteOrigin} ${siteOrigin}`,
-    `${siteOrigin} https://evil.test`,
+    `${siteOrigin} ${siteOrigin}`,
   ]);
 
   // An unknown origin, or a site's origin paired with another site's namespace, is refused.
