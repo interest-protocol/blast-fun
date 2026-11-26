@@ -5,6 +5,8 @@ import type { PresaleClientConfig, PresaleConfig } from "../config.ts";
 export type PresaleSlotProps = Readonly<{
   config: PresaleClientConfig;
   nonce: string | null;
+  /** The request carries a Privy session cookie, so the session's SDK loads at once. */
+  privySession?: boolean;
   children: ReactNode;
 }>;
 

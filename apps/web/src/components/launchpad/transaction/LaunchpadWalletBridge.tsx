@@ -7,10 +7,10 @@
 // direct wallet. Both sign for the one `network` the provider names.
 
 import { normalizeSuiAddress } from "@mysten/sui/utils";
-import { useLogin, usePrivy, type User } from "@privy-io/react-auth";
-import { useCreateWallet, useSignRawHash } from "@privy-io/react-auth/extended-chains";
+import type { User } from "@privy-io/react-auth";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { PrivyAuthProvider } from "#web/components/auth/PrivyAuthProvider.tsx";
+import { usePrivyLoginEvents, usePrivySession } from "#web/components/auth/privy-session.ts";
+import { PrivySessionProvider, usePrivySessionMounted } from "#web/components/presale/providers/PrivySessionProvider.tsx";
 
 import type { SignerKind } from "./action-machine";
 import {
@@ -73,49 +73,52 @@ function WalletPart({
 }
 
 function PrivyPart({ onReady, network }: Readonly<{ onReady: PartReady; network: string }>) {
-  const privy = usePrivy();
+  const session = usePrivySession();
   const pendingLogin = useRef<{
     resolve: (user: User) => void;
     reject: (error: Error) => void;
   } | null>(null);
-  const { login } = useLogin({
-    onComplete: ({ user }) => pendingLogin.current?.resolve(user),
-    onError: (code) =>
-      pendingLogin.current?.reject(new Error(`Privy sign-in did not finish (${code}).`)),
+  usePrivyLoginEvents((event) => {
+    if (event.kind === "login") pendingLogin.current?.resolve(event.user);
+    else if (event.kind === "login-error")
+      pendingLogin.current?.reject(new Error(`Privy sign-in did not finish (${event.code}).`));
   });
-  const latest = useLatest({
-    privy,
-    login,
-    createWallet: useCreateWallet().createWallet,
-    signRawHash: useSignRawHash().signRawHash,
-  });
+  const latest = useLatest(session.runtime);
+  const { load } = session;
+  // This bridge mounts for a signer request: start Privy's SDK now.
+  useEffect(load, [load]);
 
   useEffect(() => {
+    const started = async () => {
+      const startedAt = Date.now();
+      while (!latest.current) {
+        if (Date.now() - startedAt > PRIVY_READY_TIMEOUT_MS)
+          throw new Error("Privy did not start. Try again.");
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      return latest.current;
+    };
     const state = {
       network,
-      async ready() {
-        const startedAt = Date.now();
-        while (!latest.current.privy.ready) {
-          if (Date.now() - startedAt > PRIVY_READY_TIMEOUT_MS)
-            throw new Error("Privy did not start. Try again.");
-          await new Promise((resolve) => setTimeout(resolve, 50));
-        }
-        return latest.current.privy;
-      },
-      login: () =>
-        new Promise<User>((resolve, reject) => {
+      ready: started,
+      login: async () => {
+        const privy = await started();
+        // Offer every wallet, including mobile pairing, for a launchpad sign-in.
+        privy.enableWallets("picker");
+        return new Promise<User>((resolve, reject) => {
           pendingLogin.current = { resolve, reject };
-          latest.current.login();
-        }),
-      createWallet: () => latest.current.createWallet({ chainType: "sui" }),
-      signRawHash: (input: Parameters<typeof latest.current.signRawHash>[0]) =>
-        latest.current.signRawHash(input),
-      accessToken: () => latest.current.privy.getAccessToken(),
+          privy.login();
+        });
+      },
+      createWallet: async () => (await started()).createWallet({ chainType: "sui" }),
+      signRawHash: async (input: Parameters<NonNullable<typeof latest.current>["signRawHash"]>[0]) =>
+        (await started()).signRawHash(input),
+      accessToken: async () => (await started()).getAccessToken(),
     };
     onReady("privy", {
       current: () =>
-        latest.current.privy.authenticated
-          ? currentPrivySigner(state, latest.current.privy.user)
+        latest.current?.authenticated
+          ? currentPrivySigner(state, latest.current.user)
           : null,
       connect: () => connectPrivySigner(state),
     });
@@ -136,6 +139,8 @@ export default function LaunchpadWalletBridge({
   nonce: string;
 }>) {
   const [dAppKit] = useState(() => launchpadDAppKit(network));
+  // Inside the page's Privy session, the bridge signs with that one session.
+  const sessionMounted = usePrivySessionMounted();
   const parts = useRef<Partial<Record<SignerKind, Part>>>({});
   const lastKind = useRef<SignerKind | null>(null);
   const onReady = useCallback<PartReady>(
@@ -163,9 +168,13 @@ export default function LaunchpadWalletBridge({
     <>
       <WalletPart onReady={onReady} network={network} dAppKit={dAppKit} />
       {privyAppId ? (
-        <PrivyAuthProvider appId={privyAppId} nonce={nonce}>
+        sessionMounted ? (
           <PrivyPart onReady={onReady} network={network} />
-        </PrivyAuthProvider>
+        ) : (
+          <PrivySessionProvider appId={privyAppId} nonce={nonce}>
+            <PrivyPart onReady={onReady} network={network} />
+          </PrivySessionProvider>
+        )
       ) : null}
     </>
   );

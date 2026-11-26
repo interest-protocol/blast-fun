@@ -1,70 +1,107 @@
 "use client";
 
-import type { PrivyClientConfig } from "@privy-io/react-auth";
-import { toSolanaWalletConnectors } from "@privy-io/react-auth/solana";
-import { getWallets, type Wallets } from "@wallet-standard/app";
-import { createContext, useContext, type ReactNode } from "react";
-import { PrivyAuthProvider } from "#web/components/auth/PrivyAuthProvider.tsx";
-import { useIsDark } from "#web/components/blast-ui/use-shell-prefs.ts";
+import dynamic from "next/dynamic";
+import { useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useHydrated } from "#web/components/ui-libraries/use-hydrated.tsx";
+import {
+  PrivySessionContext,
+  privySessionValue,
+  type PrivyLoginListener,
+  type PrivyRuntime,
+} from "#web/components/auth/privy-session.ts";
+import type { PrivySessionRuntimeProps } from "./PrivySessionRuntime.tsx";
 
-const PrivySessionMounted = createContext(false);
-type WalletConfig = { solana: { connectors: ReturnType<typeof toSolanaWalletConnectors> } };
-const documentConfigs = new WeakMap<Document, Map<string, WalletConfig>>();
+/** Calls `onUnavailable` once: the SDK's code did not load, so the page stays signed out. */
+function RuntimeUnavailable({ onUnavailable }: Readonly<{ onUnavailable: () => void }>) {
+  useEffect(onUnavailable, [onUnavailable]);
+  return null;
+}
+
+// Privy, WalletConnect and the wallet kits load in their own chunk, never with the page.
+const PrivySessionRuntime = dynamic<PrivySessionRuntimeProps & Readonly<{ onUnavailable: () => void }>>(
+  () => import("./PrivySessionRuntime.tsx").catch(() => RuntimeUnavailable),
+  { ssr: false },
+);
 
 /**
  * Whether a `PrivySessionProvider` is above: `WalletProvider` mounts it only
- * while `PRIVY_APP_ID` is set. Privy's `usePrivy` answers "not ready" without
- * a provider, but `useLogin` and `useLogout` throw, so a component that calls
- * them (the sign-in page) checks this first.
+ * while `PRIVY_APP_ID` is set. Below it, `usePrivySession` reads the session
+ * and loads Privy's SDK on demand.
  */
 export function usePrivySessionMounted(): boolean {
-  return useContext(PrivySessionMounted);
+  return useContext(PrivySessionContext) !== null;
 }
 
-/** Presale and social pages share Mission Control's app ID and discover installed Solana wallets. */
+const PRIVY_COOKIE = /(?:^|;\s*)privy-(?:token|session)=/;
+const PRIVY_STORED_TOKEN = /^privy:(?:.+:)?(?:token|refresh_token)$/;
+
+/** A Privy session this browser may hold, or an OAuth sign-in returning to this page. */
+function browserPrivySession(): boolean {
+  const params = new URLSearchParams(window.location.search);
+  if (params.has("privy_oauth_code") || params.has("privy_oauth_state")) return true;
+  if (PRIVY_COOKIE.test(document.cookie)) return true;
+  try {
+    for (let index = 0; index < window.localStorage.length; index++) {
+      if (PRIVY_STORED_TOKEN.test(window.localStorage.key(index) ?? "")) return true;
+    }
+  } catch {
+    // Blocked storage holds no Privy session.
+  }
+  return false;
+}
+
+/**
+ * The page's Privy session without Privy's SDK on first load. The SDK (about
+ * 550 KB gzip with its wallet kits) loads when this browser holds a session
+ * (`sessionCookie` from the request, or Privy's own storage) or when a
+ * sign-in asks for it (`load`). Until it has started, readers see a stable
+ * signed-out value: not ready while a session is expected.
+ *
+ * Privy's hooks need its provider above them, and `next/dynamic` cannot keep
+ * the page mounted while that provider loads above it; swapping it in would
+ * remount the whole shell. So the provider renders beside the page and
+ * publishes its session through `PrivySessionContext` (`usePrivySession`).
+ */
 export function PrivySessionProvider({
   appId,
   nonce,
+  sessionCookie = false,
   children,
-}: Readonly<{ appId: string; nonce: string | null; children: ReactNode }>) {
-  const theme = useIsDark() ? "dark" : "light";
-  return (
-    <PrivyAuthProvider key={appId} appId={appId} nonce={nonce} deferWalletPicker externalWallets={sessionWallets(appId)} theme={theme}>
-      <PrivySessionMounted value>{children}</PrivySessionMounted>
-    </PrivyAuthProvider>
+}: Readonly<{ appId: string; nonce: string | null; sessionCookie?: boolean; children: ReactNode }>) {
+  // Privy's own storage is read once the page is the browser's; until then a session may exist.
+  const hydrated = useHydrated();
+  const stored = useMemo(() => hydrated && browserPrivySession(), [hydrated]);
+  const expected = sessionCookie || stored;
+  const [requested, setRequested] = useState(false);
+  const [unavailable, setUnavailable] = useState(false);
+  const [runtime, setRuntime] = useState<PrivyRuntime | null>(null);
+  const [listeners] = useState(() => new Set<PrivyLoginListener>());
+
+  const load = useCallback(() => setRequested(true), []);
+  const onUnavailable = useCallback(() => setUnavailable(true), []);
+  const subscribe = useCallback((listener: PrivyLoginListener) => {
+    listeners.add(listener);
+    return () => void listeners.delete(listener);
+  }, [listeners]);
+  const emit = useCallback<PrivyLoginListener>((event) => {
+    for (const listener of listeners) listener(event);
+  }, [listeners]);
+
+  const value = useMemo(
+    () => privySessionValue(runtime, unavailable || (hydrated && !expected), load, subscribe),
+    [expected, hydrated, load, runtime, subscribe, unavailable],
   );
-}
-
-function sessionWallets(appId: string): PrivyClientConfig["externalWallets"] {
-  if (typeof document === "undefined") {
-    return undefined;
-  }
-  let configs = documentConfigs.get(document);
-  if (!configs) {
-    configs = new Map();
-    documentConfigs.set(document, configs);
-  }
-  const previous = configs.get(appId);
-  if (previous && matchesDiscoveredWallets(previous.solana.connectors, getWallets().get())) return previous;
-  previous?.solana.connectors.onUnmount();
-  // The factory subscribes immediately; per-render memoization leaks discarded Strict Mode renders.
-  const connectors = toSolanaWalletConnectors();
-  // Privy's onMount reattaches listeners without rescanning wallets registered during absence.
-  const entry = { solana: { connectors } };
-  configs.set(appId, entry);
-  return entry;
-}
-
-// The SDK observes registrations while mounted. Its WalletConnect adapter stays the same
-// across those events. A registration missed during absence requires a fresh scan.
-function matchesDiscoveredWallets(connectors: ReturnType<typeof toSolanaWalletConnectors>, wallets: ReturnType<Wallets["get"]>): boolean {
-  // The factory takes the first external Solana wallet of each name.
-  const eligible = new Map<string, (typeof wallets)[number]>();
-  for (const wallet of wallets) {
-    if (eligible.has(wallet.name) || !wallet.chains.some((chain) => chain.startsWith("solana:"))) continue;
-    if ("privy:" in wallet.features && "isPrivyWallet" in wallet && wallet.isPrivyWallet) continue;
-    eligible.set(wallet.name, wallet);
-  }
-  const detected = connectors.get().filter((connector) => connector.walletBranding.id !== "walletconnect_solana");
-  return detected.length === eligible.size && detected.every(({ wallet }) => eligible.get(wallet.name) === wallet);
+  // A stable element: the SDK re-renders only on its own changes, not on the session it publishes.
+  const sdk = useMemo(
+    () => requested || expected
+      ? <PrivySessionRuntime appId={appId} emit={emit} nonce={nonce} onChange={setRuntime} onUnavailable={onUnavailable} />
+      : null,
+    [appId, emit, expected, nonce, onUnavailable, requested],
+  );
+  return (
+    <PrivySessionContext value={value}>
+      {children}
+      {sdk}
+    </PrivySessionContext>
+  );
 }

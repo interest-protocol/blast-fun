@@ -2,11 +2,9 @@
 
 import { publicErrorMessage, PublicError, publicErrorCopy } from "#web/lib/errors.ts";
 
-import { usePrivy } from "@privy-io/react-auth";
-
 import { useQuery } from "@tanstack/react-query";
 
-import { usePrivySessionMounted } from "#web/components/presale/providers/PrivySessionProvider.tsx";
+import { usePrivySession } from "#web/components/auth/privy-session.ts";
 import { queryKeys } from "#web/lib/query/keys.ts";
 import { useAppQueryClient } from "#web/lib/query/provider.tsx";
 import { useHydrated } from "#web/components/ui-libraries/use-hydrated.tsx";
@@ -42,17 +40,17 @@ export const SocialAccountContext = createContext<UseSocialAccount | null>(null)
  * Loads the viewer's account, creating saved random defaults when absent,
  * using the Privy access token or wallet session cookie whenever the identity changes or
  * `refresh` is called. With `enabled` false it reads nothing (a shared state
- * is used instead). Without a Privy session mounted, Privy counts as ready and
- * signed out, so a wallet session still reads `me`.
+ * is used instead). Without a Privy session mounted, or before its SDK loads
+ * when no Privy session is expected, Privy counts as ready and signed out, so
+ * a wallet session still reads `me`.
  */
 export function useSocialAccountRead(enabled = true): UseSocialAccount {
-  const privy = usePrivy();
-  const privyMounted = usePrivySessionMounted();
+  const privy = usePrivySession();
   const wallet = useWalletSession();
   const hydrated = useHydrated();
   const { getAccessToken, user } = privy;
-  const ready = hydrated && (privyMounted ? privy.ready : true);
-  const authenticated = privyMounted && privy.authenticated;
+  const ready = hydrated && privy.ready;
+  const authenticated = privy.authenticated;
   const identity = authenticated ? (user?.id ?? "") : wallet.active ? "wallet" : "";
   const walletRefresh = wallet.refresh;
   const client = useAppQueryClient();
@@ -103,8 +101,7 @@ export function useSocialAccountRead(enabled = true): UseSocialAccount {
 /**
  * The caller's Blast Account for social pages: `{ status, account, refresh }`
  * (statuses in `social-account-client.ts`). Below a `SocialSession` it is the
- * page's shared state; elsewhere it reads `me` itself. Needs a
- * `PrivyProvider` above it (without one it stays `loading`).
+ * page's shared state; elsewhere it reads `me` itself.
  */
 export function useSocialAccount(): UseSocialAccount {
   const shared = useContext(SocialAccountContext);

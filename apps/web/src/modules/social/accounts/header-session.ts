@@ -8,6 +8,11 @@ import type { HeaderSession } from "#web/components/social/use-header-session.ts
 const SIGNED_OUT: HeaderSession = { signedIn: false, viewer: null, viewerLoading: false, viewerError: false };
 const HEADER_SESSION_TIMEOUT_MS = 1_000;
 
+/** The request carries a Privy access or session cookie: the page loads Privy's SDK at once. */
+export function hasPrivySessionCookie(headers: Headers): boolean {
+  return (headers.get("cookie") ?? "").split(";").some((part) => /^privy-(?:token|session)=/.test(part.trim()));
+}
+
 /** A request-local read through the existing me handler; credentials never reach client props. */
 export async function readHeaderSession(
   request: Request,

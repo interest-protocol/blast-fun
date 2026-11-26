@@ -25,6 +25,9 @@ registerHooks({
     if (specifier === "@wallet-standard/app") {
       return { shortCircuit: true, url: "data:text/javascript,export const getWallets=()=>globalThis.privyRegistryFixture;" };
     }
+    if (specifier === "@privy-io/react-auth/extended-chains") {
+      return { shortCircuit: true, url: "data:text/javascript,export const useCreateWallet=()=>({createWallet:async()=>({})});export const useSignRawHash=()=>({signRawHash:async()=>({})});" };
+    }
     if (specifier === "@privy-io/react-auth") {
       return {
         shortCircuit: true,
@@ -36,6 +39,9 @@ registerHooks({
             if (connectors) globalThis.privyRegistryFixture.recordWalletConnect(connectors.get().find(c => c.wallet.name === "WalletConnect"));
             return createElement("section", { "data-wallets": connectors?.get().map(c => c.wallet.name).join(",") }, children);
           }
+          export const usePrivy = () => ({ ready: false, authenticated: false, user: null, getAccessToken: async () => null, logout: async () => {} });
+          export const useLogin = () => ({ login() {} });
+          export const useLoginWithOAuth = () => ({ initOAuth: async () => {} });
         `)}`,
       };
     }
@@ -43,11 +49,12 @@ registerHooks({
   },
 });
 // The real public Privy factory and Solana connectors run against the stateful registry boundary.
-const { PrivySessionProvider } = await import("./PrivySessionProvider.tsx");
+const { default: PrivySessionRuntime } = await import("./PrivySessionRuntime.tsx");
+const noop = () => undefined;
 
 test("T-008: real SDK discovers added and removed wallets after absence while unchanged remounts retain one client", async () => {
   for (const appId of ["server-A", "server-B"]) {
-    renderToStaticMarkup(<PrivySessionProvider appId={appId} nonce={null}><span>Server</span></PrivySessionProvider>);
+    renderToStaticMarkup(<PrivySessionRuntime appId={appId} emit={noop} nonce={null} onChange={noop} />);
   }
   assert.equal(walletConnectInstances.size, 0, "server requests create no browser wallet clients");
   const dom = new JSDOM('<div id="mount"></div>', { url: "https://blast.test" });
@@ -55,7 +62,7 @@ test("T-008: real SDK discovers added and removed wallets after absence while un
   const root = createRoot(document.getElementById("mount")!);
   const lateWallet: Wallet = { name: "Late wallet", version: "1.0.0", icon: "data:image/svg+xml,", chains: ["solana:mainnet"], accounts: [], features: {} };
   const render = async (appId = "registry-app") => act(async () => root.render(
-    <StrictMode><PrivySessionProvider appId={appId} nonce={null}><span>Wallets</span></PrivySessionProvider></StrictMode>,
+    <StrictMode><PrivySessionRuntime appId={appId} emit={noop} nonce={null} onChange={noop} /></StrictMode>,
   ));
   const names = () => document.querySelector("section")?.getAttribute("data-wallets")?.split(",");
   try {
@@ -128,7 +135,7 @@ test("T-008: real SDK discovers added and removed wallets after absence while un
   Object.assign(globalThis, { window: secondDocument.window, document: secondDocument.window.document });
   const secondRoot = createRoot(document.getElementById("mount")!);
   try {
-    await act(async () => secondRoot.render(<PrivySessionProvider appId="registry-app" nonce={null}><span>Second document</span></PrivySessionProvider>));
+    await act(async () => secondRoot.render(<PrivySessionRuntime appId="registry-app" emit={noop} nonce={null} onChange={noop} />));
     assert.equal(walletConnectInstances.size, 10, "browser documents own independent configurations");
   } finally {
     await act(async () => secondRoot.unmount());

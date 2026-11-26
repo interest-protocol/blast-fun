@@ -1,6 +1,5 @@
 "use client";
 
-import { useLogin, useLoginWithOAuth, usePrivy } from "@privy-io/react-auth";
 import Link from "next/link";
 import { SIGN_IN_DRAFT_EVENT } from "#web/components/social/sign-in-draft.ts";
 import { redirect } from "next/navigation";
@@ -10,6 +9,7 @@ import { Button } from "#web/components/blast-ui/Button.tsx";
 import { GoogleLogo, HelmetMark, MahaloLogo, NightlyLogo, ScallopLogo, SlushLogo, WalletIcon, XLogo } from "#web/components/blast-ui/Icons.tsx";
 import { Sheet, SheetClose, SheetHeading } from "#web/components/blast-ui/Sheet.tsx";
 import { useShellAction } from "#web/components/blast-ui/shell-actions.tsx";
+import { usePrivyLoginEvents, usePrivySession } from "#web/components/auth/privy-session.ts";
 import { usePreparePrivyWalletPicker } from "#web/components/auth/privy-wallet-picker.ts";
 import { usePrivySessionMounted } from "#web/components/presale/providers/PrivySessionProvider.tsx";
 import { useSocialViewer } from "#web/components/social/SignInGate.tsx";
@@ -152,45 +152,39 @@ function writeAttempt(method: SignInMethod | null): void {
 function useSignInFlow(
   onReturn: (outcome: Readonly<{ signedIn: true; method: SignInMethod } | { signedIn: false; state: SignInState }>) => void,
 ): SignInFlow {
-  const { ready } = usePrivy();
+  const { runtime, load } = usePrivySession();
   const viewer = useSocialViewer();
   const wallet = useWalletSession();
   const [state, setState] = useState<SignInState>(SIGN_IN_IDLE);
-  const live = useRef({ ready, onReturn });
+  const live = useRef({ runtime, onReturn });
   useEffect(() => {
-    live.current = { ready, onReturn };
+    live.current = { runtime, onReturn };
   });
 
-  const { initOAuth } = useLoginWithOAuth({
-    onComplete: ({ wasAlreadyAuthenticated }) => {
+  // Privy's login events are shared by every flow: only a wallet login this sheet opened is answered.
+  const walletLoginOpen = useRef(false);
+  usePrivyLoginEvents((event) => {
+    if (event.kind === "oauth") {
       const method = readAttempt();
       writeAttempt(null);
-      if (method && !wasAlreadyAuthenticated) live.current.onReturn({ signedIn: true, method });
-    },
-    onError: (code) => {
+      if (method && !event.wasAlreadyAuthenticated) live.current.onReturn({ signedIn: true, method });
+    } else if (event.kind === "oauth-error") {
       const method = readAttempt();
       writeAttempt(null);
       if (!method) return;
-      const next = oauthErrorState(method, String(code));
+      const next = oauthErrorState(method, event.code);
       setState(next);
       live.current.onReturn({ signedIn: false, state: next });
-    },
-  });
-
-  // EVM and Solana wallets: Privy's own wallet list (OA-12).
-  // Privy's login events are shared by every flow: only a wallet login this sheet opened is answered.
-  const walletLoginOpen = useRef(false);
-  const { login } = useLogin({
-    onComplete: ({ wasAlreadyAuthenticated, loginMethod }) => {
-      if (!walletLoginOpen.current || wasAlreadyAuthenticated || (loginMethod !== "siwe" && loginMethod !== "siws")) return;
+    } else if (event.kind === "login") {
+      // EVM and Solana wallets: Privy's own wallet list (OA-12).
+      if (!walletLoginOpen.current || event.wasAlreadyAuthenticated || (event.loginMethod !== "siwe" && event.loginMethod !== "siws")) return;
       walletLoginOpen.current = false;
       live.current.onReturn({ signedIn: true, method: "wallet" });
-    },
-    onError: (code) => {
+    } else {
       if (!walletLoginOpen.current) return;
       walletLoginOpen.current = false;
-      setState(walletLoginErrorState(String(code)));
-    },
+      setState(walletLoginErrorState(event.code));
+    }
   });
 
   /** Polls `done` every 100 ms until it is true (answers true) or `timeoutMs` passes (false). */
@@ -226,26 +220,30 @@ function useSignInFlow(
           live.current.onReturn({ signedIn: true, method });
           return;
         }
-        if (!(await waitFor(() => live.current.ready, SIGN_IN_READY_TIMEOUT_MS))) {
+        // Privy's SDK loads with the first sign-in; the pressed method keeps waiting until it starts.
+        load();
+        await waitFor(() => live.current.runtime !== null, SIGN_IN_READY_TIMEOUT_MS);
+        const privy = live.current.runtime;
+        if (!privy) {
           setState({ status: "stalled" });
           return;
         }
         if (method === "wallet") {
           walletLoginOpen.current = true;
-          login({ ...PRIVY_WALLET_LOGIN, loginMethods: [...PRIVY_WALLET_LOGIN.loginMethods] });
+          privy.login({ ...PRIVY_WALLET_LOGIN, loginMethods: [...PRIVY_WALLET_LOGIN.loginMethods] });
           return;
         }
         document.dispatchEvent(new Event(SIGN_IN_DRAFT_EVENT));
         writeAttempt(method);
         try {
-          await initOAuth({ provider: PRIVY_OAUTH_PROVIDERS[method] });
+          await privy.initOAuth({ provider: PRIVY_OAUTH_PROVIDERS[method] });
         } catch {
           writeAttempt(null);
           setState({ status: "failed", method });
         }
       })();
     },
-    [initOAuth, login, wallet],
+    [load, wallet],
   );
 
   const reset = useCallback(() => setState(SIGN_IN_IDLE), []);

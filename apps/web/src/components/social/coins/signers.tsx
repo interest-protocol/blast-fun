@@ -1,9 +1,8 @@
 "use client";
 
-import { usePrivy } from "@privy-io/react-auth";
-import { useCreateWallet, useSignRawHash } from "@privy-io/react-auth/extended-chains";
-
 import { useEffect, useRef } from "react";
+
+import { usePrivySession } from "#web/components/auth/privy-session.ts";
 
 import { findEmbeddedSuiWallet } from "#web/components/mission-control/privy-embedded-wallet.ts";
 
@@ -23,24 +22,26 @@ export type PrivyCoinSigner = Readonly<{
 }>;
 
 /**
- * Registers the Privy signer while it is mounted. It is rendered only under a
- * Privy session provider (`usePrivySessionMounted`): Privy's wallet hooks
- * throw without one.
+ * Registers the Privy signer while it is mounted, under a Privy session
+ * provider (`usePrivySessionMounted`). It signs once the session's SDK has
+ * started, which a Privy sign-in always has.
  */
 export function PrivyCoinSignerBridge({ onChange }: Readonly<{ onChange: (signer: PrivyCoinSigner | null) => void }>) {
-  const privy = usePrivy();
-  const { createWallet } = useCreateWallet();
-  const { signRawHash } = useSignRawHash();
-  const latest = useRef({ privy, createWallet, signRawHash });
+  const { runtime } = usePrivySession();
+  const latest = useRef(runtime);
   useEffect(() => {
-    latest.current = { privy, createWallet, signRawHash };
+    latest.current = runtime;
   });
   useEffect(() => {
-    const embedded = () => (latest.current.privy.authenticated ? findEmbeddedSuiWallet(latest.current.privy.user) : null);
+    const embedded = () => (latest.current?.authenticated ? findEmbeddedSuiWallet(latest.current.user) : null);
+    const started = () => {
+      if (!latest.current) throw new Error("Privy did not start. Try again.");
+      return latest.current;
+    };
     onChange({
       address: () => embedded()?.address ?? null,
       async createWallet() {
-        await latest.current.createWallet({ chainType: "sui" });
+        await started().createWallet({ chainType: "sui" });
       },
       signer() {
         const wallet = embedded();
@@ -50,7 +51,7 @@ export function PrivyCoinSignerBridge({ onChange }: Readonly<{ onChange: (signer
           address: wallet.address,
           async signTransaction(bytes) {
             const { privySuiSigner } = await loadPrivyKey();
-            const key = privySuiSigner(wallet, (input) => latest.current.signRawHash(input));
+            const key = privySuiSigner(wallet, (input) => started().signRawHash(input));
             return (await key.signTransaction(bytes)).signature;
           },
         };

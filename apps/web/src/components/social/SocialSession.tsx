@@ -1,8 +1,8 @@
 "use client";
 
-import { usePrivy } from "@privy-io/react-auth";
 import { useCallback, useEffect, type ReactNode } from "react";
 
+import { usePrivySession, type PrivySession } from "#web/components/auth/privy-session.ts";
 import { useRestorePrivyWallet } from "#web/components/auth/privy-wallet-picker.ts";
 import type { ActivitySession } from "#web/components/analytics/account-activity.ts";
 import { AccountActivity } from "#web/components/analytics/AccountActivity.tsx";
@@ -41,7 +41,7 @@ export function SocialSession({ children }: Readonly<{ children: ReactNode }>) {
 }
 
 function SocialSessionViewer({ children }: Readonly<{ children: ReactNode }>) {
-  const privy = usePrivy();
+  const privy = usePrivySession();
   useRestorePrivyWallet(privy.ready && privy.authenticated ? privy.user?.wallet : undefined);
   const wallet = useWalletSession();
   const account = useSocialAccountRead();
@@ -91,7 +91,7 @@ function SocialSessionViewer({ children }: Readonly<{ children: ReactNode }>) {
 
 function settledActivitySession(
   account: ReturnType<typeof useSocialAccountRead>,
-  privy: ReturnType<typeof usePrivy>,
+  privy: PrivySession,
   walletActive: boolean,
 ): ActivitySession | null {
   if (

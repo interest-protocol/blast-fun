@@ -1,12 +1,27 @@
 import type { User } from "@privy-io/react-auth";
 import { createContext, useContext, useEffect } from "react";
+import { usePrivySession } from "./privy-session.ts";
 
 export type WalletMode = "wallet_connect_qr" | "wallet_connect_qr_solana" | "coinbase_wallet" | "base_account" | "picker";
 export const EnableWallets = createContext<((mode: WalletMode | null) => void) | null>(null);
 
-/** Mobile pairing and QR connectors are needed when Blast offers its wallet sign-in choices. */
+/** The wallet list of the Privy provider above, or of the page's lazily loaded session SDK. */
+function useEnableWallets() {
+  const own = useContext(EnableWallets);
+  const session = usePrivySession().runtime?.enableWallets;
+  return own ?? session;
+}
+
+/**
+ * Mobile pairing and QR connectors are needed when Blast offers its wallet
+ * sign-in choices. A visible sign-in also starts loading the session's SDK.
+ */
 export function usePreparePrivyWalletPicker(visible: boolean) {
-  const enable = useContext(EnableWallets);
+  const { load } = usePrivySession();
+  const enable = useEnableWallets();
+  useEffect(() => {
+    if (visible) load();
+  }, [load, visible]);
   useEffect(() => {
     if (visible) enable?.("picker");
   }, [enable, visible]);
@@ -29,7 +44,7 @@ function savedWalletOption(wallet?: SavedWallet): WalletMode | null {
 
 /** Restore the user's paired or dedicated wallet without initializing other mobile connectors. */
 export function useRestorePrivyWallet(wallet?: SavedWallet) {
-  const enable = useContext(EnableWallets);
+  const enable = useEnableWallets();
   const option = savedWalletOption(wallet);
   useEffect(() => {
     enable?.(option);
