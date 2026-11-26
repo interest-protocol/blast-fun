@@ -117,7 +117,7 @@ export const bubbleHeadroom = (size: number) => Math.ceil(size * (1 + CLEARANCE)
  * its own bars' and any `spans` (the bars on screen) within reach, so the price line
  * and candles stay clear; a column with no room above goes under the lowest price
  * instead. Nothing goes above `topInset` px, where the study legends sit. `halfBar` is
- * half a candle's width in px, so a wide candle beside the column counts as under it.
+ * half a drawn candle's width in px, so a wide candle beside the column counts as under it.
  */
 export function layoutBubbles(people: readonly Person[], place: (person: Person) => BarSpan | null, width: number, height: number, size: number, topInset = 0, spans: readonly BarSpan[] = [], halfBar = 0): Bubble[] {
   if (width <= 0 || height <= 0 || size <= 0) return [];

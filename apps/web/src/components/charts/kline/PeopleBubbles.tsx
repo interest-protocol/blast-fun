@@ -108,7 +108,7 @@ function useBubbleLayout(chart: RefObject<Chart | null>, layer: RefObject<HTMLEl
       // One conversion for every person's bar, read back by position.
       const spans = barSpans(target, people.map(({ bar, high, low }) => ({ timestamp: bar, high, low })));
       const at = new Map(people.map((person, index) => [person, spans[index] ?? null]));
-      setLayout({ size: bubble, bubbles: layoutBubbles(people, (person) => at.get(person) ?? null, size.width, size.height, bubble, topInset, visibleSpans(target), target.getBarSpace().halfBar) });
+      setLayout({ size: bubble, bubbles: layoutBubbles(people, (person) => at.get(person) ?? null, size.width, size.height, bubble, topInset, visibleSpans(target), target.getBarSpace().halfGapBar) });
     };
     const request = () => { if (!frame) frame = requestAnimationFrame(place); };
     // A drag that starts on the chart keeps following the pointer outside it, as the chart does.
@@ -264,7 +264,7 @@ function TradeList({ trades }: Readonly<{ trades: readonly PersonTrade[] }>) {
 }
 
 /** The people one column has no room for, as a "+N" that lists them on hover or tap. */
-const MoreBubble = memo(function MoreBubble({ bubble: { people, x, y }, size, profile }: Readonly<{ bubble: Extract<Bubble, { kind: "more" }>; size: number; profile: (person: Person) => TraderProfile | null }>) {
+function MoreBubble({ bubble: { people, x, y }, size, profile }: Readonly<{ bubble: Extract<Bubble, { kind: "more" }>; size: number; profile: (person: Person) => TraderProfile | null }>) {
   const text = `${people.length} more ${people.length === 1 ? "trader" : "traders"}`;
   const shown = people.length > 99 ? "99" : String(people.length);
   return <Popover.Root>
@@ -272,7 +272,7 @@ const MoreBubble = memo(function MoreBubble({ bubble: { people, x, y }, size, pr
       openOnHover
       delay={80}
       className={styles.more}
-      aria-label={`+${shown} more ${people.length === 1 ? "trader" : "traders"}`}
+      aria-label={`+${shown}, ${text}`}
       {...dyn({ left: x - size / 2, top: y - size / 2, height: size, minWidth: size })}
     >+{shown}</Popover.Trigger>
     <PopoverSurface positioner={CARD_POSITION} popup={{ className: styles.card }}>
@@ -290,7 +290,7 @@ const MoreBubble = memo(function MoreBubble({ bubble: { people, x, y }, size, pr
       </ul>
     </PopoverSurface>
   </Popover.Root>;
-});
+}
 
 /** A list past about eight lines scrolls, so the keyboard can reach it; a short one needs no stop. */
 const scrollable = (rows: number) => rows > 8 ? 0 : undefined;
