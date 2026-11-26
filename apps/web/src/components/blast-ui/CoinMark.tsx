@@ -2,6 +2,8 @@
 
 import type { CSSProperties } from "react";
 
+import { useHydrated } from "#web/components/ui-libraries/use-hydrated.tsx";
+
 import { coreCoin } from "@blast/core/modules/social/portfolio/core-coins.ts";
 import { CREATE_TEST_SUI_QUOTE_TYPE, CREATE_SUI_QUOTE_TYPE, CREATE_QUOTE_TYPE } from "@blast/core/modules/social/contracts/create.ts";
 
@@ -31,5 +33,7 @@ export function CoinMark({ coin, size = 34 }: Readonly<{ coin: CoinMarkIdentity;
   const round = network === "mainnet" && (!!coreCoin(type) || coinArtworkIdentity(type, "") === coinArtworkIdentity(CREATE_TEST_SUI_QUOTE_TYPE, ""));
   // The generated mark shows behind a logo until it decodes, so a slow or silently failed image is never a blank slot.
   const fallback = { "--coin-fallback": identityBackground(coinArtworkIdentity(type, coin.key, network)) } as CSSProperties;
-  return <span aria-hidden="true" className={`mk-${coin.key}`} data-coin-mark="" data-coin-size={size} data-coin-round={round || undefined} style={fallback}><CoinArtwork coinType={type} network={network} fallbackId={coin.key} src={coin.iconUrl} size={size} /></span>;
+  // Set after hydration, through the CSSOM: the site's CSP blocks (and logs) a server-written style attribute.
+  const hydrated = useHydrated();
+  return <span aria-hidden="true" className={`mk-${coin.key}`} data-coin-mark="" data-coin-size={size} data-coin-round={round || undefined} style={hydrated ? fallback : undefined}><CoinArtwork coinType={type} network={network} fallbackId={coin.key} src={coin.iconUrl} size={size} /></span>;
 }

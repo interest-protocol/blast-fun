@@ -625,7 +625,7 @@ test("hint clients wait for the market hello across a pool change and a long hid
   const fallback = legacy();
   const chart = watcher();
   const first = s.hub.subscribe({ pools: chart.pools, expected, listener: chart.listener });
-  const hints = marketHintTransport("/hints", fallback.create);
+  const hints = marketHintTransport("/hints", fallback.create, queueMicrotask);
   const frames: string[] = [];
   hints.onmessage = ({ data }) => frames.push(String(data));
   first.stop();
@@ -640,7 +640,7 @@ test("hint clients wait for the market hello across a pool change and a long hid
   s.setVisible(false);
   s.fire(HIDDEN_GRACE_MS);
   assert.equal(disconnected, 1, "the paused stream's hint clients reconnect and catch up");
-  const returning = marketHintTransport("/hints", fallback.create);
+  const returning = marketHintTransport("/hints", fallback.create, queueMicrotask);
   await settle();
   s.setVisible(true);
   s.source().fence(12, OTHER);

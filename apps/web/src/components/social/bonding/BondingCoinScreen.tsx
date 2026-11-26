@@ -315,10 +315,11 @@ function AboutLinks({ links }: Readonly<{ links: LaunchPageDetails["links"] }>) 
   </div>;
 }
 
-function CoinBackLink({ origin, tradeJump = true }: Readonly<{ origin: string | null; tradeJump?: boolean }>) {
+/** `home`: a coin with no bonding curve (SUI, USDC) goes back to Home when it has no list to return to. */
+function CoinBackLink({ origin, tradeJump = true, home = false }: Readonly<{ origin: string | null; tradeJump?: boolean; home?: boolean }>) {
   const from = coinBackOrigin(origin);
   const label = from?.pathname === "/" ? "Home" : "Bonding curves";
-  const href = from ? `${from.pathname}${from.search}${from.hash}` : "/bonding";
+  const href = from ? `${from.pathname}${from.search}${from.hash}` : home ? "/" : "/bonding";
 
   return <div className={styles.back}>
     <Link href={href} replace onNavigate={(event) => {
@@ -337,7 +338,7 @@ function CoinBackLink({ origin, tradeJump = true }: Readonly<{ origin: string | 
       event.preventDefault();
       window.history.back();
     }}>
-      {from ? <><PreviousIcon strokeWidth="2" />{label}</> : <><PreviousIcon strokeWidth="2" />Bonding</>}
+      <PreviousIcon strokeWidth="2" />{from ? label : home ? "Home" : "Bonding"}
     </Link>
     <CoinPageWallet />
     {tradeJump ? <ButtonLink className={styles.tradeJump} href="#coin-trade" size="sm">Trade</ButtonLink> : null}
@@ -554,7 +555,7 @@ export function LegacyCoinScreen({ coinType, name, symbol, logoUrl, chart, decim
   const fdvUsd = live.stats?.fdvUsd ?? readFdvUsd;
   const mark = <>{verified || verifiedCommunity ? <CoinVerifiedMark community={verifiedCommunity} /> : null}{legacy ? <CoinLegacyMark /> : null}</>;
   return <div className={styles.page} data-legacy-coin="">
-    <CoinBackLink origin={origin} tradeJump={trade != null} />
+    <CoinBackLink origin={origin} tradeJump={trade != null} home={major} />
     <CoinIdentityHeader coin={{ key: coinType, coinType, iconUrl: logoUrl, round: major }} name={name} symbol={symbol} status={major ? "" : "Graduated"} graduated={!major} mark={mark} />
     <div className={styles.layout} data-no-trade={trade == null || undefined}>
       <CoinPriceCurrencyProvider quoteType={quote.coinType} quoteSymbol={quote.symbol}>

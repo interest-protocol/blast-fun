@@ -19,7 +19,7 @@ function activityOnly() {
 test("a starting market stream is waited for: its hello takes the hints, no activity-only socket opens", () => {
   const carrier = beginMarketHints();
   const fallback = activityOnly();
-  const hints = marketHintTransport("/hints", fallback.create);
+  const hints = marketHintTransport("/hints", fallback.create, queueMicrotask);
   const frames: string[] = [];
   hints.onmessage = ({ data }) => frames.push(String(data));
   let disconnected = 0;
@@ -40,14 +40,14 @@ test("a starting market stream is waited for: its hello takes the hints, no acti
 test("while a market stream exists its hints wait for it, however long; the activity-only socket opens once it ends", async () => {
   const carrier = beginMarketHints();
   const fallback = activityOnly();
-  const hints = marketHintTransport("/hints", fallback.create);
+  const hints = marketHintTransport("/hints", fallback.create, queueMicrotask);
   let disconnected = 0;
   hints.onclose = () => { disconnected++; };
   carrier.disconnected(); // a missed hello deadline, a refusal or a pause
   await Promise.resolve();
   assert.equal(fallback.opened(), 0);
   assert.equal(disconnected, 0, "a client still choosing keeps waiting");
-  const later = marketHintTransport("/hints", fallback.create);
+  const later = marketHintTransport("/hints", fallback.create, queueMicrotask);
   await Promise.resolve();
   assert.equal(fallback.opened(), 0, "a new client waits too");
   later.onclose = () => { disconnected++; };
@@ -60,12 +60,12 @@ test("while a market stream exists its hints wait for it, however long; the acti
 
 test("with no market stream the legacy stream opens after the current task, unless one starts in it", async () => {
   const fallback = activityOnly();
-  const alone = marketHintTransport("/hints", fallback.create);
+  const alone = marketHintTransport("/hints", fallback.create, queueMicrotask);
   assert.equal(fallback.opened(), 0);
   await Promise.resolve();
   assert.equal(fallback.opened(), 1);
   alone.close();
-  const beside = marketHintTransport("/hints", fallback.create);
+  const beside = marketHintTransport("/hints", fallback.create, queueMicrotask);
   const carrier = beginMarketHints(); // a chart mounting in the same commit
   await Promise.resolve();
   assert.equal(fallback.opened(), 1);
@@ -75,10 +75,32 @@ test("with no market stream the legacy stream opens after the current task, unle
   carrier.stop();
 });
 
+// This fails if Home opens an activity-only socket and closes it unconnected when its price stream starts.
+test("a market stream that starts within the grace takes the hints: the activity-only socket never opens", () => {
+  const fallback = activityOnly();
+  let pending: (() => void) | null = null;
+  const hints = marketHintTransport("/hints", fallback.create, (run) => { pending = run; });
+  const frames: string[] = [];
+  hints.onmessage = ({ data }) => frames.push(String(data));
+  const carrier = beginMarketHints(); // Home's prices subscribe once its rows render
+  carrier.frame(HELLO);
+  pending!(); // the grace ends after the market stream began
+  carrier.frame(ACTIVITY);
+  assert.equal(fallback.opened(), 0, "one socket in the tab");
+  assert.deepEqual(frames, [HELLO, ACTIVITY]);
+  hints.close();
+  carrier.stop();
+  const alone = marketHintTransport("/hints", fallback.create, (run) => { pending = run; });
+  assert.equal(fallback.opened(), 0, "nothing opens before the grace ends");
+  pending!();
+  assert.equal(fallback.opened(), 1, "with no market stream by then, the activity-only socket opens");
+  alone.close();
+});
+
 // This fails if a hint surface that mounts before the chart keeps its own socket beside the chart's.
 test("a chart that starts after the hint client closes its activity-only socket at once", async () => {
   const fallback = activityOnly();
-  const hints = marketHintTransport("/hints", fallback.create);
+  const hints = marketHintTransport("/hints", fallback.create, queueMicrotask);
   let disconnected = 0;
   hints.onclose = () => { disconnected++; };
   await Promise.resolve();
@@ -86,7 +108,7 @@ test("a chart that starts after the hint client closes its activity-only socket 
   const carrier = beginMarketHints();
   assert.equal(fallback.closed(), 1, "the activity-only socket closes before the market socket's hello");
   assert.equal(disconnected, 1, "the client reconnects, and then waits for the market stream");
-  const retry = marketHintTransport("/hints", fallback.create);
+  const retry = marketHintTransport("/hints", fallback.create, queueMicrotask);
   await Promise.resolve();
   carrier.frame(HELLO);
   assert.equal(fallback.opened(), 1, "one socket in the tab");
@@ -100,7 +122,7 @@ test("late hint subscribers reuse the market handshake without another connectio
   carrier.frame(PONG);
   carrier.frame(ACTIVITY);
   const fallback = activityOnly();
-  const hints = marketHintTransport("/hints", fallback.create);
+  const hints = marketHintTransport("/hints", fallback.create, queueMicrotask);
   const frames: string[] = [];
   hints.onmessage = ({ data }) => frames.push(String(data));
   await Promise.resolve();
@@ -118,13 +140,13 @@ test("a market drop and reconnect opens no activity-only socket: the hints wait 
   carrier.frame(HELLO);
   carrier.frame(PONG);
   const fallback = activityOnly();
-  const hints = marketHintTransport("/hints", fallback.create);
+  const hints = marketHintTransport("/hints", fallback.create, queueMicrotask);
   let lost = 0;
   hints.onclose = () => { lost++; };
   await Promise.resolve();
   carrier.disconnected();
   assert.equal(lost, 1, "the client learns the stream dropped");
-  const recovery = marketHintTransport("/hints", fallback.create);
+  const recovery = marketHintTransport("/hints", fallback.create, queueMicrotask);
   const frames: string[] = [];
   recovery.onmessage = ({ data }) => frames.push(String(data));
   recovery.onclose = () => { lost++; };
@@ -146,7 +168,7 @@ test("an old chart cannot close, invalidate or publish into its replacement's hi
   current.frame(HELLO);
   current.frame(PONG);
   const fallback = activityOnly();
-  const hints = marketHintTransport("/hints", fallback.create);
+  const hints = marketHintTransport("/hints", fallback.create, queueMicrotask);
   const frames: string[] = [];
   hints.onmessage = ({ data }) => frames.push(String(data));
   let lost = 0;
@@ -167,7 +189,7 @@ test("an old chart cannot close, invalidate or publish into its replacement's hi
 test("invalid, oversized and non-mainnet handshakes cannot replace a healthy hint connection", () => {
   const carrier = beginMarketHints();
   const fallback = activityOnly();
-  const hints = marketHintTransport("/hints", fallback.create);
+  const hints = marketHintTransport("/hints", fallback.create, queueMicrotask);
   carrier.frame("invalid JSON");
   carrier.frame(HELLO.replace("mainnet", "testnet"));
   carrier.frame(" ".repeat(1_025) + HELLO);
