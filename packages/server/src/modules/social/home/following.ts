@@ -28,16 +28,12 @@ import { activityOf, actorOf, countsOf, previewOf, type WindowCountsRow } from "
 import { decodeCursor, encodeCursor, invalidCursor } from "@blast/server/modules/social/home/codec.ts";
 import { assembleCoins, candidateOf, participantsBySale, readCoinFacts, readPeople, readSides, readTopParticipants, type Candidate, type FactsRow, type HomeReadContext } from "@blast/server/modules/social/home/coins.ts";
 import { decodeThreadCursor, eventOf, readThreadIn, type EventRow } from "@blast/server/modules/social/home/thread.ts";
-import { Params, ROW_ORDER, homeSpan, readHomeBounds, rowsWithSql, selectHome, visibleKinds, whySalesSql, type ActorScope, type HomeBounds, type HomeSpan } from "@blast/server/modules/social/home/sql.ts";
+import { Params, ROW_ORDER, homeSpan, idsScope, readHomeBounds, rowsWithSql, selectHome, visibleKinds, whySalesSql, type ActorScope, type HomeBounds, type HomeSpan } from "@blast/server/modules/social/home/sql.ts";
 
 /**
  * The Following source (contract in `contracts/home.ts`), read on the
  * primary for the signed-in viewer (so a follow just written counts) and
  * never cached:
- *
- * Every mode but `thread` covers every listed coin: shown presales, launch
- * vault coins, live curves and tracked pools (`includeStandalone`), keyed by
- * presale id or coin type as Discover's rows are.
  *
  * - `coins`: every listed coin (any lifecycle) with a named confirmed event
  *   by an account the viewer follows in the window (`activity`), or with a
@@ -49,6 +45,11 @@ import { Params, ROW_ORDER, homeSpan, readHomeBounds, rowsWithSql, selectHome, v
  *   and the Watchlist say "2 people you follow bought" on top of the
  *   public figures).
  * - `thread`: one sale's participants, followed accounts only.
+ *
+ * Every mode but `thread` covers every listed coin: shown presales, launch
+ * vault coins, live curves and tracked pools (`includeStandalone`), keyed by
+ * presale id or coin type as Discover's rows are. A why counts toward
+ * `discussion` on a presale only (`whySalesSql`).
  *
  * The naming rule still applies: a followed account that is private, or
  * that linked its wallet after the event, is not named and so not shown.
@@ -156,7 +157,7 @@ async function readFollowingCoins(
   const counts = countsOf(sides);
   const discussedOf = new Map(discussed.rows.map((row) => [row.sale, row]));
   const ids = [...new Set([...counts.keys(), ...discussedOf.keys()])];
-  const facts = await readCoinFacts(db, { kind: "ids", presaleIds: ids, includeStandalone: ids.some(isCoinType) }, span, context);
+  const facts = await readCoinFacts(db, idsScope(ids), span, context);
   const ordered = qualifiedOf(facts, counts, discussedOf, span).sort(byFollowedRecency);
   const after = cursor === null ? ordered : ordered.filter((candidate) => byFollowedRecency(candidate, { ...candidate, orderMs: cursor.latestMs, coinType: cursor.coinType }) > 0);
   const pageNumber = cursor === null ? request.page ?? 1 : 1;
@@ -187,7 +188,7 @@ async function readFollowingPreview(
   context: HomeReadContext,
 ): Promise<HomeFollowingResponse> {
   const { bounds, span, asOf, kinds, actors } = await setup(db, viewerAccountId, request.window, context);
-  const rows = { span, bounds, kinds, sales: { kind: "ids" as const, presaleIds: request.presale_ids, includeStandalone: request.presale_ids.some(isCoinType) }, actors };
+  const rows = { span, bounds, kinds, sales: idsScope(request.presale_ids), actors };
   const [sides, grouped] = await Promise.all([readSides(db, rows), readTopParticipants(db, rows, HOME_PREVIEW_ROWS * 2)]);
   const people = await readPeople(db, grouped.flatMap((row) => (row.account_id === null ? [] : [row.account_id])));
   const counts = countsOf(sides);
@@ -240,7 +241,6 @@ async function readFollowingTape(
 }
 
 /** A standalone coin's key (a coin type), as against a presale id. */
-const isCoinType = (id: string) => id.includes("::");
 
 /** The whole Following route body, by mode. */
 export async function readHomeFollowing(

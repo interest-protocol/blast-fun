@@ -91,7 +91,8 @@ export function homeSpan(window: HomeWindow, bounds: HomeBounds): HomeSpan {
  * Almost graduated curves, `HOME_ALMOST_CURVE_SOURCES`), all shown sales, or
  * specific markets. `includeStandalone` widens `all` and `ids` from shown
  * presales to every listed coin (`HOME_LIST_COIN_SOURCES`: presales, launch
- * vault coins, live curves and tracked pools), keyed by presale id or coin type. Discover's `presales` (Trending with `presales=1`) adds
+ * vault coins, live curves and tracked pools), keyed by presale id or coin
+ * type. Discover's `presales` (Trending with `presales=1`) adds
  * the presales not trading yet, bounded at the chain clock (`presaleScopeSql`),
  * and its `curves` the live curves traded in the window (`tradedCurveSql`).
  */
@@ -99,6 +100,9 @@ export type SaleScope =
   | Readonly<{ kind: "discover"; almost?: boolean; presales?: Readonly<{ clockMs: number; fromMs: number }>; curves?: TradedCurves }>
   | Readonly<{ kind: "all"; includeStandalone?: boolean }>
   | Readonly<{ kind: "ids"; presaleIds: readonly string[]; includeStandalone?: boolean }>;
+
+/** Specific markets keyed by presale id or coin type (a key with `::`); any coin type widens the source to every listed coin. */
+export const idsScope = (keys: readonly string[]): SaleScope => ({ kind: "ids", presaleIds: keys, includeStandalone: keys.some((key) => key.includes("::")) });
 
 /** Whose rows a read keeps: everyone, or the wallets the naming rule names for a set of accounts (a viewer's follows). */
 export type ActorScope =

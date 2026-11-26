@@ -989,7 +989,7 @@ export const homeFollowingResponseSchema = z.discriminatedUnion("mode", [
     previews: z.record(z.string(), homeActivitySchema),
     as_of: socialAsOfSchema,
   }),
-  // Following threads are a sale's only (the source lists no curve coin), so the published body keeps its shape.
+  // Following threads stay a presale's only (the other modes cover every listed coin), so the published body keeps its shape.
   homeThreadPageSchema.omit({ coin_type: true }).extend({ mode: z.literal("thread"), presale_id: homeThreadPageSchema.shape.presale_id.unwrap() }),
   z.strictObject({
     mode: z.literal("tape"),
