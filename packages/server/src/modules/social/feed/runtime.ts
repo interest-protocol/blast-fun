@@ -6,6 +6,7 @@ import { autocommitReader, type ReadableDatabase } from "@blast/core/modules/dat
 import { getSocialConfig } from "@blast/core/modules/social/config/reader.ts";
 import { sharedSocialRouteKit } from "@blast/server/modules/social/route-kit/shared-runtime.ts";
 import { createSocialFeedRoute } from "@blast/server/modules/social/feed/route.ts";
+import { publicReadCache } from "@blast/server/modules/public-reads/shared-runtime.ts";
 
 /**
  * Feed reads run on the read replica (`blast_replica`), never the primary.
@@ -29,5 +30,6 @@ export function socialFeedRoute(): ReturnType<typeof createSocialFeedRoute> {
       kit: sharedSocialRouteKit(),
       database: socialFeedDatabase,
       config: getSocialConfig,
+      shared: publicReadCache("social"),
     }));
 }

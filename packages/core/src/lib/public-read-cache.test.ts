@@ -199,3 +199,17 @@ test("successful cache metrics are sampled by tier while unavailable signals rem
     { outcome: "unavailable", tier: undefined, sampleRate: undefined },
   ]);
 });
+
+test("an answer expires ttl after it was stored, or after its read began only when the cache opts in", async (t) => {
+  let wall = 100_000;
+  t.mock.method(Date, "now", () => wall);
+  for (const expireFromReadStart of [false, true]) {
+    const { redis } = fixture();
+    const slow = async () => { wall += 1_500; return "slow"; };
+    assert.equal(await createPublicReadCache(redis, "test", "s".repeat(32), { expireFromReadStart })("list", slow, 1_000), "slow");
+    let loads = 0;
+    const other = createPublicReadCache(redis, "test", "s".repeat(32), { expireFromReadStart });
+    await other("list", async () => { loads++; return "again"; }, 1_000);
+    assert.equal(loads, expireFromReadStart ? 1 : 0, "a slow short-TTL read stays shared unless the cache opts in");
+  }
+});

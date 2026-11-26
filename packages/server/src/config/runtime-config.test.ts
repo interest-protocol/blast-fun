@@ -4,7 +4,7 @@ import test from "node:test";
 import { BLAST_DEPLOYMENTS, deploymentFingerprint } from "@interest-protocol/blast-sdk/deployments";
 import { deploymentIdentity } from "@blast/core/lib/config/deployment-identity.ts";
 import { quotaNamespace } from "@blast/core/lib/web-security/redis-rate-limits.ts";
-import { publicReadNamespace } from "@blast/server/modules/public-reads/namespace.ts";
+import { PUBLIC_READ_SCOPES, publicReadNamespace } from "@blast/server/modules/public-reads/namespace.ts";
 import { parseRuntimeConfig } from "./runtime-config.ts";
 import { RUNTIME_TEST_ENVIRONMENT } from "../../test/fixtures/config/runtime-config.ts";
 
@@ -174,7 +174,7 @@ test("quota and public read namespaces hash exactly as their functions do", () =
   assert.equal(config.quotaNamespace, quotaNamespace(base.BLAST_REDIS_NAMESPACE, identity));
   assert.equal(config.quotaNamespace, quotaNamespace("mainnet:test", { target: identity.target, branch: identity.branch }));
   assert.ok(config.publicReadNamespaces, "a released deployment with a replica caches public reads");
-  for (const scope of ["presales", "prices", "market"] as const) {
+  for (const scope of PUBLIC_READ_SCOPES) {
     assert.equal(config.publicReadNamespaces[scope], publicReadNamespace(scope, identity, environment));
   }
 });

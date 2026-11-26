@@ -12,6 +12,7 @@ import { socialPortfolioDatabase } from "@blast/server/modules/social/portfolio/
 import { sharedSocialRouteKit, socialAccounts } from "@blast/server/modules/social/route-kit/shared-runtime.ts";
 import { createSocialHomeRoutes } from "@blast/server/modules/social/home/route.ts";
 import { createReadCache } from "@blast/server/modules/social/read-cache.ts";
+import { publicReadCache } from "@blast/server/modules/public-reads/shared-runtime.ts";
 import type { TraderPortfolioRead } from "@blast/server/modules/social/home/traders.ts";
 import type { HomeChartTradesPage, HomeCoinMarket, HomeHoldersPage } from "@blast/core/modules/social/contracts/coin-market.ts";
 import { readTrackedPoolLaunches, readTrackedPoolMarket } from "@blast/server/modules/launchpad-market/legacy-fdv.ts";
@@ -39,6 +40,7 @@ export function socialHomeRoutes(): ReturnType<typeof createSocialHomeRoutes> {
     terms: readHomeTerms,
     trackedPoolMarket: readTrackedPoolMarket,
     trackedPoolLaunches: readTrackedPoolLaunches,
+    shared: publicReadCache("social"),
     caches: homeReadCaches(),
   }));
 }

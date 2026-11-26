@@ -37,6 +37,7 @@ import { optionalSource } from "@blast/server/modules/social/optional-source.ts"
 import type { TraderPortfolioRead } from "@blast/server/modules/social/home/traders.ts";
 import { readPrices } from "@blast/server/modules/social/prices/route.ts";
 import { createReadCache } from "@blast/server/modules/social/read-cache.ts";
+import { createPublicPresaleReader } from "@blast/server/modules/social/presales/public-reads.ts";
 import { hex, uuid } from "../../../../../core/test/kit.ts";
 
 /**
@@ -138,6 +139,8 @@ type Fixture = Readonly<{
   traders(query?: string, options?: Readonly<{ trades?: boolean }>): Promise<Response>;
   following(callsign: string | null, body: unknown, query?: string): Promise<Response>;
   ids: Readonly<{ mayaBuy1: string; leoSell: string; cyQuietBuy: string }>;
+  /** Empties this process's caches, as another API process starts: the fleet-wide tier stays. */
+  forget(): void;
 }>;
 
 async function withFixture(run: (fixture: Fixture) => Promise<void>, options: Readonly<{
@@ -300,7 +303,8 @@ async function withFixture(run: (fixture: Fixture) => Promise<void>, options: Re
       portfolios: createReadCache<ReadonlyMap<string, TraderPortfolioRead>>(10_000, 64, readNow),
     } : undefined;
     const { trackedPoolMarket, trackedPoolLaunches } = options;
-    const common = { database: () => replica, ledgerDatabase: () => autocommitReader(webPool, "social"), wallets: accounts, config: reader.getSocialConfig, now: readNow, terms, caches, trackedPoolMarket: trackedPoolMarket && (() => trackedPoolMarket(now)), trackedPoolLaunches };
+    const shared = options.cached ? createPublicPresaleReader(readNow) : undefined;
+    const common = { database: () => replica, ledgerDatabase: () => autocommitReader(webPool, "social"), wallets: accounts, config: reader.getSocialConfig, now: readNow, terms, caches, shared, trackedPoolMarket: trackedPoolMarket && (() => trackedPoolMarket(now)), trackedPoolLaunches };
     const all = createSocialHomeRoutes({ ...common, kit: kitWith(true) });
     const hidden = createSocialHomeRoutes({ ...common, kit: kitWith(false) });
     const get = (path: string, headers: Record<string, string> = {}) => new Request(`${ORIGIN}${path}`, { headers: { "x-forwarded-for": "203.0.113.7", ...headers } });
@@ -321,6 +325,7 @@ async function withFixture(run: (fixture: Fixture) => Promise<void>, options: Re
         body: JSON.stringify(body),
       }), testClient("203.0.113.7")),
       ids: { mayaBuy1: entryOf(mayaBuy1), leoSell: entryOf(leoSell), cyQuietBuy: entryOf(cyQuietBuy) },
+      forget: () => { for (const cache of Object.values(caches ?? {})) cache.clear(); },
     });
   } finally {
     await Promise.all([admin.end(), replicaPool.end(), webPool.end()]);
@@ -342,9 +347,9 @@ const keysOf = (rows: readonly { key: string }[]) => rows.map((row) => row.key);
 // The five tracked pools have no launch date. Their fallback order is by coin type.
 const TRACKED_SYMBOLS = ["HELMET", "BLAST", "Wheels", "ONE", "MANIFEST"];
 
-test("Home origin cache spends the edge freshness budget and keeps trade-filtered results separate", { skip }, async () => {
+test("Home origin cache spends the edge freshness budget, is one read for every process, and keeps trade-filtered results separate", { skip }, async () => {
   let elapsed = 0;
-  await withFixture(async ({ discover, admin }) => {
+  await withFixture(async ({ discover, admin, forget }) => {
     const first = await ok<HomeCoinsPage>(await discover(), "home-coins-page");
     elapsed = 2_500;
     const cached = await ok<HomeCoinsPage>(await discover(), "home-coins-page", "public, s-maxage=7, stale-while-revalidate=20");
@@ -355,6 +360,9 @@ test("Home origin cache spends the edge freshness budget and keeps trade-filtere
     // Another sort of the same window reuses the window read: same coins, no new read.
     const volume = await ok<HomeCoinsPage>(await discover("?sort=trending"), "home-coins-page");
     assert.equal(volume.coins.find((coin) => coin.presale_id === P.orbit)?.symbol, first.coins.find((coin) => coin.presale_id === P.orbit)?.symbol);
+    // Another process sends the same read with the same remaining freshness, without reading the window again.
+    forget();
+    assert.deepEqual(await ok<HomeCoinsPage>(await discover(), "home-coins-page", "public, s-maxage=7, stale-while-revalidate=20"), first);
     elapsed = 11_000;
     const refreshed = await ok<HomeCoinsPage>(await discover(), "home-coins-page");
     assert.equal(refreshed.coins.find((coin) => coin.presale_id === P.orbit)?.symbol, "REFRESHED");

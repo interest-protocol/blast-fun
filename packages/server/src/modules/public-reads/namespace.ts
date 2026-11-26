@@ -4,8 +4,12 @@ import { redisNamespace } from "@blast/core/lib/redis.ts";
 import { expectedDeployment } from "@blast/core/modules/launchpad-contract/provenance.ts";
 import { readPresaleDeploymentIdentity } from "@blast/core/modules/presale/deployment/service.ts";
 
+/** The shared public read caches; `social` holds Home Discover pages and the first For You page. */
+export const PUBLIC_READ_SCOPES = ["presales", "prices", "market", "social"] as const;
+export type PublicReadScope = (typeof PUBLIC_READ_SCOPES)[number];
+
 /** Bind public data to both active products; presales-only deployments have no launchpad fingerprint. */
-export function publicReadNamespace(scope: "presales" | "prices" | "market", deployment: Pick<DeploymentIdentity, "target" | "branch">, environment: Readonly<Record<string, string | undefined>>): string {
+export function publicReadNamespace(scope: PublicReadScope, deployment: Pick<DeploymentIdentity, "target" | "branch">, environment: Readonly<Record<string, string | undefined>>): string {
   const launchpad = expectedDeployment(environment);
   const presale = readPresaleDeploymentIdentity(environment);
   if (presale.status === "unavailable" && presale.reason !== "missing") {

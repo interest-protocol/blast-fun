@@ -6,7 +6,7 @@ import { expectedDeployment } from "@blast/core/modules/launchpad-contract/prove
 import { readPresaleDeploymentIdentity } from "@blast/core/modules/presale/deployment/service.ts";
 import { presaleIdentityFixture } from "../../../../core/test/fixtures/modules/presale/deployment/fixtures.ts";
 import { partnerRecognitionNamespace } from "../partner-api-keys/recognition-namespace.ts";
-import { publicReadNamespace } from "./namespace.ts";
+import { PUBLIC_READ_SCOPES, publicReadNamespace } from "./namespace.ts";
 
 const BASE = "mainnet:deploy_1-a";
 const DEPLOYMENT = { target: "preview", branch: "feature-x" };
@@ -16,7 +16,7 @@ const COMMON = {
   DATABASE_REPLICA_URL: "postgresql://reader:private@reader.example:5432/production",
 };
 const PRESALE = { ...COMMON, PRESALE_DEPLOYMENT_MANIFEST: JSON.stringify(presaleIdentityFixture()) };
-const SCOPES = ["presales", "prices", "market"] as const;
+const SCOPES = PUBLIC_READ_SCOPES;
 
 // Generated from the deleted functions at d5c8c6270: audits/2026-11-10-blast-v2-untangle/scripts/u8_golden_vectors.ts.
 // Re-recorded for #856, whose fixture identity is mainnet-shaped: the hashed input changed, the function did not.

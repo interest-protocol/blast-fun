@@ -32,7 +32,7 @@ import { homeDiscoverBaseKey, parseHolderLimit, parsePresaleIds, readHomeCoinsBy
 import { parseDiscussionQuery, readHomeDiscussion } from "@blast/server/modules/social/home/discussion.ts";
 import { readHomeFollowing } from "@blast/server/modules/social/home/following.ts";
 import { readFollowingRequest } from "@blast/server/modules/social/home/following-request.ts";
-import type { ReadCache } from "@blast/server/modules/social/read-cache.ts";
+import { sharedLoad, type ReadCache, type ReadLoad, type SharedPublicRead } from "@blast/server/modules/social/read-cache.ts";
 import type { HomeCoinsPage, HomeCoinsByIds, HomeActivityStreamPage, HomeThreadPage } from "@blast/core/modules/social/contracts/home.ts";
 import { parseTradersQuery, readHomeTraders, type TraderLedger } from "@blast/server/modules/social/home/traders.ts";
 import { parseHomeQuery } from "@blast/server/modules/social/home/rank.ts";
@@ -66,6 +66,8 @@ export type SocialHomeRouteDependencies = Readonly<{
   trackedPoolMarket?: HomeReadContext["trackedPoolMarket"];
   trackedPoolLaunches?: HomeReadContext["trackedPoolLaunches"];
   now?: () => number;
+  /** The fleet-wide tier for Discover pages (`publicReadCache("social")`); without it each process reads its own. */
+  shared?: SharedPublicRead;
   caches?: Readonly<{
     discover?: ReadCache<HomeCoinsPage>;
     /** One window read shared by every sort, filter and page of that window. */
@@ -115,7 +117,9 @@ export function createSocialHomeRoutes(dependencies: SocialHomeRouteDependencies
         const base = baseCache && (() => baseCache.read(homeDiscoverBaseKey(query.window, query.stage, ctxRead), () => readHomeDiscoverBase(db, query.window, query.stage, ctxRead)));
         return readHomeDiscover(db, query, ctxRead, base);
       };
-      return cachedResponse(ctx, dependencies.caches?.discover, JSON.stringify([query, ctxRead.hiddenKinds, ctxRead.includeMobileMarket, ctxRead.includeLiveInputs, ctxRead.includeRollingChange, ctxRead.includeDexVolume, ctxRead.includeCurve, ctxRead.includeRecentBuys, ctxRead.includeRecentBuyUsd, ctxRead.includePresales]), load);
+      const key = JSON.stringify([query, ctxRead.hiddenKinds, ctxRead.includeMobileMarket, ctxRead.includeLiveInputs, ctxRead.includeRollingChange, ctxRead.includeDexVolume, ctxRead.includeCurve, ctxRead.includeRecentBuys, ctxRead.includeRecentBuyUsd, ctxRead.includePresales]);
+      // One read per page for the whole fleet: requests for a page spread over every process, and each would otherwise read it itself.
+      return cachedResponse(ctx, dependencies.caches?.discover, key, sharedLoad(dependencies.shared, `home.discover:${key}`, load, now));
     }),
     COINS: kit.route({ name: SOCIAL_HOME_COINS_ROUTE, ...publicRead }, async (ctx) => {
       const params = new URL(ctx.request.url).searchParams;
@@ -219,11 +223,11 @@ async function cachedResponse<T>(
   ctx: SocialRequestContext,
   cache: ReadCache<T> | undefined,
   key: string,
-  load: () => Promise<T>,
+  load: ReadLoad<T>,
   options: Readonly<{ fresh?: boolean }> = {},
 ): Promise<Response> {
   let ageMs = 0;
-  const value = cache ? await cache.read(key, load, (age) => { ageMs = age; }) : await load();
+  const value = cache ? await cache.read(key, load, (age) => { ageMs = age; }) : await load(() => {});
   const response = ctx.json(value);
   if (cache && response.headers.get("cache-control")?.startsWith("public,")) {
     const remaining = Math.max(0, Math.floor(10 - ageMs / 1000));

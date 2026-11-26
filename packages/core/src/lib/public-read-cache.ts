@@ -52,8 +52,18 @@ function verifiedPayloads() {
   };
 }
 
+/**
+ * `waitMs` bounds how long a miss waits for another process's load of the key
+ * before running its own; set it above the source's usual load time. With
+ * `expireFromReadStart`, an answer expires `ttlMs` after its source read
+ * began rather than after it was stored, so no reader gets one older than
+ * `ttlMs`; a read slower than `ttlMs` is then not shared.
+ */
+export type PublicReadCacheOptions = Readonly<{ waitMs?: number; expireFromReadStart?: boolean }>;
+
 /** Public JSON only. Authorization, quotas and feature gates run before calling this. */
-export function createPublicReadCache(redis: RedisCommands, namespace: string, signingKey: string) {
+export function createPublicReadCache(redis: RedisCommands, namespace: string, signingKey: string, options: PublicReadCacheOptions = {}) {
+  const waitMs = options.waitMs ?? 1_000;
   if (!z.string().min(32).safeParse(signingKey).success) throw new Error("Public cache signing requires at least 32 characters.");
   const macKey = createHmac("sha256", signingKey).update("blast.public-cache").digest();
   const signature = (key: string, payload: string, expiresAt: number) => createHmac("sha256", macKey)
@@ -90,13 +100,22 @@ export function createPublicReadCache(redis: RedisCommands, namespace: string, s
     }
   }
 
-  async function store(key: string, lock: string, token: string, result: unknown, ttlMs: number): Promise<boolean> {
+  async function store(key: string, lock: string, token: string, result: unknown, readAt: number, ttlMs: number): Promise<boolean> {
     try {
       const payload = JSON.stringify(result);
-      const expiresAt = Date.now() + ttlMs;
+      const storedAt = Date.now();
+      const expiresAt = (options.expireFromReadStart ? readAt : storedAt) + ttlMs;
+      const remainingMs = expiresAt - storedAt;
+      if (remainingMs <= 0) {
+        recordMetric("public_read.cache", { outcome: "expired_before_store" });
+        return false;
+      }
       const encoded = JSON.stringify({ version: 2, payload, expiresAt, mac: signature(key, payload, expiresAt).toString("hex") });
-      if (Buffer.byteLength(encoded) > MAX_VALUE_BYTES) return false;
-      const stored = await storeScript(redis, [lock, key], [token, encoded, String(ttlMs)]) === 1;
+      if (Buffer.byteLength(encoded) > MAX_VALUE_BYTES) {
+        recordMetric("public_read.cache", { outcome: "too_large" });
+        return false;
+      }
+      const stored = await storeScript(redis, [lock, key], [token, encoded, String(remainingMs)]) === 1;
       if (!stored) recordMetric("public_read.cache", { outcome: "stale_write_refused" });
       return stored;
     } catch {
@@ -108,7 +127,7 @@ export function createPublicReadCache(redis: RedisCommands, namespace: string, s
 
   /** Cross-instance miss coalescing never waits indefinitely for a stuck writer. */
   async function waitForWriter<T>(key: string, lock: string, token: string) {
-    const until = performance.now() + 1_000;
+    const until = performance.now() + waitMs;
     let pauseMs = 50;
     while (performance.now() < until) {
       await setTimeout(Math.min(pauseMs, Math.max(0, until - performance.now())));
@@ -141,7 +160,7 @@ export function createPublicReadCache(redis: RedisCommands, namespace: string, s
         return hit.data;
       }
       // Cover the bounded replica query and subsequent 3s infra fetch. Waiters
-      // still fall back after one second, independently of this writer lease.
+      // still fall back after `waitMs`, independently of this writer lease.
       ownsLock = await redis.execute(["SET", lock, token, "NX", "PX", "10000"]) === "OK";
       if (!ownsLock) {
         const waited = await waitForWriter<T>(key, lock, token);
@@ -153,10 +172,11 @@ export function createPublicReadCache(redis: RedisCommands, namespace: string, s
     }
 
     try {
+      const readAt = Date.now();
       const result = await load();
       // Null commonly means not found. Never retain errors or negative lookups.
       if (ownsLock && result !== null && result !== undefined) {
-        ownsLock = !await store(key, lock, token, result, ttlMs);
+        ownsLock = !await store(key, lock, token, result, readAt, ttlMs);
       }
       return result;
     } finally {
