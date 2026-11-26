@@ -103,7 +103,7 @@ test("a pool that changed while upstream was away gets one new fence after its r
   ], "replayed frames lack state: the snapshot's fence replaces them");
 });
 
-test("a resume the reader cannot fill ends only that pool's browsers", (t) => {
+test("a resume the reader cannot fill re-fences only that pool, and its browsers stay", (t) => {
   t.mock.timers.enable({ apis: ["setInterval", "setTimeout", "Date"] });
   const { sockets, join, hello } = harness();
   const onPool = join(`pool=${POOL}`);
@@ -114,10 +114,19 @@ test("a resume the reader cannot fill ends only that pool's browsers", (t) => {
   sockets[0]!.drop();
   t.mock.timers.tick(400);
   hello(sockets[1]!);
+  const sent = sockets[1]!.sent.length;
   sockets[1]!.receive({ type: "resync_required", reason: "too_old" });
-  assert.equal(onPool.closed, true);
-  assert.deepEqual(onPool.events.at(-1)?.data, { reason: "too_old", pool_key: POOL });
+  t.mock.timers.tick(0);
+  assert.equal(onPool.closed, false);
+  assert.deepEqual(onPool.events.at(-1)?.data, { state: "recovering", pool_key: POOL });
+  assert.deepEqual(sockets[1]!.sent.slice(sent).filter(({ op }) => op !== "ping"), [
+    { op: "unsubscribe", topics: [`pool:${POOL}`] },
+    { op: "subscribe", topics: [`pool:${POOL}`] },
+  ], "a fresh subscribe, with no cursor");
+  sockets[1]!.receive(snapshot(POOL, 20));
+  assert.deepEqual(onPool.events.at(-1)?.data.cursor, "20:0:0:0", "a new fence; the browser refetches history");
   assert.equal(onOther.closed, false);
+  assert.equal(onOther.events.some(({ data }) => data.pool_key === POOL), false);
   assert.equal(sockets[1]!.closed, 0, "too_old answers one resume; the upstream stays open");
 });
 

@@ -261,7 +261,7 @@ test("one socket shares pool topics, committed fences and precise replay-shaped 
   assert.equal(socket.closed, 1);
 });
 
-test("a pool the engine never snapshots fails only its own clients and never resets other pools", async () => {
+test("a pool the engine never snapshots re-fences only itself and never resets other pools", async () => {
   const socket = new Socket();
   const relay = new MarketStreamRelay(() => socket, expected);
   const served = open(relay, request()).body!.getReader();
@@ -293,11 +293,18 @@ test("a pool the engine never snapshots fails only its own clients and never res
     const deadlines = timers.filter(({ ms }) => ms === 10_000);
     assert.equal(deadlines.length, 2, "each pool's deadline starts at the upstream subscribe");
     deadlines.at(-1)!.run();
-    const failed = await read(stalled);
-    assert.equal(failed.event, "status");
-    assert.deepEqual(failed.data, { state: "unavailable", pool_key: pool(2) });
-    assert.equal((await stalled.read()).done, true);
-    assert.deepEqual(socket.sent.at(-1), { op: "unsubscribe", topics: [`pool:${pool(2)}`] });
+    const recovering = await read(stalled);
+    assert.equal(recovering.event, "status");
+    assert.deepEqual(recovering.data, { state: "recovering", pool_key: pool(2) });
+    await new Promise((resolve) => original(resolve, 0));
+    // The relay asks again for the pool; the browser keeps its stream.
+    assert.deepEqual(
+      socket.sent.slice(-2).map((op) => [op.op, op.topics]),
+      [
+        ["unsubscribe", [`pool:${pool(2)}`]],
+        ["subscribe", [`pool:${pool(2)}`]],
+      ],
+    );
     assert.equal(socket.closed, 0);
     socket.receive(trade());
     assert.equal((await read(served)).event, "market");
@@ -411,10 +418,9 @@ test("an opening round frame reaches the pool's clients as a market event with i
   await reader.cancel();
 });
 
-test("bad deployments, cursor relationships, opening fills and lost continuity force explicit recovery", async () => {
+test("bad cursor relationships and opening fills re-fence the pool; another deployment and lost continuity force explicit recovery", async () => {
   const invalid: Array<(socket: Socket) => void> = [
     (s) => s.receive({ ...trade(), provenance: provenance(99) }),
-    (s) => s.receive({ ...snapshot(), topic: pool() }),
     (s) =>
       s.receive({
         ...trade(),
@@ -429,14 +435,6 @@ test("bad deployments, cursor relationships, opening fills and lost continuity f
       s.receive({
         ...trade(),
         trade: { ...trade().trade, kind: "opening_round_fill" },
-      }),
-    (s) =>
-      s.receive({
-        ...trade(),
-        provenance: {
-          ...provenance(11),
-          deployment_fingerprint: "f".repeat(64),
-        },
       }),
     (s) =>
       s.receive(
@@ -456,8 +454,43 @@ test("bad deployments, cursor relationships, opening fills and lost continuity f
     socket.receive(snapshot());
     await read(reader);
     bad(socket);
+    const status = await read(reader);
+    assert.equal(status.event, "status");
+    assert.deepEqual(status.data, { state: "recovering", pool_key: pool() });
+    assert.equal(socket.closed, 0);
+    await reader.cancel();
+  }
+  {
+    // A frame from another deployment means the relay is wired to the wrong reader.
+    const socket = new Socket();
+    const relay = new MarketStreamRelay(() => socket, expected);
+    const reader = open(relay, request()).body!.getReader();
+    await read(reader);
+    socket.hello();
+    socket.receive(snapshot());
+    await read(reader);
+    socket.receive({
+      ...trade(),
+      provenance: { ...provenance(11), deployment_fingerprint: "f".repeat(64) },
+    });
     assert.equal((await read(reader)).event, "resync");
     assert.equal((await reader.read()).done, true);
+    assert.equal(socket.closed, 1);
+    await reader.cancel();
+  }
+  {
+    // A frame no pool can be blamed for reconnects the upstream; the browser stays.
+    const socket = new Socket();
+    const relay = new MarketStreamRelay(() => socket, expected);
+    const reader = open(relay, request()).body!.getReader();
+    await read(reader);
+    socket.hello();
+    socket.receive(snapshot());
+    await read(reader);
+    socket.receive({ ...snapshot(), topic: pool() });
+    const status = await read(reader);
+    assert.equal(status.event, "status");
+    assert.deepEqual(status.data, { state: "recovering" });
     assert.equal(socket.closed, 1);
     await reader.cancel();
   }

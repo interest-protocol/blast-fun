@@ -11,8 +11,24 @@ test("only a hint's selecting fields cross, and a malformed frame carries no hin
   const sale = `0x${"a".repeat(64)}`;
   assert.deepEqual(
     hintOf({ type: "activity", activity_id: "10:2:0:0", kind: "trade_buy", presale_id: sale, coin_type: COIN, amount: "999" }),
-    { type: "activity", activity_id: "10:2:0:0", kind: "trade_buy", presale_id: sale },
+    { type: "activity", activity_id: "10:2:0:0", kind: "trade_buy", presale_id: sale, coin_type: COIN },
+    "a presale trade keeps its coin: Home matches rows by either",
   );
+  const SUI = `0x${"0".repeat(63)}2::sui::SUI`;
+  assert.deepEqual(
+    hintOf({ type: "activity", activity_id: "10:7:0:0", kind: "trade_buy", coin_type: COIN, quote_atoms: "18446744073709551615", quote_type: SUI, usd: "12.345678901234567890" }),
+    { type: "activity", activity_id: "10:7:0:0", kind: "trade_buy", coin_type: COIN, quote_atoms: "18446744073709551615", quote_type: SUI, usd: "12.345678901234567890" },
+    "a trade hint carries its amount for the buy cue",
+  );
+  for (const bad of [
+    { quote_atoms: "18446744073709551616" }, { quote_atoms: "-1" }, { quote_atoms: "01" }, { quote_atoms: 5 },
+    { usd: "1.0000000000000000001" }, { usd: "1e3" }, { usd: "9".repeat(40) }, { quote_type: "SUI" },
+  ])
+    assert.deepEqual(
+      hintOf({ type: "activity", activity_id: "10:8:0:0", kind: "trade_buy", coin_type: COIN, ...bad }),
+      { type: "activity", activity_id: "10:8:0:0", kind: "trade_buy", coin_type: COIN },
+      `a bad amount field is dropped, the hint kept: ${JSON.stringify(bad)}`,
+    );
   assert.deepEqual(
     hintOf({ type: "activity", activity_id: "10:3:0:0", kind: "trade_sell", presale_id: null, coin_type: COIN }),
     { type: "activity", activity_id: "10:3:0:0", kind: "trade_sell", coin_type: COIN },
