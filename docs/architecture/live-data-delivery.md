@@ -113,7 +113,7 @@ tried again.
 | Anyone opens sockets | A **ticket** from `POST /api/launchpad/market/ticket`. The route is behind the first-party API gate. It has no per-IP quota: web routes carry no rate limits (founder ruling). The gate cookie costs one page GET, so the ticket is a **cost, not authentication**. The socket limits below are the real bound. Ticket: `key = HMAC(gateway secret, "blast-live-ticket-v1")`, then `HMAC(key, payload)`. The payload is `{v, exp, n, o}`. A ticket lives 60 s and is **single use**: its nonce is burned with `SET NX PX <remaining life>` under its own `live-ticket:` prefix in the private-replay Redis. |
 | Ticket leaks through logs, history or Referer | The ticket travels only in `Sec-WebSocket-Protocol`, never in the URL. Surfaces that must not record it: Render request logs (they record the path only), error and trace reporters, and refusal close reasons. A test checks that no refusal echoes it. |
 | Another site embeds the socket | Exact `Origin` match, and the ticket binds `o`. The server never reads `Cookie`. The gate cookie is `__Host-` (host-only); sign-off checks that no first-party cookie uses `Domain=blast.fun`. |
-| One client starves the shared tables | Limits per IP across the fleet: **8 open sockets** and **20 opens a minute** (resumes count). One Redis script on the private-replay store checks both, then burns the ticket, so the count holds at any instance count. Closes remove their entries in one batched command per address; a failed removal is retried every 2 s and once more at drain. An entry also expires after the longest socket life plus 5 minutes (65 min), so a crashed instance frees its slots by then. Per IP, per instance: **4 distinct pools** and **40 distinct price coins** across that IP's sockets, because they guard that process's own tables. The key is `ClientAddress.rateKey`, a /64 for IPv6. Global tables per process: 64 pool topics and 128 price coins (`MARKET_STREAM_BUDGET`). A socket whose new topics or coins would not fit is refused with 4503; tables never fill silently. A pool the reader sends no snapshot for (a tracked venue pool, or a key the engine does not index) is fenced by the socket's other market traffic once a pong proves the reader holds its subscription. Only a pool still with no fence 10 s after its subscribe, on a process with no other market traffic, frees its slot. |
+| One client starves the shared tables | Limits per IP across the fleet: **8 open sockets** and **20 opens a minute** (resumes count). One Redis script on the private-replay store checks both, then burns the ticket, so the count holds at any instance count. Closes remove their entries in one batched command per address; a failed removal is retried every 2 s and once more at drain. An entry also expires after the longest socket life plus 5 minutes (65 min), so a crashed instance frees its slots by then. Per IP, per instance: **4 distinct pools** and **40 distinct price coins** across that IP's sockets, because they guard that process's own tables. The key is `ClientAddress.rateKey`, a /64 for IPv6. Global tables per process: 64 pool topics and 128 price coins (`MARKET_STREAM_BUDGET`). A socket whose new topics or coins would not fit is refused with 4503; tables never fill silently. A pool the reader sends no snapshot for (a tracked venue pool on an older reader) is fenced by the socket's other market traffic once a pong proves the reader holds its subscription. A pool fault never closes a socket: see [Pool recovery](#pool-recovery). |
 | Process exhaustion | Sockets share the relay's client ceiling: the configured `BLAST_BACKEND_MAX_HINT_STREAMS`, at most 1,024 per instance (`ACTIVITY_HINT_STREAM_BUDGET.maxClients`, a 64 MiB queue budget per relay). Fleet capacity is instances × the configured value; size it so expected sockets stay under 70% of that. Measured locally on 2026-11-25: about 60 KB a socket under traffic, CPU before memory; raising the configured value needs a Render memory and CPU reading first. One upstream reader socket per process, never one per browser. |
 | Expensive subscriptions | Topics are fixed at connect, using the market stream parsers (`marketStreamPools`, `marketStreamPriceCoins`, `marketStreamPresale`, `marketStreamActivity`): ≤ 2 pools, ≤ 20 price coins, ≤ 1 presale. `resume=<pool>~<cursor>` is allowed at most 2 times. Its pool must match `POOL_KEY`, appear in `pool=` and not repeat; its cursor must match `EVENT_CURSOR`. Otherwise 4400. The browser cannot send subscribe messages. |
 | Client messages | The only accepted message is `{"op":"ping","t":<int>}`: at most 128 bytes and 1 a second. Anything else, binary or over the rate closes 1008. `maxPayloadLength` is 1 KiB and `perMessageDeflate` is off. |
@@ -221,6 +221,36 @@ admission assertions; the owner approved the policy on 2026-10-27.
   lanes), so keep `8 × API replicas ≤ 64 × pool instances`; a busy answer
   otherwise follows the existing unknown-outcome recovery.
 
+## Pool recovery
+
+The market relay (`MarketStreamRelay`) closes a browser's socket only for a bad
+hello or another deployment's frame. Everything else is recovered in place.
+Each line is the `status` a browser gets.
+
+- **One pool lost its fence** (no fence 10 s after its subscribe, a failed or
+  too old resume, an `error` naming the pool, `not_ready`, a
+  `snapshot_unavailable` with reason `unavailable`, or a bad, oversized or out
+  of order frame for it, which is dropped): `{state: "recovering", pool_key}`
+  once. The relay unsubscribes and subscribes the pool again, at once, then
+  after 5 s, 10 s and every 30 s, and sends `live` with the new fence. Browsers
+  refetch history on a new fence.
+- **The reader does not know the pool** (`snapshot_unavailable`, reason
+  `not_found`): `{state: "unavailable", pool_key}` once. The relay frees the
+  reader's topic and asks again every 60 s. An older reader sends no
+  `snapshot_unavailable`, so there such a pool stays `recovering` and is asked
+  for every 30 s.
+- **The upstream dropped, or sent a frame no pool can be blamed for:**
+  `{state: "recovering"}` with no pool, heartbeats for 30 s (older tabs then
+  fall back on their own), and `{state: "fresh"}` once a new upstream is ready.
+  Fenced pools resume by cursor.
+- **No market progress for 30 s** (no market frame and no rise in a pong's
+  `market_checkpoint`): `{state: "stale"}`, then `{state: "fresh"}`. Only a
+  reader whose pongs carry `market_checkpoint` can make the stream stale; a
+  quiet market on an older reader is not a fault.
+- An oversized hint is dropped.
+
+Older browser hubs ignore `recovering`, `stale` and `fresh`.
+
 ## Bursts and memory
 
 - Browser tabs spread plain activity, connect and resync looks over up to
@@ -228,11 +258,10 @@ admission assertions; the owner approved the policy on 2026-10-27.
   synchronized re-reads were refused at the API's in-flight bound (1.1 % of
   reads locally) until spread.
 - Bun spreads connected-stream closes over its drain (30 s API, 5 s hints).
-- Bun's activity and market relays still close **every** stream when their
-  engine socket fails or resyncs, and browsers reconnect within about a second
-  (activity 0–1 s full jitter, charts 0.5–0.75 s): one process's tabs reconnect
-  together. Reader routing removes the writer restart as a trigger; the fix is
-  follow-up 1.
+- The market relay keeps every stream open when its engine socket fails: it
+  sends `status recovering`, keeps heartbeats for 30 s and reconnects upstream
+  (see [Pool recovery](#pool-recovery)). Only a bad hello or another
+  deployment's frame still closes every stream.
 
 ## Fleet budget (proposed inputs, unmeasured)
 
@@ -255,11 +284,8 @@ Proposed mix: 10,000 users × 1.2 tabs × 70 % visible ≈ 8,400 subscribed tabs
 
 ## Follow-ups, in order
 
-1. Keep relay sockets open across an engine reconnect: send `resync` as a
-   hint, paced (128 streams every 100 ms worked in the retired worker), and
-   reconnect upstream in the relay,
-   instead of closing every client. Changes the pinned close-on-failure tests
-   (`market-stream.test.ts`); own PR.
+1. Done: relay sockets stay open across an engine reconnect
+   ([Pool recovery](#pool-recovery)).
 2. Gas-pool busy → "not submitted": an explicit `submitted → reserved`
    rollback so a busy pool answer is retried at once.
 3. Native journal retention design with provenance (no deletion as a fix).

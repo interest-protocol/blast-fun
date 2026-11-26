@@ -80,7 +80,7 @@ test("the relay sends a four-second heartbeat only after a pong and times out fr
   assert.equal(frames.length, framesAtLoss);
   t.mock.timers.tick(1);
   assert.equal(socket.closed, 1);
-  assert.equal(frames.length, framesAtLoss, "browsers stay connected and quiet while the relay reconnects");
+  assert.deepEqual(frames.slice(framesAtLoss), ['event: status\ndata: {"state":"recovering"}\n\n'], "browsers stay connected and are told the relay reconnects");
 });
 
 test("optional feed refusal preserves activity and sanitizes metadata on the combined stream", async () => {

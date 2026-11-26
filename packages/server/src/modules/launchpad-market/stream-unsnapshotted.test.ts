@@ -98,7 +98,7 @@ test("malformed and repeated frames before the fence are dropped, not fatal", (t
   assert.equal(browser.closed, false);
 });
 
-test("a quiet unsnapshotted pool still stalls to unavailable, and an upstream loss forgets its partial checkpoint", (t) => {
+test("a quiet unsnapshotted pool re-fences instead of failing, and an upstream loss forgets its partial checkpoint", (t) => {
   t.mock.timers.enable({ apis: ["setInterval", "setTimeout", "Date"] });
   const { sockets, join, hello } = harness();
   const quiet = join(`pool=${POOL}`);
@@ -110,14 +110,20 @@ test("a quiet unsnapshotted pool still stalls to unavailable, and an upstream lo
   const start = quiet.events.length;
   // Frames of checkpoint 10 may have been lost with the old socket: 10 cannot be the fence.
   sockets[1]!.receive(lifecycle(POOL, 11, 0));
-  assert.equal(quiet.events.slice(start).some(({ event }) => event === "status" || event === "market"), false);
+  assert.equal(quiet.events.slice(start).some(({ event }) => event === "market"), false);
+  const sent = sockets[1]!.sent.length;
   for (let second = 0; second < 10; second++) {
     t.mock.timers.tick(1_000);
     sockets[1]!.receive({ type: "pong" });
   }
   assert.equal(sockets.length, 2, "the upstream stayed up");
-  assert.equal(quiet.closed, true);
-  assert.deepEqual(quiet.events.at(-1), { event: "status", data: { state: "unavailable", pool_key: POOL }, id: undefined });
+  assert.equal(quiet.closed, false, "a quiet pool never ends its browser");
+  assert.deepEqual(quiet.events.filter(({ event }) => event === "status").at(-1)?.data, { state: "recovering", pool_key: POOL });
+  assert.deepEqual(
+    sockets[1]!.sent.slice(sent).filter(({ op }) => op !== "ping"),
+    [{ op: "unsubscribe", topics: [`pool:${POOL}`] }, { op: "subscribe", topics: [`pool:${POOL}`] }],
+    "it asks the reader for a new snapshot",
+  );
 });
 
 test("after an upstream drop a boundary-fenced pool subscribes fresh and fences again, with no resync", (t) => {
