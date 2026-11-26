@@ -473,10 +473,18 @@ test("a set on the real relay is answered before the added pool's catch-up, then
 });
 
 test("an open whose pools stopped fitting while Redis answered closes busy and holds nothing", async () => {
-  const { live, server, subs, open, room } = harness();
+  const shared = store();
+  let admit!: () => void;
+  shared.admitting = new Promise((resolve) => {
+    admit = resolve;
+  });
+  const { live, server, subs, open, room } = harness(undefined, false, shared);
   try {
-    room.fits = false;
     const client = open(`pool=${pool(1)}&price_coin=${coin(1)}`);
+    // Room at the first check; the tables fill while Redis answers.
+    await until(() => live.stats().addresses === 1);
+    room.fits = false;
+    admit();
     assert.equal((await client.closed).code, LIVE_CLOSE.busy);
     assert.equal(subs.length, 0, "never subscribed");
     await until(() => live.stats().addresses === 0 && live.stats().sockets === 0);
