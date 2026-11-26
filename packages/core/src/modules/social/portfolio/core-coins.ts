@@ -10,19 +10,21 @@ export const BLAST_V1_COINS = [
 ] as const;
 
 /** User-curated ecosystem identities; source verification is recorded in docs/research/canonical-sui-coins.md.
- * Decimals were read from each type's mainnet coin metadata on 2026-11-20. */
+ * Decimals were read from each type's mainnet coin metadata on 2026-11-20 (BRAT on 2026-11-26).
+ * A `poolKey` is the coin's deepest Cetus or Bluefin SUI pool, read on chain; blast-infra tracks it
+ * (`src/candles/legacy.rs`). The ecosystem pools added on 2026-11-26 record from 2026-11-27, with no backfill. */
 export const CORE_COINS = [
   { symbol: "SUI", name: "Sui", decimals: 9, category: "Sui ecosystem", coinType: SUI_COIN_TYPE, logoUrl: "https://statics.noodles.fi/logo/9617893563456752127" },
   { symbol: "USDC", name: "USD Coin", decimals: 6, category: "Stablecoin", coinType: USDC_COIN_TYPE, logoUrl: "https://statics.noodles.fi/logo/12910532333836854800.png" },
   { symbol: "USDsui", name: "USDsui", decimals: 6, category: "Stablecoin", coinType: "0x44f838219cf67b058f3b37907b655f226153c18e33dfcd0da559a844fea9b1c1::usdsui::USDSUI", logoUrl: "https://statics.noodles.fi/logo/3239126153783930158.png" },
   { symbol: "hashiBTC", name: "Hashi BTC", decimals: 8, category: "Bitcoin", coinType: "0xd30fb3f8914efdbeb7b8e85fae1d65dc584b44a1281f66737b92bb9f03a59d06::btc::BTC", logoUrl: "https://statics.noodles.fi/logo/7821410237963526456" },
-  { symbol: "WAL", name: "Walrus", decimals: 9, category: "Sui ecosystem", coinType: "0x356a26eb9e012a68958082340d4c4116e7f55615cf27affcff209cf0ae544f59::wal::WAL", logoUrl: "https://statics.noodles.fi/logo/9842075661773840743.png" },
-  { symbol: "DEEP", name: "DeepBook", decimals: 6, category: "Sui ecosystem", coinType: "0xdeeb7a4662eec9f2f3def03fb937a663dddaa2e215b8078a284d026b7946c270::deep::DEEP", logoUrl: "https://statics.noodles.fi/logo/5953110395701421413.svg" },
+  { symbol: "WAL", name: "Walrus", decimals: 9, category: "Sui ecosystem", coinType: "0x356a26eb9e012a68958082340d4c4116e7f55615cf27affcff209cf0ae544f59::wal::WAL", logoUrl: "https://statics.noodles.fi/logo/9842075661773840743.png", poolKey: "cetus:0x72f5c6eef73d77de271886219a2543e7c29a33de19a6c69c5cf1899f729c3f17" },
+  { symbol: "DEEP", name: "DeepBook", decimals: 6, category: "Sui ecosystem", coinType: "0xdeeb7a4662eec9f2f3def03fb937a663dddaa2e215b8078a284d026b7946c270::deep::DEEP", logoUrl: "https://statics.noodles.fi/logo/5953110395701421413.svg", poolKey: "cetus:0xe01243f37f712ef87e556afb9b1d03d0fae13f96d324ec912daffc339dfdcbd2" },
   { symbol: "BLUE", name: "Bluefin", decimals: 9, category: "Sui ecosystem", coinType: "0xe1b45a0e641b9955a20aa0ad1c1f4ad86aad8afb07296d4085e349a50e90bdca::blue::BLUE", logoUrl: "https://statics.noodles.fi/logo/7418035000931445141.png" },
   { symbol: "NS", name: "SuiNS Token", decimals: 6, category: "Sui ecosystem", coinType: "0x5145494a5f5100e645e4b0aa950fa6b68f614e8c59e17bc5ded3495123a79178::ns::NS", logoUrl: "https://statics.noodles.fi/logo/15855495860326863293.svg" },
   { symbol: "SCA", name: "Scallop", decimals: 9, category: "Sui ecosystem", coinType: "0x7016aae72cfc67f2fadf55769c0a7dd54291a583b63051a5ed71081cce836ac6::sca::SCA", logoUrl: "https://statics.noodles.fi/logo/6731817061449729465" },
-  { symbol: "NAVX", name: "NAVX Token", decimals: 9, category: "Sui ecosystem", coinType: "0xa99b8952d4f7d947ea77fe0ecdcc9e5fc0bcab2841d6e2a5aa00c3044e5544b5::navx::NAVX", logoUrl: "https://statics.noodles.fi/logo/12603559088759419719" },
-  { symbol: "CETUS", name: "Cetus Token", decimals: 9, category: "Sui ecosystem", coinType: "0x06864a6f921804860930db6ddbe2e16acdf8504495ea7481637a1c8b9a8fe54b::cetus::CETUS", logoUrl: "https://statics.noodles.fi/logo/430711517704640244.png" },
+  { symbol: "NAVX", name: "NAVX Token", decimals: 9, category: "Sui ecosystem", coinType: "0xa99b8952d4f7d947ea77fe0ecdcc9e5fc0bcab2841d6e2a5aa00c3044e5544b5::navx::NAVX", logoUrl: "https://statics.noodles.fi/logo/12603559088759419719", poolKey: "cetus:0x0254747f5ca059a1972cd7f6016485d51392a3fde608107b93bbaebea550f703" },
+  { symbol: "CETUS", name: "Cetus Token", decimals: 9, category: "Sui ecosystem", coinType: "0x06864a6f921804860930db6ddbe2e16acdf8504495ea7481637a1c8b9a8fe54b::cetus::CETUS", logoUrl: "https://statics.noodles.fi/logo/430711517704640244.png", poolKey: "cetus:0x2e041f3fd93646dcc877f783c1f2b7fa62d30271bdef1f21ef002cebf857bded" },
   { symbol: "MMT", name: "Momentum", decimals: 9, category: "Sui ecosystem", coinType: "0x35169bc93e1fddfcf3a82a9eae726d349689ed59e4b065369af8789fe59f8608::mmt::MMT", logoUrl: "https://statics.noodles.fi/logo/8992504305779932469.png" },
   { symbol: "HAEDAL", name: "Haedal", decimals: 9, category: "Sui ecosystem", coinType: "0x3a304c7feba2d819ea57c3542d68439ca2c386ba02159c740f7b406e592c62ea::haedal::HAEDAL", logoUrl: "https://statics.noodles.fi/logo/12890268452687820622" },
   { symbol: "IKA", name: "IKA Token", decimals: 9, category: "Sui ecosystem", coinType: "0x7262fb2f7a3a14c888c438a3cd9b912469a58cf60f367352c46584262e8299aa::ika::IKA", logoUrl: "https://statics.noodles.fi/logo/6956824444457421755.svg" },
@@ -53,8 +55,9 @@ export const CORE_COINS = [
   { symbol: "XAGM", name: "Matrixdock Silver", decimals: 9, category: "Real assets", coinType: "0x64bddec0f898ccaa022b8a6e0a5f75d80f53177b87a9795dd15aefe9ac12ee6c::xagm::XAGM", logoUrl: "https://statics.noodles.fi/logo/17108638301008921494.png" },
   { symbol: "USDY", name: "Ondo US Dollar Yield", decimals: 6, category: "Real assets", coinType: "0x960b531667636f39e85867775f52f6b1f220a058c4de786905bdf761e06a56bb::usdy::USDY", logoUrl: "https://statics.noodles.fi/logo/11307898973982214367.svg" },
   { symbol: "HIPPO", name: "sudeng", decimals: 9, category: "Community", coinType: "0x8993129d72e733985f7f1a00396cbd055bad6f817fee36576ce483c8bbb8b87b::sudeng::SUDENG", logoUrl: "https://statics.noodles.fi/logo/12367217475693369235.png" },
-  { symbol: "LOFI", name: "LOFI", decimals: 9, category: "Community", coinType: "0xf22da9a24ad027cccb5f2d496cbe91de953d363513db08a3a734d361c7c17503::LOFI::LOFI", logoUrl: "https://statics.noodles.fi/logo/3577845151260351905.png" },
-  { symbol: "BLUB", name: "BLUB", decimals: 2, category: "Community", coinType: "0xfa7ac3951fdca92c5200d468d31a365eb03b2be9936fde615e69f0c1274ad3a0::BLUB::BLUB", logoUrl: "https://statics.noodles.fi/logo/4626651705687178628.jpg" },
+  { symbol: "LOFI", name: "LOFI", decimals: 9, category: "Community", coinType: "0xf22da9a24ad027cccb5f2d496cbe91de953d363513db08a3a734d361c7c17503::LOFI::LOFI", logoUrl: "https://statics.noodles.fi/logo/3577845151260351905.png", poolKey: "cetus:0xd6918afa64d432b84b48088d165b0dda0b7459463a7d66365f7ff890cae22d2d" },
+  { symbol: "BLUB", name: "BLUB", decimals: 2, category: "Community", coinType: "0xfa7ac3951fdca92c5200d468d31a365eb03b2be9936fde615e69f0c1274ad3a0::BLUB::BLUB", logoUrl: "https://statics.noodles.fi/logo/4626651705687178628.jpg", poolKey: "cetus:0x40a372f9ee1989d76ceb8e50941b04468f8551d091fb8a5d7211522e42e60aaf" },
+  { symbol: "BRAT", name: "BRAT", decimals: 9, category: "Community", coinType: "0xd883b9dc7708547a4b578e3a4ec20a34c5fd866bc61caacbcb4330474032202e::brat::BRAT", logoUrl: "https://statics.noodles.fi/logo/12540594340818269028", poolKey: "cetus:0xfb85561e287cb588cc6de79d9c1279409894c77a4ad6582ea86e8a95f1bfdc8e" },
   ...BLAST_V1_COINS,
   { symbol: "ONE", name: "JustOneSui", decimals: 6, category: "Community", coinType: "0xaaffd090b57fcdcf293f7e7ec59c119acc910eeb5fc4aadfb4185fa56b6a2cb5::suipump::SUIPUMP", logoUrl: "https://statics.noodles.fi/logo/14207055064415664154.jpeg", poolKey: "cetus:0x1f30ac740fec626467ac825121314185a9a2feacd88185d70cea7e092d07fd3a", verifiedCommunity: true },
 ] as const;
