@@ -174,6 +174,19 @@ test("closing Bridge while the allowance is checked opens no wallet", async () =
   assert.equal(calls.sends, 0);
 });
 
+test("closing Bridge while the SDK prepares the send aborts it before the wallet", async () => {
+  const calls = newCalls();
+  let seen: AbortSignal | null = null;
+  const form = await mount(fakeSdk(calls, [QUOTE], { send: (_quote, _request, _wallet, _onSigned, signal) => { seen = signal; return new Promise<string>(() => undefined); } }), calls);
+  await form.pickUsdc();
+  await form.type("20");
+  await act(async () => form.button().click());
+  await waitFor(() => seen !== null, "the SDK has the send");
+  assert.equal(seen!.aborted, false);
+  await form.unmount();
+  assert.equal(seen!.aborted, true);
+});
+
 test("an arrival reads the source balance again", async () => {
   const calls = newCalls();
   let balances = 0;

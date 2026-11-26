@@ -7,6 +7,20 @@ import { transferState, type DestinationToken, type SourceToken, type TransferSt
 /** An EIP-1193 provider, as Privy's `getEthereumProvider()` returns it. */
 export type Eip1193 = Readonly<{ request(args: { method: string; params?: unknown[] | object }): Promise<unknown> }>;
 
+/**
+ * The wallet's provider, refusing every new request once `signal` aborts:
+ * `eth_requestAccounts` (a locked wallet) prompts as well as `eth_sendTransaction`.
+ * A request already sent runs on, so a submitted transaction still returns its hash.
+ */
+export function abortableProvider(provider: Eip1193, signal: AbortSignal): Eip1193 {
+  return {
+    request: (args) => {
+      signal.throwIfAborted();
+      return provider.request(args);
+    },
+  };
+}
+
 export type EvmWallet = Readonly<{
   kind: "evm";
   address: string;
@@ -56,12 +70,14 @@ export type BridgeSdk = Readonly<{
   balance(chain: BridgeChain, token: SourceToken, owner: string): Promise<bigint>;
   /** EVM tokens only: whether the router may spend the quote's amount already. */
   allowanceEnough(quote: Quote, wallet: EvmWallet, chain: BridgeChain): Promise<boolean>;
-  approve(quote: Quote, wallet: EvmWallet, chain: BridgeChain): Promise<void>;
+  /** `signal` aborts before any wallet request that has not started yet. */
+  approve(quote: Quote, wallet: EvmWallet, chain: BridgeChain, signal: AbortSignal): Promise<void>;
   /**
    * Signs and sends the guarded quote; resolves with the source transaction hash.
    * `onSigned` gets the hash as soon as it exists (Solana: once signed, before sending).
+   * `signal` aborts before the wallet is asked, if it has not been asked yet.
    */
-  send(quote: Quote, request: BridgeRequest, wallet: SourceWallet, onSigned: (hash: string) => void): Promise<string>;
+  send(quote: Quote, request: BridgeRequest, wallet: SourceWallet, onSigned: (hash: string) => void, signal: AbortSignal): Promise<string>;
   history(blastAddress: string): Promise<BridgeRow[]>;
   /** Mayan's state for a source transaction, and what arrived once it has. */
   status(hash: string): Promise<TransferStatus>;

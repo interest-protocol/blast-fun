@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { explorerRows, mergeRows, type BridgeRow } from "./bridge-sdk.ts";
+import { abortableProvider, explorerRows, mergeRows, type BridgeRow } from "./bridge-sdk.ts";
 
 const BLAST = `0x${"ab".repeat(32)}`;
 const swap = (hash: string, at: string, extra: Record<string, unknown> = {}) => ({
@@ -21,6 +21,21 @@ test("explorer rows keep bridges paid to this Blast address on Sui, newest first
   assert.deepEqual(explorerRows({ error: "rate limited" }, BLAST), []);
   const sources = explorerRows({ data: [swap("op", "2026-11-26T10:00:00Z", { sourceChain: "24" }), swap("pol", "2026-11-26T09:00:00Z", { sourceChain: "5" }), swap("bsc", "2026-11-26T08:00:00Z", { sourceChain: "4" })] }, BLAST);
   assert.deepEqual(sources.map((row) => [row.hash, row.chain]), [["op", "optimism"], ["pol", "polygon"], ["bsc", null]]);
+});
+
+test("after a close the wallet gets no request, but one already sent still answers", async () => {
+  const methods: string[] = [];
+  let answer: (hash: string) => void = () => undefined;
+  const wallet = { request: ({ method }: { method: string }) => { methods.push(method); return method === "eth_sendTransaction" ? new Promise<unknown>((resolve) => { answer = resolve; }) : Promise.resolve([]); } };
+  const life = new AbortController();
+  const provider = abortableProvider(wallet, life.signal);
+  await provider.request({ method: "eth_accounts" });
+  const sending = provider.request({ method: "eth_sendTransaction" });
+  life.abort();
+  answer("0xhash");
+  assert.equal(await sending, "0xhash");
+  for (const method of ["eth_requestAccounts", "eth_sendTransaction"]) assert.throws(() => provider.request({ method }), { name: "AbortError" });
+  assert.deepEqual(methods, ["eth_accounts", "eth_sendTransaction"]);
 });
 
 test("a just-signed bridge stays first until the explorer lists it", () => {

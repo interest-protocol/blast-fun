@@ -11,7 +11,7 @@ import { BrowserProvider, Contract, JsonRpcProvider, type TransactionRequest } f
 
 import { mayanRpc, type BridgeChain } from "./bridge-config.ts";
 import { CHAINS, transferState, type SourceToken } from "./bridge-model.ts";
-import { explorerRows, MAYAN_EXPLORER, type BridgeSdk, type EvmWallet, type SolanaWallet } from "./bridge-sdk.ts";
+import { abortableProvider, explorerRows, MAYAN_EXPLORER, type BridgeSdk, type EvmWallet, type SolanaWallet } from "./bridge-sdk.ts";
 
 /** Blink only: Mayan's one route that refunds on the source chain and needs no relayer on Sui. */
 const BLINK_ONLY: QuoteOptions = { blink: true, swift: false, mctp: false, fastMctp: false, wormhole: false, shuttle: false, monoChain: false, gasless: false };
@@ -31,12 +31,16 @@ export function mayanSdk(): BridgeSdk {
   let solana: Connection | null = null;
   const solanaConnection = () => (solana ??= new Connection(mayanRpc("solana"), "confirmed"));
 
-  const evmSigner = async (wallet: EvmWallet) => new BrowserProvider(await wallet.provider()).getSigner(wallet.address);
+  // After a close, no request reaches the wallet, so no prompt opens.
+  const evmSigner = async (wallet: EvmWallet, signal: AbortSignal) => {
+    signal.throwIfAborted();
+    return new BrowserProvider(abortableProvider(await wallet.provider(), signal)).getSigner(wallet.address);
+  };
 
   // Returns the hash once the wallet sends. `sendTransaction` would then poll the
   // wallet's own RPC with no time limit, which never ends for some smart-contract wallets.
-  const sendEvm = async (wallet: EvmWallet, chain: BridgeChain, transaction: TransactionRequest): Promise<string> => {
-    const signer = await evmSigner(wallet);
+  const sendEvm = async (wallet: EvmWallet, chain: BridgeChain, transaction: TransactionRequest, signal: AbortSignal): Promise<string> => {
+    const signer = await evmSigner(wallet, signal);
     const chainId = CHAINS[chain].chainId!;
     const walletChainId = Number(await signer.provider.send("eth_chainId", []));
     if (walletChainId !== chainId) throw new Error(`Wallet is on chain ${walletChainId}, not ${chain}`);
@@ -67,23 +71,23 @@ export function mayanSdk(): BridgeSdk {
       return BigInt(await new Contract(token.mayan, ERC20, provider).getFunction("balanceOf")(owner));
     },
     allowanceEnough: (quote, wallet, chain) => isEvmSwapAllowanceEnough(quote, wallet.address, evm(chain)),
-    async approve(quote, wallet, chain) {
+    async approve(quote, wallet, chain, signal) {
       const provider = evm(chain);
       for (const transaction of await getEvmSwapApproveTxs(quote, wallet.address, provider)) {
         // react-doctor-disable-next-line react-doctor/async-await-in-loop -- Approvals are ordered (a reset to zero comes before the new allowance); each must be mined before the next is signed.
-        const hash = await sendEvm(wallet, chain, transaction);
+        const hash = await sendEvm(wallet, chain, transaction, signal);
         await provider.waitForTransaction(hash, 1, 120_000);
       }
     },
-    async send(quote, request, wallet, onSigned) {
+    async send(quote, request, wallet, onSigned, signal) {
       if (wallet.kind === "evm") {
         const chainId = CHAINS[request.chain].chainId!;
         const payload = await getSwapFromEvmTxPayload(quote, wallet.address, request.blastAddress, null, wallet.address, chainId, null, null, { evmProvider: evm(request.chain) });
-        const hash = await sendEvm(wallet, request.chain, { to: payload.to, data: payload.data, value: payload.value });
+        const hash = await sendEvm(wallet, request.chain, { to: payload.to, data: payload.data, value: payload.value }, signal);
         onSigned(hash);
         return hash;
       }
-      const sign = solanaSigner(wallet);
+      const sign = solanaSigner(wallet, signal);
       // No extra RPCs: every Solana call goes to Mayan's RPC only.
       const { signature } = await swapFromSolana(quote, wallet.address, request.blastAddress, null, sign, solanaConnection(), [], undefined, undefined, undefined, { onTransactionSigned: onSigned });
       return signature;
@@ -105,10 +109,11 @@ export function mayanSdk(): BridgeSdk {
 }
 
 /** Privy signs bytes; the SDK hands over web3.js transactions. */
-function solanaSigner(wallet: SolanaWallet) {
+function solanaSigner(wallet: SolanaWallet, signal: AbortSignal) {
   async function sign(transaction: Transaction): Promise<Transaction>;
   async function sign(transaction: VersionedTransaction): Promise<VersionedTransaction>;
   async function sign(transaction: Transaction | VersionedTransaction): Promise<Transaction | VersionedTransaction> {
+    signal.throwIfAborted();
     if (transaction instanceof VersionedTransaction) return VersionedTransaction.deserialize(await wallet.signTransaction(transaction.serialize()));
     const bytes = transaction.serialize({ requireAllSignatures: false, verifySignatures: false });
     return Transaction.from(await wallet.signTransaction(bytes));
