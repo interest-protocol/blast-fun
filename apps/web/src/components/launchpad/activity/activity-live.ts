@@ -105,25 +105,25 @@ export function followLiveTrades(options: LiveTradesOptions): (() => void) & Rea
   let cancel: (() => void) | null = null;
   let stopped = false;
   const reached = (checkpoint: number) => (feed.readThrough() ?? -1) >= checkpoint;
+  const caughtUp = () => {
+    misses = 0;
+  };
 
   const read = () => {
     cancel = null;
     const at = wanted;
     wanted = null;
     if (stopped || at === null) return;
-    if (reached(at)) {
-      misses = 0;
-      return;
-    }
+    if (reached(at)) return caughtUp();
     lastRead = options.now();
-    void feed.refresh(false, at).finally(() => {
+    const settled = (ok: boolean) => {
       if (stopped) return;
-      if (reached(at)) misses = 0;
-      else {
-        misses += 1;
-        want(at);
-      }
-    });
+      // A read that names no checkpoint cannot be compared with the fence: it is taken as it is.
+      if (reached(at) || (ok && feed.readThrough() === null)) return caughtUp();
+      misses += 1;
+      want(at);
+    };
+    void feed.refresh(false, at).then(settled, () => settled(false));
   };
   const want = (checkpoint: number) => {
     if (reached(checkpoint)) return;

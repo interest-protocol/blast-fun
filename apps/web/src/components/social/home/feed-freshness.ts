@@ -34,7 +34,8 @@ export type FreshnessHint = Readonly<{
   presaleId?: string;
   lifecycle?: string;
   coinType?: string;
-  trade?: Readonly<{ presaleId?: string; coinType?: string; checkpoint: number; cursor: string; kind?: "trade_buy" | "trade_sell"; actor?: string }>;
+  /** A trade row's selectors, and its quote atoms, quote coin and dollars when the hint carried them (Home's buy cue only). */
+  trade?: Readonly<{ presaleId?: string; coinType?: string; checkpoint: number; cursor: string; kind?: "trade_buy" | "trade_sell"; actor?: string; quoteAtoms?: string; quoteType?: string; usd?: string }>;
   catchUp?: true;
   /** A `connect` after an earlier live socket in this tab: hints may have been missed. */
   reconnect?: true;
@@ -44,7 +45,15 @@ export type FreshnessHint = Readonly<{
 export type FreshnessSignal = (hint?: FreshnessHint) => void;
 
 /** A source of "look now" signals; `subscribe` returns its unsubscribe. */
-export type FeedFreshnessSource = Readonly<{ name: string; subscribe(signal: FreshnessSignal): () => void }>;
+export type FeedFreshnessSource = Readonly<{
+  name: string;
+  subscribe(signal: FreshnessSignal): () => void;
+  /**
+   * Every new hint, uncoalesced and unfiltered, for a cue (Home's buy cue): never a read, never data.
+   * Only a live hint source has it; it does not open the socket on its own.
+   */
+  hints?(listener: (hint: FreshnessHint) => void): () => void;
+}>;
 
 /** The poll interval without a live hint. */
 export const NEW_POSTS_POLL_MS = 30_000;
@@ -107,14 +116,16 @@ export function pollingFreshness(intervalMs = NEW_POSTS_POLL_MS): FeedFreshnessS
 
 /** Every source's signals, as one source. */
 export function anyFreshness(...sources: readonly FeedFreshnessSource[]): FeedFreshnessSource {
+  const all = (subscribe: (source: FeedFreshnessSource) => (() => void) | undefined) => {
+    const offs = sources.map(subscribe);
+    return () => {
+      for (const off of offs) off?.();
+    };
+  };
   return {
     name: sources.map((source) => source.name).join("+"),
-    subscribe(signal) {
-      const offs = sources.map((source) => source.subscribe(signal));
-      return () => {
-        for (const off of offs) off();
-      };
-    },
+    subscribe: (signal) => all((source) => source.subscribe(signal)),
+    ...(sources.some((source) => source.hints) ? { hints: (listener: (hint: FreshnessHint) => void) => all((source) => source.hints?.(listener)) } : {}),
   };
 }
 

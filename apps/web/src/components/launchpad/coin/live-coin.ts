@@ -66,7 +66,7 @@ export function reconnecting(state: MarketStreamState | null, since: number, now
 
 export type LiveCoin = Readonly<{
   stats: LiveCoinStats | null;
-  /** The stream is live on these pools: their lists need no timer. */
+  /** The stream is live on the chart's pool: its lists need no timer. */
   live: boolean;
   reconnecting: boolean;
 }>;
@@ -74,20 +74,23 @@ export type LiveCoin = Readonly<{
 const IDLE: LiveCoin = { stats: null, live: false, reconnecting: false };
 
 /**
- * One coin's live header: joins the tab's market stream for `pools` (the chart's own pools, so the
- * stream does not widen) and keeps the latest `coin_stats` and the stream's state. `stats` arrives
- * once the hub relays `coin_stats` frames; until then the screen keeps its read.
+ * One coin's live header: joins the tab's market stream for `pools` (the screen's own pools, so the
+ * stream does not widen) and keeps the latest `coin_stats` and the state of `pool` (the chart's pool,
+ * first of `pools` by default). `stats` arrives once the hub relays `coin_stats` frames; until then
+ * the screen keeps its read.
  */
 export function useLiveCoin(request: Readonly<{
   coin: string | null;
   pools: readonly string[];
+  pool?: string;
   expected: ExpectedDeployment | null;
   enabled: boolean;
 }>): LiveCoin {
   const { coin, expected, enabled } = request;
   const poolList = request.pools.join(",");
+  const watched = request.pool ?? request.pools[0];
   const [shown, setShown] = useState<Readonly<{ key: string; value: LiveCoin }> | null>(null);
-  const key = `${coin}:${poolList}:${expected?.network}:${expected?.deployment}`;
+  const key = `${coin}:${poolList}:${watched}:${expected?.network}:${expected?.deployment}`;
   useEffect(() => {
     const hub = enabled && coin && poolList ? tabMarketStream() : null;
     if (!hub || !coin) return;
@@ -98,8 +101,10 @@ export function useLiveCoin(request: Readonly<{
     const publish = () => setShown({ key, value: { stats, live: state === "live", reconnecting: reconnecting(state, since, Date.now()) } });
     // Typed apart so the `stats` listener compiles before and after the hub names it.
     const listener: MarketStreamListener & { stats?: (frame: unknown) => void } = {
-      state: (next) => {
-        if (next === state) return;
+      state: () => {},
+      // One pool's state: the other pool may recover or wait for a slot without the header saying so.
+      pool: (poolKey, next) => {
+        if (poolKey !== watched || next === state) return;
         // The stale clock starts when the stream begins (re)connecting, from live, paused or unavailable alike.
         if (state !== "connecting" && state !== "reconnecting") since = Date.now();
         state = next;

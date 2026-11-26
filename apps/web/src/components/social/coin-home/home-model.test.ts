@@ -25,6 +25,8 @@ import {
   amountText,
   biggestBuy,
   buyCueOf,
+  hintBuy,
+  homeHintReads,
   eventLine,
   eventSentence,
   followersText,
@@ -323,4 +325,24 @@ test("a live buy reads in a glance and lands as loud as its size", () => {
   assert.equal(biggestBuy([at("new", 9, "2"), at("big", 1, "900"), at("unpriced", 10)])?.coin_key, "big");
   assert.equal(biggestBuy([at("old", 1, "5"), at("new", 2, "5.0")])?.coin_key, "new");
   assert.equal(biggestBuy([]), undefined);
+});
+
+// Fails if the hint cue's floor drifts from the server's `recent_buys` rule, or a priced buy still re-reads Home.
+test("a priced buy hint goes to the cue only, keyed like the row, at the server's floor", () => {
+  const COIN = `0x${"b2".repeat(32)}::blast::BLAST`;
+  const SALE = `0x${"a1".repeat(32)}`;
+  const hint = (trade: Readonly<Record<string, string | undefined>>, kind: "trade_buy" | "trade_sell" = "trade_buy") =>
+    ({ atMs: 5, cause: "hint" as const, trade: { coinType: COIN, checkpoint: 1, cursor: "1:2:0:0", kind, quoteAtoms: "100", usd: "3", ...trade } });
+  assert.equal(homeHintReads(hint({})), false, "a priced buy makes no read");
+  assert.equal(homeHintReads(hint({ usd: undefined })), true, "an unpriced buy reads as today");
+  assert.equal(homeHintReads(hint({ quoteAtoms: undefined })), true, "a dropped amount reads as today");
+  assert.equal(homeHintReads(hint({}, "trade_sell")), true);
+  assert.equal(homeHintReads({ atMs: 5, cause: "connect" }), true);
+  assert.deepEqual(hintBuy(hint({})), { coin_key: COIN, activity_id: "1:2:0:0", occurred_at_ms: 5, quote_atoms: "100", usd: "3", quote_symbol: null, quote_decimals: null });
+  assert.equal(hintBuy(hint({ presaleId: SALE }))?.coin_key, SALE, "a sale's row is keyed by the sale");
+  assert.equal(hintBuy(hint({ usd: "0.1" }))?.usd, "0.1");
+  assert.equal(hintBuy(hint({ usd: "0.099999999999999999" })), null, "exact, not floating point");
+  assert.equal(hintBuy(hint({ quoteAtoms: "0" })), null);
+  assert.equal(hintBuy(hint({}, "trade_sell")), null);
+  assert.deepEqual(buyCueOf(hintBuy(hint({ usd: "1204.5" }))!), { text: "+$1.2K", tier: "huge" });
 });

@@ -693,3 +693,62 @@ test("a coin's identity change reaches every surface at once, naming the coin, e
   w.advance(HINT_GAP_MS);
   assert.equal(coin.looks.at(-1)?.hint?.coinType, undefined);
 });
+
+const BUY = {
+  type: "activity",
+  activity_id: "326274020:1:0:0",
+  kind: "trade_buy",
+  coin_type: `0x${"b2".repeat(32)}::blast::BLAST`,
+  quote_atoms: "2500000000",
+  quote_type: `0x${"0".repeat(63)}2::sui::SUI`,
+  usd: "7.25",
+};
+
+// Fails if a trade hint's amount is lost before Home's cue, or a raw listener misses a hint the coalescer folds.
+test("a raw hint listener gets every new hint with its amount, before the coalescer and past a throwing listener", () => {
+  const w = world();
+  const home = surface(w, "home");
+  const raw: FreshnessHint[] = [];
+  const offThrow = w.hints.subscribeHints(() => { throw new Error("cue failed"); });
+  const off = w.hints.subscribeHints((hint) => raw.push(hint));
+  w.live();
+  w.advance(HINT_GAP_MS);
+  const looks = home.looks.length;
+  w.socket().receive({ ...BUY, activity_id: "326274020:0:0:0", kind: "trade_sell" });
+  w.socket().receive(BUY);
+  w.socket().receive({ ...BUY, activity_id: "326274020:2:0:0", usd: "90" });
+  w.socket().receive(BUY);
+  assert.equal(raw.length, 3, "each new hint once, a repeat dropped, none folded");
+  assert.deepEqual(raw[1].trade, {
+    presaleId: undefined, coinType: BUY.coin_type, checkpoint: 326274020, cursor: BUY.activity_id, kind: "trade_buy",
+    quoteAtoms: BUY.quote_atoms, quoteType: BUY.quote_type, usd: "7.25",
+  });
+  assert.equal(home.looks.length, looks + 1, "the surface still looks once now, the rest at the gap's end");
+  assert.equal(w.socket().closed, false, "a throwing listener ends nothing");
+  off();
+  offThrow();
+  w.socket().receive({ ...BUY, activity_id: "326274020:3:0:0" });
+  assert.equal(raw.length, 3, "an unsubscribed listener hears nothing");
+});
+
+// Fails if a bad amount ends a client or reaches the cue, instead of being dropped field by field.
+test("a bad or oversized amount drops only that field; the hint still selects its trade and the socket stays", () => {
+  const w = world();
+  const raw: FreshnessHint[] = [];
+  surface(w, "home");
+  w.hints.subscribeHints((hint) => raw.push(hint));
+  w.live();
+  w.socket().receive({ ...BUY, activity_id: "326274021:1:0:0", usd: "1e5", quote_atoms: "18446744073709551616" });
+  w.socket().receive({ ...BUY, activity_id: "326274021:2:0:0", usd: `1.${"1".repeat(19)}`, quote_atoms: "-1" });
+  w.socket().receive({ ...BUY, activity_id: "326274021:3:0:0", usd: "9".repeat(60) });
+  assert.equal(raw.length, 3);
+  for (const hint of raw) {
+    assert.equal(hint.trade?.kind, "trade_buy");
+    assert.equal(hint.trade?.usd, undefined);
+  }
+  assert.equal(raw[0].trade?.quoteAtoms, undefined, "over u64");
+  assert.equal(raw[1].trade?.quoteAtoms, undefined, "not digits");
+  assert.equal(raw[2].trade?.quoteAtoms, BUY.quote_atoms, "a bad usd leaves the good amount");
+  assert.equal(w.socket().closed, false);
+  assert.equal(w.events("unavailable").length, 0);
+});
