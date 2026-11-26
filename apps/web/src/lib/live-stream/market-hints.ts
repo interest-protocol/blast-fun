@@ -53,10 +53,21 @@ export function beginMarketHints() {
 }
 
 /**
+ * How long a hint client with no market stream waits before it opens the activity-only socket. A page whose
+ * market stream starts a moment after its hint client (Home subscribes its prices once its rows render)
+ * then opens one socket, not an activity-only one closed before it connects.
+ */
+export const ACTIVITY_ONLY_GRACE_MS = 1_000;
+
+/**
  * While the tab has a market stream, hints ride it, and a client waits for its hello however long it takes:
  * the tab never holds two sockets. The activity-only socket opens only while no market stream exists.
  */
-export function marketHintTransport(url: string, fallback: (url: string) => HintSocket): HintSocket {
+export function marketHintTransport(
+  url: string,
+  fallback: (url: string) => HintSocket,
+  wait: (run: () => void) => void = (run) => void setTimeout(run, ACTIVITY_ONLY_GRACE_MS),
+): HintSocket {
   let underlying: HintSocket | null = null;
   let closed = false;
   /** The carrier this socket reads; null on the activity-only socket, undefined while still choosing. */
@@ -118,7 +129,7 @@ export function marketHintTransport(url: string, fallback: (url: string) => Hint
   };
   listeners.add(notice);
   if (carrier) choose("open");
-  // A market stream that starts in this same task (a chart mounting beside this client) is waited for.
-  else queueMicrotask(() => choose("wait"));
+  // A market stream that starts within the grace (a chart or price list mounting beside this client) is waited for.
+  else wait(() => choose("wait"));
   return socket;
 }

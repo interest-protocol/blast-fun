@@ -62,7 +62,7 @@ type Subscriber = {
   last: Map<string, DisplayPrice>;
 };
 
-const READ_INTERVAL_MS = 2_000;
+const READ_INTERVAL_MS = 1_000;
 const RETRY_INTERVAL_MS = 10_000;
 
 /** The hints process reads once for all subscribed rows, and sends only changed observations. */

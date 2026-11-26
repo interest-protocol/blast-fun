@@ -4,6 +4,7 @@ import test from "node:test";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { queryKeys } from "#web/lib/query/keys.ts";
 import { infraProvenanceFixture } from "../../../../../../packages/server/test/fixtures/modules/launchpad-contract/fixtures.ts";
+import { ACTIVITY_ONLY_GRACE_MS } from "#web/lib/live-stream/market-hints.ts";
 import { hintInvalidation } from "../live-queries.ts";
 import { ActivityHints, activityHints, HINT_GAP_MS, recordHintPainted, tabActivityHints, type HintSocket } from "./activity-hints.ts";
 import type { FreshnessHint } from "./feed-freshness.ts";
@@ -266,7 +267,8 @@ test("the browser factory closes the socket while hidden and removes visibility 
     assert.equal(sockets.length, 0);
     document.visibilityState = "visible";
     document.dispatchEvent(new Event("visibilitychange"));
-    await settle(); // with no market stream starting, the activity-only socket opens after its ticket
+    await new Promise((resolve) => setTimeout(resolve, ACTIVITY_ONLY_GRACE_MS)); // no market stream starts in the grace
+    await settle(); // the activity-only socket opens after its ticket
     assert.equal(sockets.length, 1);
     hint(HELLO);
     hint({ type: "pong" });
