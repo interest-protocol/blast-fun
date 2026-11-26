@@ -54,7 +54,7 @@ test("a held coin retains its streamed price until a newer read actually include
   const first = standalone("FIRST", "cetus");
   const held = { ...standalone("HELD", "cetus"), coin_type: `0x${"1".repeat(64)}::coin::HELD` };
   const incoming = standalone("NEW", "cetus");
-  const prices = new Map([[held.coin_type, { coin_type: held.coin_type, checkpoint: 11, as_of_ms: 2, usd_price: "3" }]]);
+  const prices = new Map([[held.coin_type, { coin_type: held.coin_type, checkpoint: 11, as_of_ms: 2, usd_price: "3", trade: null }]]);
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -98,4 +98,26 @@ test("Home streams prices for the first 20 migrated coins by row order, not by s
   assert.equal(refilled.includes(rows[3].coin_type), false, "the coin that left is dropped");
   assert.equal(refilled.includes(rows[20].coin_type), true, "its slot goes to the next row");
   assert.equal(refilled.includes(rows[21].coin_type), false);
+});
+
+// Fails if a SUI move cues every row, if a trade inside a SUI move is lost, or if a trade's direction follows the quote.
+test("a coin's trade follows only its own moves, not the quote's", async () => {
+  const { observeFrame } = await import("./use-home-prices");
+  const coins = Array.from({ length: 20 }, (_, index) => `0x${(index + 1).toString(16).padStart(64, "0")}::coin::C`);
+  const frame = (checkpoint: number, at: number, price: (index: number) => string, only = coins) =>
+    ({ checkpoint, prices: only.map((coin_type) => ({ coin_type, usd_price: price(coins.indexOf(coin_type)), as_of_ms: at })) });
+  const start = observeFrame(new Map(), coins, frame(1, 100, index => `${index + 1}`));
+  assert.equal(start.get(coins[3]!)?.trade, null, "a first price is no trade");
+
+  // SUI up 0.5%: every coin moves by the same ratio, and coin 3 also sold 0.3%, still above its last price.
+  const moved = observeFrame(start, coins, frame(2, 200, index => `${(index + 1) * 1.005 * (index === 3 ? 0.997 : 1)}`));
+  assert.equal(moved.get(coins[0]!)?.trade, null, "a quote move is no trade");
+  assert.equal(moved.get(coins[0]!)?.usd_price, "1.005", "while the price itself still moves");
+  assert.deepEqual(moved.get(coins[3]!)?.trade, { at: 200, direction: -1 }, "a sell against a rising quote is down");
+
+  // A frame with 6 of the 20 coins: 5 share a SUI dip, the quote move, and one buy stands apart.
+  const minority = observeFrame(moved, coins, frame(3, 300, index => `${(index + 1) * 1.005 * (index === 9 ? 1.02 : 0.998)}`, coins.slice(4, 10)));
+  assert.equal(minority.get(coins[4]!)?.trade, null, "a minority quote move is no trade");
+  assert.deepEqual(minority.get(coins[9]!)?.trade, { at: 300, direction: 1 });
+  assert.deepEqual(minority.get(coins[3]!)?.trade, { at: 200, direction: -1 }, "a coin not in the frame keeps its trade");
 });

@@ -7,7 +7,7 @@ import { NavPending } from "#web/components/blast-ui/NavigationLink.tsx";
 import clsx from "clsx";
 import Link from "next/link";
 import { useId, useMemo, useRef } from "react";
-import { usePriceTick } from "./use-price-tick";
+import { usePriceTick, useTradeTick } from "./use-price-tick";
 import { coinAtPrice } from "./live-market";
 
 import { DexIdentity } from "#web/components/blast-ui/DexIdentity.tsx";
@@ -24,6 +24,7 @@ import styles from "./CoinHome.module.css";
 import { homeAnalytics } from "./home-analytics";
 import { homeCoinHref, homeCoinKey, homeStatus, marketVolume, shareText, type HomeBuyCue, type HomeStatus } from "./home-model";
 import { readableUsd } from "#web/lib/market-format.ts";
+import type { HomeTrade } from "./use-home-prices";
 import type { DisplayPrice } from "@blast/core/modules/launchpad-contract/market-stream.ts";
 import { coinPagePath } from "@blast/core/modules/launchpad-coin/page-key.ts";
 
@@ -31,6 +32,8 @@ export type CoinCardProps = Readonly<{
   coin: HomeCoin;
   marketLoading?: boolean;
   livePrice?: DisplayPrice;
+  /** This coin's latest own trade on the stream, apart from SUI moves. */
+  trade?: HomeTrade | null;
   /** A buy that just landed on this coin. */
   buy?: HomeBuyCue;
   window: HomeWindow;
@@ -46,7 +49,7 @@ export type CoinCardProps = Readonly<{
  * cell, "—" where a figure is unknown, so the columns line up. The ticker
  * link covers the row; Buy has its own target above the link.
  */
-export function CoinCard({ coin, window, nowMs, trading, watchlist = false, marketLoading = false, livePrice, buy }: CoinCardProps) {
+export function CoinCard({ coin, window, nowMs, trading, watchlist = false, marketLoading = false, livePrice, trade = null, buy }: CoinCardProps) {
   const marketCoin = useMemo(() => coinAtPrice(coin, livePrice), [coin, livePrice]);
   const valuationAt = livePrice && !coin.live_inputs ? coin.price_as_of_ms : marketCoin.price_as_of_ms;
   const id = useId();
@@ -60,7 +63,7 @@ export function CoinCard({ coin, window, nowMs, trading, watchlist = false, mark
       <div aria-labelledby={id} className={clsx(styles.row, styles.cols, styles.coinRow)} data-surface="" role="row">
         <CoinIdentity buy={buy} coin={coin} id={id} nowMs={nowMs} venue={status.venue || filling ? null : coin.venue} />
         <MarketCap amount={marketCoin.mobile_market?.market_cap_usd ?? null} at={valuationAt} loading={marketLoading} nowMs={nowMs} />
-        <PriceChange coin={marketCoin} window={window} />
+        <PriceChange coin={marketCoin} trade={trade} window={window} />
         <span className={clsx("num", styles.vol)} role="cell">
           <span aria-hidden="true">{volume ?? NO_VALUE}</span>
           <span className="sr-only">{volumeLabel}</span>
@@ -184,10 +187,17 @@ function MarketCap({ amount, at, loading, nowMs }: Readonly<{ amount: string | n
   </span>;
 }
 
-/** The price move over the window, signed and coloured like every price move: green up, red down, neutral when flat. */
-function PriceChange({ coin, window }: Readonly<{ coin: HomeCoin; window: HomeWindow }>) {
+/**
+ * The price move over the window, signed and coloured like every price move: green up, red down, neutral when flat.
+ * Its two decimals show a trade the rounded market cap hides, so a trade on this coin alone washes it briefly in the
+ * trade's direction, as the chart's last trade does. A SUI move, a window switch or a baseline rollover changes it quietly.
+ */
+function PriceChange({ coin, trade, window }: Readonly<{ coin: HomeCoin; trade: HomeTrade | null; window: HomeWindow }>) {
+  const node = useRef<HTMLSpanElement>(null);
   const bps = window === "1h" ? coin.mobile_market?.change_1h_bps : coin.change_24h_bps;
-  if (coin.price_usd === null || bps == null) return <span className={clsx("num", styles.change)} role="cell"><Missing what="Price change" /></span>;
+  const display = coin.price_usd === null || bps == null ? null : changeText(bps);
+  useTradeTick(node, display, trade);
+  if (display === null || bps == null) return <span className={clsx("num", styles.change)} role="cell"><Missing what="Price change" /></span>;
   const since = window === "24h" && coin.change_24h_from_ms !== undefined
     ? `Since the first price on ${utc(coin.change_24h_from_ms)}`
     : undefined;
@@ -195,8 +205,12 @@ function PriceChange({ coin, window }: Readonly<{ coin: HomeCoin; window: HomeWi
     {since ? <>
       <span className="sr-only">{since} </span>
       <span aria-hidden="true" className={styles.changeWindow}>≤24h </span>
-    </> : null}{bps === 0 ? "0%" : signPct(bps / 100)}
+    </> : null}<span className={styles.changeFigure} data-slot="coin-change" ref={node}>{display}</span>
   </span>;
+}
+
+function changeText(bps: number): string {
+  return bps === 0 ? "0%" : signPct(bps / 100);
 }
 
 /** Where the coin is in its life, in one line: a filling curve or an open sale draws its bar; a coin with no Blast history, its venue. */
