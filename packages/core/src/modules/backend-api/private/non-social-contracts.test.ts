@@ -5,10 +5,10 @@ import { NON_SOCIAL_PRIVATE_ROUTES } from "./non-social-contracts.ts";
 
 test("only the anonymous launchpad CSRF read remains, as GET and HEAD", () => {
   assert.deepEqual(
-    NON_SOCIAL_PRIVATE_ROUTES.map((route) => [route.id, route.method, route.maxBodyBytes]),
+    NON_SOCIAL_PRIVATE_ROUTES.map((route) => [route.id, route.method, route.path, route.maxBodyBytes]),
     [
-      ["launchpad.csrf", "GET", 0],
-      ["launchpad.csrf", "HEAD", 0],
+      ["launchpad.csrf", "GET", "/api/launchpad/csrf", 0],
+      ["launchpad.csrf", "HEAD", "/api/launchpad/csrf", 0],
     ],
   );
   for (const route of NON_SOCIAL_PRIVATE_ROUTES) assert.notEqual(route.ssrRead, true);

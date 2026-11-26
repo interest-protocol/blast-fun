@@ -15,6 +15,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { Pool } from "pg";
 import { migrateDatabase } from "@blast/core/modules/database/migrations.ts";
+import { privateRoute } from "@blast/core/modules/backend-api/private-routes.ts";
 import { privateBackendRelay } from "@blast/server/private/relay.ts";
 import { parseRelayConfig } from "@blast/server/private/relay-config.ts";
 import { capacityFixture } from "./capacity-fixture.ts";
@@ -271,14 +272,18 @@ test(
       ["/api/mission-control/owner/share", "POST"],
       ["/api/mission-control/owner", "GET"],
       ["/api/mission-control/owner/card", "GET"],
-      ["/api/mission-control/owner/profile", "PATCH"],
+      ["/api/mission-control/owner/display-name", "PATCH"],
       ["/api/mission-control/owner/wallets", "GET"],
       ["/api/mission-control/owner/wallets/challenge", "POST"],
       ["/api/mission-control/restore", "POST"],
       ["/api/mission-control/slush-wallet-metadata", "GET"],
       ["/api/auth/logout", "POST"],
     ] as const) {
-      assert.equal((await send(path, method)).status, 404, path);
+      // No contract means the relay cannot forward the path and private
+      // signing refuses it, so no browser or SSR call can reach Bun with it.
+      assert.equal(privateRoute(method, path, "browser"), null, `${method} ${path} browser contract`);
+      assert.equal(privateRoute(method, path, "ssr-read"), null, `${method} ${path} SSR contract`);
+      assert.equal((await send(path, method)).status, 404, `${method} ${path}`);
     }
 
     const minted = await send("/api/launchpad/csrf", "GET", undefined, {
