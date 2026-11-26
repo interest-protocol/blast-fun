@@ -16,9 +16,9 @@ import { readBondingHeroFromBackend } from "#web/lib/backend-api/bonding.ts";
 import { readFeaturedPresalesFromBackend } from "#web/lib/backend-api/presales.ts";
 import { readFeedPageFromBackend, readHomeFromBackend, readHomeTradersFromBackend } from "#web/lib/backend-api/social-reads.ts";
 
-// Home's title is the brand alone (FEATURE-MAP §0.3).
+// Home's title is the brand alone (FEATURE-MAP §0.3). `/` serves this page, so `/` is its address.
 export async function generateMetadata({ searchParams }: Readonly<{ searchParams: ReferralSearchParams }>): Promise<Metadata> {
-  return await referralPageMetadata(searchParams) ?? { title: { absolute: "Blast" } };
+  return { ...await referralPageMetadata(searchParams) ?? { title: { absolute: "Blast" } }, alternates: { canonical: "/" } };
 }
 
 const requestNow = cache((): number => Date.now());

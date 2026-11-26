@@ -23,9 +23,6 @@ export function siteMetadata(socialUrl = SITE_ORIGIN): Metadata {
       "crypto launchpad",
       "Sui wallet",
     ],
-    alternates: {
-      canonical: "/",
-    },
     category: "finance",
     formatDetection: {
       telephone: false,

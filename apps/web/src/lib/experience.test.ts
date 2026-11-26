@@ -38,6 +38,8 @@ test("the fresh social URL has its own Open Graph cache identity", () => {
 
   const metadata = siteMetadata(SITE_SOCIAL_SHARE_URL);
   assert.equal(metadata.openGraph?.url, SITE_SOCIAL_SHARE_URL);
+  // Each page names its own address; a site-wide default would point every page at Home.
+  assert.equal(metadata.alternates, undefined);
   assert.deepEqual(metadata.twitter?.images, [
     {
       url: SITE_SOCIAL_IMAGE_URL,

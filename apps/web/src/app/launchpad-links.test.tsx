@@ -12,11 +12,11 @@ import { useWebConfig } from "../../test/fixtures/lib/web-config.testing.ts";
 
 import * as robotsModule from "./robots";
 import * as sitemapModule from "./sitemap";
+import { sitemapEntries } from "#web/lib/sitemap-entries.ts";
 
 installRequestHeaders();
 const { default: NotFound, metadata: notFoundMetadata } = await import("./not-found");
 
-const sitemap = sitemapModule.default;
 const robots = robotsModule.default;
 
 const BOOSTS_URL = "https://boosts.example.com/blast";
@@ -43,14 +43,20 @@ test("the not-found page uses the app's title form and plain copy back to Home",
 
 const paths = (entries: MetadataRoute.Sitemap) => entries.map((entry) => new URL(entry.url).pathname);
 
-test("the public sitemap includes the launch page", () => {
-  assert.deepEqual(paths(sitemap()), ["/", "/launch", "/privacy", "/terms"]);
+test("the sitemap lists Home, the listed coins, sales and profiles, and the legal pages; never a noindex page", () => {
+  assert.deepEqual(paths(sitemapEntries()), ["/", "/privacy", "/terms"]);
+  const coinType = "0x2::sui::SUI";
+  const presaleId = `0x${"a".repeat(64)}`;
+  assert.deepEqual(
+    paths(sitemapEntries({ coinTypes: [coinType, coinType], presaleIds: [presaleId], callsigns: ["nova_koala"] })),
+    ["/", `/coin/${encodeURIComponent(coinType)}`, `/presale/${presaleId}`, "/@nova_koala", "/privacy", "/terms"],
+  );
 });
 
 test("the sitemap and robots.txt read the site origin the same way: both CDN-cached for an hour", async () => {
   assert.equal(sitemapModule.revalidate, 3600);
   assert.equal(robotsModule.revalidate, sitemapModule.revalidate);
-  const entries = sitemap();
+  const entries = sitemapEntries();
   const origin = new URL(entries[0]!.url).origin;
   const rules = robots();
   assert.equal(rules.sitemap, `${origin}/sitemap.xml`);

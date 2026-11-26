@@ -6,7 +6,8 @@ import { requestLaunchFlags } from "#web/lib/launch-flags.server.ts";
 
 /** In the app shell (feed on) the social pages' title form ("Sign in · Blast"); unchanged with the feed off. */
 export async function generateMetadata(): Promise<Metadata> {
-  return (await requestLaunchFlags()).social ? { title: { absolute: "Sign in · Blast" } } : {};
+  const alternates = { canonical: "/sign-in" };
+  return (await requestLaunchFlags()).social ? { title: { absolute: "Sign in · Blast" }, alternates } : { alternates };
 }
 
 // The sign-in fallback (FEATURE-MAP §8.2): the sign-in sheet's content as a
