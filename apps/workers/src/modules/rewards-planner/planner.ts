@@ -48,6 +48,33 @@ async function price(tx: TransactionContext, settings: PlannerSettings, coin: st
 
 const MINIMUM_PAYOUT_USD = 100;
 
+async function holderEconomics(
+  tx: TransactionContext,
+  settings: PlannerSettings,
+  vault: Vault,
+  end: Cut,
+  endMs: string,
+  funds: { meme: bigint; quote: bigint },
+  noMinimum: boolean,
+) {
+  if (noMinimum) {
+    const hasFunds = funds.meme > 0n || funds.quote > 0n;
+    const memePrice = hasFunds ? await price(tx, settings, vault.meme_type, end, endMs) : null;
+    return { reserve: 0n, gasReserveBps: 0, quotePrice: null, memePrice, canPayHolders: memePrice !== null };
+  }
+
+  const { gasReserveBps } = settings;
+  const reserve = funds.quote * BigInt(gasReserveBps) / 10000n;
+  const quote = funds.quote - reserve;
+  const quotePrice = quote === 0n ? null : await price(tx, settings, vault.quote_type, end, endMs);
+  const quoteMeetsMinimum = meetsPayoutMinimum(quote, quotePrice, MINIMUM_PAYOUT_USD);
+  const memePrice = quote > 0n && (funds.meme > 0n || quoteMeetsMinimum)
+    ? await price(tx, settings, vault.meme_type, end, endMs, !quoteMeetsMinimum)
+    : null;
+  const canPayHolders = memePrice !== null && meetsPayoutMinimum(quote, quotePrice, MINIMUM_PAYOUT_USD, funds.meme, memePrice);
+  return { reserve, gasReserveBps, quotePrice, memePrice, canPayHolders };
+}
+
 async function launchTeamWallets(tx: TransactionContext, deployment: BlastDeployment, vault: Vault, cut: Cut): Promise<string[]> {
   const prefix = `${deployment.packages.launchpad.originalPackageId}::events::LaunchCreated<`;
   const { rows } = await tx.read<{ events: unknown; digest: string; sender: string; checkpoint: string }>(
@@ -165,16 +192,7 @@ export async function freezePeriod(pool: Pool, deployment: BlastDeployment, sett
     if (BigInt(roundStart) >= BigInt(end.checkpoint)) throw new MissingRewardHistory("round-overlap");
     const noMinimum = settings.noMinimumVaults.includes(vault.vault_id);
     if (noMinimum && BigInt(roundStart) > BigInt(start.checkpoint)) throw new MissingRewardHistory("holder-window-overlap");
-    const gasReserveBps = noMinimum ? 0 : settings.gasReserveBps;
-    const reserve = funds.quote * BigInt(gasReserveBps) / 10000n;
-    const quote = funds.quote - reserve;
-    const quotePrice = noMinimum || quote === 0n ? null : await price(tx, settings, vault.quote_type, end, period.end_ms);
-    const quoteMeetsMinimum = meetsPayoutMinimum(quote, quotePrice, MINIMUM_PAYOUT_USD);
-    const hasBudget = noMinimum ? funds.meme > 0n || quote > 0n : quote > 0n && (funds.meme > 0n || quoteMeetsMinimum);
-    const memePrice = hasBudget
-      ? await price(tx, settings, vault.meme_type, end, period.end_ms, !noMinimum && !quoteMeetsMinimum)
-      : null;
-    const canPayHolders = memePrice !== null && (noMinimum || meetsPayoutMinimum(quote, quotePrice, MINIMUM_PAYOUT_USD, funds.meme, memePrice));
+    const { reserve, gasReserveBps, quotePrice, memePrice, canPayHolders } = await holderEconomics(tx, settings, vault, end, period.end_ms, funds, noMinimum);
     const holderExclusions = canPayHolders ? await excludedHolders(tx, deployment, vault, end) : [];
     const exclusions = [...new Set([...settings.exclusions, ...holderExclusions, ...policy.destinations, vault.vault_id, vault.origin_id, vault.pool_id])].sort();
     exclusions.forEach((value) => objectIdSchema.parse(value));
