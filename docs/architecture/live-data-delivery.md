@@ -233,12 +233,17 @@ Each line is the `status` a browser gets.
   of order frame for it, which is dropped): `{state: "recovering", pool_key}`
   once. The relay unsubscribes and subscribes the pool again, at once, then
   after 5 s, 10 s and every 30 s, and sends `live` with the new fence. Browsers
-  refetch history on a new fence.
+  refetch history on a new fence. One exception: when the 10 s pass after the
+  reader took the subscribe (it answered a later ping) with no error, the pool
+  is a tracked one an older reader never snapshots, or one it does not know yet.
+  It stays `recovering` but subscribed: the next market frame of any pool fences
+  it, however late, and the relay re-subscribes it back to back every 30 s for
+  a snapshot.
 - **The reader does not know the pool** (`snapshot_unavailable`, reason
   `not_found`): `{state: "unavailable", pool_key}` once. The relay frees the
   reader's topic and asks again every 60 s. An older reader sends no
   `snapshot_unavailable`, so there such a pool stays `recovering` and is asked
-  for every 30 s.
+  for again about every 40 s.
 - **The upstream dropped, or sent a frame no pool can be blamed for:**
   `{state: "recovering"}` with no pool, heartbeats for 30 s (older tabs then
   fall back on their own), and `{state: "fresh"}` once a new upstream is ready.

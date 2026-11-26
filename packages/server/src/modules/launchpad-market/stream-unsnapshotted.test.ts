@@ -98,7 +98,7 @@ test("malformed and repeated frames before the fence are dropped, not fatal", (t
   assert.equal(browser.closed, false);
 });
 
-test("a quiet unsnapshotted pool re-fences instead of failing, and an upstream loss forgets its partial checkpoint", (t) => {
+test("a quiet unsnapshotted pool waits subscribed instead of failing, and an upstream loss forgets its partial checkpoint", (t) => {
   t.mock.timers.enable({ apis: ["setInterval", "setTimeout", "Date"] });
   const { sockets, join, hello } = harness();
   const quiet = join(`pool=${POOL}`);
@@ -121,9 +121,41 @@ test("a quiet unsnapshotted pool re-fences instead of failing, and an upstream l
   assert.deepEqual(quiet.events.filter(({ event }) => event === "status").at(-1)?.data, { state: "recovering", pool_key: POOL });
   assert.deepEqual(
     sockets[1]!.sent.slice(sent).filter(({ op }) => op !== "ping"),
-    [{ op: "unsubscribe", topics: [`pool:${POOL}`] }, { op: "subscribe", topics: [`pool:${POOL}`] }],
-    "it asks the reader for a new snapshot",
+    [],
+    "the reader took the subscribe: no new snapshot is coming, so the pool keeps listening",
   );
+  const live = quiet.events.length;
+  sockets[1]!.receive(lifecycle(POOL, 12, 0));
+  assert.deepEqual(quiet.events.slice(live).map(({ event, data }) => [event, data.state ?? null]), [["status", "live"], ["market", null]]);
+});
+
+// HELMET: after an upstream drop, a quiet tracked pool on a quiet socket. Other traffic came only
+// after its 10 s fence window; it was deaf then (unsubscribed and waiting a backoff) and never fenced.
+test("after an upstream drop a quiet pool is fenced by other traffic that comes long after its fence window", (t) => {
+  t.mock.timers.enable({ apis: ["setInterval", "setTimeout", "Date"] });
+  const { sockets, join, hello, after } = harness();
+  const browser = join(`pool=${POOL}&pool=${OTHER}`);
+  hello(sockets[0]!);
+  sockets[0]!.receive(snapshot(OTHER, 9));
+  sockets[0]!.receive(lifecycle(OTHER, 10));
+  sockets[0]!.receive(lifecycle(OTHER, 11));
+  assert.equal(browser.events.filter(({ data }) => data.state === "live").length, 2, "both pools live");
+  sockets[0]!.drop();
+  t.mock.timers.tick(400);
+  hello(sockets[1]!);
+  sockets[1]!.receive({ type: "resume_complete", cursor: "11:0:0:0" });
+  sockets[1]!.receive(snapshot(OTHER, 11));
+  const sent = sockets[1]!.sent.length;
+  for (let tenSeconds = 0; tenSeconds < 18; tenSeconds++) liveFor(t, sockets[1]!); // 3 quiet minutes.
+  assert.deepEqual(browser.events.filter(({ event }) => event === "status").at(-1)?.data, { state: "recovering", pool_key: POOL });
+  assert.equal(browser.events.filter(({ data }) => data.pool_key === POOL && data.state === "recovering").length, 1, "told once");
+  const asks = sockets[1]!.sent.slice(sent).filter(({ op }) => op !== "ping");
+  assert.deepEqual(asks.slice(0, 2), [{ op: "unsubscribe", topics: [`pool:${POOL}`] }, { op: "subscribe", topics: [`pool:${POOL}`] }]);
+  assert.ok(asks.length >= 6 && asks.length <= 10, "asked again back to back every 40 s, never left unsubscribed");
+  const start = browser.events.length;
+  sockets[1]!.receive(lifecycle(OTHER, 200));
+  assert.deepEqual(after(browser, start), [["status", "live@200:0:0:0"], ["market", "200:0:0:0"]]);
+  assert.equal(browser.closed, false);
 });
 
 test("after an upstream drop a boundary-fenced pool subscribes fresh and fences again, with no resync", (t) => {
@@ -226,4 +258,44 @@ test("a ping lost with the upstream does not hold back quiet fences after the re
   const start = browser.events.length;
   sockets[1]!.receive(lifecycle(OTHER, 11));
   assert.deepEqual(after(browser, start), [["status", "live@11:0:0:0"]]);
+});
+
+// A launch pool an older reader does not know yet looks the same as a tracked pool: no snapshot, no
+// error. Waiting must still ask again, or a new coin on a quiet socket would never go live.
+test("a waiting pool is asked again, so a pool the reader learns later gets its snapshot", (t) => {
+  t.mock.timers.enable({ apis: ["setInterval", "setTimeout", "Date"] });
+  const { sockets, join, hello, after } = harness();
+  const browser = join(`pool=${POOL}`);
+  hello(sockets[0]!);
+  liveFor(t, sockets[0]!);
+  assert.deepEqual(browser.events.filter(({ event }) => event === "status").at(-1)?.data, { state: "recovering", pool_key: POOL });
+  sockets[0]!.receive(lifecycle(POOL, 10, 0)); // Its creation, alone in its checkpoint.
+  const sent = sockets[0]!.sent.length;
+  for (let tenSeconds = 0; tenSeconds < 3; tenSeconds++) liveFor(t, sockets[0]!);
+  assert.deepEqual(sockets[0]!.sent.slice(sent).filter(({ op }) => op !== "ping"), [
+    { op: "unsubscribe", topics: [`pool:${POOL}`] },
+    { op: "subscribe", topics: [`pool:${POOL}`] },
+  ]);
+  const start = browser.events.length;
+  sockets[0]!.receive(snapshot(POOL, 12));
+  assert.deepEqual(after(browser, start), [["status", "live@12:0:0:0"]]);
+  assert.equal(browser.closed, false);
+});
+
+test("an older reader's not_ready to a waiting pool's new subscribe re-fences it, never a live pool the reader dropped", (t) => {
+  t.mock.timers.enable({ apis: ["setInterval", "setTimeout", "Date"] });
+  const { sockets, join, hello } = harness();
+  const browser = join(`pool=${POOL}`);
+  join(`pool=${OTHER}`);
+  hello(sockets[0]!);
+  sockets[0]!.receive(snapshot(OTHER, 9));
+  liveFor(t, sockets[0]!);
+  const sent = sockets[0]!.sent.length;
+  for (let tenSeconds = 0; tenSeconds < 3; tenSeconds++) liveFor(t, sockets[0]!);
+  assert.equal(sockets[0]!.sent.slice(sent).filter(({ op }) => op === "subscribe").length, 1, "asked again");
+  sockets[0]!.receive({ type: "error", error: { code: "not_ready" } });
+  sockets[0]!.receive({ type: "pong" });
+  sockets[0]!.receive(lifecycle(OTHER, 10));
+  assert.equal(browser.events.filter(({ event, data }) => event === "status" && data.state === "live").length, 0, "the reader holds nothing for it: never live");
+  assert.deepEqual(sockets[0]!.sent.slice(-2).filter(({ op }) => op !== "ping").at(-1), { op: "unsubscribe", topics: [`pool:${POOL}`] }, "re-fenced: freed, subscribed after a backoff");
 });
