@@ -20,7 +20,6 @@ export type RateBucket =
   | "share"
   | "code"
   | "wallet"
-  | "recovery"
   | "wallet_ip"
   | "callsign"
   | "completion"
@@ -282,14 +281,6 @@ export function createRatePolicyRegistry(
       version: 2,
       subjectScope: "ip_address",
       windows: WALLET_WINDOWS,
-    }),
-    recovery: Object.freeze({
-      bucket: "recovery",
-      version: 1,
-      subjectScope: "ip_address",
-      windows: Object.freeze([
-        Object.freeze({ limit: 5, windowSeconds: 600 }),
-      ]),
     }),
     // Review L3: `wallet` is keyed by the client IP and an address the client
     // chooses, so rotating addresses multiplied it. This counts the client IP

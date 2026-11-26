@@ -237,11 +237,6 @@ test("all named versioned rate policies publish exact defaults and scopes", () =
         version: 2,
         windows: [{ limit: 5, windowSeconds: 600 }],
       },
-      recovery: {
-        scope: "ip_address",
-        version: 1,
-        windows: [{ limit: 5, windowSeconds: 600 }],
-      },
       // Review L3: the client IP alone, beside `wallet`.
       wallet_ip: { scope: "ip", version: 1, windows: [{ limit: 30, windowSeconds: 600 }] },
       callsign: {

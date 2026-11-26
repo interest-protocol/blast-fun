@@ -4,10 +4,6 @@ export const SECURITY_FIXTURES = Object.freeze({
   admission: { ip: "203.0.113.10", admissionId: "admission-fixture" },
   callsign: { attemptId: "attempt-fixture" },
   completion: { attemptId: "attempt-fixture" },
-  recovery: {
-    ip: "203.0.113.11",
-    address: `0x${"1".repeat(64)}`,
-  },
   session: { sessionId: "session-fixture" },
   telemetry: { admissionId: "admission-fixture" },
   wallet: {

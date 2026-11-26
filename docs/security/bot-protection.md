@@ -369,10 +369,9 @@ dashboard's traffic for the rule, then switch to `rate_limit` / `challenge` /
   canonical card image URL is served, everything else is redirected to it.
 - `apps/web/src/lib/web-security/web-security.test.ts`,
   `social/route-kit/route-kit.test.ts`, `presale/bridge/bridge.test.ts`:
-  the per-IP wallet budget, failed sessions, the open
-  registration cap, bounded bodies, the limiter's eviction.
-- `apps/web/src/lib/web-security/web-security.test.ts`: the registry (version 29),
-  the platform-wide subject, configurable caps, IPv6 /64 grouping.
+  the registry (version 30), the per-IP wallet budget, failed sessions, the
+  open registration cap, bounded bodies, the limiter's eviction, the
+  platform-wide subject, configurable caps, IPv6 /64 grouping.
 - `packages/core/src/lib/launch-flags.test.ts`: environment parsing, the legacy
   `team` value, worker enablement, and shared response cache policy.
 - `apps/web/src/app/sign-in/page.test.tsx`, `apps/web/src/app/launchpad-links.test.tsx`:

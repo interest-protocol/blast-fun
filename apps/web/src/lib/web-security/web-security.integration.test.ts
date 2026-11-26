@@ -47,7 +47,6 @@ test(
       assert.ok(applied.includes("0005_web_security"));
 
       await assertBoundary("wallet", SECURITY_FIXTURES.wallet, 5);
-      await assertBoundary("recovery", SECURITY_FIXTURES.recovery, 5);
       await assertBoundary("callsign", SECURITY_FIXTURES.callsign, 30);
       await assertBoundary("completion", SECURITY_FIXTURES.completion, 5);
       await assertBoundary("telemetry", SECURITY_FIXTURES.telemetry, 12);
