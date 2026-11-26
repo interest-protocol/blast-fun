@@ -54,12 +54,13 @@ export const REFERRAL_REVENUE_SQL = `SELECT * FROM (${RECRUITS_SQL}, cut AS (
  FROM (SELECT DISTINCT entity_id,claim_checkpoint,claim_digest,claim_event_index FROM matched_curve
    WHERE claim_checkpoint IS NOT NULL) c
  LEFT JOIN LATERAL (SELECT p.checkpoint,p.digest,p.event_index FROM evidence p
-   WHERE p.entity_id=c.entity_id AND p.kind='curve_claim'
+   WHERE p.entity_id=c.entity_id AND p.kind='curve_claim' AND p.checkpoint<=c.claim_checkpoint
      AND (p.checkpoint<c.claim_checkpoint
        OR (p.checkpoint=c.claim_checkpoint AND p.digest=c.claim_digest AND p.event_index<c.claim_event_index))
    ORDER BY p.checkpoint DESC,p.digest DESC,p.event_index DESC LIMIT 1) previous ON true
  CROSS JOIN LATERAL (SELECT COALESCE(sum(g.quote_atoms),0) AS quote_gross
    FROM evidence g WHERE g.entity_id=c.entity_id AND g.kind IN ('curve','graduation')
+     AND g.checkpoint BETWEEN COALESCE(previous.checkpoint,0) AND c.claim_checkpoint
      AND (g.checkpoint<c.claim_checkpoint
        OR (g.checkpoint=c.claim_checkpoint AND g.digest=c.claim_digest AND g.event_index<c.claim_event_index))
      AND (previous.checkpoint IS NULL OR g.checkpoint>previous.checkpoint
