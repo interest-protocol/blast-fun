@@ -126,6 +126,8 @@ function qualifiedOf(
     const candidate = candidateOf(row, counts.get(id), span);
     const post = discussed.get(id);
     const active = candidate.counts !== undefined && Number(candidate.counts.events) > 0;
+    // Only tiny trades and no posts: nothing to show.
+    if (!active && !post) return [];
     const orderMs = Math.max(candidate.latestMs ?? 0, post ? Number(post.latest_ms) : 0);
     return [{ ...candidate, qualified: active ? "activity" : "discussion", orderMs, posts: post?.posts ?? 0 }];
   });

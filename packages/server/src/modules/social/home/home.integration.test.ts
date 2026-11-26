@@ -988,6 +988,34 @@ test("The thread under a trade floor: a dust burst cannot hide the window's real
     for (const bad of ["0", "2", "1.5", "01", "1&min_trade_usd=1"]) assert.equal((await thread(`?presale=${P.crowd}&min_trade_usd=${bad}`)).status, 400, bad);
   }));
 
+test("Tiny trades (under a cent): no list shows them and no count counts them, the switch on or off; the volume sums them", { skip }, () =>
+  withFixture(async ({ admin, now, thread }) => {
+    const before = await ok<HomeThreadPage>(await thread(`?presale=${P.orbit}`), "home-thread-page");
+    const at = (n: number, kind: string, actor: string, row: Partial<ChainActivityRow>) => activity(kind, actor, ORBIT, now - 40_000 - n * 1_000, { checkpoint: 49_100 + n, ...row });
+    // USDC proven tiny by its atoms ($0.009999, no USD), SUI by its USD, and Maya's tiny sell beside her real one.
+    const usdcTiny = at(0, "trade_buy", hex("7e00"), { quote_amount: "9999", usd_value: null });
+    const suiTiny = at(1, "trade_sell", hex("7e01"), { quote_type: SUI, quote_amount: "1000", usd_value: "0.004" });
+    const mayaTiny = at(2, "trade_sell", W.mayaA, { quote_amount: "5000", usd_value: "0.005" });
+    // A cent is not tiny.
+    const cent = at(3, "trade_buy", hex("7e03"), { quote_amount: "10000", usd_value: "0.01" });
+    await seedChainRead(admin, { activity: [usdcTiny, suiTiny, mayaTiny, cent] });
+    for (const query of ["", "&min_trade_usd=1"]) {
+      const after = await ok<HomeThreadPage>(await thread(`?presale=${P.orbit}${query}`), "home-thread-page");
+      const keys = keysOf(after.participants);
+      assert.ok(!keys.includes(`w:${usdcTiny.actor}`) && !keys.includes(`w:${suiTiny.actor}`), query);
+      assert.equal(keys.includes(`w:${cent.actor}`), query === "", query);
+      const maya = after.participants.find((row) => row.key === "c:maya")!;
+      assert.deepEqual([maya.sells?.count, maya.events_total, maya.events!.length], [1, 4, 4], query);
+      const { totals } = after;
+      assert.deepEqual([totals.participants, totals.events, totals.buyers, totals.sellers],
+        [before.totals.participants + 1, before.totals.events + 1, before.totals.buyers + 1, before.totals.sellers], query);
+      const atoms = (amounts: typeof totals.sold, type: string) => BigInt(amounts.find((amount) => amount.quote_type === type)?.atoms ?? "0");
+      assert.equal(atoms(totals.sold, QUOTE) - atoms(before.totals.sold, QUOTE), 5_000n, "the tiny sell is volume");
+      assert.equal(atoms(totals.sold, SUI) - atoms(before.totals.sold, SUI), 1_000n);
+      assert.equal(atoms(totals.bought, QUOTE) - atoms(before.totals.bought, QUOTE), 19_999n);
+    }
+  }));
+
 test("The discussion: the sale's posts with a why, newest first, as feed items; empty is empty; a hidden sale has no page", { skip }, () =>
   withFixture(async ({ discussion, ids }) => {
     // T-043: a sale the web does not show has no discussion to read, whatever its posts were stamped with.

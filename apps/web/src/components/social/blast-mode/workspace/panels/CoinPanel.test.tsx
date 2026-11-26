@@ -1494,6 +1494,8 @@ test("with trades under $1 hidden, a burst of dust cannot empty Trades: the read
   // A bot's 20 dust wallets trade after the one real buy: unfloored, they fill the whole page.
   const dust = Array.from({ length: 20 }, (_, n) => trade(`d${n + 10}`, "0.01", 1790337600000 + n));
   const real = trade("1234", "250.00", 1790337500000);
+  // A tiny trade (under a cent) never shows, the switch on or off.
+  const tiny = trade("7e01", "0.009", 1790337600100);
   let realInWindow = true;
   const floors: (number | null)[] = [];
   let answerAll: (() => void) | null = null;
@@ -1504,11 +1506,11 @@ test("with trades under $1 hidden, a burst of dust cannot empty Trades: the read
     activity: async (_asset, _signal, minTradeUsd) => {
       floors.push(minTradeUsd);
       if (minTradeUsd === null) await new Promise<void>((resolve) => (answerAll = resolve));
-      const all = [...dust, ...(realInWindow ? [real] : [])];
+      const all = [tiny, ...dust, ...(realInWindow ? [real] : [])];
       return {
         presale_id: "0xsale", coin_type: null, next_cursor: null, window: "24h", clock_ms: 1790337660000,
         as_of: { checkpoint: 1, timestamp_ms: 1790337600000, lag_ms: 0 },
-        participants: minTradeUsd === 1 ? all.filter((row) => !dust.includes(row)) : all.slice(0, 20),
+        participants: minTradeUsd === 1 ? all.filter((row) => !dust.includes(row) && row !== tiny) : all.slice(0, 20),
         // The totals are never floored: they still count the dust.
         totals: { scope: "pool", window: "24h", from_ms: 0, to_ms: 1790337660000, participants: all.length, events: all.length, buyers: all.length, sellers: 0, backers: 0, claimers: 0, bought: [], sold: [], committed: [], latest_ms: 1790337600019 },
       } as unknown as Awaited<ReturnType<CoinPanelProps["reads"]["activity"]>>;
@@ -1535,6 +1537,7 @@ test("with trades under $1 hidden, a burst of dust cannot empty Trades: the read
     assert.equal(rows().length, 1, "the shown list stays until that read answers");
     await act(async () => answerAll!());
     assert.equal(rows().length, 12, "the dust shows");
+    assert.ok(!rows().some((row) => row.textContent?.includes("0x7e01")), "the tiny trade does not");
 
     // A window of only dust still offers the switch: there are trades, just none over $1.
     realInWindow = false;

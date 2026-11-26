@@ -5,6 +5,7 @@ import { useEffect, useEffectEvent, useMemo, useRef, useState, useSyncExternalSt
 import { isActivityTrade, type ActivityRow, type WindowName } from "@blast/core/modules/launchpad-contract/activity.ts";
 import type { ExpectedDeployment } from "@blast/core/modules/launchpad-contract/provenance.ts";
 import { POOL_KEY } from "@blast/core/modules/launchpad-contract/venues.ts";
+import type { Exact } from "@blast/core/web/exact-amount.ts";
 
 import { atCheckpoint, browserMarketDependencies } from "../blast-infra-browser";
 import { tabMarketStream } from "../market-stream-hub";
@@ -15,7 +16,7 @@ import { createActivityFeed, linkTarget, listStart, shownActivity } from "./acti
 import { followLiveTrades } from "./activity-live";
 import type { PageOutcome } from "./activity-model";
 import { usePublishWalletTrades } from "./wallet-trades";
-import { dustQuoteUsd, isTradeUnderDollar } from "./small-trades";
+import { dustQuoteUsd, isTradeUnderDollar, tradeFloor } from "./small-trades";
 import { useCoinPriceCurrency } from "../chart/CoinPriceCurrency";
 import { createTradeTape } from "./trade-tape";
 import { ActivityView, type ActivityUnits, type TransactionExplorer } from "./ActivityView";
@@ -94,8 +95,8 @@ function CoinActivityFeed({ source, compact, initialActivity, start }: CoinActiv
   // An activity permalink starts partway through the tape and cannot name its latest trade.
   // The Last-trade pill skips dust, as the trades list does.
   const quoteUsd = dustQuoteUsd(source.units.quoteType, useCoinPriceCurrency(), source.units.quoteUsd);
-  const isDust = (row: ActivityRow) => isTradeUnderDollar({ usd: row.volumeUsd, quote: row.amounts.quote, decimals: source.units.quoteDecimals, quoteUsd });
-  const shownTrade = (row: ActivityRow) => isActivityTrade(row) && !isDust(row);
+  const isUnder = (row: ActivityRow, floor?: Exact) => isTradeUnderDollar({ usd: row.volumeUsd, quote: row.amounts.quote, decimals: source.units.quoteDecimals, quoteUsd }, floor);
+  const shownTrade = (row: ActivityRow) => isActivityTrade(row) && !isUnder(row);
   const lastTrade = start === null
     ? activity.newer?.rows.find(shownTrade) ?? activity.view?.rows.find(shownTrade)
     : null;
@@ -106,9 +107,10 @@ function CoinActivityFeed({ source, compact, initialActivity, start }: CoinActiv
 
   // "Hide trades under $1": while it is on, a streamed dust trade takes no row and asks no read, so a
   // bot's burst cannot push the real trades off the list. Turning it off reads through the newest one skipped.
+  // A tiny trade never takes a row, the switch on or off.
   const [hideSmallTrades, setHideSmallTrades] = useState(true);
   const following = useRef<ReturnType<typeof followLiveTrades> | null>(null);
-  const hidesLive = useEffectEvent((row: ActivityRow) => showTape && hideSmallTrades && isDust(row));
+  const hidesLive = useEffectEvent((row: ActivityRow) => showTape && isUnder(row, tradeFloor(hideSmallTrades)));
   const smallTradeFilter = useMemo(() => [hideSmallTrades, (hide: boolean) => {
     setHideSmallTrades(hide);
     if (!hide) following.current?.showHidden();

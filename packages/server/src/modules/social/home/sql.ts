@@ -1,9 +1,10 @@
 import type { ReadableDatabase } from "@blast/core/modules/database/transaction.ts";
 import { assertChainReadThroughViews } from "@blast/core/modules/database/modules.ts";
-import { CREATE_QUOTE_TYPE, CREATE_TEST_SUI_QUOTE_TYPE, createQuoteOf } from "@blast/core/modules/social/contracts/create.ts";
+import { CREATE_TEST_SUI_QUOTE_TYPE } from "@blast/core/modules/social/contracts/create.ts";
 import { Params } from "@blast/core/modules/social/presales/sql.ts";
 import { SHOWN_PRESALES } from "@blast/core/modules/social/read-model/chain-presales.ts";
 import { namedWalletsOfSql, namedWalletsSql } from "@blast/core/modules/social/read-model/naming.ts";
+import { tinyTradeSql, tradeUnderUsdSql } from "@blast/core/modules/social/read-model/trade-size.ts";
 import { SocialRouteError } from "@blast/core/modules/social/route-kit/errors.ts";
 
 import { HOME_ALMOST_CURVE_SOURCES, HOME_DISCOVER_COIN_SOURCES, HOME_LIST_COIN_SOURCES, homeTrendingCoinSources } from "@blast/server/modules/social/home/sources.ts";
@@ -110,6 +111,11 @@ export type RowsRequest = Readonly<{
   actors: ActorScope;
   /** Drop trades proven under this many dollars; other kinds and unpriced trades stay. */
   minTradeUsd?: number;
+  /**
+   * Keep tiny trades (`TINY_TRADE_USD`), flagged `tiny`, for a read that sums
+   * volume (`readSides`); every other read drops them.
+   */
+  keepTiny?: boolean;
 }>;
 
 /** How far ahead a scheduled sale joins Trending: far enough not to miss one, near enough to bound spam. */
@@ -145,7 +151,8 @@ export type TradedCurves = Readonly<{ fromMs: number; toMs: number; marketCheckp
 function tradedCurveSql(curves: TradedCurves, params: Params): string {
   return `EXISTS (SELECT 1 FROM chain_read_v1.activity a
         WHERE a.coin_type = lp.coin_type AND a.timestamp_ms > ${params.add(curves.fromMs)}::bigint AND a.timestamp_ms <= ${params.add(curves.toMs)}::bigint
-          AND a.kind = ANY(${params.add([...curves.kinds])}::text[]) AND a.checkpoint <= ${params.add(curves.marketCheckpoint)}::bigint)`;
+          AND a.kind = ANY(${params.add([...curves.kinds])}::text[]) AND a.checkpoint <= ${params.add(curves.marketCheckpoint)}::bigint
+          AND NOT ${tinyTradeSql("a")})`;
 }
 
 function discoverSourcesSql(scope: Extract<SaleScope, { kind: "discover" }>, params: Params): string {
@@ -176,7 +183,7 @@ export function scopedHomeCoinsSql(scope: SaleScope, params: Params): string {
  * or `w:<wallet>`), with the sale's quote and decimals beside it.
  */
 export function rowsWithSql(request: RowsRequest, params: Params): string {
-  const { span, bounds, kinds, sales, actors, minTradeUsd } = request;
+  const { span, bounds, kinds, sales, actors, minTradeUsd, keepTiny } = request;
   const from = params.add(span.fromMs);
   const to = params.add(span.toMs);
   const kindList = params.add([...kinds]);
@@ -197,6 +204,7 @@ export function rowsWithSql(request: RowsRequest, params: Params): string {
   // A few curves, all without a sale: their own rows through the coin index, not the whole window.
   const fewCoins = sales.kind === "discover" && sales.almost ? "AND a.coin_type IN (SELECT hs.coin_type FROM home_sales hs)" : "";
   const tradeFloor = minTradeUsd === undefined ? "" : minTradeSql(minTradeUsd, params);
+  const tinyFloor = keepTiny ? "" : `AND NOT ${tinyTradeSql("a")}`;
   return `WITH home_sales AS (
     SELECT p.source_id, p.presale_id, p.sale_token AS coin_type, p.quote_type, p.quote_symbol, p.quote_decimals, p.sale_decimals
     FROM ${source} p
@@ -204,7 +212,8 @@ export function rowsWithSql(request: RowsRequest, params: Params): string {
   ${followed}
   home_window AS (
     SELECT a.activity_id, a.checkpoint, a.tx_slot, a.event_slot, a.part, a.kind, a.timestamp_ms, a.digest, a.actor,
-      a.presale_id, a.coin_type, a.quote_type, a.quote_amount, a.coin_amount, a.quote_refund, a.usd_value, a.market_cap_usd
+      a.presale_id, a.coin_type, a.quote_type, a.quote_amount, a.coin_amount, a.quote_refund, a.usd_value, a.market_cap_usd,
+      ${tinyTradeSql("a")} AS tiny
     FROM chain_read_v1.activity a
     ${winJoin}
     WHERE a.timestamp_ms > ${from}::bigint AND a.timestamp_ms <= ${to}::bigint
@@ -212,6 +221,7 @@ export function rowsWithSql(request: RowsRequest, params: Params): string {
       AND a.checkpoint <= CASE WHEN a.kind IN ('presale_commit', 'presale_claim') THEN ${presaleCp}::bigint ELSE ${marketCp}::bigint END
       ${fewCoins}
       ${tradeFloor}
+      ${tinyFloor}
   ),
   home_rows AS (
     SELECT c.source_id AS sale, c.coin_type AS sale_coin, c.quote_type AS sale_quote, c.quote_symbol AS sale_quote_symbol,
@@ -230,18 +240,13 @@ export function rowsWithSql(request: RowsRequest, params: Params): string {
   )`;
 }
 
-const USDC_DECIMALS = createQuoteOf(CREATE_QUOTE_TYPE)!.decimals;
-
 /**
  * Keeps a trade unless it is proven under `minUsd`, as the web's dust rule
  * judges it (`small-trades.ts`): USDC at par by its atoms, any other quote by
  * its USD, and a trade without that amount never counts as dust.
  */
 function minTradeSql(minUsd: number, params: Params): string {
-  const usd = params.add(String(minUsd));
-  return `AND (a.kind NOT IN ('trade_buy', 'trade_sell') OR CASE
-        WHEN a.quote_type = ${params.add(CREATE_QUOTE_TYPE)}::text THEN a.quote_amount IS NULL OR a.quote_amount >= ${usd}::numeric * ${params.add(String(10n ** BigInt(USDC_DECIMALS)))}::numeric
-        ELSE a.usd_value IS NULL OR a.usd_value >= ${usd}::numeric END)`;
+  return `AND NOT ${tradeUnderUsdSql("a", `${params.add(String(minUsd))}::numeric`)}`;
 }
 
 /**
@@ -276,11 +281,15 @@ export type SideRow = Readonly<{
   recent_buy?: readonly [string, string, string, string, string, string, string | null] | null;
 }>;
 
-/** Per (sale, who, kind, quote asset): count, exact atoms, priced USD, unpriced rows, tokens and the latest time. */
+/**
+ * Per (sale, who, kind, quote asset): count, exact atoms, priced USD, unpriced rows, tokens and the latest time.
+ * Over `keepTiny` rows the count and time skip tiny trades while the sums keep them (volume counts them).
+ */
 export const sidesSelect = (extraColumns = "") => `SELECT w.sale, w.who, w.kind, w.quote_type, w.sale_quote, w.sale_quote_symbol, w.sale_quote_decimals,
-      count(*)::text AS n, coalesce(sum(w.quote_amount), 0)::text AS atoms, sum(w.usd_value)::text AS usd,
+      count(*) FILTER (WHERE NOT w.tiny)::text AS n, coalesce(sum(w.quote_amount), 0)::text AS atoms, sum(w.usd_value)::text AS usd,
       count(*) FILTER (WHERE w.usd_value IS NULL)::text AS unpriced,
-      sum(w.coin_amount)::text AS tokens, max(w.timestamp_ms)::text AS latest_ms${extraColumns}
+      sum(w.coin_amount)::text AS tokens,
+      coalesce(max(w.timestamp_ms) FILTER (WHERE NOT w.tiny), max(w.timestamp_ms))::text AS latest_ms${extraColumns}
     FROM home_who w`;
 
 /** The grouping of the sides read. */

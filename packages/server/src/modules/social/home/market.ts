@@ -1,3 +1,4 @@
+import { tinyTradeSql } from "@blast/core/modules/social/read-model/trade-size.ts";
 import { isValidStructTag, normalizeStructTag } from "@mysten/sui/utils";
 import { z } from "zod";
 
@@ -109,17 +110,17 @@ const BAND_SQL = `CASE ${HOME_MARKET_WINDOWS.slice(0, -1).map((name, index) => `
  */
 export const MARKET_TRADES_SQL = `SELECT t.* FROM (
   WITH market_day AS MATERIALIZED (
-    SELECT a.actor, a.kind, a.quote_amount, a.usd_value, ${BAND_SQL} AS band
+    SELECT a.actor, a.kind, a.quote_amount, a.usd_value, ${BAND_SQL} AS band, ${tinyTradeSql("a")} AS tiny
     FROM chain_read_v1.activity a
     WHERE a.coin_type = $1 AND a.timestamp_ms > $2::bigint - ${DAY_MS} AND a.timestamp_ms <= $2::bigint
       AND a.kind = ANY($4::text[]) AND a.checkpoint <= $3::bigint
   )
-  SELECT 'trades' AS part, d.kind, d.band, count(*)::int AS n, coalesce(sum(d.quote_amount), 0)::text AS atoms,
-    sum(d.usd_value)::text AS usd, count(*) FILTER (WHERE d.usd_value IS NULL)::int AS unpriced
+  SELECT 'trades' AS part, d.kind, d.band, count(*) FILTER (WHERE NOT d.tiny)::int AS n, coalesce(sum(d.quote_amount), 0)::text AS atoms,
+    sum(d.usd_value)::text AS usd, count(*) FILTER (WHERE d.usd_value IS NULL AND NOT d.tiny)::int AS unpriced
   FROM market_day d GROUP BY d.kind, d.band
   UNION ALL
   SELECT 'wallets', w.kind, w.band, count(*)::int, '0', NULL, 0
-  FROM (SELECT d.kind, d.actor, min(d.band) AS band FROM market_day d GROUP BY d.kind, d.actor) w
+  FROM (SELECT d.kind, d.actor, min(d.band) AS band FROM market_day d WHERE NOT d.tiny GROUP BY d.kind, d.actor) w
   GROUP BY w.kind, w.band
 ) t`;
 assertChainReadThroughViews(MARKET_TRADES_SQL);
@@ -189,7 +190,7 @@ function centsText(units: bigint): string {
 
 /** One side of a window from the bands it covers (`band <= index`). */
 function sideOf(rows: readonly BandRow[], kind: string, index: number) {
-  let trades = 0, unpriced = 0, wallets = 0, atoms = 0n, usd = 0n;
+  let trades = 0, unpriced = 0, wallets = 0, atoms = 0n, usd = 0n, priced = false;
   for (const row of rows) {
     if (row.kind !== kind || row.band > index) continue;
     if (row.part === "wallets") {
@@ -200,8 +201,10 @@ function sideOf(rows: readonly BandRow[], kind: string, index: number) {
     unpriced += row.unpriced;
     atoms += BigInt(row.atoms);
     usd += usdUnits(row.usd);
+    if (row.usd !== null) priced = true;
   }
-  return { trades, unpriced, wallets, atoms: atoms.toString(), usd: trades > unpriced ? centsText(usd) : null };
+  // `trades` skips tiny trades and the sums keep them, so a priced amount is known by its rows, not by the count.
+  return { trades, unpriced, wallets, atoms: atoms.toString(), usd: priced ? centsText(usd) : null };
 }
 
 function windowOf(row: CoinRow, bands: readonly BandRow[], index: number, name: HomeMarketWindowName, clockMs: number): HomeMarketWindow {

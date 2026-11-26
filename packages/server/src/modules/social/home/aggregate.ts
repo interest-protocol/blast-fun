@@ -84,7 +84,8 @@ function addAtoms(a: string | null, b: string | null): string | null {
 
 /** The side rows of one direction as a `HomeSide`: one amount per quote asset, exact. */
 export function sideOf(rows: readonly SideRow[]): HomeSide | null {
-  if (rows.length === 0) return null;
+  // Only tiny trades: no side to show (`sidesSelect` counts them as none).
+  if (rows.every((row) => Number(row.n) === 0)) return null;
   const sale = rows[0]!.sale_quote;
   const amounts = rows.map(amountOf).sort((a, b) => byAsset(sale, a, b));
   let tokens: string | null = null;
@@ -93,7 +94,7 @@ export function sideOf(rows: readonly SideRow[]): HomeSide | null {
     count: rows.reduce((sum, row) => sum + Number(row.n), 0),
     amounts,
     tokens,
-    latest_ms: Math.max(...rows.map((row) => Number(row.latest_ms))),
+    latest_ms: Math.max(...rows.flatMap((row) => (Number(row.n) > 0 ? [Number(row.latest_ms)] : []))),
   };
 }
 
@@ -103,14 +104,14 @@ export function sideOf(rows: readonly SideRow[]): HomeSide | null {
  * counts and tokens added, the latest time kept. Null for no rows.
  */
 export function sideAcross(rows: readonly SideRow[]): HomeSide | null {
-  if (rows.length === 0) return null;
+  if (rows.every((row) => Number(row.n) === 0)) return null;
   let tokens: string | null = null;
   for (const row of rows) tokens = addAtoms(tokens, row.tokens);
   return {
     count: rows.reduce((sum, row) => sum + Number(row.n), 0),
     amounts: totalsOf(rows),
     tokens,
-    latest_ms: Math.max(...rows.map((row) => Number(row.latest_ms))),
+    latest_ms: Math.max(...rows.flatMap((row) => (Number(row.n) > 0 ? [Number(row.latest_ms)] : []))),
   };
 }
 
@@ -276,19 +277,21 @@ export function countsOf(sides: readonly SideRow[]): ReadonlyMap<string, WindowC
   const perSale = new Map<string, { who: Set<string>; byKind: Map<string, Set<string>>; events: number; latest: number; lastTrade: number | null; volume: string; netInflow: number }>();
   for (const row of sides) {
     const sale = perSale.get(row.sale) ?? { who: new Set(), byKind: new Map(), events: 0, latest: 0, lastTrade: null, volume: "0.00", netInflow: 0 };
-    sale.who.add(row.who);
+    perSale.set(row.sale, sale);
     // A claim pays out what was already counted at the commit: never volume again.
     if (row.usd !== null && row.kind !== "presale_claim") {
       sale.volume = addDecimal(sale.volume, row.usd);
       sale.netInflow += (NET_INFLOW_SIGN[row.kind] ?? 0) * Number(row.usd);
     }
+    // Only tiny trades on this side: volume, never a buyer, a seller, a trade or the latest time.
+    if (Number(row.n) === 0) continue;
+    sale.who.add(row.who);
     const kind = sale.byKind.get(row.kind) ?? new Set<string>();
     kind.add(row.who);
     sale.byKind.set(row.kind, kind);
     sale.events += Number(row.n);
     sale.latest = Math.max(sale.latest, Number(row.latest_ms));
     if (row.kind === "trade_buy" || row.kind === "trade_sell") sale.lastTrade = Math.max(sale.lastTrade ?? 0, Number(row.latest_ms));
-    perSale.set(row.sale, sale);
   }
   const size = (sale: { byKind: Map<string, Set<string>> }, kind: HomeKind) => String(sale.byKind.get(kind)?.size ?? 0);
   return new Map([...perSale].map(([id, sale]) => [id, {

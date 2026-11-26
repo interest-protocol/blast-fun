@@ -159,14 +159,15 @@ type CoinRow = Readonly<{ presale_id: string; coin_type: string; symbol: string;
 
 const KINDS: readonly HomeKind[] = ["trade_buy", "trade_sell", "presale_commit", "presale_claim"];
 
-/** The trader's coins from its side rows: one per sale, the directions kept apart, newest first. */
+/** The trader's coins from its side rows: one per sale, the directions kept apart, newest first; a coin with only tiny trades is left out. */
 export function traderCoinsOf(sides: readonly SideRow[], facts: ReadonlyMap<string, CoinRow>): readonly HomeTraderCoin[] {
   const bySale = new Map<string, SideRow[]>();
   for (const row of sides) bySale.set(row.sale, [...(bySale.get(row.sale) ?? []), row]);
   return [...bySale]
     .flatMap(([sale, rows]) => {
       const coin = facts.get(sale);
-      if (!coin) return [];
+      const counted = rows.filter((row) => Number(row.n) > 0);
+      if (!coin || counted.length === 0) return [];
       const kind = (name: HomeKind) => sideOf(rows.filter((row) => row.kind === name));
       return [{
         presale_id: sale,
@@ -177,7 +178,7 @@ export function traderCoinsOf(sides: readonly SideRow[], facts: ReadonlyMap<stri
         sells: kind("trade_sell"),
         commits: kind("presale_commit"),
         claims: kind("presale_claim"),
-        latest_ms: Math.max(...rows.map((row) => Number(row.latest_ms))),
+        latest_ms: Math.max(...counted.map((row) => Number(row.latest_ms))),
       }];
     })
     .sort((a, b) => b.latest_ms - a.latest_ms || (a.presale_id < b.presale_id ? -1 : 1));
@@ -259,7 +260,7 @@ export async function readHomeTraders(db: ReadableDatabase, window: HomeWindow, 
   const whoByKey = new Map(selected.map((trader) => [trader.key, activityByAccount.get(accountByKey.get(trader.key)!)?.who ?? `c:${accountByKey.get(trader.key)!}`]));
   const sides = new Params();
   const whos = sides.add(selected.map((trader) => whoByKey.get(trader.key)!));
-  const sidesText = selectHome(rowsWithSql(request, sides), `${sidesSelect()} WHERE w.who = ANY(${whos}::text[]) ${SIDES_GROUP}`);
+  const sidesText = selectHome(rowsWithSql({ ...request, keepTiny: true }, sides), `${sidesSelect()} WHERE w.who = ANY(${whos}::text[]) ${SIDES_GROUP}`);
   assertChainReadThroughViews(sidesText);
   const sideRows = (await db.read<SideRow>(sidesText, sides.values)).rows;
   const sidesByWho = new Map<string, SideRow[]>();

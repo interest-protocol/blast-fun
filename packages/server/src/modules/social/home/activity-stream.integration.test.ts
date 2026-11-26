@@ -481,6 +481,21 @@ test(
           );
         },
       );
+      await t.test("a tiny trade (under a cent) is never listed; a cent trade is", async () => {
+        await seedChainRead(admin, {
+          activity: [
+            activityRow(now, 1600, { timestamp_ms: now - 20_000, usd_value: "0.004" }),
+            activityRow(now, 1601, { timestamp_ms: now - 20_000, kind: "trade_sell", usd_value: "0.01" }),
+          ],
+        });
+        await admin.query(
+          "UPDATE watermarks SET reader_lo=0,checkpoint_hi_inclusive=2000,timestamp_ms_hi_inclusive=$1 WHERE pipeline IN ('market','presale')",
+          [now],
+        );
+        const ids =(await ok(await get("?limit=50"))).events.map((event) => event.activity_id);
+        assert.ok(!ids.includes("1700:0:0:0"));
+        assert.ok(ids.includes("1701:0:0:0"));
+      });
       if (evidence) {
         const pages: HomeActivityStreamPage[] = [];
         let cursor: string | null = null;

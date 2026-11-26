@@ -1,3 +1,4 @@
+import { tinyTradeSql } from "@blast/core/modules/social/read-model/trade-size.ts";
 import { assertChainReadThroughViews } from "@blast/core/modules/database/modules.ts";
 import type { ReadableDatabase } from "@blast/core/modules/database/transaction.ts";
 import type { SocialConfig } from "@blast/core/modules/social/contracts/config.ts";
@@ -102,7 +103,7 @@ FROM (
   SELECT a.activity_id, a.checkpoint, a.tx_slot, a.event_slot, a.part, a.kind, a.timestamp_ms, a.actor, a.presale_id,
     a.coin_type, a.usd_value, a.coin_amount, a.quote_refund
   FROM ${PUBLIC_ACTIVITY} a
-  WHERE a.timestamp_ms <= $1::bigint AND a.kind = ANY($2::text[])
+  WHERE a.timestamp_ms <= $1::bigint AND a.kind = ANY($2::text[]) AND NOT ${tinyTradeSql("a")}
     AND a.checkpoint <= CASE WHEN a.kind IN ('presale_commit', 'presale_claim') THEN $3::bigint ELSE $4::bigint END
   ORDER BY a.timestamp_ms DESC, a.checkpoint DESC, a.tx_slot DESC, a.event_slot DESC, a.part DESC
   LIMIT $5::int
@@ -182,23 +183,26 @@ FROM social_follows f
 WHERE f.target_kind = 'presale' AND f.target_id = ANY($1::text[])
 GROUP BY f.target_id`;
 
+/** A tiny trade in the active-curves scan: it adds to volume, never to participants or the last action. */
+const TINY = tinyTradeSql("a");
+
 /** One bounded activity scan, then display facts for the weighted shortlist. $1 floor, $2 clock, $3 market checkpoint, $4 visible trade kinds, $5 wall clock. */
 const ACTIVE_CURVES_SQL = `SELECT activity.*, coalesce(nullif(c.name, ''), nullif(c.symbol, ''), split_part(p.coin_type, '::', 3)) AS name,
   coalesce(nullif(c.symbol, ''), split_part(p.coin_type, '::', 3)) AS symbol, nullif(c.icon_url, '') AS icon_url,
   p.created_at_ms::text AS created_ms, ${verifiedTeamSql("NULL::text", "p.coin_type")} AS verified_team
 FROM (
-  SELECT a.coin_type, count(DISTINCT a.actor)::int AS participants, max(a.timestamp_ms)::text AS last_action_ms,
-    coalesce(sum(a.usd_value), 0)::text AS volume_usd
+  SELECT a.coin_type, count(DISTINCT a.actor) FILTER (WHERE NOT ${TINY})::int AS participants,
+    max(a.timestamp_ms) FILTER (WHERE NOT ${TINY})::text AS last_action_ms, coalesce(sum(a.usd_value), 0)::text AS volume_usd
   FROM chain_read_v1.activity a
   JOIN chain_read_v1.pools p ON p.coin_type = a.coin_type AND p.venue = 'blast_curve' AND p.lifecycle = 'live'
     AND p.quote_type = a.quote_type
   WHERE a.venue = 'blast_curve' AND a.kind = ANY($4::text[]) AND a.actor IS NOT NULL AND a.quote_amount > 0
     AND a.timestamp_ms > $1::bigint AND a.timestamp_ms <= $2::bigint AND a.checkpoint <= $3::bigint
     AND p.quote_type NOT IN (${TEST_SUI_COIN_TYPES_SQL}) AND p.coin_type NOT IN (${TEST_SUI_COIN_TYPES_SQL})
-  GROUP BY a.coin_type
-  ORDER BY ${breadthSql("count(DISTINCT a.actor)")}
+  GROUP BY a.coin_type HAVING bool_or(NOT ${TINY})
+  ORDER BY ${breadthSql(`count(DISTINCT a.actor) FILTER (WHERE NOT ${TINY})`)}
     + ${DISCOVERY_WEIGHTS.activity} * ${logSql("sum(a.usd_value)", DISCOVERY_VOLUME_CAP)}
-    + ${freshnessSql("$5::bigint - max(a.timestamp_ms)")} DESC, max(a.timestamp_ms) DESC, a.coin_type
+    + ${freshnessSql(`$5::bigint - max(a.timestamp_ms) FILTER (WHERE NOT ${TINY})`)} DESC, max(a.timestamp_ms) FILTER (WHERE NOT ${TINY}) DESC, a.coin_type
   LIMIT ${HAPPENING_CURVE_MAX}
 ) activity
 JOIN chain_read_v1.pools p ON p.coin_type = activity.coin_type AND p.venue = 'blast_curve' AND p.lifecycle = 'live'

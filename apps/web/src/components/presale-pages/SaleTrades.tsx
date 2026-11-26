@@ -20,7 +20,7 @@ import { useDevicePrefs } from "#web/components/blast-ui/device-prefs.ts";
 import { ActivityAmount, CompactTradeList, CompactTradeRow, TradeListSkeleton, useTradeInspector, useTradeVisibility, type TradeRowState } from "#web/components/launchpad/activity/CompactTradeList.tsx";
 import { WalletAddress } from "#web/components/launchpad/activity/WalletAddress.tsx";
 import { createRecentTradeTape } from "#web/components/launchpad/activity/trade-tape.ts";
-import { isHomeTradeUnderDollar } from "#web/components/launchpad/activity/small-trades.ts";
+import { isHomeTradeUnderDollar, tradeFloor } from "#web/components/launchpad/activity/small-trades.ts";
 import { ChartTradeContext } from "#web/components/launchpad/chart/chart-trade-context.ts";
 import { fetchHomeThread } from "#web/components/social/coin-home/home-client.ts";
 import { actorName } from "#web/components/social/coin-home/home-model.ts";
@@ -185,8 +185,8 @@ function useSaleTradeFeed(sale: SocialPresaleDetail["presale"], hideSmallTrades:
       const streamed = previous?.streamed;
       const latest = !streamed || compareEventCursors(frame.cursor, streamed) > 0 ? frame.cursor : streamed;
       const row = streamedRow(frame, sale);
-      // Filtered, dust never takes a row: it only marks the trade seen, so its hint asks for no read.
-      if (minUsd !== null && isHomeTradeUnderDollar(row.event.quote)) return previous && { ...previous, streamed: latest, traded: true };
+      // A tiny trade, or dust while filtered, never takes a row: it only marks the trade seen, so its hint asks for no read.
+      if (isHomeTradeUnderDollar(row.event.quote, tradeFloor(minUsd !== null))) return previous && { ...previous, streamed: latest, traded: true };
       return {
         rows: [row, ...known].sort((a, b) => compareEventCursors(b.position, a.position)).slice(0, Math.max(LIMIT, known.length)),
         clockMs: previous?.clockMs ?? 0,
@@ -289,7 +289,7 @@ export const SaleTrades = memo(function SaleTrades({ sale }: Readonly<{ sale: So
   const { explorer } = useDevicePrefs();
   const data = read?.data;
   const rows = recent.length ? recent : data?.rows.slice(0, LIMIT) ?? [];
-  const visibility = useTradeVisibility(rows, data?.rows, (row) => isHomeTradeUnderDollar(row.event.quote), read?.filter ?? NO_FILTER);
+  const visibility = useTradeVisibility(rows, data?.rows, (row, floor) => isHomeTradeUnderDollar(row.event.quote, floor), read?.filter ?? NO_FILTER);
 
   if (!read) return null;
   const { isPending, refetch } = read;
