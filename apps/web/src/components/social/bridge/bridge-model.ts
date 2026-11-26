@@ -1,4 +1,5 @@
 import { USDC_COIN_TYPE } from "@blast/core/lib/sui/coin-types.ts";
+import { NO_VALUE } from "@blast/core/web/format.ts";
 
 import { atomsToField, parseAtoms } from "../trade/trade-ticket.ts";
 
@@ -100,12 +101,28 @@ export type QuoteRows = Readonly<{ amount: string; minimum: string; fee: string;
 
 const usdFormat = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-function amountText(value: number, decimals: number, digits = 6): string {
-  return new Intl.NumberFormat("en-US", { maximumSignificantDigits: digits, maximumFractionDigits: Math.min(decimals, 8), roundingMode: "trunc" }).format(value);
+/**
+ * Drops digits instead of rounding, so a minimum never shows more than Mayan guarantees.
+ * Cut here too because Firefox before 116 ignores `roundingMode` and rounds up.
+ */
+export function amountText(value: number, decimals: number, digits = 6): string {
+  return new Intl.NumberFormat("en-US", { maximumSignificantDigits: digits, maximumFractionDigits: Math.min(decimals, 8), roundingMode: "trunc" }).format(cutDigits(value, digits));
+}
+
+/** `value` cut, never rounded, to `digits` significant digits. */
+export function cutDigits(value: number, digits: number): number {
+  if (value === 0 || !Number.isFinite(value)) return value;
+  const kept = digits - Math.floor(Math.log10(Math.abs(value))) - 1;
+  // toPrecision drops float noise first: 0.29 * 100 is 28.999999999999996.
+  return kept >= 0
+    ? Math.trunc(Number((value * 10 ** kept).toPrecision(15))) / 10 ** kept
+    : Math.trunc(value / 10 ** -kept) * 10 ** -kept;
 }
 
 function feeText(quote: QuoteFacts, from: SourceToken): string {
-  const fee = quote.clientRelayerFeeSuccess ?? 0;
+  const fee = quote.clientRelayerFeeSuccess;
+  // A quote without a fee says nothing about it: never show that as $0.00.
+  if (fee === null || fee === undefined) return NO_VALUE;
   const usd = fee > 0 && fee < 0.01 ? "< $0.01" : usdFormat.format(fee);
   const { amountIn, amountInUsd } = quote;
   // USDC is already dollars: one unit says it.

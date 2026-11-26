@@ -7,8 +7,10 @@ import {
   actionLabel,
   actionReason,
   amountAtoms,
+  amountText,
   bridgeAction,
   CHAINS,
+  cutDigits,
   DESTINATIONS,
   exceedsBalance,
   maxField,
@@ -42,7 +44,17 @@ test("typed amounts become atoms; Max and the balance check keep gas back for na
 test("quote rows: tiny fees, missing USD and time", () => {
   const rows = quoteRows({ expectedAmountOut: 7.071843, minReceived: 7.00474, clientRelayerFeeSuccess: 0.004, etaSeconds: 0 }, CHAINS.solana.tokens[0], DESTINATIONS[1]!);
   assert.deepEqual(rows, { amount: "7.07184", minimum: "7.00474\u00a0USDC", fee: "< $0.01", eta: "About 1\u00a0s" });
-  assert.equal(quoteRows({ expectedAmountOut: 1, minReceived: 1, clientRelayerFeeSuccess: null, etaSeconds: 150 }, ETH, DESTINATIONS[0]!).eta, "About 3\u00a0min");
+  const unknownFee = quoteRows({ expectedAmountOut: 1, minReceived: 1, clientRelayerFeeSuccess: null, etaSeconds: 150 }, ETH, DESTINATIONS[0]!);
+  assert.deepEqual([unknownFee.eta, unknownFee.fee], ["About 3\u00a0min", "\u2014"]);
+  assert.equal(quoteRows({ expectedAmountOut: 1, minReceived: 1, clientRelayerFeeSuccess: 0, etaSeconds: 1 }, USDC, DESTINATIONS[1]!).fee, "$0.00");
+});
+
+test("amounts drop digits instead of rounding up, even where the browser ignores roundingMode", () => {
+  // The cut itself, which is all Firefox 111–115 gets: it ignores roundingMode and rounds up.
+  assert.deepEqual([7.004749, 0.29, 0.000123456789, 1_234_567.89, 0, -7.004749].map((value) => cutDigits(value, 6)), [7.00474, 0.29, 0.000123456, 1_234_560, 0, -7.00474]);
+  assert.equal(amountText(7.004749, 6), "7.00474");
+  assert.equal(amountText(0.000123456789, 9), "0.000123456", "significant digits win over the decimal cap, as before");
+  assert.equal(amountText(1_234_567.89, 6), "1,234,560");
 });
 
 test("Mayan's explorer status maps to the row state", () => {

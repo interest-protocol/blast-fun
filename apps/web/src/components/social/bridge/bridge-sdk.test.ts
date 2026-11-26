@@ -19,6 +19,8 @@ test("explorer rows keep bridges paid to this Blast address on Sui, newest first
   ] }, BLAST);
   assert.deepEqual(rows.map((row) => [row.hash, row.chain, row.state, row.toAmount]), [["new", "solana", "pending", null], ["old", "base", "done", "29.8"]]);
   assert.deepEqual(explorerRows({ error: "rate limited" }, BLAST), []);
+  const sources = explorerRows({ data: [swap("op", "2026-11-26T10:00:00Z", { sourceChain: "24" }), swap("pol", "2026-11-26T09:00:00Z", { sourceChain: "5" }), swap("bsc", "2026-11-26T08:00:00Z", { sourceChain: "4" })] }, BLAST);
+  assert.deepEqual(sources.map((row) => [row.hash, row.chain]), [["op", "optimism"], ["pol", "polygon"], ["bsc", null]]);
 });
 
 test("a just-signed bridge stays first until the explorer lists it", () => {
