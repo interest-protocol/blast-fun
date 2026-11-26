@@ -1153,11 +1153,13 @@ test("Tracked pool coins date Age from their package publish and share Top 10 of
   const helmet = bySymbol.get("HELMET")!;
   const published = new Map<string, number>([[one.coinType, 1_700_000_000_000], [helmet.coinType, 1_690_000_000_000]]);
   const asked: string[] = [];
-  return withFixture(async ({ admin, coins, discover, now }) => {
+  return withFixture(async ({ admin, coins, discover, holders, now }) => {
     await seedChainRead(admin, {
       coin_balances: [
         { coin_type: one.coinType, owner: W.anon, balance: "3000000000", updated_checkpoint: 45_000 },
         { coin_type: one.coinType, owner: W.solo, balance: "1500000000", updated_checkpoint: 45_000 },
+        // Its tracked pool's own balance is never a holder.
+        { coin_type: one.coinType, owner: one.poolKey.slice(one.poolKey.indexOf(":") + 1), balance: "9000000000", updated_checkpoint: 45_000 },
       ],
     });
     const saved = await ok<HomeCoinsByIds>(await coins(`?presale=${encodeURIComponent(one.coinType)}&presale=${encodeURIComponent(helmet.coinType)}`), "home-coins-page");
@@ -1166,6 +1168,9 @@ test("Tracked pool coins date Age from their package publish and share Top 10 of
     const [oneRow] = saved.coins;
     assert.deepEqual(oneRow?.top_holders.holders.map((holder) => holder.share_bps), [2_000, 1_000]);
     assert.equal(oneRow?.top_holders.share_bps, 3_000);
+    // Its holders list (the coin page's Holders panel) has the same holders and shares, not a 404.
+    const oneHolders = await ok<HomeHoldersPage>(await holders(`?coin=${encodeURIComponent(one.coinType)}&limit=10`), "home-holders-page", "public, s-maxage=10");
+    assert.deepEqual(oneHolders.holders.map((holder) => [holder.balance, holder.share_bps]), [["3000000000", 2_000], ["1500000000", 1_000]]);
 
     const page = await ok<HomeCoinsPage>(await discover("?limit=50"), "home-coins-page");
     const launchedOf = (coinType: string) => page.coins.find((coin) => coin.coin_type === coinType)?.launched_ms;
@@ -1263,7 +1268,18 @@ test("Standalone Cetus and Bluefin coins use Discover, without a presale or dupl
     // Ready to migrate counts whatever its reserve reads.
     await curveCoin("c99", "READY", "100000000", "8000000000", "migration_ready");
     // Almost graduated reads its curves' own trades.
-    await seedChainRead(admin, { activity: [activity("trade_buy", W.anon, null, now - 2 * MINUTE, { checkpoint: 49998, coin_type: seventy, coin_amount: "1000000000", quote_amount: "5000000", usd_value: "5" })] });
+    await seedChainRead(admin, {
+      activity: [activity("trade_buy", W.anon, null, now - 2 * MINUTE, { checkpoint: 49998, coin_type: seventy, coin_amount: "1000000000", quote_amount: "5000000", usd_value: "5" })],
+      coin_balances: [
+        { coin_type: seventy, owner: W.jules, balance: "4000000000", updated_checkpoint: 45_000 },
+        // The curve holds the unsold coins: never a holder.
+        { coin_type: seventy, owner: hex("c700"), balance: "900000000000", updated_checkpoint: 45_000 },
+      ],
+    });
+    // A curve still filling has its holders list too.
+    await admin.query("INSERT INTO coins (coin_type,decimals,launcher,creator,metadata,pool_key,created_checkpoint,created_at_ms,currency_supply,balance_0x0) VALUES ($1,9,$2,$2,'{}',$3,41000,$4,1000000000000,0)", [seventy, W.anon, `blast_curve:${hex("c700")}`, now - DAY]);
+    const seventyHolders = await ok<HomeHoldersPage>(await holders(`?coin=${encodeURIComponent(seventy)}&limit=10`), "home-holders-page", "public, s-maxage=10");
+    assert.deepEqual(seventyHolders.holders.map((holder) => [holder.balance, holder.share_bps]), [["4000000000", 40]]);
     // A presale's token keeps its presale: a curve on it never makes it an Almost graduated curve.
     const presaleToken = page.coins.find((coin) => coin.presale_id !== null)!.coin_type;
     await admin.query("INSERT INTO blast_infra_fixture.coin_metadata (coin_type,name,symbol,decimals) VALUES ($1,'SALE','SALE',9) ON CONFLICT DO NOTHING", [presaleToken]);
@@ -1310,6 +1326,8 @@ test("Standalone Cetus and Bluefin coins use Discover, without a presale or dupl
     assert.deepEqual([nativeMarket.supply, nativeMarket.fdv_usd, nativeMarket.market_cap_usd], [{ total: "13000000000000", escrowed: "0", circulating: "10000000000000" }, "1300.00", "1000.00"]);
     const nativeHolders = await ok<HomeHoldersPage>(await holders(`?coin=${encodeURIComponent(native)}&limit=10`), "home-holders-page", "public, s-maxage=10");
     assert.deepEqual(nativeHolders.holders.map((holder) => holder.share_bps), [2500, 500]);
+    // Only a coin Home does not know is missing, and a hidden sale's coin stays unknown.
+    for (const coinType of [unknownType, coinOf(P.incomplete, "INC")]) assert.equal((await holders(`?coin=${encodeURIComponent(coinType)}&limit=10`)).status, 404, coinType);
   }));
 
 test("Trending with presales: upcoming, live and ended sales in their bounds, savers counted from verified accounts only", { skip }, () =>
