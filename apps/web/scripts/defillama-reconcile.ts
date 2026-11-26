@@ -20,7 +20,8 @@ const receipt = z.strictObject({
   coin: z.string().min(1),
   amount,
 });
-const breakdown = z.record(z.string(), z.record(z.string(), amount));
+// A null amount is unknown: launchpad revenue for a coin whose partner share is set at claim time.
+const breakdown = z.record(z.string(), z.record(z.string(), amount.nullable()));
 const inputSchema = z.strictObject({
   date: z.string(),
   first_checkpoint: z.number().int().positive().safe(),
@@ -210,7 +211,7 @@ function receiptTotals(receipts: FrontendFee[]) {
 
 function sameTotals(
   expected: Record<string, string>,
-  published: Record<string, string>,
+  published: Record<string, string | null>,
 ): boolean {
   return (
     Object.keys(expected).length === Object.keys(published).length &&

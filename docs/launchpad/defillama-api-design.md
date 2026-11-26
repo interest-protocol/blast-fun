@@ -39,7 +39,11 @@ second, not the end of that second.
 
 The fee summary contains `date`, `snapshot_id`, `revision`, `dailyFees`,
 `dailyRevenue`, and `dailySupplySideRevenue`. Each metric maps fee sources to
-chain-qualified Sui coin types and raw amounts as strings. No key or cursor
+chain-qualified Sui coin types and raw amounts as strings. A `null` amount is
+unknown, never zero. Gross `dailyFees` are always published. A positive
+protocol fee from a partnered launch makes `dailyRevenue` and
+`dailySupplySideRevenue` `null` for that whole source and token row, because
+the partner share is set only at claim time. No estimate is published. No key or cursor
 is required. A complete day without any fees returns empty maps. A date
 without a complete fee summary returns 404. The worker saves the summary
 atomically with the audit snapshot.
@@ -48,7 +52,9 @@ The timestamp form uses inclusive start and exclusive end in Unix seconds. Both
 must fall on UTC hour boundaries and the range is limited to 24 hours. It
 returns the same three fee maps for the exact window and echoes its timestamps.
 The worker verifies and stores each hour separately using the daily accounting
-rules. The API returns 404 if any hour is missing and 409 if the window is still
+rules. A scheduled run that cannot summarize an hour logs
+`skipped hour <iso>: <reason>`, publishes the later hours and retries the
+skipped one on its next run. The API returns 404 if any hour is missing and 409 if the window is still
 open. Verified zero hours return empty maps.
 
 Every metrics or contracts page includes `schema_version: 1`, `chain: "sui"`, `network: "mainnet"`,
@@ -324,7 +330,7 @@ immutable snapshot.
 | `dailyFees` | Sum gross included payments and accruals for the chosen scope, by token. Launchpad and frontend charges can be combined when both scopes are complete. |
 | `dailyUserFees` | Optional user-paid subset. Native launchpad charges and paid frontend overlays and splits belong here. Vault LP yield is a separate source. |
 | `dailySupplySideRevenue` | Known creator, partner and vault route allocations for the chosen scope. |
-| `dailyRevenue` | Gross fees less supply-side distributions for the same period and scope. Use only when the matching revenue coverage is complete. |
+| `dailyRevenue` | Gross fees less supply-side distributions for the same period and scope. `null` for a coin whose partner share is still unknown; never treat it as zero. |
 | `dailyProtocolRevenue` | Verified retained Blast share, including the settled frontend charges. |
 | `dailyHoldersRevenue` | Omit while a Blast governance-holder distribution mechanism is unverified. |
 | `dailyVolume` | Native curve trading, one quote side per fill. Venue trading stays with the DEX and any separate Blast routed volume belongs in the aggregator dashboard. |
