@@ -245,11 +245,12 @@ function mePresalesOptions<Key extends readonly unknown[]>(getAccessToken: Token
 /**
  * `GET /api/social/me/rewards?limit=5` (OA-45): what each coin paid and owes,
  * and the five newest payouts — the Portfolio tab, its side card and the
- * Rewards page share it. Fresh a minute, as the portfolio.
+ * Rewards page share it. Fresh a minute, as the portfolio. Keyed by account,
+ * so a switch never toasts one account's payouts as another's.
  */
-export function rewardsSummaryQuery(getAccessToken: Token) {
+export function rewardsSummaryQuery(getAccessToken: Token, callsign: string) {
   return queryOptions({
-    queryKey: queryKeys.me.rewards.summary(),
+    queryKey: queryKeys.me.rewards.summary(callsign),
     queryFn: async () => unwrapApiResult(await fetchRewardsPage({ getAccessToken }, socialRewardsPath({ limit: 5 }))),
     staleTime: PORTFOLIO_STALE_MS,
   });

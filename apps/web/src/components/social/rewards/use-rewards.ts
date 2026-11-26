@@ -55,7 +55,7 @@ export function useRewards(): RewardsRead {
   const { status: session, account } = useSocialAccount();
   const enabled = hydrated && viewer.signedIn && viewer.callsign !== null;
   const who = rewardViewerState(hydrated, viewer.signedIn, session, account !== null);
-  const read = useQuery({ ...rewardsSummaryQuery(viewer.getAccessToken ?? noToken), enabled }, client);
+  const read = useQuery({ ...rewardsSummaryQuery(viewer.getAccessToken ?? noToken, viewer.callsign ?? ""), enabled }, client);
   const page = read.data ?? null;
   const asks = useMemo(() => {
     const out: { key: string; kind: "presale" | "coin"; id: string }[] = [];
@@ -121,21 +121,29 @@ function writeSeen(seen: Seen): void {
 }
 
 /**
- * The payouts to announce: those newer than the last one this device saw for
- * the account, newest first, at most three. The first read on a device only
- * records where it is (nothing that arrived before is announced).
+ * A payout older than this is never toasted. The "seen" mark lives in each
+ * site's browser storage, so a site or device opened hours after a payout
+ * would otherwise announce it again; the Rewards page still lists it.
  */
-export function newPayouts(latest: readonly RewardPayoutView[], seenMs: number | undefined): readonly RewardPayoutView[] {
+export const PAYOUT_TOAST_MAX_AGE_MS = 60 * 60_000;
+
+/**
+ * The payouts to announce: those newer than the last one this device saw for
+ * the account and at most `PAYOUT_TOAST_MAX_AGE_MS` old, newest first, at
+ * most three. The first read on a device only records where it is (nothing
+ * that arrived before is announced).
+ */
+export function newPayouts(latest: readonly RewardPayoutView[], seenMs: number | undefined, nowMs: number): readonly RewardPayoutView[] {
   if (seenMs === undefined) return [];
-  return latest.filter((payout) => payout.atMs > seenMs).slice(0, 3);
+  return latest.filter((payout) => payout.atMs > seenMs && nowMs - payout.atMs <= PAYOUT_TOAST_MAX_AGE_MS).slice(0, 3);
 }
 
 /**
  * A round paid out (the gate's `rwReceive`): a toast for each payout that
  * arrived since this device last read the account's rewards, with its
  * transaction on the viewer's explorer. No realtime path carries payouts,
- * so it is the next read that shows one (the page's own, a focus refresh,
- * the minute's staleness).
+ * so it is the next read that shows one (the page's own when it mounts, or
+ * after a claim). Only a payout at most `PAYOUT_TOAST_MAX_AGE_MS` old toasts.
  */
 export function usePayoutToasts(latest: readonly RewardPayoutView[] | null): void {
   const viewer = useSocialViewer();
@@ -146,7 +154,7 @@ export function usePayoutToasts(latest: readonly RewardPayoutView[] | null): voi
   useEffect(() => {
     if (!latest || account === null) return;
     const seen = readSeen();
-    const fresh = newPayouts(latest, seen[account]);
+    const fresh = newPayouts(latest, seen[account], Date.now());
     for (const payout of [...fresh].reverse()) {
       const { title, sub } = payoutToast(payout);
       const href = explorerTransactionUrl(explorer, payout.digest) ?? undefined;

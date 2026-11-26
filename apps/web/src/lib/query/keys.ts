@@ -190,7 +190,7 @@ export const queryKeys = {
     /** `GET /api/social/me/rewards` (OA-45): the summary with the latest payouts, and each coin's payout pages. */
     rewards: {
       all: [ROOT, "me", "rewards"] as const,
-      summary: () => [ROOT, "me", "rewards", "summary"] as const,
+      summary: (callsign: string) => [ROOT, "me", "rewards", "summary", callsign] as const,
       coin: (presaleId: string) => [ROOT, "me", "rewards", "coin", presaleId] as const,
     },
     /** `GET /api/social/me/presales`: the sales the viewer is in. */
