@@ -55,9 +55,14 @@ function verifiedPayloads() {
 /**
  * Public JSON only. Authorization, quotas and feature gates run before calling this.
  * `waitMs` bounds how long a miss waits for another process's load of the key
- * before running its own; set it above the source's usual load time.
+ * before running its own; set it above the source's usual load time. With
+ * `expireFromReadStart`, an answer expires `ttlMs` after its source read
+ * began rather than after it was stored, so no reader gets one older than
+ * `ttlMs`; a read slower than `ttlMs` is then not shared.
  */
-export function createPublicReadCache(redis: RedisCommands, namespace: string, signingKey: string, options: Readonly<{ waitMs?: number }> = {}) {
+export type PublicReadCacheOptions = Readonly<{ waitMs?: number; expireFromReadStart?: boolean }>;
+
+export function createPublicReadCache(redis: RedisCommands, namespace: string, signingKey: string, options: PublicReadCacheOptions = {}) {
   const waitMs = options.waitMs ?? 1_000;
   if (!z.string().min(32).safeParse(signingKey).success) throw new Error("Public cache signing requires at least 32 characters.");
   const macKey = createHmac("sha256", signingKey).update("blast.public-cache").digest();
@@ -95,13 +100,15 @@ export function createPublicReadCache(redis: RedisCommands, namespace: string, s
     }
   }
 
-  /** The TTL counts from the source read's start, so no reader gets an answer older than `ttlMs`. */
   async function store(key: string, lock: string, token: string, result: unknown, readAt: number, ttlMs: number): Promise<boolean> {
     try {
       const payload = JSON.stringify(result);
-      const expiresAt = readAt + ttlMs;
+      const expiresAt = (options.expireFromReadStart ? readAt : Date.now()) + ttlMs;
       const remainingMs = expiresAt - Date.now();
-      if (remainingMs <= 0) return false;
+      if (remainingMs <= 0) {
+        recordMetric("public_read.cache", { outcome: "expired_before_store" });
+        return false;
+      }
       const encoded = JSON.stringify({ version: 2, payload, expiresAt, mac: signature(key, payload, expiresAt).toString("hex") });
       if (Buffer.byteLength(encoded) > MAX_VALUE_BYTES) {
         recordMetric("public_read.cache", { outcome: "too_large" });

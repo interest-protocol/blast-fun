@@ -4,7 +4,7 @@ import test from "node:test";
 import { createReadCache, sharedLoad } from "@blast/server/modules/social/read-cache.ts";
 import { createPublicReadCache } from "@blast/core/lib/public-read-cache.ts";
 import type { RedisCommands } from "@blast/core/lib/redis.ts";
-import { PUBLIC_READ_WAIT_MS } from "@blast/server/modules/public-reads/shared-runtime.ts";
+import { PUBLIC_READ_OPTIONS } from "@blast/server/modules/public-reads/shared-runtime.ts";
 
 test("in-flight reads coalesce even after their TTL, failed reads retry, and age never resets", async () => {
   let now = 0;
@@ -84,6 +84,7 @@ test("a load slower than a second runs once for every process, and its answer ex
   t.mock.method(Date, "now", () => wall);
   const values = new Map<string, string>();
   let contention = 0;
+  let storedForMs = 0;
   const redis: RedisCommands = { execute: async (args) => {
     if (args[0] === "GET") return values.get(args[1]) ?? null;
     if (args[0] === "SET") {
@@ -93,6 +94,7 @@ test("a load slower than a second runs once for every process, and its answer ex
     }
     if (args[0] === "EVALSHA" && args[2] === "2") {
       if (values.get(args[3]) !== args[5]) return 0;
+      storedForMs = Number(args[7]);
       values.set(args[4], args[6]);
       values.delete(args[3]);
       return 1;
@@ -105,7 +107,7 @@ test("a load slower than a second runs once for every process, and its answer ex
   } };
   const instance = () => ({
     cache: createReadCache<number>(10_000, 4, Date.now, { ms: 20_000, label: "test" }),
-    shared: createPublicReadCache(redis, "test", "s".repeat(32), { waitMs: PUBLIC_READ_WAIT_MS.social }),
+    shared: createPublicReadCache(redis, "test", "s".repeat(32), PUBLIC_READ_OPTIONS.social),
   });
   let reads = 0;
   const gate = Promise.withResolvers<void>();
@@ -114,15 +116,18 @@ test("a load slower than a second runs once for every process, and its answer ex
 
   const [a, b, c] = [instance(), instance(), instance()];
   const first = read(a);
+  while (reads === 0) await setTimeout(1);
+  wall += 500; // the second process asks after the first one's read began
   let age = -1;
   const second = read(b, (ms) => { age = ms; });
   while (contention === 0) await setTimeout(1);
   await setTimeout(1_200); // past the one-second default wait
-  wall += 1_500;
+  wall += 1_000;
   gate.resolve();
   assert.deepEqual(await Promise.all([first, second]), [1, 1]);
   assert.equal(reads, 1, "the second process waits for the first one's slow read");
   assert.equal(age, 1_500, "and ages it from when that read began");
+  assert.equal(storedForMs, 8_500, "Redis keeps it for what is left of ten seconds");
 
   wall += 8_600;
   await setTimeout(260); // past the 250 ms local tier

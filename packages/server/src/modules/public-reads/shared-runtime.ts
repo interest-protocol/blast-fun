@@ -1,6 +1,6 @@
 
 import { processSingleton } from "@blast/core/lib/process-singleton.ts";
-import { createPublicReadCache } from "@blast/core/lib/public-read-cache.ts";
+import { createPublicReadCache, type PublicReadCacheOptions } from "@blast/core/lib/public-read-cache.ts";
 import { recordMetric } from "@blast/core/lib/metrics.ts";
 import { configuredRedis } from "@blast/core/lib/redis.ts";
 import { runtimeConfig } from "@blast/server/config/runtime-config.ts";
@@ -8,11 +8,15 @@ import { createPublicPresaleReader } from "@blast/server/modules/social/presales
 import type { PublicReadScope } from "@blast/server/modules/public-reads/namespace.ts";
 
 /**
- * How long a miss waits for another process's load before running its own.
  * Social pages (the For You first page, Discover) take up to about 2 s on the
- * replica, so their wait covers that; others keep the one-second default.
+ * replica: a miss waits for another process's load rather than running its
+ * own (one scan at a time, so a cold request in a replica brown-out can take
+ * 4-5 s before failing), and the answer carries its read time, so it expires
+ * ten seconds after that read. Other scopes keep the defaults.
  */
-export const PUBLIC_READ_WAIT_MS: Readonly<Partial<Record<PublicReadScope, number>>> = { social: 3_000 };
+export const PUBLIC_READ_OPTIONS: Readonly<Partial<Record<PublicReadScope, PublicReadCacheOptions>>> = {
+  social: { waitMs: 3_000, expireFromReadStart: true },
+};
 
 /**
  * Shared public data only. Personal reads and fresh lifecycle detail never
@@ -26,7 +30,7 @@ export function publicReadCache(scope: PublicReadScope) {
       if (!redis) return createPublicPresaleReader();
       const config = runtimeConfig();
       if (!config.publicReadNamespaces) throw new Error("Shared public caching is not configured.");
-      return createPublicReadCache(redis, config.publicReadNamespaces[scope], config.subjectPepper, { waitMs: PUBLIC_READ_WAIT_MS[scope] });
+      return createPublicReadCache(redis, config.publicReadNamespaces[scope], config.subjectPepper, PUBLIC_READ_OPTIONS[scope]);
     } catch {
       recordMetric("public_read.cache", { outcome: "configuration_unavailable" });
       return createPublicPresaleReader();
