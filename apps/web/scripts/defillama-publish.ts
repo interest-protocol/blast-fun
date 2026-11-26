@@ -11,6 +11,7 @@ import {
   parseProfile,
   type Snapshot,
 } from "../../../packages/core/src/modules/defillama/contracts.ts";
+import { FeeSummaryUnavailable } from "../../../packages/core/src/modules/defillama/daily-fees.ts";
 import { collectDay, collectHour } from "../../../packages/core/src/modules/defillama/source.ts";
 import {
   loadReplayBase,
@@ -21,88 +22,102 @@ import {
 } from "../../../packages/core/src/modules/defillama/store.ts";
 import { expectedDeployment } from "../../../packages/core/src/modules/launchpad-contract/provenance.ts";
 
-let source: Pool | undefined;
-let reporting: Pool | undefined;
-try {
-  const now = Date.now();
-  const request = publicationRequest(process.argv.slice(2), now);
-  const profile = parseProfile(JSON.parse(process.env.DEFILLAMA_PROFILE ?? "null"));
-  const sourceDeployment = expectedDeployment();
-  assertPublishedProfile(profile, sourceDeployment);
-  const sourceUrl = process.env.DEFILLAMA_SOURCE_DATABASE_URL;
-  const writeUrl = process.env.DEFILLAMA_WRITE_DATABASE_URL;
-  if (!sourceUrl || !writeUrl) {
-    throw new Error("DefiLlama source and reporting write URLs are required");
-  }
-  const sourceAddress = new URL(sourceUrl),
-    reportingAddress = new URL(writeUrl);
-  if (
-    sourceAddress.host === reportingAddress.host &&
-    sourceAddress.pathname === reportingAddress.pathname
-  ) {
-    throw new Error("DefiLlama source and reporting databases must be separate");
-  }
-  source = new Pool({
-    connectionString: sourceUrl,
-    max: 1,
-    connectionTimeoutMillis: 3000,
-    query_timeout: 20_000,
-    application_name: "blast-defillama-source",
-  });
-  reporting = new Pool({
-    connectionString: writeUrl,
-    max: 1,
-    connectionTimeoutMillis: 3000,
-    query_timeout: 20_000,
-    application_name: "blast-defillama-publish",
-  });
-  source.on("error", () => {
-    console.error("DefiLlama source connection unavailable");
-  });
-  reporting.on("error", () => {
-    console.error("DefiLlama publisher connection unavailable");
-  });
-  const archiveUrl = process.env.DEFILLAMA_SUI_ARCHIVE_GRAPHQL_URL;
-  const archive = archiveUrl
-    ? new SuiGraphQLClient({ network: "mainnet", url: archiveUrl })
-    : undefined;
-  const frontendFeeHistory = parseFrontendFeeHistory(
-    JSON.parse(process.env.DEFILLAMA_FRONTEND_FEE_HISTORY ?? "[]"),
-  );
-  const publisher = {
-    source,
-    reporting,
-    profile,
-    now,
-    options: {
-      archive,
-      frontendFeeHistory,
-      sourceFingerprint: sourceDeployment?.deployment,
-    },
-  };
-  if (request.mode === "day") {
-    await publishDay(publisher, request.date);
-  } else {
-    try {
-      const hours =
-        request.mode === "scheduled"
-          ? await unpublishedHours(publisher, request.hours)
-          : request.hours;
-      await publishHours(publisher, hours);
-    } finally {
-      if (request.mode === "scheduled") {
-        await ensureDailySummary(publisher, utcDate(request.end - DAY_SECONDS));
+async function main() {
+  let source: Pool | undefined;
+  let reporting: Pool | undefined;
+  try {
+    const now = Date.now();
+    const request = publicationRequest(process.argv.slice(2), now);
+    const profile = parseProfile(JSON.parse(process.env.DEFILLAMA_PROFILE ?? "null"));
+    const sourceDeployment = expectedDeployment();
+    assertPublishedProfile(profile, sourceDeployment);
+    const sourceUrl = process.env.DEFILLAMA_SOURCE_DATABASE_URL;
+    const writeUrl = process.env.DEFILLAMA_WRITE_DATABASE_URL;
+    if (!sourceUrl || !writeUrl) {
+      throw new Error("DefiLlama source and reporting write URLs are required");
+    }
+    const sourceAddress = new URL(sourceUrl),
+      reportingAddress = new URL(writeUrl);
+    if (
+      sourceAddress.host === reportingAddress.host &&
+      sourceAddress.pathname === reportingAddress.pathname
+    ) {
+      throw new Error("DefiLlama source and reporting databases must be separate");
+    }
+    source = new Pool({
+      connectionString: sourceUrl,
+      max: 1,
+      connectionTimeoutMillis: 3000,
+      query_timeout: 20_000,
+      application_name: "blast-defillama-source",
+    });
+    reporting = new Pool({
+      connectionString: writeUrl,
+      max: 1,
+      connectionTimeoutMillis: 3000,
+      query_timeout: 20_000,
+      application_name: "blast-defillama-publish",
+    });
+    source.on("error", () => {
+      console.error("DefiLlama source connection unavailable");
+    });
+    reporting.on("error", () => {
+      console.error("DefiLlama publisher connection unavailable");
+    });
+    const archiveUrl = process.env.DEFILLAMA_SUI_ARCHIVE_GRAPHQL_URL;
+    const archive = archiveUrl
+      ? new SuiGraphQLClient({ network: "mainnet", url: archiveUrl })
+      : undefined;
+    const frontendFeeHistory = parseFrontendFeeHistory(
+      JSON.parse(process.env.DEFILLAMA_FRONTEND_FEE_HISTORY ?? "[]"),
+    );
+    const publisher = {
+      source,
+      reporting,
+      profile,
+      now,
+      options: {
+        archive,
+        frontendFeeHistory,
+        sourceFingerprint: sourceDeployment?.deployment,
+      },
+    };
+    if (request.mode === "day") {
+      await publishDay(publisher, request.date);
+    } else {
+      try {
+        const hours =
+          request.mode === "scheduled"
+            ? await unpublishedHours(publisher, request.hours)
+            : request.hours;
+        await publishHours(hourSteps(publisher), hours, request.mode === "scheduled");
+      } finally {
+        if (request.mode === "scheduled") {
+          await ensureDailySummary(publisher, utcDate(request.end - DAY_SECONDS));
+        }
       }
     }
+  } catch (error) {
+    console.error(failureLine(error));
+    process.exitCode = 1;
+  } finally {
+    await Promise.all([source?.end(), reporting?.end()]);
   }
-} catch {
-  // Driver/URL errors can contain credentials: never print the original cause.
-  console.error(
-    "DefiLlama publication failed. Check interval, source coverage, fee archive, deployment profile and database roles.",
-  );
-  process.exitCode = 1;
-} finally {
-  await Promise.all([source?.end(), reporting?.end()]);
+}
+
+if (import.meta.main) {
+  await main();
+}
+
+// Driver, URL and parser errors can contain credentials or configuration: print only our own messages.
+export function failureLine(error: unknown): string {
+  const own =
+    error instanceof DefillamaError ||
+    error instanceof FeeSummaryUnavailable ||
+    (error instanceof Error && error.constructor === Error && !("code" in error));
+  return own
+    ? `DefiLlama publication failed: ${error.message.replace(/[a-z][a-z\d+.-]*:\/\/\S+/gi, "<url>")}`
+    : "DefiLlama publication failed. Check interval, source coverage, fee archive, deployment profile and database roles.";
 }
 
 function publicationRequest(args: string[], now: number) {
@@ -148,23 +163,44 @@ async function publishDay({ source, reporting, profile, now, options }: Publishe
   );
 }
 
-async function publishHours(
-  { source, reporting, profile, now, options }: Publisher,
+export type HourSteps = {
+  replayBase(date: string): Promise<ReplayBase | undefined>;
+  collect(start: number, replayBase: ReplayBase | undefined): Promise<Snapshot>;
+  publish(snapshot: Snapshot): Promise<void>;
+};
+
+function hourSteps({ source, reporting, profile, now, options }: Publisher): HourSteps {
+  return {
+    replayBase: (date) => loadReplayBase(reporting, profile, date),
+    collect: (start, replayBase) =>
+      collectHour(source, profile, start, now, { ...options, replayBase }),
+    publish: (snapshot) => publish(reporting, snapshot),
+  };
+}
+
+/** A scheduled run skips an hour whose fees cannot be summarized; the next run retries it. */
+export async function publishHours(
+  steps: HourSteps,
   hours: readonly number[],
+  skipUnsummarized: boolean,
 ) {
   let replayBase: ReplayBase | undefined;
   let replayDate: string | undefined;
   for (const start of hours) {
     const date = utcDate(start);
     if (replayDate !== date) {
-      replayBase = await loadReplayBase(reporting, profile, date);
+      replayBase = await steps.replayBase(date);
       replayDate = date;
     }
-    const snapshot = await collectHour(source, profile, start, now, {
-      ...options,
-      replayBase,
-    });
-    await publish(reporting, snapshot);
+    const snapshot = await steps.collect(start, replayBase);
+    try {
+      await steps.publish(snapshot);
+    } catch (error) {
+      if (!skipUnsummarized || !(error instanceof FeeSummaryUnavailable)) {
+        throw error;
+      }
+      console.warn(`skipped hour ${new Date(start * 1000).toISOString()}: ${error.reason}`);
+    }
     if (snapshot.native_replay) {
       replayBase = {
         source: snapshot.source,
@@ -196,8 +232,9 @@ async function ensureDailySummary(publisher: Publisher, date: string) {
 }
 
 async function publish(reporting: Pool, snapshot: Snapshot) {
-  if (snapshot.frontend_fee_coverage.status !== "complete") {
-    throw new Error("Complete frontend fee policy and archive coverage are required");
+  const { status, reason } = snapshot.frontend_fee_coverage;
+  if (status !== "complete") {
+    throw new FeeSummaryUnavailable(reason ?? "frontend_fee_coverage_unavailable");
   }
   const publication = await publishSnapshot(reporting, snapshot);
   console.log(

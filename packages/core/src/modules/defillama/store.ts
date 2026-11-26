@@ -10,7 +10,12 @@ import {
   type Profile,
   type Snapshot,
 } from "./contracts.ts";
-import { summarizeDailyFees, type DailyFees } from "./daily-fees.ts";
+import {
+  FeeSummaryUnavailable,
+  feeSummaryGap,
+  summarizeDailyFees,
+  type DailyFees,
+} from "./daily-fees.ts";
 
 export type Summary = Omit<Snapshot, "items" | "contracts" | "native_replay"> & {
   daily_fees?: DailyFees;
@@ -35,10 +40,11 @@ export async function publishSnapshot(
   snapshot: Snapshot,
 ): Promise<{ id: string; revision: number }> {
   const hourly = snapshot.end_timestamp - snapshot.start_timestamp === HOUR_SECONDS;
-  const fees = summarizeDailyFees(snapshot);
-  if (hourly && !fees) {
-    throw new Error("Complete coverage is required for hourly fees");
+  const gap = feeSummaryGap(snapshot);
+  if (hourly && gap !== null) {
+    throw new FeeSummaryUnavailable(gap);
   }
+  const fees = summarizeDailyFees(snapshot);
   // Hourly summaries share the append-only store. Daily audit rows and replay bases stay on the daily feed.
   const publication = hourly
     ? {
