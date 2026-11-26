@@ -23,9 +23,14 @@ import {
 import {
   amountShort,
   amountText,
-  biggestBuy,
+  biggestTrade,
   buyCueOf,
-  hintBuy,
+  addPops,
+  HOME_POPS_PER_PAGE,
+  HOME_POPS_PER_ROW,
+  popsOn,
+  tradeCueOf,
+  hintTrade,
   homeHintReads,
   eventLine,
   eventSentence,
@@ -323,27 +328,54 @@ test("a live buy reads in a glance and lands as loud as its size", () => {
   assert.equal(buyCueOf(buy(undefined, "x")), null);
 
   const at = (coin_key: string, occurred_at_ms: number, usd?: string) => ({ ...buy(usd), coin_key, occurred_at_ms });
-  assert.equal(biggestBuy([at("new", 9, "2"), at("big", 1, "900"), at("unpriced", 10)])?.coin_key, "big");
-  assert.equal(biggestBuy([at("old", 1, "5"), at("new", 2, "5.0")])?.coin_key, "new");
-  assert.equal(biggestBuy([]), undefined);
+  assert.equal(biggestTrade([at("new", 9, "2"), at("big", 1, "900"), at("unpriced", 10)])?.coin_key, "big");
+  assert.equal(biggestTrade([at("old", 1, "5"), at("new", 2, "5.0")])?.coin_key, "new");
+  assert.equal(biggestTrade([]), undefined);
 });
 
-// Fails if the hint cue's floor drifts from the server's `recent_buys` rule, or a priced buy still re-reads Home.
-test("a priced buy hint goes to the cue only, keyed like the row, at the server's floor", () => {
+// Fails if the hint cue's floor drifts from the server's `recent_buys` rule, or a priced trade still re-reads Home.
+test("a priced trade hint goes to its pop only, keyed like the row, at the server's floor", () => {
   const COIN = `0x${"b2".repeat(32)}::blast::BLAST`;
   const SALE = `0x${"a1".repeat(32)}`;
   const hint = (trade: Readonly<Record<string, string | undefined>>, kind: "trade_buy" | "trade_sell" = "trade_buy") =>
     ({ atMs: 5, cause: "hint" as const, trade: { coinType: COIN, checkpoint: 1, cursor: "1:2:0:0", kind, quoteAtoms: "100", usd: "3", ...trade } });
   assert.equal(homeHintReads(hint({})), false, "a priced buy makes no read");
+  assert.equal(homeHintReads(hint({}, "trade_sell")), false, "a priced sell makes no read");
   assert.equal(homeHintReads(hint({ usd: undefined })), true, "an unpriced buy reads as today");
+  assert.equal(homeHintReads(hint({ usd: undefined }, "trade_sell")), true, "an unpriced sell reads as today");
   assert.equal(homeHintReads(hint({ quoteAtoms: undefined })), true, "a dropped amount reads as today");
-  assert.equal(homeHintReads(hint({}, "trade_sell")), true);
   assert.equal(homeHintReads({ atMs: 5, cause: "connect" }), true);
-  assert.deepEqual(hintBuy(hint({})), { coin_key: COIN, activity_id: "1:2:0:0", occurred_at_ms: 5, quote_atoms: "100", usd: "3", quote_symbol: null, quote_decimals: null });
-  assert.equal(hintBuy(hint({ presaleId: SALE }))?.coin_key, SALE, "a sale's row is keyed by the sale");
-  assert.equal(hintBuy(hint({ usd: "0.1" }))?.usd, "0.1");
-  assert.equal(hintBuy(hint({ usd: "0.099999999999999999" })), null, "exact, not floating point");
-  assert.equal(hintBuy(hint({ quoteAtoms: "0" })), null);
-  assert.equal(hintBuy(hint({}, "trade_sell")), null);
-  assert.deepEqual(buyCueOf(hintBuy(hint({ usd: "1204.5" }))!), { text: "+$1.2K", tier: "huge" });
+  assert.deepEqual(hintTrade(hint({})), { coin_key: COIN, activity_id: "1:2:0:0", occurred_at_ms: 5, quote_atoms: "100", usd: "3", quote_symbol: null, quote_decimals: null, side: "buy" });
+  assert.equal(hintTrade(hint({ presaleId: SALE }))?.coin_key, SALE, "a sale's row is keyed by the sale");
+  assert.equal(hintTrade(hint({ usd: "0.1" }))?.usd, "0.1");
+  assert.equal(hintTrade(hint({ usd: "0.099999999999999999" })), null, "exact, not floating point");
+  assert.equal(hintTrade(hint({ quoteAtoms: "0" })), null);
+  assert.equal(hintTrade(hint({}, "trade_sell"))?.side, "sell");
+  assert.deepEqual(tradeCueOf(hintTrade(hint({ usd: "1204.5" }))!), { text: "+$1.2K", tier: "huge", side: "buy" });
+  assert.deepEqual(tradeCueOf(hintTrade(hint({ usd: "1204.5" }, "trade_sell"))!), { text: "\u2212$1.2K", tier: "small", side: "sell" }, "a sell is never loud");
+});
+
+// Fails if a trade at or under $1 pops, a row or the page overflows, a small trade beats a big one to a slot,
+// or a pop already showing moves.
+test("trades above $1 pop, at most 3 a row and 12 a page, biggest first", () => {
+  const trade = (coin_key: string, id: string, usd?: string, side: "buy" | "sell" = "buy") =>
+    ({ coin_key, activity_id: id, occurred_at_ms: 1, quote_atoms: "100", quote_symbol: "SUI", quote_decimals: 9, side, ...(usd !== undefined && { usd }) });
+  assert.equal(popsOn(trade("a", "1", "1")), false, "exactly $1 does not pop");
+  assert.equal(popsOn(trade("a", "1", "1.000000000000000001")), true);
+  assert.equal(popsOn(trade("a", "1", "0.5", "sell")), false);
+  assert.equal(popsOn(trade("a", "1")), true, "a read's unpriced buy pops in its own coin");
+
+  const first = addPops([], [trade("a", "s", "5"), trade("a", "b", "500", "sell")]);
+  assert.deepEqual(first.map(pop => [pop.id, pop.slot, pop.cue.text]), [["b", 0, "\u2212$500"], ["s", 1, "+$5"]]);
+  const row = addPops(first, [trade("a", "x", "2"), trade("a", "big", "900"), trade("a", "y", "3")]);
+  assert.deepEqual(row.map(pop => [pop.id, pop.slot]), [["b", 0], ["s", 1], ["big", 2]], "a full row keeps its pops and takes the biggest");
+  const freed = addPops(row.filter(pop => pop.id !== "b"), [trade("a", "z", "4")]);
+  assert.deepEqual(freed.map(pop => [pop.id, pop.slot]), [["s", 1], ["big", 2], ["z", 0]], "a new pop takes the freed slot");
+
+  const burst = Array.from({ length: 30 }, (_, index) => trade(`coin${index % 10}`, `t${index}`, `${index + 2}`));
+  const page = addPops([], burst);
+  assert.equal(page.length, HOME_POPS_PER_PAGE);
+  assert.ok(page.every(pop => Number(pop.cue.text.slice(2)) >= 20), "the page keeps the biggest of the burst");
+  assert.ok([...Map.groupBy(page, pop => pop.coinKey).values()].every(pops => pops.length <= HOME_POPS_PER_ROW));
+  assert.equal(addPops(page, [trade("coin0", "late", "9000")]), page, "a full page adds nothing and keeps its array, so the list does not re-render");
 });
