@@ -48,6 +48,7 @@ Verified on 2026-10-14 against the search endpoint used by the official [Noodles
 | LOFI | Community | `0xf22da9a24ad027cccb5f2d496cbe91de953d363513db08a3a734d361c7c17503::LOFI::LOFI` | [Search](https://api-internal.noodles.fi/api/v1/global-search?limit=30&scope=coin&keyword=LOFI) |
 | BLUB | Community | `0xfa7ac3951fdca92c5200d468d31a365eb03b2be9936fde615e69f0c1274ad3a0::BLUB::BLUB` | [Search](https://api-internal.noodles.fi/api/v1/global-search?limit=30&scope=coin&keyword=BLUB) |
 | MANIFEST | Community | `0xc466c28d87b3d5cd34f3d5c088751532d71a38d93a8aae4551dd56272cfb4355::manifest::MANIFEST` | [Search](https://api-internal.noodles.fi/api/v1/global-search?limit=30&scope=coin&keyword=MANIFEST) |
+| BRAT | Community | `0xd883b9dc7708547a4b578e3a4ec20a34c5fd866bc61caacbcb4330474032202e::brat::BRAT` | [Search](https://api-internal.noodles.fi/api/v1/global-search?limit=5&scope=all&keyword=BRAT) |
 | ONE | Community | `0xaaffd090b57fcdcf293f7e7ec59c119acc910eeb5fc4aadfb4185fa56b6a2cb5::suipump::SUIPUMP` | [Search](https://api-internal.noodles.fi/api/v1/global-search?limit=30&scope=coin&keyword=JustOneSui) |
 
 Primary cross-checks: [Sui DeepBook contracts](https://docs.sui.io/onchain-finance/deepbook/deepbookv3/contract-information), [Scallop supported coins](https://github.com/scallop-io/scallop-skills/blob/master/references/supported-coins.md), [NAVI NAVX](https://naviprotocol.gitbook.io/navi-protocol-docs/dao-and-token/navx-tokenomics), [Turbos token address](https://turbos.gitbook.io/turbos/others/token-address).
@@ -112,6 +113,10 @@ Left out (17):
 
 ONE (JustOneSui) was added on the owner's request, taking the list from 44 to 45. Its type is `0xaaff…2cb5::suipump::SUIPUMP`: `suipump::SUIPUMP` is the module and struct name SuiPump gives its launches, not the ticker. Sui mainnet GraphQL `coinMetadata` gives symbol `ONE`, name `JustOneSui` and 6 decimals, so the list shows ONE. Noodles verifies it (about $28k liquidity, $84k market cap, $2k 24h volume on 2026-11-20) and it is the only verified coin among about 30 that use the name JustOneSui or the ticker ONE; matching stays by struct tag, so those copies are never treated as listed. It had a Cetus route from 0.1 SUI, and its Noodles logo returned HTTP 200 as `image/jpeg`.
 
+## Ecosystem coin pools and BRAT (2026-11-26)
+
+On the owner's request, BRAT was added, taking the list from 45 to 46 (Noodles-verified, about $15k liquidity, $205k market cap on 2026-11-26; Sui mainnet GraphQL `coinMetadata` gives 9 decimals). CETUS, DEEP, NAVX, WAL, BLUB, LOFI and BRAT got a `poolKey`: each coin's deepest Cetus or Bluefin SUI pool, read on chain the same day (every `Pool<coin, SUI>` and `Pool<SUI, coin>` of both venues, both sides' reserves). All seven are Cetus pools with the coin as coin A. blast-infra tracks them from 2026-11-27 00:00 UTC; nothing earlier is filled. BRAT's pool (about 21.7k SUI, both sides) is thinner than ONE's (about 43k SUI), the template for a tracked pool; it is kept because the owner asked for it. MAGMA, BLUE, HAEDAL, US, MMT, TRUTH, SCA and TAKE were left without a pool: their deepest Cetus or Bluefin SUI pool was below ONE's.
+
 ## Logo resolution
 
 CoinMark keeps the indexed metadata image first, then uses the exact canonical identity's Noodles logo when metadata is empty, unsafe, or fails to load. A copied ticker never receives another coin's logo. If both images fail, the stable generated placeholder remains; each failed URL is tried only once. No Noodles API requests are added at runtime.
@@ -164,4 +169,5 @@ Direct Sui mainnet gRPC `getCoinMetadata` reads on 2026-10-14 returned metadata 
 | BLUB | [Noodles logo](https://statics.noodles.fi/logo/4626651705687178628.jpg) |
 | MANIFEST | [Noodles logo](https://statics.noodles.fi/logo/8816372507594642197) |
 | sSUI | [Noodles logo](https://statics.noodles.fi/logo/11570756678430542905.png) |
+| BRAT | [Noodles logo](https://statics.noodles.fi/logo/12540594340818269028) |
 | ONE | [Noodles logo](https://statics.noodles.fi/logo/14207055064415664154.jpeg) |

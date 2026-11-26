@@ -35,6 +35,7 @@ export function startBackend() {
     recognition,
     redis,
     namespace: config.namespace,
+    extraNamespaces: config.extraSites.map((site) => site.namespace),
     subjectPepper: config.runtime.subjectPepper,
     handlers: (limiter) => createPartnerV1Handlers(limiter, effectHttp.handler),
     operators: ({ login }) =>
@@ -49,7 +50,11 @@ export function startBackend() {
     privateReplayRedis,
     handle,
     preparePartner: handle.preparePartner,
-    privateApi: { siteOrigin: config.runtime.siteOrigin, handle: privateHttp.handle },
+    privateApi: {
+      siteOrigin: config.runtime.siteOrigin,
+      extraSites: config.extraSites,
+      handle: privateHttp.handle,
+    },
     cronApi: { handle: cronHttp.handler },
     async ready() {
       await Promise.all([

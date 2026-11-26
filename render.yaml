@@ -38,6 +38,8 @@ projects:
                 sync: false
               - key: BLAST_BACKEND_EXPECTED_QUOTA_NAMESPACE
                 sync: false
+              - key: BLAST_BACKEND_EXTRA_SITES
+                sync: false
               - key: BLAST_BACKEND_FLEET_CONFIG
                 sync: false
               - key: BLAST_BACKEND_GATEWAY_SECRET
@@ -165,6 +167,8 @@ projects:
             dockerCommand: bun run src/hints-main.ts
             envVars:
               - key: BLAST_BACKEND_EXPECTED_QUOTA_NAMESPACE
+                sync: false
+              - key: BLAST_BACKEND_EXTRA_SITES
                 sync: false
               - key: BLAST_BACKEND_FLEET_CONFIG
                 sync: false

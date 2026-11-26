@@ -1,7 +1,10 @@
 import { deploymentIdentity } from "@blast/core/lib/config/deployment-identity.ts";
 import { requiredSecret, requiredValue } from "@blast/core/lib/config/secret.ts";
+import { trustedUrl } from "@blast/core/lib/config/trusted-origin.ts";
+import { normalizeSiteOrigin } from "@blast/core/lib/site-origin.ts";
 import { quotaNamespace } from "@blast/core/lib/web-security/redis-rate-limits.ts";
 import { ACTIVITY_HINT_STREAM_BUDGET } from "@blast/core/modules/backend-api/stream-budget.ts";
+import type { TrustedSite } from "../../transport/contracts.ts";
 
 export type Environment = Readonly<Record<string, string | undefined>>;
 
@@ -78,6 +81,7 @@ export function backendTransportConfig(environment: Environment, role: keyof typ
   }
   return {
     namespace,
+    extraSites: extraSites(environment, namespace),
     localRun: identity.localRun,
     port,
     hostname,
@@ -103,4 +107,67 @@ function privateWorkCap(environment: Environment): number | undefined {
     throw new Error("Invalid backend private work cap; expected 180000–280000 milliseconds.");
   }
   return cap;
+}
+
+const EXTRA_SITES = "BLAST_BACKEND_EXTRA_SITES";
+const MAX_EXTRA_SITES = 4;
+
+/**
+ * `BLAST_BACKEND_EXTRA_SITES`: optional JSON list of other web deployments this backend trusts,
+ * for example `[{"origin":"https://dev.blast.fun","target":"dev","branch":"dev"}]`. Each site's
+ * namespace is the one its own web relay signs (this backend's `BLAST_REDIS_NAMESPACE` with that
+ * site's target and branch), so its replay keys and quotas never share the primary site's.
+ * Errors name the variable, never its value.
+ */
+function extraSites(environment: Environment, namespace: string): readonly TrustedSite[] {
+  const raw = environment[EXTRA_SITES]?.trim();
+  if (!raw) {
+    return [];
+  }
+  const invalid = () =>
+    new Error(
+      `${EXTRA_SITES} must be a JSON array of at most ${MAX_EXTRA_SITES} {"origin","target","branch"} entries, each a distinct non-production site.`,
+    );
+  let entries: unknown;
+  try {
+    entries = JSON.parse(raw);
+  } catch {
+    throw invalid();
+  }
+  if (!Array.isArray(entries) || !entries.length || entries.length > MAX_EXTRA_SITES) {
+    throw invalid();
+  }
+  const primaryOrigin = normalizeSiteOrigin(environment.NEXT_PUBLIC_SITE_URL);
+  const origins = new Set([primaryOrigin]);
+  const namespaces = new Set([namespace]);
+  return entries.map((entry: unknown) => {
+    const { origin, target, branch, ...rest } = (
+      entry && typeof entry === "object" ? entry : {}
+    ) as Record<string, unknown>;
+    if (
+      Object.keys(rest).length ||
+      typeof origin !== "string" ||
+      typeof target !== "string" ||
+      typeof branch !== "string" ||
+      !target ||
+      !branch ||
+      target === "production"
+    ) {
+      throw invalid();
+    }
+    // The web relay signs its origin as text; only an exact, bare origin can ever match.
+    if (trustedUrl(EXTRA_SITES, origin, { shape: "origin", http: "loopback" }).origin !== origin) {
+      throw invalid();
+    }
+    const site = {
+      siteOrigin: origin,
+      namespace: quotaNamespace(environment.BLAST_REDIS_NAMESPACE, { target, branch }),
+    };
+    if (origins.has(site.siteOrigin) || namespaces.has(site.namespace)) {
+      throw invalid();
+    }
+    origins.add(site.siteOrigin);
+    namespaces.add(site.namespace);
+    return site;
+  });
 }

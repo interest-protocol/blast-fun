@@ -14,6 +14,8 @@ export type AdmissionDependencies = Readonly<{
   recognition?: PartnerRecognition;
   redis: RedisCommands;
   namespace: string;
+  /** Extra trusted sites' namespaces; only first-party read proofs may carry one. */
+  extraNamespaces?: readonly string[];
   subjectPepper: string;
   /** Override policies only in isolated local fixtures; runtime uses the registry. */
   policies?: Readonly<Record<RateBucket, RatePolicy>>;
