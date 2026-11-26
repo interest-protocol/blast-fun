@@ -155,7 +155,7 @@ export type HomePop = Readonly<{ id: string; coinKey: string; slot: number; cue:
  * The pops after a batch of trades lands on `showing`: the biggest trades first, each in its row's first free slot,
  * while its row and the page have room. Pops already showing keep their place; a trade with no room is skipped.
  */
-export function addPops(showing: readonly HomePop[], trades: readonly HomeCueTrade[]): HomePop[] {
+export function addPops(showing: readonly HomePop[], trades: readonly HomeCueTrade[]): readonly HomePop[] {
   const pops = [...showing];
   for (const trade of [...trades].sort(biggestFirst)) {
     if (pops.length >= HOME_POPS_PER_PAGE) break;
@@ -164,11 +164,12 @@ export function addPops(showing: readonly HomePop[], trades: readonly HomeCueTra
     const slot = Array.from({ length: HOME_POPS_PER_ROW }, (_, index) => index).find(free => !taken.has(free));
     if (cue && slot !== undefined) pops.push({ id: trade.activity_id, coinKey: trade.coin_key, slot, cue });
   }
-  return pops;
+  // Nothing added (page or rows full): the same array, so the list does not re-render.
+  return pops.length === showing.length ? showing : pops;
 }
 
-/** The buy worth showing from one read: the most dollars, the newest among equals; an unpriced buy only when none is priced. */
-export function biggestBuy<T extends HomeCueBuy>(buys: readonly T[]): T | undefined {
+/** The trade worth naming from one batch: the most dollars, the newest among equals; an unpriced one only when none is priced. */
+export function biggestTrade<T extends HomeCueBuy>(buys: readonly T[]): T | undefined {
   return [...buys].sort(biggestFirst)[0];
 }
 

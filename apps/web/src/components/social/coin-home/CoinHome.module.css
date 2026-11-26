@@ -143,7 +143,7 @@
    a large figure's brief landing growth covers its smaller neighbour, which then has a second in the clear. */
 .pop[data-pop-slot="1"] { z-index: 4; inset-inline-start: calc(8ch + 1rem); }
 .pop[data-pop-slot="2"] { z-index: 5; inset-inline-start: calc(16ch + 2rem); }
-/* A larger figure stacks above its neighbours, so the trade meant to shout is never the one cut. */
+/* A larger figure stacks above its neighbours, so its landing growth is never cut by a smaller one. */
 .pop[data-home-pop="big"] { z-index: 6; }
 .pop[data-home-pop="huge"] { z-index: 7; }
 @keyframes home-pop {

@@ -23,7 +23,7 @@ import {
 import {
   amountShort,
   amountText,
-  biggestBuy,
+  biggestTrade,
   buyCueOf,
   addPops,
   HOME_POPS_PER_PAGE,
@@ -328,9 +328,9 @@ test("a live buy reads in a glance and lands as loud as its size", () => {
   assert.equal(buyCueOf(buy(undefined, "x")), null);
 
   const at = (coin_key: string, occurred_at_ms: number, usd?: string) => ({ ...buy(usd), coin_key, occurred_at_ms });
-  assert.equal(biggestBuy([at("new", 9, "2"), at("big", 1, "900"), at("unpriced", 10)])?.coin_key, "big");
-  assert.equal(biggestBuy([at("old", 1, "5"), at("new", 2, "5.0")])?.coin_key, "new");
-  assert.equal(biggestBuy([]), undefined);
+  assert.equal(biggestTrade([at("new", 9, "2"), at("big", 1, "900"), at("unpriced", 10)])?.coin_key, "big");
+  assert.equal(biggestTrade([at("old", 1, "5"), at("new", 2, "5.0")])?.coin_key, "new");
+  assert.equal(biggestTrade([]), undefined);
 });
 
 // Fails if the hint cue's floor drifts from the server's `recent_buys` rule, or a priced trade still re-reads Home.
@@ -377,4 +377,5 @@ test("trades above $1 pop, at most 3 a row and 12 a page, biggest first", () => 
   assert.equal(page.length, HOME_POPS_PER_PAGE);
   assert.ok(page.every(pop => Number(pop.cue.text.slice(2)) >= 20), "the page keeps the biggest of the burst");
   assert.ok([...Map.groupBy(page, pop => pop.coinKey).values()].every(pops => pops.length <= HOME_POPS_PER_ROW));
+  assert.equal(addPops(page, [trade("coin0", "late", "9000")]), page, "a full page adds nothing and keeps its array, so the list does not re-render");
 });

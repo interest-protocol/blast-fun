@@ -21,7 +21,7 @@ import { CoinCard } from "./CoinCard";
 import styles from "./CoinHome.module.css";
 import { coinsByIdsQuery, discoverQuery, followingCoinsQuery } from "./home-client";
 import { resultsAnnouncement, SORT_LABELS, type HeaderSort } from "./home-state";
-import { addPops, biggestBuy, homeCoinKey, popsOn, tradeCueOf, type HomeCueTrade, type HomePop } from "./home-model";
+import { addPops, biggestTrade, homeCoinKey, popsOn, tradeCueOf, type HomeCueTrade, type HomePop } from "./home-model";
 import { TableFooter } from "./TableFooter";
 import { countWords } from "@blast/core/web/format.ts";
 import type { FeedFreshnessSource } from "../home/feed-freshness";
@@ -243,30 +243,30 @@ function useHomePops(query: HomeQuery, settled: boolean, showTrades: boolean | u
   const [pops, setPops] = useState<{ view: string; showing: readonly HomePop[] }>({ view, showing: NO_POPS });
   const [announced, setAnnounced] = useState("");
   const nextAnnounceAt = useRef(0);
-  const timers = useRef(new Set<number>());
-  useEffect(() => {
-    const pending = timers.current;
-    return () => pending.forEach(timer => window.clearTimeout(timer));
-  }, []);
   useHomeLive(query, settled, freshness, trades => {
     if (!showTrades) return;
     const listed = new Map(coins.map(coin => [homeCoinKey(coin), coin.symbol]));
     const popping = trades.filter(trade => listed.has(trade.coin_key) && popsOn(trade));
     if (!popping.length) return;
-    setPops(current => ({ view, showing: addPops(current.view === view ? current.showing : NO_POPS, popping) }));
+    setPops(current => {
+      const showing = addPops(current.view === view ? current.showing : NO_POPS, popping);
+      return current.view === view && showing === current.showing ? current : { view, showing };
+    });
     // Trade ids are unique (`useHomeLive` reports each once), so the batch's ids name exactly the pops it added.
     const batch = new Set(popping.map(trade => trade.activity_id));
-    const timer = window.setTimeout(() => {
-      timers.current.delete(timer);
-      setPops(current => ({ ...current, showing: current.showing.filter(pop => !batch.has(pop.id)) }));
-    }, HOME_POP_MS);
-    timers.current.add(timer);
     const now = performance.now();
-    const loudest = biggestBuy(popping);
-    if (loudest && now >= nextAnnounceAt.current) {
+    const loudest = biggestTrade(popping);
+    const announcing = loudest !== undefined && now >= nextAnnounceAt.current;
+    if (announcing) {
       nextAnnounceAt.current = now + HOME_POP_ANNOUNCE_MS;
       setAnnounced(tradeAnnouncement(listed.get(loudest.coin_key)!, loudest));
     }
+    // A timer that outlives the list sets state nothing reads; React ignores it.
+    window.setTimeout(() => {
+      setPops(current => current.showing.some(pop => batch.has(pop.id)) ? { ...current, showing: current.showing.filter(pop => !batch.has(pop.id)) } : current);
+      // Cleared by the batch that set it, so the same words later are announced again.
+      if (announcing) setAnnounced("");
+    }, HOME_POP_MS);
   });
   return { pops: settled && pops.view === view ? pops.showing : NO_POPS, announced };
 }
