@@ -27,7 +27,7 @@ import { deployment, fingerprint, cap, id, key, base, bytes, vault, memeType, qu
 const url=process.env.MISSION_CONTROL_TEST_DATABASE_URL;
 const digest=(digit:string)=>digit.repeat(32);
 const cut={checkpoint:"20",digest:digest("C"),timestampMs:"86401000"};
-const settings={fingerprint,gasReserveBps:0,maxAgeMs:60000,maxConfidenceBps:50,exclusions:[]};
+const settings={fingerprint,gasReserveBps:0,maxAgeMs:60000,maxConfidenceBps:50,exclusions:[],noMinimumVaults:[],catchUpAtMs:null};
 test("fresh vault planning, immutable manifests, exact reservations and signed custody survive local DB races",{skip:!url},async()=>{
   assert.equal(new URL(url!).hostname,"127.0.0.1");
   const database=await freshDatabase(20);
@@ -396,5 +396,69 @@ test("fresh vault planning, immutable manifests, exact reservations and signed c
     await assert.rejects(retrySkippedPeriod(planner, fingerprint, joeyVault, retryPeriod), { message: "No latest, untouched low-budget reward plan matches this period." });
     assert.equal(await allocatePage(planner, retryPlan), true);
     assert.equal((await readPlan(watcher, retryPlan)).stage, "proofs");
+
+    for (const [offset, grossMeme, grossQuote] of [[8n, "2", "0"], [9n, "0", "2"], [10n, "1", "1"]] as const) {
+      const smallPlan = await seedJoeyPlan(offset * DAY_MS, {
+        payoutPolicy: "no-minimum", grossMeme, grossQuote, quotePrice: null, qualifiers: 2, globalWeight: "2",
+      }, "allocating");
+      await admin.query("INSERT INTO vault_reward_holders VALUES($1,$2,1),($1,$3,1)", [smallPlan, id("0xd1"), id("0xd2")]);
+      await allocatePage(planner, smallPlan);
+      if (offset === 10n) {
+        assert.equal((await readPlan(watcher, smallPlan)).stage, "skipped", "atomic dust carries until there is a positive allocation");
+      } else {
+        await buildManifest(planner, smallPlan);
+        const manifest = manifestSummary((await readPlan(watcher, smallPlan)).manifest);
+        assert.deepEqual([manifest.memeAmount, manifest.quoteAmount, manifest.leafCount], [grossMeme, grossQuote, 2]);
+      }
+    }
+
+    const catchUpVault = id("0x3333"), defaultVault = id("0x4444");
+    for (const v of [catchUpVault, defaultVault]) {
+      await admin.query("INSERT INTO reward_test_vaults VALUES($1,$2,'launch',$3,$4,$5,1,0,1)", [v, id("0xef"), memeType, quoteType, id("0xdd")]);
+      await admin.query(`INSERT INTO vault_reward_periods(period_id,network,deployment_fingerprint,vault_id,start_ms,end_ms,status)
+        VALUES($1,'mainnet',$2,$3,0,$4,'skipped')`, [randomUUID(), fingerprint, v, DAY_MS.toString()]);
+    }
+    const catchUpAtMs = cut.timestampMs;
+    const scopedSettings = { ...settings, noMinimumVaults: [catchUpVault], catchUpAtMs };
+    await Promise.all([discoverPeriods(planner, scopedSettings, 8), discoverPeriods(planner, scopedSettings, 8)]);
+    const windows = () => admin.query(`SELECT vault_id,start_ms::text,end_ms::text,status FROM vault_reward_periods
+      WHERE vault_id=ANY($1) ORDER BY vault_id,start_ms`, [[catchUpVault, defaultVault]]);
+    assert.deepEqual((await windows()).rows, [
+      { vault_id: catchUpVault, start_ms: "0", end_ms: DAY_MS.toString(), status: "skipped" },
+      { vault_id: catchUpVault, start_ms: "1000", end_ms: catchUpAtMs, status: "planning" },
+      { vault_id: defaultVault, start_ms: "0", end_ms: DAY_MS.toString(), status: "skipped" },
+    ], "only the opted-in vault rebases and racing discovery inserts one catch-up window");
+    const catchUpCollection = {
+      ...collected,
+      bcs: Buffer.from(vaultEventBcs.FeesCollected.serialize({
+        vault_id: catchUpVault, gross_meme_amount: 100n, gross_quote_amount: 0n,
+        protocol_meme_amount: 0n, protocol_quote_amount: 0n, route_meme_amounts: [100n], route_quote_amounts: [0n],
+      }).toBytes()).toString("base64"),
+    };
+    await admin.query("INSERT INTO blast_infra_fixture.transaction_evidence VALUES($1,20,86401000,$2,true,$3)", [digest("9"), key.toSuiAddress(), json([catchUpCollection])]);
+    await admin.query("INSERT INTO reward_test_collections VALUES($1,20,1,0,$2,$3,ARRAY[100]::numeric[],ARRAY[0]::numeric[])",
+      [catchUpVault, digest("9"), json({ routes: [{ destination: { kind: "holder_rewards" } }] })]);
+    const { period_id: catchUpPeriod } = (await admin.query("SELECT period_id FROM vault_reward_periods WHERE vault_id=$1 AND end_ms=$2", [catchUpVault, catchUpAtMs])).rows[0];
+    const catchUpPlan = await freezePeriod(planner, deployment, scopedSettings, catchUpPeriod);
+    const frozenCatchUp = frozenSchema.parse((await readPlan(watcher, catchUpPlan)).inputs);
+    assert.deepEqual([frozenCatchUp.payoutPolicy, frozenCatchUp.grossMeme, frozenCatchUp.grossQuote, frozenCatchUp.quotePrice], ["no-minimum", "100", "0", null]);
+    await qualifyPage(planner, catchUpPlan, await fillIdentityGaps(planner, catchUpPlan, chain([objectHolder])));
+    await allocatePage(planner, catchUpPlan);
+    await buildManifest(planner, catchUpPlan);
+    await uploadManifest(planner, catchUpPlan, storage);
+    await reservePlan(planner, deployment, catchUpPlan);
+    const catchUpReserved = await readPlan(watcher, catchUpPlan);
+    assert.equal(catchUpReserved.stage, "reserved");
+    assert.deepEqual([manifestSummary(catchUpReserved.manifest).memeAmount, manifestSummary(catchUpReserved.manifest).quoteAmount], ["100", "0"]);
+    const nextDay = (BigInt(catchUpAtMs) + DAY_MS).toString();
+    await admin.query("UPDATE vault_reward_periods SET status='funded' WHERE vault_id=$1 AND end_ms=$2", [catchUpVault, catchUpAtMs]);
+    await admin.query("INSERT INTO checkpoint_journal(checkpoint,network,digest,epoch,timestamp_ms,total_transactions,format_version,payload,payload_hash) VALUES(21,'mainnet',$1,1,$2,1,1,''::bytea,decode(repeat('00',32),'hex'))", [digest("D"), nextDay]);
+    await admin.query("INSERT INTO blast_infra_fixture.checkpoint_headers VALUES(21,$1,$2)", [digest("D"), nextDay]);
+    await admin.query("UPDATE watermarks SET checkpoint_hi_inclusive=21,timestamp_ms_hi_inclusive=$1 WHERE pipeline IN ('market','intake')", [nextDay]);
+    await discoverPeriods(planner, scopedSettings, 8);
+    assert.deepEqual((await windows()).rows.filter(row => row.status === "planning"), [
+      { vault_id: catchUpVault, start_ms: catchUpAtMs, end_ms: nextDay, status: "planning" },
+      { vault_id: defaultVault, start_ms: DAY_MS.toString(), end_ms: (2n * DAY_MS).toString(), status: "planning" },
+    ], "the catch-up anchors the next 24-hour window while other vaults keep their old cadence");
   } finally { await planner.end();await watcher.end();await admin.end();await database.drop(); }
 });

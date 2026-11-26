@@ -72,6 +72,27 @@ process. Store credentials in service-scoped configuration. Verify
 deployment identity, reader provenance, permissions and custody before a
 signed worker pass. Require fresh release evidence for each enabled process.
 
+### Catch-up and daily holder payouts
+
+Set `REWARDS_NO_MINIMUM_VAULTS` on the planner to a JSON array of the approved
+vault IDs. Their newly frozen plans use any positive holder allocation, including
+rounds funded with a single asset. Holder eligibility and integer rounding
+continue to apply. A round's gas stays with the worker signer, with no reserve
+deducted from these vaults.
+
+To catch up, also set `REWARDS_CATCH_UP_AT_MS` to a fixed epoch millisecond cut
+after each selected vault's latest period end. Check that each vault has no open
+plan or pending publication and that the cut's preceding 24 hours start at or
+after its most recent paid window. Check the indexed holder price for each vault
+at the planned cut. Complete the planner handover before the old planner could
+open another window for these vaults, or stop and drain the old planner first.
+The planner uses the cut for the catch-up balances and the next 24-hour boundary.
+Remove the catch-up variable once those periods exist. Keep the vault list to
+retain the policy.
+Deploy the executor that understands the policy before setting it on the planner.
+On rollback, remove the planner opt-in first and let any already frozen no-minimum
+plans complete with the supporting executor before rolling that executor back.
+
 ### Incompatible holder reward policy cutovers
 
 1. After owner approval, stop and drain both live rewards workers. Confirm both old processes have exited and no old signer can submit more transactions. Resolve signing and signed custody with definitive chain effects or verified transaction expiry before proceeding.
