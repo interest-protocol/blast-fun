@@ -51,7 +51,7 @@ test("quote rows: tiny fees, missing USD and time", () => {
 
 test("amounts drop digits instead of rounding up, even where the browser ignores roundingMode", () => {
   // The cut itself, which is all Firefox 111–115 gets: it ignores roundingMode and rounds up.
-  assert.deepEqual([7.004749, 0.29, 0.000123456789, 1_234_567.89, 0, -7.004749].map((value) => cutDigits(value, 6)), [7.00474, 0.29, 0.000123456, 1_234_560, 0, -7.00474]);
+  assert.deepEqual([7.004749, 0.29, 0.000123456789, 1_234_567.89, 0, -7.004749, 1.9999999999999998, 3e-9].map((value) => cutDigits(value, 6)), [7.00474, 0.29, 0.000123456, 1_234_560, 0, -7.00474, 1.99999, 3e-9]);
   assert.equal(amountText(7.004749, 6), "7.00474");
   assert.equal(amountText(0.000123456789, 9), "0.000123456", "significant digits win over the decimal cap, as before");
   assert.equal(amountText(1_234_567.89, 6), "1,234,560");

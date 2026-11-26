@@ -109,14 +109,16 @@ export function amountText(value: number, decimals: number, digits = 6): string 
   return new Intl.NumberFormat("en-US", { maximumSignificantDigits: digits, maximumFractionDigits: Math.min(decimals, 8), roundingMode: "trunc" }).format(cutDigits(value, digits));
 }
 
-/** `value` cut, never rounded, to `digits` significant digits. */
+/**
+ * `value` cut, never rounded, to `digits` significant digits. It cuts the
+ * shortest decimal text of the number, so no multiplication adds float noise.
+ */
 export function cutDigits(value: number, digits: number): number {
   if (value === 0 || !Number.isFinite(value)) return value;
-  const kept = digits - Math.floor(Math.log10(Math.abs(value))) - 1;
-  // toPrecision drops float noise first: 0.29 * 100 is 28.999999999999996.
-  return kept >= 0
-    ? Math.trunc(Number((value * 10 ** kept).toPrecision(15))) / 10 ** kept
-    : Math.trunc(value / 10 ** -kept) * 10 ** -kept;
+  const [mantissa = "", exponent = "0"] = value.toExponential().split("e");
+  const sign = mantissa.startsWith("-") ? "-" : "";
+  const kept = mantissa.replace(/[-.]/g, "").slice(0, digits);
+  return Number(`${sign}${kept[0]}.${kept.slice(1) || "0"}e${exponent}`);
 }
 
 function feeText(quote: QuoteFacts, from: SourceToken): string {
@@ -179,6 +181,7 @@ export function quoteErrorText(error: unknown, chain: ChainInfo, token: SourceTo
 
 export const PAUSED_TEXT = "Bridging is paused. You can still deposit on Sui. Code: bridge_paused.";
 export const QUOTE_FAILED_TEXT = "Couldn’t get a price. Code: bridge_quote_failed.";
+export const LOAD_FAILED_TEXT = "Bridge to Sui couldn’t load. Code: bridge_load_failed.";
 /** A send that threw may still have reached the chain (Solana confirms after sending), so it never says nothing left. */
 export const SEND_FAILED_TEXT = "The bridge didn’t start. Check your wallet before you try again. Code: bridge_send_failed.";
 

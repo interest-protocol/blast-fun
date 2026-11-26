@@ -4,11 +4,13 @@ import clsx from "clsx";
 import { Component, lazy, Suspense, useState, type ReactNode } from "react";
 
 import { Button } from "#web/components/blast-ui/Button.tsx";
+import { DiagnosticText } from "#web/components/blast-ui/DiagnosticText.tsx";
 import { SkeletonBox, SkeletonRegion, SkeletonText } from "#web/components/blast-ui/Skeleton.tsx";
 
 import coinStyles from "../coins/coins.module.css";
 
 import type { BridgeCardProps } from "./BridgeCard.tsx";
+import { LOAD_FAILED_TEXT } from "./bridge-model.ts";
 import styles from "./bridge.module.css";
 
 // The Mayan SDK, ethers and web3.js load only when someone opens Bridge to Sui.
@@ -53,7 +55,7 @@ class ChunkBoundary extends Component<Readonly<{ onRetry: () => void; children: 
     if (!this.state.failed) return this.props.children;
     return (
       <div className={styles.form}>
-        <p className={clsx(coinStyles.status, styles.note)} role="alert">Bridge to Sui couldn’t load.</p>
+        <p className={clsx(coinStyles.status, styles.note)} role="alert"><DiagnosticText message={LOAD_FAILED_TEXT} /></p>
         <Button onClick={this.retry} size="lg" variant="secondary">Try again</Button>
       </div>
     );

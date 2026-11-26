@@ -203,12 +203,14 @@ function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent }: R
   const [rateChangedFor, setRateChangedFor] = useState<string | null>(null);
   const [sent, setSent] = useState<readonly BridgeRow[]>([]);
   const running = useRef(false);
-  // Closing the screen while a quote is on its way must not open the wallet afterwards.
-  const open = useRef(true);
+  // Closing the screen aborts: no wallet opens afterwards, from here or inside the SDK.
+  const life = useRef<AbortController | null>(null);
   useEffect(() => {
-    open.current = true;
-    return () => { open.current = false; };
+    const controller = new AbortController();
+    life.current = controller;
+    return () => controller.abort();
   }, []);
+  const signal = () => life.current!.signal;
   const inputs = keys.quoteKey.join("|");
 
   // Quote errors get quote copy here; anything after this point gets the send copy in `run`.
@@ -222,7 +224,7 @@ function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent }: R
       setFailed(quoteErrorText(error, info, token));
       return null;
     }
-    if (!open.current) return null;
+    if (signal().aborted) return null;
     const checked = guardQuote(fresh, ask, now());
     if (checked.ok) return fresh;
     console.error("Bridge quote refused before signing", checked.reason);
@@ -236,9 +238,12 @@ function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent }: R
     // Run now even offline: the quote fails with its copy, instead of pausing and prompting the wallet on reconnect.
     networkMode: "always",
     onError: (error) => {
+      // The person said no in the wallet: nothing to explain.
       if (rejected(error)) return;
-      if (isPausedError(error)) onPaused(error);
       console.error("Bridge failed", error);
+      // Closed: no card left to explain it on.
+      if (signal().aborted) return;
+      if (isPausedError(error)) onPaused(error);
       setFailed(isPausedError(error) ? PAUSED_TEXT : SEND_FAILED_TEXT);
     },
     // An approval or a bridge spends from the source wallet, gas included.
@@ -257,7 +262,7 @@ function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent }: R
   const approve = (ask: BridgeRequest, source: EvmWallet) => run(async () => {
     const fresh = await freshQuote(ask);
     if (!fresh) return;
-    await sdk.approve(fresh, source, chain);
+    await sdk.approve(fresh, source, chain, signal());
     // Re-check on the quote the approval was made for.
     queryClient.setQueryData(keys.allowanceKey, await sdk.allowanceEnough(fresh, source, chain));
   });
@@ -274,9 +279,9 @@ function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent }: R
       queryClient.setQueryData(keys.allowanceKey, false);
       return;
     }
-    if (!open.current) return;
+    if (signal().aborted) return;
     const record = (hash: string) => setSent((rows) => rows.some((row) => row.hash === hash) ? rows : [{ hash, chain, fromAmount, fromSymbol: token.symbol, toAmount: String(fresh.expectedAmountOut), toSymbol: to.symbol, state: "pending", at: new Date(now()).toISOString() }, ...rows]);
-    record(await sdk.send(fresh, ask, source, record));
+    record(await sdk.send(fresh, ask, source, record, signal()));
     routeEvent(fresh, chain, token);
     onSent();
     setRateChangedFor(null);
