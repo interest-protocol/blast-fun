@@ -1,6 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 
-import { HINTED_KEYS } from "#web/lib/query/invalidate.ts";
+import { HINTED_KEYS, saleDetailsHinted } from "#web/lib/query/invalidate.ts";
 import { queryKeys } from "#web/lib/query/keys.ts";
 
 import { recordHintPainted } from "./home/activity-hints";
@@ -21,7 +21,7 @@ export const VIEWER_SPREAD_MS = 10_000;
  * invalidation (OA-38). On each hint — a commit, a claim or a lifecycle row
  * landed somewhere, or the socket (re)connected and may have missed some —
  * the discovery reads a hint can move (`HINTED_KEYS`: every presale list page)
- * and sale details are invalidated: the ones on screen read again, once each however many
+ * and the sale details it can move (`saleDetailsHinted`) are invalidated: the ones on screen read again, once each however many
  * components show them, and the rest are marked stale for their next mount.
  * Lifecycle hints and resumed streams also refresh allocations, wallet metadata
  * and vesting, because a hidden tab may have missed a phase change; after a
@@ -40,6 +40,13 @@ export const VIEWER_SPREAD_MS = 10_000;
 export function hintInvalidation(client: QueryClient, source: FeedFreshnessSource, timers: GapTimers = browserGapTimers(), random = Math.random): () => void {
   let followup: unknown = null;
   let lifecyclePending = false;
+  // Every sale a lifecycle hint named, and any catch-up, since the last look. Taken before the gates, which keep
+  // one hint and drop the rest of a burst, so no sale that changed phase misses its read.
+  let namedSales = new Set<string>();
+  let namedCatchUp = false;
+  // The same, for the 30 s follow-up.
+  let followupSales = new Set<string>();
+  let followupCatchUp = false;
   let viewer: unknown = null;
   let viewerCancels = false;
   let scheduled: unknown = null;
@@ -71,22 +78,35 @@ export function hintInvalidation(client: QueryClient, source: FeedFreshnessSourc
   const look = (hint?: FreshnessHint) => {
     const phase = hint?.presaleId !== undefined;
     const lifecycle = phase || hint?.catchUp === true;
+    const sales = namedSales;
+    const catchUp = namedCatchUp;
+    namedSales = new Set();
+    namedCatchUp = false;
     lifecyclePending ||= lifecycle;
+    for (const sale of sales) followupSales.add(sale);
+    followupCatchUp ||= catchUp;
     if (followup === null) followup = timers.setTimeout(() => {
       followup = null;
-      if (visible()) void Promise.all(HINTED_KEYS.map((queryKey) => client.invalidateQueries({ queryKey }, { cancelRefetch: false })));
+      const details = saleDetailsHinted(followupSales, followupCatchUp);
+      if (visible()) void Promise.all([...HINTED_KEYS.map((queryKey) => client.invalidateQueries({ queryKey }, { cancelRefetch: false })), client.invalidateQueries(details, { cancelRefetch: false })]);
       if (lifecyclePending) readViewer(true, false);
       lifecyclePending = false;
+      followupSales = new Set();
+      followupCatchUp = false;
     }, 30_100 + Math.floor(random() * 5_000));
-    // The sale reads are public and edge-cached, so they go now. Plain hints leave the
-    // viewer's reads alone; its 60 s poll and the follow-up above cover them.
+    // The public reads are edge-cached, so they go now: the lists, sales still taking commits, and the
+    // sales named since the last look. Plain hints leave the viewer's reads alone; its 60 s poll and the
+    // follow-up above cover them.
     if (lifecycle) readViewer(phase, true);
-    void Promise.all(HINTED_KEYS.map((queryKey) => client.invalidateQueries({ queryKey }, { cancelRefetch: lifecycle }))).then(() =>
+    const details = saleDetailsHinted(sales, catchUp);
+    void Promise.all([...HINTED_KEYS.map((queryKey) => client.invalidateQueries({ queryKey }, { cancelRefetch: lifecycle })), client.invalidateQueries(details, { cancelRefetch: lifecycle })]).then(() =>
       recordHintPainted(LIVE_QUERIES_SURFACE, hint),
     );
   };
   const signal = (hint?: FreshnessHint) => {
     const lifecycle = hint?.presaleId !== undefined || hint?.catchUp === true;
+    if (hint?.presaleId !== undefined) namedSales.add(hint.presaleId);
+    namedCatchUp ||= hint?.catchUp === true;
     if (!(lifecycle ? lifecycleGate.admit(hint) : gate.admit(hint))) return;
     if (!(scheduledHint?.presaleId || scheduledHint?.catchUp) || lifecycle) scheduledHint = hint;
     if (scheduled !== null) return;

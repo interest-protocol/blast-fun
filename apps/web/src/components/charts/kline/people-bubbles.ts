@@ -5,17 +5,18 @@ import { tradeWalletLabels, WALLET_LABELS, type WalletLabel } from "#web/compone
 import { shiftDecimal } from "#web/components/launchpad/coin/coin-format.ts";
 import type { Bar } from "./kline-model.ts";
 
-/** One trade by one wallet: when, which way, its USD size when known, and its wallet tags. */
-export type PersonTrade = Readonly<{ address: string; timestampMs: number; side: "buy" | "sell"; usd: number | null; labels: readonly WalletLabel[] }>;
+/** One trade by one wallet: when, which way, its USD size when known, and its wallet tags. `id` is the activity row's position, unique per event. */
+export type PersonTrade = Readonly<{ id: string; address: string; timestampMs: number; side: "buy" | "sell"; usd: number | null; labels: readonly WalletLabel[] }>;
 
 /** One wallet on one bar: everything it bought and sold there. `bought`/`sold` are USD, null when a trade's size is unknown. */
 export type Person = Readonly<{
   address: string;
   bar: number;
-  /** Net side: a wallet that bought at least as much as it sold sits under the bar. */
+  /** Net side, the ring's colour: a wallet that bought at least as much as it sold is a buyer. */
   side: "buy" | "sell";
-  /** The bar's low for a buyer, its high for a seller (shown unit). */
-  value: number;
+  /** The bar's high and low (shown unit): the bubble sits clear of them. */
+  high: number;
+  low: number;
   bought: number | null;
   sold: number | null;
   buys: number;
@@ -23,6 +24,8 @@ export type Person = Readonly<{
   labels: readonly WalletLabel[];
   own: boolean;
   lastMs: number;
+  /** Every trade the wallet made on the bar, newest first. */
+  trades: readonly PersonTrade[];
 }>;
 
 /** Trades from the activity rows, sized in USD (the indexer's figure, else quote × the quote's USD price). */
@@ -34,7 +37,7 @@ export function personTrades(rows: readonly ActivityRow[], deployer: string | nu
     if (row.volumeUsd !== undefined) usd = Number(row.volumeUsd);
     else if (quote !== undefined && quoteDecimals !== null && quoteUsd !== null) usd = Number(shiftDecimal(quote.toString(), -quoteDecimals)) * Number(quoteUsd);
     const side = row.kind === "curve_buy" || row.kind === "venue_buy" ? "buy" : "sell";
-    return [{ address: row.actor, timestampMs: row.timestampMs, side, usd: usd !== null && Number.isFinite(usd) ? usd : null, labels: tradeWalletLabels(row, deployer) }];
+    return [{ id: row.position, address: row.actor, timestampMs: row.timestampMs, side, usd: usd !== null && Number.isFinite(usd) ? usd : null, labels: tradeWalletLabels(row, deployer) }];
   });
 }
 
@@ -63,14 +66,15 @@ const addUsd = (total: number | null, usd: number | null) => total === null || u
 
 /** One person per wallet per bar. `own` holds the viewer's wallets, lowercased. */
 export function barPeople(trades: readonly PersonTrade[], bars: readonly Bar[], own: ReadonlySet<string>): Person[] {
-  type Held = { address: string; index: number; bought: number | null; sold: number | null; buys: number; sells: number; labels: Set<WalletLabel>; lastMs: number };
+  type Held = { address: string; index: number; bought: number | null; sold: number | null; buys: number; sells: number; labels: Set<WalletLabel>; lastMs: number; trades: PersonTrade[] };
   const held = new Map<string, Held>();
   for (const trade of trades) {
     const index = barIndex(bars, trade.timestampMs);
     if (index === null) continue;
     const key = `${index}:${trade.address}`;
-    const person = held.get(key) ?? { address: trade.address, index, bought: 0, sold: 0, buys: 0, sells: 0, labels: new Set(), lastMs: trade.timestampMs };
+    const person = held.get(key) ?? { address: trade.address, index, bought: 0, sold: 0, buys: 0, sells: 0, labels: new Set(), lastMs: trade.timestampMs, trades: [] };
     if (trade.side === "buy") { person.buys++; person.bought = addUsd(person.bought, trade.usd); } else { person.sells++; person.sold = addUsd(person.sold, trade.usd); }
+    person.trades.push(trade);
     for (const label of trade.labels) person.labels.add(label);
     person.lastMs = Math.max(person.lastMs, trade.timestampMs);
     held.set(key, person);
@@ -79,64 +83,73 @@ export function barPeople(trades: readonly PersonTrade[], bars: readonly Bar[], 
     const bar = bars[person.index]!;
     const side = netSide(person);
     return {
-      address: person.address, bar: bar.timestamp, side, value: side === "buy" ? bar.low : bar.high,
+      address: person.address, bar: bar.timestamp, side, high: bar.high, low: bar.low,
       bought: person.buys ? person.bought : null, sold: person.sells ? person.sold : null, buys: person.buys, sells: person.sells,
       labels: LABEL_ORDER.filter((label) => person.labels.has(label)), own: own.has(person.address.toLowerCase()), lastMs: person.lastMs,
+      trades: [...person.trades].sort((a, b) => b.timestampMs - a.timestampMs),
     };
   }).sort((a, b) => b.lastMs - a.lastMs);
   // Own first, then newest; the layout keeps the visible ones up to MAX_PEOPLE.
   return [...people.filter((person) => person.own), ...people.filter((person) => !person.own)];
 }
 
-export type Point = Readonly<{ x: number; y: number }>;
-type Placed = Readonly<{ person: Person; point: Point }>;
+/** A bar on screen: its x, and the y of its high (`top`) and low (`bottom`), in px. */
+export type BarSpan = Readonly<{ x: number; top: number; bottom: number }>;
+type Placed = Readonly<{ person: Person; point: BarSpan }>;
 export type Bubble =
   | Readonly<{ kind: "person"; key: string; person: Person; x: number; y: number }>
   | Readonly<{ kind: "more"; key: string; people: readonly Person[]; x: number; y: number }>;
 
 /** Bubbles one column holds before the rest fold into "+N". */
 export const STACK_LIMIT = 3;
+/** Space between a bubble and the price it sits over, as a share of the bubble's size. */
+const CLEARANCE = .5;
+/** Px of the ring drawn around each bubble. */
+const RING = 2;
+/** Px above the highest price the chart keeps free, so one bubble fits over the top bar: the clearance plus the bubble. */
+export const bubbleHeadroom = (size: number) => Math.ceil(size * (1 + CLEARANCE)) + 4;
 
 /**
  * Where each bubble goes. Bubbles `size` px wide share a column when their bars are
  * closer than that (zoomed out); a column shows up to `STACK_LIMIT` people, the
  * viewer's own first and always, then tagged wallets, then the newest, and folds the
- * rest into one "+N". Buyers stack down from under the bar, sellers up from above it.
- * Nothing goes above `topInset` px, where the study legends sit.
+ * rest into one "+N". Every column stacks up from above the highest price under it,
+ * its own bars' and any `spans` (the bars on screen) within reach, so the price line
+ * and candles stay clear; a column with no room above goes under the lowest price
+ * instead. Nothing goes above `topInset` px, where the study legends sit. `halfBar` is
+ * half a drawn candle's width in px, so a wide candle beside the column counts as under it.
  */
-export function layoutBubbles(people: readonly Person[], place: (person: Person) => Point | null, width: number, height: number, size: number, topInset = 0): Bubble[] {
+export function layoutBubbles(people: readonly Person[], place: (person: Person) => BarSpan | null, width: number, height: number, size: number, topInset = 0, spans: readonly BarSpan[] = [], halfBar = 0): Bubble[] {
   if (width <= 0 || height <= 0 || size <= 0) return [];
   const visible: Placed[] = [];
   for (const person of people) {
     const point = place(person);
-    if (point && Number.isFinite(point.x) && Number.isFinite(point.y) && point.x >= 0 && point.x < width) visible.push({ person, point });
+    if (point && [point.x, point.top, point.bottom].every(Number.isFinite) && point.x >= 0 && point.x < width) visible.push({ person, point });
   }
   // People arrive own first, then newest: keep the viewer's own and the newest visible ones.
   const ownCount = visible.filter((placed) => placed.person.own).length;
   const kept = visible.slice(0, Math.max(ownCount, MAX_PEOPLE));
+  // Columns at least one bubble apart: a new one starts once a person sits `size` px past the last one's start.
+  const row = [...kept].sort((a, b) => a.point.x - b.point.x);
   const bubbles: Bubble[] = [];
-  for (const side of ["buy", "sell"] as const) {
-    // Columns at least one bubble apart: a new one starts once a person sits `size` px past the last one's start.
-    const row = kept.filter((placed) => placed.person.side === side).sort((a, b) => a.point.x - b.point.x);
-    let left = -Infinity;
-    let column: Placed[] = [];
-    const flush = () => {
-      if (!column.length) return;
-      const stack = stackColumn(`${side}:${Math.round(column[0]!.point.x)}`, side, column, height, size, left, topInset);
-      left = stack[0]!.x;
-      bubbles.push(...stack);
-    };
-    for (const placed of row) {
-      if (column.length && placed.point.x - column[0]!.point.x >= size) { flush(); column = []; }
-      column.push(placed);
-    }
-    flush();
+  let left = -Infinity;
+  let column: Placed[] = [];
+  const flush = () => {
+    if (!column.length) return;
+    const stack = stackColumn(column, { height, size, previousX: left, topInset, spans, halfBar });
+    left = stack[0]!.x;
+    bubbles.push(...stack);
+  };
+  for (const placed of row) {
+    if (column.length && placed.point.x - column[0]!.point.x >= size) { flush(); column = []; }
+    column.push(placed);
   }
+  flush();
   return bubbles;
 }
 
 /** One column's bubbles: the ranked people that fit, then a "+N" for the rest. */
-function stackColumn(key: string, side: Person["side"], placed: readonly Placed[], height: number, size: number, previousX: number, topInset: number): Bubble[] {
+function stackColumn(placed: readonly Placed[], { height, size, previousX, topInset, spans, halfBar }: Readonly<{ height: number; size: number; previousX: number; topInset: number; spans: readonly BarSpan[]; halfBar: number }>): Bubble[] {
   const ranked = [...placed].sort((a, b) => Number(b.person.own) - Number(a.person.own) || b.person.labels.length - a.person.labels.length || b.person.lastMs - a.person.lastMs);
   const own = ranked.filter((entry) => entry.person.own).length;
   const room = Math.max(own, ranked.length > STACK_LIMIT ? STACK_LIMIT - 1 : STACK_LIMIT);
@@ -145,21 +158,22 @@ function stackColumn(key: string, side: Person["side"], placed: readonly Placed[
   const slots = shown.length + (folded.length ? 1 : 0);
   // Centred on the people shown, but never closer than one bubble to the column before.
   const x = Math.max(shown.reduce((sum, entry) => sum + entry.point.x, 0) / shown.length, previousX + size);
-  const gap = size * .25, step = size * .8;
+  // Every bar the bubbles could cover: the column's own, and any whose candle reaches under the bubble or its ring.
+  const reach = size / 2 + RING + halfBar;
+  const under = [...placed.map((entry) => entry.point), ...spans.filter((span) => Math.abs(span.x - x) <= reach)];
+  const ceiling = Math.min(...under.map((span) => span.top));
+  const floor = Math.max(...under.map((span) => span.bottom));
+  const clearance = size * CLEARANCE + size / 2, step = size * .8, stack = (slots - 1) * step;
   const top = Math.min(topInset, height / 2) + size / 2, bottom = Math.max(top, height - size / 2);
-  // Anchor on the lowest low (buyers) or the highest high (sellers) in the column.
-  // A bar dragged off the top or bottom anchors at that edge, so its stack still fans out.
-  const ys = ranked.map((entry) => entry.point.y);
-  const anchor = clamp(side === "buy" ? Math.max(...ys) : Math.min(...ys), top - size / 2, height);
-  // Buyers stack down from under the bar, sellers up from over it; a stack that would
-  // run off the plot grows the other way, so its bubbles never pile on one spot.
-  const from = (way: number) => anchor + way * (gap + size / 2);
-  let way = side === "buy" ? 1 : -1;
-  const end = from(way) + way * (slots - 1) * step;
-  if (end > bottom || end < top) way = -way;
-  const at = (slot: number) => clamp(from(way) + way * slot * step, top, bottom);
+  // Over the price first, stacking up; under it, stacking down, when the top bar leaves no room;
+  // otherwise from the top edge down, so the bubbles still never pile on one spot. A bar dragged
+  // off the plot anchors at the edge it left by.
+  const above = Math.min(ceiling - clearance, bottom), below = Math.max(floor + clearance, top);
+  let at = (slot: number) => clamp(top + stack - slot * step, top, bottom);
+  if (above - stack >= top) at = (slot) => above - slot * step;
+  else if (below + stack <= bottom) at = (slot) => below + slot * step;
   const bubbles: Bubble[] = shown.map(({ person }, slot) => ({ kind: "person", key: `${person.bar}:${person.address}`, person, x, y: at(slot) }));
-  if (folded.length) bubbles.push({ kind: "more", key: `more:${key}`, people: folded, x, y: at(shown.length) });
+  if (folded.length) bubbles.push({ kind: "more", key: `more:${placed[0]!.person.bar}`, people: folded, x, y: at(shown.length) });
   return bubbles;
 }
 

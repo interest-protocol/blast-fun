@@ -540,15 +540,19 @@ const active: HomeCoin = { ...coin, coin_type: "0x2::coin::ACTV", symbol: "ACTV"
 const listed = () => [...document.querySelectorAll('ol[aria-label*=" coins, "] > li')].flatMap((row) => row.querySelector("strong")?.textContent ?? []);
 
 test("Trending lists ecosystem coins after the Blast coins with activity, half a page at most, and Add opens them", async () => {
+  const { INDEXED_POOL_COINS } = await import("@blast/core/modules/social/portfolio/core-coins.ts");
   const urls: string[] = [];
   const page = await mounted(async (url) => { urls.push(url); return Response.json({ ...answer, coins: [active, coin], ranked: 1 }); });
   try {
     assert.ok(urls.length > 0 && urls.every((url) => new URL(url, "https://blast.test").searchParams.get("ranked") === "1"), "Trending asks for the count");
-    assert.deepEqual(listed(), ["ACTV", "SUI", "USDC", "USDsui", "hashiBTC", "WAL", "KSTL"]);
-    await page.click("Open WAL in Focus");
+    // A coin with a tracked pool (WAL, DEEP, …) already has its own Home row, so it is never an ecosystem row too.
+    assert.deepEqual(listed(), ["ACTV", "SUI", "USDC", "USDsui", "hashiBTC", "BLUE", "KSTL"]);
+    const tracked = new Set<string>(INDEXED_POOL_COINS.map((each) => each.symbol));
+    assert.deepEqual(listed().filter((symbol) => tracked.has(symbol)), []);
+    await page.click("Open BLUE in Focus");
     const snapshot = page.store.getSnapshot();
     const panel = snapshot.panels[snapshot.visible_order[0]!]!;
-    assert.equal(panel.coin_type, "0x356a26eb9e012a68958082340d4c4116e7f55615cf27affcff209cf0ae544f59::wal::WAL");
+    assert.equal(panel.coin_type, "0xe1b45a0e641b9955a20aa0ad1c1f4ad86aad8afb07296d4085e349a50e90bdca::blue::BLUE");
     assert.equal(panel.presale_id, null);
     assert.equal(panel.active_namespace, "coin");
   } finally {
@@ -556,9 +560,9 @@ test("Trending lists ecosystem coins after the Blast coins with activity, half a
   }
 });
 
-test("All ecosystem coins lists every curated coin a page at a time with fresh prices only, and Add opens USDsui", async () => {
-  const { CORE_COINS } = await import("@blast/core/modules/social/portfolio/core-coins.ts");
-  const usdsui = CORE_COINS.find((each) => each.symbol === "USDsui")!;
+test("All ecosystem coins lists every curated coin without a tracked pool a page at a time with fresh prices only, and Add opens USDsui", async () => {
+  const { ECOSYSTEM_LIST_COINS } = await import("@blast/core/modules/social/portfolio/core-coins.ts");
+  const usdsui = ECOSYSTEM_LIST_COINS.find((each) => each.symbol === "USDsui")!;
   const page = await mounted(async (url) => {
     const parsed = new URL(url, "https://blast.test");
     if (parsed.pathname !== "/api/social/prices") return Response.json({ ...answer, coins: [active, coin], ranked: 1 });
@@ -574,11 +578,11 @@ test("All ecosystem coins lists every curated coin a page at a time with fresh p
     assert.equal(document.activeElement, region(), "the button left with the lead, so focus moves to the list it opened");
     assert.ok([...document.querySelectorAll("p")].some((note) => note.textContent === "Ecosystem coins"), "the list names itself while no tab is pressed");
     const rows = () => [...region()!.querySelectorAll("li")];
-    assert.deepEqual(rows().map((row) => row.querySelector("strong")?.textContent), CORE_COINS.slice(0, 10).map((each) => each.symbol));
+    assert.deepEqual(rows().map((row) => row.querySelector("strong")?.textContent), ECOSYSTEM_LIST_COINS.slice(0, 10).map((each) => each.symbol));
     const figure = (symbol: string) => rows().find((row) => row.querySelector("strong")?.textContent === symbol)!.textContent;
     assert.match(figure("USDsui"), /\$0\.9998/);
-    assert.doesNotMatch(figure("WAL"), /\$/, "no market price, no figure");
-    assert.ok(region()!.querySelector(`[aria-label="Page ${Math.ceil(CORE_COINS.length / 10)}"]`), "every coin is a page away");
+    assert.doesNotMatch(figure("hashiBTC"), /\$/, "no market price, no figure");
+    assert.ok(region()!.querySelector(`[aria-label="Page ${Math.ceil(ECOSYSTEM_LIST_COINS.length / 10)}"]`), "every coin is a page away");
     await page.click("Open USDsui in Focus");
     const snapshot = page.store.getSnapshot();
     assert.equal(snapshot.panels[snapshot.visible_order[0]!]!.coin_type, usdsui.coinType);
@@ -671,9 +675,9 @@ test("a held ranking keeps its ecosystem rows in place until Update ranking", as
     ranked = 2;
     await act(async () => { await page.client.refetchQueries(); });
     await page.settle();
-    assert.deepEqual(listed(), ["ACTV", "SUI", "USDC", "USDsui", "hashiBTC", "WAL", "KSTL"], "no row moves under the pointer");
+    assert.deepEqual(listed(), ["ACTV", "SUI", "USDC", "USDsui", "hashiBTC", "BLUE", "KSTL"], "no row moves under the pointer");
     await page.click("Update ranking");
-    assert.deepEqual(listed(), ["ACTV", "KSTL", "SUI", "USDC", "USDsui", "hashiBTC", "WAL"]);
+    assert.deepEqual(listed(), ["ACTV", "KSTL", "SUI", "USDC", "USDsui", "hashiBTC", "BLUE"]);
   } finally {
     await page.dispose();
   }
@@ -688,9 +692,9 @@ test("a pointer over the list holds its ecosystem rows in place until it leaves"
     ranked = 2;
     await act(async () => { await page.client.refetchQueries(); });
     await page.settle();
-    assert.deepEqual(listed(), ["ACTV", "SUI", "USDC", "USDsui", "hashiBTC", "WAL", "KSTL"], "no row moves under the pointer");
+    assert.deepEqual(listed(), ["ACTV", "SUI", "USDC", "USDsui", "hashiBTC", "BLUE", "KSTL"], "no row moves under the pointer");
     await act(async () => { row.dispatchEvent(new page.dom.window.MouseEvent("pointerout", { bubbles: true, relatedTarget: document.body })); });
-    assert.deepEqual(listed(), ["ACTV", "KSTL", "SUI", "USDC", "USDsui", "hashiBTC", "WAL"]);
+    assert.deepEqual(listed(), ["ACTV", "KSTL", "SUI", "USDC", "USDsui", "hashiBTC", "BLUE"]);
   } finally {
     await page.dispose();
   }
@@ -710,7 +714,7 @@ test("New lists ecosystem coins after every Blast coin, with or without a launch
     assert.deepEqual(listed(), ["ACTV", "KSTL"], "page 1 of 2 holds Blast coins only");
     assert.equal(urls.filter((url) => url.searchParams.get("sort") === "newest" && url.searchParams.has("ranked")).length, 0, "New does not ask for the count");
     await page.click("Next page");
-    assert.deepEqual(listed(), ["ACTV", "KSTL", "SUI", "USDC", "USDsui", "hashiBTC", "WAL"]);
+    assert.deepEqual(listed(), ["ACTV", "KSTL", "SUI", "USDC", "USDsui", "hashiBTC", "BLUE"]);
   } finally {
     await page.dispose();
   }

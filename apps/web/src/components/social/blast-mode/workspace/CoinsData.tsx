@@ -70,7 +70,7 @@ import {
 import type { DataControls } from "@blast/core/modules/social/blast-workspace/setup.ts";
 import { fetchListedTradeCoins } from "../../coins/swap-client";
 import type { SocialTradeCoin } from "@blast/core/web/contracts/trades.ts";
-import { CORE_COINS } from "@blast/core/modules/social/portfolio/core-coins.ts";
+import { ECOSYSTEM_LIST_COINS } from "@blast/core/modules/social/portfolio/core-coins.ts";
 import { CoinMark } from "#web/components/blast-ui/CoinMark.tsx";
 import { InspectValue } from "#web/components/blast-ui/InspectValue.tsx";
 import { readablePrice } from "#web/lib/market-format.ts";
@@ -467,12 +467,12 @@ function TradeCoinRow({ coin }: Readonly<{ coin: Pick<SocialTradeCoin, "coin_typ
   );
 }
 
-/** The curated ecosystem coins (`CORE_COINS` order), at most half a page so Blast coins always show, then the way to all of them. They carry no Blast figures, so none are shown. */
+/** The curated ecosystem coins (`ECOSYSTEM_LIST_COINS`, in `CORE_COINS` order), at most half a page so Blast coins always show, then the way to all of them. They carry no Blast figures, so none are shown. */
 function EcosystemRows({ rows }: Readonly<{ rows: number }>) {
   const show = useContext(ShowEcosystem);
   return (
     <>
-      {CORE_COINS.slice(0, Math.floor(rows / 2)).map((coin) => <EcosystemRow key={coin.coinType} coin={coin} usdPrice={null} />)}
+      {ECOSYSTEM_LIST_COINS.slice(0, Math.floor(rows / 2)).map((coin) => <EcosystemRow key={coin.coinType} coin={coin} usdPrice={null} />)}
       {show && (
         <li className={styles.controls}>
           <Button variant="secondary" size="sm" type="button" onClick={show}>All ecosystem coins</Button>
@@ -486,7 +486,7 @@ function EcosystemRows({ rows }: Readonly<{ rows: number }>) {
 function EcosystemCoins({ rows }: Readonly<{ rows: number }>) {
   const [page, setPage] = useState(1);
   const list = useRef<HTMLOListElement>(null);
-  const pages = Math.ceil(CORE_COINS.length / rows);
+  const pages = Math.ceil(ECOSYSTEM_LIST_COINS.length / rows);
   const shown = Math.min(page, pages);
   // A new list or page starts at the top, as the Discover pager does.
   useLayoutEffect(() => {
@@ -496,19 +496,19 @@ function EcosystemCoins({ rows }: Readonly<{ rows: number }>) {
   return (
     <>
       <ol ref={list} className={styles.list}>
-        {CORE_COINS.slice((shown - 1) * rows, shown * rows).map((coin) => <PricedEcosystemRow key={coin.coinType} coin={coin} />)}
+        {ECOSYSTEM_LIST_COINS.slice((shown - 1) * rows, shown * rows).map((coin) => <PricedEcosystemRow key={coin.coinType} coin={coin} />)}
       </ol>
       <Pager className={styles.coinsPager} what="coins" page={shown} pages={pages} onPage={setPage} />
     </>
   );
 }
 
-function PricedEcosystemRow({ coin }: Readonly<{ coin: (typeof CORE_COINS)[number] }>) {
+function PricedEcosystemRow({ coin }: Readonly<{ coin: (typeof ECOSYSTEM_LIST_COINS)[number] }>) {
   const usdPrice = useQuoteUsd(coin.coinType);
   return <EcosystemRow coin={coin} usdPrice={usdPrice} />;
 }
 
-function EcosystemRow({ coin, usdPrice }: Readonly<{ coin: (typeof CORE_COINS)[number]; usdPrice: string | null }>) {
+function EcosystemRow({ coin, usdPrice }: Readonly<{ coin: (typeof ECOSYSTEM_LIST_COINS)[number]; usdPrice: string | null }>) {
   return <TradeCoinRow coin={{ coin_type: coin.coinType, symbol: coin.symbol, name: coin.name, icon_url: coin.logoUrl, usd_price: usdPrice, presale_id: null, in_presale: false }} />;
 }
 

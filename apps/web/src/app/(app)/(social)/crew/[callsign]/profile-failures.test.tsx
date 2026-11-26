@@ -23,7 +23,7 @@ test("missing profiles remain not-found; backend failures reject metadata and co
   assert.deepEqual(await generateMetadata({ params: params() }), { title: "Page not found" });
   await assert.rejects(connectionsPage(params()), /NEXT_HTTP_ERROR_FALLBACK;404/);
   profile = { callsign: "kaimoreno", display_name: "Kai" };
-  assert.deepEqual(await generateMetadata({ params: params() }), { title: "Kai" });
+  assert.deepEqual(await generateMetadata({ params: params() }), { title: "Kai", alternates: { canonical: "/@kaimoreno" } });
   assert.equal((await connectionsPage(params())).props.profile, profile);
   failure = new Error("backend unavailable");
   await assert.rejects(generateMetadata({ params: params() }), error => error === failure);
