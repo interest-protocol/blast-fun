@@ -8,7 +8,7 @@ import { reviewVestingAmount } from "./creation-display";
 const A = `0x${"a".repeat(64)}`;
 const coin = PUBLIC_PREFERRED_COINS.find((item) => item.symbol === "SUI")!;
 const review: CreationReviewState = {
-  coin, sender: A, timezone: "Europe/Lisbon",
+  coin, sender: A,
   intent: { action: "create", coinType: coin.coinType, total: "124968397112711982", beneficiary: A, refundRecipient: A, cancelCapRecipient: `0x${"b".repeat(64)}`,
     schedule: { kind: "linear", start_ms: String(Date.parse("2026-10-17T22:30:00Z")), period_ms: "2592000000", periods: "12", cliff_ms: "0" } },
   attempt: { request_id: "fixture", action: "create", state: "submitted", digest: "fixture", transaction_bytes: "not-signable", schedule_id: null, gas_budget: "7388640", expires_at_ms: 9999999999999, sponsor_reservation_id: "fixture" },

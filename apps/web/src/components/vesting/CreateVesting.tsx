@@ -156,7 +156,6 @@ function useCreationForm() {
   function touch(field: string) {
     setTouched((previous) => new Set([...previous, field]));
   }
-  const timezone = "UTC";
   const selectedBalance = useWalletCoinBalance(wallet.wallet, coin?.coinType ?? "", !!coin);
   const gasBalance = useWalletCoinBalance(wallet.wallet, SUI_COIN_TYPE, wallet.fee === "wallet");
   const balance = coin && selectedBalance.status === "ready"
@@ -216,7 +215,7 @@ function useCreationForm() {
             "Your connected wallet changed. Review again with the current wallet.",
           );
         }
-        setReview({ intent, attempt, coin, timezone, sender: wallet.wallet });
+        setReview({ intent, attempt, coin, sender: wallet.wallet });
       },
       setError,
       () => setPreparing(false),
@@ -298,7 +297,6 @@ function useCreationForm() {
     prepare,
     confirm,
     error,
-    timezone,
     walletNotice,
   };
 }
@@ -329,7 +327,6 @@ export function CreateVesting() {
             <LiveSummary
               draft={form.draft}
               coin={form.coin}
-              timezone={form.timezone}
             />
           </div>
           <div className={createStyles.reviewAction}>
@@ -747,7 +744,7 @@ function RecipientFields({ form }: Readonly<{ form: CreationForm }>) {
 const SCHEDULE_KINDS = [["linear", "Linear"], ["checkpoints", "Release dates"]] as const;
 
 function ScheduleFields({ form }: Readonly<{ form: CreationForm }>) {
-  const { draft, update, timezone } = form;
+  const { draft, update } = form;
   const region = useRef<HTMLDivElement>(null);
   const kinds = useRef<HTMLDivElement>(null);
   useFeedbackReveal(draft.kind, region, { duration: 180, offset: 4 });
@@ -787,7 +784,6 @@ function ScheduleFields({ form }: Readonly<{ form: CreationForm }>) {
               error={
                 form.issue?.field === "start" ? form.issue.message : undefined
               }
-              timezone={timezone}
             />
             <ScheduleField
               id="vesting-end"
@@ -796,7 +792,6 @@ function ScheduleFields({ form }: Readonly<{ form: CreationForm }>) {
               onChange={(end) => update({ end })}
               onBlur={() => form.touch("end")}
               error={form.issue?.field === "end" ? form.issue.message : undefined}
-              timezone={timezone}
             />
 
             <label>
@@ -835,7 +830,6 @@ function CheckpointGenerator({ form }: Readonly<{ form: CreationForm }>) {
         releases: regularCheckpointReleases(
           draft,
           amountAtoms(draft.total, draft.decimals),
-          form.timezone,
         ),
       });
       setError(null);
@@ -857,7 +851,6 @@ function CheckpointGenerator({ form }: Readonly<{ form: CreationForm }>) {
           value={draft.start}
           onChange={(start) => update({ start })}
           onBlur={() => form.touch("start")}
-          timezone={form.timezone}
         />
         <div className={createStyles.pair}>
           <label>
@@ -1062,7 +1055,6 @@ function ReleaseRow({ row, index, form, patch, remove }: Readonly<{
       value={row.date}
       onChange={(date) => patch({ date })}
       onBlur={() => form.touch(`date-${row.key}`)}
-      timezone={form.timezone}
       error={
         form.issue?.field === `date-${row.key}`
           ? form.issue.message

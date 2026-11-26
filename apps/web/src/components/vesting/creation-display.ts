@@ -19,14 +19,11 @@ export function compactVestingAmount(atoms: bigint, decimals: number): string {
   return formatVestingAmount(atoms, decimals);
 }
 
-export function localVestingDate(
-  value: bigint | string,
-  timezone: string,
-): string {
+export function vestingDate(value: bigint | string): string {
   const ms = BigInt(value);
   if (ms > 8_640_000_000_000_000n) return `Unix ${ms} ms`;
   return new Intl.DateTimeFormat("en-GB", {
-    timeZone: timezone,
+    timeZone: "UTC",
     day: "numeric",
     month: "short",
     year: "numeric",

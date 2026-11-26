@@ -13,7 +13,6 @@ import {
   SUI_FEE_RESERVE_ATOMS,
 } from "#web/components/social/coins/coin-model.ts";
 import { SUI_COIN_TYPE } from "@blast/core/lib/sui/coin-types.ts";
-import { wallInstants, zonedInstant, zonedString } from "./zoned-time";
 
 const DAY = 86_400_000n;
 export type Release = Readonly<{ key: string; date: string; amount: string }>;
@@ -57,23 +56,28 @@ function integer(text: string, field: string, minimum: bigint): bigint {
   return BigInt(text);
 }
 
-export function releaseTimestamp(
-  text: string,
-  field: string,
-  timezone = "UTC",
-): bigint {
-  try {
-    // A wall time in a daylight-saving gap or overlap is refused unless it names its offset.
-    const local = text.includes("[") ? null : wallInstants(text, timezone);
-    const value = local ? (local.length === 1 ? local[0] : null) : zonedInstant(text);
-    if (value == null || !Number.isSafeInteger(value) || value <= 0) throw new RangeError();
-    return BigInt(value);
-  } catch {
-    throw new CreationFieldError(
-      field,
-      `Choose a valid date and time in ${timezone}. For a time in another zone, include its zone and explicit UTC offset.`,
-    );
+/** "YYYY-MM-DDTHH:mm[:ss[.sss]][Z]", always read as UTC. */
+const UTC_WALL = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{3}))?)?Z?$/;
+
+export function releaseTimestamp(text: string, field: string): bigint {
+  const parts = UTC_WALL.exec(text)?.slice(1).map((part) => Number(part ?? 0));
+  if (parts) {
+    const [year, month, day, hour, minute, second, ms] = parts as [number, number, number, number, number, number, number];
+    const value = Date.UTC(year, month - 1, day, hour, minute, second, ms);
+    const date = new Date(value);
+    // Date.UTC rolls 30 Feb into March and 24:00 into the next day; refuse those.
+    if (
+      value > 0 &&
+      date.getUTCFullYear() === year &&
+      date.getUTCMonth() === month - 1 &&
+      date.getUTCDate() === day &&
+      date.getUTCHours() === hour &&
+      date.getUTCMinutes() === minute &&
+      date.getUTCSeconds() === second
+    )
+      return BigInt(value);
   }
+  throw new CreationFieldError(field, "Choose a valid date and time in UTC.");
 }
 
 export function amountAtoms(
@@ -237,7 +241,6 @@ export function linearReleaseSummary(
 export function regularCheckpointReleases(
   input: ScheduleInput,
   total: bigint,
-  timezone = "UTC",
 ): readonly Release[] {
   const count = integer(input.periods, "periods", 1n);
   if (count > 256n)
@@ -251,8 +254,7 @@ export function regularCheckpointReleases(
       throw new CreationFieldError("periods", "Choose a shorter schedule.");
     return {
       key: `regular-${index}`,
-      // Keep the instant and UTC offset through DST changes and local editing.
-      date: zonedString(Number(time), timezone),
+      date: new Date(Number(time)).toISOString(),
       amount: formatVestingAmount(amount, input.decimals),
     };
   });

@@ -45,7 +45,7 @@
 .trigger [data-placeholder] {
   color: var(--muted);
 }
-.trigger[aria-invalid="true"] {
+.trigger[data-invalid] {
   border-color: var(--down);
 }
 :global([data-blast-ui]) .trigger:focus-visible {
@@ -138,7 +138,7 @@
   height: 1rem;
   fill: currentColor;
 }
-.navButton:disabled {
+.navButton[aria-disabled="true"] {
   color: var(--muted);
   cursor: not-allowed;
 }
@@ -197,7 +197,7 @@
   box-shadow: none;
 }
 @media (hover: hover) and (pointer: fine) {
-  .navButton:not(:disabled):hover,
+  .navButton:not([aria-disabled="true"]):hover,
   .captionLabel:hover,
   .day:not(.selected) .dayButton:hover {
     background: var(--raised);
@@ -207,25 +207,6 @@
   color: var(--down);
   font-size: 0.75rem;
   grid-column: 1 / -1;
-}
-.field .timezone {
-  grid-column: 1 / -1;
-  color: var(--muted);
-  font-size: 0.75rem;
-  font-weight: 400;
-}
-.occurrences {
-  grid-column: 1 / -1;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  font-size: 0.75rem;
-}
-.occurrences span {
-  width: 100%;
-}
-.occurrences button[aria-pressed="true"] {
-  box-shadow: inset 0 0 0 1px var(--ink);
 }
 @media (max-width: 500px) {
   .field {
