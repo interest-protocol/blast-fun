@@ -258,7 +258,11 @@ function Signal({
   return (
     <li>
       <IntentLink
-        href={event.coin.presale_id === null ? coinPagePath(event.coin.coin_type) : presaleHref(event.coin.presale_id)}
+        href={
+          event.coin.presale_id === null
+            ? coinPagePath(event.coin.coin_type)
+            : presaleHref(event.coin.presale_id)
+        }
         className={styles.event}
       >
         {content}

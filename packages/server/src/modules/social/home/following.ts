@@ -240,8 +240,6 @@ async function readFollowingTape(
   return { mode: "tape", window: request.window, clock_ms: bounds.clockMs, events, as_of: asOf };
 }
 
-/** A standalone coin's key (a coin type), as against a presale id. */
-
 /** The whole Following route body, by mode. */
 export async function readHomeFollowing(
   db: ReadableDatabase,
