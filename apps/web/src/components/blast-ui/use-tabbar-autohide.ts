@@ -40,7 +40,9 @@ export function useTabBarAutoHide() {
         last = y;
       }
     };
-    const onScroll = () => { frame ||= requestAnimationFrame(update); };
+    const onScroll = () => {
+      if (frame === 0) frame = requestAnimationFrame(update);
+    };
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => {
       window.removeEventListener("scroll", onScroll);
