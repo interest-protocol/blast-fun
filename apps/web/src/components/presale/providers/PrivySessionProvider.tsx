@@ -1,60 +1,42 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback, useContext, useEffect, useMemo, useState, type ComponentType, type ReactNode } from "react";
+import { useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ComponentType, type ReactNode } from "react";
 import { useHydrated } from "#web/components/ui-libraries/use-hydrated.tsx";
 import {
   PrivySessionContext,
   privySessionValue,
   type PrivyLoginListener,
-  type PrivyRuntime,
 } from "#web/components/auth/privy-session.ts";
 import type { PrivySessionRuntimeProps } from "./PrivySessionRuntime.tsx";
+import { PrivyStart } from "./privy-start.ts";
 
-/** Calls `onUnavailable` once: the SDK's code did not load, so the page stays signed out. */
-function RuntimeUnavailable({ onUnavailable }: Readonly<{ onUnavailable: () => void }>) {
-  useEffect(onUnavailable, [onUnavailable]);
+/** Marks the start failed: the SDK's code did not load, so the page stays signed out. */
+function RuntimeUnavailable({ start }: Pick<PrivySessionRuntimeProps, "start">) {
+  useEffect(() => start.fail(), [start]);
   return null;
 }
 
-type RuntimeComponent = ComponentType<PrivySessionRuntimeProps & Readonly<{ onUnavailable: () => void }>>;
+type RuntimeComponent = ComponentType<PrivySessionRuntimeProps>;
 
 // Privy, WalletConnect and the wallet kits load in their own chunk, never with the page.
-// A failed load is kept by its component, so a retry needs a fresh one, which later providers share.
+// `next/dynamic` keeps a failed load, so the failure swaps in a fresh loader at once:
+// the retry, and any provider mounted later, loads the chunk again.
 let latestRuntime: RuntimeComponent = runtimeLoader();
 function runtimeLoader(): RuntimeComponent {
-  return dynamic<PrivySessionRuntimeProps & Readonly<{ onUnavailable: () => void }>>(() => import("./PrivySessionRuntime.tsx").catch(() => RuntimeUnavailable), { ssr: false });
+  const runtime = dynamic<PrivySessionRuntimeProps>(
+    () => import("./PrivySessionRuntime.tsx").catch(() => {
+      if (latestRuntime === runtime) latestRuntime = runtimeLoader();
+      return RuntimeUnavailable;
+    }),
+    { ssr: false },
+  );
+  return runtime;
 }
 
-/** `load` callers wait here until Privy is ready, or until its code fails to load. */
-class PendingStart {
-  #runtime: PrivyRuntime | null = null;
-  #failed = false;
-  #waiting = new Set<Readonly<{ resolve: (runtime: PrivyRuntime) => void; reject: (error: Error) => void }>>();
-
-  /** Resolves with the started runtime; after a failed load, `retry` loads the code again first. */
-  wait(retry: () => void): Promise<PrivyRuntime> {
-    if (this.#runtime) return Promise.resolve(this.#runtime);
-    if (this.#failed) {
-      this.#failed = false;
-      retry();
-    }
-    return new Promise((resolve, reject) => this.#waiting.add({ resolve, reject }));
-  }
-
-  started(runtime: PrivyRuntime | null): void {
-    this.#runtime = runtime;
-    if (!runtime) return;
-    for (const { resolve } of this.#waiting) resolve(runtime);
-    this.#waiting.clear();
-  }
-
-  failed(): void {
-    this.#failed = true;
-    for (const { reject } of this.#waiting) reject(new Error("Privy did not start. Try again."));
-    this.#waiting.clear();
-  }
-}
+// Privy's API client sets no request timeout, so a hung startup request leaves it neither
+// ready nor failed. Nothing else would end that wait.
+const PRIVY_START_TIMEOUT_MS = 15_000;
 
 /**
  * Whether a `PrivySessionProvider` is above: `WalletProvider` mounts it only
@@ -91,8 +73,9 @@ function browserPrivySession(): boolean {
  * (`sessionCookie` from the request, Privy's own storage, or a sign-in
  * returning to the page) or when a sign-in asks for it (`load`). Until it has
  * started, readers see a stable signed-out value: not ready while a session
- * is expected. A failed load leaves the page signed out; the next `load`
- * tries again.
+ * is expected. A failed start (the code did not load, Privy reported an
+ * error, or it was not ready within 15 s) unmounts the SDK and leaves the
+ * page signed out; the next `load` mounts it again.
  *
  * Privy's hooks need its provider above them, and `next/dynamic` cannot keep
  * the page mounted while that provider loads above it; swapping it in would
@@ -114,25 +97,21 @@ export function PrivySessionProvider({
   const stored = useMemo(() => hydrated && browserPrivySession(), [hydrated]);
   const expected = sessionCookie || stored;
   const [requested, setRequested] = useState(false);
-  const [unavailable, setUnavailable] = useState(false);
   const [Runtime, setRuntimeComponent] = useState<{ component: RuntimeComponent }>(() => ({ component: latestRuntime }));
-  const [runtime, setRuntime] = useState<PrivyRuntime | null>(null);
   const [listeners] = useState(() => new Set<PrivyLoginListener>());
-  const [pending] = useState(() => new PendingStart());
-  // The runtime is published once Privy is ready: that answers every waiting `load`.
-  useEffect(() => pending.started(runtime), [pending, runtime]);
+  const [start] = useState(() => new PrivyStart());
+  const { runtime, failed, attempt } = useSyncExternalStore(start.subscribe, start.state, start.state);
+  useEffect(() => () => start.stop(), [start]);
   const load = useCallback(() => {
     setRequested(true);
-    return pending.wait(() => {
-      setUnavailable(false);
-      latestRuntime = runtimeLoader();
-      setRuntimeComponent({ component: latestRuntime });
-    });
-  }, [pending]);
-  const onUnavailable = useCallback(() => {
-    setUnavailable(true);
-    pending.failed();
-  }, [pending]);
+    return start.wait(() => setRuntimeComponent({ component: latestRuntime }));
+  }, [start]);
+  const active = !failed && (requested || expected);
+  useEffect(() => {
+    if (!active || runtime) return;
+    const timer = setTimeout(() => start.fail(), PRIVY_START_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [active, attempt, runtime, start]);
   const subscribe = useCallback((listener: PrivyLoginListener) => {
     listeners.add(listener);
     return () => void listeners.delete(listener);
@@ -142,15 +121,16 @@ export function PrivySessionProvider({
   }, [listeners]);
 
   const value = useMemo(
-    () => privySessionValue(runtime, unavailable || (hydrated && !expected), load, subscribe),
-    [expected, hydrated, load, runtime, subscribe, unavailable],
+    () => privySessionValue(runtime, failed || (hydrated && !expected), load, subscribe),
+    [expected, failed, hydrated, load, runtime, subscribe],
   );
   // A stable element: the SDK re-renders only on its own changes, not on the session it publishes.
+  // Each retry mounts a fresh SDK (`attempt`), never the one that failed.
   const sdk = useMemo(
-    () => requested || expected
-      ? <Runtime.component appId={appId} emit={emit} nonce={nonce} onChange={setRuntime} onUnavailable={onUnavailable} />
+    () => active
+      ? <Runtime.component key={attempt} appId={appId} emit={emit} nonce={nonce} start={start} />
       : null,
-    [Runtime, appId, emit, expected, nonce, onUnavailable, requested],
+    [Runtime, active, appId, attempt, emit, nonce, start],
   );
   return (
     <PrivySessionContext value={value}>

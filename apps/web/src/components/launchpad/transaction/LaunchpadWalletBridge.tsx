@@ -9,7 +9,7 @@
 import { normalizeSuiAddress } from "@mysten/sui/utils";
 import type { User } from "@privy-io/react-auth";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { startPrivy, usePrivyLoginEvents, usePrivySession } from "#web/components/auth/privy-session.ts";
+import { usePrivyLoginEvents, usePrivySession } from "#web/components/auth/privy-session.ts";
 import { PrivySessionProvider, usePrivySessionMounted } from "#web/components/presale/providers/PrivySessionProvider.tsx";
 
 import type { SignerKind } from "./action-machine";
@@ -87,13 +87,15 @@ function PrivyPart({ onReady, network }: Readonly<{ onReady: PartReady; network:
   useEffect(() => {
     load().catch(() => undefined); // `connect` and signing report a failed load.
   }, [load]);
-  // Offer every wallet, including mobile pairing, as soon as Privy starts: it builds the
-  // WalletConnect entries asynchronously after the list changes, so they must not wait for login.
-  const enableWallets = session.runtime?.enableWallets;
+  // A signed-out visitor gets every wallet, including mobile pairing, as soon as Privy starts:
+  // it builds the WalletConnect entries asynchronously, so they must not wait for login.
+  // A signed-in trader never opens the picker, so WalletConnect stays off.
+  const runtime = session.runtime;
+  const enableWallets = runtime && !runtime.authenticated ? runtime.enableWallets : undefined;
   useEffect(() => enableWallets?.("picker"), [enableWallets]);
 
   useEffect(() => {
-    const started = async () => latest.current ?? startPrivy(load);
+    const started = async () => latest.current ?? load();
     const state = {
       network,
       ready: started,

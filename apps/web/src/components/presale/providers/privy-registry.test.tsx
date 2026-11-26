@@ -5,6 +5,10 @@ import { JSDOM } from "jsdom";
 import { act, StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
+import { PrivyStart } from "./privy-start.ts";
+
+// The page's start; these tests only watch the SDK's wallet clients.
+const start = new PrivyStart();
 
 type Wallet = { name: string; version: string; icon: string; chains: string[]; accounts: never[]; features: Record<string, never> };
 const wallets = new Set<Wallet>();
@@ -54,7 +58,7 @@ const noop = () => undefined;
 
 test("T-008: real SDK discovers added and removed wallets after absence while unchanged remounts retain one client", async () => {
   for (const appId of ["server-A", "server-B"]) {
-    renderToStaticMarkup(<PrivySessionRuntime appId={appId} emit={noop} nonce={null} onChange={noop} />);
+    renderToStaticMarkup(<PrivySessionRuntime appId={appId} emit={noop} nonce={null} start={start} />);
   }
   assert.equal(walletConnectInstances.size, 0, "server requests create no browser wallet clients");
   const dom = new JSDOM('<div id="mount"></div>', { url: "https://blast.test" });
@@ -62,7 +66,7 @@ test("T-008: real SDK discovers added and removed wallets after absence while un
   const root = createRoot(document.getElementById("mount")!);
   const lateWallet: Wallet = { name: "Late wallet", version: "1.0.0", icon: "data:image/svg+xml,", chains: ["solana:mainnet"], accounts: [], features: {} };
   const render = async (appId = "registry-app") => act(async () => root.render(
-    <StrictMode><PrivySessionRuntime appId={appId} emit={noop} nonce={null} onChange={noop} /></StrictMode>,
+    <StrictMode><PrivySessionRuntime appId={appId} emit={noop} nonce={null} start={start} /></StrictMode>,
   ));
   const names = () => document.querySelector("section")?.getAttribute("data-wallets")?.split(",");
   try {
@@ -135,7 +139,7 @@ test("T-008: real SDK discovers added and removed wallets after absence while un
   Object.assign(globalThis, { window: secondDocument.window, document: secondDocument.window.document });
   const secondRoot = createRoot(document.getElementById("mount")!);
   try {
-    await act(async () => secondRoot.render(<PrivySessionRuntime appId="registry-app" emit={noop} nonce={null} onChange={noop} />));
+    await act(async () => secondRoot.render(<PrivySessionRuntime appId="registry-app" emit={noop} nonce={null} start={start} />));
     assert.equal(walletConnectInstances.size, 10, "browser documents own independent configurations");
   } finally {
     await act(async () => secondRoot.unmount());

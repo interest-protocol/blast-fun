@@ -9,7 +9,7 @@ import { Button } from "#web/components/blast-ui/Button.tsx";
 import { GoogleLogo, HelmetMark, MahaloLogo, NightlyLogo, ScallopLogo, SlushLogo, WalletIcon, XLogo } from "#web/components/blast-ui/Icons.tsx";
 import { Sheet, SheetClose, SheetHeading } from "#web/components/blast-ui/Sheet.tsx";
 import { useShellAction } from "#web/components/blast-ui/shell-actions.tsx";
-import { startPrivy, usePrivyLoginEvents, usePrivySession } from "#web/components/auth/privy-session.ts";
+import { usePrivyLoginEvents, usePrivySession } from "#web/components/auth/privy-session.ts";
 import { usePreparePrivyWalletPicker } from "#web/components/auth/privy-wallet-picker.ts";
 import { usePrivySessionMounted } from "#web/components/presale/providers/PrivySessionProvider.tsx";
 import { useSocialViewer } from "#web/components/social/SignInGate.tsx";
@@ -211,7 +211,7 @@ function useSignInFlow(
         // Privy's SDK loads with the first sign-in; the pressed method keeps waiting until it starts.
         let privy;
         try {
-          privy = await startPrivy(load);
+          privy = await load();
         } catch {
           setState({ status: "stalled" });
           return;

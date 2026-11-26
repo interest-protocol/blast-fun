@@ -5,7 +5,11 @@ import { JSDOM } from "jsdom";
 import { act, StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
+import { PrivyStart } from "./privy-start.ts";
 import { setShellPref } from "#web/components/blast-ui/use-shell-prefs.ts";
+
+// The page's start; these tests only watch the SDK's wallet clients.
+const start = new PrivyStart();
 
 const resources = { factories: 0, listeners: 0 };
 Object.assign(globalThis, { privyLifetimeResources: resources });
@@ -59,7 +63,7 @@ const { default: PrivySessionRuntime } = await import("./PrivySessionRuntime.tsx
 
 const noop = () => undefined;
 function Runtime({ appId }: Readonly<{ appId: string }>) {
-  return <PrivySessionRuntime appId={appId} emit={noop} nonce={null} onChange={noop} />;
+  return <PrivySessionRuntime appId={appId} emit={noop} nonce={null} start={start} />;
 }
 
 test("the wallet picker follows Blast's theme while the wallet session stays mounted", async () => {
