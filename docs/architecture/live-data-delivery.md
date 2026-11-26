@@ -62,7 +62,7 @@ ticket client, the coin-topic `coin_market` hints only that worker produced
 activity stream. Coin pages keep their 15 s poll; a chart's trades and its
 header price arrive on its market stream.
 
-## Direct browser socket: security review (2026-11-25)
+## Direct browser socket: security review (2026-11-25, `set` added 2026-11-26)
 
 A tab opens one WebSocket to the hints process at
 `wss://live.blast.fun/v1/socket` and receives its events as SSE event blocks,
@@ -76,9 +76,18 @@ first unsigned route that does work. It must not become a free fan-out, an
 amplifier, a way to starve other tabs, or a way to read anything the public
 pages do not already show.
 
+Revision of 2026-11-26: an open socket may now change what it streams with one
+client message, `set`, instead of closing and opening a new socket with a new
+ticket. A `set` opens nothing, burns no ticket and makes no Redis call; it is
+bounded by its own per-socket rate, the per-IP limits of this instance and the
+process tables. The sections below cover both.
+
 What it carries: only public market data (trades, candles, prices, presale
-fills, activity hints) for the pools the URL names. No account, no wallet, no
-write path. A leaked frame is not a confidentiality loss.
+fills, activity hints) for the pools, price coins and presale the socket holds:
+the ones its URL named at connect, then the ones its latest accepted `set`
+named. At any moment that is at most 2 pools, 20 price coins and 1 presale.
+No account, no wallet, no write path. A leaked frame is not a confidentiality
+loss.
 
 ### Admission, in this order
 
@@ -102,9 +111,40 @@ never write to Redis and a ticket is never burned on a refusal.
 
 Clients treat a handshake that never opens like 4503: wait a random 1–30 s.
 After a 4429, or 3 sockets in a row that close before their first frame, the
-tab asks for no ticket for 10 minutes. Meanwhile the hub reports the stream
-unavailable and charts, prices and feeds keep their polls; then the socket is
-tried again.
+tab asks for no ticket for 60–90 s (`LIVE_BACKOFF_MS`, times a random 1–1.5).
+Meanwhile the hub reports the stream unavailable and charts, prices and feeds
+keep their polls; then the socket is tried again.
+
+### A `set` on an open socket, in this order
+
+`{"op":"set","seq":<int>,"pools":[…],"price_coins":[…],"presale":<id>|null}`
+replaces the whole wanted set; `activity` stays as the socket opened. The
+server answers each `set` it does not close on with one
+`event: set` block: `{"seq","ok":true,"held":{…}}`, or
+`{"seq","ok":false,"reason","retry_ms","held":{…}}`. `held` is what the socket
+streams after the answer. A refusal never closes the socket.
+
+1. Frame: a string of at most 8 KiB, JSON, exactly those five keys, `seq` a
+   safe integer, and pools, coins and presale that pass the same market stream
+   parsers as the URL (≤ 2 pools, ≤ 20 coins, no repeats, valid keys).
+   Otherwise **close 1008**.
+2. State: a `set` before admission finished (no relay handle yet) or while the
+   socket is closing → **close 1008**. While the instance drains → `busy`,
+   retry in 5 s (the drain close follows).
+3. Rate: at most **10 `set`s a minute per socket** → `rate`, retry when the
+   oldest leaves the window. A `set` refused for rate does not count.
+4. Removals always apply: pools, coins or the presale the new set drops are
+   released from this socket's per-IP share and from the relay. A changed
+   presale counts as a removal of the old one.
+5. Per-IP, per-instance tables after the additions: **4 distinct pools** and
+   **40 distinct price coins** → `per_ip`, retry in 60 s.
+6. Per-IP churn: at most **40 added pools a minute per address** on this
+   instance → `churn`, retry when the window frees. The history is kept apart
+   from the sockets, so closing every socket and reopening does not reset it.
+7. Process tables (`fits()`: 64 topics, 128 coins; no client-count term, the
+   socket already holds its client slot) → `busy`, retry in 5 s.
+8. Answer `ok`, then the relay joins the added pools, so the answer always
+   comes before their catch-up frames. Additions are all or nothing.
 
 ### Controls
 
@@ -113,10 +153,10 @@ tried again.
 | Anyone opens sockets | A **ticket** from `POST /api/launchpad/market/ticket`. The route is behind the first-party API gate. It has no per-IP quota: web routes carry no rate limits (founder ruling). The gate cookie costs one page GET, so the ticket is a **cost, not authentication**. The socket limits below are the real bound. Ticket: `key = HMAC(gateway secret, "blast-live-ticket-v1")`, then `HMAC(key, payload)`. The payload is `{v, exp, n, o}`. A ticket lives 60 s and is **single use**: its nonce is burned with `SET NX PX <remaining life>` under its own `live-ticket:` prefix in the private-replay Redis. |
 | Ticket leaks through logs, history or Referer | The ticket travels only in `Sec-WebSocket-Protocol`, never in the URL. Surfaces that must not record it: Render request logs (they record the path only), error and trace reporters, and refusal close reasons. A test checks that no refusal echoes it. |
 | Another site embeds the socket | Exact `Origin` match, and the ticket binds `o`. The server never reads `Cookie`. The gate cookie is `__Host-` (host-only); sign-off checks that no first-party cookie uses `Domain=blast.fun`. |
-| One client starves the shared tables | Limits per IP across the fleet: **8 open sockets** and **20 opens a minute** (resumes count). One Redis script on the private-replay store checks both, then burns the ticket, so the count holds at any instance count. Closes remove their entries in one batched command per address; a failed removal is retried every 2 s and once more at drain. An entry also expires after the longest socket life plus 5 minutes (65 min), so a crashed instance frees its slots by then. Per IP, per instance: **4 distinct pools** and **40 distinct price coins** across that IP's sockets, because they guard that process's own tables. The key is `ClientAddress.rateKey`, a /64 for IPv6. Global tables per process: 64 pool topics and 128 price coins (`MARKET_STREAM_BUDGET`). A socket whose new topics or coins would not fit is refused with 4503; tables never fill silently. The reader snapshots every pool it streams, tracked venue pools included; the relay drops a pool's frames until its snapshot. A pool fault never closes a socket: see [Pool recovery](#pool-recovery). |
+| One client starves the shared tables | Limits per IP across the fleet: **8 open sockets** and **20 opens a minute** (resumes count). One Redis script on the private-replay store checks both, then burns the ticket, so the count holds at any instance count. Closes remove their entries in one batched command per address; a failed removal is retried every 2 s and once more at drain. An entry also expires after the longest socket life plus 5 minutes (65 min), so a crashed instance frees its slots by then. Per IP, per instance: **4 distinct pools** and **40 distinct price coins** across that IP's sockets, because they guard that process's own tables; a `set` is checked against them after its removals and refused `per_ip`. Per IP, per instance: at most **40 pools added by `set` a minute**, since each new pool can cost the reader one snapshot; this history outlives the address's sockets. The key is `ClientAddress.rateKey`, a /64 for IPv6. Global tables per process: 64 pool topics and 128 price coins (`MARKET_STREAM_BUDGET`). A socket whose new topics or coins would not fit is refused with 4503, and a `set` whose additions would not fit is refused `busy` (the socket stays open with its kept set); tables never fill silently. The reader snapshots every pool it streams, tracked venue pools included; the relay drops a pool's frames until its snapshot. A pool fault never closes a socket: see [Pool recovery](#pool-recovery). |
 | Process exhaustion | Sockets share the relay's client ceiling: the configured `BLAST_BACKEND_MAX_HINT_STREAMS`, at most 1,024 per instance (`ACTIVITY_HINT_STREAM_BUDGET.maxClients`, a 64 MiB queue budget per relay). Fleet capacity is instances × the configured value; size it so expected sockets stay under 70% of that. Measured locally on 2026-11-25: about 60 KB a socket under traffic, CPU before memory; raising the configured value needs a Render memory and CPU reading first. One upstream reader socket per process, never one per browser. |
-| Expensive subscriptions | Topics are fixed at connect, using the market stream parsers (`marketStreamPools`, `marketStreamPriceCoins`, `marketStreamPresale`, `marketStreamActivity`): ≤ 2 pools, ≤ 20 price coins, ≤ 1 presale. `resume=<pool>~<cursor>` is allowed at most 2 times. Its pool must match `POOL_KEY`, appear in `pool=` and not repeat; its cursor must match `EVENT_CURSOR`. Otherwise 4400. The browser cannot send subscribe messages. |
-| Client messages | The only accepted message is `{"op":"ping","t":<int>}`: at most 128 bytes and 1 a second. Anything else, binary or over the rate closes 1008. `maxPayloadLength` is 1 KiB and `perMessageDeflate` is off. |
+| Expensive subscriptions | At connect and on every `set`, the same market stream parsers (`marketStreamPools`, `marketStreamPriceCoins`, `marketStreamPresale`; `marketStreamActivity` at connect only) bound a socket to ≤ 2 pools, ≤ 20 price coins and ≤ 1 presale. A `set` replaces the whole set, so a socket never holds more than one URL's worth. `resume=<pool>~<cursor>` is allowed at most 2 times, at connect only. Its pool must match `POOL_KEY`, appear in `pool=` and not repeat; its cursor must match `EVENT_CURSOR`. Otherwise 4400. A pool added by `set` gets a fresh fence, or catches up at once from a pool the process already holds. The upstream cost of a `set` is bounded by the 10-a-minute socket rate and the 40-pools-a-minute address churn. |
+| Client messages | Two messages are accepted. `{"op":"ping","t":<int>}`: at most 128 characters and 1 a second. `set` (above): at most 8 KiB and 10 a minute; over the rate it is answered `rate`, not closed. Anything else, binary, a ping over its rate, or a malformed `set` closes 1008. `maxPayloadLength` is 8 KiB and `perMessageDeflate` is off. |
 | Slow readers | The relay queue (64 KiB a client) is the control: overflow closes 4408. Bun's `backpressureLimit` is 256 KiB with `closeOnBackpressureLimit`, as a backstop only. |
 | Liveness | Heartbeat every 4 s, sent only while upstream is confirmed alive (PR #31). The hub watchdog clears prices after 9 s. Bun `idleTimeout` is 60 s and `sendPings` is on, so a socket stays open through an upstream reconnect; heartbeats are not what keeps it open. |
 | Resume ring | Per pool: the last 2 minutes, at most 256 frames and 64 KiB. A replay is at most 32 KiB, under the 64 KiB queue; anything larger gets a normal fence and the browser refetches. The ring dies with its topic when the last subscriber leaves, so it pins no topics or upstream subscriptions. |
@@ -133,16 +173,24 @@ tried again.
 - A client with many IPs can still hold sockets up to the global cap. The cap
   and the per-IP limits bound the cost, and Render's network is the DDoS
   layer. Cloudflare is added only if a measurement shows the need.
+- The `set` churn limit is per instance. One address whose sockets land on
+  N instances can add up to 40 × N pools a minute fleet-wide. Each instance's
+  reader cost is still bounded by its own limit and its 64 topics.
+- Worst case for `set` frames: 10 a minute per socket, so about 1,667 frames a
+  second at 10,000 sockets. Each is parsed in memory with no I/O.
 - Unsigned routes on the service: `/v1/socket`, plus the existing liveness
   (`/v1/live`), `/v1/health` and readiness.
   The last two are bounded by a 5 s cache and 8 requests in flight.
 
 ### Sign-off
 
-- [ ] Jose: controls accepted, `BLAST_LIVE_SOCKET_URL` may be set.
+Redone on 2026-11-26 for `set`: the earlier review covered URL-only topics.
+
+- [ ] Jose: controls accepted, including the `set` message (2026-11-26), `BLAST_LIVE_SOCKET_URL` may be set.
 - [ ] Render `X-Forwarded-For` test recorded: two client IPs get separate keys, and neither a forged leading entry nor a second `X-Forwarded-For` line changes the key, on `live.blast.fun` and the onrender.com host.
 - [ ] No first-party cookie uses `Domain=blast.fun`.
 - [ ] Load test: memory per socket, the chosen cap and the instance count recorded here.
+- [ ] `set` measured on dev (PR 2): tickets, opens and `set`s per tab over 5 minutes, before and after.
 
 ## Rollout on develop (applied 2026-10-27)
 

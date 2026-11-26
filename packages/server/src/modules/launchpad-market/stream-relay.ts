@@ -23,8 +23,12 @@ import {
 import type { WebSocket } from "undici";
 import { POOL_KEY } from "@blast/core/modules/launchpad-contract/venues.ts";
 import { parseOpeningRound } from "@blast/core/modules/launchpad-contract/activity.ts";
-import { DisplayPriceFeed, type DisplayPriceReader } from "./display-price-feed.ts";
-import type { HintSink, HintSubscription } from "../../lib/hint-subscription.ts";
+import {
+  DisplayPriceFeed,
+  type DisplayPriceReader,
+  type DisplayPriceSubscription,
+} from "./display-price-feed.ts";
+import type { HintSink } from "../../lib/hint-subscription.ts";
 
 /** Only the upstream operations this read-only relay needs. */
 export interface RelaySocket {
@@ -42,10 +46,24 @@ export interface RelaySocket {
 }
 
 type Frame = Readonly<Record<string, unknown>>;
+/** What one socket streams: a `set` replaces it whole. */
+export type MarketSet = Readonly<{
+  pools: readonly string[];
+  priceCoins: readonly string[];
+  presale: string | null;
+}>;
+/** A socket's handle: `set` changes its pools, coins and presale in place; kept pools keep their fence. */
+export type MarketSubscription = Readonly<{
+  stop(): void;
+  set(next: MarketSet): void;
+}>;
+/** `set` mutates the pools, coins and presale; `activity` stays as the socket opened. */
 type Client = {
   pools: readonly string[];
+  priceCoins: readonly string[];
   activity: boolean;
   presale: string | null;
+  prices?: DisplayPriceSubscription;
   sink: HintSink;
   stop: () => void;
 };
@@ -301,17 +319,18 @@ export class MarketStreamRelay {
     if (prices) this.#prices = new DisplayPriceFeed(prices);
   }
 
-  /** Whether a socket for these pools and coins fits the shared tables now; it never fills them silently. */
+  /** Whether a new socket for these pools and coins fits the shared tables now; it never fills them silently. */
   admits(pools: readonly string[], priceCoins: readonly string[]): boolean {
-    const added = pools.filter((pool) => !this.#topics.has(pool)).length;
-    return (
-      this.#clients.size < this.#maxClients &&
-      this.#topics.size + added <= B.maxTopics &&
-      (this.#prices?.admits(priceCoins) ?? true)
-    );
+    return this.#clients.size < this.#maxClients && this.fits(pools, priceCoins);
   }
 
-  subscribe(request: Request, sink: HintSink, options: MarketSubscribeOptions = {}): HintSubscription {
+  /** Whether an open socket may add these pools and coins: the pool and coin tables only, as it is already a client. */
+  fits(pools: readonly string[], priceCoins: readonly string[]): boolean {
+    const added = pools.filter((pool) => !this.#topics.has(pool)).length;
+    return this.#topics.size + added <= B.maxTopics && (this.#prices?.admits(priceCoins) ?? true);
+  }
+
+  subscribe(request: Request, sink: HintSink, options: MarketSubscribeOptions = {}): Response | MarketSubscription {
     const parsed = parseSubscription(request);
     if (!parsed) {
       return publicErrorResponse(
@@ -333,38 +352,88 @@ export class MarketStreamRelay {
         { headers: { "Retry-After": "5" } },
       );
     const client: Client = {
-      pools,
+      pools: [],
+      priceCoins: [],
       activity: marketStreamActivity(request) || presale !== null,
-      presale,
+      presale: null,
       sink,
-      stop: () => stop(),
-    };
-    const stopPrices = this.#prices?.subscribe(priceCoins, (frame) => this.#send(client, event("prices", frame)));
-    const stop = () => {
-      if (!this.#clients.delete(client)) return;
-      stopPrices?.();
-      if (presale) {
-        const clients = this.#presales.get(presale);
-        clients?.delete(client);
-        if (!clients?.size) this.#presales.delete(presale);
-      }
-      this.#releaseTopics(client);
-      sink.close();
-      if (!this.#clients.size) this.#disconnect();
+      stop: () => {
+        if (!this.#clients.delete(client)) return;
+        client.prices?.stop();
+        this.#leavePresale(client);
+        this.#releaseTopics(client, client.pools);
+        sink.close();
+        if (!this.#clients.size) this.#disconnect();
+      },
     };
     this.#clients.add(client);
-    if (presale) {
-      const clients = this.#presales.get(presale) ?? new Set<Client>();
-      clients.add(client);
-      this.#presales.set(presale, clients);
-    }
+    this.#setPrices(client, priceCoins);
+    this.#joinPresale(client, presale);
     this.#send(client, event("status", { state: "connecting" }));
-    this.#joinTopics(client, options.resume);
+    this.#joinTopics(client, pools, options.resume);
     this.#greetHints(client);
+    const subscription = { stop: client.stop, set: (next: MarketSet) => this.#set(client, next) };
+    // A refused send already dropped the client: start nothing for it.
+    if (!this.#clients.has(client)) return subscription;
     if (!this.#heartbeat) this.#heartbeat = setInterval(() => this.#beat(), B.heartbeatMs);
     if (!this.#socket && !this.#reopen) this.#open();
-    else if (this.#ready && added.length) this.#subscribe("subscribe", added);
-    return stop;
+    else this.#subscribeFresh(added);
+    return subscription;
+  }
+
+  /**
+   * Replaces what one socket streams. Removed pools leave (upstream `unsubscribe` when last);
+   * added ones join and catch up, and a pool new to the process is subscribed upstream now, or on
+   * the next hello while the upstream is away. Kept pools are untouched. The caller checked `fits`.
+   */
+  #set(client: Client, next: MarketSet): void {
+    if (!this.#clients.has(client)) return;
+    const removed = client.pools.filter((pool) => !next.pools.includes(pool));
+    const added = next.pools.filter((pool) => !client.pools.includes(pool));
+    this.#releaseTopics(client, removed);
+    this.#setPrices(client, next.priceCoins);
+    if (next.presale !== client.presale) {
+      this.#leavePresale(client);
+      this.#joinPresale(client, next.presale);
+      if (next.presale && client.activity && this.#hintReady) this.#send(client, event("hint", this.#hintPong(true)));
+    }
+    const fresh = added.filter((pool) => !this.#topics.has(pool));
+    this.#joinTopics(client, added);
+    this.#subscribeFresh(fresh);
+  }
+
+  /** Upstream `subscribe` for pools new to the process that still have a topic: a client dropped while joining left none. */
+  #subscribeFresh(pools: readonly string[]): void {
+    const live = pools.filter((pool) => this.#topics.has(pool));
+    if (this.#ready && live.length) this.#subscribe("subscribe", live);
+  }
+
+  /** Changes the coin list in place: a restart would resend kept coins and could abort the shared read. */
+  #setPrices(client: Client, coins: readonly string[]): void {
+    client.priceCoins = coins;
+    if (!this.#prices) return;
+    if (!coins.length) {
+      client.prices?.stop();
+      client.prices = undefined;
+    } else if (client.prices) client.prices.update(coins);
+    else client.prices = this.#prices.subscribe(coins, (frame) => this.#send(client, event("prices", frame)));
+  }
+
+  #joinPresale(client: Client, presale: string | null): void {
+    client.presale = presale;
+    if (!presale) return;
+    const clients = this.#presales.get(presale) ?? new Set<Client>();
+    clients.add(client);
+    this.#presales.set(presale, clients);
+  }
+
+  #leavePresale(client: Client): void {
+    const presale = client.presale;
+    client.presale = null;
+    if (!presale) return;
+    const clients = this.#presales.get(presale);
+    clients?.delete(client);
+    if (!clients?.size) this.#presales.delete(presale);
   }
 
   #greetHints(client: Client): void {
@@ -373,8 +442,11 @@ export class MarketStreamRelay {
     if (this.#hintReady) this.#send(client, event("hint", this.#hintPong(client.presale !== null)));
   }
 
-  #joinTopics(client: Client, resume?: ReadonlyMap<string, string>): void {
-    for (const pool of client.pools) {
+  /** Each catch-up can drop the client (its sink refused); then it joins nothing more. */
+  #joinTopics(client: Client, pools: readonly string[], resume?: ReadonlyMap<string, string>): void {
+    for (const pool of pools) {
+      if (!this.#clients.has(client)) return;
+      client.pools = [...client.pools, pool];
       let topic = this.#topics.get(pool);
       if (!topic) {
         topic = { clients: new Set(), ring: [], ringBytes: 0 };
@@ -412,8 +484,9 @@ export class MarketStreamRelay {
     if (send) for (const client of topic.clients) this.#send(client, bytes);
   }
 
-  #releaseTopics(client: Client): void {
-    for (const pool of client.pools) {
+  #releaseTopics(client: Client, pools: readonly string[]): void {
+    client.pools = client.pools.filter((pool) => !pools.includes(pool));
+    for (const pool of pools) {
       const topic = this.#topics.get(pool);
       if (!topic) continue;
       topic.clients.delete(client);
@@ -572,7 +645,7 @@ export class MarketStreamRelay {
     )
       throw new Fatal();
     this.#ready = true;
-    this.#hello = { type: "hello", provenance: frame.provenance, heartbeat: true, heartbeat_ms: B.heartbeatMs };
+    this.#hello = { type: "hello", provenance: frame.provenance, heartbeat: true, heartbeat_ms: B.heartbeatMs, set: true };
     this.#hint(this.#hello);
     this.#readyAt = Date.now();
     const fenced = [...this.#topics].filter(([, topic]) => topic.resuming && topic.cursor);

@@ -12,7 +12,11 @@ import {
   marketStreamPriceCoins,
 } from "@blast/core/modules/launchpad-contract/market-stream.ts";
 import { POOL_KEY } from "@blast/core/modules/launchpad-contract/venues.ts";
-import type { HintSink, HintSubscription } from "@blast/server/lib/hint-subscription.ts";
+import type { HintSink } from "@blast/server/lib/hint-subscription.ts";
+import type {
+  MarketSet,
+  MarketSubscription,
+} from "@blast/server/modules/launchpad-market/stream-relay.ts";
 import type { Server, ServerWebSocket, WebSocketHandler } from "bun";
 import type { TrustedSite } from "./contracts.ts";
 import { randomUUID } from "node:crypto";
@@ -26,13 +30,22 @@ export const LIVE_SOCKET = Object.freeze({
   path: "/v1/socket",
   protocol: "blast-live.v1",
   ticketPrefix: "blast-ticket.",
-  perIp: Object.freeze({ sockets: 8, opensPerMinute: 20, pools: 4, priceCoins: 40 }),
+  perIp: Object.freeze({
+    sockets: 8,
+    opensPerMinute: 20,
+    pools: 4,
+    priceCoins: 40,
+    /** Pools added by `set` on this instance; each can cost an upstream snapshot. */
+    addedPoolsPerMinute: 40,
+  }),
   maxResumes: 2,
-  maxClientMessageBytes: 128,
+  /** Longest client frame per op, in characters. */
+  maxClientMessage: Object.freeze({ ping: 128, set: 8_192 }),
   minPingIntervalMs: 1_000,
+  setsPerMinute: 10,
   lifetimeMs: Object.freeze({ min: 30 * 60_000, max: 60 * 60_000 }),
   idleTimeoutSeconds: 60,
-  maxPayloadBytes: 1_024,
+  maxPayloadBytes: 8_192,
   backpressureBytes: 256 * 1_024,
 });
 
@@ -73,15 +86,21 @@ return 1
 const REMOVAL = { retryMs: 2_000, idsPerKey: 32, keys: 4_096, batchKeys: 64 } as const;
 /** Room past the longest socket life before a leaked slot frees itself. */
 const SOCKET_ENTRY_MS = LIVE_SOCKET.lifetimeMs.max + 5 * 60_000;
+const MINUTE_MS = 60_000;
+/** How long a refused `set` asks the browser to wait, by reason; `rate` and `churn` wait for their window. */
+const SET_RETRY_MS = { per_ip: 60_000, busy: 5_000 } as const;
 
 /** What the socket needs from the market relay. */
 export type LiveRelay = Readonly<{
+  /** A new socket fits the relay's tables. */
   admits(pools: readonly string[], priceCoins: readonly string[]): boolean;
+  /** An open socket may add these pools and coins. */
+  fits(pools: readonly string[], priceCoins: readonly string[]): boolean;
   subscribe(
     request: Request,
     sink: HintSink,
     options: Readonly<{ resume?: ReadonlyMap<string, string> }>,
-  ): HintSubscription;
+  ): Response | MarketSubscription;
 }>;
 
 export type LiveSocketOptions = Readonly<{
@@ -112,9 +131,14 @@ export type LiveSocketData = {
   closing: boolean;
   slow: boolean;
   lastPing: number;
+  /** When this socket's recent `set`s arrived, oldest first. */
+  sets: number[];
+  /** What the socket holds now; always matches the address tables. */
   pools: readonly string[];
   priceCoins: readonly string[];
-  stop?: () => void;
+  presale: string | null;
+  /** The relay handle, once admitted: a `set` before it closes the socket. */
+  relay?: MarketSubscription;
   lifetime?: ReturnType<typeof setTimeout>;
 };
 
@@ -129,8 +153,10 @@ type Query = Readonly<{
   request: Request;
   pools: readonly string[];
   priceCoins: readonly string[];
+  presale: string | null;
   resume: ReadonlyMap<string, string>;
 }>;
+type SetRefusal = "rate" | "per_ip" | "churn" | "busy";
 
 const NO_STORE = { "Cache-Control": "private, no-store" };
 const decoder = new TextDecoder();
@@ -155,7 +181,7 @@ export function liveSocketQuery(url: URL): Query {
   const request = new Request(`https://live.internal${MARKET_STREAM_PATH}?${params}`);
   const pools = marketStreamPools(request);
   const priceCoins = marketStreamPriceCoins(request);
-  marketStreamPresale(request);
+  const presale = marketStreamPresale(request);
   const resume = new Map<string, string>();
   for (const value of resumes) {
     const [pool = "", cursor = "", ...rest] = value.split("~");
@@ -170,7 +196,45 @@ export function liveSocketQuery(url: URL): Query {
     }
     resume.set(pool, cursor);
   }
-  return { request, pools, priceCoins, resume };
+  return { request, pools, priceCoins, presale, resume };
+}
+
+const KEYS = ["op", "seq", "pools", "price_coins", "presale"].sort().join();
+const strings = (value: unknown): value is string[] =>
+  Array.isArray(value) && value.every((item) => typeof item === "string");
+
+/**
+ * A client `set`: the whole wanted set, checked by the same parsers as the URL so the rules
+ * cannot drift. `activity` stays as the socket opened. Throws on anything else.
+ */
+export function liveSetMessage(frame: Record<string, unknown>): { seq: number } & MarketSet {
+  const { seq, pools, price_coins: coins, presale } = frame;
+  if (
+    Object.keys(frame).sort().join() !== KEYS ||
+    !Number.isSafeInteger(seq) ||
+    !strings(pools) ||
+    !strings(coins) ||
+    (presale !== null && typeof presale !== "string")
+  ) {
+    throw new Error("Invalid live set.");
+  }
+  const params = new URLSearchParams({ activity: "true" });
+  for (const pool of pools) {
+    params.append("pool", pool);
+  }
+  for (const coin of coins) {
+    params.append("price_coin", coin);
+  }
+  if (presale !== null) {
+    params.set("presale", presale);
+  }
+  const request = new Request(`https://live.internal${MARKET_STREAM_PATH}?${params}`);
+  return {
+    seq: seq as number,
+    pools: marketStreamPools(request),
+    priceCoins: marketStreamPriceCoins(request),
+    presale: marketStreamPresale(request),
+  };
 }
 
 export function createLiveSocket(options: LiveSocketOptions) {
@@ -188,6 +252,32 @@ export function createLiveSocket(options: LiveSocketOptions) {
     { siteOrigin: options.siteOrigin, namespace: options.namespace },
     ...(options.extraSites ?? []),
   ];
+  // Pools each address added by `set` in the last minute, oldest first. Kept apart from
+  // `addresses` so closing every socket and reopening does not reset the window.
+  const churn = new Map<string, number[]>();
+  let churnSweptAt = 0;
+  const recent = (times: number[], now: number) => {
+    while (times.length && times[0]! <= now - MINUTE_MS) {
+      times.shift();
+    }
+    return times;
+  };
+  const addedPools = (rateKey: string, now: number) => {
+    if (now - churnSweptAt >= MINUTE_MS) {
+      churnSweptAt = now;
+      for (const [key, times] of churn) {
+        if (!recent(times, now).length) {
+          churn.delete(key);
+        }
+      }
+    }
+    let times = churn.get(rateKey);
+    if (!times) {
+      churn.set(rateKey, (times = []));
+    }
+    return recent(times, now);
+  };
+
   const ipKey = (data: LiveSocketData, kind: "sockets" | "opens") =>
     `${data.site.namespace}:live-ip:${kind}:${data.rateKey}`;
   const address = (key: string) => {
@@ -271,9 +361,9 @@ export function createLiveSocket(options: LiveSocketOptions) {
       return;
     }
     clearTimeout(data.lifetime);
-    const stop = data.stop;
-    data.stop = undefined;
-    stop?.();
+    const relay = data.relay;
+    data.relay = undefined;
+    relay?.stop();
     if (data.admitted) {
       const entry = address(data.rateKey);
       count(entry.pools, data.pools, -1);
@@ -313,28 +403,35 @@ export function createLiveSocket(options: LiveSocketOptions) {
       return true;
     },
     close() {
-      ws.data.stop = undefined;
+      ws.data.relay = undefined;
       shut(ws, ws.data.slow ? LIVE_CLOSE.slow : LIVE_CLOSE.done);
     },
   });
 
   /** This instance's tables: distinct pools and coins for one address. */
-  const crowded = (rateKey: string, query: Query) => {
+  const crowded = (rateKey: string, pools: readonly string[], priceCoins: readonly string[]) => {
     const entry = addresses.get(rateKey);
     return (
       !!entry &&
-      (distinct(entry.pools, query.pools) > LIVE_SOCKET.perIp.pools ||
-        distinct(entry.priceCoins, query.priceCoins) > LIVE_SOCKET.perIp.priceCoins)
+      (distinct(entry.pools, pools) > LIVE_SOCKET.perIp.pools ||
+        distinct(entry.priceCoins, priceCoins) > LIVE_SOCKET.perIp.priceCoins)
     );
   };
-  const hold = (data: LiveSocketData, query: Query) => {
+  /** Moves this socket's share of the address tables from what it holds to `next`. */
+  const take = (data: LiveSocketData, next: MarketSet) => {
     const entry = address(data.rateKey);
+    count(entry.pools, data.pools, -1);
+    count(entry.priceCoins, data.priceCoins, -1);
+    count(entry.pools, next.pools, 1);
+    count(entry.priceCoins, next.priceCoins, 1);
+    data.pools = next.pools;
+    data.priceCoins = next.priceCoins;
+    data.presale = next.presale;
+  };
+  const hold = (data: LiveSocketData, query: Query) => {
     data.admitted = true;
-    data.pools = query.pools;
-    data.priceCoins = query.priceCoins;
-    entry.sockets++;
-    count(entry.pools, query.pools, 1);
-    count(entry.priceCoins, query.priceCoins, 1);
+    address(data.rateKey).sockets++;
+    take(data, query);
   };
   /** The fleet-wide part, in one Redis step: null admits, otherwise the close code. */
   const claim = async (data: LiveSocketData, ticket: { nonce: string; expiresAtMs: number }) => {
@@ -384,7 +481,7 @@ export function createLiveSocket(options: LiveSocketOptions) {
     } catch {
       return shut(ws, LIVE_CLOSE.query);
     }
-    if (crowded(data.rateKey, query)) {
+    if (crowded(data.rateKey, query.pools, query.priceCoins)) {
       return shut(ws, LIVE_CLOSE.perIp);
     }
     if (draining || !options.relay.admits(query.pools, query.priceCoins)) {
@@ -401,21 +498,94 @@ export function createLiveSocket(options: LiveSocketOptions) {
       return unclaim(data);
     }
     const result = options.relay.subscribe(query.request, sink(ws), { resume: query.resume });
-    if (typeof result !== "function") {
+    if (result instanceof Response) {
       if (!data.closing) {
         shut(ws, result.status === 400 ? LIVE_CLOSE.query : LIVE_CLOSE.busy);
       }
       return;
     }
     if (data.closing) {
-      return result();
+      return result.stop();
     }
-    data.stop = result;
+    data.relay = result;
     const { min, max } = LIVE_SOCKET.lifetimeMs;
     data.lifetime = setTimeout(
       () => shut(ws, LIVE_CLOSE.done),
       min + Math.floor(Math.random() * (max - min)),
     );
+  }
+
+  /**
+   * A `set`: the whole wanted set on an open socket. Removals always apply; additions are all or
+   * nothing. Checks, in order: frame, state, per-socket rate, removals, per-IP pools and coins,
+   * per-IP added-pool churn, then the relay's shared tables. The answer goes out before the relay
+   * joins added pools, so it precedes their catch-up. No Redis: a `set` opens nothing.
+   */
+  function changeSet(ws: Socket, frame: Record<string, unknown>, now: number) {
+    const data = ws.data;
+    let seq: number;
+    let next: MarketSet;
+    try {
+      ({ seq, ...next } = liveSetMessage(frame));
+    } catch {
+      return shut(ws, LIVE_CLOSE.message);
+    }
+    const relay = data.relay;
+    if (!relay || data.closing) {
+      return shut(ws, LIVE_CLOSE.message);
+    }
+    const answer = (refusal?: SetRefusal, retryMs?: number) => {
+      ws.send(
+        `event: set\ndata: ${JSON.stringify({
+          seq,
+          ok: !refusal,
+          ...(refusal ? { reason: refusal, retry_ms: retryMs } : {}),
+          held: { pools: data.pools, price_coins: data.priceCoins, presale: data.presale },
+        })}\n\n`,
+      );
+    };
+    if (draining) {
+      return answer("busy", SET_RETRY_MS.busy);
+    }
+    const sets = recent(data.sets, now);
+    if (sets.length >= LIVE_SOCKET.setsPerMinute) {
+      return answer("rate", sets[0]! + MINUTE_MS - now);
+    }
+    sets.push(now);
+
+    const kept: MarketSet = {
+      pools: data.pools.filter((pool) => next.pools.includes(pool)),
+      priceCoins: data.priceCoins.filter((coin) => next.priceCoins.includes(coin)),
+      presale: next.presale === data.presale ? data.presale : null,
+    };
+    if (
+      kept.pools.length !== data.pools.length ||
+      kept.priceCoins.length !== data.priceCoins.length ||
+      kept.presale !== data.presale
+    ) {
+      take(data, kept);
+      relay.set(kept);
+      if (data.closing) {
+        return;
+      }
+    }
+    const pools = next.pools.filter((pool) => !kept.pools.includes(pool));
+    const coins = next.priceCoins.filter((coin) => !kept.priceCoins.includes(coin));
+    if (crowded(data.rateKey, pools, coins)) {
+      return answer("per_ip", SET_RETRY_MS.per_ip);
+    }
+    const added = addedPools(data.rateKey, now);
+    const over = added.length + pools.length - LIVE_SOCKET.perIp.addedPoolsPerMinute;
+    if (over > 0) {
+      return answer("churn", added[over - 1]! + MINUTE_MS - now);
+    }
+    if (!options.relay.fits(pools, coins)) {
+      return answer("busy", SET_RETRY_MS.busy);
+    }
+    take(data, next);
+    added.push(...pools.map(() => now));
+    answer();
+    relay.set(next);
   }
 
   const websocket: WebSocketHandler<LiveSocketData> = {
@@ -431,24 +601,30 @@ export function createLiveSocket(options: LiveSocketOptions) {
     },
     message(ws, message) {
       const now = Date.now();
-      if (
-        typeof message !== "string" ||
-        message.length > LIVE_SOCKET.maxClientMessageBytes ||
-        now - ws.data.lastPing < LIVE_SOCKET.minPingIntervalMs
-      ) {
+      if (typeof message !== "string" || message.length > LIVE_SOCKET.maxClientMessage.set) {
         return shut(ws, LIVE_CLOSE.message);
       }
-      let ping: unknown;
+      let frame: unknown;
       try {
-        ping = JSON.parse(message);
+        frame = JSON.parse(message);
       } catch {
         return shut(ws, LIVE_CLOSE.message);
       }
-      const { op, t, ...rest } = (ping && typeof ping === "object" ? ping : {}) as Record<
-        string,
-        unknown
-      >;
-      if (op !== "ping" || !Number.isSafeInteger(t) || Object.keys(rest).length) {
+      if (!frame || typeof frame !== "object" || Array.isArray(frame)) {
+        return shut(ws, LIVE_CLOSE.message);
+      }
+      const fields = frame as Record<string, unknown>;
+      if (fields.op === "set") {
+        return changeSet(ws, fields, now);
+      }
+      const { op, t, ...rest } = fields;
+      if (
+        op !== "ping" ||
+        message.length > LIVE_SOCKET.maxClientMessage.ping ||
+        now - ws.data.lastPing < LIVE_SOCKET.minPingIntervalMs ||
+        !Number.isSafeInteger(t) ||
+        Object.keys(rest).length
+      ) {
         return shut(ws, LIVE_CLOSE.message);
       }
       ws.data.lastPing = now;
@@ -512,8 +688,10 @@ export function createLiveSocket(options: LiveSocketOptions) {
         closing: false,
         slow: false,
         lastPing: 0,
+        sets: [],
         pools: [],
         priceCoins: [],
+        presale: null,
       };
       // Echo only the protocol name, never the ticket entry.
       return server.upgrade(request, {

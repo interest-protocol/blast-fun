@@ -73,7 +73,7 @@ class RelaySource implements MarketEventSource {
   readonly #stop: () => void;
   constructor(relay: MarketStreamRelay, url: string) {
     this.url = url;
-    const stop = relay.subscribe(new Request(`https://frontend.test${url}`), {
+    const subscription = relay.subscribe(new Request(`https://frontend.test${url}`), {
       send: (chunk) => {
         const text = new TextDecoder().decode(chunk);
         const type = text.match(/^event: (.+)$/m)?.[1];
@@ -83,8 +83,8 @@ class RelaySource implements MarketEventSource {
       },
       close: () => queueMicrotask(() => { if (!this.closed) this.#emit("error", undefined); }),
     });
-    assert.equal(typeof stop, "function", "the relay accepts the hub's request");
-    this.#stop = stop as () => void;
+    assert.ok(!(subscription instanceof Response), "the relay accepts the hub's request");
+    this.#stop = subscription.stop;
   }
   addEventListener(type: string, listener: (event: { data?: string }) => void): void { this.#listeners.set(type, [...this.#listeners.get(type) ?? [], listener]); }
   close(): void { if (this.closed) return; this.closed = true; this.#stop(); }
