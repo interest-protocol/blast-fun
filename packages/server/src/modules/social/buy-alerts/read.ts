@@ -1,3 +1,4 @@
+import { tinyTradeSql } from "@blast/core/modules/social/read-model/trade-size.ts";
 import { assertChainReadThroughViews } from "@blast/core/modules/database/modules.ts";
 import type { ReadableDatabase } from "@blast/core/modules/database/transaction.ts";
 import { SOCIAL_FOLLOW_LIMIT } from "@blast/core/modules/social/contracts/follows.ts";
@@ -16,7 +17,7 @@ const FOLLOWING_WALLETS_SQL = `SELECT n.address FROM (${namedWalletsSql(`named_a
   ORDER BY n.address LIMIT $2::int`;
 
 /** $1..$4 the row's key: one activity row by its primary key. */
-const ROW_SQL = `SELECT a.kind, a.actor, a.presale_id, a.coin_type, a.timestamp_ms::text AS timestamp_ms,
+const ROW_SQL = `SELECT CASE WHEN ${tinyTradeSql("a")} THEN 'tiny' ELSE a.kind END AS kind, a.actor, a.presale_id, a.coin_type, a.timestamp_ms::text AS timestamp_ms,
     a.usd_value::text AS usd_value, a.market_cap_usd::text AS market_cap_usd
   FROM chain_read_v1.activity a
   WHERE a.checkpoint = $1::bigint AND a.tx_slot = $2::bigint AND a.event_slot = $3::bigint AND a.part = $4::bigint`;

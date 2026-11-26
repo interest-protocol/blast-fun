@@ -1,3 +1,4 @@
+import { tinyTradeSql } from "@blast/core/modules/social/read-model/trade-size.ts";
 import type { ReadableDatabase } from "@blast/core/modules/database/transaction.ts";
 import type { FeedItemBacker } from "@blast/core/modules/social/contracts/items.ts";
 import { profilePagePath } from "@blast/core/modules/social/contracts/profiles.ts";
@@ -91,7 +92,7 @@ export const FOLLOWED_BUYERS_SQL = `
   ), bought AS (
     SELECT p.presale_id, n.account_id, max(a.timestamp_ms) AS last_ms, sum(a.usd_value) AS usd
     FROM ${SHOWN_PRESALES} p
-    JOIN ${SHOWN_ACTIVITY} a ON a.coin_type = p.sale_token AND a.kind = 'trade_buy'
+    JOIN ${SHOWN_ACTIVITY} a ON a.coin_type = p.sale_token AND a.kind = 'trade_buy' AND NOT ${tinyTradeSql("a")}
     JOIN named n ON n.address = a.actor AND n.named_from_ms <= a.timestamp_ms
     CROSS JOIN clock
     WHERE p.presale_id = ANY($2::text[]) AND p.lifecycle = 'migrated'

@@ -31,7 +31,7 @@ import { ago, NO_VALUE } from "@blast/core/web/format.ts";
 import { SOCIAL_FEED_DELAYED_LAG_MS } from "@blast/core/web/contracts/feed.ts";
 import { InspectValue } from "#web/components/blast-ui/InspectValue.tsx";
 import { SmallTradeSwitch } from "#web/components/launchpad/activity/SmallTradeSwitch.tsx";
-import { isHomeTradeUnderDollar, type SmallTradeFilter } from "#web/components/launchpad/activity/small-trades.ts";
+import { isHomeTradeUnderDollar, tradeFloor, type SmallTradeFilter } from "#web/components/launchpad/activity/small-trades.ts";
 import { SMALL_TRADE_USD } from "@blast/core/web/contracts/coin-market.ts";
 import { SkeletonText } from "#web/components/blast-ui/Skeleton.tsx";
 import { useShellPrefs } from "#web/components/blast-ui/use-shell-prefs.ts";
@@ -460,7 +460,8 @@ function RecentTrades({ events, coin, nowMs, noteId, empty, filter: [hideSmallTr
   const [limit, setLimit] = useState(12);
   // Filtered, a window of only small trades still shows the switch, so they are one tap away.
   if (events.length === 0 && !(hideSmallTrades && onlySmall)) return empty;
-  const visibleEvents = hideSmallTrades ? events.filter(({ event }) => !isHomeTradeUnderDollar(event.quote)) : events;
+  const floor = tradeFloor(hideSmallTrades);
+  const visibleEvents = events.filter(({ event }) => !isHomeTradeUnderDollar(event.quote, floor));
   return (
     <>
       <SmallTradeSwitch checked={hideSmallTrades} onCheckedChange={setHideSmallTrades} />

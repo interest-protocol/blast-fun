@@ -108,6 +108,12 @@ export type HomeHoldersPage = HomeWire<
  * they never become a post or the coin page's Last-trade pill.
  */
 export const SMALL_TRADE_USD = 1;
+/**
+ * Trades under this many dollars are tiny: no trades list shows them and no
+ * buy, sell, buyer or trade count counts them, with the switch on or off.
+ * Volume still sums them. Jose's ruling, 2026-11-26.
+ */
+export const TINY_TRADE_USD = "0.01";
 /** The chart's "Big trades": trades of at least this many dollars. */
 export const HOME_BIG_TRADE_USD = 1_000;
 /** The most trades one chart page carries, newest first. */

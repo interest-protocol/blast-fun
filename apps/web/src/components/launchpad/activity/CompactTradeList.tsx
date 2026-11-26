@@ -6,6 +6,7 @@ import type { SocialExplorer } from "@blast/core/modules/social/contracts/settin
 import { profilePagePath } from "@blast/core/modules/social/contracts/profiles.ts";
 import { RECENT_TRADES_LIMIT, type TraderProfile } from "@blast/core/modules/social/contracts/trader-profiles.ts";
 import { atomsGrouped, NO_VALUE } from "@blast/core/web/format.ts";
+import type { Exact } from "@blast/core/web/exact-amount.ts";
 import { IconButtonLink } from "#web/components/blast-ui/Button.tsx";
 import { CoinAmount } from "#web/components/blast-ui/CoinAmount.tsx";
 import { DateStamp } from "#web/components/blast-ui/DateStamp.tsx";
@@ -21,6 +22,7 @@ import { formatAmountShort } from "../coin/coin-format";
 import primitives from "../primitives/primitives.module.css";
 import { explorerTransactionUrl } from "../transaction/explorer";
 import { SmallTradeSwitch } from "./SmallTradeSwitch";
+import { tradeFloor } from "./small-trades";
 import { useTradeSlide } from "./use-trade-slide";
 import { useWalletExplorer } from "./TraderWallet";
 import styles from "./Activity.module.css";
@@ -82,15 +84,20 @@ export type TradeRowState = Readonly<{
   now: number | null;
 }>;
 
-/** `filter`: the "Hide trades under $1" switch's state, owned by whoever reads the rows. */
+/**
+ * `isUnder(row, floor)`: the row is a trade proven under `floor` dollars. Tiny trades never show; with
+ * the "Hide trades under $1" switch on (its state owned by whoever reads the rows), dust does not either.
+ */
 export function useTradeVisibility<Row extends { position: string }>(
   rows: readonly Row[],
   availableRows: readonly Row[] | undefined,
-  isUnderDollar: (row: Row) => boolean,
+  isUnder: (row: Row, floor: Exact) => boolean,
   [hideSmallTrades, setHideSmallTrades]: readonly [boolean, (hide: boolean) => void],
 ) {
   const [heldRows, setHeldRows] = useState<readonly Row[] | null>(null);
-  const visibleRows = heldRows ?? (hideSmallTrades ? filteredTrades(rows, availableRows, isUnderDollar) : rows);
+  const floor = tradeFloor(hideSmallTrades);
+  const hidden = (row: Row) => isUnder(row, floor);
+  const visibleRows = heldRows ?? filteredTrades(rows, availableRows, hidden);
   const holdRows = useCallback((active: boolean) => {
     setHeldRows((previous) => active ? previous ?? visibleRows : null);
   }, [visibleRows]);
@@ -103,7 +110,7 @@ export function useTradeVisibility<Row extends { position: string }>(
       setHeldRows(null);
       setHideSmallTrades(checked);
     },
-    allows: (row: Row) => !hideSmallTrades || !isUnderDollar(row),
+    allows: (row: Row) => !hidden(row),
   };
 }
 
@@ -167,15 +174,15 @@ export function CompactTradeList<Row extends { position: string }>({
 function filteredTrades<Row extends { position: string }>(
   rows: readonly Row[],
   availableRows: readonly Row[] | undefined,
-  isUnderDollar: (row: Row) => boolean,
+  hidden: (row: Row) => boolean,
 ) {
-  const visible = rows.filter((row) => !isUnderDollar(row));
+  const visible = rows.filter((row) => !hidden(row));
   const tail = rows.at(-1);
   if (!tail || visible.length === rows.length) {
     return visible;
   }
   for (const row of availableRows ?? []) {
-    if (compareEventCursors(row.position, tail.position) < 0 && !isUnderDollar(row)) {
+    if (compareEventCursors(row.position, tail.position) < 0 && !hidden(row)) {
       visible.push(row);
       if (visible.length === rows.length) {
         break;

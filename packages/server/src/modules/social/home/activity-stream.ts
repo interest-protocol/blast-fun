@@ -4,6 +4,7 @@ import { SocialRouteError } from "@blast/core/modules/social/route-kit/errors.ts
 import { coinLabel } from "@blast/core/modules/social/contracts/financial-wire.ts";
 import { isHomeWindow, type HomeWindow } from "@blast/core/modules/social/contracts/home.ts";
 import { invalidCursor } from "./codec.ts";
+import { tinyTradeSql } from "@blast/core/modules/social/read-model/trade-size.ts";
 
 export type ActivityStreamQuery = Readonly<{
   window: HomeWindow;
@@ -178,7 +179,7 @@ async function readPage(
     FROM chain_read_v1.activity a JOIN ${HOME_COIN_SOURCES} c
       ON (a.presale_id IS NOT NULL AND c.presale_id=a.presale_id) OR (a.presale_id IS NULL AND c.sale_token=a.coin_type)
     WHERE a.timestamp_ms > ${from}::bigint AND a.timestamp_ms <= ${to}::bigint AND a.kind=ANY(${kinds}::text[])
-      AND a.checkpoint <= CASE WHEN a.kind='presale_commit' THEN ${presale}::bigint ELSE ${market}::bigint END${after}
+      AND a.checkpoint <= CASE WHEN a.kind='presale_commit' THEN ${presale}::bigint ELSE ${market}::bigint END AND NOT ${tinyTradeSql("a")}${after}
     ORDER BY ${ROW_ORDER("a")} LIMIT ${size}::int
   )`,
     `SELECT p.*,p.binding AS presale_id,p.timestamp_ms::text AS timestamp_ms,p.checkpoint::text AS checkpoint,

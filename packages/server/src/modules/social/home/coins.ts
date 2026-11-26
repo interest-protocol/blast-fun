@@ -288,12 +288,13 @@ async function trackedLaunchesOf(rows: readonly FactsRow[], read: HomeReadContex
 export async function readSides(db: ReadableDatabase, request: RowsRequest, recentBuyFromMs?: number): Promise<readonly SideRow[]> {
   if (request.sales.kind === "ids" && request.sales.presaleIds.length === 0) return [];
   const params = new Params();
-  const rows = rowsWithSql(request, params);
+  // Tiny trades stay for the volume sums; the counts skip them (`sidesSelect`).
+  const rows = rowsWithSql({ ...request, keepTiny: true }, params);
   // Keep one event's fields together, ordered by timestamp and cursor, in the existing aggregate.
   // A priced buy under the floor is skipped here, so dust never hides the real buy before it.
   const recentBuy = recentBuyFromMs === undefined ? "" : `,
     (max(ARRAY[w.timestamp_ms, w.checkpoint, w.tx_slot, w.event_slot, w.part, w.quote_amount, trim_scale(w.usd_value)]::numeric[])
-      FILTER (WHERE w.kind = 'trade_buy' AND w.timestamp_ms > ${params.add(recentBuyFromMs)}::bigint
+      FILTER (WHERE w.kind = 'trade_buy' AND NOT w.tiny AND w.timestamp_ms > ${params.add(recentBuyFromMs)}::bigint
         AND w.quote_amount > 0 AND (w.usd_value IS NULL OR w.usd_value >= ${params.add(HOME_RECENT_BUY_MIN_USD)}::numeric)))::text[] AS recent_buy`;
   const text = selectHome(rows, `${sidesSelect(recentBuy)} ${SIDES_GROUP}`);
   assertChainReadThroughViews(text);

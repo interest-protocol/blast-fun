@@ -323,7 +323,7 @@ test("Discover keeps both a heavily backed sale and the newest commit beyond the
     assert.deepEqual(legacy.map(row => row.presale.presale_id), dust.slice(0, 5));
   }));
 
-test("Discover finds confirmed activity on an old live curve beyond the catalog, once per wallet", { skip }, () =>
+test("Discover finds confirmed activity on an old live curve beyond the catalog, once per wallet, a tiny trade adding volume only", { skip }, () =>
   withFixture(async ({ admin, happening, now }) => {
     const coin = `${hex("dce1")}::curve::CURVE`;
     const pool = `blast_curve:${hex("dce2")}`;
@@ -337,14 +337,15 @@ test("Discover finds confirmed activity on an old live curve beyond the catalog,
     const first = trade("trade_buy", W.ana, 10 * MINUTE, "4.00");
     const repeat = trade("trade_sell", W.ana, 8 * MINUTE, "3.00");
     const second = trade("trade_buy", W.ben, 5 * MINUTE, null);
+    const tiny = trade("trade_buy", W.cy, 3 * MINUTE, "0.004");
     const old = trade("trade_buy", W.anon, 61 * MINUTE, "100.00");
     const uncommitted = trade("trade_buy", W.cy, MINUTE, "99.00");
-    await seedChainRead(admin, { activity: [first, repeat, second, old, uncommitted] });
+    await seedChainRead(admin, { activity: [first, repeat, second, tiny, old, uncommitted] });
     await admin.query(advanceWatermark(old.checkpoint, 0, "market"));
     const body = await happeningOf(await happening({ trades: true, recent: true }));
     assert.deepEqual(body.active_curves, [{
       coin_type: coin, symbol: "CURVE", name: "The Curve", icon_url: null, verified_team: false,
-      created_ms: created, participants: 2, last_action_ms: now - 5 * MINUTE, volume_usd: "7.00",
+      created_ms: created, participants: 2, last_action_ms: now - 5 * MINUTE, volume_usd: "7.004",
     }]);
     assert.deepEqual((await happeningOf(await happening({ recent: true }))).active_curves, []);
   }));

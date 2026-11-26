@@ -1,3 +1,4 @@
+import { tinyTradeSql } from "@blast/core/modules/social/read-model/trade-size.ts";
 import { z } from "zod";
 
 import { assertChainReadThroughViews } from "@blast/core/modules/database/modules.ts";
@@ -72,7 +73,7 @@ function chartTradesSql(filter: string): string {
       a.coin_amount, a.quote_amount, a.usd_value
     FROM chain_read_v1.activity a
     WHERE a.coin_type = $1 AND a.timestamp_ms > $2::bigint AND a.timestamp_ms <= $3::bigint
-      AND a.kind = ANY($5::text[]) AND a.checkpoint <= $4::bigint
+      AND a.kind = ANY($5::text[]) AND a.checkpoint <= $4::bigint AND NOT ${tinyTradeSql("a")}
       AND ${filter}
     ORDER BY a.timestamp_ms DESC, a.checkpoint DESC, a.tx_slot DESC, a.event_slot DESC, a.part DESC
     LIMIT $7::int

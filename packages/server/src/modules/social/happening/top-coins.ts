@@ -1,3 +1,4 @@
+import { tinyTradeSql } from "@blast/core/modules/social/read-model/trade-size.ts";
 import { optionalSource } from "../optional-source.ts";
 import { DISPLAY_PRICES } from "@blast/core/modules/social/prices/test-sui.ts";
 import type { ReadableDatabase } from "@blast/core/modules/database/transaction.ts";
@@ -27,7 +28,7 @@ export const TOP_COINS_SQL = `SELECT market.* FROM (WITH shown_coins AS MATERIAL
   FROM chain_read_v1.activity a
   JOIN counted_coins c ON c.coin_type = a.coin_type
   JOIN social_wallet_owners o ON o.address = a.actor
-  WHERE a.kind = 'trade_buy' AND a.timestamp_ms > $1::bigint - 86400000 AND a.timestamp_ms <= $1::bigint
+  WHERE a.kind = 'trade_buy' AND NOT ${tinyTradeSql("a")} AND a.timestamp_ms > $1::bigint - 86400000 AND a.timestamp_ms <= $1::bigint
     AND a.checkpoint <= $3::bigint
   GROUP BY c.coin_key
 ), holders AS (

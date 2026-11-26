@@ -1,3 +1,4 @@
+import { tinyTradeSql } from "@blast/core/modules/social/read-model/trade-size.ts";
 import { z } from "zod";
 import { assertChainReadThroughViews } from "@blast/core/modules/database/modules.ts";
 import type { ReadableDatabase } from "@blast/core/modules/database/transaction.ts";
@@ -74,7 +75,7 @@ FROM (
   SELECT a.activity_id, a.checkpoint, a.tx_slot, a.event_slot, a.part, a.kind, a.timestamp_ms, a.actor, a.presale_id, a.coin_type,
     a.usd_value, a.quote_amount, a.coin_amount, a.quote_refund
   FROM ${SHOWN_ACTIVITY} a
-  WHERE a.timestamp_ms <= $1::bigint AND a.kind = ANY($2::text[])
+  WHERE a.timestamp_ms <= $1::bigint AND a.kind = ANY($2::text[]) AND NOT ${tinyTradeSql("a")}
     AND a.checkpoint <= CASE WHEN a.kind IN ('presale_commit', 'presale_claim') THEN $3::bigint ELSE $4::bigint END${
       withCursor
         ? `

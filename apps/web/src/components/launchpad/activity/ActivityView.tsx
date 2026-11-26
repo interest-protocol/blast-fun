@@ -463,7 +463,7 @@ export const TradeList = memo(function TradeList({ rows, availableRows, units, e
   const quoteUsd = dustQuoteUsd(units.quoteType, currency, units.quoteUsd);
   const ownFilter = useState(true);
   const visibility = useTradeVisibility(rows, availableRows,
-    (row) => isTradeUnderDollar({ usd: row.volumeUsd, quote: row.amounts.quote, decimals: units.quoteDecimals, quoteUsd }),
+    (row, floor) => isTradeUnderDollar({ usd: row.volumeUsd, quote: row.amounts.quote, decimals: units.quoteDecimals, quoteUsd }, floor),
     filter ?? ownFilter,
   );
   const profiles = useTraderProfiles(profileSource?.launchId ?? "", profileSource?.activity ?? NO_CONFIRMED_ACTIVITY, profileSource !== undefined, visibility.rows, leaving);
