@@ -37,12 +37,12 @@ export default async function AppLayout({
   );
 
   const testPricing = testSuiPriceEnabled();
-  const shellBanner = testPricing ? (
+  const shellBanner = (
     <>
-      <TestPricingNotice enabled />
+      <TestPricingNotice enabled={testPricing} />
       {banner}
     </>
-  ) : banner;
+  );
   const shell = (
     <SocialShell
       banner={shellBanner}
