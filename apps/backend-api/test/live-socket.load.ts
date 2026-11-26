@@ -53,7 +53,8 @@ if (process.argv[2] === "server") {
       BLAST_BACKEND_TRUSTED_PROXY_CIDRS: "127.0.0.0/24",
     }),
     relay,
-    redis: { execute: async () => "OK" },
+    // Every Redis step admits: the ticket burn and per-address caps are not what this measures.
+    redis: { execute: async () => 1 },
   });
   let checkpoint = 10;
   const server = Bun.serve<LiveSocketData>({

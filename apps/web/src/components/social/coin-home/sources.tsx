@@ -27,7 +27,7 @@ import { countWords } from "@blast/core/web/format.ts";
 import type { FeedFreshnessSource } from "../home/feed-freshness";
 import { useHomeLive } from "./use-home-live";
 import { useSortPrefetch } from "./use-sort-prefetch";
-import { newerHomePrice, useHomePrices } from "./use-home-prices";
+import { homeTrade, newerHomePrice, useHomePrices } from "./use-home-prices";
 import { useLiveCoins, type RankedCoin } from "./use-live-coins";
 import { useRankMotion } from "./use-rank-motion";
 import { useRankings, type Rankings } from "./use-rankings";
@@ -161,6 +161,7 @@ function CoinRows({ coins, props, latest, checkpoint, buy, list, rankings, swapp
       buy={buy?.coinKey === homeCoinKey(coin) ? buy.cue : undefined}
       livePrice={props.streamPrices ? newerHomePrice(latest, coin, coin.readCheckpoint ?? checkpoint) : undefined}
       nowMs={props.nowMs}
+      trade={props.streamPrices ? homeTrade(latest, coin) : null}
       trading={props.trading}
       watchlist={props.source === "watchlist"}
       window={props.window}

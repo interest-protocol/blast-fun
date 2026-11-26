@@ -11,7 +11,12 @@ import {
 } from "@blast/core/modules/launchpad-contract/market-stream.ts";
 import type { HomeCoin } from "@blast/core/web/contracts/home.ts";
 
-type Observation = DisplayPrice & Readonly<{ checkpoint: number }>;
+/** The coin's latest own move, apart from its quote's: when it landed and which way it went against the quote. */
+export type HomeTrade = Readonly<{ at: number; direction: 1 | -1 }>;
+type Observation = DisplayPrice & Readonly<{ checkpoint: number; trade: HomeTrade | null }>;
+
+/** Within this of the frame's common move, a coin moved with its quote: a SUI tick, not a trade. */
+const QUOTE_MOVE_TOLERANCE = 1e-5;
 
 /**
  * The coins a Home list streams prices for, at most `maxPriceCoinsPerClient` migrated coins on the page. Sticky,
@@ -46,20 +51,7 @@ export function useHomePrices(coins: readonly HomeCoin[], enabled: boolean) {
   useEffect(() => {
     if (!subscriptionKey) return;
     const priceCoins = subscriptionKey.split("|");
-    const receive = ({ checkpoint, prices }: DisplayPriceFrame) => setLatest((previous) => {
-      const next = new Map(priceCoins.flatMap((type) => {
-        const price = previous.get(type);
-        return price ? [[type, price] as const] : [];
-      }));
-      let changed = next.size !== previous.size;
-      for (const price of prices) {
-        const current = next.get(price.coin_type);
-        if (current && (checkpoint < current.checkpoint || price.as_of_ms < current.as_of_ms)) continue;
-        next.set(price.coin_type, { ...price, checkpoint });
-        changed = true;
-      }
-      return changed ? next : previous;
-    });
+    const receive = (frame: DisplayPriceFrame) => setLatest((previous) => observeFrame(previous, priceCoins, frame));
     const subscription = tabMarketStream()?.subscribe({
       pools: [],
       priceCoins,
@@ -70,6 +62,60 @@ export function useHomePrices(coins: readonly HomeCoin[], enabled: boolean) {
   }, [subscriptionKey]);
 
   return latest;
+}
+
+/**
+ * One frame applied to the streamed coins. A quote move (SUI) moves every coin on that quote by the same ratio in one
+ * read, so the frame's common move is the ratio at least two moved coins share (1 when none do). A coin that moved
+ * apart from it traded, up or down against it. A coin's first price, or a move smaller than the tolerance, is no trade.
+ */
+export function observeFrame(
+  previous: ReadonlyMap<string, Observation>,
+  priceCoins: readonly string[],
+  { checkpoint, prices }: DisplayPriceFrame,
+): ReadonlyMap<string, Observation> {
+  const next = new Map(priceCoins.flatMap((type) => {
+    const price = previous.get(type);
+    return price ? [[type, price] as const] : [];
+  }));
+  let changed = next.size !== previous.size;
+  const fresh = prices.filter((price) => {
+    const current = next.get(price.coin_type);
+    return !current || (checkpoint >= current.checkpoint && price.as_of_ms >= current.as_of_ms);
+  });
+  const ratios = new Map(fresh.flatMap((price) => {
+    const before = Number(next.get(price.coin_type)?.usd_price);
+    const ratio = Number(price.usd_price) / before;
+    return before > 0 && Number.isFinite(ratio) ? [[price.coin_type, ratio] as const] : [];
+  }));
+  const common = quoteMove([...ratios.values()]);
+  for (const price of fresh) {
+    const ratio = ratios.get(price.coin_type);
+    const apart = ratio === undefined ? 0 : ratio / common - 1;
+    const trade = Math.abs(apart) > QUOTE_MOVE_TOLERANCE && Math.abs(ratio! - 1) > QUOTE_MOVE_TOLERANCE
+      ? { at: price.as_of_ms, direction: apart > 0 ? 1 as const : -1 as const }
+      : next.get(price.coin_type)?.trade ?? null;
+    next.set(price.coin_type, { ...price, checkpoint, trade });
+    changed = true;
+  }
+  return changed ? next : previous;
+}
+
+function quoteMove(ratios: readonly number[]): number {
+  const moved = ratios.filter((ratio) => Math.abs(ratio - 1) > QUOTE_MOVE_TOLERANCE);
+  let common = 1;
+  let shared = 1;
+  for (const ratio of moved) {
+    const count = moved.filter((other) => Math.abs(other / ratio - 1) <= QUOTE_MOVE_TOLERANCE).length;
+    if (count > shared) [common, shared] = [ratio, count];
+  }
+  return common;
+}
+
+/** The coin's latest trade on this tab's stream, whichever read won its price. */
+export function homeTrade(latest: ReadonlyMap<string, Observation>, coin: HomeCoin): HomeTrade | null {
+  const type = coin.lifecycle === "migrated" ? coinKey(coin.coin_type) : null;
+  return (type && latest.get(type)?.trade) || null;
 }
 
 /** A timestamp tie can only be broken by the market watermark read alongside the HTTP price. */
