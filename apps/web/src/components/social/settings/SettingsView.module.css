@@ -94,6 +94,7 @@ button.action:not([disabled]):active::before { background: var(--hair); }
 /* Log out: the board's 56px row; its hover takes the danger tint. */
 button.dangerRow { min-height: 3.5rem; }
 @media (hover: hover) and (pointer: fine) { button.dangerRow:not([disabled]):hover::before { background: var(--down-soft); } }
+button.dangerRow:not([disabled]):active::before { background: var(--hair); }
 
 .note { margin: 0.125rem 0.25rem 0; font-size: 0.75rem; line-height: 1.45; color: var(--muted); }
 
