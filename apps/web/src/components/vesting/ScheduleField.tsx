@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { DayPicker, type DropdownProps } from "react-day-picker";
-import { Button } from "#web/components/blast-ui/Button.tsx";
+import { useEffect, useRef, useState, type ComponentProps } from "react";
+import { DayPicker, type DayButtonProps, type DropdownProps } from "react-day-picker";
+import { Button, IconButton } from "#web/components/blast-ui/Button.tsx";
 import { Popover, PopoverSurface } from "#web/components/blast-ui/Popover.tsx";
 import { SelectField, TextField } from "#web/components/blast-ui/TextField.tsx";
 import styles from "./ScheduleField.module.css";
@@ -42,6 +42,46 @@ function CalendarSelect({ options, value, onChange, disabled, "aria-label": aria
       ))}
     </SelectField>
   );
+}
+
+/** A calendar day on the shared button; every prop DayPicker 9.14 gives its DayButton is passed on. */
+function CalendarDay({
+  modifiers, className, type, disabled, "aria-disabled": ariaDisabled, tabIndex, "aria-label": ariaLabel,
+  onClick, onBlur, onFocus, onKeyDown, onMouseEnter, onMouseLeave, children,
+}: DayButtonProps) {
+  const ref = useRef<HTMLButtonElement>(null);
+  // As in DayPicker's own DayButton: the focused day takes focus, so arrow keys move it.
+  useEffect(() => {
+    if (modifiers.focused) ref.current?.focus();
+  }, [modifiers.focused]);
+  return (
+    <Button
+      ref={ref}
+      variant="ghost"
+      size="sm"
+      className={className}
+      type={type}
+      disabled={disabled}
+      aria-disabled={ariaDisabled}
+      // DayPicker keeps a disabled day focusable only while it holds focus.
+      focusableDisabled={modifiers.focused}
+      tabIndex={tabIndex}
+      aria-label={ariaLabel}
+      onClick={onClick}
+      onBlur={onBlur}
+      onFocus={onFocus}
+      onKeyDown={onKeyDown}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+    >
+      {children}
+    </Button>
+  );
+}
+
+/** The previous and next month buttons on the shared icon button; DayPicker supplies the label. */
+function CalendarNav({ "aria-label": ariaLabel = "", ...props }: Omit<ComponentProps<"button">, "style">) {
+  return <IconButton {...props} aria-label={ariaLabel} variant="ghost" size="chip" />;
 }
 
 export function ScheduleField({
@@ -119,7 +159,7 @@ export function ScheduleField({
               weekStartsOn={1}
               captionLayout="dropdown"
               navLayout="after"
-              components={{ Dropdown: CalendarSelect }}
+              components={{ Dropdown: CalendarSelect, DayButton: CalendarDay, PreviousMonthButton: CalendarNav, NextMonthButton: CalendarNav }}
               startMonth={new Date(Math.min(year - 1, selected?.getFullYear() ?? year), 0)}
               endMonth={new Date(Math.max(year + 100, selected?.getFullYear() ?? year), 11)}
               classNames={{

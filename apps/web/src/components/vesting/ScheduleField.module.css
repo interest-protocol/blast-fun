@@ -85,23 +85,9 @@
   display: flex;
   gap: 0.25rem;
 }
-.navButton {
-  display: grid;
-  place-items: center;
-  width: 2.25rem;
-  height: 2.25rem;
-  border-radius: var(--r-button);
-  color: var(--ink);
-  cursor: pointer;
-}
+/* The shared IconButton owns the nav buttons' 36px geometry, hover, focus and unavailable state. */
 .navButton .chevron {
-  width: 1rem;
-  height: 1rem;
   fill: currentColor;
-}
-.navButton[aria-disabled="true"] {
-  color: var(--muted);
-  cursor: not-allowed;
 }
 .grid {
   border-collapse: separate;
@@ -117,24 +103,21 @@
   padding: 0;
   text-align: center;
 }
-.dayButton {
-  position: relative;
-  display: grid;
-  place-items: center;
+/* The shared Button owns hover, press and focus; a day cell is a 34px square in the text's ink. */
+:global([data-blast-ui]) .day .dayButton {
+  --control-height: 2.125rem;
+  --control-pad: 0;
   width: 2.125rem;
-  height: 2.125rem;
-  border-radius: var(--r-button);
   color: inherit;
   font: inherit;
   font-variant-numeric: tabular-nums;
-  cursor: pointer;
 }
 .outside {
   color: var(--muted);
 }
-.disabled .dayButton {
+:global([data-blast-ui]) .day.disabled .dayButton {
+  background: transparent;
   color: var(--muted);
-  cursor: not-allowed;
 }
 .hidden {
   visibility: hidden;
@@ -148,20 +131,10 @@
   border-radius: 50%;
   background: currentColor;
 }
-.selected .dayButton {
+/* The grid and cell classes lift these above the shared ghost variant and its hover. */
+:global([data-blast-ui]) .grid .day.selected .dayButton {
   background: var(--ink);
   color: var(--bg);
-}
-:global([data-blast-ui]) .popover :is(.dayButton, .navButton):focus-visible {
-  outline: 0.125rem solid var(--ink);
-  outline-offset: 0.125rem;
-  box-shadow: none;
-}
-@media (hover: hover) and (pointer: fine) {
-  .navButton:not([aria-disabled="true"]):hover,
-  .day:not(.selected) .dayButton:hover {
-    background: var(--raised);
-  }
 }
 .error {
   color: var(--down);
