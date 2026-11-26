@@ -271,14 +271,16 @@ function Readout({ bars, hovered, interval, precision, unit, quoteSymbol, spoken
   const bar = bars[index];
   const dateTime = useMemo(() => readoutDate(interval), [interval]);
   if (!bar) return <p className={styles.readout} aria-hidden="true" />;
-  return <p className={`${styles.readout} ${remove ? styles.hintRow : ""}`} aria-live={spoken ? "polite" : "off"} data-latest={index === bars.length - 1 || undefined} data-removing={remove ? "" : undefined}>
-    <span className={styles.readoutTime}>
-      <time dateTime={new Date(bar.timestamp).toISOString()}>{dateTime.format(bar.timestamp)}</time>
-      {found < 0 && <span className={styles.readoutTag} data-tag="latest">Latest</span>}
-      {bar.volume === 0 && <span className={styles.readoutTag}>No trades</span>}
+  return <p className={`${styles.readout} ${remove ? styles.hintRow : ""}`} aria-live={spoken ? "polite" : "off"} data-latest={index === bars.length - 1 || undefined} data-removing={remove ? "" : undefined} data-no-trades={bar.volume === 0 || undefined}>
+    <span className={styles.readoutLine}>
+      <span className={styles.readoutTime}>
+        <time dateTime={new Date(bar.timestamp).toISOString()}>{dateTime.format(bar.timestamp)}</time>
+        {found < 0 && <span className={styles.readoutTag} data-tag="latest">Latest</span>}
+        {bar.volume === 0 && <span className={styles.readoutTag}>No trades</span>}
+      </span>
+      <span className={styles.readoutVolume}><abbr title="Volume">Vol</abbr> {volumeText(bar.volume)} {quoteSymbol}</span>
     </span>
     <ReadoutPrices bar={bar} previous={bars[index - 1]?.close ?? bar.open} precision={precision} />
-    <span className={styles.readoutVolume}><abbr title="Volume">Vol</abbr> {volumeText(bar.volume)} {quoteSymbol}</span>
     <span className="sr-only"> Prices in {unit}.</span>
     {remove && <span className={styles.readoutRemove}><Button variant="ghost" size="sm" onClick={remove.onRemove} aria-label={`Remove ${remove.name.toLowerCase()}`}>Remove</Button></span>}
   </p>;

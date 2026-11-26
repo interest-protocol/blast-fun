@@ -42,7 +42,7 @@ export function CoinIdentityHeader({ coin, name, symbol, status, graduated, mark
       <span className={styles.heroMark}><CoinMark coin={coin} size={55} /></span>
       <PageHeader
         title={<span className={styles.coinName}>
-          <span>{tickerOnly ? `$${symbol}` : name}</span>
+          {tickerOnly ? <span className="ticker">${symbol}</span> : <span title={compact && name ? name : undefined}>{name}</span>}
           <small className="coinNamed">
             {symbol && !tickerOnly ? <span className="ticker">${symbol}</span> : null}
             {mark}
@@ -84,13 +84,19 @@ function PriceSlot({ price, reserve }: Readonly<{ price: ReactNode; reserve?: Re
   return <div className={styles.priceHold}><strong>{price}</strong><strong aria-hidden="true">{reserve}</strong></div>;
 }
 
+/** Marks a row that shows the unit (the currency switch, or a visible figure), so a chart beside it may drop its unit title. */
+function showsUnit(switchShown: boolean, priceNamesUnit: boolean, amountsHidden: boolean): "" | undefined {
+  return switchShown || (priceNamesUnit && !amountsHidden) ? "" : undefined;
+}
+
 /**
  * `reserve` is the last confirmed figure. While `price` waits with "—", the
  * row keeps that figure's space, unseen, so the content below does not move.
+ * `priceNamesUnit`: the price is a figure that shows its unit ($ or the quote symbol), not a placeholder.
  */
-export function MarketPriceRow({ price, reserve, priceLabel = "Price", change, activity, showCurrency = true }: Readonly<{
+export function MarketPriceRow({ price, reserve, priceLabel = "Price", change, activity, showCurrency = true, priceNamesUnit = false }: Readonly<{
   price: ReactNode; reserve?: ReactNode; priceLabel?: string; change?: Readonly<{ value: ReactNode; direction?: "up" | "down" }> | null;
-  activity?: ReactNode; showCurrency?: boolean;
+  activity?: ReactNode; showCurrency?: boolean; priceNamesUnit?: boolean;
 }>) {
   const { amountsHidden } = useShellPrefs();
   const displayCurrency = useCoinPriceCurrency();
@@ -98,7 +104,7 @@ export function MarketPriceRow({ price, reserve, priceLabel = "Price", change, a
   const hasPrice = price != null;
   const held = reserve == null ? undefined : true;
   if (!hasPrice && !currency && !activity) return null;
-  return <div className={styles.marketPriceRow}>
+  return <div className={styles.marketPriceRow} data-unit-shown={showsUnit(currency != null, priceNamesUnit, amountsHidden)}>
     {hasPrice || activity ? <div className={styles.marketPrice}>
       {hasPrice && <><span>{priceLabel}</span><PriceSlot price={price} reserve={reserve} /></>}
       {hasPrice && change && !amountsHidden && <span className={styles.priceChange} data-direction={change.direction}
