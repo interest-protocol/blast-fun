@@ -31,17 +31,16 @@ export function mayanSdk(): BridgeSdk {
   let solana: Connection | null = null;
   const solanaConnection = () => (solana ??= new Connection(mayanRpc("solana"), "confirmed"));
 
-  // After a close, no request reaches the wallet, so no prompt opens.
-  const evmSigner = async (wallet: EvmWallet, signal: AbortSignal) => {
-    signal.throwIfAborted();
-    return new BrowserProvider(abortableProvider(await wallet.provider(), signal)).getSigner(wallet.address);
-  };
-
   // Returns the hash once the wallet sends. `sendTransaction` would then poll the
   // wallet's own RPC with no time limit, which never ends for some smart-contract wallets.
   const sendEvm = async (wallet: EvmWallet, chain: BridgeChain, transaction: TransactionRequest, signal: AbortSignal): Promise<string> => {
-    const signer = await evmSigner(wallet, signal);
+    signal.throwIfAborted();
     const chainId = CHAINS[chain].chainId!;
+    const provider = await wallet.provider();
+    // After a close, no request reaches the wallet, so no prompt opens. The network is
+    // given, not detected: ethers retries a failed detection every second, forever.
+    signal.throwIfAborted();
+    const signer = await new BrowserProvider(abortableProvider(provider, signal), chainId, { staticNetwork: true }).getSigner(wallet.address);
     const walletChainId = Number(await signer.provider.send("eth_chainId", []));
     if (walletChainId !== chainId) throw new Error(`Wallet is on chain ${walletChainId}, not ${chain}`);
     return signer.sendUncheckedTransaction({ ...transaction, chainId });
