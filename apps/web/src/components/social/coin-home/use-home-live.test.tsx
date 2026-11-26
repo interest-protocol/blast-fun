@@ -16,7 +16,7 @@ const { createRoot } = await import("react-dom/client");
 const { useHomeLive } = await import("./use-home-live");
 const { discoverQuery } = await import("./home-client");
 
-const query: HomeQuery = { window: "1h", sort: "relevant", stage: "all", minParticipants: 0, age: "all", tradable: false, limit: 10, page: 1, cursor: null, presales: true };
+const query: HomeQuery = { window: "1h", sort: "relevant", stage: "all", minParticipants: 0, age: "all", tradable: false, knownDeployer: false, limit: 10, page: 1, cursor: null, presales: true };
 const page = { coins: [], total: 0, pages: 1, page: 1, next_cursor: null, window: "1h", clock_ms: 0, as_of: { checkpoint: 1, timestamp_ms: 0, lag_ms: 0 } } as unknown as HomeCoinsPage;
 
 /** Home's live loop over a page cached `ageMs` ago; counts the Discover reads it starts. */

@@ -20,7 +20,7 @@ function send(name: string, properties: Properties): void {
 
 export const homeAnalytics = {
   source: (state: HomeViewState) => send("home_source", { source: state.source, window: state.window }),
-  controls: (state: HomeViewState, filters: number) => send("home_controls", { sort: state.sort, window: state.window, filters, age: state.age, min: state.minParticipants, tradable: state.tradable }),
+  controls: (state: HomeViewState, filters: number) => send("home_controls", { sort: state.sort, window: state.window, filters, age: state.age, min: state.minParticipants, tradable: state.tradable, known_deployer: state.knownDeployer }),
   events: (presaleId: string) => send("home_events_expand", { presale: presaleId }),
   openCoin: (presaleId: string) => send("home_open_coin", { presale: presaleId }),
   trade: (presaleId: string, action: "buy" | "sell" | "commit" | "view") => send("home_trade_entry", { presale: presaleId, action }),

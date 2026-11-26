@@ -1154,6 +1154,13 @@ test("Discover and saved coins fill missing price and supply from tracked pools 
       .map((coin) => [coin.venue, coin.quote.symbol, coin.verified_team]), [["bluefin", "USDC", true]]);
     assert.deepEqual(overlaps.coins.filter((coin) => coin.coin_type === wheels.coinType).map((coin) => [coin.presale_id, coin.price_usd]), [[shownPresaleId, null]]);
     assert.ok(!overlaps.coins.some((coin) => coin.coin_type === helmet.coinType || coin.coin_type === blast.coinType));
+    // Known deployer only keeps exactly the coins the badge marks, Blast v1 coins included, in the same order.
+    const everyCoin = await ok<HomeCoinsPage>(await discover("?limit=50"), "home-coins-page");
+    const known = await ok<HomeCoinsPage>(await discover("?known_deployer=1&limit=50"), "home-coins-page");
+    assert.deepEqual(symbols(known.coins), symbols(everyCoin.coins.filter((coin) => coin.verified_team === true)));
+    assert.equal(known.total, known.coins.length);
+    assert.ok(known.coins.some((coin) => coin.coin_type === manifest.coinType));
+    assert.ok(!known.coins.some((coin) => coin.coin_type === one.coinType));
     const indexedOne = overlaps.coins.find((coin) => coin.coin_type === one.coinType);
     assert.deepEqual([indexedOne?.price_usd, indexedOne?.price_as_of_ms, indexedOne?.fdv_usd, indexedOne?.mobile_market?.market_cap_usd], ["0.002", now, "40.00", "30.00"]);
     poolPricesAvailable = false;

@@ -613,6 +613,9 @@ const saleFieldsOf = (facts: FactsRow, savers: number | undefined) => facts.pres
   ...(savers !== undefined && { savers }),
 };
 
+/** Whether the coin carries the Known deployer badge: a verified team, or a Blast v1 coin marked as one. Discover's `known_deployer` filter reads the same value. */
+const isKnownDeployer = (facts: Pick<FactsRow, "verified_team" | "coin_type">) => facts.verified_team || blastV1Coin(facts.coin_type)?.verifiedTeam === true;
+
 /** One coin item from its facts, its window and its supply. */
 export function coinOf(input: CoinInputs): HomeCoin {
   const { facts, activity, nowMs, supply, totalSupply, mobileMarket } = input;
@@ -621,7 +624,7 @@ export function coinOf(input: CoinInputs): HomeCoin {
   const { baselineUntil, openUsd, ...dayChange } = dayChangeOf(facts, price, input.rollingChangeClockMs);
   const circulating = mobileMarket ? supplyOf(supply, mobileMarket.escrowed)?.circulating ?? null : null;
   const hourEligible = facts.launched_ms === null || Number(facts.launched_ms) <= hourStart;
-  const verifiedTeam = facts.verified_team || blastV1Coin(facts.coin_type)?.verifiedTeam;
+  const verifiedTeam = isKnownDeployer(facts);
   return {
     presale_id: facts.presale_id,
     coin_type: facts.coin_type,
@@ -1092,6 +1095,7 @@ export async function readHomeDiscover(db: ReadableDatabase, query: HomeQuery, c
     launchedMs: candidate.launchedMs,
     // A sale not trading yet has its venue already, but nothing to trade there.
     tradable: isTradable(candidate.facts),
+    knownDeployer: isKnownDeployer(candidate.facts),
     listed: isListed(candidate.facts),
     progressBps: candidate.progressBps ?? null,
     nowMs: bounds.clockMs,

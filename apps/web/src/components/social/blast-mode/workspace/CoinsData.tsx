@@ -78,7 +78,7 @@ import { useQuoteUsd } from "../../prices/use-quote-usd";
 import { useReportDiscoveryCoins } from "./discovery-preview";
 import { CoinsRows, PanelAddButton, RefreshButton } from "./CoinsRows";
 import { Switch } from "#web/components/blast-ui/Checkbox.tsx";
-import { assetOnScreen, canonicalCoinType, ecosystemSlot, workspaceDiscoverQuery } from "./coin-row-model";
+import { assetOnScreen, canonicalCoinType, ecosystemSlot, workspaceDiscoverQuery, workspaceViewState } from "./coin-row-model";
 import { workspaceScrollOwner } from "./scroll-owner";
 import styles from "./CoinsData.module.css";
 
@@ -124,11 +124,7 @@ function CoinsContent() {
     requestAnimationFrame(() => region.current?.focus({ preventScroll: true }));
   };
   // Blast mode lists every stage; Home's tabs are its own.
-  const state: HomeViewState = {
-    ...controls,
-    stage: "all",
-    minParticipants: controls.min_participants,
-  };
+  const state = workspaceViewState(controls);
   const change = (next: HomeViewState) => {
     setEcosystem(false);
     dispatch.patchDataControls("Coins", {
@@ -140,6 +136,8 @@ function CoinsContent() {
       min_participants: next.minParticipants as 0 | 2 | 5 | 10,
       age: next.age,
       tradable: next.tradable,
+      // Left out while off (`setup.ts`).
+      known_deployer: next.knownDeployer || undefined,
       page: 1,
       navigation: { ...controls.navigation, scroll_top: 0, anchor: null },
     });
@@ -322,6 +320,10 @@ function CoinsFilters({ state, change }: Readonly<{ state: HomeViewState; change
       <label className={styles.filterRow}>
         <span>Trades in the app only</span>
         <Switch aria-label="Trades in the app only" checked={state.tradable} onCheckedChange={(tradable) => change({ ...state, tradable })} />
+      </label>
+      <label className={styles.filterRow}>
+        <span>Known deployer only</span>
+        <Switch aria-label="Known deployer only" checked={state.knownDeployer} onCheckedChange={(knownDeployer) => change({ ...state, knownDeployer })} />
       </label>
     </>
   );
@@ -537,9 +539,9 @@ function DiscoverCoins({
       controls={controls}
       read={read}
       viewKey={JSON.stringify(query)}
-      // Ecosystem coins have no participants or launch time, so a participant or age filter leaves them out.
-      ecosystem={state.minParticipants === 0 && state.age === "all"}
-      empty={<DiscoverEmpty compact onReset={() => dispatch.patchDataControls("Coins", { ...controls, min_participants: 0, age: "all", tradable: false, page: 1 })} query={query} />}
+      // Ecosystem coins have no participants, launch time or deployer, so a participant, age or Known deployer filter leaves them out.
+      ecosystem={state.minParticipants === 0 && state.age === "all" && !state.knownDeployer}
+      empty={<DiscoverEmpty compact onReset={() => dispatch.patchDataControls("Coins", { ...controls, min_participants: 0, age: "all", tradable: false, known_deployer: undefined, page: 1 })} query={query} />}
     />
   );
 }

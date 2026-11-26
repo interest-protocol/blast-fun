@@ -497,14 +497,15 @@ export function pageOf<Candidate extends Rankable>(
  * known progress is not almost graduated.
  */
 export function passesFilters(
-  query: Pick<HomeQuery, "minParticipants" | "age" | "tradable" | "stage">,
-  candidate: Readonly<{ participants: number; launchedMs: number | null; tradable: boolean; listed: boolean; progressBps: number | null; nowMs: number }>,
+  query: Pick<HomeQuery, "minParticipants" | "age" | "tradable" | "knownDeployer" | "stage">,
+  candidate: Readonly<{ participants: number; launchedMs: number | null; tradable: boolean; knownDeployer: boolean; listed: boolean; progressBps: number | null; nowMs: number }>,
 ): boolean {
   // Only a curve still filling has a progress; one with an unknown target is never "almost".
   if (query.stage === "almost" && (candidate.progressBps ?? -1) < HOME_ALMOST_GRADUATED_BPS) return false;
   if (query.stage === "graduated" && !candidate.listed) return false;
   if (candidate.participants < query.minParticipants) return false;
   if (query.tradable && !candidate.tradable) return false;
+  if (query.knownDeployer && !candidate.knownDeployer) return false;
   const span = HOME_AGE_MS[query.age];
   if (span !== null && (candidate.launchedMs === null || candidate.nowMs - candidate.launchedMs > span)) return false;
   return true;
@@ -531,9 +532,8 @@ function parsePage(raw: string | null): number {
   return socialParameter(z.string().regex(/^[1-9][0-9]{0,3}$/).transform(Number).pipe(z.number().max(HOME_PAGE_LAST)).nullable().transform((value) => value ?? 1), raw, "page");
 }
 
-/** `tradable`: absent is false; `1` true; `0` false; anything else refused. */
-/** `1` or `0`, absent meaning `0`. */
-function parseFlag(raw: string | null, parameter: "tradable" | "ranked"): boolean {
+/** `1` or `0`, absent meaning `0`; anything else refused. */
+function parseFlag(raw: string | null, parameter: "tradable" | "known_deployer" | "ranked"): boolean {
   socialParameter(z.enum(["1", "0"]).nullable(), raw, parameter);
   return raw === "1";
 }
@@ -565,6 +565,7 @@ export function parseHomeQuery(params: URLSearchParams): HomeQuery {
     minParticipants: parseMinParticipants(single(params, "min_participants")),
     age: parseChoice(single(params, "age"), HOME_DEFAULT_QUERY.age, isHomeAge, "age"),
     tradable: parseFlag(single(params, "tradable"), "tradable"),
+    knownDeployer: parseFlag(single(params, "known_deployer"), "known_deployer"),
     limit: parseLimit(single(params, "limit")),
     page,
     cursor,

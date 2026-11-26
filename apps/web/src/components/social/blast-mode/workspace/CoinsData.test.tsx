@@ -402,6 +402,23 @@ test("Most held asks Discover for the most holders first and keeps the order in 
   }
 });
 
+test("Known deployer only asks Discover for badged coins, counts on Filters and clears with the other filters", async () => {
+  const page = await mounted();
+  try {
+    await page.click("Filters");
+    await page.click("Known deployer only");
+    assert.equal(page.store.getSnapshot().data.controls.Coins.known_deployer, true);
+    assert.ok(page.requests.some((request) => new URL(request, "https://blast.test").searchParams.get("known_deployer") === "1"));
+    assert.equal(document.querySelector('button[title="Filters"]')?.getAttribute("aria-label"), "Filters, 1 active");
+    assert.equal(document.querySelector('[aria-label="Known deployer only"]')?.getAttribute("aria-checked"), "true");
+    await page.click("Clear filters");
+    assert.equal(page.store.getSnapshot().data.controls.Coins.known_deployer ?? false, false);
+    assert.equal(document.querySelector('button[title="Filters"]')?.getAttribute("aria-label"), "Filters");
+  } finally {
+    await page.dispose();
+  }
+});
+
 test("a guest Following source stays private and does not fall back to public discovery", async () => {
   const page = await mounted();
   try {

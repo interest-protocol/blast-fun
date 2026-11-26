@@ -201,12 +201,12 @@ test("the view state round-trips through the URL, with defaults left out and unk
   assert.equal(viewSearchOf(viewStateOf(new URLSearchParams("w=1h"))), "");
   // Relevant is the default view, so its old explicit link folds to the plain address.
   assert.equal(viewSearchOf(viewStateOf(new URLSearchParams("sort=relevant"))), "");
-  const state = { source: "following", stage: "all", sort: "newest", window: "24h", minParticipants: 5, age: "7d", tradable: true, page: 3 } as const;
-  assert.equal(viewSearchOf(state), "?src=following&sort=newest&w=24h&min=5&age=7d&tradable=1&page=3");
+  const state = { source: "following", stage: "all", sort: "newest", window: "24h", minParticipants: 5, age: "7d", tradable: true, knownDeployer: true, page: 3 } as const;
+  assert.equal(viewSearchOf(state), "?src=following&sort=newest&w=24h&min=5&age=7d&tradable=1&known=1&page=3");
   assert.deepEqual(viewStateOf(new URLSearchParams(viewSearchOf(state))), state);
   assert.equal(viewSearchOf(HOME_DEFAULT_FEED), "");
   assert.equal(viewSearchOf(HOME_DEFAULT_VIEW), "?sort=held");
-  assert.deepEqual(viewStateOf(new URLSearchParams("src=x&sort=cap&w=7d&min=3&age=1d&tradable=yes&page=0")), HOME_DEFAULT_FEED);
+  assert.deepEqual(viewStateOf(new URLSearchParams("src=x&sort=cap&w=7d&min=3&age=1d&tradable=yes&known=yes&page=0")), HOME_DEFAULT_FEED);
   // A tab's stage implies its order, so the link names only the stage; a header sort within it is named.
   const almost = viewStateOf(new URLSearchParams("stage=almost"));
   assert.deepEqual([almost.stage, almost.sort], ["almost", "progress"]);
@@ -220,9 +220,10 @@ test("the view state round-trips through the URL, with defaults left out and unk
   assert.equal(viewStateOf(new URLSearchParams("page=12")).page, 12);
   assert.equal(viewStateOf(new URLSearchParams("page=12")).sort, "held");
   for (const bad of ["page=0", "page=1.5", "page=two", "page=10000", "page=-2"]) assert.equal(viewStateOf(new URLSearchParams(bad)).page, 1, bad);
-  assert.equal(activeFilterCount(state), 3);
+  assert.equal(activeFilterCount(state), 4);
+  assert.equal(activeFilterCount({ ...HOME_DEFAULT_VIEW, knownDeployer: true }), 1);
   assert.equal(activeFilterCount(HOME_DEFAULT_VIEW), 0);
-  assert.deepEqual(discoverQueryOf(state), { window: "24h", sort: "newest", stage: "all", minParticipants: 5, age: "7d", tradable: true, limit: 10, page: 3, cursor: null, presales: true });
+  assert.deepEqual(discoverQueryOf(state), { window: "24h", sort: "newest", stage: "all", minParticipants: 5, age: "7d", tradable: true, knownDeployer: true, limit: 10, page: 3, cursor: null, presales: true });
   assert.equal(discoverQueryOf(state, 20).limit, 20);
   assert.equal(resultsAnnouncement(state, 3), "Following · 3 coins · last 24 hours");
   assert.equal(resultsAnnouncement(state, 47, 5), "Following · 47 coins · page 3 of 5 · last 24 hours");

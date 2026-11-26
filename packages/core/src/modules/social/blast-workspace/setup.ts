@@ -112,6 +112,8 @@ export const DataControlsSchema = z.strictObject({
     ]),
     age: z.enum(["24h", "7d", "30d", "all"]),
     tradable: z.boolean(),
+    // Optional so setups saved before it parse; written only when on, so a backend that predates it still accepts the setup until a user turns it on.
+    known_deployer: z.boolean().optional(),
     page,
     rows,
     live: z.boolean(),
