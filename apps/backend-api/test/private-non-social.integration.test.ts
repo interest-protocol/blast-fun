@@ -281,7 +281,11 @@ test(
     ] as const) {
       // No contract means the relay cannot forward the path and private
       // signing refuses it, so no browser or SSR call can reach Bun with it.
-      assert.equal(privateRoute(method, path, "browser"), null, `${method} ${path} browser contract`);
+      assert.equal(
+        privateRoute(method, path, "browser"),
+        null,
+        `${method} ${path} browser contract`,
+      );
       assert.equal(privateRoute(method, path, "ssr-read"), null, `${method} ${path} SSR contract`);
       assert.equal((await send(path, method)).status, 404, `${method} ${path}`);
     }
