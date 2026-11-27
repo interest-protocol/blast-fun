@@ -194,6 +194,8 @@ export function quoteErrorText(error: unknown, chain: ChainInfo, token: SourceTo
 
 export const PAUSED_TEXT = "Bridging is paused. You can still deposit on Sui. Code: bridge_paused.";
 export const QUOTE_FAILED_TEXT = "Couldn’t get a price. Code: bridge_quote_failed.";
+export const BALANCE_FAILED_TEXT = "Couldn’t load the balance. Code: bridge_balance_failed.";
+export const TOKENS_FAILED_TEXT = "Couldn’t load tokens. Code: bridge_tokens_failed.";
 export const LOAD_FAILED_TEXT = "Bridge to Sui couldn’t load. Code: bridge_load_failed.";
 /** A send that threw may still have reached the chain (Solana confirms after sending), so it never says nothing left. */
 export const SEND_FAILED_TEXT = "The bridge didn’t start. Check your wallet before you try again. Code: bridge_send_failed.";
@@ -206,7 +208,7 @@ export function isPausedError(error: unknown): boolean {
 
 /** What the main button says and does, in the order the checks run. */
 export type BridgeAction =
-  | Readonly<{ kind: "paused" | "wait" | "enter" | "short" | "quoting" | "busy" }>
+  | Readonly<{ kind: "paused" | "wait" | "enter" | "balance" | "short" | "quoting" | "busy" }>
   | Readonly<{ kind: "signIn" | "connect" | "switch" | "retry" | "approve" | "requote" | "bridge" }>;
 
 export type ActionInput = Readonly<{
@@ -216,6 +218,7 @@ export type ActionInput = Readonly<{
   sourceConnected: boolean;
   wrongChain: boolean;
   atoms: bigint | null;
+  balanceReady: boolean;
   insufficient: boolean;
   quoting: boolean;
   /** The quote failed for a reason a second ask may fix. */
@@ -233,8 +236,9 @@ export function bridgeAction(input: ActionInput): BridgeAction {
   if (!input.sourceConnected) return { kind: "connect" };
   if (input.wrongChain) return { kind: "switch" };
   if (input.atoms === null) return { kind: "enter" };
-  if (input.insufficient) return { kind: "short" };
   if (input.busy) return { kind: "busy" };
+  if (!input.balanceReady) return { kind: "balance" };
+  if (input.insufficient) return { kind: "short" };
   if (input.quoteFailed && !input.quoting) return { kind: "retry" };
   if (input.quoting || !input.hasQuote) return { kind: "quoting" };
   if (input.needsApproval) return { kind: "approve" };
@@ -269,6 +273,8 @@ export function actionReason(action: BridgeAction, token: SourceToken): string |
       return "Loading your account.";
     case "enter":
       return "Enter an amount.";
+    case "balance":
+      return "Checking your balance.";
     case "short":
       return `Not enough ${token.symbol} for this amount.`;
     default:
@@ -278,5 +284,5 @@ export function actionReason(action: BridgeAction, token: SourceToken): string |
 
 /** Disabled states: the button only explains. */
 export function actionDisabled(action: BridgeAction): boolean {
-  return ["paused", "wait", "enter", "short", "quoting", "busy"].includes(action.kind);
+  return ["paused", "wait", "enter", "balance", "short", "quoting", "busy"].includes(action.kind);
 }

@@ -6,6 +6,7 @@ import { useRef, useState } from "react";
 import { shortAddress } from "@blast/core/web/format.ts";
 
 import { Button, DisclosureButton, IconButton } from "#web/components/blast-ui/Button.tsx";
+import { DiagnosticText } from "#web/components/blast-ui/DiagnosticText.tsx";
 import { EmptyState } from "#web/components/blast-ui/EmptyState.tsx";
 import { CheckIcon, CloseIcon } from "#web/components/blast-ui/Icons.tsx";
 import { Popover, PopoverSurface } from "#web/components/blast-ui/Popover.tsx";
@@ -15,7 +16,7 @@ import { Ticker } from "#web/components/blast-ui/Ticker.tsx";
 import { useDebouncedValue } from "#web/lib/use-debounced-value.ts";
 
 import type { BridgeChain } from "./bridge-config.ts";
-import { CHAINS, sourceAddressKey, type SourceToken } from "./bridge-model.ts";
+import { CHAINS, sourceAddressKey, TOKENS_FAILED_TEXT, type SourceToken } from "./bridge-model.ts";
 import type { BridgeSdk } from "./bridge-sdk.ts";
 import styles from "./bridge.module.css";
 
@@ -110,7 +111,7 @@ export function SourceTokenPicker({ chain, token, disabled, sdk, onChange }: Pro
         </div>
         {loading ? <SkeletonLine label="Loading tokens" /> : null}
         {catalog.isError && !catalog.isFetching ? (
-          <EmptyState action={<Button onClick={() => { void catalog.refetch(); }} size="sm">Retry</Button>} compact role="alert" title="Couldn’t load tokens" />
+          <EmptyState action={<Button onClick={() => { void catalog.refetch(); }} size="sm">Retry</Button>} compact role="alert" title={<DiagnosticText message={TOKENS_FAILED_TEXT} />} />
         ) : null}
         {catalog.isSuccess && !catalog.isFetching && options.length === 0 ? <EmptyState compact role="status" title="No tokens found" /> : null}
       </PopoverSurface>
