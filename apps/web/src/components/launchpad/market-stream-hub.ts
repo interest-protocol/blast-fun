@@ -478,12 +478,13 @@ export class MarketStreamHub {
 
   /**
    * A pool the socket streams (or will) was fenced against another deployment: it gets no new fence by
-   * `set` (kept pools are untouched), so the tab opens a new socket.
+   * `set` (kept pools are untouched), so the tab opens a new socket. That is any streamed pool when the
+   * deployment changes now, and a streamed pool the hub no longer tracks, which an earlier change dropped.
    */
   private conflicts(connection: Connection, wanted: Wanted): boolean {
-    if (sameExpected(connection.expected, wanted.expected)) return false;
     const streamed = streamedPools(connection);
-    return wanted.pools.some((pool) => streamed.has(pool));
+    if (!sameExpected(connection.expected, wanted.expected)) return wanted.pools.some((pool) => streamed.has(pool));
+    return wanted.pools.some((pool) => streamed.has(pool) && !connection.pools.has(pool) && !connection.leaving.has(pool));
   }
 
   /** A new socket for `wanted`; the old one, if any, is closed first. */
@@ -513,13 +514,13 @@ export class MarketStreamHub {
    * that comes back before the relay drops them needs no new fence.
    */
   private change(connection: Connection, wanted: Wanted): void {
+    const restored = this.changePools(connection, wanted.pools);
     if (!sameExpected(connection.expected, wanted.expected)) {
       connection.expected = wanted.expected;
-      // Fenced against the old deployment: never brought back.
+      // Fenced against the old deployment: never brought back (`conflicts` redials for one the socket still streams).
       for (const pool of connection.leaving.values()) unfence(pool, "waiting");
       connection.leaving.clear();
     }
-    const restored = this.changePools(connection, wanted.pools);
     connection.priceCoins = wanted.priceCoins;
     const presaleBack = this.changePresale(connection, wanted.presale);
     this.sync();
@@ -540,7 +541,8 @@ export class MarketStreamHub {
     }
     for (const [key, pool] of connection.pools) {
       if (pools.has(key)) continue;
-      if (streamed.has(key)) connection.leaving.set(key, pool);
+      // Its stats are not kept current while it is away (`stats` drops them), so it comes back without them.
+      if (streamed.has(key)) connection.leaving.set(key, Object.assign(pool, { stats: undefined }));
       else unfence(pool, "waiting");
     }
     connection.pools = pools;
@@ -621,9 +623,12 @@ export class MarketStreamHub {
       if (asked.has(key)) pool.relay = "unavailable";
     }
     for (const [key, pool] of connection.leaving) {
-      if (kept.has(key)) continue;
-      unfence(pool, "waiting");
-      connection.leaving.delete(key);
+      // Removed while its own `set` was in flight: the socket streams it now, so it hears its fence.
+      if (kept.has(key)) pool.awaiting = false;
+      else {
+        unfence(pool, "waiting");
+        connection.leaving.delete(key);
+      }
     }
   }
 
@@ -831,6 +836,8 @@ export class MarketStreamHub {
   private connect(): void {
     const connection = this.connection;
     if (!connection) return;
+    // A reconnect or a shown tab during the linger: nobody would read the new socket.
+    if (nothingWanted(this.wanted())) return this.close();
     const params = new URLSearchParams();
     params.set("activity", "true");
     for (const key of connection.pools.keys()) params.append("pool", key);
@@ -861,10 +868,12 @@ export class MarketStreamHub {
     const confirmPong = (checkpoint: unknown) => {
       // The handshake pong is the first confirmed upstream heartbeat.
       if (heartbeatTimeoutMs === MARKET_STREAM_BUDGET.heartbeatTimeoutMs) expectHeartbeat();
-      // A pong before the answer that adds the presale is not this presale's.
-      if (!connection.presaleAwaiting && typeof checkpoint === "number" && Number.isSafeInteger(checkpoint) && checkpoint >= 0) {
-        this.presaleState(connection, checkpoint);
-      }
+      if (typeof checkpoint !== "number" || !Number.isSafeInteger(checkpoint) || checkpoint < 0) return;
+      // A pong before the answer that adds the presale is not this presale's. One for a presale left
+      // while its `set` was in flight is the leaving presale's, so it comes back ready.
+      const away = connection.leavingPresale;
+      if (connection.presale !== undefined && !connection.presaleAwaiting) this.presaleState(connection, checkpoint);
+      else if (away && away.id === connection.held.presale) away.fence = checkpoint;
     };
     // Anything after an `unavailable` shows this relay keeps the socket open (an older one closes it at once).
     source.addEventListener("heartbeat", () => { connection.unavailableLast = false; expectHeartbeat(); });

@@ -903,6 +903,89 @@ test("a refused set marks only the added pools unavailable, keeps the old ones l
   assert.equal(s.sources.length, 1);
 });
 
+// This fails if a pool left while its own `set` is in flight ignores the fence that follows the answer:
+// after a refused `set` that leaves it held, a screen that wants it back would wait forever.
+test("a pool left while its set is in flight keeps the fence after the answer; wanted back after a refused set, it is live", async () => {
+  const s = setup();
+  const chart = watcher();
+  s.hub.subscribe({ pools: chart.pools, expected, listener: chart.listener });
+  s.source().hello();
+  s.source().fence(10);
+  const left = s.hub.subscribe({ pools: [VENUE], expected, listener: watcher([VENUE]).listener });
+  await settle();
+  left.stop();
+  await settle();
+  const held = s.source().sets().at(-1)!.pools;
+  s.source().answer();
+  s.source().fence(20, VENUE); // the catch-up that follows the answer
+  assert.deepEqual(s.source().sets().at(-1)!.pools, [CURVE]);
+  s.source().answer({ reason: "rate", retry_ms: 1_000, held: { pools: held, price_coins: [], presale: null } });
+  const back = watcher([VENUE]);
+  s.hub.subscribe({ pools: back.pools, expected, listener: back.listener });
+  await settle();
+  s.advance(1_500);
+  assert.deepEqual(back.fences, [[VENUE, 20]]);
+  assert.equal(back.last(VENUE), "live");
+  assert.equal(s.sources.length, 1);
+});
+
+// This fails if the pong for a presale left while its `set` is in flight is lost: it would come back never ready.
+test("a presale left while its set is in flight keeps its pong; wanted back after a refused set, it is ready", async () => {
+  const s = setup();
+  s.hub.subscribe({ pools: [CURVE], expected, listener: watcher().listener });
+  s.source().hello();
+  s.source().fence(10);
+  const sale = `0x${"66".repeat(32)}`;
+  const left = s.hub.subscribe({ pools: [], presale: sale, expected: null, listener: { state: () => {} } });
+  await settle();
+  left.stop();
+  await settle();
+  s.source().answer();
+  s.source().emit("hint", { type: "pong", presale_checkpoint: 40 });
+  assert.equal(s.source().sets().at(-1)!.presale, null);
+  s.source().answer({ reason: "rate", retry_ms: 1_000, held: { pools: [CURVE], price_coins: [], presale: sale } });
+  const ready: (number | null)[] = [];
+  s.hub.subscribe({ pools: [], presale: sale, expected: null, listener: { state: () => {}, presaleReady: (checkpoint) => ready.push(checkpoint) } });
+  await settle();
+  s.advance(1_500);
+  assert.equal(ready.at(-1), 40);
+  assert.equal(s.sources.length, 1);
+});
+
+// This fails if a pool fenced under one deployment comes back with that fence after the tab moved to another.
+test("a pool fenced under another deployment never comes back with its old fence: wanted again, it opens a new socket", async () => {
+  const s = setup();
+  const first = s.hub.subscribe({ pools: [CURVE], expected: null, listener: watcher().listener });
+  s.source().hello();
+  s.source().fence(10);
+  first.stop();
+  s.hub.subscribe({ pools: [OTHER], expected, listener: watcher([OTHER]).listener });
+  await settle();
+  assert.deepEqual(s.source().sets().map(({ pools }) => pools), [[OTHER]]);
+  const back = watcher();
+  s.hub.subscribe({ pools: back.pools, expected, listener: back.listener });
+  await settle();
+  assert.deepEqual(back.fences, [], "the old fence was never checked against this deployment");
+  assert.equal(s.sources.length, 2, "the socket may still hold it under the old fence: a new socket fences it again");
+  s.source().hello();
+  s.source().fence(15);
+  assert.deepEqual(back.fences, [[CURVE, 15]]);
+});
+
+// This fails if a socket that drops during the linger is reopened with nobody to read it.
+test("a socket that drops during the linger is not reopened", async () => {
+  const s = setup();
+  const chart = s.hub.subscribe({ pools: [CURVE], expected, listener: watcher().listener });
+  s.source().hello();
+  s.source().fence(10);
+  chart.stop();
+  await settle();
+  s.source().emit("error");
+  s.advance(LINGER_MS);
+  assert.equal(s.sources.length, 1);
+  assert.equal(s.timers.length, 0);
+});
+
 test("frames, stats and presale pongs for an awaiting pool or presale are ignored until the answer", async () => {
   const s = setup();
   const chart = watcher();
