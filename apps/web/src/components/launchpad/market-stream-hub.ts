@@ -516,7 +516,10 @@ export class MarketStreamHub {
    */
   private conflicts(connection: Connection, wanted: Wanted): boolean {
     const streamed = streamedPools(connection);
-    if (!sameExpected(connection.expected, wanted.expected)) return wanted.pools.some((pool) => streamed.has(pool));
+    if (!sameExpected(connection.expected, wanted.expected)) {
+      const discovery = connection.discoveryPages.values().next().value?.page.section.provenance;
+      return (discovery !== undefined && deploymentMismatch(discovery, wanted.expected) !== null) || wanted.pools.some((pool) => streamed.has(pool));
+    }
     return wanted.pools.some((pool) => streamed.has(pool) && !connection.pools.has(pool) && !connection.leaving.has(pool));
   }
 
@@ -742,7 +745,7 @@ export class MarketStreamHub {
     if (this.socket === "open" && request.discovery) {
       if (!connection.discoverySupported) return "unavailable";
       if (connection.upstream !== "ok") return connection.upstream;
-      return connection.discoveryPages.size === 2 ? "live" : "recovering";
+      return connection.discoveryPages.size === 2 && [...connection.discoveryPages.values()].every(({ page }) => page.section.state !== "unavailable") ? "live" : "recovering";
     }
     return this.socket === "open" ? "live" : this.socket === "refused" ? "unavailable" : this.socket;
   }
@@ -1204,8 +1207,9 @@ export class MarketStreamHub {
       const provenance = parseInfraProvenance(wire.provenance);
       if (deploymentMismatch(provenance, connection.expected)) return;
       const page = parseDiscoveryResponse(wire.page);
+      const section = page.section.provenance;
       if ((page.view !== "new" && page.view !== "near_graduation") ||
-        page.section.state === "unavailable" || page.section.provenance.checkpoint !== provenance.checkpoint) return;
+        !section || section.network !== provenance.network || section.deployment !== provenance.deployment || section.checkpoint !== provenance.checkpoint) return;
       const revision = BigInt(wire.revision);
       if ((connection.discoveryPages.get(page.view)?.revision ?? -1n) >= revision) return;
       connection.discoveryPages.set(page.view, { revision, page });

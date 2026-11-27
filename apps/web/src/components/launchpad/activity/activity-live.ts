@@ -80,6 +80,7 @@ export type LiveTradesOptions = Readonly<{
   feed: LiveActivityFeed;
   /** The compact live tape can evict old rows until the reader opens its detailed history. */
   recentOnly?: boolean;
+  historyOpen?: boolean;
   /** A row the shown list leaves out (dust under its filter): it takes no row and asks no read until `showHidden`. */
   hides?: (row: ActivityRow) => boolean;
   onState: (state: MarketStreamState) => void;
@@ -107,7 +108,7 @@ export function followLiveTrades(options: LiveTradesOptions): (() => void) & Rea
   let hidden: number | null = null;
   let truncated: number | null = null;
   let newest: number | null = null;
-  let keepHistory = !options.recentOnly;
+  let keepHistory = !options.recentOnly || options.historyOpen === true;
   let lastRead = Number.NEGATIVE_INFINITY;
   let misses = 0;
   let cancel: (() => void) | null = null;
@@ -186,8 +187,8 @@ export function followLiveTrades(options: LiveTradesOptions): (() => void) & Rea
   const showHistory = (open: boolean) => {
     if (!options.recentOnly) return;
     keepHistory = open;
-    const at = truncated ?? (feed.readThrough() === null ? newest : null);
-    if (open && at !== null) {
+    const at = Math.max(truncated ?? -1, newest ?? -1);
+    if (open && at >= 0) {
       want(at);
       truncated = null;
     }

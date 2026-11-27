@@ -110,6 +110,7 @@ function CoinActivityFeed({ source, compact, initialActivity, start }: CoinActiv
   // A tiny trade never takes a row, the switch on or off.
   const [hideSmallTrades, setHideSmallTrades] = useState(true);
   const following = useRef<ReturnType<typeof followLiveTrades> | null>(null);
+  const historyOpen = useRef(false);
   const hidesLive = useEffectEvent((row: ActivityRow) => showTape && isUnder(row, tradeFloor(hideSmallTrades)));
   const smallTradeFilter = useMemo(() => [hideSmallTrades, (hide: boolean) => {
     setHideSmallTrades(hide);
@@ -133,6 +134,7 @@ function CoinActivityFeed({ source, compact, initialActivity, start }: CoinActiv
       expected: network && deployment ? { network, deployment } : null,
       feed,
       recentOnly,
+      historyOpen: historyOpen.current,
       hides: (row) => hidesLive(row),
       onState: (state) => setStream({ key: poolsKey, live: state === "live" }),
       schedule: (run, ms) => {
@@ -185,7 +187,10 @@ function CoinActivityFeed({ source, compact, initialActivity, start }: CoinActiv
       onRefresh={() => void feed.refresh(true)}
       onMoreActivity={() => void feed.more()}
       onShowNewerActivity={() => feed.showNewer()}
-      onHistoryOpen={(open) => following.current?.showHistory(open)}
+      onHistoryOpen={(open) => {
+        historyOpen.current = open;
+        following.current?.showHistory(open);
+      }}
       onWindow={setFlowWindow}
       smallTradeFilter={smallTradeFilter}
     />

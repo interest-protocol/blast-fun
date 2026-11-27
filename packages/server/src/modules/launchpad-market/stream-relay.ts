@@ -24,6 +24,7 @@ import {
 import type { WebSocket } from "undici";
 import { POOL_KEY } from "@blast/core/modules/launchpad-contract/venues.ts";
 import { parseOpeningRound } from "@blast/core/modules/launchpad-contract/activity.ts";
+import type { DiscoveryResponse } from "@blast/core/modules/launchpad-discovery/rows.ts";
 import {
   DisplayPriceFeed,
   type DisplayPriceReader,
@@ -452,11 +453,20 @@ export class MarketStreamRelay {
     if (revision <= this.#discoveryRevision) return;
     const provenance = parseInfraProvenance(frame.provenance);
     if (deploymentMismatch(provenance, this.#expected)) throw new Fatal();
-    const pages = projectDiscovery(frame, provenance);
+    const unavailable = (view: DiscoveryResponse["view"]): DiscoveryResponse => ({
+      view, section: { state: "unavailable", reason: "frame-too-large", provenance },
+    });
+    const pack = (page: DiscoveryResponse) => event("discovery", { revision: frame.revision, provenance: frame.provenance, page });
+    const pages = frame.new === null && frame.progress === null
+      ? [unavailable("new"), unavailable("near_graduation")]
+      : projectDiscovery(frame, provenance);
     this.#discoveryRevision = revision;
-    for (const page of pages) {
-      const bytes = event("discovery", { revision: frame.revision, provenance: frame.provenance, page });
-      if (bytes.byteLength > B.maxChunkBytes) continue;
+    for (let page of pages) {
+      let bytes = pack(page);
+      if (bytes.byteLength > B.maxChunkBytes) {
+        page = unavailable(page.view);
+        bytes = pack(page);
+      }
       const display = JSON.stringify(page.section.state === "available" ? page.section.data : page.section.state);
       const previous = this.#discoveryPages.get(page.view);
       this.#discoveryPages.set(page.view, { bytes, display });

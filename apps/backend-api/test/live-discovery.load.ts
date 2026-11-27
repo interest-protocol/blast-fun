@@ -121,6 +121,7 @@ function discoveryPageIsOrdered(page: DiscoveryResponse) {
   }
   return (
     page.view === "near_graduation" &&
+    rows.length === 10 &&
     rows.every(
       (row, index) =>
         row.launchId !== id(17) &&
@@ -566,9 +567,14 @@ async function fleet() {
     assert.ok(!abort, "interrupted");
     await waitReady(count, 45_000);
     const until = Date.now() + 10_000;
-    while (tabs.some((tab) => tab.pool !== null && tab.last < checkpoint) && Date.now() < until) {
+    const caughtUp = (tab: Tab) =>
+      tab.pool === null
+        ? (tab.discovery.get("near_graduation") ?? 0) >= checkpoint
+        : tab.last >= checkpoint;
+    while (tabs.some((tab) => !caughtUp(tab)) && Date.now() < until) {
       await Bun.sleep(100);
     }
+    const stalledDiscover = tabs.filter((tab) => tab.discover && !caughtUp(tab)).length;
     for (const tab of tabs) {
       if (tab.pool !== null && tab.last < checkpoint) {
         missing += checkpoint - tab.last;
@@ -583,6 +589,7 @@ async function fleet() {
       duplicates,
       missing,
       wrongDiscover,
+      stalledDiscover,
       staleFallbacks,
       tickets,
       trade_receive_p95_ms: percentile(latency, 0.95),
@@ -598,7 +605,7 @@ async function fleet() {
     console.log(JSON.stringify(result));
     assert.ok(tradeCount && discoveryCount);
     assert.equal(readyCount(), count);
-    assert.equal(duplicates + missing + wrongDiscover, 0);
+    assert.equal(duplicates + missing + wrongDiscover + stalledDiscover, 0);
     assert.equal(staleFallbacks, 0);
     assert.ok(
       (result.trade_receive_p95_ms ?? Infinity) <= 1_000 &&

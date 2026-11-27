@@ -129,7 +129,9 @@ replaces the whole wanted set; `activity` stays as the socket opened, so a
 client that may `set` a presale opens with `activity=true` (without it the
 socket gets presale frames but no `presale_checkpoint` hint). The optional
 `discovery` field defaults to false. The browser sends it after the gateway
-advertises `discovery: true` in its hello. The
+advertises `discovery: true` in its hello. When a Discover page exceeds its
+socket frame budget, the gateway sends an unavailable page at that revision
+and the browser reads the view over HTTP until a usable live page arrives. The
 server answers each `set` it does not close on with one
 `event: set` block: `{"seq","ok":true,"held":{…}}`, or
 `{"seq","ok":false,"reason","retry_ms","held":{…}}`. `held` is what the socket

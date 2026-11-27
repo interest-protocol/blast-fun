@@ -386,6 +386,37 @@ test("a live tape keeps its window during a burst and reads history when opened 
   follow();
 });
 
+test("opening history catches up a partially filled tape and keeps that intent after resubscribing", async () => {
+  const { hub, listener } = fakeHub();
+  const clock = fakeClock();
+  const reads: number[] = [];
+  let checkpoint = READ_THROUGH;
+  const feed: LiveActivityFeed = {
+    addLive: () => false,
+    readThrough: () => checkpoint,
+    refresh: async (_manual, at) => {
+      reads.push(checkpoint = at!);
+      return true;
+    },
+  };
+  const options = { hub, launchId: LAUNCH, pools: [CURVE_POOL_KEY], expected: null, feed, recentOnly: true, onState: () => {}, schedule: clock.schedule, now: clock.now, random: () => 0 };
+  const first = followLiveTrades(options);
+  listener().trade!(frame(CURVE_POOL_KEY, READ_THROUGH + 1));
+  assert.equal(clock.timers.length, 0);
+  first.showHistory(true);
+  clock.fire();
+  await settle();
+  assert.deepEqual(reads, [READ_THROUGH + 1]);
+  first();
+
+  const replacement = followLiveTrades({ ...options, historyOpen: true });
+  listener().fence!(CURVE_POOL_KEY, READ_THROUGH + 2, { lastEvent: READ_THROUGH + 2, tapeResumed: true });
+  clock.fire();
+  await settle();
+  assert.deepEqual(reads, [READ_THROUGH + 1, READ_THROUGH + 2]);
+  replacement();
+});
+
 test("under the small-trade filter a burst of dust frames takes no row and asks no read; a real trade still shows, and turning the filter off reads the dust once", () => {
   const { hub, listener } = fakeHub();
   const clock = fakeClock();

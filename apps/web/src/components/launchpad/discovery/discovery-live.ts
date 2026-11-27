@@ -30,7 +30,7 @@ export function useLiveDiscovery(enabled: boolean) {
 
 /** Keep the authoritative live order and token and carry forward verified badges from the cached page. */
 export function liveDiscoveryPage(streamed: DiscoveryResponse | undefined, cached: DiscoveryResponse | undefined) {
-  if (!streamed || (streamed.section.provenance?.checkpoint ?? -1) < (cached?.section.provenance?.checkpoint ?? -1)) return cached;
+  if (!streamed || streamed.section.state === "unavailable" || (streamed.section.provenance?.checkpoint ?? -1) < (cached?.section.provenance?.checkpoint ?? -1)) return cached;
   if (streamed.section.state !== "available" || (cached?.section.state !== "available" && cached?.section.state !== "stale")) return streamed;
   const verified = new Set(cached.section.data.rows.filter((row) => row.verifiedTeam).map((row) => row.launchId));
   if (!verified.size) return streamed;

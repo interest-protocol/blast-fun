@@ -10,6 +10,7 @@ import type { RelaySocket } from "@blast/server/modules/launchpad-market/stream-
 import {
   infraProvenanceFixture,
   FIXTURE_FINGERPRINT,
+  launchSummaryFixture,
   poolSummaryFixture,
 } from "../../../packages/server/test/fixtures/modules/launchpad-contract/fixtures.ts";
 import { validateBackendFleet } from "../src/app/config/fleet.ts";
@@ -124,6 +125,49 @@ const read = async (reader: ReadableStreamDefaultReader<Uint8Array>) => {
     data: JSON.parse(text.match(/^data: (.+)$/m)![1]!) as Record<string, unknown>,
   };
 };
+
+test("oversized Discover pages replace the cached page and let clients recover on a later revision", async () => {
+  const socket = new Socket();
+  const relay = new MarketStreamRelay(() => socket, expected);
+  const target = new Request(`https://frontend.test${MARKET_STREAM_PATH}?discovery=true`);
+  const live = open(relay, target).body!.getReader();
+  const discovery = (revision: number, name: string) => {
+    const launch = launchSummaryFixture();
+    const page = { pools: [{ ...launch, metadata: { ...(launch.metadata as object), name } }], next_cursor: null };
+    socket.receive({ type: "discovery", revision: String(revision), provenance: provenance(revision), new: page, progress: { pools: [], next_cursor: null } });
+  };
+  const page = async (reader: ReadableStreamDefaultReader<Uint8Array>) => {
+    const entry = await read(reader);
+    assert.equal(entry.event, "discovery");
+    return entry.data.page as { view: string; section: { state: string; reason?: string } };
+  };
+  try {
+    await read(live);
+    socket.receive({ type: "hello", protocol: 1, provenance: provenance(), discovery: true });
+    socket.receive({ type: "pong" });
+    discovery(10, "Froggy");
+    assert.equal((await page(live)).section.state, "available");
+    assert.equal((await page(live)).view, "near_graduation");
+    discovery(11, "x".repeat(B.maxChunkBytes));
+    assert.equal((await page(live)).section.reason, "frame-too-large");
+
+    const later = open(relay, target).body!.getReader();
+    try {
+      await read(later);
+      assert.equal((await page(later)).section.state, "unavailable");
+      assert.equal((await page(later)).view, "near_graduation");
+    } finally {
+      await later.cancel();
+    }
+    socket.receive({ type: "discovery", revision: "12", provenance: provenance(12), new: null, progress: null });
+    assert.equal((await page(live)).view, "near_graduation");
+    discovery(13, "Froggy");
+    assert.equal((await page(live)).section.state, "available");
+    assert.equal((await page(live)).section.state, "empty");
+  } finally {
+    await live.cancel();
+  }
+});
 
 test("an unpriced fill reaches live clients and is preserved in the next subscriber's fence", async () => {
   const socket = new Socket();

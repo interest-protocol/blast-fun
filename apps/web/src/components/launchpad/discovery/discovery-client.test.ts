@@ -78,6 +78,10 @@ test("a current live page owns the order and pagination token while a newer HTTP
   assert.equal(visible.section.data.nextCursor, "live-cursor");
   const fresh = page(9, [first], "fallback-cursor");
   assert.equal(liveDiscoveryPage(stream, fresh), fresh);
+  const oversized = parseDiscoveryResponse({ view: "near_graduation", section: {
+    state: "unavailable", reason: "frame-too-large", provenance: { ...provenance, checkpoint: 10 },
+  } });
+  assert.equal(liveDiscoveryPage(oversized, fresh), fresh);
 });
 
 test("Almost graduated reads curves by progress and lists only those at 60% or more", async () => {

@@ -1392,11 +1392,11 @@ test("Discover shares the existing socket, rejects old pages, and waits for a fr
   const sent = source.sets().at(-1)!;
   assert.deepEqual(sent, { op: "set", seq: 1, pools: [CURVE], price_coins: [], presale: null, discovery: true });
   source.emit("set", { seq: sent.seq, ok: true, held: { pools: [CURVE], price_coins: [], presale: null, discovery: true } });
-  const page = (view: string, checkpoint: number) => {
+  const page = (view: string, checkpoint: number, state = "empty") => {
     const provenance = wireProvenance(checkpoint);
     source.emit("discovery", {
       revision: String(checkpoint), provenance,
-      page: { view, section: { state: "empty", provenance: { source: "blast-infra", network: "mainnet", deployment: DEPLOYMENT, checkpoint, timestampMs: provenance.timestamp_ms, observedAt: provenance.observed_ms, lagMs: 20 } } },
+      page: { view, section: { state, ...(state === "unavailable" && { reason: "frame-too-large" }), provenance: { source: "blast-infra", network: "mainnet", deployment: DEPLOYMENT, checkpoint, timestampMs: provenance.timestamp_ms, observedAt: provenance.observed_ms, lagMs: 20 } } },
     });
   };
   page("new", 20);
@@ -1411,6 +1411,42 @@ test("Discover shares the existing socket, rejects old pages, and waits for a fr
   page("near_graduation", 21);
   page("new", 21);
   assert.equal(states.at(-1), "live");
+  page("new", 22, "unavailable");
+  assert.equal(received.at(-1), 22);
+  assert.equal(states.at(-1), "recovering");
+  page("new", 21);
+  assert.equal(states.at(-1), "recovering");
+  page("new", 23);
+  assert.equal(states.at(-1), "live");
+});
+
+test("a new Discover deployment cannot replay cached pages from the previous deployment", async () => {
+  const s = setup();
+  const received: number[] = [];
+  s.hub.subscribe({ pools: [], expected: null, discovery: true, listener: { state: () => {} } });
+  await settle();
+  const source = s.source();
+  const provenance = wireProvenance(20);
+  source.emit("hint", { type: "hello", provenance, set: true, discovery: true });
+  const sent = source.sets().at(-1)!;
+  source.emit("set", { seq: sent.seq, ok: true, held: { pools: [], price_coins: [], presale: null, discovery: true } });
+  source.emit("discovery", { revision: "20", provenance, page: {
+    view: "new",
+    section: { state: "empty", provenance: { source: "blast-infra", network: "mainnet", deployment: DEPLOYMENT, checkpoint: 20, timestampMs: provenance.timestamp_ms, observedAt: provenance.observed_ms, lagMs: 20 } },
+  } });
+  const listener: Parameters<typeof s.hub.subscribe>[0]["listener"] = {
+    state: () => {},
+    discovery: ({ section }) => { received.push(section.provenance!.checkpoint!); },
+  };
+  const matching = s.hub.subscribe({ pools: [], expected, discovery: true, listener });
+  await settle();
+  assert.deepEqual(received, [20]);
+  assert.equal(s.sources.length, 1);
+  matching.stop();
+  s.hub.subscribe({ pools: [], expected: { ...expected, deployment: "cd".repeat(32) }, discovery: true, listener });
+  await settle();
+  assert.deepEqual(received, [20]);
+  assert.equal(s.sources.length, 2);
 });
 
 test("Discover leaves the existing socket usable when the gateway is older", async () => {
