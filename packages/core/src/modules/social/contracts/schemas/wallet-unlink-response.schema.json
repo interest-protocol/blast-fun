@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "account_deleted": {
+      "type": "boolean"
+    },
+    "signed_out": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "account_deleted",
+    "signed_out"
+  ],
+  "additionalProperties": false,
+  "title": "Unlinked Slush wallet",
+  "description": "DELETE /api/social/me/wallets 200. Indicates whether the account was closed and whether the caller must sign in again.",
+  "$id": "https://blast-v2.invalid/social/contracts/wallet-unlink-response.schema.json"
+}

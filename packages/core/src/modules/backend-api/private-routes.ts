@@ -97,6 +97,12 @@ const IDENTITY_ROUTES: readonly PrivateRouteContract[] = [
     maxBodyBytes: 4096,
   },
   {
+    id: "social.wallet.unlink",
+    method: "DELETE",
+    path: "/api/social/me/wallets",
+    maxBodyBytes: 4096,
+  },
+  {
     id: "social.sign-in.challenge",
     method: "POST",
     path: "/api/social/sign-in/challenge",

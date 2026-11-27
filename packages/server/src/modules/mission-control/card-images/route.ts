@@ -14,11 +14,11 @@ import type { CardImageService } from "@blast/server/modules/mission-control/car
 /**
  * A published card record never changes. Share URLs additionally carry the
  * current recruit total, and their render digest includes the displayed X
- * handles. Browsers keep an exact image a day and the CDN keeps it a year;
- * renderer or recruit changes therefore get a new URL instead of stale bytes.
+ * handles. The CDN can share a response briefly so retired cards age out,
+ * and the browser revalidates.
  */
 export const PUBLIC_CARD_IMAGE_CACHE_CONTROL =
-  "public, max-age=86400, s-maxage=31536000, immutable";
+  "public, max-age=0, s-maxage=60, must-revalidate";
 
 /** About 5 MB of card ids and digests per instance. */
 export const PUBLISHED_CARD_DIGEST_ENTRIES = 20_000;
@@ -65,6 +65,7 @@ export interface PublicCardImageDependencies {
    * Unknown and unpublished ids are never remembered.
    */
   readonly published: LRUCache<string, string>;
+  isPublished(cardId: string): Promise<boolean>;
   publishedCard(cardId: string): Promise<PublishedCardSnapshot | null>;
 }
 
@@ -130,7 +131,11 @@ export async function publicCardImageResponse(
     const remembered = digest === undefined
       ? null
       : dependencies.images.cached({ cardId: id, digest, format });
-    if (remembered) return png(remembered);
+    if (remembered) {
+      if (await dependencies.isPublished(id)) return png(remembered);
+      dependencies.published.delete(id);
+      return notFound();
+    }
 
     const snapshot = await dependencies.publishedCard(id);
     if (!snapshot) return notFound();
@@ -172,7 +177,7 @@ export type WarmPublicCardImageOutcome = "stored" | "unpublished" | "busy" | "fa
  */
 export async function warmPublicCardImage(
   cardId: string,
-  dependencies: PublicCardImageDependencies & {
+  dependencies: Pick<PublicCardImageDependencies, "images" | "publishedCard"> & {
     now?: () => number;
     sleep?: (delayMs: number) => Promise<void>;
   },

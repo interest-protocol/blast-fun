@@ -47,6 +47,8 @@ import {
   socialWalletChallengeSchema,
   socialWalletLinkRequestSchema,
   socialWalletLinkedSchema,
+  socialWalletUnlinkRequestSchema,
+  socialWalletUnlinkedSchema,
 } from "../src/modules/social/contracts/wallets.ts";
 import { socialBuyAlertResponseSchema, socialFollowingWalletsSchema } from "../src/modules/social/contracts/buy-alerts.ts";
 import { socialWatchlistIdsSchema, socialWatchlistKeysSchema } from "../src/modules/social/contracts/watchlist.ts";
@@ -467,6 +469,8 @@ const socialContracts = {
   "wallet-challenge-response": socialWalletChallengeSchema,
   "wallet-link-request": socialWalletLinkRequestSchema,
   "wallet-link-response": socialWalletLinkedSchema,
+  "wallet-unlink-request": socialWalletUnlinkRequestSchema,
+  "wallet-unlink-response": socialWalletUnlinkedSchema,
   "wallet-session-request": socialWalletSessionRequestSchema,
   "wallet-session-response": socialWalletSessionSchema,
   "wallet-sign-in-challenge-request": socialWalletSignInChallengeRequestSchema,

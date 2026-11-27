@@ -66,6 +66,8 @@ export type SheetProps = Readonly<{
   onRequestOpen?: () => void;
   /** The id of the sheet's title (`aria-labelledby`). */
   labelledBy: string;
+  /** The id of a short description to announce when the sheet opens. */
+  describedBy?: string;
   /** The element that takes focus on open (the design: the first action, or the field). */
   initialFocus?: () => HTMLElement | null;
   onKeyDown?: KeyboardEventHandler<HTMLElement>;
@@ -111,7 +113,7 @@ export function Sheet(props: SheetProps) {
 function StaticSheet(props: SheetProps) {
   return (
     <div className={styles.scrim} data-sheet-scrim="">
-      <dialog aria-labelledby={props.labelledBy} aria-modal className={sheetClass(props)} onKeyDown={props.onKeyDown} open tabIndex={-1}>
+      <dialog aria-describedby={props.describedBy} aria-labelledby={props.labelledBy} aria-modal className={sheetClass(props)} onKeyDown={props.onKeyDown} open tabIndex={-1}>
         {props.children}
       </dialog>
     </div>
@@ -288,6 +290,7 @@ function LiveSheet(props: SheetProps) {
           ref={setScrim}
         >
           <Dialog.Popup
+            aria-describedby={props.describedBy}
             aria-labelledby={labelledBy}
             aria-modal={open ? true : undefined}
             className={sheetClass(props)}
@@ -316,13 +319,13 @@ export function SheetClose({ onClick, disabled }: Readonly<{ onClick: () => void
 }
 
 /** The sheet's title (27px/700) and its lead line. */
-export function SheetHeading({ id, title, lead }: Readonly<{ id: string; title: string; lead?: ReactNode }>) {
+export function SheetHeading({ id, leadId, title, lead }: Readonly<{ id: string; leadId?: string; title: string; lead?: ReactNode }>) {
   return (
     <div>
       <h2 className={styles.title} id={id}>
         {title}
       </h2>
-      {lead ? <p className={styles.lead}>{lead}</p> : null}
+      {lead ? <p className={styles.lead} id={leadId}>{lead}</p> : null}
     </div>
   );
 }

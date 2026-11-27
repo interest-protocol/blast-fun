@@ -13,6 +13,7 @@ import type {
 } from "@blast/core/modules/social/contracts/me.ts";
 import type { SocialAccountLoader } from "../route-kit/contracts.ts";
 import { SocialRouteError } from "@blast/core/modules/social/route-kit/errors.ts";
+import { WALLET_SESSION_ACTIVE_SQL } from "@blast/core/modules/social/wallet-sign-in/sessions.ts";
 
 type AccountRow = {
   member_profile_id: string | null;
@@ -46,8 +47,8 @@ type WalletRow = {
  */
 const ACCOUNT_BY_DID = `
   SELECT
-    member.profile_id AS member_profile_id,
-    a.account_id,
+    CASE WHEN a.deleted_at IS NULL THEN member.profile_id END AS member_profile_id,
+    CASE WHEN a.deleted_at IS NULL THEN a.account_id END AS account_id,
     CASE WHEN a.account_id IS NULL THEN NULL WHEN a.profile_id IS NULL THEN 'new' ELSE 'member' END AS kind,
     COALESCE(p.callsign, a.callsign) AS callsign,
     -- UI-06: the account's own name and picture choice win (as in social_account_identities, 0062).
@@ -79,25 +80,28 @@ const ACCOUNT_BY_DID = `
  * or a member's Privy identity). One row per source that holds it.
  */
 const HOLDERS_BY_ADDRESS = `
-  SELECT h.account_id, h.profile_id, h.rank
-  FROM (
+  SELECT h.account_id, h.profile_id, guard.session_active
+  FROM (SELECT ${WALLET_SESSION_ACTIVE_SQL} AS session_active) guard
+  LEFT JOIN LATERAL (
     SELECT a.account_id, NULL::uuid AS profile_id, 0 AS rank
-    FROM social_accounts a WHERE a.sui_address = $1
+    FROM social_accounts a WHERE a.sui_address = $1 AND a.deleted_at IS NULL
     UNION ALL
-    SELECT w.account_id, NULL::uuid, 1 FROM social_account_wallets w WHERE w.address = $1
+    SELECT w.account_id, NULL::uuid, 1
+    FROM social_account_wallets w JOIN social_accounts a ON a.account_id = w.account_id
+    WHERE w.address = $1 AND a.deleted_at IS NULL
     UNION ALL
     SELECT a.account_id, w.profile_id, 2
     FROM mission_control_account_wallets w
     LEFT JOIN social_accounts a ON a.profile_id = w.profile_id
-    WHERE w.sui_address = $1
+    WHERE w.sui_address = $1 AND a.deleted_at IS NULL
     UNION ALL
     SELECT COALESCE(own.account_id, member.account_id), i.profile_id, 3
     FROM presale_embedded_wallets e
     LEFT JOIN social_accounts own ON own.privy_did = e.privy_did
     LEFT JOIN mission_control_account_identities i ON i.provider = 'privy' AND i.provider_subject = e.privy_did
     LEFT JOIN social_accounts member ON member.profile_id = i.profile_id
-    WHERE e.address = $1
-  ) AS h
+    WHERE e.address = $1 AND own.deleted_at IS NULL AND member.deleted_at IS NULL
+  ) AS h ON guard.session_active
   ORDER BY h.rank`;
 
 /** An account's resolution row by account id (the shape `ACCOUNT_BY_DID` answers). */
@@ -116,7 +120,7 @@ const ACCOUNT_BY_ID = `
     floor(extract(epoch FROM a.sharing_since) * 1000)::bigint AS sharing_since_ms
   FROM social_accounts a
   LEFT JOIN mission_control_profiles p ON p.profile_id = a.profile_id
-  WHERE a.account_id = $1`;
+  WHERE a.account_id = $1 AND a.deleted_at IS NULL`;
 
 /**
  * The account's wallets from `social_wallet_owners`, which already drops an
@@ -125,7 +129,7 @@ const ACCOUNT_BY_ID = `
  * presale embedded wallet is `embedded`; a proven social wallet is `slush`
  * when it says so, else `external`.
  */
-const WALLETS_BY_ACCOUNT = `
+export const WALLETS_BY_ACCOUNT = `
   SELECT
     o.address,
     CASE
@@ -257,8 +261,8 @@ export class PostgresSocialAccounts implements SocialAccountLoader {
    * only data from before the guard can hit it). No holder: null, a
    * wallet-only visitor who may create an account.
    */
-  async resolveWallet(address: string): Promise<SocialAccount | null> {
-    const accountId = await this.#walletAccountId(address);
+  async resolveWallet(address: string, sessionId?: string): Promise<SocialAccount | null> {
+    const accountId = await this.#walletAccountId(address, sessionId);
     if (!accountId) return null;
     const found: string = accountId;
     const result = await autocommitRead<AccountRow>(this.#pool(), "social", ACCOUNT_BY_ID, [found], {
@@ -281,8 +285,8 @@ export class PostgresSocialAccounts implements SocialAccountLoader {
   }
 
   /** Ownership is checked first; account fields and wallets then share a read snapshot. */
-  async resolveWalletWithWallets(address: string): Promise<SocialMeAccount | null> {
-    const accountId = await this.#walletAccountId(address);
+  async resolveWalletWithWallets(address: string, sessionId?: string): Promise<SocialMeAccount | null> {
+    const accountId = await this.#walletAccountId(address, sessionId);
     if (!accountId) return null;
     const result = await autocommitRead<AccountWithWalletsRow>(
       this.#pool(), "social", ACCOUNT_WITH_WALLETS_BY_ID, [accountId],
@@ -300,8 +304,8 @@ export class PostgresSocialAccounts implements SocialAccountLoader {
     return row;
   }
 
-  async #walletAccountId(address: string): Promise<string | null> {
-    const holder = walletHolder(await this.#holders(address));
+  async #walletAccountId(address: string, sessionId?: string): Promise<string | null> {
+    const holder = walletHolder(await this.#holders(address, sessionId));
     if (holder.account_id || !holder.profile_id) return holder.account_id;
     await autocommitWrite(
       this.#pool(), "social", "social_accounts",
@@ -309,18 +313,21 @@ export class PostgresSocialAccounts implements SocialAccountLoader {
       [this.#createId(), holder.profile_id],
     );
     // The ownership reread must reject a competing owner that appeared during creation.
-    return walletHolder(await this.#holders(address)).account_id;
+    return walletHolder(await this.#holders(address, sessionId)).account_id;
   }
 
-  async #holders(address: string): Promise<{ account_id: string | null; profile_id: string | null }[]> {
-    const result = await autocommitRead<{ account_id: string | null; profile_id: string | null }>(
+  async #holders(address: string, sessionId?: string): Promise<WalletHolder[]> {
+    const { rows } = await autocommitRead<WalletHolder & { session_active: boolean }>(
       this.#pool(),
       "social",
       HOLDERS_BY_ADDRESS,
-      [address],
+      [address, sessionId ?? null],
       { label: "social.wallet_holders", prepare: true },
     );
-    return result.rows;
+    if (rows[0]?.session_active !== true) {
+      throw Object.assign(new SocialRouteError("unauthorized"), { clearWallet: true });
+    }
+    return rows;
   }
 
   /** One round trip, with the exact same ownership/kind rules as a single account. */

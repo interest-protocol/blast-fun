@@ -12,9 +12,10 @@ import type { Pool } from "pg";
 import { createSeasonZeroCardRecord, renderSeasonZeroCardPng, type SeasonZeroCardRecord } from "@blast/server/modules/mission-control/card-renderer/index.ts";
 import { makeSeasonZeroCardFixtures } from "../../../../test/fixtures/modules/mission-control/card-renderer/fixtures.ts";
 import { createPool, createRuntimePool, type PoolSettings } from "@blast/core/modules/database/pool.ts";
-import { migrateDatabase, resetDatabase } from "@blast/core/modules/database/admin.ts";
+import { urlAs } from "../../../../../core/test/fixtures/modules/database/role-fixtures.ts";
+import { freshTestDatabase } from "../../../../../core/test/fixtures/modules/database/template.ts";
 import { recordStatements } from "../../../../../core/test/fixtures/modules/database/testing.ts";
-import { publishedCardSnapshot } from "@blast/server/modules/mission-control/card-images/published-card.ts";
+import { isCardPublished, publishedCardSnapshot } from "@blast/server/modules/mission-control/card-images/published-card.ts";
 import {
   cardImageIdentity,
   cardImagePathname,
@@ -60,19 +61,19 @@ interface Harness {
 async function withHarness(t: TestContext, run: (harness: Harness) => Promise<void>): Promise<void> {
   assert.ok(databaseUrl);
   t.mock.method(console, "info", () => {});
-  const admin = createPool(databaseUrl, { max: 4 });
+  const database = await freshTestDatabase();
+  const admin = createPool(database.url, { max: 4 });
   const directory = await mkdtemp(join(tmpdir(), "card-images-db-"));
   const pools: Pool[] = [];
   const renders: Render[] = [];
   try {
-    await migrateDatabase(admin);
     await run({
       admin,
       directory,
       instance() {
         // A separate pool, cache, and single-flight map: one Fluid instance.
         const instance = pools.length;
-        const pool = createRuntimePool(databaseUrl, INSTANCE_SETTINGS);
+        const pool = createRuntimePool(urlAs(database.url, "blast_web"), INSTANCE_SETTINGS);
         pools.push(pool);
         return new CardImageService({
           memoryCacheBytes: 64 * 1024 * 1024,
@@ -91,8 +92,8 @@ async function withHarness(t: TestContext, run: (harness: Harness) => Promise<vo
     });
   } finally {
     await Promise.all(pools.map((pool) => pool.end()));
-    await resetDatabase(admin);
     await admin.end();
+    await database.drop();
     await rm(directory, { force: true, recursive: true });
   }
 }
@@ -259,6 +260,7 @@ test(
     const dependencies = {
       images,
       published: new LRUCache<string, string>({ max: 100 }),
+      isPublished: (cardId: string) => isCardPublished(cardId, admin),
       publishedCard: (cardId: string) => publishedCardSnapshot(cardId, admin),
     };
 
@@ -311,7 +313,7 @@ test(
 );
 
 test(
-  "a published full card still in memory is served without touching the database; unpublished cards are checked every time",
+  "a cached full card is served only while the account is active",
   { skip },
   async (t) => withHarness(t, async ({ admin, instance, pools, renders }) => {
     const record = await insertCard(admin, "pilot_five");
@@ -326,6 +328,7 @@ test(
     const dependencies = {
       images,
       published: new LRUCache<string, string>({ max: 100 }),
+      isPublished: (cardId: string) => isCardPublished(cardId, admin),
       publishedCard: (cardId: string) => publishedCardSnapshot(cardId, admin),
     };
 
@@ -346,17 +349,25 @@ test(
       assert.equal(cached.headers.get("cache-control"), PUBLIC_CARD_IMAGE_CACHE_CONTROL);
       assert.deepEqual(Buffer.from(await cached.arrayBuffer()), bytes);
     }
-    assert.equal(lookups.mock.callCount(), 1, "no published-card query");
+    assert.equal(lookups.mock.callCount(), 4, "one publication check per cached origin response");
     assert.equal(catalog.mock.callCount(), 2, "no catalog query");
     assert.equal(renders.length, 1);
 
     for (let request = 0; request < 3; request += 1) {
       assert.equal((await publicCardImageResponse(later.cardId, dependencies, "card")).status, 404);
     }
-    assert.equal(lookups.mock.callCount(), 4, "an unpublished card is looked up every time");
+    assert.equal(lookups.mock.callCount(), 7, "an unpublished card is looked up every time");
     await admin.query("UPDATE mission_control_cards SET published_at = $2 WHERE card_id = $1", [later.cardId, NOW]);
     const beforePublishedLookup = lookups.mock.callCount();
     assert.equal((await publicCardImageResponse(later.cardId, dependencies, "card")).status, 200);
     assert.equal(lookups.mock.callCount(), beforePublishedLookup + 1, "and is served once published");
+    await admin.query(
+      `INSERT INTO social_accounts (account_id, profile_id, deleted_at, privacy)
+       SELECT gen_random_uuid(), profile_id, now(), 'private' FROM mission_control_cards WHERE card_id = $1`,
+      [record.cardId],
+    );
+    assert.equal((await publicCardImageResponse(record.cardId, dependencies, "card")).status, 404);
+    assert.equal((await publicCardImageResponse(record.cardId, dependencies, "share", 0)).status, 404);
+    assert.equal(dependencies.published.has(record.cardId), false);
   }),
 );

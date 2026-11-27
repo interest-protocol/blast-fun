@@ -5,7 +5,7 @@ import type {
   CardImageFormat,
 } from "@blast/core/modules/mission-control/card-images/contracts.ts";
 import { parseCardPage } from "@blast/core/modules/mission-control/card-images/page.ts";
-import { publishedCardSnapshot } from "./published-card.ts";
+import { isCardPublished, publishedCardSnapshot } from "./published-card.ts";
 import {
   canonicalCardImageRedirect,
   cardImageQuery,
@@ -47,6 +47,7 @@ export const publicCardImageRoute = createPublicCardImageRoute({
           image: (input) => missionControlCardImages().image(input),
         },
         published: missionControlPublishedCardDigests(),
+        isPublished: isCardPublished,
         publishedCard: (cardId) => publishedCardSnapshot(cardId),
       },
       format,

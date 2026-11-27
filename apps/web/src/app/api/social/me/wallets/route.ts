@@ -6,3 +6,4 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 40;
 
 export const POST = backendPrivateRequest;
+export const DELETE = backendPrivateRequest;

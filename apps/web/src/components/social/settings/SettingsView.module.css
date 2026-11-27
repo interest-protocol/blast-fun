@@ -60,8 +60,10 @@
 .row .text .danger { color: var(--down); font-weight: 600; }
 .unavailable { font-size: 0.8125rem; color: var(--muted); }
 
-/* Wallets: a 40px tonal tile, the name over its mono address, Copy at the end. */
+/* Wallets: a tonal tile, identity and adjacent wallet actions. */
 .row.wallet { justify-content: flex-start; gap: 0.875rem; }
+.walletActions { display: flex; align-items: center; gap: 0.25rem; flex: none; }
+.walletActions > button { min-height: 44px; min-width: 44px; }
 .walletIcon { width: 2.5rem; height: 2.5rem; flex: none; border-radius: var(--r-button); display: grid; place-items: center; background: var(--chip); color: var(--muted); }
 .walletIcon svg { width: 1.1875rem; height: 1.1875rem; }
 .row .text :global(.mono) { font-size: 0.8125rem; letter-spacing: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
