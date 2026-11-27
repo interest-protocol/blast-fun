@@ -47,6 +47,8 @@ async function price(tx: TransactionContext, settings: PlannerSettings, coin: st
 }
 
 const MINIMUM_PAYOUT_USD = 100;
+const MINIMUM_HOLDING_USD = 10;
+const LEGACY_MINIMUM_HOLDING_USD = 5;
 
 async function holderEconomics(
   tx: TransactionContext,
@@ -197,7 +199,8 @@ export async function freezePeriod(pool: Pool, deployment: BlastDeployment, sett
     const exclusions = [...new Set([...settings.exclusions, ...holderExclusions, ...policy.destinations, vault.vault_id, vault.origin_id, vault.pool_id])].sort();
     exclusions.forEach((value) => objectIdSchema.parse(value));
     const frozen = frozenSchema.parse({ network: "mainnet", fingerprint: settings.fingerprint, vaultId: vault.vault_id, memeType: vault.meme_type, quoteType: vault.quote_type, poolId: vault.pool_id, originId: vault.origin_id, number: vault.next_round,
-      startMs: period.start_ms, endMs: period.end_ms, start, end, roundStart, treasury: policy.treasury, exclusions, memePrice, quotePrice, grossMeme: funds.meme.toString(), grossQuote: funds.quote.toString(), reserve: reserve.toString(), gasReserveBps, claimWindowMs: CLAIM_WINDOW_MS, globalWeight: "0", qualifiers: 0, sourceEvidence: funds.evidence, payoutPolicy: noMinimum ? "no-minimum" : "combined-value-to-holders" });
+      startMs: period.start_ms, endMs: period.end_ms, start, end, roundStart, treasury: policy.treasury, exclusions, memePrice, quotePrice, grossMeme: funds.meme.toString(), grossQuote: funds.quote.toString(), reserve: reserve.toString(), gasReserveBps, claimWindowMs: CLAIM_WINDOW_MS, globalWeight: "0", qualifiers: 0, sourceEvidence: funds.evidence, payoutPolicy: noMinimum ? "no-minimum" : "combined-value-to-holders",
+      holderMinimumUsd: MINIMUM_HOLDING_USD });
     const planId = randomUUID();
     await tx.forModule("rewards-planner").write("vault_reward_plans", "INSERT INTO vault_reward_plans(plan_id,period_id,number,stage,inputs) VALUES($1,$2,$3,'qualifying',$4)", [planId, periodId, frozen.number, json(frozen)]);
     return planId;
@@ -225,7 +228,10 @@ async function qualifyingPlan(tx: TransactionContext, planId: string, lock: bool
 /** The reward floor at the frozen price: the smallest weight that earns a leaf. */
 function rewardFloor(f: Frozen): bigint {
   if (!f.memePrice) throw new MissingRewardHistory("holder-meme-price");
-  return minimumWeight({ numerator: BigInt(f.memePrice.numerator), denominator: BigInt(f.memePrice.denominator) });
+  return minimumWeight(
+    { numerator: BigInt(f.memePrice.numerator), denominator: BigInt(f.memePrice.denominator) },
+    f.holderMinimumUsd ?? LEGACY_MINIMUM_HOLDING_USD,
+  );
 }
 
 function meetsHolderBudget(f: Frozen, minimumUsd: number): boolean {

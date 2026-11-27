@@ -75,6 +75,7 @@ test("fresh vault planning, immutable manifests, exact reservations and signed c
     const treasury=deployment.sharedObjects.core.treasury.objectId;
     const created={eventType:`${deployment.packages.admin.originalPackageId}::delayed::DelayedCreated<${deployment.packages.core.originalPackageId}::blast_treasury::DestinationKey,address>`,bcs:Buffer.from(delayedEventBcs("DelayedCreated",treasuryDelayedKeys.Destination).serialize({parent:treasury,key:null,value:base.treasury,delay_ms:1n}).toBytes()).toString("base64")};
     const longerHolder = id("0xc1"), team = id("0xd3"), quoteRecipient = id("0xd4"), objectHolder = id("0xd5");
+    const belowMinimum = id("0xd6");
     // A pool or Vesting schedule holding the coin: the chain proves its address is an object.
     const checked:string[]=[];
     const chain=(objects:readonly string[]):CheckIdentities=>async(addresses,roundCut)=>{assert.equal(roundCut,20n);checked.push(...addresses);return addresses.map((address)=>({address,kind:objects.includes(address)?"object" as const:"account" as const,provenThrough:25n}));};
@@ -86,9 +87,10 @@ test("fresh vault planning, immutable manifests, exact reservations and signed c
     await admin.query("INSERT INTO reward_test_stack VALUES($1,'treasury',1,1)",[treasury]);
     await admin.query("INSERT INTO reward_test_delayed VALUES($1,'blast_core::blast_treasury::DestinationKey',$2,1,1,0)",[treasury,json(base.treasury)]);
     await admin.query("INSERT INTO reward_test_collections VALUES($1,20,1,0,$2,$3,ARRAY[100]::numeric[],ARRAY[150]::numeric[])",[vault.objectId,digest("5"),json({routes:[{destination:{kind:"holder_rewards"}}]})]);
-    for(const owner of [id("0xd1"),id("0xd2"),team,quoteRecipient,objectHolder]) await admin.query("INSERT INTO reward_test_holders VALUES($1,$2)",[owner,(5n*DAY_MS).toString()]);
-    await admin.query("INSERT INTO reward_test_holders VALUES($1,$2)",[longerHolder,(10n*DAY_MS).toString()]);
-    await admin.query("INSERT INTO reward_test_holders VALUES($1,1)",[id("0xd6")]);
+    for(const owner of [id("0xd1"),id("0xd2"),team,quoteRecipient,objectHolder]) await admin.query("INSERT INTO reward_test_holders VALUES($1,$2)",[owner,(10n*DAY_MS).toString()]);
+    await admin.query("INSERT INTO reward_test_holders VALUES($1,$2),($3,$4)", [
+      longerHolder, (20n * DAY_MS).toString(), belowMinimum, (999n * DAY_MS / 100n).toString(),
+    ]);
     // Saved answers: a proven account, an account proven only before the cut, and an object the indexer's window does not skip yet.
     await admin.query("INSERT INTO reward_test_identities VALUES($1,'account',20),($2,'account',19),($3,'object',20),($4,'account',20)",[id("0xd1"),quoteRecipient,objectHolder,longerHolder]);
     await discoverPeriods(planner,settings,2);
@@ -102,7 +104,7 @@ test("fresh vault planning, immutable manifests, exact reservations and signed c
     assert.ok(frozenInputs.exclusions.includes(team),"positive launch Meme allocation is excluded");
     assert.ok(!frozenInputs.exclusions.includes(quoteRecipient),"Quote-only allocation retains eligibility");
     const known=await fillIdentityGaps(planner,planId,chain([objectHolder]));
-    assert.deepEqual(checked.slice(0,2),[id("0xd2"),quoteRecipient],"gaps first: only unproven holders at or above the reward floor; dust is not checked");
+    assert.deepEqual(checked.slice(0,2),[id("0xd2"),quoteRecipient],"gaps first: only unproven holders at or above the reward floor");
     assert.deepEqual(checked.slice(2).sort(),[longerHolder,id("0xd1"),objectHolder].sort(),"then the page's qualifying holders this pass has not answered");
     assert.deepEqual((await admin.query("SELECT address,kind,proven_through::text FROM reward_test_identities WHERE address=ANY($1) ORDER BY address",[[id("0xd2"),quoteRecipient]])).rows,
       [{address:id("0xd2"),kind:"account",proven_through:"25"},{address:quoteRecipient,kind:"account",proven_through:"25"}],"gap answers are saved");
@@ -298,8 +300,18 @@ test("fresh vault planning, immutable manifests, exact reservations and signed c
     const noQuotePlan = await joeyPlan("10000", "0", 2n * DAY_MS, null);
     assert.equal((await readPlan(watcher, noQuotePlan)).stage, "skipped", "JOEY cannot fund a round without SUI");
 
+    const legacyFloorPlan = await seedJoeyPlan(3n * DAY_MS, {
+      grossMeme: "100", grossQuote: "100", holderMinimumUsd: undefined,
+    });
+    await qualifyPage(planner, legacyFloorPlan, await fillIdentityGaps(planner, legacyFloorPlan, chain([objectHolder])));
+    const legacyHolder = await admin.query(
+      "SELECT beneficiary FROM vault_reward_holders WHERE plan_id=$1 AND beneficiary=$2",
+      [legacyFloorPlan, belowMinimum],
+    );
+    assert.deepEqual(legacyHolder.rows, [{ beneficiary: belowMinimum }], "a plan frozen before the change keeps its $5 floor");
+
     const largeCohortPlan = await seedJoeyPlan(4n * DAY_MS, {
-      grossMeme: "100", grossQuote: "100", qualifiers: 65_535, globalWeight: (65_535n * 5n * DAY_MS).toString(),
+      grossMeme: "100", grossQuote: "100", qualifiers: 65_535, globalWeight: (65_535n * 10n * DAY_MS).toString(),
     });
     assert.equal(await qualifyPage(planner, largeCohortPlan, known), true);
     const largeCohort = await readPlan(watcher, largeCohortPlan);
@@ -449,7 +461,17 @@ test("fresh vault planning, immutable manifests, exact reservations and signed c
     await reservePlan(planner, deployment, catchUpPlan);
     const catchUpReserved = await readPlan(watcher, catchUpPlan);
     assert.equal(catchUpReserved.stage, "reserved");
-    assert.deepEqual([manifestSummary(catchUpReserved.manifest).memeAmount, manifestSummary(catchUpReserved.manifest).quoteAmount], ["100", "0"]);
+    const catchUpSummary = manifestSummary(catchUpReserved.manifest);
+    assert.deepEqual([catchUpSummary.memeAmount, catchUpSummary.quoteAmount], ["100", "0"]);
+    const catchUpHolders = await admin.query(
+      "SELECT beneficiary FROM vault_reward_allocations WHERE plan_id=$1 ORDER BY beneficiary",
+      [catchUpPlan],
+    );
+    assert.deepEqual(
+      catchUpHolders.rows.map((row) => row.beneficiary),
+      [longerHolder, id("0xd1"), id("0xd2"), quoteRecipient],
+      "the $10 holding minimum also applies to rounds without a minimum payout budget",
+    );
     const nextDay = (BigInt(catchUpAtMs) + DAY_MS).toString();
     await admin.query("UPDATE vault_reward_periods SET status='funded' WHERE vault_id=$1 AND end_ms=$2", [catchUpVault, catchUpAtMs]);
     await admin.query("INSERT INTO checkpoint_journal(checkpoint,network,digest,epoch,timestamp_ms,total_transactions,format_version,payload,payload_hash) VALUES(21,'mainnet',$1,1,$2,1,1,''::bytea,decode(repeat('00',32),'hex'))", [digest("D"), nextDay]);
