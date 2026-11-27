@@ -23,7 +23,7 @@ import { decimalText, dropDecimal, pasteDecimal } from "#web/lib/decimal-input.t
 import { useDebouncedValue } from "#web/lib/use-debounced-value.ts";
 
 import coinStyles from "../coins/coins.module.css";
-import { atomsToField, fmtLive } from "../trade/trade-ticket.ts";
+import { fmtLive } from "../trade/trade-ticket.ts";
 
 import { BRIDGE_CHAINS, type BridgeChain } from "./bridge-config.ts";
 import { guardQuote, quoteFacts, type BridgeRequest } from "./bridge-guard.ts";
@@ -33,6 +33,7 @@ import {
   actionReason,
   amountAtoms,
   bridgeAction,
+  bridgeAmountField,
   type BridgeAction,
   CHAINS,
   DESTINATIONS,
@@ -54,6 +55,7 @@ import {
 } from "./bridge-model.ts";
 import { explorerLink, mergeRows, type BridgeRow, type BridgeSdk, type EvmWallet, type SolanaWallet, type SourceWallet, type TransferStatus } from "./bridge-sdk.ts";
 import styles from "./bridge.module.css";
+import { SourceTokenPicker } from "./SourceTokenPicker.tsx";
 
 /** The source wallets Privy has connected, and how to connect one. */
 export type BridgeWallets = Readonly<{
@@ -132,7 +134,7 @@ function useBridgeQuote({ sdk, selection, wallet, blastAddress, atoms, paused, o
         throw error;
       }
     },
-    enabled: settled !== null && !paused,
+    enabled: settled !== null && !typing && !paused,
     // No interval: each bound quote opens an order at Mayan. A stale one is re-asked when the tab returns.
     staleTime: QUOTE_FRESH_MS,
     refetchOnWindowFocus: true,
@@ -147,7 +149,7 @@ function useBridgeQuote({ sdk, selection, wallet, blastAddress, atoms, paused, o
 
 /** The source wallet's balance and, for an ERC-20 on the right chain, whether the router may spend the amount. */
 function useSourceReads({ sdk, selection, wallet }: ReadArgs, { quote, settled, current, bound }: ReturnType<typeof useBridgeQuote>) {
-  const { chain, info, token } = selection;
+  const { chain, info, token, to } = selection;
   const balanceKey = ["bridge", "balance", chain, token.mayan, wallet?.address ?? null] as const;
   const balance = useQuery({
     queryKey: balanceKey,
@@ -159,7 +161,7 @@ function useSourceReads({ sdk, selection, wallet }: ReadArgs, { quote, settled, 
 
   const evmWallet = wallet?.kind === "evm" ? wallet : null;
   const wrongChain = evmWallet !== null && evmWallet.chainId !== info.chainId;
-  const allowanceKey = ["bridge", "allowance", chain, token.mayan, evmWallet?.address ?? null, settled] as const;
+  const allowanceKey = ["bridge", "allowance", chain, token.mayan, evmWallet?.address ?? null, settled, to.coinType] as const;
   const allowance = useQuery({
     queryKey: allowanceKey,
     queryFn: () => sdk.allowanceEnough(quote.data!, evmWallet!, chain),
@@ -316,23 +318,26 @@ function noteText(paused: boolean, failed: string | null, quoteError: string | n
 /** The chain, coins and amount the user picked; a new coin starts with an empty amount. */
 function useBridgeInputs() {
   const [chain, setChain] = useState<BridgeChain>(BRIDGE_CHAINS[0]);
-  const [tokenIndex, setTokenIndex] = useState<0 | 1>(0);
+  const [token, setToken] = useState<SourceToken>(CHAINS[BRIDGE_CHAINS[0]].tokens[0]);
   const [toIndex, setToIndex] = useState<0 | 1>(0);
   const [amount, setAmount] = useState("");
   const info = CHAINS[chain];
-  const token = info.tokens[tokenIndex];
   const selection: Selection = { chain, info, token, to: DESTINATIONS[toIndex]! };
   const chooseChain = (next: BridgeChain) => {
+    if (next === chain) return;
+    const pinned = info.tokens.indexOf(token);
+    const nextToken = CHAINS[next].tokens[pinned === 1 ? 1 : 0];
     setChain(next);
-    // 0.1 ETH is not 0.1 SOL: a new coin starts empty, the same coin keeps its amount.
-    if (CHAINS[next].tokens[tokenIndex].symbol !== token.symbol) setAmount("");
+    setToken(nextToken);
+    if (pinned < 0 || nextToken.symbol !== token.symbol) setAmount("");
   };
-  const chooseToken = (next: 0 | 1) => {
-    setTokenIndex(next);
-    setToIndex(info.tokens[next].symbol === "USDC" ? 1 : 0);
+  const chooseToken = (next: SourceToken) => {
+    if (next.mayan === token.mayan) return;
+    setToken(next);
+    setToIndex(next === info.tokens[1] ? 1 : 0);
     setAmount("");
   };
-  return { selection, tokenIndex, toIndex, setToIndex, amount, setAmount, chooseChain, chooseToken };
+  return { selection, toIndex, setToIndex, amount, setAmount, chooseChain, chooseToken };
 }
 
 type ActionInputs = Readonly<{
@@ -371,7 +376,7 @@ function formAction({ reads, send, selection, wallet, atoms, paused, signedIn, b
 
 export function BridgeForm({ sdk, wallets, blastAddress, signedIn, onSignIn, onArrived, now = Date.now }: BridgeFormProps) {
   const id = useId();
-  const { selection, tokenIndex, toIndex, setToIndex, amount, setAmount, chooseChain, chooseToken } = useBridgeInputs();
+  const { selection, toIndex, setToIndex, amount, setAmount, chooseChain, chooseToken } = useBridgeInputs();
   const { chain, info, token } = selection;
   const [paused, setPaused] = useState(false);
   const onPaused = useCallback((error: unknown) => {
@@ -410,13 +415,13 @@ export function BridgeForm({ sdk, wallets, blastAddress, signedIn, onSignIn, onA
           amount={amount}
           balance={reads.balance.data}
           busy={locked}
+          chain={chain}
           connected={wallet !== null}
           id={id}
-          info={info}
           onAmount={(next) => { setAmount(next); send.setFailed(null); }}
           onToken={(next) => { chooseToken(next); send.setFailed(null); }}
+          sdk={sdk}
           token={token}
-          tokenIndex={tokenIndex}
         />
         <GetPanel
           blastAddress={blastAddress}
@@ -505,21 +510,21 @@ function ChainChoice({ chain, disabled, onChange }: Readonly<{ chain: BridgeChai
   );
 }
 
-function SendPanel({ id, amount, onAmount, balance, busy, connected, info, token, tokenIndex, onToken }: Readonly<{
+function SendPanel({ id, amount, onAmount, balance, busy, connected, chain, sdk, token, onToken }: Readonly<{
   id: string;
   amount: string;
   onAmount: (amount: string) => void;
   balance: bigint | undefined;
   busy: boolean;
   connected: boolean;
-  info: ChainInfo;
+  chain: BridgeChain;
+  sdk: BridgeSdk;
   token: SourceToken;
-  tokenIndex: 0 | 1;
-  onToken: (index: 0 | 1) => void;
+  onToken: (token: SourceToken) => void;
 }>) {
   const balanceText = balance === undefined
     ? <SkeletonText>Balance 0.0000 {token.symbol}</SkeletonText>
-    : `Balance ${atomsToField(balance, token.decimals)} ${token.symbol}`;
+    : `Balance ${bridgeAmountField(balance, token.decimals)} ${token.symbol}`;
   return (
     <div className={coinStyles.amt}>
       <div className={coinStyles.amtTop}>
@@ -551,18 +556,10 @@ function SendPanel({ id, amount, onAmount, balance, busy, connected, info, token
             value={amount}
           />
         </AmountFit>
-        <Segmented
-          className={styles.coinPick}
-          disabled={busy}
-          label="Coin to send"
-          onChange={onToken}
-          options={info.tokens.map((option, index) => [index as 0 | 1, <Named key={option.symbol} logo={option.logo} name={option.symbol} />] as const)}
-          size="sm"
-          value={tokenIndex}
-        />
+        <SourceTokenPicker chain={chain} disabled={busy} key={chain} onChange={onToken} sdk={sdk} token={token} />
       </div>
       <div className={coinStyles.amtFoot}>
-        <span>{connected ? balanceText : `Your ${info.label} wallet`}</span>
+        <span>{connected ? balanceText : `Your ${CHAINS[chain].label} wallet`}</span>
       </div>
     </div>
   );

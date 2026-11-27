@@ -1,7 +1,7 @@
 # Bridge in with Mayan: plan
 
-Status: approved by Jose 2026-11-26 (`mayan-bridge-in-proposal.md`). PR 1
-builds it behind the flag; PR 2 (token list) is not built.
+Status: approved by Jose 2026-11-26 (`mayan-bridge-in-proposal.md`). The
+bridge and token picker are both behind the bridge flag in PR #116.
 
 ## Goal
 
@@ -95,14 +95,13 @@ Jose, 2026-11-26: its own **Bridge** button, beside Deposit and Withdraw.
 - Check the phone row with three large buttons at 320 px wide; if labels
   wrap, the phone row uses icon-over-label buttons for all three.
 
-## Scope of v1, in two PRs
+## Source tokens
 
-- **PR 1:** native token and USDC on each chain (ETH and USDC on Base,
-  Ethereum, Arbitrum; SOL and USDC on Solana) → SUI or USDC. No source-chain
-  swap, one ERC-20 approval at most.
-- **PR 2:** any verified token per chain from `fetchTokenList(chain)`. These
-  add a source swap (`needsBlinkSourceSwap`) and possibly a different approval
-  spender; `getEvmSwapApproval` names it. Ship after PR 1 is live.
+Each chain starts with its native coin and canonical USDC. The picker loads
+Mayan's verified ERC-20, SPL or Token-2022 catalog for the selected chain and
+searches by name, symbol or address. Selecting a token still requires a Blink
+route for the amount and destination. These routes may swap on the source
+chain and use a different approval spender, which `getEvmSwapApproval` chooses.
 
 ## Card layout and states
 
@@ -267,9 +266,8 @@ input beside `presaleConnectSources`, set in both, only while the flag is on:
 - Exactly the further hosts the SDK reaches on our paths, captured from a
   browser run of EVM ETH, EVM USDC and Solana SOL. No wildcards.
 
-Chain and coin logos are local files in `public/blast-ui/` (PR 2's token
-list may load remote logos; `img-src` already allows `https:`). `script-src`
-is untouched.
+Chain and pinned coin logos are local files in `public/blast-ui/`. The picker
+loads other tokens' logos over HTTPS, which `img-src` already allows.
 Test both builders, flag on and off, in `web-security.test.ts`.
 
 ## Quotes and the Scale rule
@@ -378,12 +376,11 @@ Node test runner (`npm test -w apps/web`), as the coin sheet tests do:
 
 ## Out of scope for v1
 
-BSC (no route), bridge out of Sui, destinations other than SUI and USDC, any
-token beyond native + USDC (PR 2), permits and gasless orders, slippage
-editing, gas drop, a referrer fee.
+BSC, bridge out of Sui, destinations other than SUI and USDC, permits and
+gasless orders, slippage editing, gas drop, and a referrer fee.
 
 ## PR shape
 
-PR 1 on `feat/mayan-bridge`: config + CSP, model + guard + tests, the card
-behind the flag, the Bridge buttons. PR 2: token list. Each PR body: RPS table,
-`Modern Web Guidance:` line, screenshots, bundle numbers.
+PR #116 on `feat/mayan-bridge` includes config, CSP, the bridge card and
+buttons, the picker, guards and tests. The PR records request estimates,
+Modern Web Guidance, screenshots and bundle measurements.

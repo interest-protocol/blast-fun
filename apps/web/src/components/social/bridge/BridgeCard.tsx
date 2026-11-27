@@ -45,9 +45,12 @@ export default function BridgeCard(props: BridgeCardProps) {
     startPrivy(load).catch(() => setFailed(true));
   }, [load]);
   // `BridgeScreen`'s boundary says the card could not load and offers a retry, which starts Privy again.
-  if (failed && !source) throw new Error("Privy did not start for Bridge to Sui.");
-  if (!source) return <BridgeLoading />;
+  if (!source) return failed ? <BridgeStartupFailure /> : <BridgeLoading />;
   return <BridgeReady {...props} source={source} />;
+}
+
+function BridgeStartupFailure(): never {
+  throw new Error("Privy did not start for Bridge to Sui.");
 }
 
 function BridgeReady({ blastAddress, signedIn, onSignIn, source }: BridgeCardProps & Readonly<{ source: PrivySourceWallets }>) {

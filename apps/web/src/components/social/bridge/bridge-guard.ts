@@ -1,8 +1,8 @@
-import { decodeBlinkQuote, hasBlinkQuoteHash, isNativeBlinkEvmToken, isNativeBlinkSvmToken, type BlinkQuote, type Quote } from "@mayanfinance/swap-sdk";
+import { decodeBlinkQuote, getWormholeChainIdByName, hasBlinkQuoteHash, isNativeBlinkEvmToken, isNativeBlinkSvmToken, type BlinkQuote, type Quote } from "@mayanfinance/swap-sdk";
 import { normalizeStructTag, normalizeSuiAddress } from "@mysten/sui/utils";
 
 import type { BridgeChain } from "./bridge-config.ts";
-import type { DestinationToken, QuoteFacts, SourceToken } from "./bridge-model.ts";
+import { CHAINS, sourceAddressKey, type DestinationToken, type QuoteFacts, type SourceToken } from "./bridge-model.ts";
 
 /** What the person asked for; a quote must match all of it before any wallet call. */
 export type BridgeRequest = Readonly<{
@@ -19,7 +19,7 @@ export type BridgeRequest = Readonly<{
 export type GuardResult = Readonly<{ ok: true; order: BlinkQuote }> | Readonly<{ ok: false; reason: string }>;
 
 function sameSourceAddress(chain: BridgeChain, a: string, b: string): boolean {
-  return chain === "solana" ? a === b : a.toLowerCase() === b.toLowerCase();
+  return sourceAddressKey(chain, a) === sourceAddressKey(chain, b);
 }
 
 function sameSourceToken(chain: BridgeChain, token: SourceToken, address: string): boolean {
@@ -55,9 +55,22 @@ export function guardQuote(quote: Quote, request: BridgeRequest, now: number): G
   // Gasless orders take another SDK path (Permit2 or a sponsored Solana deposit) that this card never builds.
   if (quote.gasless || order.gasless) return { ok: false, reason: "gasless order" };
   const params = order.orderParams;
-  if (params.srcChain !== request.chain || params.dstChain !== "sui") return { ok: false, reason: "wrong chains" };
-  if (!sameSourceToken(request.chain, request.token, params.srcToken)) return { ok: false, reason: "wrong source token" };
-  if (order.amountIn !== request.amountIn64) return { ok: false, reason: "wrong amount" };
+  const { chain, token, amountIn64 } = request;
+  if (params.srcChain !== chain || params.dstChain !== "sui" || quote.fromChain !== chain || quote.toChain !== "sui") {
+    return { ok: false, reason: "wrong chains" };
+  }
+  // The SDK uses the outer fields for ERC-20 approvals and SPL transfer instructions.
+  const from = quote.fromToken;
+  if (from?.chainId !== (CHAINS[chain].chainId ?? 0) || from.wChainId !== getWormholeChainIdByName(chain)) {
+    return { ok: false, reason: "wrong chains" };
+  }
+  if (typeof from.contract !== "string" || !sameSourceToken(chain, token, from.contract) || !sameSourceToken(chain, token, params.srcToken)
+    || from.decimals !== token.decimals || (token.standard !== undefined && from.standard !== token.standard)) {
+    return { ok: false, reason: "wrong source token" };
+  }
+  if (quote.effectiveAmountIn64 !== amountIn64 || order.amountIn !== amountIn64 || String(params.expectedAmountIn) !== amountIn64) {
+    return { ok: false, reason: "wrong amount" };
+  }
   if (!sameCoinType(params.dstToken, request.to.coinType)) return { ok: false, reason: "wrong destination coin" };
   if (normalizeSuiAddress(params.recipient) !== normalizeSuiAddress(request.blastAddress)) return { ok: false, reason: "wrong recipient" };
   if (!sameSourceAddress(request.chain, params.refundAddress, request.sourceAddress)) return { ok: false, reason: "wrong refund address" };

@@ -1,5 +1,6 @@
 import {
   fetchQuote,
+  getAssociatedTokenAddress,
   getEvmSwapApproveTxs,
   getSwapFromEvmTxPayload,
   isEvmSwapAllowanceEnough,
@@ -9,6 +10,7 @@ import {
 import { Connection, PublicKey, Transaction, VersionedTransaction } from "@solana/web3.js";
 import { BrowserProvider, Contract, JsonRpcProvider, type TransactionRequest } from "ethers";
 
+import { fetchSourceTokens } from "./bridge-catalog.ts";
 import { mayanRpc, type BridgeChain } from "./bridge-config.ts";
 import { CHAINS, transferState, type SourceToken } from "./bridge-model.ts";
 import { abortableProvider, explorerRows, MAYAN_EXPLORER, type BridgeSdk, type EvmWallet, type SolanaWallet } from "./bridge-sdk.ts";
@@ -16,6 +18,7 @@ import { abortableProvider, explorerRows, MAYAN_EXPLORER, type BridgeSdk, type E
 /** Blink only: Mayan's one route that refunds on the source chain and needs no relayer on Sui. */
 const BLINK_ONLY: QuoteOptions = { blink: true, swift: false, mctp: false, fastMctp: false, wormhole: false, shuttle: false, monoChain: false, gasless: false };
 const ERC20 = ["function balanceOf(address) view returns (uint256)"];
+const TOKEN_2022_PROGRAM = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
 
 /** The Mayan SDK, ethers and web3.js behind the card's `BridgeSdk`, on Mayan's RPCs. */
 export function mayanSdk(): BridgeSdk {
@@ -50,11 +53,14 @@ export function mayanSdk(): BridgeSdk {
     const connection = solanaConnection();
     const key = new PublicKey(owner);
     if (token.native) return BigInt(await connection.getBalance(key));
-    const accounts = await connection.getParsedTokenAccountsByOwner(key, { mint: new PublicKey(token.mayan) });
-    return accounts.value.reduce((sum, account) => sum + BigInt(account.account.data.parsed?.info?.tokenAmount?.amount ?? "0"), 0n);
+    const program = token.standard === "spl2022" ? TOKEN_2022_PROGRAM : undefined;
+    const account = getAssociatedTokenAddress(new PublicKey(token.mayan), key, true, program);
+    const { value } = await connection.getParsedAccountInfo(account);
+    return BigInt(value && "parsed" in value.data ? value.data.parsed.info.tokenAmount.amount : "0");
   };
 
   return {
+    tokens: fetchSourceTokens,
     async quote({ chain, token, to, amountIn64, swapper, destination }) {
       const [quote] = await fetchQuote(
         { amountIn64, fromToken: token.mayan, fromChain: chain, toToken: to.coinType, toChain: "sui", slippageBps: "auto", swapperAddress: swapper, destinationAddress: destination },
@@ -75,7 +81,9 @@ export function mayanSdk(): BridgeSdk {
       for (const transaction of await getEvmSwapApproveTxs(quote, wallet.address, provider)) {
         // react-doctor-disable-next-line react-doctor/async-await-in-loop -- Approvals are ordered (a reset to zero comes before the new allowance); each must be mined before the next is signed.
         const hash = await sendEvm(wallet, chain, transaction, signal);
-        await provider.waitForTransaction(hash, 1, 120_000);
+        // react-doctor-disable-next-line react-doctor/async-await-in-loop -- The next approval depends on this receipt.
+        const receipt = await provider.waitForTransaction(hash, 1, 120_000);
+        if (receipt?.status !== 1) throw new Error("The token approval did not confirm.");
       }
     },
     async send(quote, request, wallet, onSigned, signal) {
