@@ -379,13 +379,14 @@ type ActionInputs = Readonly<{
   selection: Selection;
   wallet: SourceWallet | null;
   atoms: bigint | null;
+  id: string;
   paused: boolean;
   signedIn: boolean;
   blastAddress: string | null;
 }>;
 
 /** What the button does now, and why the last quote failed if it did. */
-function formAction({ reads, send, selection, wallet, atoms, paused, signedIn, blastAddress }: ActionInputs) {
+function formAction({ reads, send, selection, wallet, atoms, id, paused, signedIn, blastAddress }: ActionInputs) {
   const { info, token } = selection;
   const quoteSettled = reads.quote.isError && !reads.quote.isFetching && atoms !== null && !reads.typing && !paused;
   const quoteError = quoteSettled ? quoteErrorText(reads.quote.error, info, token) : null;
@@ -405,7 +406,14 @@ function formAction({ reads, send, selection, wallet, atoms, paused, signedIn, b
     needsApproval: reads.allowance.data === false,
     rateChanged: send.rateChanged,
   });
-  return { quoteError, action };
+  const message = noteText(paused, send.failed, quoteError);
+  const balanceFailed = reads.balance.isError && !reads.balance.isFetching;
+  const blockedByBalance = action.kind === "balance" && balanceFailed;
+  const reason = blockedByBalance ? null : actionReason(action, token);
+  const noteId = `${id}-bridge-note`;
+  const actionDescription = blockedByBalance ? `${id}-balance-error` : message || reason ? noteId : undefined;
+  const balance = reads.balance.isSuccess ? reads.balance.data : undefined;
+  return { action, actionDescription, balance, balanceFailed, message, noteId, reason };
 }
 
 export function BridgeForm({ sdk, wallets, blastAddress, signedIn, onSignIn, onArrived, now = Date.now }: BridgeFormProps) {
@@ -422,7 +430,7 @@ export function BridgeForm({ sdk, wallets, blastAddress, signedIn, onSignIn, onA
   const atoms = amountAtoms(amount, token);
   const reads = useBridgeReads({ sdk, selection, wallet, blastAddress, atoms, paused, onPaused });
   const send = useBridgeSend({ sdk, selection, keys: reads, shown: reads.shown, now, onPaused, onSent: () => setAmount("") });
-  const { quoteError, action } = formAction({ reads, send, selection, wallet, atoms, paused, signedIn, blastAddress });
+  const { action, actionDescription, balance, balanceFailed, message, noteId, reason } = formAction({ reads, send, selection, wallet, atoms, id, paused, signedIn, blastAddress });
 
   const request = (): BridgeRequest => ({ chain, token, to: selection.to, amountIn64: atoms!.toString(), blastAddress: blastAddress!, sourceAddress: wallet!.address });
   const press = () => pressAction(action.kind, {
@@ -436,12 +444,6 @@ export function BridgeForm({ sdk, wallets, blastAddress, signedIn, onSignIn, onA
 
   const facts = reads.shown ? quoteRows(quoteFacts(reads.shown, token), token, selection.to) : null;
   const refreshing = facts !== null && (reads.quote.isFetching || reads.typing);
-  const message = noteText(paused, send.failed, quoteError);
-  const balanceFailed = reads.balance.isError && !reads.balance.isFetching;
-  const blockedByBalance = action.kind === "balance" && balanceFailed;
-  const reason = blockedByBalance ? null : actionReason(action, token);
-  const noteId = `${id}-bridge-note`;
-  const actionDescription = blockedByBalance ? `${id}-balance-error` : message || reason ? noteId : undefined;
   // Nothing to change while a wallet is asked or Mayan has paused this SDK.
   const locked = send.busy || paused;
   const rows = mergeRows(send.sent, reads.history.data ?? []);
@@ -452,7 +454,7 @@ export function BridgeForm({ sdk, wallets, blastAddress, signedIn, onSignIn, onA
       <div className={styles.panels}>
         <SendPanel
           amount={amount}
-          balance={reads.balance.isSuccess ? reads.balance.data : undefined}
+          balance={balance}
           balanceFailed={balanceFailed}
           busy={locked}
           chain={chain}
