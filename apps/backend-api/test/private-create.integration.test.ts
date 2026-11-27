@@ -547,7 +547,8 @@ test(
       }
       socket.once("close", () => upstream.destroy());
       upstream.once("close", () => socket.destroy());
-      socket.pipe(upstream).pipe(socket);
+      socket.pipe(upstream);
+      upstream.pipe(socket);
     });
     readerProxy.maxConnections = 20;
     readerProxy.on("drop", () => {

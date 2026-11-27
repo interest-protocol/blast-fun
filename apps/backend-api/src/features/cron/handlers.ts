@@ -8,7 +8,7 @@ import { CronHttpApi } from "../../data/api/cron/CronHttpApi.ts";
 const headers = { "Cache-Control": "no-store" };
 
 export function cronHandlers(cleanup: () => Promise<CleanupReport>) {
-  const run = Effect.tryPromise({ try: cleanup, catch: (error) => error });
+  const run = Effect.tryPromise({ try: cleanup, catch: (cause) => ({ cause }) });
   const respond = () =>
     Effect.match(run, {
       onSuccess: (report) =>
@@ -24,7 +24,7 @@ export function cronHandlers(cleanup: () => Promise<CleanupReport>) {
               },
               { status: 500, headers },
             ),
-      onFailure: (cause) =>
+      onFailure: ({ cause }) =>
         publicJson(
           {
             error: {
