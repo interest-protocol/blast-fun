@@ -39,6 +39,8 @@ const OTHER_WALLET = `0x${"cd".repeat(32)}`;
 const SESSION = "s".repeat(43);
 const OTHER_SESSION = "o".repeat(43);
 const STALE_SESSION = "x".repeat(43);
+const SESSION_ID = "00000000-0000-4000-8000-000000000002";
+const OTHER_SESSION_ID = "00000000-0000-4000-8000-000000000003";
 const keys = generateKeyPairSync("ec", { namedCurve: "P-256" });
 const verificationKey = keys.publicKey.export({ format: "pem", type: "spki" }).toString();
 const validator = createSocialValidator();
@@ -87,14 +89,16 @@ function kit(overrides: Partial<SocialRouteKitDependencies> = {}) {
         resolved.push(did);
         return did === DID ? ACCOUNT : null;
       },
-      async resolveWallet(address) {
+      async resolveWallet(address, sessionId) {
         resolved.push(`sui:${address}`);
-        return address === WALLET ? ACCOUNT : null;
+        return address === WALLET && sessionId === SESSION_ID ? ACCOUNT : null;
       },
     },
     walletSessions: {
       async live(token) {
-        return token === SESSION ? { address: WALLET } : token === OTHER_SESSION ? { address: OTHER_WALLET } : null;
+        if (token === SESSION) return { address: WALLET, sessionId: SESSION_ID };
+        if (token === OTHER_SESSION) return { address: OTHER_WALLET, sessionId: OTHER_SESSION_ID };
+        return null;
       },
     },
     primary: () => {
@@ -442,7 +446,7 @@ test("OA-16: a wallet session cookie is a caller on a same-origin request; its a
     });
   const post = await route("POST")(request({ cookie: walletCookie(), origin: ORIGIN, "sec-fetch-site": "same-origin" }, { method: "POST" }), testClient());
   assert.equal(post.status, 200);
-  assert.deepEqual(seen.at(-1), { kind: "wallet", address: WALLET, subject: `sui:${WALLET}` });
+  assert.deepEqual(seen.at(-1), { kind: "wallet", address: WALLET, sessionId: SESSION_ID, subject: `sui:${WALLET}` });
   assert.deepEqual(resolved.at(-1), `sui:${WALLET}`);
   assert.deepEqual(limiter.calls.at(-1), { bucket: "social_follow", subject: { accountId: `sui:${WALLET}` } });
   // A same-origin GET (browsers send no Origin on it) is enough with Sec-Fetch-Site.
@@ -528,7 +532,7 @@ test("review L4: failed wallet-session lookups count per IP; once full, no cooki
     walletSessions: {
       async live(token) {
         lookups += 1;
-        return token === SESSION ? { address: WALLET } : null;
+        return token === SESSION ? { address: WALLET, sessionId: SESSION_ID } : null;
       },
     },
   });
