@@ -134,6 +134,7 @@ export const queryKeys = {
     competitionRank: (slug: string, viewer: string | null) => [ROOT, "me", "competitions", "rank", slug, viewer] as const,
     invitees: (callsign: string) => [ROOT, "me", "invitees", callsign] as const,
     referrals: (callsign: string) => [ROOT, "me", "referrals", callsign] as const,
+    referralMonths: (callsign: string) => [ROOT, "me", "referrals", callsign, "months"] as const,
     all: [ROOT, "me"] as const,
     /** `GET /api/social/me/following/wallets`: the followed wallets a tab filters buy hints by, per account. */
     followingWallets: (accountId?: string) => (accountId === undefined ? ([ROOT, "me", "following-wallets"] as const) : ([ROOT, "me", "following-wallets", accountId] as const)),
@@ -190,7 +191,7 @@ export const queryKeys = {
     /** `GET /api/social/me/rewards` (OA-45): the summary with the latest payouts, and each coin's payout pages. */
     rewards: {
       all: [ROOT, "me", "rewards"] as const,
-      summary: () => [ROOT, "me", "rewards", "summary"] as const,
+      summary: (callsign: string) => [ROOT, "me", "rewards", "summary", callsign] as const,
       coin: (presaleId: string) => [ROOT, "me", "rewards", "coin", presaleId] as const,
     },
     /** `GET /api/social/me/presales`: the sales the viewer is in. */

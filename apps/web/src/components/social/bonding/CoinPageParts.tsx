@@ -5,6 +5,7 @@ import { HIDDEN_AMOUNT } from "@blast/core/web/format.ts";
 import { CoinTypeTag } from "#web/components/blast-ui/CoinTypeTag.tsx";
 import { CoinMark } from "#web/components/blast-ui/CoinMark.tsx";
 import { PageHeader } from "#web/components/blast-ui/PageHeader.tsx";
+import { InspectValue } from "#web/components/blast-ui/InspectValue.tsx";
 import { LiveFigureCue } from "#web/components/blast-ui/LiveFigureCue.tsx";
 import { DexIdentity } from "#web/components/blast-ui/DexIdentity.tsx";
 import { Segmented } from "#web/components/blast-ui/Segmented.tsx";
@@ -42,7 +43,7 @@ export function CoinIdentityHeader({ coin, name, symbol, status, graduated, mark
       <span className={styles.heroMark}><CoinMark coin={coin} size={55} /></span>
       <PageHeader
         title={<span className={styles.coinName}>
-          {tickerOnly ? <span className="ticker">${symbol}</span> : <span title={compact && name ? name : undefined}>{name}</span>}
+          {tickerOnly ? <span className="ticker">${symbol}</span> : <InspectValue value={name ?? ""} label="coin name" triggerLabel={`${name}. Show the full name`}><span className={styles.coinNameText}>{name}</span></InspectValue>}
           <small className="coinNamed">
             {symbol && !tickerOnly ? <span className="ticker">${symbol}</span> : null}
             {mark}
@@ -149,8 +150,9 @@ export function MarketOverview({
   </section>;
 }
 
-export function ChartCard({ children }: Readonly<{ children: ReactNode }>) {
-  return <section className={`${styles.card} ${styles.marketChart}`} aria-label="Price chart">{children}</section>;
+/** The price chart's card; `head` is the price row, so the price and the candles read as one block. */
+export function ChartCard({ head, children }: Readonly<{ head?: ReactNode; children: ReactNode }>) {
+  return <section className={`${styles.card} ${styles.marketChart}`} aria-label="Price chart">{head}{children}</section>;
 }
 
 type ActivityTab = "trades" | "holders" | "posts";

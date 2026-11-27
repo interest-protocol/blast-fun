@@ -9,15 +9,15 @@ import { HOME_RECENT_BUY_MS, type HomeQuery } from "@blast/core/web/contracts/ho
 import { liveFreshness, recordHintPainted } from "../home/activity-hints";
 import { browserGapTimers, hintedGap, NEW_POSTS_MIN_GAP_MS, NEW_POSTS_POLL_MS, type FeedFreshnessSource, type FreshnessHint } from "../home/feed-freshness";
 import { discoverQuery } from "./home-client";
-import { hintBuy, homeHintReads, type HomeCueBuy } from "./home-model";
+import { hintTrade, homeHintReads, type HomeCueTrade } from "./home-model";
 
-/** Priced buy hints are collected this long, then the cue shows the biggest. */
+/** Priced trade hints are collected this long, then their pops land together (one render per batch). */
 export const HOME_HINT_CUE_COLLECT_MS = 250;
 
-/** How many reported buy ids a mounted Home list remembers. */
-const HOME_SEEN_BUYS = 1_024;
+/** How many reported trade ids a mounted Home list remembers. */
+const HOME_SEEN_TRADES = 1_024;
 
-/** Home's hint source: a priced buy hint goes to the cue only and makes no read (`homeHintReads`). */
+/** Home's hint source: a priced trade hint goes to its pop only and makes no read (`homeHintReads`). */
 export function homeFreshness(): FeedFreshnessSource {
   return liveFreshness("home", NEW_POSTS_POLL_MS, homeHintReads);
 }
@@ -25,23 +25,23 @@ export function homeFreshness(): FeedFreshnessSource {
 /**
  * Visible Home reads share query keys, cached answers and in-flight requests with manual refresh.
  *
- * `onBuys` gets new buys for the cue from two paths that share one `seen` set of activity ids:
- * a priced buy hint, collected for `HOME_HINT_CUE_COLLECT_MS` (no read), and any other hint's
- * rate-limited re-read (its `recent_buys`). A buy reported once, shown or dropped, is never
+ * `onTrades` gets new trades for the pops from two paths that share one `seen` set of activity ids:
+ * a priced buy or sell hint, collected for `HOME_HINT_CUE_COLLECT_MS` (no read), and any other hint's
+ * rate-limited re-read (its `recent_buys`). A trade reported once, shown or dropped, is never
  * reported again by either path.
  */
 export function useHomeLive(
   query: HomeQuery,
   enabled: boolean,
   source?: FeedFreshnessSource,
-  onBuys?: (buys: readonly HomeCueBuy[]) => void,
+  onTrades?: (trades: readonly HomeCueTrade[]) => void,
   refreshRelated?: () => Promise<unknown>,
 ): void {
   const client = useAppQueryClient();
   const key = JSON.stringify(query);
-  const reportBuys = useEffectEvent((buys: readonly HomeCueBuy[]) => onBuys?.(buys));
+  const reportTrades = useEffectEvent((trades: readonly HomeCueTrade[]) => onTrades?.(trades));
   const refresh = useEffectEvent(() => refreshRelated?.());
-  const trackBuys = onBuys !== undefined;
+  const trackTrades = onTrades !== undefined;
   useEffect(() => {
     if (!enabled) return;
     const freshness = source ?? homeFreshness();
@@ -56,7 +56,7 @@ export function useHomeLive(
     const remember = (id: string): boolean => {
       if (seen.has(id)) return false;
       seen.add(id);
-      if (seen.size > HOME_SEEN_BUYS) seen.delete(seen.values().next().value as string);
+      if (seen.size > HOME_SEEN_TRADES) seen.delete(seen.values().next().value as string);
       return true;
     };
     const look = (hint?: FreshnessHint) => {
@@ -66,11 +66,11 @@ export function useHomeLive(
       if (hint?.cause === "connect" && !hint.reconnect && Date.now() - (client.getQueryState(discover.queryKey)?.dataUpdatedAt ?? 0) < NEW_POSTS_POLL_MS) return;
       if (!gate.admit(hint)) return;
       const read = client.fetchQuery({ ...discover, staleTime: 0 }).catch(() => undefined);
-      if (trackBuys) void read.then(page => {
+      if (trackTrades) void read.then(page => {
         if (disposed || document.visibilityState !== "visible") return;
         const floor = Math.max(visibleSince, Date.now() - HOME_RECENT_BUY_MS);
         const buys = page?.recent_buys?.filter(buy => buy.occurred_at_ms > floor && remember(buy.activity_id));
-        if (buys?.length) reportBuys(buys);
+        if (buys?.length) reportTrades(buys.map(buy => ({ ...buy, side: "buy" as const })));
       });
       let related: Promise<unknown> | undefined;
       const now = Date.now();
@@ -84,20 +84,20 @@ export function useHomeLive(
     };
     const gate = hintedGap(NEW_POSTS_MIN_GAP_MS, browserGapTimers(), look);
     const off = freshness.subscribe(look);
-    // A priced buy hint, raw (before the 1 s coalescer, so none in a burst is lost): the cue only, no read.
-    let collected: HomeCueBuy[] = [];
+    // A priced trade hint, raw (before the 1 s coalescer, so none in a burst is lost): its pop only, no read.
+    let collected: HomeCueTrade[] = [];
     let flush: number | undefined;
-    const offHints = trackBuys ? freshness.hints?.((hint) => {
+    const offHints = trackTrades ? freshness.hints?.((hint) => {
       if (disposed || document.visibilityState !== "visible") return;
-      const buy = hintBuy(hint);
-      if (!buy) return;
-      if (!remember(buy.activity_id)) return;
-      collected.push(buy);
+      const trade = hintTrade(hint);
+      if (!trade) return;
+      if (!remember(trade.activity_id)) return;
+      collected.push(trade);
       if (flush === undefined) flush = window.setTimeout(() => {
         flush = undefined;
-        const buys = collected;
+        const trades = collected;
         collected = [];
-        if (!disposed && document.visibilityState === "visible") reportBuys(buys);
+        if (!disposed && document.visibilityState === "visible") reportTrades(trades);
       }, HOME_HINT_CUE_COLLECT_MS);
     }) : undefined;
     const onVisibility = () => { visibleSince = Date.now(); };
@@ -112,5 +112,5 @@ export function useHomeLive(
     };
     // `key` stands for `query`: a query with the same text is the same read.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [client, enabled, key, source, trackBuys]);
+  }, [client, enabled, key, source, trackTrades]);
 }

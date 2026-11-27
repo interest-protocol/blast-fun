@@ -84,18 +84,8 @@ test("retired pages, password routes, and signup APIs are not found under every 
   }
 });
 
-test("hidden mode blocks Mission Control APIs and assets, including dotted paths", () => {
-  for (const path of [
-    "/api/auth/logout",
-    "/api/mission-control/admission",
-    "/api/mission-control/owner",
-    "/api/mission-control/owner/share",
-    "/api/mission-control/slush-wallet-metadata",
-    "/api/mission-control/telemetry",
-    "/api/og",
-    "/mission-control/auth",
-    "/mission-control/bedroom-day-2000.webp",
-  ]) assert.equal(decideMissionControlRoute(path, false), "not-found", path);
+test("hidden mode blocks gated APIs", () => {
+  assert.equal(decideMissionControlRoute("/api/og", false), "not-found");
 });
 
 test("hidden mode keeps published cards public with the legal pages", () => {
@@ -111,8 +101,8 @@ test("gate cookie renewal and Vercel Cron maintenance run whether or not Mission
   }
 });
 
-test("legacy APIs outside the retired paths still honor the API flag", () => {
-  for (const path of ["/api/mission-control/restore", "/api/mission-control/completion/other"]) {
+test("APIs outside the retired paths still honor the API flag", () => {
+  for (const path of ["/api/analytics/activity", "/api/v1/coins"]) {
     assert.equal(decideMissionControlRoute(path, false), "not-found", path);
     assert.equal(decideMissionControlRoute(path, true), "allow", path);
   }

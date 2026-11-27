@@ -78,12 +78,6 @@ test("boards: the page column ends 40px inside 1180px beside the right column, a
   has(find(shell, ".main", "(max-width: 1219px)"), "padding-right: var(--page-gutter);");
 });
 
-test("Backer avatars keep their compact stack", () => {
-  const happening = rules(read("../social/happening/Happening.module.css"));
-  has(find(happening, ".pile"), "flex: none;");
-  has(find(happening, ".pile > span"), "width: 18px !important; height: 18px !important; margin-left: -6px;");
-});
-
 test("the rail scrolls with no visible scrollbar and keeps its row spacing", () => {
   for (const declaration of ["padding: 20px 16px;", "gap: 4px;", "overflow-y: auto;", "scrollbar-width: none;"]) has(find(shell, ".rail"), declaration);
   assert.equal(find(shell, ".rail::-webkit-scrollbar"), "display: none;");

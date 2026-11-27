@@ -99,13 +99,6 @@ button {
   animation: none;
 }
 
-body.blast-card-dragging,
-body.blast-card-dragging * {
-  cursor: grabbing !important;
-  user-select: none !important;
-  -webkit-user-select: none !important;
-}
-
 @media (hover: hover) and (pointer: fine) {
   html[data-blast-cursor="ready"],
   html[data-blast-cursor="ready"] * {

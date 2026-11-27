@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { MarketStreamRelay } from "./stream-relay.ts";
+import { MarketStreamRelay, type MarketSubscription } from "./stream-relay.ts";
 import type { RelaySocket } from "./stream-relay.ts";
 
 const fingerprint = "a".repeat(64);
@@ -27,8 +27,8 @@ function stream(relay: MarketStreamRelay, request: Request) {
         send: (chunk) => { controller.enqueue(chunk); return true; },
         close: () => { if (!cancelled) controller.close(); },
       });
-      assert.equal(typeof subscription, "function");
-      stop = subscription as () => void;
+      assert.ok(!(subscription instanceof Response));
+      stop = subscription.stop;
     },
     cancel() { cancelled = true; stop?.(); },
   }).getReader();
@@ -175,10 +175,10 @@ for (const type of ["resync_required", "reconnect"]) {
     }, { network: "mainnet", deployment: fingerprint });
     const events: string[] = [];
     let closed = false;
-    const stop = relay.subscribe(new Request("https://frontend.test/api/launchpad/market/stream?activity=true"), {
+    const subscription = relay.subscribe(new Request("https://frontend.test/api/launchpad/market/stream?activity=true"), {
       send: (chunk) => { events.push(new TextDecoder().decode(chunk).match(/^event: (.+)$/m)![1]!); return true; },
       close: () => { closed = true; },
-    }) as () => void;
+    }) as MarketSubscription;
     sockets[0]!.receive({ type: "hello", protocol: 1, provenance });
     sockets[0]!.receive({ type: "pong" });
     sockets[0]!.receive({ type });
@@ -189,6 +189,6 @@ for (const type of ["resync_required", "reconnect"]) {
     assert.equal(sockets.length, 2);
     sockets[1]!.receive({ type: "hello", protocol: 1, provenance });
     assert.equal(events.at(-1), "hint", "the browser gets the new hello");
-    stop();
+    subscription.stop();
   });
 }

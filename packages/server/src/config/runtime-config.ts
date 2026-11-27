@@ -1,13 +1,10 @@
-import { createHash } from "node:crypto";
 import { z } from "zod";
 
 import { parseBlastTradeFee, type BlastTradeFee } from "@blast/core/lib/blast-trade-fee.ts";
 import { boundedInteger } from "@blast/core/lib/config/bounded-integer.ts";
 import { deploymentIdentity } from "@blast/core/lib/config/deployment-identity.ts";
 import {
-  optionalKey32,
   optionalSecret,
-  requiredKey32,
   requiredSecret,
   requiredValue,
 } from "@blast/core/lib/config/secret.ts";
@@ -34,11 +31,6 @@ import type { CreateFeePolicy } from "@blast/core/modules/social/contracts/creat
 import { processSingleton } from "@blast/core/lib/process-singleton.ts";
 import { requiredSiteOrigin } from "@blast/core/lib/site-origin.ts";
 import { rotatingGateKeys, type GateKeys } from "@blast/core/lib/web-security/gate-cookie.ts";
-import {
-  DEFAULT_MEMBER_SESSION_POLICY,
-  memberSessionPolicySchema,
-  type MemberSessionPolicy,
-} from "@blast/core/modules/mission-control/member-sessions/contracts.ts";
 import { parsePrivyConfig, type PrivyConfig } from "@blast/server/lib/privy-adapter/http-gateway.ts";
 import { concurrencyFromEnvironment } from "@blast/server/lib/concurrency.ts";
 import {
@@ -87,8 +79,6 @@ export type RuntimeConfig = Readonly<{
   cronSecret: string;
   gateKeys: GateKeys;
   privy: PrivyConfig;
-  ownerCursorKey: Buffer;
-  memberSessionPolicy: MemberSessionPolicy;
   /** `BLAST_NETWORK` + `BLAST_DEPLOYMENT_FINGERPRINT`: required on the API. */
   expectedDeployment: ExpectedDeployment;
   /** The SDK manifest `expectedDeployment` selects; `unavailable` keeps the gate's deployment_unavailable answer. */
@@ -131,8 +121,6 @@ export type RuntimeConfig = Readonly<{
   quotaNamespace: string;
 }>;
 
-const OWNER_CURSOR_CONTEXT = "blast:owner-recruit-cursor:v1";
-
 /** The process's runtime config, parsed from `process.env` on first use. */
 export function runtimeConfig(): RuntimeConfig {
   return processSingleton("runtimeConfig", () => parseRuntimeConfig(process.env));
@@ -145,7 +133,6 @@ export function parseRuntimeConfig(environment: Environment): RuntimeConfig {
     throw new Error("ADMIN_LOGIN_ADMISSION_TOKEN must differ from PRESALE_ADMIN_TOKEN.");
   }
 
-  const sessionTokenKey = requiredKey32(environment, "COMPLETION_SESSION_TOKEN_KEY");
   const deployment = requiredDeployment(environment);
   const presaleDeployment = readPresaleDeploymentIdentity(environment);
   const tradeFee = parsed(
@@ -166,8 +153,6 @@ export function parseRuntimeConfig(environment: Environment): RuntimeConfig {
       optionalSecret(environment, "BLAST_GATE_SECRET_PREVIOUS"),
     ),
     privy: parsePrivyConfig(environment),
-    ownerCursorKey: ownerCursorKey(optionalKey32(environment, "OWNER_CURSOR_KEY") ?? sessionTokenKey),
-    memberSessionPolicy: memberSessionPolicy(environment),
     expectedDeployment: deployment,
     presaleDeployment,
     suiNodeUrl: suiNodeUrl(environment),
@@ -292,32 +277,3 @@ function publicReadNamespaces(
   }
 }
 
-/** Owner cursors are keyed from their own key, or the completion session key when unset. */
-function ownerCursorKey(source: Buffer): Buffer {
-  return createHash("sha256").update(OWNER_CURSOR_CONTEXT).update(source).digest();
-}
-
-function memberSessionPolicy(environment: Environment): MemberSessionPolicy {
-  const policy = {
-    idleTtlMs: sessionDays(environment, "MEMBER_SESSION_IDLE_DAYS", DEFAULT_MEMBER_SESSION_POLICY.idleTtlMs),
-    absoluteTtlMs: sessionDays(environment, "MEMBER_SESSION_ABSOLUTE_DAYS", DEFAULT_MEMBER_SESSION_POLICY.absoluteTtlMs),
-  };
-  if (!memberSessionPolicySchema.safeParse(policy).success) {
-    throw new Error(
-      "MEMBER_SESSION_ABSOLUTE_DAYS must be at most 31 and at least MEMBER_SESSION_IDLE_DAYS.",
-    );
-  }
-  return policy;
-}
-
-function sessionDays(environment: Environment, name: string, fallbackMs: number): number {
-  const value = environment[name];
-  if (value === undefined) {
-    return fallbackMs;
-  }
-  const days = Number(value);
-  if (!z.number().int().positive().safeParse(days).success) {
-    throw new Error(`${name} must be a whole number of days.`);
-  }
-  return days * 24 * 60 * 60 * 1_000;
-}

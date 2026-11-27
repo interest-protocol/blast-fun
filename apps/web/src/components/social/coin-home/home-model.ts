@@ -93,6 +93,9 @@ export function amountShort(amount: HomeAmount): string {
 /** How loud a buy lands on its row: a quiet figure, a filled one from $100, and an icon that pops from $1,000. */
 export type HomeBuyTier = "small" | "big" | "huge";
 export type HomeBuyCue = Readonly<{ text: string; tier: HomeBuyTier }>;
+export type HomeTradeSide = "buy" | "sell";
+/** A trade as its row pops it: a buy rises in green, sized by its dollars; a sell sinks in red, always quiet. */
+export type HomeTradeCue = HomeBuyCue & Readonly<{ side: HomeTradeSide }>;
 
 /**
  * A buy the cue can draw: a read's `recent_buys` entry, or a priced trade hint,
@@ -100,6 +103,9 @@ export type HomeBuyCue = Readonly<{ text: string; tier: HomeBuyTier }>;
  */
 export type HomeCueBuy = Pick<HomeRecentBuy, "coin_key" | "activity_id" | "occurred_at_ms" | "quote_atoms" | "usd"> &
   Readonly<{ quote_symbol: string | null; quote_decimals: number | null }>;
+
+/** A trade a row can pop: a read's buy, or a priced buy or sell hint. */
+export type HomeCueTrade = HomeCueBuy & Readonly<{ side: HomeTradeSide }>;
 
 /**
  * A live buy as its row flashes it, short enough to read in a glance: dollars
@@ -120,40 +126,90 @@ export function buyCueOf(buy: Pick<HomeCueBuy, "quote_atoms" | "quote_decimals" 
   return { text: `+${atLeastPow10(paid, 0) ? shortQtyExact(paid) : amtExact(paid)} ${buy.quote_symbol}`, tier: "small" };
 }
 
-/** The buy worth showing from one read: the most dollars, the newest among equals; an unpriced buy only when none is priced. */
-export function biggestBuy<T extends HomeCueBuy>(buys: readonly T[]): T | undefined {
-  const usd = (buy: T) => exactDecimal(buy.usd) ?? { n: 0n, scale: 0 };
-  return [...buys].sort((a, b) => compareExact(usd(b), usd(a)) || b.occurred_at_ms - a.occurred_at_ms)[0];
+/** A trade's pop: a buy's cue, or a sell's figure with a minus sign and no size tier. */
+export function tradeCueOf(trade: Pick<HomeCueTrade, "quote_atoms" | "quote_decimals" | "quote_symbol" | "usd" | "side">): HomeTradeCue | null {
+  const cue = buyCueOf(trade);
+  if (!cue) return null;
+  return trade.side === "buy" ? { ...cue, side: "buy" } : { text: `\u2212${cue.text.slice(1)}`, tier: "small", side: "sell" };
 }
 
-/** Whether a trade hint is a priced buy (quote atoms and dollars both kept by `hintOf`). */
-function pricedBuy(hint: FreshnessHint): boolean {
-  return hint.trade?.kind === "trade_buy" && hint.trade.usd !== undefined && hint.trade.quoteAtoms !== undefined;
+/** Home pops a trade worth more than this many dollars, or an unpriced buy from a read (shown in its own coin). */
+export const HOME_POP_MIN_USD = "1";
+const MIN_POP_USD = exactDecimal(HOME_POP_MIN_USD)!;
+
+/** Whether a trade earns a pop: above `HOME_POP_MIN_USD`, compared as an exact decimal. */
+export function popsOn(trade: Pick<HomeCueTrade, "usd">): boolean {
+  if (trade.usd === undefined) return true;
+  const usd = exactDecimal(trade.usd);
+  return usd !== null && compareExact(usd, MIN_POP_USD) > 0;
+}
+
+/** Pops a row holds at once, and pops the page holds at once. */
+export const HOME_POPS_PER_ROW = 3;
+export const HOME_POPS_PER_PAGE = 12;
+
+/** One pop on a row. `slot` (0 to `HOME_POPS_PER_ROW - 1`) fixes its offset for its whole life. */
+export type HomePop = Readonly<{ id: string; coinKey: string; slot: number; cue: HomeTradeCue }>;
+
+/**
+ * The pops after a batch of trades lands on `showing`: the biggest trades first, each in its row's first free slot,
+ * while its row and the page have room. Pops already showing keep their place; a trade with no room is skipped.
+ */
+export function addPops(showing: readonly HomePop[], trades: readonly HomeCueTrade[]): readonly HomePop[] {
+  const pops = [...showing];
+  for (const trade of [...trades].sort(biggestFirst)) {
+    if (pops.length >= HOME_POPS_PER_PAGE) break;
+    const cue = tradeCueOf(trade);
+    const taken = new Set(pops.filter(pop => pop.coinKey === trade.coin_key).map(pop => pop.slot));
+    const slot = Array.from({ length: HOME_POPS_PER_ROW }, (_, index) => index).find(free => !taken.has(free));
+    if (cue && slot !== undefined) pops.push({ id: trade.activity_id, coinKey: trade.coin_key, slot, cue });
+  }
+  // Nothing added (page or rows full): the same array, so the list does not re-render.
+  return pops.length === showing.length ? showing : pops;
+}
+
+/** The trade worth naming from one batch: the most dollars, the newest among equals; an unpriced one only when none is priced. */
+export function biggestTrade<T extends HomeCueBuy>(buys: readonly T[]): T | undefined {
+  return [...buys].sort(biggestFirst)[0];
+}
+
+/** Most dollars first (an unpriced buy counts as none), the newest among equals. */
+function biggestFirst(a: HomeCueBuy, b: HomeCueBuy): number {
+  const usd = (buy: HomeCueBuy) => exactDecimal(buy.usd) ?? { n: 0n, scale: 0 };
+  return compareExact(usd(b), usd(a)) || b.occurred_at_ms - a.occurred_at_ms;
+}
+
+/** Whether a hint is a priced trade, a buy or a sell (quote atoms and dollars both kept by `hintOf`). */
+function pricedTrade(hint: FreshnessHint): boolean {
+  return hint.trade?.kind !== undefined && hint.trade.usd !== undefined && hint.trade.quoteAtoms !== undefined;
 }
 
 /**
- * Whether Home re-reads its list for a hint. A priced buy goes to the cue only
+ * Whether Home re-reads its list for a hint. A priced buy or sell goes to the pop only
  * (cue only, never data): its rank, volume and counts wait for the 30 s poll.
- * Every other hint (unpriced, a bad amount, a sell, not a trade) reads as before.
+ * Every other hint (unpriced, a bad amount, not a trade) reads as before.
  */
 export function homeHintReads(hint: FreshnessHint): boolean {
-  return !pricedBuy(hint);
+  return !pricedTrade(hint);
 }
 
 const MIN_CUE_USD = exactDecimal(HOME_RECENT_BUY_MIN_USD)!;
 
 /**
- * The buy a priced hint stands for, keyed like Home's rows (`presale_id ?? coin_type`),
+ * The buy or sell a priced hint stands for, keyed like Home's rows (`presale_id ?? coin_type`),
  * when it clears the server's `recent_buys` floor as an exact decimal: atoms above
  * zero and at least `HOME_RECENT_BUY_MIN_USD`. Null otherwise.
  */
-export function hintBuy(hint: FreshnessHint): HomeCueBuy | null {
+export function hintTrade(hint: FreshnessHint): HomeCueTrade | null {
   const trade = hint.trade;
-  if (!trade || !pricedBuy(hint)) return null;
+  if (!trade?.kind || !pricedTrade(hint)) return null;
   const coinKey = trade.presaleId ?? trade.coinType;
   const usd = exactDecimal(trade.usd);
   if (!coinKey || !usd || !/[1-9]/.test(trade.quoteAtoms ?? "") || compareExact(usd, MIN_CUE_USD) < 0) return null;
-  return { coin_key: coinKey, activity_id: trade.cursor, occurred_at_ms: hint.atMs, quote_atoms: trade.quoteAtoms!, usd: trade.usd, quote_symbol: null, quote_decimals: null };
+  return {
+    coin_key: coinKey, activity_id: trade.cursor, occurred_at_ms: hint.atMs, quote_atoms: trade.quoteAtoms!, usd: trade.usd!,
+    quote_symbol: null, quote_decimals: null, side: trade.kind === "trade_buy" ? "buy" : "sell",
+  };
 }
 
 /**
@@ -325,20 +381,6 @@ export function shareText(bps: number | null): string | null {
   if (bps < 10) return "<0.1%";
   if (bps < 100) return `${(bps / 100).toFixed(1)}%`;
   return `${Math.round(bps / 100)}%`;
-}
-
-/** The past tense of a direction: `bought`, `sold`, `backed`, `claimed`. */
-export function verbOf(kind: HomeKind, past = true): string {
-  switch (kind) {
-    case "trade_buy":
-      return past ? "bought" : "buy";
-    case "trade_sell":
-      return past ? "sold" : "sell";
-    case "presale_commit":
-      return past ? "backed" : "back";
-    case "presale_claim":
-      return past ? "claimed" : "claim";
-  }
 }
 
 /** The person's name as a row shows it: the display name, else the callsign; a wallet by its short address. */

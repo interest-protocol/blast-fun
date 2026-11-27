@@ -114,7 +114,7 @@ test("installing wraps the global fetch once; gatedFetch uses whatever the globa
   const global = network((url, count) => (url === "/api/gate" ? new Response(null, { status: 204 }) : count === 1 ? refusal() : Response.json({ ok: 2 })));
   globalThis.fetch = global.fetch;
   try {
-    assert.deepEqual(await (await gatedFetch("/api/mission-control/owner")).json(), { ok: 2 });
+    assert.deepEqual(await (await gatedFetch("/api/analytics/activity")).json(), { ok: 2 });
   } finally {
     globalThis.fetch = original;
   }

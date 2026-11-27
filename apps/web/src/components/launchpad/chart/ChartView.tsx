@@ -16,7 +16,7 @@ import { Popover, PopoverSurface } from "#web/components/blast-ui/Popover.tsx";
 import { useLaunchWallet, useWalletTrades } from "../activity/wallet-trades";
 import { tradeWalletLabels } from "../activity/wallet-labels";
 import { walletMarkerKey, type WalletChartTrade, type WalletRipple } from "#web/components/charts/wallet-markers.ts";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useShellPrefs } from "#web/components/blast-ui/use-shell-prefs.ts";
 import { useMobileChartLayout } from "#web/components/charts/use-mobile-chart-layout.ts";
 import { saveChartPreference, useChartPreference } from "./chart-preferences";
@@ -376,6 +376,8 @@ const CHART_STYLES = [
 
 function ChartFilters({ view }: Readonly<{ view: ReturnType<typeof useChartViewControls> }>) {
   const { range, interval } = view.controls;
+  // Opening focuses the card itself, which the browser does without scrolling; focusing its first field scrolled the page.
+  const card = useRef<HTMLDivElement>(null);
   return (
     <Popover.Root>
       <Popover.Trigger render={<DisclosureButton
@@ -388,7 +390,7 @@ function ChartFilters({ view }: Readonly<{ view: ReturnType<typeof useChartViewC
       </DisclosureButton>} />
       <PopoverSurface
         positioner={{ align: "end", sideOffset: 8, collisionPadding: 12, className: styles.filterLayer }}
-        popup={{ className: styles.filters }}
+        popup={{ className: styles.filters, ref: card, initialFocus: card }}
       >
         <Popover.Title className={primitives.srOnly}>Chart filters</Popover.Title>
         <ChartRangeFields view={view} compact />
@@ -573,10 +575,12 @@ function CompactChart({ view }: Readonly<{ view: ChartViewControls }>) {
   return <div className={styles.chart} data-compact-chart="" data-chart-style={style}>
     <div className={styles.compactHead}>
       <h2>Price{unit ? <span> · {unit}</span> : null}</h2>
+      <StreamNotice view={view} />
       <div className={styles.compactTools}>
         {choosable && <span className={styles.stylePicker} title={lineOnly ?? undefined}>
           <Segmented label={lineOnly ? `Chart style. ${lineOnly}.` : "Chart style"} size="touch" variant="outline" options={CHART_STYLES} value={style} onChange={setStyle} optionDisabled={(key) => key === "candles" && lineOnly !== null} />
         </span>}
+        {view.controls.range !== "live" && <IntervalButtons view={view} />}
         <ChartFilters view={view} />
       </div>
     </div>
@@ -586,12 +590,31 @@ function CompactChart({ view }: Readonly<{ view: ChartViewControls }>) {
   </div>;
 }
 
-/** One slot, as tall as its Try again button, holds the delayed notice or the update line, so neither moves the page. */
+/** On a chart wider than about 640 px, the range's intervals as one row of buttons: one tap changes the candles. Narrower charts keep them in the range picker. */
+function IntervalButtons({ view }: Readonly<{ view: ChartViewControls }>) {
+  const { controls, onControls } = view;
+  return <span className={styles.intervalPicker}>
+    <Segmented label="Candle interval" size="touch" variant="outline" options={rangeIntervals(controls.range).map((interval) => [interval, interval] as const)} value={controls.interval} onChange={(interval) => onControls({ ...controls, interval })} />
+  </span>;
+}
+
+/** The live stream's state ("Trade updates delayed." while the tab's socket is refused or reconnecting); an empty Live chart says it in its own empty state instead. */
+function streamNotice({ geometry, updates, controls }: ChartViewControls) {
+  return geometry || controls.range !== "live" ? updates : null;
+}
+
+/**
+ * The stream's state in the chart's head, where the eye already is, on one line in the room the
+ * title and tools leave. A narrow chart has no such room, so its status slot says it instead.
+ */
+function StreamNotice({ view }: Readonly<{ view: ChartViewControls }>) {
+  return <p className={`${styles.note} ${styles.headNotice}`} role="status" data-stream-notice="">{streamNotice(view)}</p>;
+}
+
+/** One slot, as tall as its Try again button, holds a source's delayed notice (and on a narrow chart the stream's), so it never moves the page. */
 function CompactStatus({ view }: Readonly<{ view: ChartViewControls }>) {
-  const { geometry, updates } = view;
-  const live = view.controls.range === "live";
   return <div className={`${styles.note} ${styles.status} ${styles.alertSlot}`} role="status">
-    {(geometry ? compactSourceAlert(view) : null) ?? (geometry || !live ? updates : null)}
+    {(view.geometry ? compactSourceAlert(view) : null) ?? <span className={styles.slotNotice}>{streamNotice(view)}</span>}
   </div>;
 }
 
@@ -609,13 +632,13 @@ function CompactEmptyChart({ view }: Readonly<{ view: ReturnType<typeof useChart
   const { amountsHidden } = useShellPrefs();
   const opening = compactOpeningPrice(view);
   const visible = view.sources.filter(({ name }) => view.shown(name));
-  const state = `${styles.chartState} ${styles.chartEmpty}`;
+  const state = `${klineStyles.sized} ${styles.chartEmpty}`;
   if (opening) return <EmptyState className={state} title={`Opening price ${amountsHidden ? HIDDEN_AMOUNT : tokenPrice(opening, view.source, view.quoteUsd)}`}>The chart starts with the first trade.</EmptyState>;
   if (view.missingPriceUnits) return <EmptyState className={state} role="alert" title="Price units couldn’t load.">Reload the page to try again.</EmptyState>;
   if (!visible.length) return <EmptyState className={state} title="No chart series selected.">Open chart filters to show a series.</EmptyState>;
   if (visible.some(({ section }) => section?.state === "loading")) return (
-    <SkeletonRegion className={styles.chartState} label="Loading price history">
-      <SkeletonBox className={styles.chartSkeleton} />
+    <SkeletonRegion label="Loading price history">
+      <SkeletonBox className={`${klineStyles.loading} ${styles.chartSkeleton}`} />
     </SkeletonRegion>
   );
   const delayed = visible.some(({ section }) => section?.state === "stale");

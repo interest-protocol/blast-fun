@@ -137,18 +137,6 @@ export function tradersQuery(window: HomeWindow, query: HomeTradersQuery = HOME_
   });
 }
 
-/** One coin's thread in the pool scope, paged by participant. */
-export function threadQuery(coinKey: string, window: HomeWindow) {
-  return infiniteQueryOptions({
-    queryKey: queryKeys.home.thread(coinKey, window),
-    queryFn: ({ pageParam, signal }) => fetchHomeThread(coinKey, window, pageParam, signal),
-    gcTime: 30 * 60_000,
-    initialPageParam: null as string | null,
-    getNextPageParam: (last: HomeThreadPage) => last.next_cursor,
-    staleTime: PUBLIC_STALE_MS,
-  });
-}
-
 /** One coin's discussion: its posts with a why, paged. */
 export function discussionQuery(presaleId: string) {
   return infiniteQueryOptions({

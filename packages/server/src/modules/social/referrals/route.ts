@@ -1,16 +1,21 @@
 import type { SocialRouteKit } from "@blast/server/modules/social/route-kit/route.ts";
 import { SocialRouteError } from "@blast/core/modules/social/route-kit/errors.ts";
 import { isReferralCursor } from "@blast/core/modules/social/referrals/contracts.ts";
-import { readReferralInvitees, readReferralSummary } from "@blast/server/modules/social/referrals/read.ts";
+import { readReferralInvitees, readReferralSummary } from "./read.ts";
+import { readReferralMonths } from "./revenue.ts";
 
 export function createReferralRoute(kit: SocialRouteKit) {
   return Object.freeze({
     GET: kit.route(
       { name: "GET /api/social/me/referrals", auth: "account", account: "required", bucket: "social_read", cache: "private" },
-      async (context) => context.json(await context.transaction(
-        (social) => readReferralSummary(social, context.account!.account_id),
-        { label: "social.referrals", isolationLevel: "REPEATABLE READ" },
-      )),
+      async (context) => {
+        const monthly = new URL(context.request.url).searchParams.get("view") === "monthly";
+        const accountId = context.account!.account_id;
+        return context.json(await context.transaction(
+          async (social) => monthly ? await readReferralMonths(social, accountId) : await readReferralSummary(social, accountId),
+          { label: "social.referrals", isolationLevel: "REPEATABLE READ" },
+        ));
+      },
     ),
   });
 }

@@ -213,25 +213,6 @@ export function soundEnabledNow(): boolean {
 
 const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
 
-function subscribeReducedMotion(listener: () => void): () => void {
-  const list = window.matchMedia(REDUCED_MOTION_QUERY);
-  list.addEventListener("change", listener);
-  return () => list.removeEventListener("change", listener);
-}
-
-function reducedMotionSnapshot(): boolean {
-  return window.matchMedia(REDUCED_MOTION_QUERY).matches;
-}
-
-/**
- * Whether the reader asked for reduced motion. Read during render only where
- * nothing in the server's HTML depends on it; everything the layer animates is
- * decided in an event handler, where `motionAllowed()` is read fresh.
- */
-export function useReducedMotion(): boolean {
-  return useSyncExternalStore(subscribeReducedMotion, reducedMotionSnapshot, () => false);
-}
-
 /**
  * Whether the layer may animate at all, read at the moment of the gesture.
  * Under reduced motion the answer is no, and the layer then adds **no

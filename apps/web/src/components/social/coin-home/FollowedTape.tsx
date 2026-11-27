@@ -7,6 +7,7 @@ import { IntentLink as Link } from "#web/components/blast-ui/NavigationLink.tsx"
 import { useAppQueryClient } from "#web/lib/query/provider.tsx";
 import type { HomeTapeEvent, HomeWindow } from "@blast/core/web/contracts/home.ts";
 import { bxAgo } from "@blast/core/web/format.ts";
+import { coinPagePath } from "@blast/core/modules/launchpad-coin/page-key.ts";
 
 import { presaleHref } from "../feed-ui/shell-bridge-model";
 import { Avatar } from "../post/PostMedia";
@@ -50,7 +51,7 @@ function TapeItem({ event, nowMs }: Readonly<{ event: HomeTapeEvent; nowMs: numb
         {actor.type === "account" ? <Link className={styles.tapeName} href={actor.path}>{firstName(actor)}</Link> : null}
         {actor.type === "account" && actor.verified ? <VerifiedBadge className="verified" /> : null}
         {` ${parts.before} `}
-        <span className="coinNamed sm"><Link className={styles.tapeCoin} href={presaleHref(event.coin.presale_id)}>{event.coin.symbol}</Link>{event.coin.verified_team ? <CoinVerifiedMark size="sm" /> : null}</span>
+        <span className="coinNamed sm"><Link className={styles.tapeCoin} href={event.coin.presale_id === null ? coinPagePath(event.coin.coin_type) : presaleHref(event.coin.presale_id)}>{event.coin.symbol}</Link>{event.coin.verified_team ? <CoinVerifiedMark size="sm" /> : null}</span>
         {parts.after ? ` ${parts.after}` : null}
       </span>
       <span className={styles.tapeWhen}>{bxAgo(event.occurred_at_ms, nowMs)}</span>

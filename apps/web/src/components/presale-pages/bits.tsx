@@ -3,16 +3,9 @@
 import type { ReactNode } from "react";
 
 import { timeUntil } from "@blast/core/web/format.ts";
-import type { SocialPresaleSummary } from "@blast/core/web/contracts/presales.ts";
 
 import { dyn } from "#web/components/blast-ui/csp-style.ts";
 import { cx } from "./cx";
-import { isOversubscribed } from "@blast/core/modules/presale/presentation.ts";
-
-export function Oversubscription({ sale }: Readonly<{ sale: Pick<SocialPresaleSummary, "raised_atoms" | "target_atoms" | "phase"> }>) {
-  if (!isOversubscribed(sale)) return null;
-  return <span className={cx("oversubscription")}><b>Above target</b><span>{sale.phase === "cancelled" ? "Cancelled presale. Commitments are fully refundable." : "Your allocation is based on your share of all commitments. Unallocated payment is refunded at claim."}</span></span>;
-}
 
 /** An unnamed wallet's gradient dot (`.wav`): hue from the address's character codes, as the design. */
 export function WalletAvatar({ address, size = 26 }: Readonly<{ address: string; size?: number }>) {

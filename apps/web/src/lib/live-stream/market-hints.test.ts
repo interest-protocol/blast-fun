@@ -138,6 +138,31 @@ test("late hint subscribers reuse the market handshake without another connectio
   carrier.stop();
 });
 
+// This fails if a second pong (the server sends one each time a `set` adds a presale) breaks the
+// hints: every client must still get it, and a late client replays only the newest.
+test("a repeated presale pong reaches every client and a late client replays only the newest", async () => {
+  const carrier = beginMarketHints();
+  const fallback = activityOnly();
+  const early = marketHintTransport("/hints", fallback.create, queueMicrotask);
+  const frames: string[] = [];
+  early.onmessage = ({ data }) => frames.push(String(data));
+  const first = JSON.stringify({ type: "pong", presale_checkpoint: 40 });
+  const second = JSON.stringify({ type: "pong", presale_checkpoint: 41 });
+  carrier.frame(HELLO);
+  carrier.frame(first);
+  carrier.frame(second);
+  assert.deepEqual(frames, [HELLO, first, second]);
+  const late = marketHintTransport("/hints", fallback.create, queueMicrotask);
+  const replayed: string[] = [];
+  late.onmessage = ({ data }) => replayed.push(String(data));
+  await Promise.resolve();
+  assert.deepEqual(replayed, [HELLO, second]);
+  assert.equal(fallback.opened(), 0);
+  early.close();
+  late.close();
+  carrier.stop();
+});
+
 // This fails if a market reconnect opens an activity-only socket beside the market socket it is reopening.
 test("a market drop and reconnect opens no activity-only socket: the hints wait for the new hello", async () => {
   const carrier = beginMarketHints();

@@ -40,13 +40,6 @@ export const FlipIcon = () => (
   </Line>
 );
 
-export const GasIcon = () => (
-  <Line>
-    <path d="M5 20V6a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v14M4 20h12M8 9h4" />
-    <path d="M15 10h1.5a1.5 1.5 0 0 1 1.5 1.5V17a1.5 1.5 0 0 0 3 0V8.5L18 6" />
-  </Line>
-);
-
 export const SearchIcon = () => (
   <Line>
     <circle cx="11" cy="11" r="6.5" />

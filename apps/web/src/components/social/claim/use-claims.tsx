@@ -23,16 +23,6 @@ export type Claims = Readonly<{
   run: (target: ClaimTarget) => void;
 }>;
 
-const ClaimsContext = createContext<Claims>(NO_CLAIMS);
-
-export function ClaimsProvider({ value, children }: Readonly<{ value: Claims; children: ReactNode }>) {
-  return <ClaimsContext value={value}>{children}</ClaimsContext>;
-}
-
-export function useClaims(): Claims {
-  return useContext(ClaimsContext);
-}
-
 const RunnerContext = createContext<Readonly<{ path: ClaimPath | undefined; scope: string | null; runner: ClaimRunner | null }> | null>(null);
 
 /** One runner per signed-in shell; nested overlay providers keep the same owner. */

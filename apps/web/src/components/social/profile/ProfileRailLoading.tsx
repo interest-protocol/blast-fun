@@ -2,9 +2,9 @@ import clsx from "clsx";
 import { SkeletonText as Text } from "#web/components/blast-ui/Skeleton.tsx";
 import profile from "./Profile.module.css";
 
-export function ProfileRailLoading({
-  title = "In right now",
-}: Readonly<{ title?: string }>) {
+const title = "In right now";
+
+export function ProfileRailLoading() {
   return (
     <div
       aria-busy="true"

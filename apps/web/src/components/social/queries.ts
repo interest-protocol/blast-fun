@@ -14,7 +14,6 @@ import {
   PRESALE_COMMIT_FIELDS_HEADER,
   PRESALE_LIST_SORTS,
   SOCIAL_PRESALE_VIEWER_PATH,
-  SOCIAL_CREATED_PRESALES_PATH,
   socialPresaleListPath,
   socialPresalePath,
   type PresaleListStatus,
@@ -85,16 +84,6 @@ export function featuredPresalesQuery() {
     },
     staleTime: PUBLIC_STALE_MS,
     refetchInterval: (query) => pollInterval(30_000, query),
-  });
-}
-
-/** Private creator discovery, invalidated with the account’s presale reads. */
-export function createdPresalesQuery(getAccessToken: Token) {
-  return queryOptions({
-    queryKey: queryKeys.me.createdPresales(),
-    queryFn: async () => unwrapApiResult(await callSocialApi({ getAccessToken }, SOCIAL_CREATED_PRESALES_PATH, { method: "GET" },
-      socialPresaleRowsSchema)),
-    staleTime: VIEWER_STALE_MS,
   });
 }
 
@@ -256,11 +245,12 @@ function mePresalesOptions<Key extends readonly unknown[]>(getAccessToken: Token
 /**
  * `GET /api/social/me/rewards?limit=5` (OA-45): what each coin paid and owes,
  * and the five newest payouts — the Portfolio tab, its side card and the
- * Rewards page share it. Fresh a minute, as the portfolio.
+ * Rewards page share it. Fresh a minute, as the portfolio. Keyed by account,
+ * so a switch never toasts one account's payouts as another's.
  */
-export function rewardsSummaryQuery(getAccessToken: Token) {
+export function rewardsSummaryQuery(getAccessToken: Token, callsign: string) {
   return queryOptions({
-    queryKey: queryKeys.me.rewards.summary(),
+    queryKey: queryKeys.me.rewards.summary(callsign),
     queryFn: async () => unwrapApiResult(await fetchRewardsPage({ getAccessToken }, socialRewardsPath({ limit: 5 }))),
     staleTime: PORTFOLIO_STALE_MS,
   });

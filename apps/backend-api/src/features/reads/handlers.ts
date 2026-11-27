@@ -25,12 +25,12 @@ export const readHandlers = HttpApiBuilder.group(ReadApi, "reads", (handlers) =>
                 const { run, onFailure } = yield* ReadRequest;
                 return yield* Effect.tryPromise({
                   try: () => run(route),
-                  catch: (cause) => cause,
+                  catch: (cause) => ({ cause }),
                 }).pipe(
                   Effect.match({
                     onSuccess: (response) =>
                       HttpServerResponse.raw(response, { status: response.status }),
-                    onFailure: (cause) => {
+                    onFailure: ({ cause }) => {
                       onFailure(cause);
                       return HttpServerResponse.empty({ status: 500 });
                     },

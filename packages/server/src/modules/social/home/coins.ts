@@ -82,6 +82,7 @@ import {
   SIDES_GROUP,
   sidesSelect,
   homeSpan,
+  idsScope,
   readHomeBounds,
   rowsWithSql,
   scopedHomeCoinsSql,
@@ -1124,7 +1125,7 @@ export async function readHomeCoinsByIds(
   if (!asOf) throw new SocialRouteError("service_unavailable");
   const span = homeSpan(window, bounds);
   const kinds = visibleKinds(context.hiddenKinds);
-  const scope: SaleScope = { kind: "ids", presaleIds, includeStandalone: presaleIds.some((id) => id.includes("::")) };
+  const scope = idsScope(presaleIds);
   const actors: ActorScope = { kind: "everyone" };
   const [facts, sides] = await Promise.all([
     readCoinFacts(db, scope, span, context),

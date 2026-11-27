@@ -37,18 +37,8 @@
   display: grid; grid-template-columns: 2.75rem minmax(0, 1fr); column-gap: 0.8125rem; min-height: 11.8125rem;
   padding: 1.3125rem 1.3125rem 0.8125rem; border-radius: var(--r-md); background: var(--card); box-shadow: var(--sh-1);
 }
-.skAvatar { width: max(44px, 2.75rem); height: max(44px, 2.75rem); border-radius: 62.4375rem; background: var(--chip); }
-.skLines { display: flex; flex-direction: column; gap: 0.8125rem; padding-top: 0.3125rem; }
-.skLines span { height: 0.8125rem; border-radius: 62.4375rem; background: var(--chip); animation: pulse 1.6s var(--ease-std) infinite; }
-.skLines span:nth-child(1) { width: 38%; }
-.skLines span:nth-child(2) { width: 62%; height: 1.75rem; }
-.skLines span:nth-child(3) { width: 84%; }
 @keyframes pulse { 50% { opacity: .55; } }
 
 @media (max-width: 760px) {
   .skeleton { padding: 1.0625rem 0.9375rem 0.625rem; grid-template-columns: 2.5rem minmax(0, 1fr); column-gap: 0.6875rem; }
-  .skAvatar { width: 2.5rem; height: 2.5rem; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .skLines span { animation: none; }
 }

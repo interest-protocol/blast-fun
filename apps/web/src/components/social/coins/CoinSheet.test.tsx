@@ -103,14 +103,14 @@ test("withdraw: the amount box, the To field and its hint, the terms, the button
   assert.match(text(render([{ kind: "wd", key: "sui" }], { wallet: { ...READY, fee: "wallet" } as CoinSheetWallet })), /Network fee Paid from your SUI/);
 });
 
-test("R3-33 (Swap board): the trade screen is the universal swap — You sell / You get, the flip, the presets, the detail, the button", () => {
+test("R3-33 (Swap board): the trade screen is the universal swap — You sell, its presets, the flip, You get, the detail, the button", () => {
   const html = render([{ kind: "coin", key: "sui" }, { kind: "trade", key: "sui" }]);
   // The board's boxes: the label and balance over the amount and its coin, the dollar value under it.
   // USD estimates stay unavailable until a quote arrives; the button comes before the detail, whose rows start hidden.
   // The ecosystem market link follows the detail (#765).
   assert.match(
     text(html),
-    /^Swap Pay Balance 412\.38 SUI SUI — Receive Balance 860 USDC — USDC 25% 50% 75% Max Enter an amount\. Swap$/,
+    /^Swap Pay Balance 412\.38 SUI SUI — 25% 50% 75% Max Receive Balance 860 USDC — USDC Enter an amount\. Swap$/,
   );
   // The Buy/Sell segmented control and the old labels are gone.
   assert.doesNotMatch(html, /role="tablist"|You pay|Buy or sell|Trading opens soon/);

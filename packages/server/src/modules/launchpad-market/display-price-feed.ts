@@ -61,6 +61,11 @@ type Subscriber = {
   send: (frame: DisplayPriceFrame) => void;
   last: Map<string, DisplayPrice>;
 };
+/** One subscriber's handle: `update` changes its coins in place, so kept coins are not sent again. */
+export type DisplayPriceSubscription = Readonly<{
+  stop(): void;
+  update(coins: readonly string[]): void;
+}>;
 
 const READ_INTERVAL_MS = 1_000;
 const RETRY_INTERVAL_MS = 10_000;
@@ -87,22 +92,25 @@ export class DisplayPriceFeed {
     return new Set([...this.#coins(), ...coins]).size <= MARKET_STREAM_BUDGET.maxPriceCoins;
   }
 
-  subscribe(coins: readonly string[], send: Subscriber["send"]): (() => void) | undefined {
-    if (!coins.length) return;
-    const requested = this.#coins();
-    for (const coin of coins) requested.add(coin);
-    if (requested.size > MARKET_STREAM_BUDGET.maxPriceCoins) return;
-
-    const subscriber = { coins, send, last: new Map<string, DisplayPrice>() };
+  subscribe(coins: readonly string[], send: Subscriber["send"]): DisplayPriceSubscription | undefined {
+    if (!coins.length || !this.admits(coins)) return;
+    const subscriber: Subscriber = { coins, send, last: new Map() };
     this.#subscribers.add(subscriber);
     this.#schedule();
-    return () => {
-      this.#subscribers.delete(subscriber);
-      if (this.#subscribers.size) return;
-      clearTimeout(this.#timer);
-      this.#timer = undefined;
-      this.#read?.abort();
-      this.#checkpoint = -1;
+    return {
+      stop: () => {
+        this.#subscribers.delete(subscriber);
+        if (this.#subscribers.size) return;
+        clearTimeout(this.#timer);
+        this.#timer = undefined;
+        this.#read?.abort();
+        this.#checkpoint = -1;
+      },
+      // The caller checked `admits` for the added coins; a dropped coin is sent again if it returns.
+      update: (next) => {
+        subscriber.coins = next;
+        for (const coin of subscriber.last.keys()) if (!next.includes(coin)) subscriber.last.delete(coin);
+      },
     };
   }
 

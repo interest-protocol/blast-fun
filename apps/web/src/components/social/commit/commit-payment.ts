@@ -7,7 +7,7 @@ import { commitAmounts, commitRefusal, type CommitInput, type CommitSale } from 
 import { PUBLIC_BASE_COINS, type WalletCoinView } from "../coins/coin-model";
 import type { TradeQuoteRequester } from "../trades/trades-client.ts";
 import { tradeSide } from "../trade/trade-ticket.ts";
-import { impactText, isOffered } from "../trades/trade-quote-view";
+import { isOffered } from "../trades/trade-quote-view";
 import { commitErrorText } from "./commit-input";
 import type { CommitBlastInput } from "./CommitPanel";
 import { COMMIT_COIN_TYPES, commitQuoteUsd } from "./commit-view";
@@ -119,10 +119,3 @@ export async function prepareCommitPayment(input: CommitInput, coin: WalletCoinV
   return { input: current, order: paymentOrder(input, coin, current, quote), quote };
 }
 
-export function paymentRouteText(quote: SocialTradeQuote, sale: CommitSale): string {
-  const coin = saleQuoteCoin(sale);
-  const minimum = quote.min_out === null ? "—" : atomsText(quote.min_out, coin.decimals);
-  const impact = quote.price_impact_bps === null ? "—" : impactText(quote.price_impact_bps);
-  const fee = quote.blast_fee_bps === null ? "—" : impactText(quote.blast_fee_bps);
-  return `${minimum} ${coin.symbol} minimum · ${quote.route_label ?? "Swap route"} · impact ${impact} · slippage ${impactText(quote.slippage_bps)} · Blast swap fee ${fee} · ${quote.network_fee?.label ?? "Network fee shown in wallet"}`;
-}

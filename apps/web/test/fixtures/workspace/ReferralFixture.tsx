@@ -1,28 +1,54 @@
 "use client";
-import { useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 const subscribe = () => () => {};
 const clientReady = () => true;
 const serverReady = () => false;
 import { AppShell } from "../../../src/components/blast-ui/AppShell";
+import { PendingPanel } from "../../../src/components/blast-ui/PendingPanel";
+import { EmptyState } from "../../../src/components/blast-ui/EmptyState";
 import { PageHeader } from "../../../src/components/blast-ui/PageHeader";
 import { QueryProvider } from "../../../src/lib/query/provider";
+import { makeQueryClient } from "../../../src/lib/query/client";
+import { queryKeys } from "../../../src/lib/query/keys";
+import { SocialViewerProvider } from "../../../src/components/social/SignInGate";
 import {
   geist,
   geistMono,
   bricolage,
 } from "../../../src/components/blast-ui/fonts";
 import {
-  ProfileInvitesView,
   ProfileInvitesCardView,
 } from "../../../src/components/social/profile/ProfileInvites";
-import { InviteesView } from "../../../src/components/social/referrals/InvitesPage";
-import type { ReferralSummary } from "@blast/core/modules/social/referrals/contracts.ts";
-import profileStyles from "../../../src/components/social/profile/Profile.module.css";
+import { InvitesPage } from "../../../src/components/social/referrals/InvitesPage";
+import type { ReferralStatement, ReferralSummary } from "@blast/core/modules/social/referrals/contracts.ts";
+const viewer = {
+  accountId: "fixture-referrer",
+  callsign: "kaleo_on_blast",
+  displayName: "Kaleo",
+  avatarUrl: null,
+  verified: true,
+};
+const monthly: readonly ReferralStatement[] = [
+  { month: "2026-12", revenue_atoms: "42600000000", earnings_atoms: "12780000000", share_bps: 3000, payment: null },
+  { month: "2026-11", revenue_atoms: "25000000000", earnings_atoms: "7500000000", share_bps: 3000,
+    payment: { amount_atoms: "7500000000", digest: "4vJ9JU1bJJE96FWSJKvHsmmFADCg4gpZQff4P3bkLKi" } },
+  { month: "2026-10", revenue_atoms: "0", earnings_atoms: "0", share_bps: 3000, payment: null },
+];
+
 export function ReferralFixture({
   view = "invites",
   theme = "light",
   state = "ready",
 }: Readonly<{ view?: string; theme?: string; state?: string }>) {
+  const [client] = useState(() => {
+    const client = makeQueryClient({ defaultOptions: { queries: { refetchOnMount: false } } });
+    client.setQueryData(queryKeys.me.referralMonths(viewer.callsign), {
+      months: state === "empty" ? [] : state === "precision" ? [
+        { month: "2026-12", revenue_atoms: "42600000001", earnings_atoms: "12780000001", share_bps: 3000, payment: null },
+      ] : monthly,
+    });
+    return client;
+  });
   const hydrated = useSyncExternalStore(subscribe, clientReady, serverReady);
   const accounting = {
     assets: [
@@ -57,15 +83,14 @@ export function ReferralFixture({
       data-blast-ui=""
       data-theme={theme}
     >
-      <QueryProvider>
+      <QueryProvider client={client}>
         <AppShell
-          signedIn={false}
-          viewer={null}
+          signedIn
+          viewer={viewer}
           portfolio={{ status: "unavailable" }}
           signInHref="/sign-in"
         >
-          <p>Test fixture · Simulated referral data · No payments</p>
-          <PageHeader title={view === "profile" ? "Your profile" : "Invites"} />
+          {view === "profile" || unavailable ? <PageHeader title={view === "profile" ? "Your profile" : "Invites"} /> : null}
           {view === "profile" ? (
             <div style={{ maxWidth: "18.75rem" }}>
               <ProfileInvitesCardView
@@ -74,59 +99,14 @@ export function ReferralFixture({
                 summary={unavailable ? undefined : summary}
               />
             </div>
+          ) : state === "loading" ? (
+            <PendingPanel framed label="Loading referral payments" />
+          ) : state === "error" ? (
+            <EmptyState framed role="alert" title="Referral payments couldn’t load" />
           ) : (
-            <div className={profileStyles.page}>
-              <ProfileInvitesView
-                callsign="kaleo_on_blast"
-                failed={state === "error"}
-                onRetry={() => {}}
-                summary={unavailable ? undefined : summary}
-              />
-              <InviteesView
-                invitees={
-                  state === "empty" || unavailable
-                    ? []
-                    : [
-                        {
-                          id: "00000000-0000-4000-8000-000000000001",
-                          callsign: "first_follower",
-                          display_name: "First follower",
-                          avatar_url: null,
-                          x_handle: "first_follower",
-                          joined_at_ms: 1790000000000,
-                          accounting,
-                        },
-                        {
-                          id: "00000000-0000-4000-8000-000000000002",
-                          callsign: "long_name",
-                          display_name:
-                            "A very long follower name with emoji 🌏🌈",
-                          avatar_url: null,
-                          x_handle: "a_long_x_handle",
-                          joined_at_ms: 1790000000000,
-                          accounting: {
-                            ...accounting,
-                            assets: [
-                              {
-                                ...accounting.assets[0],
-                                volume_atoms: "999999999999999999999",
-                                revenue_atoms: "3",
-                                earnings_atoms: "1",
-                              },
-                            ],
-                            pending_events: 1,
-                          },
-                        },
-                      ]
-                }
-                pending={state === "loading"}
-                failed={state === "error"}
-                hasMore={false}
-                loadingMore={false}
-                onMore={async () => {}}
-                onRetry={() => {}}
-              />
-            </div>
+            <SocialViewerProvider callsign={viewer.callsign} signedIn>
+              <InvitesPage />
+            </SocialViewerProvider>
           )}
         </AppShell>
       </QueryProvider>

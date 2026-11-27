@@ -11,7 +11,6 @@ const { QueryProvider } = await import("#web/lib/query/provider.tsx");
 const { settleQueries } = await import("#web/lib/query/test-client.ts");
 const { featuredPresalesQuery, presaleListQuery } = await import("../social/queries.ts");
 const { FeaturedPresales } = await import("./FeaturedPresales");
-const { FeaturedArtwork } = await import("./FeaturedArtwork");
 const { FeaturedCarousel } = await import("./FeaturedCarousel");
 const { PresalesList } = await import("./PresalesList");
 const { SocialViewerProvider } = await import("#web/components/social/SignInGate.tsx");
@@ -182,40 +181,6 @@ test("visibility and open purchase details freeze the slide clock, and navigatio
   assert.equal(container.querySelector(".timer"), clock, "visibility preserves the remaining time");
   await complete(); assert.equal(moves.length, 1);
   assert.notEqual(container.querySelector(".timer"), clock, "each navigation starts a fresh interval");
-});
-
-test("missing, loading and failed covers keep a decorative slot separate from the identity, and a replacement can load", async (t) => {
-  const container = document.createElement("div"); document.body.append(container);
-  const root = createRoot(container);
-  t.after(async () => { await act(async () => root.unmount()); container.remove(); });
-  const cover = { url: "https://cdn.blast.fun/covers/first.webp", width: 1536, height: 512 };
-  const render = async (image: typeof cover | null) => act(async () => root.render(<FeaturedArtwork cover={image}><span>Project logo</span></FeaturedArtwork>));
-  await render(null);
-  const stage = container.firstElementChild!;
-  const slot = stage.firstElementChild!;
-  const identity = stage.lastElementChild!;
-  const assertStructure = () => {
-    assert.equal(stage.firstElementChild, slot);
-    assert.equal(slot.getAttribute("aria-hidden"), "true");
-    assert.equal(stage.lastElementChild, identity);
-    assert.match(identity.textContent!, /Project logo/);
-  };
-  assertStructure();
-  await render(cover);
-  assertStructure();
-  assert.equal(container.querySelector("img")?.getAttribute("src"), cover.url);
-  await act(async () => container.querySelector("img")!.dispatchEvent(testEvent("error")));
-  assert.equal(container.querySelector("img"), null);
-  assert.match(container.textContent, /Project logo/);
-  assert.equal(container.querySelector("[data-cover]"), null);
-  assertStructure();
-  await render({ ...cover, url: "https://cdn.blast.fun/covers/replacement.webp" });
-  assert.ok(container.querySelector("img"));
-  assertStructure();
-  await render(null);
-  assert.equal(container.querySelector("img"), null);
-  assert.match(container.textContent, /Project logo/);
-  assertStructure();
 });
 
 test("featured presales lead with the cover and read the raise in its coin, with no purchase UI", async (t) => {

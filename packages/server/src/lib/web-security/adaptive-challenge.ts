@@ -39,7 +39,6 @@ export interface AdaptiveChallengeInput {
 const FAILURE_THRESHOLDS: Partial<Record<RateBucket, number>> = {
   code: 4,
   wallet: 3,
-  recovery: 3,
   oauth: 3,
 };
 

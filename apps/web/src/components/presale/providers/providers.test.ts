@@ -64,7 +64,6 @@ const PROVIDER_SLOTS = [
 ];
 const BROKEN = readPresaleConfig({
   BLAST_NETWORK: "moonnet",
-  NEXT_PUBLIC_PRESALE_EVM_RPC_URLS: "{",
   NEXT_PUBLIC_PRESALE_SWAP_SLIPPAGE_BPS: "-5",
   NEXT_PUBLIC_PRESALE_DEFAULT_THEME: "plaid",
 });
@@ -104,29 +103,6 @@ test("presale pages still render through the stub slots when every feature is un
 test("the retired new-allowlist page redirects to Create", async () => {
   const { default: Page } = await import("../../../app/presale/(tools)/allowlists/new/page.tsx");
   assert.throws(() => Page(), { digest: "NEXT_REDIRECT;replace;/create;307;" });
-});
-
-test("the provider root passes public settings without RPC URL paths or queries", async () => {
-  const tree = presaleTree({
-    "Probe.tsx": `"use client";
-import { usePresaleConfig } from "./providers/ConfigProvider";
-export function Probe() {
-  const config = usePresaleConfig();
-  return <p>{config.network.status}:{String(config.bridge.enabled)}:{Object.keys(config.bridge).join(",")}</p>;
-}
-`,
-  });
-  const { Probe } = await import(pathToFileURL(join(tree, "Probe.tsx")).href);
-  const config = readPresaleConfig({
-    NEXT_PUBLIC_PRESALE_BRIDGE_ENABLED: "1",
-    NEXT_PUBLIC_PRESALE_SOLANA_RPC_URL: "https://solana.rpc.test/example-path",
-    NEXT_PUBLIC_PRESALE_EVM_RPC_URLS: JSON.stringify({ base: "https://base.rpc.test/?token=example-query" }),
-  });
-  assert.equal(await render(tree, React.createElement(Probe), config), "<p>unavailable:true:enabled</p>");
-  assert.equal(
-    await render(tree, React.createElement(Probe), { ...config, bridge: { ...config.bridge, enabled: false } }),
-    "<p>unavailable:false:enabled</p>",
-  );
 });
 
 test("the provider root composes the six slots in their fixed order", async () => {

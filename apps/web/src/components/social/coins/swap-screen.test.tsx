@@ -349,9 +349,10 @@ test("Swap board: the sheet, its boxes, the flip, the presets and the action kee
   assert.match(css, /\.swapDialog\.screen \{ gap: 16px; \}/);
   assert.match(css, /\.swapDialog \.tradeBody \{ --trade-gap: 6px; \}/);
   assert.match(css, /\.swapDialog \.amt \{ padding: 16px; gap: 6px; border-radius: 18px; \}/);
-  assert.match(css, /\.flipSlot \{[^}]*margin: -15px 0;/);
-  assert.match(css, /\.swapFlip \{[^}]*width: 36px; height: 36px; border-radius: 12px; background: var\(--chip\); box-shadow: 0 0 0 4px var\(--card\);/);
-  assert.match(css, /\.swapDialog \.presets \{ gap: 6px; margin-top: 8px; \}/);
+  assert.match(css, /\.flipSlot \{[^}]*margin: 0 0 2px;/);
+  assert.match(css, /\.swapFlip \{[^}]*width: 36px; height: 36px; border-radius: 12px; background: var\(--chip\); color: var\(--muted\);/);
+  assert.match(css, /\.swapDialog \.presets \{ gap: 6px; \}/);
+  assert.match(css, /\.swapPair > \.presets \{ margin-block: 2px 8px; \}/);
   assert.match(css, /\.swapDialog \.preset \{ height: 36px; border-radius: var\(--r-button\); font-size: 13px; background: var\(--chip\); box-shadow: none; \}/);
   assert.match(css, /\.swapDialog \[data-trade\] \{ height: 54px; min-height: 54px; border-radius: 15px; font-size: 16px; \}/);
   assert.match(css, /button\.txSum\[data-ui-button\] \{[^}]*color: var\(--muted\); font-size: 13px; font-weight: 500; \}/);

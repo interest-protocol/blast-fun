@@ -63,7 +63,3 @@ export function useCommitClock(): number {
   return useSyncExternalStore(subscribe, snapshot, serverSnapshot);
 }
 
-/** The clock, for a handler. Never called during a render. */
-export function commitNow(): number {
-  return Date.now();
-}

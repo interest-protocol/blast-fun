@@ -21,7 +21,7 @@ import { CoinCard } from "./CoinCard";
 import styles from "./CoinHome.module.css";
 import { coinsByIdsQuery, discoverQuery, followingCoinsQuery } from "./home-client";
 import { resultsAnnouncement, SORT_LABELS, type HeaderSort } from "./home-state";
-import { biggestBuy, buyCueOf, homeCoinKey, type HomeBuyCue } from "./home-model";
+import { addPops, biggestTrade, homeCoinKey, popsOn, tradeCueOf, type HomeCueTrade, type HomePop } from "./home-model";
 import { TableFooter } from "./TableFooter";
 import { countWords } from "@blast/core/web/format.ts";
 import type { FeedFreshnessSource } from "../home/feed-freshness";
@@ -125,7 +125,7 @@ function motionKeys(props: ListProps, viewKey: string | undefined, motionVersion
  * With no rows (a `result` in their place) the pager, count go;
  * a settled `empty` result drops the column header and its sorts too.
  */
-export function CoinList({ coins, props, result, empty = false, end, viewKey, rankings, checkpoint = 0, buy, swapping = false }: Readonly<{ coins: readonly RankedCoin[]; props: ListProps; result?: ReactNode; empty?: boolean; end?: ReactNode; viewKey?: string; rankings?: Rankings; checkpoint?: number; buy?: Readonly<{ coinKey: string; cue: HomeBuyCue }>; /** The previous view's rows, held while the new view loads. */ swapping?: boolean }>) {
+export function CoinList({ coins, props, result, empty = false, end, viewKey, rankings, checkpoint = 0, pops = NO_POPS, swapping = false }: Readonly<{ coins: readonly RankedCoin[]; props: ListProps; result?: ReactNode; empty?: boolean; end?: ReactNode; viewKey?: string; rankings?: Rankings; checkpoint?: number; /** Trades popping on these rows. */ pops?: readonly HomePop[]; /** The previous view's rows, held while the new view loads. */ swapping?: boolean }>) {
   const motion = motionKeys(props, viewKey, rankings?.motionVersion);
   const list = useRankMotion(motion.view, { group: motion.group, holding: swapping });
   const hasResult = Boolean(result);
@@ -145,20 +145,22 @@ export function CoinList({ coins, props, result, empty = false, end, viewKey, ra
       {/* react-doctor-disable-next-line react-doctor/prefer-tag-over-role -- Rows are grid list items that restack on a phone and slide when ranks move; a native table cannot take that layout, so ARIA table roles give the sorted headers their columns. */}
       <div aria-label="Coins" data-source={props.source} role="table">
         <ListHead {...head} />
-        <CoinRows buy={buy} checkpoint={checkpoint} coins={coins} latest={latest} list={list} props={props} rankings={rankings} swapping={swapping} />
+        <CoinRows pops={pops} checkpoint={checkpoint} coins={coins} latest={latest} list={list} props={props} rankings={rankings} swapping={swapping} />
       </div>
       <div data-table-end="">{end}</div>
     </>
   );
 }
 
-function CoinRows({ coins, props, latest, checkpoint, buy, list, rankings, swapping }: Readonly<{ coins: readonly RankedCoin[]; props: ListProps; latest: ReturnType<typeof useHomePrices>; checkpoint: number; buy?: Readonly<{ coinKey: string; cue: HomeBuyCue }>; list: ReturnType<typeof useRankMotion>; rankings?: Rankings; swapping: boolean }>) {
+function CoinRows({ coins, props, latest, checkpoint, pops, list, rankings, swapping }: Readonly<{ coins: readonly RankedCoin[]; props: ListProps; latest: ReturnType<typeof useHomePrices>; checkpoint: number; pops: readonly HomePop[]; list: ReturnType<typeof useRankMotion>; rankings?: Rankings; swapping: boolean }>) {
+  const popsByRow = new Map<string, HomePop[]>();
+  for (const pop of pops) popsByRow.set(pop.coinKey, [...popsByRow.get(pop.coinKey) ?? [], pop]);
   return <ol aria-busy={swapping || undefined} className={clsx(styles.list, styles.rankedList)} data-swapping={swapping || undefined} data-sort={props.source === "discover" ? props.sort : undefined} ref={list} role="rowgroup" {...rankings?.interactionProps}>
     {coins.map((coin) => (
     <CoinCard
       key={homeCoinKey(coin)}
       coin={coin}
-      buy={buy?.coinKey === homeCoinKey(coin) ? buy.cue : undefined}
+      pops={popsByRow.get(homeCoinKey(coin))}
       livePrice={props.streamPrices ? newerHomePrice(latest, coin, coin.readCheckpoint ?? checkpoint) : undefined}
       nowMs={props.nowMs}
       trade={props.streamPrices ? homeTrade(latest, coin) : null}
@@ -226,29 +228,53 @@ function holdNewCoins(query: HomeQuery): boolean {
   return query.sort === "newest" && query.page === 1 && query.cursor === null;
 }
 
-/** How long a buy stays on its row: long enough to read the figure, matched by the CSS animation. */
-const HOME_BUY_CUE_MS = 1_500;
+/** How long a pop stays on its row: long enough to read the figure, matched by the CSS animation. */
+const HOME_POP_MS = 1_500;
+/** Screen readers hear at most one trade this often: the biggest of its batch. */
+const HOME_POP_ANNOUNCE_MS = 5_000;
+const NO_POPS: readonly HomePop[] = [];
 
-function useHomeBuyCue(query: HomeQuery, settled: boolean, showBuys: boolean | undefined, freshness: FeedFreshnessSource | undefined, coins: readonly RankedCoin[]) {
+/**
+ * The pops showing on the current view's rows. Each batch of trades (`useHomeLive`) is one state update
+ * and one timer that clears it; a view change drops every pop of the old view.
+ */
+function useHomePops(query: HomeQuery, settled: boolean, showTrades: boolean | undefined, freshness: FeedFreshnessSource | undefined, coins: readonly RankedCoin[]) {
   const view = JSON.stringify(query);
-  const [buyCue, setBuyCue] = useState<{ view: string; coinKey: string; symbol: string; cue: HomeBuyCue }>();
-  const nextCueAt = useRef(0);
-  useEffect(() => {
-    if (!buyCue) return;
-    const timeout = window.setTimeout(() => setBuyCue(undefined), HOME_BUY_CUE_MS);
-    return () => window.clearTimeout(timeout);
-  }, [buyCue]);
-  useHomeLive(query, settled, freshness, buys => {
-    const now = performance.now();
-    if (now < nextCueAt.current || !showBuys) return;
+  const [pops, setPops] = useState<{ view: string; showing: readonly HomePop[] }>({ view, showing: NO_POPS });
+  const [announced, setAnnounced] = useState("");
+  const nextAnnounceAt = useRef(0);
+  useHomeLive(query, settled, freshness, trades => {
+    if (!showTrades) return;
     const listed = new Map(coins.map(coin => [homeCoinKey(coin), coin.symbol]));
-    const buy = biggestBuy(buys.filter(event => listed.has(event.coin_key)));
-    const cue = buy && buyCueOf(buy);
-    if (!cue) return;
-    nextCueAt.current = now + HOME_BUY_CUE_MS + 100;
-    setBuyCue({ view, coinKey: buy.coin_key, symbol: listed.get(buy.coin_key)!, cue });
+    const popping = trades.filter(trade => listed.has(trade.coin_key) && popsOn(trade));
+    if (!popping.length) return;
+    setPops(current => {
+      const showing = addPops(current.view === view ? current.showing : NO_POPS, popping);
+      return current.view === view && showing === current.showing ? current : { view, showing };
+    });
+    // Trade ids are unique (`useHomeLive` reports each once), so the batch's ids name exactly the pops it added.
+    const batch = new Set(popping.map(trade => trade.activity_id));
+    const now = performance.now();
+    const loudest = biggestTrade(popping);
+    const announcing = loudest !== undefined && now >= nextAnnounceAt.current;
+    if (announcing) {
+      nextAnnounceAt.current = now + HOME_POP_ANNOUNCE_MS;
+      setAnnounced(tradeAnnouncement(listed.get(loudest.coin_key)!, loudest));
+    }
+    // A timer that outlives the list sets state nothing reads; React ignores it.
+    window.setTimeout(() => {
+      setPops(current => current.showing.some(pop => batch.has(pop.id)) ? { ...current, showing: current.showing.filter(pop => !batch.has(pop.id)) } : current);
+      // Cleared by the batch that set it, so the same words later are announced again.
+      if (announcing) setAnnounced("");
+    }, HOME_POP_MS);
   });
-  return settled && buyCue?.view === view ? buyCue : undefined;
+  return { pops: settled && pops.view === view ? pops.showing : NO_POPS, announced };
+}
+
+/** One trade as a screen reader hears it: `JOEY buy for $42`. */
+function tradeAnnouncement(symbol: string, trade: HomeCueTrade): string {
+  const cue = tradeCueOf(trade);
+  return cue ? `${symbol} ${trade.side} for ${cue.text.slice(1)}` : "";
 }
 
 export function DiscoverList({ query, initial, props, freshness }: Readonly<{ query: HomeQuery; initial: HomeCoinsPage | null; props: ListProps; freshness?: FeedFreshnessSource }>) {
@@ -264,7 +290,7 @@ export function DiscoverList({ query, initial, props, freshness }: Readonly<{ qu
     checkpoint: settled?.as_of?.checkpoint,
   });
   const coins = previous?.coins ?? rankings.coins;
-  const buy = useHomeBuyCue(query, settled !== undefined, props.streamPrices, freshness, coins);
+  const { pops, announced } = useHomePops(query, settled !== undefined, props.streamPrices, freshness, coins);
   useLastPage(props.page, settled?.pages, props.onPage);
 
   const refresh = () => void read.refetch({ cancelRefetch: false });
@@ -275,12 +301,12 @@ export function DiscoverList({ query, initial, props, freshness }: Readonly<{ qu
 
   return (
     <>
-      <span className="sr-only" role="status">{buy ? `${buy.symbol} buy for ${buy.cue.text.slice(1)}` : ""}</span>
+      <span className="sr-only" role="status">{announced}</span>
       {data ? <ResultsAnnouncement props={props} count={data.total} pages={data.pages} /> : null}
       <FreshnessNote asOf={data?.as_of} />
       <CoinList
         checkpoint={previous?.as_of?.checkpoint}
-        buy={buy}
+        pops={pops}
         rankings={rankings}
         viewKey={JSON.stringify([query, read.isPlaceholderData])}
         coins={coins}

@@ -19,11 +19,8 @@ import type { PortfolioReadResult } from "./portfolio-client";
 import { dockToday } from "./portfolio/today-model";
 import { priceQuery } from "./prices/price-client";
 import { portfolioFigures, pricedFigures, valuationHoldingsReady } from "./portfolio/portfolio-model";
-import { PORTFOLIO_STALE_MS, portfolioQuery } from "./queries";
+import { portfolioQuery } from "./queries";
 import type { AccessTokenSource } from "./viewer-state-client";
-
-/** A visible tab reads the portfolio again when its last read is older than this. */
-export const SHELL_PORTFOLIO_STALE_MS = PORTFOLIO_STALE_MS;
 
 /**
  * The coins whose 24 h prices today's move needs (R3-20's `coin` asks): SUI,

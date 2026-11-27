@@ -49,10 +49,8 @@
 .chartEmpty { display: grid; align-items: center; }
 .chart.up { color: var(--up); }
 .chart.down { color: var(--down); }
-.chartNote { min-height: 9.375rem; justify-content: center; }
 /* The boot script restores privacy before hydration; keep its chart footprint consistent. */
-:global([data-blast-ui][data-amounts="hidden"]) .chart,
-:global([data-blast-ui][data-amounts="hidden"]) .chartNote { display:none; }
+:global([data-blast-ui][data-amounts="hidden"]) .chart { display:none; }
 
 .mix { display: flex; flex-direction: column; gap: 0.75rem; }
 .alloc { display: flex; gap: 0.1875rem; height: 0.5rem; border-radius: 62.4375rem; overflow: hidden; }

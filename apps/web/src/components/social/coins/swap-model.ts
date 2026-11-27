@@ -422,9 +422,6 @@ export function progressVerb(title: string): string {
   return title.startsWith("Buy ") ? "Buying" : title.startsWith("Sell ") ? "Selling" : "Swapping";
 }
 
-/** How long a failure's words stay on the button before it reads the quote again (the gate's 2.2 s). */
-export const FAILURE_SHOWN_MS = 2_200;
-
 // ---------- the picker ----------
 
 export type PickerGroup = Readonly<{ label: string; coins: readonly WalletCoinView[] }>;

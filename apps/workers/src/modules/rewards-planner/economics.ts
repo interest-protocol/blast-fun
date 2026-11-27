@@ -23,16 +23,10 @@ export function meetsPayoutMinimum(
     minimum * quoteDenominator * memeDenominator;
 }
 
-export function qualifies(weight: bigint, tokenUsd: Price): boolean {
+/** Convert the USD holding minimum to the smallest eligible daily weight. */
+export function minimumWeight(tokenUsd: Price, minimumUsd: number): bigint {
   assertPrice(tokenUsd);
-  if (weight < 0n) throw new Error("Invalid holder weight.");
-  return weight * tokenUsd.numerator >= 5n * DAY_MS * tokenUsd.denominator;
-}
-
-/** The smallest weight that `qualifies` at this price: dust below it never earns a leaf. */
-export function minimumWeight(tokenUsd: Price): bigint {
-  assertPrice(tokenUsd);
-  const floor = 5n * DAY_MS * tokenUsd.denominator;
+  const floor = BigInt(minimumUsd) * DAY_MS * tokenUsd.denominator;
   return (floor + tokenUsd.numerator - 1n) / tokenUsd.numerator;
 }
 

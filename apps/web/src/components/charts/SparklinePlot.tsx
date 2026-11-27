@@ -15,14 +15,12 @@ export default function SparklinePlot({
   points,
   width,
   height,
-  fill = false,
   up,
   ink = false,
 }: Readonly<{
   points: readonly SparkPoint[];
   width: number;
   height: number;
-  fill?: boolean;
   up?: boolean;
   ink?: boolean;
 }>) {
@@ -50,7 +48,7 @@ export default function SparklinePlot({
   return (
     <span
       className={clsx(styles.spark, styles[tone])}
-      {...dyn({ width: fill ? "100%" : `${width}px`, height: `${height}px` })}
+      {...dyn({ width: `${width}px`, height: `${height}px` })}
     >
       <TradingViewChart series={series} timeline={time.timeline} compact />
     </span>

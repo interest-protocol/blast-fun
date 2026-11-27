@@ -167,10 +167,10 @@ export function GatedAction({
 }
 
 /** The header's sign-in link for a visitor, returning to the current path; nothing once signed in. */
-export function SignInLink({ className, variant, size = "sm" }: Readonly<{ className?: string; variant?: ButtonLinkProps["variant"]; size?: ButtonLinkProps["size"] }>) {
+export function SignInLink({ className, variant }: Readonly<{ className?: string; variant?: ButtonLinkProps["variant"] }>) {
   const gate = useSignInGate();
   if (gate.signedIn || gate.sessionPending) return null;
-  if (variant) return <ButtonLink className={className} href={gate.signInHref} onClick={gate.openSignIn} prefetch={false} size={size} variant={variant}>Sign in</ButtonLink>;
+  if (variant) return <ButtonLink className={className} href={gate.signInHref} onClick={gate.openSignIn} prefetch={false} size="sm" variant={variant}>Sign in</ButtonLink>;
   return (
     <Link className={className} href={gate.signInHref} onClick={gate.openSignIn} prefetch={false}>
       Sign in

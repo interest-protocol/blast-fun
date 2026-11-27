@@ -66,11 +66,6 @@ export const CurveIcon = (p: IconProps) => (
     <path d="M4 4v16h16" />
   </LineIcon>
 );
-export const TrophyIcon = (p: IconProps) => (
-  <LineIcon {...p}>
-    <path d="M8 4h8v6a4 4 0 0 1-8 0V4ZM8 6H4v2a4 4 0 0 0 4 4m8-6h4v2a4 4 0 0 1-4 4m-4 2v4m-4 2h8m-7-2h6" />
-  </LineIcon>
-);
 export const ChartLineIcon = (p: IconProps) => (
   <LineIcon {...p}><path d="M3 19h18M4 14l5-5 4 3 6-7" /></LineIcon>
 );
@@ -119,12 +114,6 @@ export const PencilIcon = (p: IconProps) => (
   </LineIcon>
 );
 
-export const UserPlusIcon = (p: IconProps) => (
-  <LineIcon {...p}>
-    <circle cx="9" cy="8" r="4" />
-    <path d="M2 20c1-3.8 4-5.8 7-5.8 1.5 0 3 .5 4.2 1.4M18 12v8M14 16h8" />
-  </LineIcon>
-);
 /** "pie": Portfolio (OA-41, the layer's `I.pie`). */
 export const PieIcon = (p: IconProps) => (
   <LineIcon {...p}>
@@ -188,22 +177,6 @@ export const DotsIcon = (p: IconProps) => (
     <circle cx="12" cy="12" r="1.6" />
     <circle cx="19" cy="12" r="1.6" />
   </svg>
-);
-export const SunIcon = (p: IconProps) => (
-  <LineIcon {...p}>
-    <circle cx="12" cy="12" r="4" />
-    <path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4" />
-  </LineIcon>
-);
-export const MoonIcon = (p: IconProps) => (
-  <LineIcon {...p}>
-    <path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" />
-  </LineIcon>
-);
-export const LogOutIcon = (p: IconProps) => (
-  <LineIcon {...p}>
-    <path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4M10 16l-4-4 4-4M6 12h10" />
-  </LineIcon>
 );
 export const CheckIcon = ({ strong = false, ...props }: IconProps & { strong?: boolean }) => (
   <LineIcon {...props} strokeWidth={strong ? "2.6" : undefined}>
