@@ -204,6 +204,50 @@ test("reopening Bridge does not report an arrival again from the cache", async (
   }
 });
 
+test("a terminal Fast MCTP history row wins over a cached pending status", async () => {
+  const calls = newCalls();
+  const transfer: BridgeRow = {
+    hash: "0xrefund", chain: "base", fromAmount: "20", fromSymbol: "USDC", toAmount: null,
+    toSymbol: "USDC", state: "pending", refundOnSui: true, at: new Date(BEFORE_EXPIRY).toISOString(),
+  };
+  let refreshed = false;
+  let statusReads = 0;
+  const sdk = fakeSdk(calls, [FAST_MCTP], {
+    history: async () => [refreshed ? { ...transfer, state: "refunded" } : transfer],
+    status: async () => { statusReads += 1; return { state: "pending", toAmount: null }; },
+  });
+  const form = await mount(sdk, calls, evm(), { gcTime: 5 * 60_000 });
+  try {
+    await waitFor(() => statusReads === 1 && form.text().includes("On the way"), "the cached pending transfer");
+    refreshed = true;
+    await form.remount();
+    await waitFor(() => form.text().includes("Refunded to your Blast wallet on Sui"), "the terminal refund from history");
+    assert.doesNotMatch(form.text(), /On the way/);
+  } finally {
+    await form.unmount();
+  }
+});
+
+test("a failed history read offers a retry and a successful empty read clears it", async () => {
+  const calls = newCalls();
+  let failed = true;
+  const sdk = fakeSdk(calls, [], { history: async () => {
+    if (failed) throw new Error("Mayan unavailable");
+    return [];
+  } });
+  const form = await mount(sdk, calls);
+  try {
+    const retry = await waitFor(() => [...form.container.querySelectorAll("button")].find((button) => button.textContent === "Retry history"), "the history retry action");
+    assert.match(form.text(), /Couldn’t load recent bridges/);
+    assert.match(form.text(), /Code: bridge_history_failed\./);
+    failed = false;
+    await act(async () => retry.click());
+    await waitFor(() => !form.text().includes("Recent bridges"), "the recovered empty history");
+  } finally {
+    await form.unmount();
+  }
+});
+
 test("reopening before Mayan indexes a submission retries history and resumes watching", async () => {
   const { environmentManager } = await import("@tanstack/react-query");
   const wasServer = environmentManager.isServer();

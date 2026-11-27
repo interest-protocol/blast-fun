@@ -82,7 +82,7 @@ export function parseWebConfig(environment: Environment): WebConfig {
     presaleDeployment: readPresaleDeploymentIdentity(environment),
     presale,
     bridge,
-    bridgeFastMctp: bridge && !production && target === "dev",
+    bridgeFastMctp: bridge && !production && target === "dev" && environment.VERCEL === "1",
     development: environment.NODE_ENV === "development",
     liveSocket: liveSocketConfig(environment, relay),
   };

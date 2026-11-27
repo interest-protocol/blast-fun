@@ -96,6 +96,7 @@ test("the Fast MCTP fallback requires Bridge and the hosted dev environment", ()
   assert.equal(parseWebConfig({ ...preview, ...enabled }).bridgeFastMctp, false);
   assert.equal(parseWebConfig({ ...production, ...enabled, VERCEL_TARGET_ENV: "dev" }).bridgeFastMctp, false);
   assert.equal(parseWebConfig({ ...preview, VERCEL_TARGET_ENV: "dev" }).bridgeFastMctp, false);
+  assert.equal(parseWebConfig({ ...enabled, BLAST_DEPLOYMENT_TARGET: "dev" }).bridgeFastMctp, false);
   assert.equal(parseWebConfig({ ...preview, ...enabled, VERCEL_TARGET_ENV: "dev" }).bridgeFastMctp, true);
 });
 
