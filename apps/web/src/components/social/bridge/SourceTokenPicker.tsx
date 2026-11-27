@@ -5,9 +5,9 @@ import { useRef, useState } from "react";
 
 import { shortAddress } from "@blast/core/web/format.ts";
 
-import { Button, DisclosureButton } from "#web/components/blast-ui/Button.tsx";
+import { Button, DisclosureButton, IconButton } from "#web/components/blast-ui/Button.tsx";
 import { EmptyState } from "#web/components/blast-ui/EmptyState.tsx";
-import { CheckIcon } from "#web/components/blast-ui/Icons.tsx";
+import { CheckIcon, CloseIcon } from "#web/components/blast-ui/Icons.tsx";
 import { Popover, PopoverSurface } from "#web/components/blast-ui/Popover.tsx";
 import { SkeletonLine } from "#web/components/blast-ui/Skeleton.tsx";
 import { TextField } from "#web/components/blast-ui/TextField.tsx";
@@ -31,6 +31,7 @@ export function SourceTokenPicker({ chain, token, disabled, sdk, onChange }: Pro
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const input = useRef<HTMLInputElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
   const catalog = useQuery({
     queryKey: ["bridge", "tokens", chain],
     queryFn: () => sdk.tokens(chain),
@@ -43,7 +44,7 @@ export function SourceTokenPicker({ chain, token, disabled, sdk, onChange }: Pro
   const term = search.trim();
   const folded = term.toLowerCase();
   const addressTerm = sourceAddressKey(chain, term);
-  const loading = useDebouncedValue(catalog.isFetching, 180) && catalog.isFetching;
+  const loading = useDebouncedValue(catalog.isFetching, 300) && catalog.isFetching;
   const named = [...CHAINS[chain].tokens, ...(catalog.data ?? [])];
   const symbols = new Map<string, number>();
   for (const option of named) {
@@ -63,17 +64,29 @@ export function SourceTokenPicker({ chain, token, disabled, sdk, onChange }: Pro
   };
 
   return (
-    <Popover.Root onOpenChange={changeOpen} open={open}>
+    <Popover.Root modal="trap-focus" onOpenChange={changeOpen} open={open}>
       <Popover.Trigger
         aria-label={`Coin to send: ${token.symbol}`}
         disabled={disabled}
+        ref={trigger}
         render={<DisclosureButton className={styles.sourcePick} size="sm" variant="picker"><TokenMark token={token} /><Ticker bare symbol={token.symbol} /></DisclosureButton>}
       />
       <PopoverSurface
         positioner={{ align: "end", className: styles.tokenLayer, collisionPadding: 12, sideOffset: 6 }}
-        popup={{ className: styles.tokenPopup, initialFocus: input }}
+        popup={{
+          className: styles.tokenPopup,
+          finalFocus: trigger,
+          initialFocus: input,
+          onKeyDown: (event) => {
+            // The enclosing sheet traps Tab at document level. This portal owns focus while open.
+            if (event.key === "Tab") event.stopPropagation();
+          },
+        }}
       >
-        <Popover.Title className={styles.tokenTitle}>Choose a token</Popover.Title>
+        <div className={styles.tokenHeading}>
+          <Popover.Title className={styles.tokenTitle}>Choose a token</Popover.Title>
+          <Popover.Close render={<IconButton aria-label="Close token picker" size="touch"><CloseIcon /></IconButton>} />
+        </div>
         <TextField aria-label="Search tokens" autoComplete="off" onChange={(event) => setSearch(event.currentTarget.value)} placeholder="Search name or address" ref={input} type="search" value={search} />
         <div className={styles.tokenList}>
           {options.map((option) => (
@@ -97,9 +110,9 @@ export function SourceTokenPicker({ chain, token, disabled, sdk, onChange }: Pro
         </div>
         {loading ? <SkeletonLine label="Loading tokens" /> : null}
         {catalog.isError && !catalog.isFetching ? (
-          <EmptyState action={<Button onClick={() => { void catalog.refetch(); }} size="sm">Retry</Button>} compact role="alert" title="Couldn’t load tokens." />
+          <EmptyState action={<Button onClick={() => { void catalog.refetch(); }} size="sm">Retry</Button>} compact role="alert" title="Couldn’t load tokens" />
         ) : null}
-        {catalog.isSuccess && !catalog.isFetching && options.length === 0 ? <EmptyState compact role="status" title="No tokens found." /> : null}
+        {catalog.isSuccess && !catalog.isFetching && options.length === 0 ? <EmptyState compact role="status" title="No tokens found" /> : null}
       </PopoverSurface>
     </Popover.Root>
   );
