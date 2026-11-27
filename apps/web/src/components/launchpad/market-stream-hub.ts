@@ -513,12 +513,15 @@ export class MarketStreamHub {
    * A pool the socket streams (or will) was fenced against another deployment: it gets no new fence by
    * `set` (kept pools are untouched), so the tab opens a new socket. That is any streamed pool when the
    * deployment changes now, and a streamed pool the hub no longer tracks, which an earlier change dropped.
+   * Discover also needs a new socket if a cached page fails the new deployment check:
+   * the relay only sends unchanged pages when the client first joins.
    */
   private conflicts(connection: Connection, wanted: Wanted): boolean {
     const streamed = streamedPools(connection);
     if (!sameExpected(connection.expected, wanted.expected)) {
-      const discovery = connection.discoveryPages.values().next().value?.page.section.provenance;
-      return (discovery !== undefined && deploymentMismatch(discovery, wanted.expected) !== null) || wanted.pools.some((pool) => streamed.has(pool));
+      const discoveryMismatch = [...connection.discoveryPages.values()].some(({ page }) =>
+        page.section.provenance !== undefined && deploymentMismatch(page.section.provenance, wanted.expected) !== null);
+      return discoveryMismatch || wanted.pools.some((pool) => streamed.has(pool));
     }
     return wanted.pools.some((pool) => streamed.has(pool) && !connection.pools.has(pool) && !connection.leaving.has(pool));
   }

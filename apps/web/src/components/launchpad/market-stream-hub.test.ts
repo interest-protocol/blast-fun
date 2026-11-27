@@ -1449,6 +1449,54 @@ test("a new Discover deployment cannot replay cached pages from the previous dep
   assert.equal(s.sources.length, 2);
 });
 
+test("Discover waits for a fresh pair when tightening the deployment rules for mixed cached pages", async () => {
+  const s = setup();
+  const unpinned = watcher([]);
+  s.hub.subscribe({ pools: [], expected: null, discovery: true, listener: unpinned.listener });
+  await settle();
+
+  const provenance = wireProvenance(20);
+  function openDiscover(source: Source) {
+    source.emit("hint", { type: "hello", provenance, set: true, discovery: true });
+    const { seq } = source.sets().at(-1)!;
+    source.emit("set", { seq, ok: true, held: { pools: [], price_coins: [], presale: null, discovery: true } });
+  }
+  function page(source: Source, view: string, deployment: string) {
+    source.emit("discovery", {
+      revision: "20",
+      provenance: { ...provenance, deployment_fingerprint: deployment },
+      page: { view, section: { state: "empty", provenance: {
+        source: "blast-infra", network: "mainnet", deployment, checkpoint: 20,
+        timestampMs: provenance.timestamp_ms, observedAt: provenance.observed_ms, lagMs: 20,
+      } } },
+    });
+  }
+
+  const source = s.source();
+  openDiscover(source);
+  page(source, "new", DEPLOYMENT);
+  page(source, "near_graduation", "cd".repeat(32));
+  assert.equal(unpinned.states.at(-1), "live");
+
+  const pinned = watcher([]);
+  const received: string[] = [];
+  s.hub.subscribe({ pools: [], expected, discovery: true, listener: {
+    ...pinned.listener,
+    discovery: ({ view }) => received.push(view),
+  } });
+  await settle();
+  assert.deepEqual(received, []);
+  assert.equal(pinned.states.at(-1), "connecting");
+
+  const replacement = s.source();
+  openDiscover(replacement);
+  page(replacement, "new", DEPLOYMENT);
+  assert.equal(pinned.states.at(-1), "recovering");
+  page(replacement, "near_graduation", DEPLOYMENT);
+  assert.deepEqual(received, ["new", "near_graduation"]);
+  assert.equal(pinned.states.at(-1), "live");
+});
+
 test("Discover leaves the existing socket usable when the gateway is older", async () => {
   const s = setup();
   const chart = watcher();
