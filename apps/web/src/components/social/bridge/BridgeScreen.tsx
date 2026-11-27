@@ -5,11 +5,11 @@ import { Component, lazy, Suspense, useState, type ReactNode } from "react";
 
 import { Button } from "#web/components/blast-ui/Button.tsx";
 import { DiagnosticText } from "#web/components/blast-ui/DiagnosticText.tsx";
-import { SkeletonBox, SkeletonRegion, SkeletonText } from "#web/components/blast-ui/Skeleton.tsx";
 
 import coinStyles from "../coins/coins.module.css";
 
 import type { BridgeCardProps } from "./BridgeCard.tsx";
+import { BridgeLoading } from "./BridgeLoading.tsx";
 import { LOAD_FAILED_TEXT } from "./bridge-model.ts";
 import styles from "./bridge.module.css";
 
@@ -60,23 +60,4 @@ class ChunkBoundary extends Component<Readonly<{ onRetry: () => void; children: 
       </div>
     );
   }
-}
-
-/** The card's own layout, so nothing moves when the chunk arrives. */
-function BridgeLoading() {
-  return (
-    <SkeletonRegion className={styles.form} label="Loading Bridge to Sui">
-      <SkeletonBox className={styles.chainsLoading} />
-      <div aria-hidden="true" className={styles.panels}>
-        {["You send", "You get on Sui"].map((label, index) => (
-          <div className={clsx(coinStyles.amt, index === 1 && coinStyles.amtOut)} key={label}>
-            <div className={coinStyles.amtTop}><span><SkeletonText>{label}</SkeletonText></span></div>
-            <div className={coinStyles.amtRow}><b className={coinStyles.amtVal}><SkeletonText>0</SkeletonText></b></div>
-            <div className={coinStyles.amtFoot}><SkeletonText>Your Blast wallet</SkeletonText></div>
-          </div>
-        ))}
-      </div>
-      <SkeletonBox className={styles.actionLoading} />
-    </SkeletonRegion>
-  );
 }

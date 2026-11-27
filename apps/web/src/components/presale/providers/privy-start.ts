@@ -1,4 +1,4 @@
-import type { PrivyRuntime } from "#web/components/auth/privy-session.ts";
+import type { PrivyRuntime, PrivySourceWallets, PrivySourceWalletsFeed } from "#web/components/auth/privy-session.ts";
 
 export type PrivyStartState = Readonly<{
   /** Privy's runtime once it is ready; null before that and after it stops. */
@@ -73,5 +73,45 @@ export class PrivyStart {
   #settle(answer: (waiter: Readonly<{ resolve: (runtime: PrivyRuntime) => void; reject: (error: Error) => void }>) => void): void {
     for (const waiter of this.#waiting) answer(waiter);
     this.#waiting.clear();
+  }
+}
+
+/**
+ * The page's source wallets, owned by `PrivySessionProvider`. The runtime reads
+ * Privy's wallets only while a reader (Bridge to Sui) is subscribed (`wanted`),
+ * and writes them here (`publish`).
+ */
+export class PrivySourceWalletsStore implements PrivySourceWalletsFeed {
+  #value: PrivySourceWallets | null = null;
+  #readers = new Set<() => void>();
+  #wantedListeners = new Set<() => void>();
+
+  readonly subscribe = (listener: () => void): (() => void) => {
+    this.#readers.add(listener);
+    this.#wantedChanged();
+    return () => {
+      this.#readers.delete(listener);
+      this.#wantedChanged();
+    };
+  };
+
+  readonly get = (): PrivySourceWallets | null => this.#value;
+
+  /** Whether anything reads the wallets: the runtime mounts Privy's wallet hooks only then. */
+  readonly wanted = (): boolean => this.#readers.size > 0;
+
+  readonly subscribeWanted = (listener: () => void): (() => void) => {
+    this.#wantedListeners.add(listener);
+    return () => void this.#wantedListeners.delete(listener);
+  };
+
+  publish(value: PrivySourceWallets | null): void {
+    if (this.#value === value) return;
+    this.#value = value;
+    for (const listener of this.#readers) listener();
+  }
+
+  #wantedChanged(): void {
+    for (const listener of this.#wantedListeners) listener();
   }
 }
