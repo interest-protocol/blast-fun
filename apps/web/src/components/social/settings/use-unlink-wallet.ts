@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 
 import { useToast } from "#web/components/blast-ui/Toasts.tsx";
+import { useCaptureViewerScope } from "#web/components/social/SignInGate.tsx";
 import type { TokenSource } from "#web/components/social/social-api.ts";
 import { diagnosticMessage, publicErrorMessage } from "#web/lib/errors.ts";
 import { invalidateAfter } from "#web/lib/query/invalidate.ts";
@@ -24,6 +25,7 @@ type Options = Readonly<{
 export function useUnlinkWallet({ account, getTokenSource, refresh, signOut }: Options) {
   const client = useAppQueryClient();
   const toast = useToast();
+  const captureViewer = useCaptureViewerScope();
   const [target, setTarget] = useState<UnlinkTarget | null>(null);
   const unlinked = useRef(false);
 
@@ -50,11 +52,13 @@ export function useUnlinkWallet({ account, getTokenSource, refresh, signOut }: O
     if (!source || !target || target.accountId !== account?.account_id) {
       return diagnosticMessage("Your session ended. Sign in again.", { code: "unauthorized" });
     }
+    const sameViewer = captureViewer();
     const result = await unlinkWallet({ getAccessToken: source }, {
       account_id: target.accountId,
       address: target.address,
       confirm_account_deletion: target.deleteAccount,
     });
+    if (!sameViewer()) return null;
     if (result.status !== "ok") {
       if (result.code === "wallet_unlink_changed") {
         refresh();
