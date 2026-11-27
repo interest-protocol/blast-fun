@@ -31,6 +31,7 @@ type OperatorRoute = Readonly<{
 
 /** Every `/api/admin/...` endpoint. Any other path under `/api/admin` is not found. */
 export const OPERATOR_ROUTES = Object.freeze([
+  { id: "feedback", path: "/api/admin/feedback", methods: ["GET", "POST"], auth: "operator" },
   {
     id: "partner-keys",
     path: "/api/admin/partner-keys",

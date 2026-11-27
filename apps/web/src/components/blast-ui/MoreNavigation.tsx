@@ -9,13 +9,16 @@ import { BlastMenuTrigger, type MenuHandle } from "./BlastMenu";
 import { Button } from "./Button";
 import { Collapse } from "./Collapse";
 import { CREATE_MENU_ID } from "./CreateMenu";
-import { ChevronIcon, DotsIcon, PieIcon, PlusIcon } from "./Icons";
+import { ChevronIcon, DotsIcon, PencilIcon, PieIcon, PlusIcon } from "./Icons";
 import type { CreateMenuPayload } from "./menu-placement";
 import { PrimaryLink } from "./NavigationLink";
 import styles from "./MoreNavigation.module.css";
 
 /** Secondary destinations in the phone tab bar. */
-export function MoreNavigation({ createMenu }: Readonly<{ createMenu: MenuHandle<CreateMenuPayload> }>) {
+export function MoreNavigation({ createMenu, onFeedback }: Readonly<{
+  createMenu: MenuHandle<CreateMenuPayload>;
+  onFeedback: () => void;
+}>) {
   const [open, setOpen] = useState(false);
   const container = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -66,6 +69,19 @@ export function MoreNavigation({ createMenu }: Readonly<{ createMenu: MenuHandle
       ><DotsIcon /><span>More</span></Button>
       <Collapse className={styles.panel} focusOnClose={() => trigger.current} id={panelId} open={open}>
         <div className={styles.mobileDestinations}>
+          <Button
+            aria-haspopup="dialog"
+            className={clsx(shellStyles.navItem, styles.destination)}
+            onClick={() => {
+              trigger.current?.focus();
+              setOpen(false);
+              onFeedback();
+            }}
+            variant="nav"
+          >
+            <PencilIcon />
+            <span>Send feedback</span>
+          </Button>
           <BlastMenuTrigger
             className={clsx(shellStyles.navItem, styles.destination)}
             handle={createMenu}
