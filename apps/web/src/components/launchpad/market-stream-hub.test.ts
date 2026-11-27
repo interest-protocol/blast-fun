@@ -790,6 +790,33 @@ test("a tab hidden during the linger keeps the socket for its hint clients and r
   back.close();
 });
 
+test("a coin page's socket hidden during the linger stays for its hint clients", async () => {
+  const s = setup();
+  const fallback = legacy();
+  const coin = s.hub.subscribe({ pools: [CURVE], expected, listener: watcher().listener });
+  s.source().hello();
+  s.source().fence(10);
+  const hints = marketHintTransport("/hints", fallback.create, queueMicrotask);
+  await settle();
+  coin.stop();
+  await settle();
+  s.setVisible(false);
+  hints.close();
+  s.advance(LINGER_MS);
+  assert.deepEqual(s.source().sets().map(topicsOf), [{ pools: [], price_coins: [], presale: null }], "the hidden grace still runs: topics drop by set");
+  s.advance(HIDDEN_GRACE_MS * 10);
+  assert.equal(s.source().closed, true);
+  s.setVisible(true);
+  assert.equal(s.sources.length, 2);
+  assert.equal(new URL(s.source().url, "https://blast.test").search, "?activity=true");
+  const back = marketHintTransport("/hints", fallback.create, queueMicrotask);
+  s.source().hello();
+  s.advance(LINGER_MS);
+  assert.equal(s.source().closed, false);
+  assert.equal(fallback.opened(), 0);
+  back.close();
+});
+
 test("a coin observer follows the stream's trades without opening or widening it", async () => {
   const s = setup();
   const coinType = `0x${"44".repeat(32)}::meme::MEME`;

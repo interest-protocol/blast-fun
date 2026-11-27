@@ -492,8 +492,8 @@ export class MarketStreamHub {
       const connection = this.connection!;
       const wanted = this.wanted();
       if (!nothingWanted(wanted)) return;
-      // A kept socket paused in a hidden tab decides once the tab is back (`connect`).
-      const away = this.keptForHints && !connection.source && !this.deps.visible();
+      // A kept socket in a hidden tab decides once the tab is back (`connect`).
+      const away = this.keptForHints && !this.deps.visible();
       if (!hintClientsAttached() && !away) return this.close();
       // A relay without `set` cannot drop the topics: its hint clients fall back to their own socket.
       if (connection.hello && !connection.settable && !sameTopics(connection.held, NO_TOPICS)) return this.close();
@@ -1055,6 +1055,8 @@ export class MarketStreamHub {
     if (sameTopics(topics(connection), connection.held)) return;
     const wanted = this.wanted();
     if (!nothingWanted(wanted)) this.redial(wanted);
+    // Kept for hint clients, but this relay cannot drop the topics: they fall back to their own socket.
+    else this.close();
   }
 
   /**
