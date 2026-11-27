@@ -4,7 +4,7 @@ import { FEEDBACK_MESSAGE_LIMIT, type FeedbackKind } from "@blast/core/web/contr
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 
 import { gatedFetch } from "#web/lib/api-gate-client.ts";
-import { diagnosticMessage, responseDiagnostic } from "#web/lib/errors.ts";
+import { diagnosticMessage, responseError } from "#web/lib/errors.ts";
 import { Button } from "./Button";
 import { DiagnosticText } from "./DiagnosticText";
 import styles from "./FeedbackSheet.module.css";
@@ -71,7 +71,8 @@ export function FeedbackSheet({ open, onClose }: Readonly<{ open: boolean; onClo
         const copy = response.status === 429
           ? "You’ve sent several messages. Wait a moment and try again."
           : "Your message couldn’t be sent. Try again.";
-        setError(diagnosticMessage(copy, { ...responseDiagnostic(response), code: `http_${response.status}` }));
+        const payload: unknown = await response.json().catch(() => null);
+        setError(diagnosticMessage(copy, responseError(payload, response)));
       }
     } catch {
       setError(diagnosticMessage("Your message couldn’t be sent. Try again.", { code: "network_unavailable" }));
