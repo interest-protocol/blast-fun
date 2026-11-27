@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { MARKET_STREAM_BUDGET } from "@blast/core/modules/launchpad-contract/market-stream.ts";
 import { marketHintTransport } from "#web/lib/live-stream/market-hints.ts";
-import { HIDDEN_GRACE_MS, LINGER_MS, MarketStreamHub, SET_ANSWER_MS, STABLE_MS, type MarketEventSource, type MarketStreamState, type MarketTrade } from "./market-stream-hub.ts";
+import { HIDDEN_GRACE_MS, LINGER_MS, MarketStreamHub, RECONNECT_MIN_MS, SET_ANSWER_MS, STABLE_MS, type MarketEventSource, type MarketStreamState, type MarketTrade } from "./market-stream-hub.ts";
 
 const CURVE = `blast_curve:0x${"11".repeat(32)}`;
 const VENUE = `cetus:0x${"22".repeat(32)}`;
@@ -669,6 +669,125 @@ test("hint clients wait for the market hello across a pool change and a long hid
   s.source().hello();
   assert.equal(fallback.opened(), 0, "a tab shown again waits for the new hello");
   returning.close();
+});
+
+/** Home: prices only, then left for a page that wants no topics but has a hint client (an open sale page). */
+async function homeToSale(s: ReturnType<typeof setup>) {
+  const fallback = legacy();
+  const home = s.hub.subscribe({ pools: [], priceCoins: [SUI], expected: null, listener: watcher([]).listener });
+  s.source().hello();
+  const hints = marketHintTransport("/hints", fallback.create, queueMicrotask);
+  await settle();
+  home.stop();
+  await settle();
+  s.advance(LINGER_MS);
+  return { fallback, hints };
+}
+
+const topicsOf = ({ pools, price_coins, presale }: SetFrame) => ({ pools, price_coins, presale });
+
+test("with hint clients and nothing wanted, the socket stays and sends one empty set; a coin page then reuses it", async () => {
+  const s = setup();
+  const { fallback, hints } = await homeToSale(s);
+  const frames: string[] = [];
+  hints.onmessage = ({ data }) => frames.push(String(data));
+  assert.equal(s.source().closed, false, "hint clients still read the socket");
+  assert.deepEqual(s.source().sets().map(topicsOf), [{ pools: [], price_coins: [], presale: null }]);
+  s.source().answer();
+  s.advance(LINGER_MS * 10);
+  assert.equal(s.source().closed, false);
+  assert.equal(s.source().sent.length, 1, "one empty set, nothing more");
+  assert.equal(fallback.opened(), 0, "hint clients never open their own socket");
+  s.source().emit("hint", { type: "pong" });
+  s.source().emit("hint", { type: "activity" });
+  assert.deepEqual(frames.map((frame) => JSON.parse(frame).type), ["pong", "activity"], "hints keep arriving after the empty set");
+  const coin = watcher();
+  s.hub.subscribe({ pools: coin.pools, expected, listener: coin.listener });
+  await settle();
+  assert.equal(s.sources.length, 1, "the coin page reuses the socket");
+  assert.deepEqual(s.source().sets().map(topicsOf).at(-1), { pools: [CURVE], price_coins: [], presale: null });
+  s.source().answer();
+  s.source().fence(10);
+  assert.equal(coin.states.at(-1), "live");
+  assert.equal(fallback.opened(), 0);
+  hints.close();
+  assert.equal(s.source().closed, false, "a socket with topics outlives its hint clients");
+});
+
+test("a socket kept for hint clients closes LINGER_MS after the last one leaves", async () => {
+  const s = setup();
+  const { fallback, hints } = await homeToSale(s);
+  s.source().answer();
+  hints.close();
+  const next = marketHintTransport("/hints", fallback.create, queueMicrotask);
+  s.advance(LINGER_MS - 100);
+  next.close();
+  s.advance(100);
+  assert.equal(s.source().closed, false, "the linger counts from the last client's leave");
+  s.advance(LINGER_MS - 101);
+  assert.equal(s.source().closed, false);
+  s.advance(1);
+  assert.equal(s.source().closed, true);
+  assert.equal(s.sources.length, 1);
+  assert.equal(s.timers.length, 0);
+  assert.equal(s.listening(), false);
+  assert.equal(fallback.opened(), 0);
+});
+
+test("a socket kept for hint clients that drops reopens with no topics and waits a linger for them to come back", async () => {
+  const s = setup();
+  const { fallback, hints } = await homeToSale(s);
+  s.source().answer();
+  let dropped = 0;
+  hints.onclose = () => { dropped++; };
+  s.source().emit("error");
+  assert.equal(dropped, 1, "hint clients leave with the socket and come back with their own backoff");
+  s.advance(RECONNECT_MIN_MS);
+  assert.equal(s.sources.length, 2);
+  assert.equal(new URL(s.source().url, "https://blast.test").search, "?activity=true");
+  s.advance(LINGER_MS - 1);
+  const back = marketHintTransport("/hints", fallback.create, queueMicrotask);
+  s.source().hello();
+  s.advance(LINGER_MS);
+  assert.equal(s.source().closed, false, "a hint client back within the linger keeps the socket");
+  assert.equal(s.source().sent.length, 0, "the new socket already streams no topics");
+  back.close();
+  s.setVisible(false);
+  s.advance(HIDDEN_GRACE_MS * 10);
+  assert.equal(s.source().closed, true, "a hidden tab pauses the socket");
+  assert.equal(s.listening(), true, "but keeps it for the tab's return");
+  s.setVisible(true);
+  assert.equal(s.sources.length, 3);
+  s.source().hello();
+  s.advance(LINGER_MS);
+  assert.equal(s.source().closed, true, "no hint client came back: the socket closes");
+  assert.equal(s.listening(), false);
+  assert.equal(s.timers.length, 0);
+  assert.equal(fallback.opened(), 0);
+});
+
+test("a tab hidden during the linger keeps the socket for its hint clients and reopens it with no topics", async () => {
+  const s = setup();
+  const fallback = legacy();
+  const home = s.hub.subscribe({ pools: [], priceCoins: [SUI], expected: null, listener: watcher([]).listener });
+  s.source().hello();
+  const hints = marketHintTransport("/hints", fallback.create, queueMicrotask);
+  await settle();
+  home.stop();
+  await settle();
+  s.setVisible(false);
+  hints.close(); // A background tab's hint client releases its stream.
+  s.advance(LINGER_MS * 10);
+  assert.equal(s.source().closed, true);
+  s.setVisible(true);
+  assert.equal(s.sources.length, 2, "the tab's return reopens the hub's socket");
+  assert.equal(new URL(s.source().url, "https://blast.test").search, "?activity=true");
+  const back = marketHintTransport("/hints", fallback.create, queueMicrotask);
+  s.source().hello();
+  s.advance(LINGER_MS);
+  assert.equal(s.source().closed, false);
+  assert.equal(fallback.opened(), 0);
+  back.close();
 });
 
 test("a coin observer follows the stream's trades without opening or widening it", async () => {

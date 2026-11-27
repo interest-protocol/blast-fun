@@ -8,7 +8,7 @@ import { normalizeStructTag } from "@mysten/sui/utils";
 
 import { parseChartFrame, type ChartFrame } from "./chart/chart-live-model.ts";
 import { publishChartRound } from "./chart/chart-live-round.ts";
-import { beginMarketHints } from "#web/lib/live-stream/market-hints.ts";
+import { beginMarketHints, hintClientsAttached } from "#web/lib/live-stream/market-hints.ts";
 import { createLiveTiming, TIMING_SAMPLE_RATE } from "#web/lib/live-stream/live-timing.ts";
 import { browserLiveSource } from "#web/lib/live-stream/live-socket-source.ts";
 import { presaleMarketFrameSchema, type PresaleMarketFrame } from "@blast/core/modules/live/presale-market-frames.ts";
@@ -143,7 +143,10 @@ export const HELLO_DEADLINE_MS = 10_000;
 const LEGACY_HEARTBEAT_TIMEOUT_MS = 45_000;
 /** A hidden tab keeps its stream this long, so a quick tab flip costs no reconnect or history read. */
 export const HIDDEN_GRACE_MS = 15_000;
-/** With nothing wanted, the socket stays open this long, so the next page's screens reuse it with one `set`. */
+/**
+ * With nothing wanted, the socket stays open this long, so the next page's screens reuse it with one `set`.
+ * Then it closes, or, while hint clients read it, drops every topic with one `set` and stays.
+ */
 export const LINGER_MS = 5_000;
 /** A `set` not answered by then reconnects, like a socket that stopped answering. */
 export const SET_ANSWER_MS = 10_000;
@@ -330,7 +333,8 @@ function unfence(pool: Pool, relay: Pool["relay"]): void {
 /**
  * One bounded market stream per tab: at most two pools, shared by every screen that watches them.
  * The tab keeps one socket: a page that changes what it watches sends one `set` with the whole wanted
- * set (one in flight at a time), and the socket closes `LINGER_MS` after nothing is wanted.
+ * set (one in flight at a time). `LINGER_MS` after nothing is wanted, the socket closes, or, while
+ * hint clients read its hints, it streams no topics and stays, so they never need a socket of their own.
  * Each pool has its own state: one pool's fault (unknown, re-fencing, a bad frame) never ends the
  * socket or another pool's stream. Only a missing hello, heartbeat or `set` answer, a socket close,
  * or the relay's `resync` reconnects, with a 500 ms to 30 s backoff.
@@ -361,6 +365,12 @@ export class MarketStreamHub {
   private cancelRetry: (() => void) | null = null;
   /** The close once nothing is wanted (`LINGER_MS`). */
   private cancelLinger: (() => void) | null = null;
+  /**
+   * Nothing is wanted and the socket stays for hint clients (it streams no topics once the linger ends).
+   * They leave with each drop or pause and come back with their own backoff, so it closes only once it is
+   * up (or the tab is visible) `LINGER_MS` with none attached.
+   */
+  private keptForHints = false;
   private seq = 0;
 
   constructor(deps: MarketStreamDependencies) {
@@ -457,9 +467,13 @@ export class MarketStreamHub {
 
   private reconcile(): void {
     const wanted = this.wanted();
-    if (nothingWanted(wanted)) return this.linger();
+    if (nothingWanted(wanted)) {
+      if (hintClientsAttached()) this.keptForHints = true;
+      return this.linger();
+    }
     this.cancelLinger?.();
     this.cancelLinger = null;
+    this.keptForHints = false;
     const current = this.connection;
     if (current && (!current.hello || current.settable) && !this.conflicts(current, wanted)) this.change(current, wanted);
     else if (!current || !sameExpected(current.expected, wanted.expected) || !sameTopics(topics(current), wantedTopics(wanted))) this.redial(wanted);
@@ -467,13 +481,39 @@ export class MarketStreamHub {
     this.publish();
   }
 
-  /** Nothing is wanted: the socket stays for the next page's screens, then closes. */
+  /**
+   * Nothing is wanted: the socket stays for the next page's screens, then closes. While hint clients read it
+   * (an open sale page), it sends one `set` with no topics instead and stays, until the last one leaves.
+   */
   private linger(): void {
     if (!this.connection) return this.close();
     this.cancelLinger ??= this.deps.schedule(() => {
       this.cancelLinger = null;
-      if (nothingWanted(this.wanted())) this.close();
+      const connection = this.connection!;
+      const wanted = this.wanted();
+      if (!nothingWanted(wanted)) return;
+      // A kept socket paused in a hidden tab decides once the tab is back (`connect`).
+      const away = this.keptForHints && !connection.source && !this.deps.visible();
+      if (!hintClientsAttached() && !away) return this.close();
+      // A relay without `set` cannot drop the topics: its hint clients fall back to their own socket.
+      if (connection.hello && !connection.settable && !sameTopics(connection.held, NO_TOPICS)) return this.close();
+      this.keptForHints = true;
+      this.empty(connection);
+      this.publish();
     }, LINGER_MS);
+  }
+
+  /** Drops every topic, by one `set` on an open socket. The deployment stays: streamed pools wait in `leaving` for the answer. */
+  private empty(connection: Connection): void {
+    this.change(connection, { ...this.wanted(), expected: connection.expected });
+  }
+
+  /** The last hint client left: a socket that wants no topics closes a linger after this leave. */
+  private hintsLeft(): void {
+    if (!this.connection || !nothingWanted(this.wanted())) return;
+    this.cancelLinger?.();
+    this.cancelLinger = null;
+    this.linger();
   }
 
   /**
@@ -503,7 +543,7 @@ export class MarketStreamHub {
     this.nameCoins(this.connection);
     // The new socket needs a new hint handshake. The new carrier replaces the old in one step, so hint
     // clients keep waiting for it (even while hidden) rather than open their own socket.
-    this.hints = beginMarketHints();
+    this.hints = beginMarketHints(() => this.hintsLeft());
     if (this.deps.visible()) this.connect();
     else this.pause();
   }
@@ -760,7 +800,7 @@ export class MarketStreamHub {
       this.cancelHidden?.();
       this.cancelHidden = null;
       if (this.connection && !this.connection.source) {
-        this.hints ??= beginMarketHints();
+        this.hints ??= beginMarketHints(() => this.hintsLeft());
         // Shown again: connect at once, past any pending backoff or refusal (a refusal still in force answers at once).
         this.cancelReconnect?.();
         this.cancelReconnect = null;
@@ -787,6 +827,7 @@ export class MarketStreamHub {
   private close(): void {
     this.cancelLinger?.();
     this.cancelLinger = null;
+    this.keptForHints = false;
     this.drop();
     this.connection = null;
     this.hints?.stop();
@@ -836,8 +877,16 @@ export class MarketStreamHub {
   private connect(): void {
     const connection = this.connection;
     if (!connection) return;
-    // A reconnect or a shown tab during the linger: nobody would read the new socket.
-    if (nothingWanted(this.wanted())) return this.close();
+    if (nothingWanted(this.wanted())) {
+      // A reconnect or a shown tab during the linger: nobody would read the new socket.
+      if (!this.keptForHints && !hintClientsAttached()) return this.close();
+      // Kept for hint clients: the new socket streams no topics, and they come back to it within a linger, or it closes.
+      this.keptForHints = true;
+      this.empty(connection);
+      this.cancelLinger?.();
+      this.cancelLinger = null;
+      this.linger();
+    }
     const params = new URLSearchParams();
     params.set("activity", "true");
     for (const key of connection.pools.keys()) params.append("pool", key);

@@ -6,8 +6,11 @@ type HintSocket = {
   onmessage: ((event: { data: unknown }) => void) | null;
   onclose: (() => void) | null;
 };
-/** The market stream's handshake: while it has no hello, hint clients wait for it (it reconnects with its own backoff). */
-type Carrier = { hello: string | null; pong: string | null };
+/**
+ * The market stream's handshake: while it has no hello, hint clients wait for it (it reconnects with its own backoff).
+ * `left`: told when the last hint client leaves, so a stream kept open only for hints can close.
+ */
+type Carrier = { hello: string | null; pong: string | null; left?: () => void };
 type Notice = Readonly<{ type: "changed" | "disconnected" }> | Readonly<{ type: "frame"; data: string }>;
 let carrier: Carrier | null = null;
 const listeners = new Set<(notice: Notice) => void>();
@@ -15,9 +18,14 @@ const announce = (notice: Notice) => {
   for (const listener of [...listeners]) listener(notice);
 };
 
+/** True while a hint client is attached: a market stream that wants no topics stays open to carry its hints. */
+export function hintClientsAttached(): boolean {
+  return listeners.size > 0;
+}
+
 /** The chart carries activity hints too. No activity history or cursor is cached here. */
-export function beginMarketHints() {
-  const owner: Carrier = { hello: null, pong: null };
+export function beginMarketHints(left?: () => void) {
+  const owner: Carrier = { hello: null, pong: null, left };
   carrier = owner;
   announce({ type: "changed" });
   return {
@@ -78,6 +86,7 @@ export function marketHintTransport(
       if (closed) return;
       closed = true;
       listeners.delete(notice);
+      if (!listeners.size) carrier?.left?.();
       underlying?.close();
       underlying = null;
     },
