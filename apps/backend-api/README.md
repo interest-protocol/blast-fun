@@ -288,6 +288,14 @@ npm test --workspace @blast/backend-api
 npm run test:integration --workspace @blast/backend-api
 ```
 
+Run the optional Effect diagnostics from the repository root after installing
+dependencies. The first run downloads the pinned CLI. The check accepts the
+backend's use of unstable APIs in `effect/http` and `effect/http-api`.
+
+```sh
+npm run lint:effect --workspace @blast/backend-api
+```
+
 The physical suite launches two actual Bun backend processes and a frontend
 relay. It verifies fresh policies and revocations, exact shared quotas,
 no double charging, anonymous public relays, operator commands and isolation,

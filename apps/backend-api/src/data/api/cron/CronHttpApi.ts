@@ -10,14 +10,14 @@ const [cleanupPath] = CRON_ROUTES;
 
 const report = {
   complete: Schema.Boolean,
-  durationMs: Schema.Number,
+  durationMs: Schema.Finite,
   tables: Schema.Record(
     Schema.Literals(CLEANUP_TABLES),
     Schema.Struct({
-      batches: Schema.Number,
+      batches: Schema.Finite,
       complete: Schema.Boolean,
-      deleted: Schema.Number,
-      durationMs: Schema.Number,
+      deleted: Schema.Finite,
+      durationMs: Schema.Finite,
       error: Schema.optionalKey(Schema.String),
     }),
   ),
