@@ -91,6 +91,8 @@ export interface MarketEventSource {
   addEventListener(type: string, listener: (event: { data?: string }) => void): void;
   /** `failed`: the caller gave up on it at a deadline, so a socket that never spoke counts against the tab. */
   close(failed?: boolean): void;
+  /** Sends one message on the open socket; false when it is not open. */
+  send(text: string): boolean;
 }
 
 export type MarketStreamDependencies = Readonly<{
@@ -98,25 +100,41 @@ export type MarketStreamDependencies = Readonly<{
   schedule: (run: () => void, ms: number) => () => void;
   /** Runs after the current task's other subscription changes, so they reconnect once. */
   defer: (run: () => void) => void;
-  /** Runs `run` once the screens mounting with a new stream have subscribed (`OPEN_SETTLE_MS`); returns its cancel. */
-  settle: (run: () => void) => () => void;
   random: () => number;
   visible: () => boolean;
   onVisibilityChange: (listener: () => void) => () => void;
 }>;
 
-type Subscriber = { request: MarketStreamRequest; pools: ReadonlySet<string>; state: MarketStreamState | null; poolStates: Map<string, MarketStreamState> };
+/** `pending`: its first replay (the stream's progress so far) has not run yet. */
+type Subscriber = { request: MarketStreamRequest; pools: ReadonlySet<string>; state: MarketStreamState | null; poolStates: Map<string, MarketStreamState>; pending: boolean };
 type Observer = { coin: string; listener: CoinTradeListener; seen: string | null };
 /**
  * `coin` survives reconnects: it names the pool, not the connection's progress through it.
  * `lastEvent`: a checkpoint after which every pool event arrives as a frame: the fence's cursor or a later frame.
  * `relay`: what the relay last said about an unfenced pool.
+ * `awaiting`: the socket does not stream it yet (a `set` will add it); its frames are ignored until the answer.
  * `refences`: local re-fences in a row (bad or oversized frames); `cancelRefence` is the one waiting
  * its backoff, `cancelCalm` resets the count once a fence holds.
  */
-type Pool = { fence: number | null; seen: number; lastEvent: number; cursor: string | null; tradeCursor: string | null; summary: unknown; coin: string | null; priceMissing?: boolean; stats?: CoinStatsFrame; relay: "waiting" | "recovering" | "unavailable"; refences: number; cancelRefence: (() => void) | null; cancelCalm: (() => void) | null };
-/** `upstream`: what the relay last said about its own upstream (`recovering` while it reconnects, `stale` while it lags). */
-type Connection = { pools: Map<string, Pool>; priceCoins: Set<string>; presale?: string; presaleFence: number | null; presaleSeen: number; expected: ExpectedDeployment | null; source: MarketEventSource | null; hello: boolean; upstream: "ok" | "recovering" | "stale"; unavailableLast: boolean };
+type Pool = { fence: number | null; seen: number; lastEvent: number; cursor: string | null; tradeCursor: string | null; summary: unknown; coin: string | null; priceMissing?: boolean; stats?: CoinStatsFrame; relay: "waiting" | "recovering" | "unavailable"; awaiting: boolean; refences: number; cancelRefence: (() => void) | null; cancelCalm: (() => void) | null };
+/** The topics one socket streams, as the relay names them. */
+type Topics = Readonly<{ pools: readonly string[]; priceCoins: readonly string[]; presale: string | null }>;
+const NO_TOPICS: Topics = { pools: [], priceCoins: [], presale: null };
+/** A presale the tab no longer wants while the socket still streams it: wanted again before the relay drops it, it needs no new pong. */
+type LeavingPresale = { id: string; fence: number | null; seen: number };
+/**
+ * `pools`, `priceCoins`, `presale`: what the tab wants streamed. `held`: what the socket streams (its URL, then
+ * each `set` answer); `sent`: the one `set` waiting for its answer. `settable`: the hello said the relay takes `set`.
+ * `leaving`: pools no longer wanted that the socket may still stream. `presaleAwaiting`: the presale waits for a
+ * `set` answer, and its pongs are ignored until then.
+ * `upstream`: what the relay last said about its own upstream (`recovering` while it reconnects, `stale` while it lags).
+ */
+type Connection = {
+  pools: Map<string, Pool>; priceCoins: Set<string>; presale?: string; presaleFence: number | null; presaleSeen: number; expected: ExpectedDeployment | null;
+  source: MarketEventSource | null; hello: boolean; upstream: "ok" | "recovering" | "stale"; unavailableLast: boolean;
+  held: Topics; sent: (Topics & { seq: number }) | null; settable: boolean; leaving: Map<string, Pool>; leavingPresale: LeavingPresale | null; presaleAwaiting: boolean;
+};
+type Wanted = { pools: string[]; priceCoins: Set<string>; presale?: string; expected: ExpectedDeployment | null };
 /** The socket: `open` once its hello arrived; `refused` while the tab waits out a refusal. */
 type Socket = "connecting" | "open" | "reconnecting" | "paused" | "refused";
 
@@ -125,13 +143,12 @@ export const HELLO_DEADLINE_MS = 10_000;
 const LEGACY_HEARTBEAT_TIMEOUT_MS = 45_000;
 /** A hidden tab keeps its stream this long, so a quick tab flip costs no reconnect or history read. */
 export const HIDDEN_GRACE_MS = 15_000;
-/**
- * A new stream waits this long before it asks for a ticket, so the screens that mount with it (one page
- * load subscribes from several components) share one ticket and one socket.
- */
-export const OPEN_SETTLE_MS = 100;
-/** A screen that will subscribe once its read answers (`hold`) delays the tab's next open at most this long. */
-export const HOLD_MAX_MS = 3_000;
+/** With nothing wanted, the socket stays open this long, so the next page's screens reuse it with one `set`. */
+export const LINGER_MS = 5_000;
+/** A `set` not answered by then reconnects, like a socket that stopped answering. */
+export const SET_ANSWER_MS = 10_000;
+/** A refusal that names no wait is retried after this long. */
+const SET_RETRY_MS = 5_000;
 /** A socket open this long resets the reconnect backoff. */
 export const STABLE_MS = 20_000;
 /** The reconnect backoff starts here and doubles up to `RECONNECT_MAX_MS`, with up to half again of jitter (capped). */
@@ -161,6 +178,40 @@ export function coinKey(value: unknown): string | null {
 
 function sameExpected(left: ExpectedDeployment | null, right: ExpectedDeployment | null): boolean {
   return left?.network === right?.network && left?.deployment === right?.deployment;
+}
+
+function nothingWanted(wanted: Wanted): boolean {
+  return !wanted.pools.length && !wanted.priceCoins.size && !wanted.presale;
+}
+
+function wantedTopics(wanted: Wanted): Topics {
+  return { pools: wanted.pools, priceCoins: [...wanted.priceCoins], presale: wanted.presale ?? null };
+}
+
+function topics(connection: Connection): Topics {
+  return { pools: [...connection.pools.keys()], priceCoins: [...connection.priceCoins], presale: connection.presale ?? null };
+}
+
+/** The pools the socket holds or was last asked for. */
+function streamedPools(connection: Connection): Set<string> {
+  return new Set([...connection.held.pools, ...connection.sent?.pools ?? []]);
+}
+
+function sameTopics(left: Topics, right: Topics): boolean {
+  const same = (a: readonly string[], b: readonly string[]) => {
+    const other = new Set(b);
+    return a.length === b.length && a.every((item) => other.has(item));
+  };
+  return left.presale === right.presale && same(left.pools, right.pools) && same(left.priceCoins, right.priceCoins);
+}
+
+/** The `held` of a `set` answer, or null when it is not one. */
+function readHeld(value: unknown): Topics | null {
+  const strings = (list: unknown): list is string[] => Array.isArray(list) && list.every((item) => typeof item === "string");
+  if (value === null || typeof value !== "object") return null;
+  const { pools, price_coins: priceCoins, presale } = value as Record<string, unknown>;
+  if (!strings(pools) || !strings(priceCoins) || (presale !== null && typeof presale !== "string")) return null;
+  return { pools, priceCoins, presale };
 }
 
 function fitsExpected(request: MarketStreamRequest, expected: ExpectedDeployment | null): boolean {
@@ -231,6 +282,19 @@ function passed(pool: Pool, checkpoint: number | null): void {
   pool.lastEvent = Math.max(pool.lastEvent, checkpoint);
 }
 
+/**
+ * The fenced pool a frame is for, or null when the frame is dropped: a pool without a fence (not streamed
+ * here, or re-fencing). A leaving pool only moves its checkpoint on, so a screen that brings it back reads
+ * history through what it missed.
+ */
+function fencedPool(connection: Connection, key: string, checkpoint: number | null): Pool | null {
+  const pool = connection.pools.get(key);
+  if (pool) return pool.fence === null ? null : pool;
+  const away = connection.leaving.get(key);
+  if (away?.fence != null) passed(away, checkpoint);
+  return null;
+}
+
 /** The checkpoint of a frame's cursor, or null when it names none. */
 function cursorCheckpoint(value: unknown): number | null {
   if (typeof value !== "string" || !EVENT_CURSOR.test(value)) return null;
@@ -252,8 +316,8 @@ function fresh(pool: Pool, frame: ChartFrame, summary: unknown): boolean {
   return true;
 }
 
-function emptyPool(coin: string | null): Pool {
-  return { fence: null, seen: 0, lastEvent: 0, cursor: null, tradeCursor: null, summary: null, coin, relay: "waiting", refences: 0, cancelRefence: null, cancelCalm: null };
+function emptyPool(coin: string | null, awaiting = false): Pool {
+  return { fence: null, seen: 0, lastEvent: 0, cursor: null, tradeCursor: null, summary: null, coin, relay: "waiting", awaiting, refences: 0, cancelRefence: null, cancelCalm: null };
 }
 
 /** Voids the pool's fence; the next `status: live` (or a new connection) fences it again. */
@@ -265,9 +329,11 @@ function unfence(pool: Pool, relay: Pool["relay"]): void {
 
 /**
  * One bounded market stream per tab: at most two pools, shared by every screen that watches them.
+ * The tab keeps one socket: a page that changes what it watches sends one `set` with the whole wanted
+ * set (one in flight at a time), and the socket closes `LINGER_MS` after nothing is wanted.
  * Each pool has its own state: one pool's fault (unknown, re-fencing, a bad frame) never ends the
- * socket or another pool's stream. Only a missing hello or heartbeat, a socket close, or the
- * relay's `resync` reconnects, with a 500 ms to 30 s backoff.
+ * socket or another pool's stream. Only a missing hello, heartbeat or `set` answer, a socket close,
+ * or the relay's `resync` reconnects, with a 500 ms to 30 s backoff.
  */
 export class MarketStreamHub {
   private readonly deps: MarketStreamDependencies;
@@ -289,11 +355,13 @@ export class MarketStreamHub {
   private cancelHidden: (() => void) | null = null;
   private cancelStable: (() => void) | null = null;
   private stopVisibility: (() => void) | null = null;
-  /** The settle before a new stream opens (`OPEN_SETTLE_MS`). */
-  private cancelOpen: (() => void) | null = null;
-  /** Screens holding the next open (`hold`); `openHeld`: a new stream waits for them. */
-  private holds = 0;
-  private openHeld = false;
+  /** The deadline of the `set` in flight (`SET_ANSWER_MS`). */
+  private cancelAnswer: (() => void) | null = null;
+  /** The wait a refused `set` named before the next one. */
+  private cancelRetry: (() => void) | null = null;
+  /** The close once nothing is wanted (`LINGER_MS`). */
+  private cancelLinger: (() => void) | null = null;
+  private seq = 0;
 
   constructor(deps: MarketStreamDependencies) {
     this.deps = deps;
@@ -308,7 +376,7 @@ export class MarketStreamHub {
       priceCoins.some((coin) => !displayPriceCoinSchema.safeParse(coin).success)) {
       throw new Error("Invalid subscription to market pools or coin prices.");
     }
-    const subscriber: Subscriber = { request, pools: new Set(request.pools), state: null, poolStates: new Map() };
+    const subscriber: Subscriber = { request, pools: new Set(request.pools), state: null, poolStates: new Map(), pending: this.connection !== null };
     this.subscribers.unshift(subscriber);
     this.active.add(subscriber);
     this.stopVisibility ??= this.deps.onVisibilityChange(() => this.visibility());
@@ -326,34 +394,6 @@ export class MarketStreamHub {
         this.queueReconcile();
       },
     };
-  }
-
-  /**
-   * A screen that will subscribe once its read answers (a sale page learns its pool from the coin's market read)
-   * holds the tab's next open until it releases or `HOLD_MAX_MS` passes, so the stream opens once with its pool
-   * rather than open without it and reopen. Returns the release. An open stream whose wanted set does not change
-   * is not touched; a change still closes it at once, and the new one waits for the release.
-   */
-  hold(): () => void {
-    let held = true;
-    this.holds += 1;
-    if (this.cancelOpen) {
-      this.cancelOpen();
-      this.cancelOpen = null;
-      this.openHeld = true;
-    }
-    const release = () => {
-      if (!held) return;
-      held = false;
-      cancelExpiry();
-      this.holds -= 1;
-      if (this.holds === 0 && this.openHeld) {
-        this.openHeld = false;
-        this.openSoon();
-      }
-    };
-    const cancelExpiry = this.deps.schedule(release, HOLD_MAX_MS);
-    return release;
   }
 
   /** Follows `coinType`'s trades on whatever the tab already streams; it never opens or widens a stream. */
@@ -387,7 +427,7 @@ export class MarketStreamHub {
    * Newest subscribers first, pool by pool while they fit one stream: a request over the budget gets
    * the part that fits, and the rest is `over_budget` until a slot frees.
    */
-  private wanted(): { pools: string[]; priceCoins: Set<string>; presale?: string; expected: ExpectedDeployment | null } {
+  private wanted(): Wanted {
     const pools = new Set<string>();
     const priceCoins = new Set<string>();
     const presale = this.subscribers.find(({ request }) => request.presale !== undefined)?.request.presale;
@@ -417,64 +457,198 @@ export class MarketStreamHub {
 
   private reconcile(): void {
     const wanted = this.wanted();
-    if (!wanted.pools.length && !wanted.priceCoins.size && !wanted.presale) return this.close();
+    if (nothingWanted(wanted)) return this.linger();
+    this.cancelLinger?.();
+    this.cancelLinger = null;
     const current = this.connection;
-    const same = current !== null && sameExpected(current.expected, wanted.expected) &&
-      current.presale === wanted.presale &&
-      current.pools.size === wanted.pools.length && wanted.pools.every((pool) => current.pools.has(pool)) &&
-      current.priceCoins.size === wanted.priceCoins.size && [...wanted.priceCoins].every((coin) => current.priceCoins.has(coin));
-    if (!same) {
-      const refused = this.socket === "refused" && this.cancelReconnect !== null;
-      this.drop();
-      this.connection = { pools: new Map(wanted.pools.map((pool) => [pool, emptyPool(current?.pools.get(pool)?.coin ?? null)])), priceCoins: wanted.priceCoins, presale: wanted.presale, presaleFence: null, presaleSeen: 0, expected: wanted.expected, source: null, hello: false, upstream: "ok", unavailableLast: false };
-      this.attempts = 0;
-      // A pool change asks the source again; while a refusal lasts it answers `refused` at once.
-      this.socket = refused || this.deps.visible() ? "connecting" : "paused";
-    }
+    if (current && (!current.hello || current.settable) && !this.conflicts(current, wanted)) this.change(current, wanted);
+    else if (!current || !sameExpected(current.expected, wanted.expected) || !sameTopics(topics(current), wantedTopics(wanted))) this.redial(wanted);
     this.nameCoins(this.connection!);
-    if (!same) {
-      // The new pools need a new hint handshake. The new carrier replaces the old in one step, so hint
-      // clients keep waiting for it (even while hidden) rather than open their own socket.
-      this.hints = beginMarketHints();
-      if (this.deps.visible()) this.openSoon();
-    }
     this.publish();
   }
 
-  /** Opens the new stream after the settle, or once the holds release; a later change of what is wanted starts over. */
-  private openSoon(): void {
-    this.cancelOpen?.();
-    this.cancelOpen = null;
-    if (this.holds > 0) {
-      this.openHeld = true;
-      return;
+  /** Nothing is wanted: the socket stays for the next page's screens, then closes. */
+  private linger(): void {
+    if (!this.connection) return this.close();
+    this.cancelLinger ??= this.deps.schedule(() => {
+      this.cancelLinger = null;
+      if (nothingWanted(this.wanted())) this.close();
+    }, LINGER_MS);
+  }
+
+  /**
+   * A pool the socket streams (or will) was fenced against another deployment: it gets no new fence by
+   * `set` (kept pools are untouched), so the tab opens a new socket.
+   */
+  private conflicts(connection: Connection, wanted: Wanted): boolean {
+    if (sameExpected(connection.expected, wanted.expected)) return false;
+    const streamed = streamedPools(connection);
+    return wanted.pools.some((pool) => streamed.has(pool));
+  }
+
+  /** A new socket for `wanted`; the old one, if any, is closed first. */
+  private redial(wanted: Wanted): void {
+    const current = this.connection;
+    const refused = this.socket === "refused" && this.cancelReconnect !== null;
+    this.drop();
+    this.connection = {
+      pools: new Map(wanted.pools.map((pool) => [pool, emptyPool(current?.pools.get(pool)?.coin ?? null)])), priceCoins: wanted.priceCoins, presale: wanted.presale,
+      presaleFence: null, presaleSeen: 0, expected: wanted.expected, source: null, hello: false, upstream: "ok", unavailableLast: false,
+      held: NO_TOPICS, sent: null, settable: false, leaving: new Map(), leavingPresale: null, presaleAwaiting: false,
+    };
+    this.attempts = 0;
+    // While a refusal lasts the source answers `refused` at once.
+    this.socket = refused || this.deps.visible() ? "connecting" : "paused";
+    this.nameCoins(this.connection);
+    // The new socket needs a new hint handshake. The new carrier replaces the old in one step, so hint
+    // clients keep waiting for it (even while hidden) rather than open their own socket.
+    this.hints = beginMarketHints();
+    if (this.deps.visible()) this.connect();
+    else this.pause();
+  }
+
+  /**
+   * Changes what the tab wants on the same socket: kept pools keep their fences, added ones wait for the
+   * `set` answer and their fence, and removed ones the socket still streams wait in `leaving`, so a screen
+   * that comes back before the relay drops them needs no new fence.
+   */
+  private change(connection: Connection, wanted: Wanted): void {
+    if (!sameExpected(connection.expected, wanted.expected)) {
+      connection.expected = wanted.expected;
+      // Fenced against the old deployment: never brought back.
+      for (const pool of connection.leaving.values()) unfence(pool, "waiting");
+      connection.leaving.clear();
     }
+    const restored = this.changePools(connection, wanted.pools);
+    connection.priceCoins = wanted.priceCoins;
+    const presaleBack = this.changePresale(connection, wanted.presale);
+    this.sync();
+    // Screens already watching a pool that comes back (a freed budget slot) read from its fence again; new screens get their replay.
+    if (!restored.length && !presaleBack) return;
+    for (const subscriber of [...this.subscribers]) if (!subscriber.pending) this.replay(subscriber, { pools: restored, presale: presaleBack });
+  }
+
+  /** Rebuilds the pools in wanted order; returns the ones back from `leaving` with their fence. */
+  private changePools(connection: Connection, wanted: readonly string[]): string[] {
+    const streamed = connection.source === null ? new Set<string>() : streamedPools(connection);
+    const pools = new Map<string, Pool>();
+    const restored: string[] = [];
+    for (const key of wanted) {
+      const pool = connection.pools.get(key) ?? connection.leaving.get(key);
+      if (pool && connection.leaving.delete(key) && pool.fence !== null) restored.push(key);
+      pools.set(key, pool ?? emptyPool(null, true));
+    }
+    for (const [key, pool] of connection.pools) {
+      if (pools.has(key)) continue;
+      if (streamed.has(key)) connection.leaving.set(key, pool);
+      else unfence(pool, "waiting");
+    }
+    connection.pools = pools;
+    return restored;
+  }
+
+  /** True when the presale comes back from `leavingPresale` with its fence. */
+  private changePresale(connection: Connection, presale: string | undefined): boolean {
+    if (presale === connection.presale) return false;
+    const old = connection.presale;
+    const away = connection.leavingPresale;
+    const back = away?.id === presale ? away : null;
+    const socketHas = (id: string) => connection.source !== null && (connection.held.presale === id || connection.sent?.presale === id);
+    if (old && socketHas(old)) connection.leavingPresale = { id: old, fence: connection.presaleFence, seen: connection.presaleSeen };
+    else if (away && away !== back && socketHas(away.id)) connection.leavingPresale = away;
+    else connection.leavingPresale = null;
+    connection.presale = presale;
+    connection.presaleFence = back?.fence ?? null;
+    connection.presaleSeen = back?.seen ?? 0;
+    connection.presaleAwaiting = presale !== undefined && !back;
+    return back?.fence != null;
+  }
+
+  /**
+   * Sends what the tab wants when the socket holds something else: one `set` in flight, none before a
+   * hello that takes `set`, none while a refusal's wait lasts. No answer by `SET_ANSWER_MS` reconnects.
+   */
+  private sync(): void {
     const connection = this.connection;
-    let pending = true;
-    const cancel = this.deps.settle(() => {
-      if (!pending) return;
-      pending = false;
-      this.cancelOpen = null;
-      // A stream paused while hidden and held is still this one to open.
-      if (this.connection !== connection || !connection || connection.source || (this.socket !== "connecting" && this.socket !== "paused")) return;
-      if (this.deps.visible()) this.connect();
-      else this.pause();
-    });
-    if (pending) {
-      this.cancelOpen = () => {
-        pending = false;
-        cancel();
-      };
+    const source = connection?.source;
+    if (!connection || !source || !connection.settable || connection.sent || this.cancelRetry) return;
+    const next = topics(connection);
+    if (sameTopics(next, connection.held)) return;
+    const seq = ++this.seq;
+    if (!source.send(JSON.stringify({ op: "set", seq, pools: next.pools, price_coins: next.priceCoins, presale: next.presale }))) return this.reconnect();
+    connection.sent = { ...next, seq };
+    this.cancelAnswer = this.deps.schedule(() => {
+      this.cancelAnswer = null;
+      if (this.connection === connection && connection.source === source) this.reconnect(true);
+    }, SET_ANSWER_MS);
+  }
+
+  /**
+   * The answer to the `set` in flight. `held` is what the socket now streams: on a refusal, the removals
+   * applied and the additions did not. A refused added pool is `unavailable` (its screens poll) until the
+   * retry after `retryMs`.
+   */
+  private answered(connection: Connection, sent: Topics, held: Topics, retryMs: number | null): void {
+    this.cancelAnswer?.();
+    this.cancelAnswer = null;
+    connection.sent = null;
+    connection.held = held;
+    this.heldPools(connection, sent, held);
+    this.heldPresale(connection, held);
+    if (retryMs !== null) {
+      this.cancelRetry = this.deps.schedule(() => {
+        this.cancelRetry = null;
+        if (this.connection === connection) this.sync();
+      }, Math.round(retryMs * (1 + this.deps.random() / 2)));
+    }
+    this.sync();
+    this.publish();
+  }
+
+  /** After an answer: added pools wait for their fence, refused ones wait for the next `set`, dropped leaving ones go. */
+  private heldPools(connection: Connection, sent: Topics, held: Topics): void {
+    const kept = new Set(held.pools);
+    const asked = new Set(sent.pools);
+    for (const [key, pool] of connection.pools) {
+      if (kept.has(key)) {
+        // Added: its fence follows the answer.
+        if (pool.awaiting) Object.assign(pool, { awaiting: false, relay: "waiting" });
+        continue;
+      }
+      // Brought back from `leaving` after this `set` removed it: the next one adds it again.
+      if (!pool.awaiting) unfence(pool, "waiting");
+      pool.awaiting = true;
+      if (asked.has(key)) pool.relay = "unavailable";
+    }
+    for (const [key, pool] of connection.leaving) {
+      if (kept.has(key)) continue;
+      unfence(pool, "waiting");
+      connection.leaving.delete(key);
     }
   }
 
-  private replay(subscriber: Subscriber): void {
+  /** After an answer: the presale is streamed, or waits for the next `set` with its state cleared. */
+  private heldPresale(connection: Connection, held: Topics): void {
+    if (connection.leavingPresale && connection.leavingPresale.id !== held.presale) connection.leavingPresale = null;
+    const presale = connection.presale ?? null;
+    if (presale !== null && held.presale === presale) connection.presaleAwaiting = false;
+    else if (presale !== null && !connection.presaleAwaiting) {
+      connection.presaleAwaiting = true;
+      connection.presaleSeen = 0;
+      this.presaleState(connection, null);
+    }
+  }
+
+  /** Tells a subscriber the stream's progress so far; `only`: just these pools and the presale if true. */
+  private replay(subscriber: Subscriber, only?: Readonly<{ pools: readonly string[]; presale: boolean }>): void {
+    if (!only) subscriber.pending = false;
     const connection = this.connection;
     if (!connection?.source || !this.active.has(subscriber)) return;
     const { request } = subscriber;
-    if (request.presale && request.presale === connection.presale && connection.presaleFence !== null)
+    if (request.presale && request.presale === connection.presale && connection.presaleFence !== null && (!only || only.presale))
       safely(() => request.listener.presaleReady?.(Math.max(connection.presaleFence!, connection.presaleSeen)));
-    for (const key of request.pools) {
+    for (const key of only?.pools ?? request.pools) {
+      if (!subscriber.pools.has(key)) continue;
       const pool = connection.pools.get(key);
       if (!pool || pool.fence === null || !this.serves(subscriber, key) || !this.active.has(subscriber)) continue;
       this.notifyFence(subscriber, key, pool);
@@ -582,16 +756,10 @@ export class MarketStreamHub {
       this.cancelHidden = null;
       if (this.connection && !this.connection.source) {
         this.hints ??= beginMarketHints();
-        // A screen still holding the open opens it on release; a pending backoff or refusal keeps its own timer.
-        if (this.holds > 0) {
-          this.openHeld = true;
-          return;
-        }
-        // Shown again: connect at once, past any pending backoff or refusal (a refusal still in force answers at once),
-        // unless a settle under way is about to.
+        // Shown again: connect at once, past any pending backoff or refusal (a refusal still in force answers at once).
         this.cancelReconnect?.();
         this.cancelReconnect = null;
-        if (!this.cancelOpen) this.connect();
+        this.connect();
       }
     } else if (this.connection?.source && !this.cancelHidden) {
       if (!this.connection.pools.size) return this.pause();
@@ -612,6 +780,8 @@ export class MarketStreamHub {
   }
 
   private close(): void {
+    this.cancelLinger?.();
+    this.cancelLinger = null;
     this.drop();
     this.connection = null;
     this.hints?.stop();
@@ -624,9 +794,10 @@ export class MarketStreamHub {
   /** Ends the current source and every timer that belongs to it; pools lose their fences. */
   private drop(deadline = false): void {
     const connection = this.connection;
-    this.cancelOpen?.();
-    this.cancelOpen = null;
-    this.openHeld = false;
+    this.cancelAnswer?.();
+    this.cancelAnswer = null;
+    this.cancelRetry?.();
+    this.cancelRetry = null;
     this.cancelHello?.();
     this.cancelHello = null;
     this.cancelHeartbeat?.();
@@ -643,12 +814,18 @@ export class MarketStreamHub {
     connection.hello = false;
     connection.upstream = "ok";
     connection.unavailableLast = false;
+    connection.held = NO_TOPICS;
+    connection.sent = null;
+    connection.settable = false;
+    connection.leavingPresale = null;
+    connection.presaleAwaiting = false;
     this.presaleState(connection, null);
     connection.presaleSeen = 0;
-    for (const pool of connection.pools.values()) {
+    for (const pool of [...connection.pools.values(), ...connection.leaving.values()]) {
       unfence(pool, "waiting");
       pool.summary = null;
     }
+    connection.leaving.clear();
   }
 
   private connect(): void {
@@ -662,6 +839,10 @@ export class MarketStreamHub {
     this.socket = "connecting";
     const source = this.deps.createSource(`${MARKET_STREAM_PATH}?${params}`);
     connection.source = source;
+    // The URL names everything the tab wants: nothing waits for a `set`.
+    connection.held = topics(connection);
+    for (const pool of connection.pools.values()) pool.awaiting = false;
+    connection.presaleAwaiting = false;
     connection.hello = false;
     connection.upstream = "ok";
     connection.unavailableLast = false;
@@ -680,7 +861,8 @@ export class MarketStreamHub {
     const confirmPong = (checkpoint: unknown) => {
       // The handshake pong is the first confirmed upstream heartbeat.
       if (heartbeatTimeoutMs === MARKET_STREAM_BUDGET.heartbeatTimeoutMs) expectHeartbeat();
-      if (typeof checkpoint === "number" && Number.isSafeInteger(checkpoint) && checkpoint >= 0) {
+      // A pong before the answer that adds the presale is not this presale's.
+      if (!connection.presaleAwaiting && typeof checkpoint === "number" && Number.isSafeInteger(checkpoint) && checkpoint >= 0) {
         this.presaleState(connection, checkpoint);
       }
     };
@@ -730,15 +912,18 @@ export class MarketStreamHub {
     // A deployment mismatch (or an older relay giving up): the relay ends this socket; reconnect with backoff.
     source.addEventListener("resync", () => { if (current()) this.reconnect(); });
     source.addEventListener("presale", (event) => {
-      if (!current() || connection.presaleFence === null || !connection.presale || !event.data || event.data.length > MARKET_STREAM_BUDGET.maxChunkBytes) return;
+      if (!current() || (connection.presaleFence === null && !connection.leavingPresale) || !event.data || event.data.length > MARKET_STREAM_BUDGET.maxChunkBytes) return;
       let frame: PresaleMarketFrame;
       try {
         frame = presaleMarketFrameSchema.parse(JSON.parse(event.data));
       } catch {
         return;
       }
-      if (frame.presale_id !== connection.presale) return;
-      connection.presaleSeen = Math.max(connection.presaleSeen, Number(frame.cursor.split(":", 1)[0]));
+      const checkpoint = Number(frame.cursor.split(":", 1)[0]);
+      const away = connection.leavingPresale;
+      if (away?.id === frame.presale_id) away.seen = Math.max(away.seen, checkpoint);
+      if (connection.presaleFence === null || frame.presale_id !== connection.presale) return;
+      connection.presaleSeen = Math.max(connection.presaleSeen, checkpoint);
       for (const subscriber of [...this.subscribers]) {
         if (current() && this.active.has(subscriber) && subscriber.request.presale === frame.presale_id) {
           safely(() => subscriber.request.listener.presale?.(frame));
@@ -747,6 +932,15 @@ export class MarketStreamHub {
     });
     // A drop after the stream opened: retried with backoff.
     source.addEventListener("error", () => { if (current()) this.reconnect(); });
+    source.addEventListener("set", (event) => {
+      const sent = connection.sent;
+      const answer = current() && sent ? readObject(event.data ?? "") : null;
+      if (!answer || answer.seq !== sent!.seq) return;
+      const held = readHeld(answer.held);
+      if (!held) return this.reconnect();
+      const retryMs = typeof answer.retry_ms === "number" && Number.isFinite(answer.retry_ms) && answer.retry_ms >= 0 ? answer.retry_ms : SET_RETRY_MS;
+      this.answered(connection, sent!, held, answer.ok === true ? null : retryMs);
+    });
     // The socket is off or backing off for `data` ms: polls carry the page until then. A pool change, or
     // the tab shown again, asks the source again, and it answers at once while the wait lasts.
     source.addEventListener("refused", (event) => {
@@ -768,6 +962,7 @@ export class MarketStreamHub {
         const hint = JSON.parse(event.data) as Record<string, unknown>;
         if (hint.type === "hello" && parseInfraProvenance(hint.provenance).network === "mainnet" && !connection.hello) {
           connection.hello = true;
+          connection.settable = hint.set === true;
           this.socket = "open";
           this.cancelHello?.();
           this.cancelHello = null;
@@ -784,12 +979,21 @@ export class MarketStreamHub {
             expectHeartbeat();
           }
           this.publish();
+          this.helloSync(connection);
         } else if (connection.hello && hint.type === "pong") {
           confirmPong(hint.presale_checkpoint);
         }
       } catch { /* The hint carrier refuses malformed hints independently. */ }
       if (current()) this.hints?.frame(event.data);
     });
+  }
+
+  /** After the hello: what changed before it goes by `set`, or, on an older relay without `set`, by a new socket. */
+  private helloSync(connection: Connection): void {
+    if (connection.settable) return this.sync();
+    if (sameTopics(topics(connection), connection.held)) return;
+    const wanted = this.wanted();
+    if (!nothingWanted(wanted)) this.redial(wanted);
   }
 
   /**
@@ -807,8 +1011,9 @@ export class MarketStreamHub {
 
   /** A `status` naming a pool; false when it changes nothing. */
   private poolStatus(connection: Connection, key: string, status: Record<string, unknown>): boolean {
-    const pool = connection.pools.get(key);
-    if (!pool) return false;
+    // A leaving pool keeps its fence current; an awaiting one hears nothing before the `set` answer.
+    const pool = connection.pools.get(key) ?? connection.leaving.get(key);
+    if (!pool || pool.awaiting) return false;
     switch (status.state) {
       case "live":
         if (!this.fence(connection, key, pool, status)) unfence(pool, "recovering");
@@ -885,10 +1090,9 @@ export class MarketStreamHub {
     const wire = readObject(data);
     if (!wire) return this.refenceAll(connection);
     const key = String(wire.pool_key ?? (wire.trade as Record<string, unknown> | undefined)?.pool_key);
-    const pool = connection.pools.get(key);
-    // A frame for a pool without a fence (not streamed here, or re-fencing) is dropped.
-    if (!pool || pool.fence === null) return;
     const checkpoint = cursorCheckpoint(wire.cursor);
+    const pool = fencedPool(connection, key, checkpoint);
+    if (!pool) return;
     if (pool.cancelRefence) return passed(pool, checkpoint);
     if (data.length > MARKET_STREAM_BUDGET.maxUpstreamFrameChars) return this.refenceLocally(connection, key, pool, checkpoint);
     const subscribers = this.subscribers.filter((subscriber) => subscriber.pools.has(key) && this.serves(subscriber, key));
@@ -977,7 +1181,6 @@ export function tabMarketStream(): MarketStreamHub | null {
     },
     schedule,
     defer: (run) => queueMicrotask(run),
-    settle: (run) => schedule(run, OPEN_SETTLE_MS),
     random: Math.random,
     visible: () => document.visibilityState === "visible",
     onVisibilityChange: (listener) => {
@@ -985,4 +1188,13 @@ export function tabMarketStream(): MarketStreamHub | null {
       return () => document.removeEventListener("visibilitychange", listener);
     },
   }));
+}
+
+/**
+ * Tests only: closes the tab's stream now, without the linger, and forgets the hub, so a later test in
+ * the same file opens its own socket instead of reusing the one an earlier test left lingering.
+ */
+export function resetTabMarketStream(): void {
+  tab?.["close"](); // `close` stays private: nothing else may end the stream at once
+  tab = null;
 }
