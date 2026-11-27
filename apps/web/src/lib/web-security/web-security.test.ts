@@ -262,6 +262,11 @@ test("all named versioned rate policies publish exact defaults and scopes", () =
         version: 1,
         windows: [{ limit: 10, windowSeconds: 600 }],
       },
+      product_feedback: {
+        scope: "ip",
+        version: 1,
+        windows: [{ limit: 5, windowSeconds: 60 }],
+      },
       // Launchpad coin-view beacons: per client IP, apart from Mission Control's telemetry.
       launchpad_telemetry: {
         scope: "ip",
