@@ -5,7 +5,6 @@ import {
   LIVE_BACKOFF_MS,
   LIVE_OFF_MS,
   LIVE_PROTOCOL,
-  LIVE_SPARE_TICKET_MS,
   fetchLiveTicket,
   liveMarketSource,
   liveSourceState,
@@ -18,13 +17,13 @@ const GRANT: LiveGrant = { url: "wss://live.blast.test/v1/socket", ticket: "t" }
 
 function harness(tickets: () => Promise<LiveGrant | null>, throwOnOpen = false, random = () => 0.5) {
   let now = 1_000;
-  const sockets: (LiveSocketLike & { url: string; protocols: string[]; closed: boolean })[] = [];
+  const sockets: (LiveSocketLike & { url: string; protocols: string[]; closed: boolean; sent: string[] })[] = [];
   const timers: { run: () => void; ms: number }[] = [];
   const deps = {
     fetchTicket: tickets,
     openSocket: (url: string, protocols: string[]) => {
       if (throwOnOpen) throw new SyntaxError("bad protocol");
-      const socket = { url, protocols, closed: false, onmessage: null, onclose: null, close() { this.closed = true; } };
+      const socket = { url, protocols, closed: false, sent: [] as string[], onmessage: null, onclose: null, close() { this.closed = true; }, send(text: string) { if (this.closed) return false; this.sent.push(text); return true; } };
       sockets.push(socket);
       return socket;
     },
@@ -47,47 +46,17 @@ function harness(tickets: () => Promise<LiveGrant | null>, throwOnOpen = false, 
 
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 
-// This fails if a screen joining a page while its ticket is on the way costs a second ticket, or if a
-// ticket the caller gave up on, or one too old to still be valid, is ever used.
-test("a ticket on its way when its source closes opens the tab's next source, not a second ticket", async () => {
-  const asks: ((grant: LiveGrant) => void)[] = [];
-  const { open, sockets, advance } = harness(() => new Promise((resolve) => asks.push(resolve)));
-  open().source.close();
-  open("/api/launchpad/market/stream?activity=true&pool=p&pool=q");
-  asks[0]!(GRANT);
+// This fails if a `set` is sent before the socket exists, or after its source closed.
+test("send reaches the open socket only: false before it opens and after the source closes", async () => {
+  const { open, sockets } = harness(async () => GRANT);
+  const { source } = open();
+  assert.equal(source.send("before"), false);
   await settle();
-  assert.equal(asks.length, 1, "the page's second source asked for no ticket of its own");
-  assert.deepEqual(sockets.map(({ url }) => url), [`${GRANT.url}?activity=true&pool=p&pool=q`], "one socket, with the pools wanted when it opened");
-
-  open().source.close(true);
-  open();
-  assert.equal(asks.length, 3, "a ticket given up on (a deadline) serves no one");
-
-  open().source.close();
-  advance(LIVE_SPARE_TICKET_MS);
-  open();
-  assert.equal(asks.length, 5, "a spare ticket asked for too long ago is not used");
-});
-
-// This fails if a ticket ask that failed after its source closed is handed on, so the next source
-// counts a failure or waits the off window without asking.
-test("an ask that brings no ticket after its source closes serves no one", async () => {
-  const asks: ((grant: LiveGrant | null) => void)[] = [];
-  const fails: (() => void)[] = [];
-  const { open, state } = harness(() => new Promise((resolve, reject) => {
-    asks.push(resolve);
-    fails.push(() => reject(new Error("ticket 503")));
-  }));
-  open().source.close();
-  fails[0]!();
-  await settle();
-  open().source.close();
-  asks[1]!(null);
-  await settle();
-  open();
-  assert.equal(asks.length, 3, "each source after a failed or empty ask asks afresh");
-  assert.equal(state.failures, 0);
-  assert.equal(state.offUntil, 0);
+  assert.equal(source.send("set"), true);
+  assert.deepEqual(sockets[0]!.sent, ["set"]);
+  source.close();
+  assert.equal(source.send("after"), false);
+  assert.deepEqual(sockets[0]!.sent, ["set"]);
 });
 
 // This fails if the socket's SSE blocks reach the hub differently from the

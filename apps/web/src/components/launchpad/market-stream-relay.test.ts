@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { MarketStreamRelay, type RelaySocket } from "@blast/server/modules/launchpad-market/stream-relay.ts";
+import { MarketStreamRelay, type MarketSubscription, type RelaySocket } from "@blast/server/modules/launchpad-market/stream-relay.ts";
 import { MarketStreamHub, type MarketEventSource, type MarketStreamState } from "./market-stream-hub.ts";
 
 // The browser hub against the real relay: per-pool faults never end the tab's socket.
@@ -70,7 +70,7 @@ class RelaySource implements MarketEventSource {
   closed = false;
   url = "";
   readonly #listeners = new Map<string, ((event: { data?: string }) => void)[]>();
-  readonly #stop: () => void;
+  readonly #subscription: MarketSubscription;
   constructor(relay: MarketStreamRelay, url: string) {
     this.url = url;
     const subscription = relay.subscribe(new Request(`https://frontend.test${url}`), {
@@ -84,10 +84,19 @@ class RelaySource implements MarketEventSource {
       close: () => queueMicrotask(() => { if (!this.closed) this.#emit("error", undefined); }),
     });
     assert.ok(!(subscription instanceof Response), "the relay accepts the hub's request");
-    this.#stop = subscription.stop;
+    this.#subscription = subscription;
+  }
+  /** The server's `set` handler without its limits. */
+  send(text: string): boolean {
+    if (this.closed) return false;
+    const { seq, pools, price_coins: priceCoins, presale } = JSON.parse(text) as { seq: number; pools: string[]; price_coins: string[]; presale: string | null };
+    // As the server does: the answer goes before the relay's catch-up for the added pools.
+    queueMicrotask(() => this.#emit("set", JSON.stringify({ seq, ok: true, held: { pools, price_coins: priceCoins, presale } })));
+    this.#subscription.set({ pools, priceCoins, presale });
+    return true;
   }
   addEventListener(type: string, listener: (event: { data?: string }) => void): void { this.#listeners.set(type, [...this.#listeners.get(type) ?? [], listener]); }
-  close(): void { if (this.closed) return; this.closed = true; this.#stop(); }
+  close(): void { if (this.closed) return; this.closed = true; this.#subscription.stop(); }
   #emit(type: string, data: string | undefined): void { if (!this.closed) for (const listener of this.#listeners.get(type) ?? []) listener({ data }); }
 }
 
@@ -99,7 +108,7 @@ function harness(t: import("node:test").TestContext, reader: Reader | null = nul
   const hub = new MarketStreamHub({
     createSource: (url) => { const source = new RelaySource(relay, url); sources.push(source); return source; },
     schedule: (run, ms) => { const id = setTimeout(run, ms); return () => clearTimeout(id); },
-    defer: queueMicrotask, settle: (run) => { run(); return () => {}; }, random: () => 0, visible: () => true, onVisibilityChange: () => () => {},
+    defer: queueMicrotask, random: () => 0, visible: () => true, onVisibilityChange: () => () => {},
   });
   const states = new Map<string, MarketStreamState>();
   const fences: [string, number][] = [];
@@ -222,17 +231,17 @@ test("a third pool is over budget while the other two stream, and streams once a
   assert.equal(h.sources.filter((source) => !source.closed).length, 1);
   h.hello();
   await h.flush();
+  await h.run(1_000); // the `set` that adds the third pool, and the reader's snapshot for it
   assert.equal(newer.state(THIRD), "live", "the newest subscriber is served first");
   const served = [POOL, OTHER].filter((pool) => h.subscription.state(pool) === "live");
   const over = [POOL, OTHER].filter((pool) => h.subscription.state(pool) === "over_budget");
   assert.equal(served.length, 1);
   assert.equal(over.length, 1);
   newer.stop();
-  await h.flush();
-  h.hello();
   await h.run(5_000);
   assert.equal(h.subscription.state(POOL), "live");
   assert.equal(h.subscription.state(OTHER), "live");
+  assert.equal(h.sources.length, 1, "one socket throughout: each change is a `set`");
   h.subscription.stop();
 });
 

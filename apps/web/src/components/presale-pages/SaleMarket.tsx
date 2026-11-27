@@ -3,7 +3,7 @@
 import { DateStamp } from "#web/components/blast-ui/DateStamp.tsx";
 import type { AsOf } from "@blast/core/web/contracts/items.ts";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 import { Button } from "#web/components/blast-ui/Button.tsx";
 import { EmptyState } from "#web/components/blast-ui/EmptyState.tsx";
@@ -47,7 +47,6 @@ import coinStyles from "#web/components/social/bonding/bonding-coin.module.css";
 import { ChartLastTrade } from "#web/components/launchpad/chart/ChartLastTrade.tsx";
 import { CoinPriceCurrencyProvider, useCoinPriceCurrency } from "#web/components/launchpad/chart/CoinPriceCurrency.tsx";
 import { useLiveListening, useLiveScreen, useReportListening } from "#web/components/launchpad/coin/LiveScreen.tsx";
-import { tabMarketStream } from "#web/components/launchpad/market-stream-hub.ts";
 import { statsAfterRead, useLiveCoin, type LiveCoinStats } from "#web/components/launchpad/coin/live-coin.ts";
 import { cx } from "./cx";
 import { marketPoll } from "./sale-market-poll";
@@ -413,10 +412,6 @@ export function SaleMarket({
     client,
   );
   const liveScreen = useLiveScreen();
-  // The sale's pool comes from this read. Until it answers, the tab's stream waits (`hold`), so the
-  // sale's trades and its pool open one socket rather than a presale-only one replaced a second later.
-  const marketPending = marketQuery.isPending;
-  useEffect(() => (liveScreen && marketPending ? tabMarketStream()?.hold() : undefined), [liveScreen, marketPending]);
   const market = marketQuery.data?.coin_type === sale.sale_token ? marketQuery.data : null;
   const poolKey = market?.pool ? `${market.pool.venue}:${market.pool.id}` : null;
   // The chart's own pool, so the tab's stream does not widen; a pool the stream cannot key is never joined.

@@ -21,6 +21,12 @@ class Source implements MarketEventSource {
   readonly listeners = new Map<string, ((event: { data?: string }) => void)[]>();
   addEventListener(type: string, listener: (event: { data?: string }) => void): void { this.listeners.set(type, [...this.listeners.get(type) ?? [], listener]); }
   close(): void {}
+  /** The server's answer to a `set`: it holds what was asked. */
+  send(text: string): boolean {
+    const { seq, pools, price_coins, presale } = JSON.parse(text) as { seq: number; pools: string[]; price_coins: string[]; presale: string | null };
+    queueMicrotask(() => this.emit("set", { seq, ok: true, held: { pools, price_coins, presale } }));
+    return true;
+  }
   emit(type: string, value: unknown): void { for (const listener of this.listeners.get(type) ?? []) listener({ data: JSON.stringify(value) }); }
   fence(pool: string, checkpoint: number): void { this.emit("status", { state: "live", pool_key: pool, checkpoint, cursor: `${checkpoint}:0:0:0`, provenance: provenance(checkpoint) }); }
 }
@@ -30,7 +36,7 @@ function setup(answers: (pool: VenuePoolKey, at: number | null) => number | null
   const timers: { run: () => void; at: number }[] = [];
   const schedule = (run: () => void, ms: number) => { const timer = { run, at: now + ms }; timers.push(timer); return () => { const index = timers.indexOf(timer); if (index >= 0) timers.splice(index, 1); }; };
   const sources: Source[] = [];
-  const hub = new MarketStreamHub({ createSource: () => { const source = new Source(); sources.push(source); return source; }, schedule, defer: queueMicrotask, settle: (run) => { run(); return () => {}; }, random: () => 0, visible: () => true, onVisibilityChange: () => () => {} });
+  const hub = new MarketStreamHub({ createSource: () => { const source = new Source(); sources.push(source); return source; }, schedule, defer: queueMicrotask, random: () => 0, visible: () => true, onVisibilityChange: () => () => {} });
   const client = createTestQueryClient();
   const reads: [VenuePoolKey, number | null][] = [];
   const rows: ActivityRow[] = [];
@@ -67,7 +73,8 @@ test("a cached read behind the fence is read again until it reaches the fence ch
   let behind = true;
   const s = setup((pool, at) => pool === FIRST && behind ? (behind = false, 8) : at);
   await s.settle();
-  s.source().emit("hint", { type: "hello", provenance: provenance(1) });
+  s.source().emit("hint", { type: "hello", set: true, provenance: provenance(1) });
+  await s.settle();
   s.source().fence(FIRST, 12);
   await s.advance(5_000); // the frame-read floor
   assert.deepEqual(s.reads, [[FIRST, 12]]);
@@ -83,7 +90,8 @@ test("a cached read behind the fence is read again until it reaches the fence ch
 test("an older poll never replaces a read pinned to a later fence", async () => {
   const s = setup((_pool, at) => at);
   await s.settle();
-  s.source().emit("hint", { type: "hello", provenance: provenance(1) });
+  s.source().emit("hint", { type: "hello", set: true, provenance: provenance(1) });
+  await s.settle();
   s.source().fence(FIRST, 12);
   await s.advance(5_000);
   assert.equal(newestRead(s.client, FIRST, { stale: false, rows: [], checkpoint: 9 }).checkpoint, 12);
@@ -93,7 +101,8 @@ test("an older poll never replaces a read pinned to a later fence", async () => 
 test("a live pool has no poll while the other, not live, keeps its own; trades from both pools reach the list", async () => {
   const s = setup((_pool, at) => at);
   await s.settle();
-  s.source().emit("hint", { type: "hello", provenance: provenance(1) });
+  s.source().emit("hint", { type: "hello", set: true, provenance: provenance(1) });
+  await s.settle();
   s.source().fence(FIRST, 12);
   s.source().emit("status", { state: "unavailable", pool_key: SECOND });
   await s.advance(0);

@@ -8,7 +8,7 @@ import type { ChartPoolRead } from "./chart-client.ts";
 import { subscribeChartPrice, type ChartPriceUpdate } from "./chart-live-price.ts";
 import { subscribeChartRound, type ChartRoundUpdate } from "./chart-live-round.ts";
 import { ChartStream, type ChartStreamStatus } from "./chart-stream.ts";
-import { MarketStreamHub, type MarketEventSource } from "../market-stream-hub.ts";
+import { LINGER_MS, MarketStreamHub, type MarketEventSource } from "../market-stream-hub.ts";
 import { chartRequest } from "./chart-model.ts";
 
 const CURVE = `blast_curve:0x${"11".repeat(32)}`;
@@ -30,6 +30,7 @@ class Source implements MarketEventSource {
   listeners = new Map<string, ((event: { data?: string }) => void)[]>();
   addEventListener(type: string, listener: (event: { data?: string }) => void): void { this.listeners.set(type, [...this.listeners.get(type) ?? [], listener]); }
   close(): void { this.closed = true; }
+  send(): boolean { return false; }
   emit(type: string, value: unknown = {}): void { for (const listener of this.listeners.get(type) ?? []) listener({ data: JSON.stringify(value) }); }
   ready(checkpoint: number, poolKey = CURVE): void { this.emit("status", { state: "live", pool_key: poolKey, checkpoint, cursor: `${checkpoint}:0:0:0`, provenance: wireProvenance(checkpoint) }); }
 }
@@ -47,7 +48,7 @@ function setup(pools = [CURVE], requestFrom?: number, migration: MigrationMarker
   const schedule = (run: () => void, ms: number) => { const timer = { run, ms }; timers.push(timer); return () => { const index = timers.indexOf(timer); if (index >= 0) timers.splice(index, 1); }; };
   const hub = new MarketStreamHub({
     createSource: (url) => { urls.push(url); const source = new Source(); sources.push(source); return source; },
-    schedule, defer: queueMicrotask, settle: (run) => { run(); return () => {}; }, random: () => 0, visible: () => true, onVisibilityChange: () => () => {},
+    schedule, defer: queueMicrotask, random: () => 0, visible: () => true, onVisibilityChange: () => () => {},
   });
   const client = new ChartStream({
     pools, expected, migration: () => migration, request: () => ({ ...chartRequest({ interval: "1s", range: "all" }, NOW), ...(requestFrom === undefined ? {} : { from: requestFrom }) }),
@@ -56,7 +57,9 @@ function setup(pools = [CURVE], requestFrom?: number, migration: MigrationMarker
     hub, visible: () => true, schedule, now: () => now, ...(livePolls === undefined ? {} : { livePolls }),
     publish: (run) => { publications.push(run); return () => { const index = publications.indexOf(run); if (index >= 0) publications.splice(index, 1); }; }, random: () => 0,
   });
-  return { client, sources, urls, loads, sections, statuses, timers, publications, source: () => sources.at(-1)!, advance: (ms: number) => { now += ms; }, flush: () => publications.splice(0).forEach((run) => run()) };
+  /** The hub's linger after its last screen: the socket closes when it runs. */
+  const linger = () => { const timer = timers.find(({ ms }) => ms === LINGER_MS)!; timers.splice(timers.indexOf(timer), 1); timer.run(); };
+  return { client, sources, urls, loads, sections, statuses, timers, publications, linger, source: () => sources.at(-1)!, advance: (ms: number) => { now += ms; }, flush: () => publications.splice(0).forEach((run) => run()) };
 }
 
 test("stream opens before REST, shows behind-fence history, then applies only later checkpoints once", async () => {
@@ -92,7 +95,9 @@ test("stream opens before REST, shows behind-fence history, then applies only la
   assert.equal(final.state === "available" && final.data.candles[0].volumeQuote, 17n);
   s.client.stop();
   unsubscribe();
-  await settle(); // the hub closes once no subscriber is left
+  await settle();
+  assert.equal(s.source().closed, false, "the socket lingers for a next screen");
+  s.linger(); // the hub closes once no subscriber is left
   assert.equal(s.source().closed, true);
   assert.equal(s.timers.length, 0);
 });
@@ -281,8 +286,9 @@ test("disconnect invalidates prices, settles late reads harmlessly and retries w
   s.source().ready(12); const loading = s.loads.at(-1)!;
   s.client.stop(); loading.resolve(answer(12)); await settle();
   assert.equal(s.sections.length, 0);
-  assert.equal(s.timers.length, 0);
   unsubscribe();
+  s.linger();
+  assert.equal(s.timers.length, 0);
 });
 
 // This fails if a chart whose history read lags behind a busy pool ends the tab's socket, or
@@ -721,7 +727,7 @@ test("a tab shown after a long hide reads history at once, as a fresh chart did"
   const timers: { run: () => void; ms: number }[] = [];
   const schedule = (run: () => void, ms: number) => { const timer = { run, ms }; timers.push(timer); return () => { const index = timers.indexOf(timer); if (index >= 0) timers.splice(index, 1); }; };
   const hub = new MarketStreamHub({
-    createSource: () => new Source(), schedule, defer: queueMicrotask, settle: (run) => { run(); return () => {}; }, random: () => 0, visible: () => visible,
+    createSource: () => new Source(), schedule, defer: queueMicrotask, random: () => 0, visible: () => visible,
     onVisibilityChange: (listener) => { onVisibility = listener; return () => {}; },
   });
   const loads: string[] = [];

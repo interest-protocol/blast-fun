@@ -163,6 +163,18 @@ test("R3-26: one socket per tab, opened lazily by the first surface; subscribe a
   assert.equal(late.looks.length, 0);
 });
 
+// This fails if a later pong (the market socket sends one each time a `set` adds a presale) makes surfaces read again.
+test("a second pong once live is ignored: no extra look and no new subscribe", () => {
+  const w = world();
+  const tape = surface(w, "happening");
+  w.live();
+  const sent = w.socket().sent.length;
+  w.socket().receive({ type: "pong", presale_checkpoint: 41 });
+  w.socket().receive({ type: "pong" });
+  assert.deepEqual(tape.looks.map((look) => look.hint?.cause), ["connect"]);
+  assert.equal(w.socket().sent.length, sent);
+});
+
 test("R3-26-AC-2: a hint is a signal, not data: a frame with fabricated amounts gives a surface only when and why", () => {
   const w = world();
   const tape = surface(w);
@@ -558,7 +570,7 @@ test("the socket adapter forwards hints, and a drop or a refusal closes it for t
   for (const ending of ["error", "refused"]) {
     const listeners = new Map<string, (event: { data?: string }) => void>();
     let closed = 0;
-    const source: MarketEventSource = { addEventListener: (type, listener) => { listeners.set(type, listener); }, close: () => { closed += 1; } };
+    const source: MarketEventSource = { addEventListener: (type, listener) => { listeners.set(type, listener); }, close: () => { closed += 1; }, send: () => false };
     const adapter = socketHintStream(source, () => () => undefined);
     const frames: unknown[] = [];
     let disconnected = 0;
@@ -576,7 +588,7 @@ test("the socket adapter forwards hints, and a drop or a refusal closes it for t
 test("the activity-only socket closes as failed when its hello or heartbeat stops, and the client reconnects", () => {
   const listeners = new Map<string, (event: { data?: string }) => void>();
   const closes: (boolean | undefined)[] = [];
-  const source: MarketEventSource = { addEventListener: (type, listener) => { listeners.set(type, listener); }, close: (failed) => { closes.push(failed); } };
+  const source: MarketEventSource = { addEventListener: (type, listener) => { listeners.set(type, listener); }, close: (failed) => { closes.push(failed); }, send: () => false };
   const timers: { run: () => void; ms: number; cancelled: boolean }[] = [];
   const armed = () => timers.filter((timer) => !timer.cancelled);
   const adapter = socketHintStream(source, (run, ms) => {
