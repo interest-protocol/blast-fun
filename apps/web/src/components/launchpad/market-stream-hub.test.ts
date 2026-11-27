@@ -952,6 +952,50 @@ test("a presale left while its set is in flight keeps its pong; wanted back afte
   assert.equal(s.sources.length, 1);
 });
 
+// This fails if a pool that comes back from `leaving` replays stats older than the socket already sent.
+test("a pool away in leaving keeps its newest stats, and a screen that brings it back gets those", async () => {
+  const s = setup();
+  const coin = `0x${"44".repeat(32)}::meme::MEME`;
+  const stats = (checkpoint: number) => ({ type: "coin_stats", coin, pool_key: CURVE, checkpoint, timestamp_ms: NOW + checkpoint, cursor: `${checkpoint}:0:0:0`, provenance: wireProvenance(checkpoint), holders: checkpoint, price: "0.5" });
+  const first = s.hub.subscribe({ pools: [CURVE], expected, listener: watcher().listener });
+  s.source().hello();
+  s.source().fence(10);
+  s.source().emit("stats", stats(20));
+  first.stop();
+  s.hub.subscribe({ pools: [VENUE], expected, listener: watcher([VENUE]).listener });
+  await settle();
+  s.source().emit("stats", stats(21)); // before the answer that removes it
+  const seen: unknown[] = [];
+  s.hub.subscribe({ pools: [CURVE], expected, listener: { ...watcher().listener, stats: (frame) => seen.push(frame.holders) } });
+  await settle();
+  assert.deepEqual(seen, [21]);
+});
+
+// This fails if a presale brought back while the `set` that adds it is unanswered takes a pong before the answer.
+test("a presale brought back before the set that adds it is answered waits for that answer", async () => {
+  const s = setup();
+  s.hub.subscribe({ pools: [CURVE], expected, listener: watcher().listener });
+  s.source().hello();
+  s.source().fence(10);
+  const sale = `0x${"66".repeat(32)}`;
+  const first = s.hub.subscribe({ pools: [], presale: sale, expected: null, listener: { state: () => {} } });
+  await settle();
+  assert.equal(s.source().sets().at(-1)!.presale, sale);
+  first.stop();
+  const other = s.hub.subscribe({ pools: [], presale: `0x${"77".repeat(32)}`, expected: null, listener: { state: () => {} } });
+  await settle();
+  other.stop();
+  const ready: (number | null)[] = [];
+  s.hub.subscribe({ pools: [], presale: sale, expected: null, listener: { state: () => {}, presaleReady: (checkpoint) => ready.push(checkpoint) } });
+  await settle();
+  s.source().emit("hint", { type: "pong", presale_checkpoint: 40 }); // not this presale's: the relay has not added it
+  assert.equal(ready.includes(40), false);
+  s.source().answer();
+  s.source().emit("hint", { type: "pong", presale_checkpoint: 41 });
+  assert.equal(ready.at(-1), 41);
+  assert.equal(s.source().sets().length, 1);
+});
+
 // This fails if a pool fenced under one deployment comes back with that fence after the tab moved to another.
 test("a pool fenced under another deployment never comes back with its old fence: wanted again, it opens a new socket", async () => {
   const s = setup();

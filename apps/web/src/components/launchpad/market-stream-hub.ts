@@ -541,8 +541,7 @@ export class MarketStreamHub {
     }
     for (const [key, pool] of connection.pools) {
       if (pools.has(key)) continue;
-      // Its stats are not kept current while it is away (`stats` drops them), so it comes back without them.
-      if (streamed.has(key)) connection.leaving.set(key, Object.assign(pool, { stats: undefined }));
+      if (streamed.has(key)) connection.leaving.set(key, pool);
       else unfence(pool, "waiting");
     }
     connection.pools = pools;
@@ -562,7 +561,8 @@ export class MarketStreamHub {
     connection.presale = presale;
     connection.presaleFence = back?.fence ?? null;
     connection.presaleSeen = back?.seen ?? 0;
-    connection.presaleAwaiting = presale !== undefined && !back;
+    // One brought back from a `set` still unanswered waits for that answer, like a new one.
+    connection.presaleAwaiting = presale !== undefined && connection.held.presale !== presale;
     return back?.fence != null;
   }
 
@@ -905,10 +905,11 @@ export class MarketStreamHub {
       } catch {
         return;
       }
-      const target = connection.pools.get(frame.pool_key);
+      // A leaving pool keeps its stats current (no screen hears them), so it comes back with the newest.
+      const target = connection.pools.get(frame.pool_key) ?? connection.leaving.get(frame.pool_key);
       if (target?.fence == null) return;
       // One coin can span two pools (curve, then venue): only its newest stats count, from either pool.
-      const others = [...connection.pools.values()].filter((pool) => pool.stats?.coin === frame.coin);
+      const others = [...connection.pools.values(), ...connection.leaving.values()].filter((pool) => pool.stats?.coin === frame.coin);
       const newer = ({ checkpoint, cursor }: CoinStatsFrame): boolean => checkpoint > frame.checkpoint || (checkpoint === frame.checkpoint && compareEventCursors(cursor, frame.cursor) > 0);
       if (others.some((pool) => newer(pool.stats!))) return;
       for (const pool of others) pool.stats = undefined;
