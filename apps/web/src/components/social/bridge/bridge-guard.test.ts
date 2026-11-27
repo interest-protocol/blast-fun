@@ -66,6 +66,14 @@ test("the guard refuses every quote that is not exactly what was asked", () => {
   assert.equal(reason(QUOTES.solToSuiUsdc, { ...SOLANA_SOL, sourceAddress: SOLANA_SOL.sourceAddress.toLowerCase() }), "wrong refund address");
 });
 
+test("wallet approvals cannot use a different token or amount from the embedded order", () => {
+  const base = QUOTES.baseUsdcToSui;
+  assert.equal(reason({ ...base, fromToken: { ...base.fromToken, contract: `0x${"22".repeat(20)}` } }, BASE_USDC), "wrong source token");
+  assert.equal(reason({ ...base, effectiveAmountIn64: "20000001" }, BASE_USDC), "wrong amount");
+  assert.equal(reason(withOrder(base, (params) => { params.expectedAmountIn = "20000001"; }), BASE_USDC), "wrong amount");
+  assert.equal(reason({ ...base, fromChain: "ethereum" }, BASE_USDC), "wrong chains");
+});
+
 test("quote facts feed the rows: amount out, floor, fee, time", () => {
   const usdc = CHAINS.base.tokens[1];
   assert.deepEqual(quoteRows(quoteFacts(QUOTES.baseUsdcToSui, usdc), usdc, DESTINATIONS[0]!), {

@@ -20,9 +20,7 @@ export type RateBucket =
   | "share"
   | "code"
   | "wallet"
-  | "recovery"
   | "wallet_ip"
-  | "recovery_ip"
   | "callsign"
   | "completion"
   | "telemetry"
@@ -58,10 +56,7 @@ export const WEB_ROUTE_RATE_BUCKETS = [
   "launchpad_discovery",
   "launchpad_wallet_launches",
   "launchpad_theses_read",
-  "mission_control_owner_read",
-  "mission_control_owner_card",
   "mission_control_card_image",
-  "mission_control_owner_write",
 ] as const;
 
 export type WebRouteRateBucket = (typeof WEB_ROUTE_RATE_BUCKETS)[number];
@@ -287,29 +282,15 @@ export function createRatePolicyRegistry(
       subjectScope: "ip_address",
       windows: WALLET_WINDOWS,
     }),
-    recovery: Object.freeze({
-      bucket: "recovery",
-      version: 1,
-      subjectScope: "ip_address",
-      windows: Object.freeze([
-        Object.freeze({ limit: 5, windowSeconds: 600 }),
-      ]),
-    }),
-    // Review L3: `wallet` and `recovery` are keyed by the client IP and an
-    // address the client chooses, so rotating addresses multiplied them. These
-    // count the client IP alone, beside them: about a dozen wallet sign-ins
-    // (an issue and a verify each) or crew restores per ten minutes per address.
+    // Review L3: `wallet` is keyed by the client IP and an address the client
+    // chooses, so rotating addresses multiplied it. This counts the client IP
+    // alone, beside it: about a dozen wallet sign-ins (an issue and a verify
+    // each) per ten minutes per address.
     wallet_ip: Object.freeze({
       bucket: "wallet_ip",
       version: 1,
       subjectScope: "ip",
       windows: Object.freeze([Object.freeze({ limit: 30, windowSeconds: 600 })]),
-    }),
-    recovery_ip: Object.freeze({
-      bucket: "recovery_ip",
-      version: 1,
-      subjectScope: "ip",
-      windows: Object.freeze([Object.freeze({ limit: 20, windowSeconds: 600 })]),
     }),
     callsign: Object.freeze({
       bucket: "callsign",
@@ -471,19 +452,12 @@ const WEB_ROUTE_RATE_POLICIES: Readonly<Record<WebRouteRateBucket, RatePolicy>> 
   // A wallet's own launches as discovery rows: read on opening the portfolio's Launches and paging.
   launchpad_wallet_launches: singleWindow("launchpad_wallet_launches", "ip", [{ limit: 120, windowSeconds: 60 }]),
   launchpad_theses_read: singleWindow("launchpad_theses_read", "ip", [{ limit: 240, windowSeconds: 60 }]),
-  // A member's own profile or recruits.
-  mission_control_owner_read: singleWindow("mission_control_owner_read", "ip", [{ limit: 240, windowSeconds: 60 }]),
-  // The owner card renders an image on a miss.
-  mission_control_owner_card: singleWindow("mission_control_owner_card", "ip", [{ limit: 30, windowSeconds: 60 }]),
   // A published card's public image (`/card/{id}/image`, outside `/api`, so
   // no gate; review M3): a request the CDN did not answer reads the card and
   // may render. Unfurlers (X, Slack, Discord, Telegram) fetch from shared
   // addresses, so the budget is generous; non-canonical URLs are redirected
   // before they count.
   mission_control_card_image: singleWindow("mission_control_card_image", "ip", [{ limit: 300, windowSeconds: 60 }]),
-  // Review L5: a member's own writes that had no bucket (display name,
-  // primary wallet, sign-out); each reads the session and writes a row.
-  mission_control_owner_write: singleWindow("mission_control_owner_write", "ip", [{ limit: 30, windowSeconds: 60 }]),
 });
 
 function presalePolicy(

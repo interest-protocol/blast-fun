@@ -66,6 +66,7 @@ export type BridgeRow = Readonly<{
  * `mayan-sdk.ts` implements it with the Mayan SDK; tests pass a fake.
  */
 export type BridgeSdk = Readonly<{
+  tokens(chain: BridgeChain): Promise<readonly SourceToken[]>;
   quote(input: QuoteInput): Promise<Quote>;
   balance(chain: BridgeChain, token: SourceToken, owner: string): Promise<bigint>;
   /** EVM tokens only: whether the router may spend the quote's amount already. */

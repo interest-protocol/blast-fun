@@ -17,6 +17,7 @@ import { focusNextFrame } from "#web/lib/deferred-focus.ts";
 import { useEffect, useId, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 
 import { useShellActions } from "#web/components/blast-ui/shell-actions.tsx";
+import { useRowKeys } from "#web/components/ui-libraries/use-row-keys.ts";
 import { usePhoneLayout } from "#web/components/blast-ui/use-shell-prefs.ts";
 import { Collapse } from "#web/components/blast-ui/Collapse.tsx";
 import { DateStamp } from "#web/components/blast-ui/DateStamp.tsx";
@@ -699,24 +700,6 @@ function Tile({ color, label, value, sub, locked }: Readonly<{ color: string; la
 
 const vestSummary = (row: CreateBuyerVesting, from: string) =>
   row.duration > 0 ? `Vests ${row.duration} ${VESTING_UNIT_LABEL[row.duration_unit]}${row.cliff ? `, ${row.cliff}-${VESTING_UNIT_LABEL[row.cliff_unit]} cliff` : ""} · ${from}` : "";
-
-/**
- * Stable keys for a list of recipient rows, which carry no id of their own: one
- * per row, kept through a removal (`drop`, by index), a new one for each row
- * added at the end, so removing a row never hands its neighbour's inputs to it.
- */
-function useRowKeys(count: number): Readonly<{ keys: readonly number[]; drop: (index: number) => void }> {
-  const [state, setState] = useState(() => ({ keys: Array.from({ length: count }, (_, at) => at), next: count }));
-  let current = state;
-  if (state.keys.length !== count) {
-    const grow = count - state.keys.length;
-    current = grow > 0
-      ? { keys: [...state.keys, ...Array.from({ length: grow }, (_, at) => state.next + at)], next: state.next + grow }
-      : { keys: state.keys.slice(0, count), next: state.next };
-    setState(current);
-  }
-  return { keys: current.keys, drop: (index) => setState((was) => ({ keys: was.keys.filter((_, at) => at !== index), next: was.next })) };
-}
 
 /** A recipient's vesting: the same switch as the buyers'; its "Vesting" label shows where the column header does not. */
 function RecipientVesting({ form, path, row, scope }: Readonly<{ form: Form; path: string; row: CreateRecipient; scope: string }>) {

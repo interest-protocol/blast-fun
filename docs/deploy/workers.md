@@ -28,6 +28,13 @@ node --import ./scripts/register-runtime-types.mjs --experimental-strip-types \
 
 For plans that evaluate holder eligibility, frozen exclusions include the per-coin blacklist, launch and presale team allocations, evidenced treasury destinations, protocol objects, and `REWARDS_EXCLUSIONS`. Cuts, holders, allocations, and custody survive restart. The planner and signer require a recorded payout policy for unpublished plans. The treasury remains the destination for gas reimbursement.
 
+Every new plan requires a daily average holding worth at least US$10 at the
+closing price, including vaults with no minimum payout budget. Plans already
+frozen without a recorded holding minimum keep their US$5 rule. Deploy the
+updated vault-rewards worker before the planner so it can verify commitments
+for plans with a recorded holding minimum. Keep both updated until those plans
+finish if rolling back.
+
 `VAULT_REWARDS_RELAY_BATCH` defaults to 1,023, the largest accepted Sui command count. The relay packs the largest ordered prefix that fits in a signed 128 KiB transaction. It dry-runs with up to 1 SUI from the signer’s address balance, budgets gas after Sui’s storage rebate, plus up to 10% headroom, and checks the adjusted bytes before signing. On a gas or size limit, it probes smaller prefixes to find the largest one that fits before signing. The signer independently caps claim gas at 1 SUI per transaction.
 
 ## Indexer contract and cutover gates

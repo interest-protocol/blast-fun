@@ -55,15 +55,8 @@
     cursor: var(--blast-cursor-text, text) !important;
   }
 
-  [data-blast-ui] [data-grip],
-  [data-blast-ui] [data-grip] * {
-    cursor: var(--blast-cursor-grab, grab) !important;
-  }
-
   [data-blast-ui] [data-dragging],
-  [data-blast-ui] [data-dragging] *,
-  body.blast-card-dragging [data-blast-ui],
-  body.blast-card-dragging [data-blast-ui] * {
+  [data-blast-ui] [data-dragging] * {
     cursor: var(--blast-cursor-grabbing, grabbing) !important;
   }
 

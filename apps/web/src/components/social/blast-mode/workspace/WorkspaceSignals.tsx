@@ -21,6 +21,7 @@ import type {
   HomeTapeEvent,
 } from "@blast/core/web/contracts/home.ts";
 import { bxAgo } from "@blast/core/web/format.ts";
+import { coinPagePath } from "@blast/core/modules/launchpad-coin/page-key.ts";
 import { useWorkspace } from "./workspace-context";
 import { WorkspaceToolbarTarget } from "./frame-targets";
 import {
@@ -256,16 +257,16 @@ function Signal({
   );
   return (
     <li>
-      {event.coin.presale_id ? (
-        <IntentLink
-          href={presaleHref(event.coin.presale_id)}
-          className={styles.event}
-        >
-          {content}
-        </IntentLink>
-      ) : (
-        <span className={styles.event}>{content}</span>
-      )}
+      <IntentLink
+        href={
+          event.coin.presale_id === null
+            ? coinPagePath(event.coin.coin_type)
+            : presaleHref(event.coin.presale_id)
+        }
+        className={styles.event}
+      >
+        {content}
+      </IntentLink>
     </li>
   );
 }

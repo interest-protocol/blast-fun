@@ -22,7 +22,7 @@ import { useWatchStar } from "../watchlist/Watchlist";
 import { PresaleMark } from "../post/PostMedia";
 import styles from "./CoinHome.module.css";
 import { homeAnalytics } from "./home-analytics";
-import { homeCoinHref, homeCoinKey, homeStatus, marketVolume, shareText, type HomeBuyCue, type HomeStatus } from "./home-model";
+import { homeCoinHref, homeCoinKey, homeStatus, marketVolume, shareText, type HomePop, type HomeStatus } from "./home-model";
 import { readableUsd } from "#web/lib/market-format.ts";
 import type { HomeTrade } from "./use-home-prices";
 import type { DisplayPrice } from "@blast/core/modules/launchpad-contract/market-stream.ts";
@@ -34,8 +34,8 @@ export type CoinCardProps = Readonly<{
   livePrice?: DisplayPrice;
   /** This coin's latest own trade on the stream, apart from SUI moves. */
   trade?: HomeTrade | null;
-  /** A buy that just landed on this coin. */
-  buy?: HomeBuyCue;
+  /** Trades popping on this coin right now. */
+  pops?: readonly HomePop[];
   window: HomeWindow;
   nowMs: number;
   /** The trading flag: without it no trade control is drawn. */
@@ -49,7 +49,7 @@ export type CoinCardProps = Readonly<{
  * cell, "—" where a figure is unknown, so the columns line up. The ticker
  * link covers the row; Buy has its own target above the link.
  */
-export function CoinCard({ coin, window, nowMs, trading, watchlist = false, marketLoading = false, livePrice, trade = null, buy }: CoinCardProps) {
+export function CoinCard({ coin, window, nowMs, trading, watchlist = false, marketLoading = false, livePrice, trade = null, pops }: CoinCardProps) {
   const marketCoin = useMemo(() => coinAtPrice(coin, livePrice), [coin, livePrice]);
   const valuationAt = livePrice && !coin.live_inputs ? coin.price_as_of_ms : marketCoin.price_as_of_ms;
   const id = useId();
@@ -61,7 +61,7 @@ export function CoinCard({ coin, window, nowMs, trading, watchlist = false, mark
   return (
     <li className={styles.item} data-lifecycle={coin.lifecycle} data-list-row={homeCoinKey(coin)} role="none">
       <div aria-labelledby={id} className={clsx(styles.row, styles.cols, styles.coinRow)} data-surface="" role="row">
-        <CoinIdentity buy={buy} coin={coin} id={id} nowMs={nowMs} venue={status.venue || filling ? null : coin.venue} />
+        <CoinIdentity coin={coin} pops={pops} id={id} nowMs={nowMs} venue={status.venue || filling ? null : coin.venue} />
         <MarketCap amount={marketCoin.mobile_market?.market_cap_usd ?? null} at={valuationAt} loading={marketLoading} nowMs={nowMs} />
         <PriceChange coin={marketCoin} trade={trade} window={window} />
         <span className={clsx("num", styles.vol)} role="cell">
@@ -135,7 +135,7 @@ function HoldersCell({ coin }: Readonly<{ coin: HomeCoin }>) {
 }
 
 /** The identity: the coin icon, linked symbol, name, age and the venue's logo (its name for assistive technology and on hover) when the Status cell does not name it. */
-function CoinIdentity({ coin, id, nowMs, buy, venue }: Readonly<{ coin: HomeCoin; id: string; nowMs: number; buy?: HomeBuyCue; venue: string | null }>) {
+function CoinIdentity({ coin, id, nowMs, pops, venue }: Readonly<{ coin: HomeCoin; id: string; nowMs: number; pops?: readonly HomePop[]; venue: string | null }>) {
   const shownVenue = venue && coin.lifecycle !== "cancelled" ? venue : null;
   const href = homeCoinHref(coin) ?? coinPagePath(coin.coin_type);
   const distinct = coin.name.trim().toLowerCase() !== coin.symbol.trim().toLowerCase();
@@ -144,8 +144,8 @@ function CoinIdentity({ coin, id, nowMs, buy, venue }: Readonly<{ coin: HomeCoin
     <span className={styles.ident} role="cell">
       <PresaleMark coinType={coin.coin_type} presaleId={homeCoinKey(coin)} size={44} src={coin.icon_url} />
       <span className={styles.identText}>
-        {buy ? <span aria-hidden="true" className={styles.buyAnchor}>
-          <span className={clsx("num", styles.buyCue)} data-home-buy={buy.tier}>{buy.text}</span>
+        {pops?.length ? <span aria-hidden="true" className={styles.popAnchor}>
+          {pops.map(pop => <span key={pop.id} className={clsx("num", styles.pop)} data-home-pop={pop.cue.tier} data-side={pop.cue.side} data-pop-slot={pop.slot}>{pop.cue.text}</span>)}
         </span> : null}
         <span className="coinNamed">
           <Link aria-label={distinct ? `Open ${coin.name} (${coin.symbol})` : `Open ${coin.symbol}`} className={styles.symbol} href={href} id={id} prefetch={false}>

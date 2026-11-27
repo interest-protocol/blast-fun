@@ -1,7 +1,8 @@
 import { USDC_COIN_TYPE } from "@blast/core/lib/sui/coin-types.ts";
+import { groupedExact } from "@blast/core/web/exact-amount.ts";
 import { NO_VALUE } from "@blast/core/web/format.ts";
 
-import { atomsToField, parseAtoms } from "../trade/trade-ticket.ts";
+import { parseAtoms } from "../trade/trade-ticket.ts";
 
 import type { BridgeChain } from "./bridge-config.ts";
 
@@ -13,7 +14,9 @@ export type SourceToken = Readonly<{
   native: boolean;
   /** Atoms kept back by Max so the wallet can still pay its network fee. */
   reserve: bigint;
-  logo: string;
+  logo: string | null;
+  name?: string;
+  standard?: "spl" | "spl2022";
 }>;
 
 export type ChainInfo = Readonly<{ label: string; logo: string; kind: "evm" | "solana"; chainId: number | null; tokens: readonly [SourceToken, SourceToken] }>;
@@ -32,12 +35,12 @@ const LOGO = {
   sui: "/blast-ui/coins/sui.svg",
 } as const;
 
-function usdc(mayan: string): SourceToken {
-  return { symbol: "USDC", decimals: 6, mayan, native: false, reserve: 0n, logo: LOGO.usdc };
+function usdc(mayan: string, standard?: SourceToken["standard"]): SourceToken {
+  return { symbol: "USDC", name: "USD Coin", decimals: 6, mayan, native: false, reserve: 0n, logo: LOGO.usdc, standard };
 }
 
 function eth(reserve: bigint): SourceToken {
-  return { symbol: "ETH", decimals: 18, mayan: NATIVE, native: true, reserve, logo: LOGO.ethereum };
+  return { symbol: "ETH", name: "Ether", decimals: 18, mayan: NATIVE, native: true, reserve, logo: LOGO.ethereum };
 }
 
 /** Native token first, then USDC; the reserve covers a few sends at ordinary fees. */
@@ -51,16 +54,21 @@ export const CHAINS: Readonly<Record<BridgeChain, ChainInfo>> = {
     logo: LOGO.polygon,
     kind: "evm",
     chainId: 137,
-    tokens: [{ symbol: "POL", decimals: 18, mayan: NATIVE, native: true, reserve: 300_000_000_000_000_000n, logo: LOGO.polygon }, usdc("0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359")],
+    tokens: [{ symbol: "POL", name: "Polygon", decimals: 18, mayan: NATIVE, native: true, reserve: 300_000_000_000_000_000n, logo: LOGO.polygon }, usdc("0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359")],
   },
   solana: {
     label: "Solana",
     logo: LOGO.solana,
     kind: "solana",
     chainId: null,
-    tokens: [{ symbol: "SOL", decimals: 9, mayan: NATIVE, native: true, reserve: 10_000_000n, logo: LOGO.solana }, usdc("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v")],
+    tokens: [{ symbol: "SOL", name: "Solana", decimals: 9, mayan: NATIVE, native: true, reserve: 10_000_000n, logo: LOGO.solana }, usdc("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", "spl")],
   },
 };
+
+/** Solana mints use case-sensitive base58; EVM addresses can have mixed-case checksums. */
+export function sourceAddressKey(chain: BridgeChain, address: string): string {
+  return chain === "solana" ? address : address.toLowerCase();
+}
 
 export type DestinationToken = Readonly<{ symbol: "SUI" | "USDC"; decimals: number; coinType: string; logo: string }>;
 
@@ -75,10 +83,15 @@ export function amountAtoms(text: string, token: SourceToken): bigint | null {
   return atoms && atoms > 0n ? atoms : null;
 }
 
+/** The full source precision, including token balances smaller than one millionth. */
+export function bridgeAmountField(atoms: bigint, decimals: number): string {
+  return groupedExact({ n: atoms, scale: decimals }, decimals);
+}
+
 /** Max fills the balance, less the fee reserve for a native token. */
 export function maxField(balance: bigint, token: SourceToken): string {
   const spendable = balance - (token.native ? token.reserve : 0n);
-  return spendable > 0n ? atomsToField(spendable, token.decimals) : "0";
+  return spendable > 0n ? bridgeAmountField(spendable, token.decimals) : "0";
 }
 
 /** True when the amount, plus the fee reserve for a native token, is more than the balance. */

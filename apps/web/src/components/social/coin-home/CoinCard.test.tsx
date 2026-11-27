@@ -8,7 +8,7 @@ import { AppRouterContext } from "next/dist/shared/lib/app-router-context.shared
 import { QueryProvider } from "#web/lib/query/provider.tsx";
 import type { HomeCoin, HomeWindow } from "@blast/core/modules/social/contracts/home.ts";
 import { CoinCard } from "./CoinCard";
-import type { HomeBuyCue } from "./home-model";
+import type { HomeBuyTier, HomePop, HomeTradeSide } from "./home-model";
 import { CoinList, type ListProps } from "./sources";
 import { installTestDom, recordAnimations, waitFor } from "../../../../test/fixtures/social/test-dom.ts";
 import { installLiveSocket, liveTicket } from "../../../../test/fixtures/lib/live-socket.testing.ts";
@@ -169,11 +169,11 @@ test("a row with no change figure still washes on its own trade, and on the firs
   assert.equal(change()?.style.getPropertyValue("--home-price-direction"), "var(--up-soft)");
 });
 
-function render(value: HomeCoin, loading = false, nowMs = 1, window: HomeWindow = "24h", buy?: HomeBuyCue) {
+function render(value: HomeCoin, loading = false, nowMs = 1, window: HomeWindow = "24h", pops?: readonly HomePop[]) {
   const client = new QueryClient();
   try {
     return new JSDOM(renderToStaticMarkup(<AppRouterContext value={router}><QueryProvider client={client}>
-      <CoinCard buy={buy} coin={value} marketLoading={loading} window={window} nowMs={nowMs} trading />
+      <CoinCard coin={value} pops={pops} marketLoading={loading} window={window} nowMs={nowMs} trading />
     </QueryProvider></AppRouterContext>));
   } finally { client.clear(); }
 }
@@ -378,17 +378,21 @@ test("a newer Home price revalues each supply independently and preserves missin
   assert.equal(unknown.mobile_market?.market_cap_usd, null);
 });
 
-// Fails if a buy's figure is missing, or a large one lands as quietly as a small one.
-test("a buy shows its figure, sized by the buy", () => {
-  const cue = (buy?: HomeBuyCue) => {
-    const dom = render(coin, false, 1, "24h", buy);
+// Fails if a pop's figure is missing, a large buy lands as quietly as a small one, a sell reads as a buy,
+// or pops landing together stack on one spot.
+test("a row pops each trade, sized and coloured by the trade, each in its own slot", () => {
+  const pop = (id: string, slot: number, text: string, tier: HomeBuyTier, side: HomeTradeSide = "buy"): HomePop =>
+    ({ id, coinKey: "a", slot, cue: { text, tier, side } });
+  const shown = (pops?: readonly HomePop[]) => {
+    const dom = render(coin, false, 1, "24h", pops);
     try {
-      const figure = dom.window.document.querySelector("[data-home-buy]");
-      return [figure?.textContent, figure?.getAttribute("data-home-buy")];
+      return [...dom.window.document.querySelectorAll("[data-home-pop]")].map(figure =>
+        [figure.textContent, figure.getAttribute("data-home-pop"), figure.getAttribute("data-side"), figure.getAttribute("data-pop-slot")]);
     } finally { dom.window.close(); }
   };
-  assert.deepEqual(cue(), [undefined, undefined]);
-  assert.deepEqual(cue({ text: "+$13", tier: "small" }), ["+$13", "small"]);
-  assert.deepEqual(cue({ text: "+$420", tier: "big" }), ["+$420", "big"]);
-  assert.deepEqual(cue({ text: "+$1.2K", tier: "huge" }), ["+$1.2K", "huge"]);
+  assert.deepEqual(shown(), []);
+  assert.deepEqual(shown([pop("1", 0, "+$13", "small")]), [["+$13", "small", "buy", "0"]]);
+  assert.deepEqual(shown([pop("1", 0, "+$420", "big"), pop("2", 2, "+$1.2K", "huge"), pop("3", 1, "\u2212$15", "small", "sell")]), [
+    ["+$420", "big", "buy", "0"], ["+$1.2K", "huge", "buy", "2"], ["\u2212$15", "small", "sell", "1"],
+  ]);
 });

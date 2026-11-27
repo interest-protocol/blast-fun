@@ -46,6 +46,7 @@ class Source implements MarketEventSource {
   readonly listeners = new Map<string, ((event: { data?: string }) => void)[]>();
   addEventListener(type: string, listener: (event: { data?: string }) => void): void { this.listeners.set(type, [...this.listeners.get(type) ?? [], listener]); }
   close(): void {}
+  send(): boolean { return false; }
   emit(type: string, value: unknown = {}): void { for (const listener of this.listeners.get(type) ?? []) listener({ data: JSON.stringify(value) }); }
 }
 
@@ -58,7 +59,7 @@ test("Blast mode's focused coin moves on stream trades, keeps its stream across 
   const hub = new MarketStreamHub({
     createSource: () => { const source = new Source(); sources.push(source); return source; },
     schedule: () => () => {},
-    defer: queueMicrotask, settle: (run) => { run(); return () => {}; }, random: () => 0, visible: () => true, onVisibilityChange: () => () => {},
+    defer: queueMicrotask, random: () => 0, visible: () => true, onVisibilityChange: () => () => {},
   });
   let checkpoint = 10;
   let reads = 0;
@@ -136,7 +137,7 @@ test("a migrated coin's stream survives an empty read: its candle frames keep th
   const hub = new MarketStreamHub({
     createSource: () => { const source = new Source(); sources.push(source); return source; },
     schedule: () => () => {},
-    defer: queueMicrotask, settle: (run) => { run(); return () => {}; }, random: () => 0, visible: () => true, onVisibilityChange: () => () => {},
+    defer: queueMicrotask, random: () => 0, visible: () => true, onVisibilityChange: () => () => {},
   });
   const venue = `cetus:0x${"33".repeat(32)}`;
   const migrated = history(10);

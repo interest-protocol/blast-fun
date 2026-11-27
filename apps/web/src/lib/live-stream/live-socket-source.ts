@@ -10,12 +10,6 @@ export const LIVE_OFF_MS = 30 * 60_000;
 export const LIVE_MAX_FAILURES = 3;
 /** A ticket not answered by then is a failure, like a socket that never speaks. */
 export const LIVE_TICKET_TIMEOUT_MS = 10_000;
-/**
- * A ticket asked for by a source closed before it used it (a screen joined the page while the ticket was on its way,
- * so the tab's stream changed) serves the tab's next source for this long after it was asked for, rather than a second
- * ticket. A ticket names no pools; it lives 60 s and opens one socket.
- */
-export const LIVE_SPARE_TICKET_MS = 30_000;
 
 /** A long wait stretched by a random 0–50%, so tabs that failed together do not return together. */
 export function spreadWait(ms: number, random: () => number): number {
@@ -31,6 +25,8 @@ export type LiveSocketLike = {
   onmessage: ((event: { data: unknown }) => void) | null;
   onclose: ((event: { code: number }) => void) | null;
   close(): void;
+  /** False unless the socket is open. */
+  send(text: string): boolean;
 };
 
 export type LiveSourceDependencies = Readonly<{
@@ -42,13 +38,11 @@ export type LiveSourceDependencies = Readonly<{
   random: () => number;
 }>;
 
-type TicketAsk = Readonly<{ grant: Promise<LiveGrant | null>; askedAt: number }>;
-
-/** Per tab: shared by every source the tab opens. `offUntil`: no ticket is asked for before this. `spare`: see `LIVE_SPARE_TICKET_MS`. */
-export type LiveSourceState = { failures: number; offUntil: number; notBefore: number; spare: TicketAsk | null };
+/** Per tab: shared by every source the tab opens. `offUntil`: no ticket is asked for before this. */
+export type LiveSourceState = { failures: number; offUntil: number; notBefore: number };
 
 export function liveSourceState(): LiveSourceState {
-  return { failures: 0, offUntil: 0, notBefore: 0, spare: null };
+  return { failures: 0, offUntil: 0, notBefore: 0 };
 }
 
 type Listener = (event: { data?: string }) => void;
@@ -84,8 +78,6 @@ export function liveMarketSource(path: string, state: LiveSourceState, deps: Liv
   let closed = false;
   /** This attempt asked for a ticket but its socket sent nothing yet: a close now, by either side or at the caller's deadline, counts as a failure. */
   let silent = false;
-  /** The ticket on its way to this source. */
-  let asking: TicketAsk | null = null;
 
   const emit = (type: string, event: { data?: string }) => {
     for (const listener of [...listeners.get(type) ?? []]) listener(event);
@@ -107,27 +99,15 @@ export function liveMarketSource(path: string, state: LiveSourceState, deps: Liv
       return refuse();
     }
     silent = true;
-    const spare = state.spare;
-    state.spare = null;
-    const ask = spare !== null && deps.now() - spare.askedAt < LIVE_SPARE_TICKET_MS ? spare : { grant: deps.fetchTicket(), askedAt: deps.now() };
-    asking = ask;
-    // An ask that brought no ticket is no spare: the next source asks afresh.
-    const unspare = () => {
-      if (state.spare === ask) state.spare = null;
-    };
     let grant: LiveGrant | null;
     try {
-      grant = await ask.grant;
+      grant = await deps.fetchTicket();
     } catch {
-      asking = null;
-      unspare();
       if (closed) return;
       silent = false;
       fail();
       return emit("error", {});
     }
-    asking = null;
-    if (grant === null) unspare();
     if (closed) return;
     if (grant === null) {
       silent = false;
@@ -186,8 +166,6 @@ export function liveMarketSource(path: string, state: LiveSourceState, deps: Liv
     close(failed) {
       // The caller gave up on a socket that never spoke (a hello or heartbeat deadline): a hung network counts as a failure too.
       if (failed && silent && !closed) fail();
-      // A ticket still on its way serves the tab's next source, unless the caller gave up on it.
-      if (!failed && !closed && asking !== null) state.spare = asking;
       silent = false;
       closed = true;
       cancelWait?.();
@@ -195,6 +173,7 @@ export function liveMarketSource(path: string, state: LiveSourceState, deps: Liv
       socket = null;
       current?.close();
     },
+    send: (text) => !closed && socket?.send(text) === true,
   };
 }
 
@@ -216,15 +195,15 @@ function closeCode(data: string): number | null {
 }
 
 /** The browser's WebSocket behind the two handlers the source sets. */
-export function browserSocket(url: string, protocols: string[]): LiveSocketLike & { send(text: string): boolean } {
+export function browserSocket(url: string, protocols: string[]): LiveSocketLike {
   const ws = new WebSocket(url, protocols);
-  const socket = {
+  const socket: LiveSocketLike = {
     onmessage: null,
     onclose: null,
     close: () => ws.close(),
     /** False unless the socket is open; the clock pings stop on false. */
     send: (text: string) => ws.readyState === WebSocket.OPEN && (ws.send(text), true),
-  } as LiveSocketLike & { send(text: string): boolean };
+  };
   ws.onmessage = (event) => socket.onmessage?.(event);
   ws.onclose = (event) => socket.onclose?.(event);
   return socket;

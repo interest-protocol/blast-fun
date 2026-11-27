@@ -1,13 +1,28 @@
 # Account referrals and revenue tracking
 
-`/invites` and the owner's profile show the invited people, their referred
-volume, Blast revenue and lifetime earnings by native coin, plus the current
-referral rate. The standard share is 30% after activation. Approved special
-referrers keep 60%.
-Both private APIs derive the owner from the authenticated session; per-person
-aggregates are visible only to that owner. No payout, paid/unpaid balance,
-wallet collection or transfer execution is implemented. Operators pay monthly
-outside this feature. Earnings are lifetime accrued totals, not an unpaid balance.
+The owner's profile shows lifetime referral activity. `/invites` shows one row
+per UTC month with native SUI collected by Blast from referred bonding-curve
+trades and funded, non-cancelled presales. Revenue belongs to the month Blast
+collected the fee. If the applicable rates differ within a month, the displayed
+share is weighted by each receipt's contribution. Earnings use the applicable
+rates and carry fractions of a mist into later months for each invitee. A dash indicates
+that the figures are still unavailable. The month shows the confirmed amount and
+transaction once a payout is recorded.
+
+The private APIs derive the owner from the authenticated session. Operators pay
+outside Blast and can record one confirmed native SUI transfer per account and
+closed UTC month. After the transfer, run:
+
+```text
+npm run social:operator -- referral record <account-id> <YYYY-MM> <sender> <recipient> <digest> <amount-in-mist> --reason "<reason>"
+```
+
+Use the payout wallet as the sender and a verified wallet on the referral
+account as the recipient. The command checks the executed transaction and the
+recipient's exact SUI balance increase. It is safe to retry the same record.
+The page displays the amount received and a transaction explorer link. Run
+migration `0170_social_referral_payments` and release the API before publishing
+the page.
 
 ## Reserved X identities
 
@@ -51,17 +66,16 @@ activity predating either signup attribution or wallet verification is excluded.
 - **Presales:** only funded, non-cancelled sales count accepted volume. Each
   invitee's accepted volume is its commitments divided by all commitments,
   multiplied by accepted quote. Revenue uses the same proportion of actual
-  `ProtocolFeesPaid.quote`. Refunded overflow, `partner_quote` and minted token
+  `ProtocolFeesPaid.quote` paid in the sale's quote coin. Refunded overflow, `partner_quote` and minted token
   allocations are excluded. Funded sales without fee payment retain accepted
   volume and stay pending for revenue. Failed/cancelled sales earn nothing.
 - **Bonding curves:** confirmed buys and sells count executed quote volume
-  (sell proceeds net of quote fees). Revenue is charged protocol fees, excluding
-  creator fees. Fees in different coins remain separate. For unpartnered launches,
-  the fee charged by each swap counts immediately as revenue generated; it need
-  not already have been transferred to the treasury. For partnered launches,
-  net Blast revenue waits for the actual claim's treasury/partner split and is
-  allocated proportionally over that claim's gross fee accrual window. Graduation
-  accrual participates in the denominator, but is not attributed as swap revenue.
+  (sell proceeds net of quote fees). Revenue uses quote-coin swap fees paid to Blast's
+  treasury. Each claim is allocated over its gross quote fee accrual window,
+  after the partner's cut where applicable. Each quote coin stays a separate
+  total. Creator fees, meme-token fees, and separate SUI creation fees are
+  excluded. Graduation accrual
+  participates in the denominator, but is not attributed as swap revenue.
   Same-transaction event order is supported. When cross-transaction ordering at a
   boundary checkpoint cannot be proven by the source view, affected fees stay
   pending instead of inheriting another claim's split. Missing launch metadata

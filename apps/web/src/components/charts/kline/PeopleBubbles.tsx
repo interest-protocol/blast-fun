@@ -19,7 +19,7 @@ import { SocialAccountContext } from "#web/components/social/use-social-account.
 import { useAppQueryClient } from "#web/lib/query/provider.tsx";
 import { readableUsd } from "#web/lib/market-format.ts";
 import type { Bar } from "./kline-model.ts";
-import { barPeople, layoutBubbles, mousePress, personIdentity, personTrades, profileAt, rememberProfiles, type BarSpan, type Bubble, type Person, type PersonTrade, type SeenProfile } from "./people-bubbles.ts";
+import { barPeople, layoutBubbles, moreWidth, mousePress, personIdentity, personTrades, profileAt, rememberProfiles, type BarSpan, type Bubble, type Person, type PersonTrade, type SeenProfile } from "./people-bubbles.ts";
 import styles from "./PeopleBubbles.module.css";
 
 /** Bubble size in px: a face you can tell apart, still narrow enough for neighbouring bars; a little smaller on phones. */
@@ -28,6 +28,22 @@ const bubbleSize = (plotWidth: number) => plotWidth < 560 ? 18 : BUBBLE_SIZE;
 const NO_PROFILES: ReadonlyMap<string, SeenProfile> = new Map();
 /** A card opens over its bubble, away from the price under it. */
 const CARD_POSITION = { side: "top", sideOffset: 6, collisionPadding: 12, className: styles.cardLayer } as const;
+const EDGE = 12;
+
+/**
+ * Where a bubble's card goes: over the bubble, or under it when the sticky top bar would cover it.
+ * The bar's height changes with the screen and with its notices, so it is measured as the card opens.
+ */
+function useCardPosition() {
+  const [top, setTop] = useState(EDGE);
+  const onOpenChange = useCallback((open: boolean) => {
+    if (!open) return;
+    const bar = document.querySelector("[data-shell-topbar]")?.getBoundingClientRect().bottom ?? 0;
+    setTop(Math.max(0, bar) + EDGE);
+  }, []);
+  const positioner = useMemo(() => ({ ...CARD_POSITION, collisionPadding: { top, right: EDGE, bottom: EDGE, left: EDGE } }), [top]);
+  return { positioner, onOpenChange };
+}
 
 /** The box the plot and its bubbles share. The bubbles sit beside the plot, not inside its image role. */
 export function BubbleStage({ children }: Readonly<{ children: ReactNode }>) {
@@ -40,13 +56,15 @@ export function BubbleStage({ children }: Readonly<{ children: ReactNode }>) {
  * own account. It makes no requests of its own, so the viewer's own trades show
  * when the account is loaded and the trade is among the activity rows.
  */
-export function PeopleBubbles({ chart, bars, quoteDecimals, quoteUsd, topInset = 0 }: Readonly<{
+export function PeopleBubbles({ chart, bars, quoteDecimals, quoteUsd, topInset = 0, line = false }: Readonly<{
   chart: RefObject<Chart | null>;
   bars: readonly Bar[];
   quoteDecimals: number | null;
   quoteUsd: string | null;
   /** Px at the top of the price pane kept clear for the study legends. */
   topInset?: number;
+  /** The chart draws a line through the closes, not candles: the bubbles clear the line. */
+  line?: boolean;
 }>) {
   const activity = useWalletTrades();
   const deployer = useLaunchWallet();
@@ -58,7 +76,7 @@ export function PeopleBubbles({ chart, bars, quoteDecimals, quoteUsd, topInset =
   const callsign = account?.callsign, avatarUrl = account?.avatar_url;
   const ownProfile = useMemo(() => callsign === undefined ? null : { callsign, avatarUrl: avatarUrl ?? null }, [callsign, avatarUrl]);
   const layer = useRef<HTMLDivElement>(null);
-  const { bubbles, size } = useBubbleLayout(chart, layer, people, topInset);
+  const { bubbles, size } = useBubbleLayout(chart, layer, people, topInset, line);
 
   const profile = useCallback((person: Person) => person.own ? ownProfile : profileAt(seen, person.address, person.lastMs), [ownProfile, seen]);
   return <div ref={layer} className={styles.layer}>
@@ -91,9 +109,9 @@ function useSeenTraderProfiles(): ReadonlyMap<string, SeenProfile> {
  * resizes, gets new bars, or has its price axis dragged (KLineCharts reports no
  * action for that, so a drag over the plot counts).
  */
-function useBubbleLayout(chart: RefObject<Chart | null>, layer: RefObject<HTMLElement | null>, people: readonly Person[], topInset: number): Readonly<{ bubbles: readonly Bubble[]; size: number }> {
+function useBubbleLayout(chart: RefObject<Chart | null>, layer: RefObject<HTMLElement | null>, people: readonly Person[], topInset: number, line: boolean): Readonly<{ bubbles: readonly Bubble[]; size: number }> {
   const [layout, setLayout] = useState<Readonly<{ bubbles: readonly Bubble[]; size: number }>>({ bubbles: [], size: 20 });
-  const latest = useRef({ people, topInset });
+  const latest = useRef({ people, topInset, line });
   const schedule = useRef<() => void>(() => {});
   useEffect(() => {
     let frame = 0;
@@ -104,11 +122,11 @@ function useBubbleLayout(chart: RefObject<Chart | null>, layer: RefObject<HTMLEl
       if (!current || !size) return;
       const target = current;
       const bubble = bubbleSize(size.width);
-      const { people, topInset } = latest.current;
+      const { people, topInset, line } = latest.current;
       // One conversion for every person's bar, read back by position.
-      const spans = barSpans(target, people.map(({ bar, high, low }) => ({ timestamp: bar, high, low })));
+      const spans = barSpans(target, people.map(({ bar, high, low, close }) => ({ timestamp: bar, high, low, close })), line);
       const at = new Map(people.map((person, index) => [person, spans[index] ?? null]));
-      setLayout({ size: bubble, bubbles: layoutBubbles(people, (person) => at.get(person) ?? null, size.width, size.height, bubble, topInset, visibleSpans(target), target.getBarSpace().halfGapBar) });
+      setLayout({ size: bubble, bubbles: layoutBubbles(people, (person) => at.get(person) ?? null, size.width, size.height, bubble, { topInset, spans: visibleSpans(target, line), halfBar: target.getBarSpace().halfGapBar, line }) });
     };
     const request = () => { if (!frame) frame = requestAnimationFrame(place); };
     // A drag that starts on the chart keeps following the pointer outside it, as the chart does.
@@ -155,28 +173,28 @@ function useBubbleLayout(chart: RefObject<Chart | null>, layer: RefObject<HTMLEl
     };
   }, [chart, layer]);
   useEffect(() => {
-    latest.current = { people, topInset };
+    latest.current = { people, topInset, line };
     // Wait a frame so the chart has drawn the new bars and axis first.
     schedule.current();
-  }, [people, topInset]);
+  }, [people, topInset, line]);
   return layout;
 }
 
-type PricedBar = Readonly<{ timestamp: number; high: number; low: number }>;
+type PricedBar = Readonly<{ timestamp: number; high: number; low: number; close: number }>;
 
-/** Each bar's x and the y of its high and low, in px over the price pane; null where the chart can't place it. */
-function barSpans(chart: Chart, bars: readonly PricedBar[]): (BarSpan | null)[] {
-  const points = chart.convertToPixel(bars.flatMap(({ timestamp, high, low }) => [{ timestamp, value: high }, { timestamp, value: low }]), { paneId: "candle_pane" });
+/** Each bar's x and the y of the top and bottom of what is drawn for it (its high and low, or on a line its close), in px over the price pane; null where the chart can't place it. */
+function barSpans(chart: Chart, bars: readonly PricedBar[], line: boolean): (BarSpan | null)[] {
+  const points = chart.convertToPixel(bars.flatMap(({ timestamp, high, low, close }) => [{ timestamp, value: line ? close : high }, { timestamp, value: line ? close : low }]), { paneId: "candle_pane" });
   return bars.map((_, index) => {
     const top = Array.isArray(points) ? points[index * 2] : undefined, bottom = Array.isArray(points) ? points[index * 2 + 1] : undefined;
     return top?.x === undefined || top.y === undefined || bottom?.y === undefined ? null : { x: top.x, top: top.y, bottom: bottom.y };
   });
 }
 
-/** The bars on screen, so a bubble also clears its neighbours' prices, not only its own bar's. */
-function visibleSpans(chart: Chart): BarSpan[] {
+/** The bars on screen and one past each edge (a line leaves the screen toward them), so a bubble also clears its neighbours' prices, not only its own bar's. */
+function visibleSpans(chart: Chart, line: boolean): BarSpan[] {
   const { realFrom, realTo } = chart.getVisibleRange();
-  return barSpans(chart, chart.getDataList().slice(Math.max(0, realFrom), Math.max(0, realTo))).filter((span) => span !== null);
+  return barSpans(chart, chart.getDataList().slice(Math.max(0, realFrom - 1), Math.max(0, realTo + 1)), line).filter((span) => span !== null);
 }
 
 const PersonBubble = memo(function PersonBubble({ person, x, y, size, profile }: Readonly<{ person: Person; x: number; y: number; size: number; profile: TraderProfile | null }>) {
@@ -185,7 +203,8 @@ const PersonBubble = memo(function PersonBubble({ person, x, y, size, profile }:
   const badge = person.labels[0];
   const count = person.buys + person.sells;
   const page = useBubblePage(who.anonymous ? explorer?.url : profilePagePath(who.callsign), who.anonymous);
-  return <Popover.Root>
+  const { positioner, onOpenChange } = useCardPosition();
+  return <Popover.Root onOpenChange={onOpenChange}>
     <Popover.Trigger
       openOnHover
       delay={80}
@@ -205,7 +224,7 @@ const PersonBubble = memo(function PersonBubble({ person, x, y, size, profile }:
       {count > 1 && <span className={styles.count} aria-hidden="true">{count > 9 ? "9+" : count}</span>}
       {badge && <span className={styles.badge}><WalletLabelIcon label={badge} /></span>}
     </Popover.Trigger>
-    <PopoverSurface positioner={CARD_POSITION} popup={{ className: styles.card }}>
+    <PopoverSurface positioner={positioner} popup={{ className: styles.card }}>
       <PersonCard person={person} who={who} />
     </PopoverSurface>
   </Popover.Root>;
@@ -267,15 +286,16 @@ function TradeList({ trades }: Readonly<{ trades: readonly PersonTrade[] }>) {
 function MoreBubble({ bubble: { people, x, y }, size, profile }: Readonly<{ bubble: Extract<Bubble, { kind: "more" }>; size: number; profile: (person: Person) => TraderProfile | null }>) {
   const text = `${people.length} more ${people.length === 1 ? "trader" : "traders"}`;
   const shown = people.length > 99 ? "99" : String(people.length);
-  return <Popover.Root>
+  const { positioner, onOpenChange } = useCardPosition();
+  return <Popover.Root onOpenChange={onOpenChange}>
     <Popover.Trigger
       openOnHover
       delay={80}
       className={styles.more}
       aria-label={`+${shown}, ${text}`}
-      {...dyn({ left: x - size / 2, top: y - size / 2, height: size, minWidth: size })}
+      {...dyn({ left: x - size / 2, top: y - size / 2, height: size, width: moreWidth(people.length, size) })}
     >+{shown}</Popover.Trigger>
-    <PopoverSurface positioner={CARD_POSITION} popup={{ className: styles.card }}>
+    <PopoverSurface positioner={positioner} popup={{ className: styles.card }}>
       <Popover.Title className={styles.cardName}>{text}</Popover.Title>
       <ul className={styles.cardPeople} tabIndex={scrollable(people.length)} aria-label="Traders">
         {people.map((person) => {

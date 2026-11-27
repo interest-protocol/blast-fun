@@ -74,7 +74,6 @@
   "apps/web/src/components/social/create/QuotePicker.tsx": 1,
   "apps/web/src/components/social/creator-earnings/CreatorEarnings.tsx": 1,
   "apps/web/src/components/social/FeedList.tsx": 0,
-  "apps/web/src/components/social/happening/parts.tsx": 1,
   "apps/web/src/components/social/happening/TrendingCoinStrip.tsx": 1,
   "apps/web/src/components/social/notifications/NotificationsView.tsx": 0,
   "apps/web/src/components/social/onboarding/CallsignField.tsx": 1,

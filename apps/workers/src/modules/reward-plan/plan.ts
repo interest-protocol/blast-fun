@@ -22,6 +22,7 @@ export const frozenSchema = z.object({
   sourceEvidence: z.record(z.string(), z.unknown()),
   // Published plans from earlier policies must retain their original commitment.
   payoutPolicy: z.enum(["both-assets-to-holders", "combined-value-to-holders", "no-minimum"]).optional(),
+  holderMinimumUsd: z.number().int().positive().optional(),
 });
 export type Frozen = z.infer<typeof frozenSchema>;
 

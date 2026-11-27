@@ -217,12 +217,6 @@
   max-height: 20rem;
   overflow: auto;
 }
-.customRow {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 2.5rem;
-  gap: 0.5rem;
-  align-items: end;
-}
 @media (max-width: 1054px) {
   .grid {
     grid-template-columns: minmax(0, 1fr) 17.5rem;
@@ -251,12 +245,6 @@
   }
   .page .heading h1 {
     font-size: 1.875rem;
-  }
-  .customRow {
-    grid-template-columns: minmax(0, 1fr) 2.5rem;
-  }
-  .customRow label:first-child {
-    grid-column: 1 / -1;
   }
 }
 @media (max-width: 600px) {

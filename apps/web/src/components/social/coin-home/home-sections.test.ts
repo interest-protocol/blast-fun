@@ -9,12 +9,9 @@ import {
   moveHomeSection,
   parseHomeSections,
   placeHomeSection,
-  sectionMovedMessage,
-  sectionSlotStep,
   serializeHomeSections,
   setHomeSectionShown,
   shownHomeSections,
-  springPath,
 } from "./home-sections.ts";
 
 test("the cookie round-trips: order with hidden marked; unknown keys dropped; missing sections appended; malformed is the default", () => {
@@ -71,31 +68,6 @@ test("Bonding Curves keeps its saved position and visibility", () => {
   const saved = parseHomeSections(serializeHomeSections(moveHomeSection(hidden, "traders", -1)));
   assert.equal(saved.order[2], "bonding");
   assert.deepEqual(saved.hidden, ["bonding"]);
-});
-
-test("the drag's swap rule and the words", () => {
-  const a = { top: 0, height: 100 };
-  const b = { top: 100, height: 300 };
-  // A short section dragged down: its bottom past the tall neighbour's centre (250) takes the slot.
-  assert.equal(sectionSlotStep({ top: 160, height: 100 }, a, b), 1);
-  assert.equal(sectionSlotStep({ top: 140, height: 100 }, a, b), 0);
-  // A tall section dragged up: its top past the short neighbour's centre (50), not its own centre.
-  assert.equal(sectionSlotStep({ top: 40, height: 300 }, a, undefined), -1);
-  assert.equal(sectionSlotStep({ top: 60, height: 300 }, a, undefined), 0);
-  assert.equal(sectionSlotStep({ top: 60, height: 300 }, undefined, undefined), 0);
-  assert.equal(sectionMovedMessage("traders", 0, 3), "PnL leaderboard moved to position 1 of 3");
-});
-
-test("the settle's spring starts where the section was let go, never overshoots, and ends at its slot", () => {
-  const path = springPath(-120, 800);
-  assert.equal(path[0], -120);
-  assert.ok(path.every((y) => y <= 0.5), "critically damped: no overshoot past the slot");
-  assert.ok(Math.abs(path[path.length - 1]!) < 0.5, `ends at the slot (${path[path.length - 1]})`);
-  // A release moving toward the slot gets there sooner than one moving away.
-  const toward = springPath(-120, 800).findIndex((y) => Math.abs(y) < 2);
-  const away = springPath(-120, -800).findIndex((y) => Math.abs(y) < 2);
-  assert.ok(toward < away);
-  assert.deepEqual(springPath(0, 0).every((y) => y === 0), true);
 });
 
 test("the cookie line and its reading", () => {

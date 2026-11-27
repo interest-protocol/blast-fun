@@ -6,7 +6,7 @@ import type { Quote } from "@mayanfinance/swap-sdk";
 
 import { installTestDom, setInputValue, testEvent, waitFor } from "../../../../test/fixtures/social/test-dom.ts";
 
-import type { BridgeRow, BridgeSdk, EvmWallet } from "./bridge-sdk.ts";
+import type { BridgeRow, BridgeSdk, EvmWallet, QuoteInput } from "./bridge-sdk.ts";
 
 const dom = installTestDom();
 const { act } = await import("react");
@@ -26,6 +26,7 @@ type Calls = { quotes: Array<string | undefined>; sends: number; approves: numbe
 /** The fake Mayan: each quote call takes the next answer (the last one repeats). */
 function fakeSdk(calls: Calls, answers: ReadonlyArray<Quote | Error>, overrides: Partial<BridgeSdk> = {}): BridgeSdk {
   return {
+    tokens: async () => [],
     async quote(input) {
       calls.quotes.push(input.swapper);
       const answer = answers[Math.min(calls.quotes.length - 1, answers.length - 1)]!;
@@ -54,6 +55,7 @@ const coded = (code: unknown) => Object.assign(new Error("refused"), { code });
 
 async function mount(sdk: BridgeSdk, calls: Calls, wallet: EvmWallet | null = evm(), queries: Record<string, unknown> = {}) {
   const container = dom.document.createElement("div");
+  container.setAttribute("data-blast-ui", "");
   dom.document.body.appendChild(container);
   const root = createRoot(container);
   const client = createTestQueryClient({ queries });
@@ -70,7 +72,7 @@ async function mount(sdk: BridgeSdk, calls: Calls, wallet: EvmWallet | null = ev
     />,
   )));
   await render(wallet);
-  const button = () => container.querySelector<HTMLButtonElement>("button[data-ui-size=lg]")!;
+  const button = () => container.querySelector<HTMLButtonElement>("button[data-ui-variant=primary]")!;
   const text = () => container.textContent ?? "";
   return {
     container,
@@ -82,7 +84,9 @@ async function mount(sdk: BridgeSdk, calls: Calls, wallet: EvmWallet | null = ev
     /** USDC to send, then SUI to receive: USDC defaults the receiving coin to USDC. */
     async pickUsdc() {
       const option = (group: string, symbol: string) => [...container.querySelectorAll<HTMLButtonElement>(`[aria-label='${group}'] button`)].find((button) => button.textContent === symbol)!;
-      await act(async () => option("Coin to send", "USDC").click());
+      await act(async () => container.querySelector<HTMLButtonElement>("[aria-label^='Coin to send:']")!.click());
+      const source = await waitFor(() => [...dom.document.querySelectorAll<HTMLButtonElement>("[role='dialog'] button")].find((button) => button.textContent?.startsWith("USDC")), "the source token options");
+      await act(async () => source.click());
       assert.equal(option("Coin to receive", "USDC").getAttribute("aria-pressed"), "true", "USDC sends to USDC by default");
       await act(async () => option("Coin to receive", "SUI").click());
     },
@@ -97,11 +101,59 @@ async function mount(sdk: BridgeSdk, calls: Calls, wallet: EvmWallet | null = ev
       await act(async () => button().click());
       await waitFor(() => calls.quotes.length > asked && !button().hasAttribute("aria-busy"), "the press settles");
     },
-    unmount: () => act(async () => root.unmount()),
+    async unmount() {
+      await act(async () => root.unmount());
+      container.remove();
+    },
   };
 }
 
 const newCalls = (): Calls => ({ quotes: [], sends: 0, approves: 0, arrived: 0 });
+
+test("a search picks a catalog token by its contract and quotes its own decimals", async () => {
+  const calls = newCalls();
+  const token = { symbol: "CBBTC", name: "Coinbase Wrapped BTC", decimals: 8, mayan: "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf", native: false, reserve: 0n, logo: null };
+  const requests: QuoteInput[] = [];
+  const form = await mount(fakeSdk(calls, [QUOTE], {
+    tokens: async (chain) => {
+      assert.equal(chain, "base");
+      return [token];
+    },
+    quote: async (input) => {
+      requests.push(input);
+      calls.quotes.push(input.swapper);
+      throw coded("ROUTE_NOT_FOUND");
+    },
+  }), calls);
+  try {
+    const trigger = form.container.querySelector<HTMLButtonElement>("[aria-label^='Coin to send:']")!;
+    await act(async () => trigger.click());
+    const search = await waitFor(() => dom.document.querySelector<HTMLInputElement>("[aria-label='Search tokens']"), "the token search");
+    await act(async () => {
+      setInputValue(search, token.mayan);
+      search.dispatchEvent(testEvent("input"));
+    });
+    const match = () => [...dom.document.querySelectorAll<HTMLButtonElement>("[role='dialog'] button")].find((button) => button.textContent?.includes("Coinbase Wrapped BTC"));
+    await waitFor(() => !!match(), "the matching catalog token");
+    await act(async () => match()!.click());
+    assert.equal(trigger.getAttribute("aria-label"), "Coin to send: CBBTC");
+    const amount = form.container.querySelector<HTMLInputElement>("[inputmode='decimal']")!;
+    await act(async () => {
+      setInputValue(amount, "0.0002");
+      amount.dispatchEvent(testEvent("input"));
+    });
+    await waitFor(() => requests.length > 0, "the catalog token is quoted");
+    assert.equal(requests[0]!.token.mayan, token.mayan);
+    assert.equal(requests[0]!.amountIn64, "20000");
+    await waitFor(() => /No route/i.test(form.text()), "the no-route message");
+    assert.equal(form.button().disabled, true);
+    assert.equal(calls.sends, 0);
+    assert.equal(calls.approves, 0);
+  } finally {
+    await form.unmount();
+  }
+});
+
 
 test("a checked quote bridges on one press, lists the row and reports the arrival once", async () => {
   const calls = newCalls();

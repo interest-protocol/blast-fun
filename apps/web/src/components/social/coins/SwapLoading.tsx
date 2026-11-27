@@ -21,10 +21,10 @@ export function SwapLoading() {
   return <div aria-busy="true" aria-label="Loading trading form" className={clsx(styles.tradeBody, styles.swapLoading)} role="status">
     <div aria-hidden="true" className={styles.swapPair}>
       <LoadingAmount label="Pay" />
+      <div className={styles.presets}>{SELL_PRESETS.map(([, label]) => <button className={styles.preset} disabled key={label} type="button">{label}</button>)}</div>
       <div className={styles.flipSlot}><span className={styles.swapFlip} /></div>
       <LoadingAmount label="Receive" out />
     </div>
-    <div aria-hidden="true" className={styles.presets}>{SELL_PRESETS.map(([, label]) => <button className={styles.preset} disabled key={label} type="button">{label}</button>)}</div>
     <div aria-hidden="true" className={styles.validationSlot} />
     <div aria-hidden="true"><button className="btn btn-primary btn-lg btn-block" data-trade="" disabled type="button"><SkeletonText>Swap</SkeletonText></button></div>
   </div>;

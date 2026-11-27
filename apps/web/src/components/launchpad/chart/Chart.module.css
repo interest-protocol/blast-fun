@@ -104,10 +104,6 @@
   vector-effect: non-scaling-stroke;
 }
 
-.hatch {
-  stroke: var(--lp-muted);
-  stroke-width: 1;
-}
 
 .gap {
   opacity: 0.35;
@@ -240,19 +236,35 @@
   justify-content: space-between;
   flex-wrap: wrap;
   gap: .5rem;
+  /* The style picker's height (a 44 px button in a 3 px track), held before data shows it, so the row never grows when candles arrive. */
+  min-block-size: calc(max(44px, 2.75rem) + .375rem);
 }
 .chart .compactHead h2 { margin: 0; font-size: 1.0625rem; font-weight: 650; }
 .compactHead h2 span { color: var(--ink-2); font-weight: 400; white-space: nowrap; }
 .compactTools { display: flex; gap: .5rem; margin-inline-start: auto; }
+/* Takes only the room left beside the title and tools (a zero basis, so its text never wraps the row), on one line. */
+.headNotice { flex: 1 1 0; min-inline-size: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .stylePicker { display: inline-flex; }
+/* One-tap intervals once the chart is wider than about 640 px; the range button then names only the range. */
+.intervalPicker { display: none; }
+@container (width >= 40rem) {
+  .intervalPicker { display: inline-flex; }
+  .compactTools .filterInterval { display: none; }
+}
 .compactTools .filterTrigger { --control-height: max(44px, 2.75rem); --control-hover: transparent; }
 /*
- * On a sale page on a phone, the chart's view controls fill its head row: the style picker over
- * Indicators, the range over Traders. When the price row above shows the unit, the chart's
- * title goes from sight (screen readers keep it); otherwise the title stays to name the unit.
+ * When the price row heading the chart card shows the unit, the chart's title goes from sight
+ * (screen readers keep it); otherwise the title stays to name the unit.
  */
+:global([data-unit-shown]) ~ * .compactHead h2 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+/* A narrow chart's head has no room for the stream's notice, so the status slot under the plot reads it whole; only one of the two is ever shown (and announced). */
+.slotNotice { display: none; }
+@container (max-width: 30rem) {
+  .headNotice { display: none; }
+  .slotNotice { display: inline; }
+}
+/* On a sale page on a phone, the chart's view controls fill its head row: the style picker over Indicators, the range over Traders. */
 @media (max-width: 760px) {
-  :global([data-sale-page]) :global([data-unit-shown]) ~ * .compactHead h2 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   :global([data-sale-page]) .compactTools { flex-grow: 1; margin-inline-start: 0; }
   :global([data-sale-page]) .compactTools > :last-child { margin-inline-start: auto; }
 }
@@ -262,35 +274,18 @@
 .chart[data-compact-chart] {
   container-type: inline-size;
   row-gap: .5rem;
-  --coin-plot-height: 14.75rem;
-  --coin-line-plot-height: 12.75rem;
-  --coin-readout-height: 4.625rem;
+}
+/*
+ * From 1024 px, the price pane takes the window's spare height, up to 14rem more (a 640 px plot with
+ * the default studies), so the candles fill a tall window and still fit a short one. The chart's
+ * loading, empty and error states take the same height (KLineCoinChart.module.css `.loading`, `.sized`).
+ */
+@media (min-width: 1024px) and (pointer: fine), (min-width: 1024px) and (pointer: none) {
+  .chart[data-compact-chart] { --kline-grow: clamp(0rem, 100dvh - 60rem, 14rem); }
 }
 
-.chart[data-compact-chart][data-chart-style="line"] {
-  --coin-plot-height: var(--coin-line-plot-height);
-  --coin-readout-height: 2.75rem;
-}
-
-@media (min-width: 761px) {
-  .chart[data-compact-chart] {
-    --coin-plot-height: clamp(15.25rem, 32vh, 23.5rem);
-    --coin-line-plot-height: clamp(13.75rem, 31vh, 21rem);
-  }
-}
-
-/* Keep the mobile layout stable before hydration. */
-@media (max-width: 760px), (pointer: coarse) {
-  .chart[data-compact-chart][data-chart-style] {
-    --coin-plot-height: var(--coin-line-plot-height);
-    --coin-readout-height: 2.75rem;
-  }
-}
-
-.chartState { min-block-size: calc(var(--coin-plot-height) + var(--coin-readout-height)); }
 .chart .chartEmpty { justify-content: center; background: transparent; }
 .chartSkeleton {
-  block-size: calc(var(--coin-plot-height) + var(--coin-readout-height));
   visibility: hidden;
   animation: showChartSkeleton 0s var(--t4) both;
 }

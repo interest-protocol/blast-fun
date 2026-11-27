@@ -5,9 +5,7 @@ import { gatedFetch } from "#web/lib/api-gate-client.ts";
 import {
   socialTradeQuoteSchema,
   socialTradeResponseSchema,
-  socialTradeBalanceFailureSchema,
   type TradeFeeRequired,
-  type SocialTradeBalanceFailure,
   SOCIAL_TRADE_QUOTE_PATH,
   SOCIAL_TRADES_PATH,
   socialTradeSettlePath,
@@ -31,10 +29,6 @@ import { socialRequestAuth } from "../social-fetch";
  * itself runs through `runTrade` (`trade-flow.ts`, R3-31).
  */
 
-export function isTradeBalanceFailure(value: unknown): value is SocialTradeBalanceFailure {
-  return socialTradeBalanceFailureSchema.safeParse(value).success;
-}
-
 /** Whether `value` is a well-formed quote answer (every field a surface renders). */
 export function isSocialTradeQuote(value: unknown): value is SocialTradeQuote {
   return socialTradeQuoteSchema.safeParse(value).success;
@@ -47,11 +41,6 @@ export function isSocialTradeQuote(value: unknown): value is SocialTradeQuote {
  */
 export function requestTradeQuote(options: SocialApiOptions, body: SocialTradeQuoteRequest): Promise<ApiResult<SocialTradeQuote>> {
   return callSocialApi(options, SOCIAL_TRADE_QUOTE_PATH, { method: "POST", body }, socialTradeQuoteSchema);
-}
-
-/** Whether `value` is a well-formed trade answer (R3-31). */
-export function isSocialTrade(value: unknown): value is SocialTrade {
-  return socialTradeResponseSchema.safeParse(value).success;
 }
 
 /** `POST /api/social/trades`'s answer: the trade, or the fee prompt (`sponsorship_unavailable` with the fee), or a refusal. */

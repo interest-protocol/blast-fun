@@ -1,5 +1,3 @@
-import { z } from "zod";
-
 import { diagnosticMessage } from "#web/lib/errors.ts";
 import {
   SALE_COVER_MAX_BYTES,
@@ -131,8 +129,6 @@ export function saleDetailsRefusal(result: ApiResult<unknown>): string {
   }
 }
 
-const emptySaleResponseSchema = z.null();
-
 export function fetchSaleDetails(options: SocialApiOptions, presaleId: string): Promise<ApiResult<SocialSaleMetadataResponse>> {
   return callSocialApi(options, socialSaleMetadataPath(presaleId), { method: "GET" }, socialSaleMetadataResponseSchema);
 }
@@ -147,6 +143,3 @@ export function uploadSaleCover(options: SocialApiOptions, presaleId: string, fi
   return callSocialApi(options, socialSaleCoverPath(presaleId), { method: "POST", form }, socialSaleMetadataResponseSchema);
 }
 
-export function removeSaleCover(options: SocialApiOptions, presaleId: string): Promise<ApiResult<null>> {
-  return callSocialApi(options, socialSaleCoverPath(presaleId), { method: "DELETE" }, emptySaleResponseSchema);
-}

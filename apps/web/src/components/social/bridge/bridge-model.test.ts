@@ -33,6 +33,7 @@ test("typed amounts become atoms; Max and the balance check keep gas back for na
   assert.equal(amountAtoms("0.01", ETH), 10_000_000_000_000_000n);
 
   assert.equal(maxField(5_000_000n, USDC), "5");
+  assert.equal(maxField(25n, { ...USDC, decimals: 8 }), "0.00000025");
   assert.equal(maxField(1_000_000_000_000_000n, ETH), "0.00098", "0.001 ETH less the 0.00002 reserve");
   assert.equal(maxField(10_000_000_000_000n, ETH), "0", "balance under the reserve");
   assert.equal(maxField(1_000_000_000_000_000_000n, POL), "0.7", "1 POL less the 0.3 reserve");
@@ -118,7 +119,7 @@ test("the one button names the next step, in order", () => {
 
 test("every chain and coin logo is a file the app serves", () => {
   const logos = [...Object.values(CHAINS).flatMap((chain) => [chain.logo, ...chain.tokens.map((token) => token.logo)]), ...DESTINATIONS.map((token) => token.logo)];
-  for (const logo of new Set(logos)) assert.ok(existsSync(new URL(`../../../../public${logo}`, import.meta.url)), logo);
+  for (const logo of new Set(logos)) assert.ok(logo && existsSync(new URL(`../../../../public${logo}`, import.meta.url)), logo ?? undefined);
 });
 
 test("the analytics band is coarse and marks amounts near the BLINK cap", () => {

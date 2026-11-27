@@ -1,3 +1,4 @@
+import { resetTabMarketStream } from "#web/components/launchpad/market-stream-hub.ts";
 import { LIVE_TICKET_PATH } from "#web/lib/live-stream/live-socket-source.ts";
 
 /**
@@ -46,10 +47,29 @@ export class FakeLiveSocket {
     this.closed = true;
   }
 
-  send(): void {}
+  /** Every frame the tab sent, in order. */
+  readonly sent: string[] = [];
+
+  send(text: string): void {
+    this.sent.push(text);
+  }
+
+  /** The `set` frames the tab sent, parsed. */
+  sets(): { seq: number; pools: string[]; price_coins: string[]; presale: string | null }[] {
+    return this.sent.map((text) => JSON.parse(text) as { op?: string }).filter((frame) => frame.op === "set") as ReturnType<FakeLiveSocket["sets"]>;
+  }
+
+  /** Answers the newest `set` with the topics it asked for. */
+  answerSet(): void {
+    const { seq, pools, price_coins, presale } = this.sets().at(-1)!;
+    this.emit("set", { seq, ok: true, held: { pools, price_coins, presale } });
+  }
 }
 
-/** Replaces the global WebSocket, calling `opened` with each new socket; `restore` puts the previous one back. */
+/**
+ * Replaces the global WebSocket, calling `opened` with each new socket; `restore` puts the previous one
+ * back and ends the tab's stream, which would otherwise linger into the next test.
+ */
 export function installLiveSocket(opened?: (socket: FakeLiveSocket) => void): { sockets: FakeLiveSocket[]; restore(): void } {
   const previous = Object.getOwnPropertyDescriptor(globalThis, "WebSocket");
   const sockets: FakeLiveSocket[] = [];
@@ -63,6 +83,7 @@ export function installLiveSocket(opened?: (socket: FakeLiveSocket) => void): { 
   return {
     sockets,
     restore() {
+      resetTabMarketStream();
       if (previous) Object.defineProperty(globalThis, "WebSocket", previous);
       else Reflect.deleteProperty(globalThis, "WebSocket");
     },

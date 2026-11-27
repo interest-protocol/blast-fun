@@ -74,14 +74,6 @@ const NUMBER_SPOTS: readonly Spot[] = [
     seconds: "default",
     marks: [/<TweenNum format=\{usdc\} value=\{raisedUsd\} \/>/, /<CoinTweenNum count=\{count\} \/>/, /<TweenNum format=\{wholeCount\} value=\{sale\.participants\} \/> backers/],
   },
-  {
-    gate: "`[data-live=\"people\"]` and `[data-live=\"usd\"]`, \"… in the last hour\": `tweenNum(…, .8)` every 7 s",
-    app: "LiveLine (Live activity card, Home's phone card)",
-    file: "src/components/social/happening/parts.tsx",
-    kind: "count",
-    seconds: "lastHour",
-    marks: [/value=\{lastHour\.wallets\}/, /value=\{Number\(lastHour\.usd\)\}/],
-  },
   // ---- roll (roll) ----
   {
     gate: "`.rocket .roll`: `roll($('.roll', t), rocketCount(p), on)`, 280 ms",

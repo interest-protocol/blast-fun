@@ -7,7 +7,8 @@ import type { FeelSignal } from "./feel-cues.ts";
 import { documentVisible, type FeelPlayOptions } from "./feel-gate.ts";
 import { startFeelAudio, type FeelAudio } from "./feel-mount.ts";
 import { FeelScope } from "./feel-scope.ts";
-import { setSoundEnabled, useReducedMotion, useSoundEnabled } from "./feel-sound-pref.ts";
+import { setSoundEnabled, useSoundEnabled } from "./feel-sound-pref.ts";
+import { useReducedMotion } from "#web/components/blast-ui/use-shell-prefs.ts";
 import { browserAudioContext, type FeelAudioContextFactory } from "./feel-synth.ts";
 
 /**

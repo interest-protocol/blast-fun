@@ -3,7 +3,6 @@ import { useState } from "react";
 import { setShellPref } from "../../../src/components/blast-ui/use-shell-prefs.ts";
 import { Button } from "../../../src/components/blast-ui/Button.tsx";
 import { Sparkline } from "../../../src/components/charts/Sparkline.tsx";
-import { AllocationChart } from "../../../src/components/charts/AllocationChart.tsx";
 import { PoolCandleChart } from "../../../src/components/charts/PoolCandleChart.tsx";
 import TrendPlot from "../../../src/components/social/profile/TrendPlot.tsx";
 import SalePricePlot from "../../../src/components/presale-pages/SalePricePlot.tsx";
@@ -24,11 +23,6 @@ const spark = [
   [start + 86400_000, 1.5],
 ] as const;
 const prices = spark.map(([at, value]) => [at, String(value * 0.001)] as const);
-const parts = [
-  { bps: 7000, color: "var(--pink)" },
-  { bps: 2000, color: "#8b5cf6" },
-  { bps: 1000, color: "var(--muted)" },
-];
 const trend = {
   points: spark.map(([at_ms, usd]) => ({ at_ms, usd })),
   changeBps: "5000",
@@ -213,13 +207,6 @@ export function SharedChartsFixture() {
           <div style={{ height: 184 }}>
             <ReleasePlot data={steppedSchedule} stepped />
           </div>
-        </section>
-        <section data-proof="allocation">
-          <h2>Token allocation</h2>
-          <div style={{ height: 192 }}>
-            <AllocationChart parts={parts} />
-          </div>
-          <p>Buyers 70% · Pool 20% · Blast 10%</p>
         </section>
         <a href="https://www.tradingview.com/">Charts by TradingView</a>
       </div>
