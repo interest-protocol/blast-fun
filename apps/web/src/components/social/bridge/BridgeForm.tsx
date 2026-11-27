@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { track } from "@vercel/analytics";
 import clsx from "clsx";
-import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 import type { Quote } from "@mayanfinance/swap-sdk";
 
@@ -13,7 +13,8 @@ import { AmountFit } from "#web/components/blast-ui/AmountFit.tsx";
 import { BlastMenu, BlastMenuRadioGroup, BlastMenuRadioItem, BlastMenuTrigger } from "#web/components/blast-ui/BlastMenu.tsx";
 import { Button, DisclosureButton } from "#web/components/blast-ui/Button.tsx";
 import { CopyAddress } from "#web/components/blast-ui/CopyAddress.tsx";
-import { DiagnosticText } from "#web/components/blast-ui/DiagnosticText.tsx";
+import { DiagnosticCode, DiagnosticText } from "#web/components/blast-ui/DiagnosticText.tsx";
+import { EmptyState } from "#web/components/blast-ui/EmptyState.tsx";
 import { CheckIcon } from "#web/components/blast-ui/Icons.tsx";
 import { Segmented } from "#web/components/blast-ui/Segmented.tsx";
 import { SkeletonText } from "#web/components/blast-ui/Skeleton.tsx";
@@ -80,10 +81,12 @@ export type BridgeFormProps = Readonly<{
 
 const QUOTE_DEBOUNCE_MS = 400;
 const QUOTE_FRESH_MS = 60_000;
+const BALANCE_FRESH_MS = 60_000;
 const STATUS_POLL_MS = 5_000;
 const STATUS_GIVE_UP_MS = 30 * 60_000;
 const INDEXING_WINDOW_MS = 60_000;
 const BUSY_TEXT = "Confirm in your wallet.";
+const HISTORY_FAILED = "Couldn’t load recent bridges";
 
 /** Retry only what may pass on a second try: rate limits, server errors, the network. */
 function retryable(error: unknown): boolean {
@@ -123,7 +126,7 @@ function useBridgeQuote({ sdk, selection, wallet, blastAddress, atoms, paused, o
   const typed = atoms?.toString() ?? null;
   const settled = useDebouncedValue(typed, QUOTE_DEBOUNCE_MS);
   const typing = settled !== typed;
-  // A bound quote names the source wallet and the Blast address and carries a Blink order.
+  // A bound quote names the source wallet and the Blast address.
   const swapper = wallet && blastAddress ? wallet.address : undefined;
   const destination = swapper ? blastAddress! : undefined;
   const quoteKey = ["bridge", "quote", chain, token.mayan, settled, to.coinType, swapper ?? null, destination ?? null] as const;
@@ -161,13 +164,14 @@ function useSourceReads({ sdk, selection, wallet }: ReadArgs, { quote, settled, 
     queryKey: balanceKey,
     queryFn: () => sdk.balance(chain, token, wallet!.address),
     enabled: wallet !== null,
-    staleTime: Infinity,
+    staleTime: BALANCE_FRESH_MS,
+    refetchOnWindowFocus: true,
     retry: 1,
   });
 
   const evmWallet = wallet?.kind === "evm" ? wallet : null;
   const wrongChain = evmWallet !== null && evmWallet.chainId !== info.chainId;
-  const allowanceKey = ["bridge", "allowance", chain, token.mayan, evmWallet?.address ?? null, settled, to.coinType] as const;
+  const allowanceKey = ["bridge", "allowance", chain, token.mayan, evmWallet?.address ?? null, settled, to.coinType, quote.data?.type ?? null] as const;
   const allowance = useQuery({
     queryKey: allowanceKey,
     queryFn: () => sdk.allowanceEnough(quote.data!, evmWallet!, chain),
@@ -231,7 +235,7 @@ function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent }: R
   const { chain, info, token, to } = selection;
   const queryClient = useQueryClient();
   const [failed, setFailed] = useState<string | null>(null);
-  // The quote inputs a lower fresh rate was found for; any new input clears the prompt.
+  // The inputs for a fresh route or lower rate that needs review.
   const [rateChangedFor, setRateChangedFor] = useState<string | null>(null);
   const [sent, setSent] = useState<readonly BridgeRow[]>([]);
   const running = useRef(false);
@@ -294,7 +298,12 @@ function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent }: R
   const approve = (ask: BridgeRequest, source: EvmWallet) => run(async () => {
     const fresh = await freshQuote(ask);
     if (!fresh) return;
-    await sdk.approve(fresh, source, chain, signal());
+    if (shown && fresh.type !== shown.type) {
+      queryClient.setQueryData(keys.quoteKey, fresh);
+      setRateChangedFor(inputs);
+      return;
+    }
+    await sdk.approve(fresh, ask, source, signal());
     // Re-check on the quote the approval was made for.
     queryClient.setQueryData(keys.allowanceKey, await sdk.allowanceEnough(fresh, source, chain));
   });
@@ -303,7 +312,10 @@ function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent }: R
     const fresh = await freshQuote(ask);
     if (!fresh) return;
     queryClient.setQueryData(keys.quoteKey, fresh);
-    if (shown && fresh.minReceived < shown.minReceived) {
+    const worseQuote = fresh.type === "FAST_MCTP"
+      ? shown && fresh.expectedAmountOut < shown.expectedAmountOut
+      : shown && fresh.minReceived < shown.minReceived;
+    if (shown && (fresh.type !== shown.type || worseQuote)) {
       setRateChangedFor(inputs);
       return;
     }
@@ -314,7 +326,7 @@ function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent }: R
     if (signal().aborted) return;
     const record = (hash: string) => {
       rememberSubmission(ask.blastAddress, hash);
-      setSent((rows) => rows.some((row) => row.hash === hash) ? rows : [{ hash, chain, fromAmount, fromSymbol: token.symbol, toAmount: String(fresh.expectedAmountOut), toSymbol: to.symbol, state: "pending", at: new Date(now()).toISOString() }, ...rows]);
+      setSent((rows) => rows.some((row) => row.hash === hash) ? rows : [{ hash, chain, fromAmount, fromSymbol: token.symbol, toAmount: String(fresh.expectedAmountOut), toSymbol: to.symbol, state: "pending", refundOnSui: fresh.type === "FAST_MCTP", at: new Date(now()).toISOString() }, ...rows]);
     };
     record(await sdk.send(fresh, ask, source, record, signal()));
     routeEvent(fresh, chain, token);
@@ -472,7 +484,6 @@ export function BridgeForm({ sdk, wallets, blastAddress, signedIn, onSignIn, onA
           facts={facts}
           onTo={setToIndex}
           refreshing={refreshing}
-          failed={atoms !== null && message !== null}
           toIndex={toIndex}
           waiting={atoms !== null && !message}
         />
@@ -481,6 +492,7 @@ export function BridgeForm({ sdk, wallets, blastAddress, signedIn, onSignIn, onA
         amount={amount}
         busy={action.kind === "busy"}
         facts={atoms === null ? null : facts}
+        fastMctp={reads.shown?.type === "FAST_MCTP"}
         info={info}
         message={message}
         noteId={noteId}
@@ -502,7 +514,14 @@ export function BridgeForm({ sdk, wallets, blastAddress, signedIn, onSignIn, onA
         {actionLabel(action, info, token)}
       </Button>
       <p className={styles.powered}>Powered by Mayan</p>
-      <RecentBridges id={id} now={now} onArrived={onArrived} rows={rows} sdk={sdk} />
+      <RecentBridges
+        id={id}
+        now={now}
+        onArrived={onArrived}
+        onRetry={reads.history.isError && !reads.history.isFetching ? () => { void reads.history.refetch(); } : undefined}
+        rows={rows}
+        sdk={sdk}
+      />
     </div>
   );
 }
@@ -615,29 +634,25 @@ function SendPanel({ id, amount, onAmount, balance, balanceFailed, onRetryBalanc
   );
 }
 
-function GetPanel({ facts, waiting, failed, refreshing, toIndex, onTo, busy, blastAddress }: Readonly<{
+function GetPanel({ facts, waiting, refreshing, toIndex, onTo, busy, blastAddress }: Readonly<{
   facts: QuoteRows | null;
   /** An amount is typed and nothing went wrong: a quote is on its way. */
   waiting: boolean;
-  /** An amount is typed and the quote or send failed: there is no amount to show. */
-  failed: boolean;
   refreshing: boolean;
   toIndex: 0 | 1;
   onTo: (index: 0 | 1) => void;
   busy: boolean;
   blastAddress: string | null;
 }>) {
-  let value: ReactNode = "0";
-  if (facts) value = facts.amount;
-  else if (waiting) value = <SkeletonText>0.0000</SkeletonText>;
-  else if (failed) value = NO_VALUE;
+  const amount = facts?.amount ?? NO_VALUE;
+  const value = !facts && waiting ? <SkeletonText>0.0000</SkeletonText> : amount;
   return (
     <div aria-live="polite" className={clsx(coinStyles.amt, coinStyles.amtOut)}>
       <div className={coinStyles.amtTop}>
         <span className={coinStyles.lbl}>You get on Sui</span>
       </div>
       <div className={coinStyles.amtRow}>
-        <AmountFit value={facts?.amount ?? (failed ? NO_VALUE : "0")}>
+        <AmountFit value={amount}>
           <b className={clsx(coinStyles.amtVal, "num", !facts && coinStyles.zero, refreshing && coinStyles.pending)}>{value}</b>
         </AmountFit>
         <Segmented
@@ -657,8 +672,9 @@ function GetPanel({ facts, waiting, failed, refreshing, toIndex, onTo, busy, bla
   );
 }
 
-function QuoteNotes({ facts, amount, info, token, refreshing, message, noteId, rateChanged, reason, busy }: Readonly<{
+function QuoteNotes({ facts, fastMctp, amount, info, token, refreshing, message, noteId, rateChanged, reason, busy }: Readonly<{
   facts: QuoteRows | null;
+  fastMctp: boolean;
   amount: string;
   info: ChainInfo;
   token: SourceToken;
@@ -671,33 +687,60 @@ function QuoteNotes({ facts, amount, info, token, refreshing, message, noteId, r
 }>) {
   return (
     <>
-      {facts ? (
-        <div className={clsx(styles.summary, refreshing && styles.refreshing)}>
-          <p className={styles.sentence}>
-            Send {displayAmount(amount.replace(/,/g, ""), token.symbol)} from {info.label}. You get at least {facts.minimum}.
-          </p>
-          <dl className={coinStyles.terms}>
-            <div><dt>Fee</dt><dd>{facts.fee}</dd></div>
-            <div><dt>Arrives</dt><dd>{facts.eta}</dd></div>
-          </dl>
-        </div>
-      ) : null}
+      {facts ? <QuoteSummary facts={facts} fastMctp={fastMctp} rateChanged={rateChanged} refreshing={refreshing} sent={displayAmount(amount.replace(/,/g, ""), token.symbol)} source={info.label} /> : null}
       {message ? <p className={clsx(coinStyles.status, styles.note)} id={noteId} role="alert"><DiagnosticText message={message} /></p> : null}
-      {rateChanged ? <p className={clsx(coinStyles.status, styles.note)} role="status">The rate changed. Check the new numbers.</p> : null}
+      {rateChanged ? <p className={clsx(coinStyles.status, styles.note)} role="status">The quote changed. Review it before continuing.</p> : null}
       {reason && !message ? <p className={clsx(coinStyles.status, styles.note)} id={noteId}>{reason}</p> : null}
       {busy ? <p aria-hidden="true" className={clsx(coinStyles.status, styles.note)}>{BUSY_TEXT}</p> : null}
     </>
   );
 }
 
-function RecentBridges({ id, rows, sdk, onArrived, now }: Readonly<{ id: string; rows: readonly BridgeRow[]; sdk: BridgeSdk; onArrived: BridgeFormProps["onArrived"]; now: () => number }>) {
-  if (rows.length === 0) return null;
+function QuoteSummary({ facts, fastMctp, rateChanged, refreshing, sent, source }: Readonly<{
+  facts: QuoteRows;
+  fastMctp: boolean;
+  rateChanged: boolean;
+  refreshing: boolean;
+  sent: string;
+  source: string;
+}>) {
+  return (
+    <div className={clsx(styles.summary, refreshing && styles.refreshing)}>
+      <p className={styles.sentence}>
+        Send {sent} from {source}. {fastMctp ? "The amount shown is an estimate." : `You get at least ${facts.minimum}.`}
+      </p>
+      <dl className={coinStyles.terms}>
+        <div><dt>{fastMctp ? "Estimated fee" : "Fee"}</dt><dd>{facts.fee}</dd></div>
+        <div><dt>Arrives</dt><dd>{facts.eta}</dd></div>
+        {fastMctp || rateChanged ? <div><dt>Route</dt><dd>{fastMctp ? "Mayan Fast MCTP" : "Mayan Blink"}</dd></div> : null}
+      </dl>
+    </div>
+  );
+}
+
+function RecentBridges({ id, rows, sdk, onArrived, onRetry, now }: Readonly<{
+  id: string;
+  rows: readonly BridgeRow[];
+  sdk: BridgeSdk;
+  onArrived: BridgeFormProps["onArrived"];
+  onRetry?: () => void;
+  now: () => number;
+}>) {
+  const hasRows = rows.length > 0;
+  if (!hasRows && !onRetry) return null;
   return (
     <section aria-labelledby={`${id}-recent`} className={styles.recent}>
       <h3 id={`${id}-recent`}>Recent bridges</h3>
-      <ul>
-        {rows.map((row) => <BridgeRowView key={row.hash} now={now} onArrived={onArrived} row={row} sdk={sdk} />)}
-      </ul>
+      {hasRows ? (
+        <ul>
+          {rows.map((row) => <BridgeRowView key={row.hash} now={now} onArrived={onArrived} row={row} sdk={sdk} />)}
+        </ul>
+      ) : null}
+      {onRetry ? (
+        <EmptyState action={<Button onClick={onRetry} size="sm" variant="ghost">Retry history</Button>} compact role="alert" title={HISTORY_FAILED}>
+          <DiagnosticCode generic={HISTORY_FAILED} message={`${HISTORY_FAILED} Code: bridge_history_failed.`} />
+        </EmptyState>
+      ) : null}
     </section>
   );
 }
@@ -730,12 +773,14 @@ function BridgeRowView({ row, sdk, onArrived, now }: Readonly<{ row: BridgeRow; 
     refetchInterval: (query) => (query.state.data?.state ?? "pending") === "pending" && now() - Date.parse(row.at) < STATUS_GIVE_UP_MS ? STATUS_POLL_MS : false,
     retry: 1,
   });
-  const state = status.data?.state ?? row.state;
-  const toAmount = status.data?.toAmount ?? row.toAmount;
+  const settled = row.state === "pending" ? status.data : row;
+  const state = settled?.state ?? row.state;
+  const toAmount = settled?.toAmount ?? row.toAmount;
   const info = row.chain ? CHAINS[row.chain] : null;
   const chain = info?.label ?? "another chain";
   const sentText = displayAmount(row.fromAmount, row.fromSymbol);
-  const line = statusLine(state, chain, toAmount, row.toSymbol, age >= STATUS_GIVE_UP_MS);
+  const refundWallet = row.refundOnSui ? "Blast wallet on Sui" : `${chain} wallet`;
+  const line = statusLine(state, refundWallet, toAmount, row.toSymbol, age >= STATUS_GIVE_UP_MS);
   return (
     <li className={styles.row} data-state={state}>
       <Logo size={24} src={info?.logo ?? null} />
@@ -748,10 +793,10 @@ function BridgeRowView({ row, sdk, onArrived, now }: Readonly<{ row: BridgeRow; 
   );
 }
 
-function statusLine(state: TransferState, chain: string, toAmount: string | null | undefined, symbol: string, gaveUp: boolean): string {
+function statusLine(state: TransferState, refundWallet: string, toAmount: string | null | undefined, symbol: string, gaveUp: boolean): string {
   const received = toAmount ? displayAmount(toAmount, symbol) : null;
   if (state === "done") return `Arrived · ${received ?? symbol}`;
-  if (state === "refunded") return `Refunded to your ${chain} wallet`;
+  if (state === "refunded") return `Refunded to your ${refundWallet}`;
   if (gaveUp) return "Still on the way. Check on Mayan.";
   return received ? `On the way · ≈ ${received}` : "On the way";
 }

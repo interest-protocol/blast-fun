@@ -50,6 +50,8 @@ export type WebConfig = Readonly<{
   presale: PresaleConfig;
   /** `NEXT_PUBLIC_MAYAN_BRIDGE_ENABLED=1`; false hides Bridge to Sui. */
   bridge: boolean;
+  /** Direct Base USDC fallback in the hosted dev environment. */
+  bridgeFastMctp: boolean;
   /** `NODE_ENV` is development: the CSP allows the dev server's eval and websocket. */
   development: boolean;
   /** The direct market socket, or null when it is off and tabs have no live stream. */
@@ -65,8 +67,9 @@ export type LiveSocketConfig = Readonly<{ url: string; origin: string }>;
 
 export function parseWebConfig(environment: Environment): WebConfig {
   const relay = parseRelayConfig(environment);
-  const { production } = deploymentIdentity(environment);
+  const { production, target } = deploymentIdentity(environment);
   const presale = readPresaleConfig(environment);
+  const bridge = readBridgeEnabled(environment);
 
   return {
     relay,
@@ -78,7 +81,8 @@ export function parseWebConfig(environment: Environment): WebConfig {
     signingChain: configuredSigningChain(environment),
     presaleDeployment: readPresaleDeploymentIdentity(environment),
     presale,
-    bridge: readBridgeEnabled(environment),
+    bridge,
+    bridgeFastMctp: bridge && !production && target === "dev" && environment.VERCEL === "1",
     development: environment.NODE_ENV === "development",
     liveSocket: liveSocketConfig(environment, relay),
   };

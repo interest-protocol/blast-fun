@@ -43,7 +43,7 @@ export type QuoteInput = Readonly<{
   token: SourceToken;
   to: DestinationToken;
   amountIn64: string;
-  /** Both set for a bound quote (it carries a Blink order); both absent for a preview. */
+  /** Both set for a wallet-bound quote, both absent for a preview. */
   swapper?: string;
   destination?: string;
 }>;
@@ -57,6 +57,8 @@ export type BridgeRow = Readonly<{
   toAmount: string | null;
   toSymbol: string;
   state: TransferState;
+  /** Fast MCTP pays any refund to the Blast wallet on Sui. */
+  refundOnSui?: boolean;
   /** ISO time the bridge started. */
   at: string;
 }>;
@@ -72,7 +74,7 @@ export type BridgeSdk = Readonly<{
   /** EVM tokens only: whether the router may spend the quote's amount already. */
   allowanceEnough(quote: Quote, wallet: EvmWallet, chain: BridgeChain): Promise<boolean>;
   /** `signal` aborts before any wallet request that has not started yet. */
-  approve(quote: Quote, wallet: EvmWallet, chain: BridgeChain, signal: AbortSignal): Promise<void>;
+  approve(quote: Quote, request: BridgeRequest, wallet: EvmWallet, signal: AbortSignal): Promise<void>;
   /**
    * Signs and sends the guarded quote; resolves with the source transaction hash.
    * `onSigned` gets the hash as soon as it exists (Solana: once signed, before sending).
@@ -93,6 +95,7 @@ const WORMHOLE_CHAINS: Readonly<Record<string, BridgeChain>> = { "1": "solana", 
 const SUI_WORMHOLE_ID = "21";
 
 type ExplorerSwap = Readonly<{
+  service?: unknown;
   sourceTxHash?: unknown;
   sourceChain?: unknown;
   destChain?: unknown;
@@ -127,6 +130,7 @@ export function explorerRows(json: unknown, blastAddress: string, limit = 5): Br
       toAmount: text(swap.toAmount),
       toSymbol: text(swap.toTokenSymbol) ?? "",
       state: transferState(text(swap.clientStatus)),
+      ...(swap.service === "MCTP_FAST_BRIDGE" ? { refundOnSui: true } : {}),
       at,
     });
   }

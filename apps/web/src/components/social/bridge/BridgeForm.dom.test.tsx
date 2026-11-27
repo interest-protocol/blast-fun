@@ -17,6 +17,7 @@ const { BridgeForm } = await import("./BridgeForm.tsx");
 // Live Mayan quotes captured 2026-11-26 with placeholder addresses (the guard tests use the same file).
 const QUOTES = JSON.parse(readFileSync(new URL("../../../../test/fixtures/social/bridge/blink-quotes.json", import.meta.url), "utf8")) as Record<"baseUsdcToSui", Quote>;
 const QUOTE = QUOTES.baseUsdcToSui;
+const FAST_MCTP = JSON.parse(readFileSync(new URL("../../../../test/fixtures/social/bridge/fast-mctp-quote.json", import.meta.url), "utf8")) as Quote;
 const BLAST = `0x${"ab".repeat(32)}`;
 const SOURCE = `0x${"11".repeat(20)}`;
 const BEFORE_EXPIRY = Date.parse("2026-11-26T08:40:00Z");
@@ -82,13 +83,13 @@ async function mount(sdk: BridgeSdk, calls: Calls, wallet: EvmWallet | null = ev
     /** A fresh form on the same query cache, like closing and reopening Bridge. */
     remount: () => render(wallet, "again"),
     /** USDC to send, then SUI to receive: USDC defaults the receiving coin to USDC. */
-    async pickUsdc() {
+    async pickUsdc(receive: "SUI" | "USDC" = "SUI") {
       const option = (group: string, symbol: string) => [...container.querySelectorAll<HTMLButtonElement>(`[aria-label='${group}'] button`)].find((button) => button.textContent === symbol)!;
       await act(async () => container.querySelector<HTMLButtonElement>("[aria-label^='Coin to send:']")!.click());
       const source = await waitFor(() => [...dom.document.querySelectorAll<HTMLButtonElement>("[role='dialog'] button")].find((button) => button.textContent?.startsWith("USDC")), "the source token options");
       await act(async () => source.click());
       assert.equal(option("Coin to receive", "USDC").getAttribute("aria-pressed"), "true", "USDC sends to USDC by default");
-      await act(async () => option("Coin to receive", "SUI").click());
+      if (receive === "SUI") await act(async () => option("Coin to receive", "SUI").click());
     },
     async type(amount: string) {
       const input = container.querySelector<HTMLInputElement>("input")!;
@@ -198,6 +199,50 @@ test("reopening Bridge does not report an arrival again from the cache", async (
     await form.remount();
     await waitFor(() => /Arrived · 29\.81\u00a0SUI/.test(form.text()), "the listed row");
     assert.equal(calls.arrived, 1, "the cached arrival is not told twice");
+  } finally {
+    await form.unmount();
+  }
+});
+
+test("a terminal Fast MCTP history row wins over a cached pending status", async () => {
+  const calls = newCalls();
+  const transfer: BridgeRow = {
+    hash: "0xrefund", chain: "base", fromAmount: "20", fromSymbol: "USDC", toAmount: null,
+    toSymbol: "USDC", state: "pending", refundOnSui: true, at: new Date(BEFORE_EXPIRY).toISOString(),
+  };
+  let refreshed = false;
+  let statusReads = 0;
+  const sdk = fakeSdk(calls, [FAST_MCTP], {
+    history: async () => [refreshed ? { ...transfer, state: "refunded" } : transfer],
+    status: async () => { statusReads += 1; return { state: "pending", toAmount: null }; },
+  });
+  const form = await mount(sdk, calls, evm(), { gcTime: 5 * 60_000 });
+  try {
+    await waitFor(() => statusReads === 1 && form.text().includes("On the way"), "the cached pending transfer");
+    refreshed = true;
+    await form.remount();
+    await waitFor(() => form.text().includes("Refunded to your Blast wallet on Sui"), "the terminal refund from history");
+    assert.doesNotMatch(form.text(), /On the way/);
+  } finally {
+    await form.unmount();
+  }
+});
+
+test("a failed history read offers a retry and a successful empty read clears it", async () => {
+  const calls = newCalls();
+  let failed = true;
+  const sdk = fakeSdk(calls, [], { history: async () => {
+    if (failed) throw new Error("Mayan unavailable");
+    return [];
+  } });
+  const form = await mount(sdk, calls);
+  try {
+    const retry = await waitFor(() => [...form.container.querySelectorAll("button")].find((button) => button.textContent === "Retry history"), "the history retry action");
+    assert.match(form.text(), /Couldn’t load recent bridges/);
+    assert.match(form.text(), /Code: bridge_history_failed\./);
+    failed = false;
+    await act(async () => retry.click());
+    await waitFor(() => !form.text().includes("Recent bridges"), "the recovered empty history");
   } finally {
     await form.unmount();
   }
@@ -395,7 +440,30 @@ test("a lower fresh quote waits for a new press at the new rate", async () => {
     await form.press();
     assert.equal(calls.sends, 0);
     assert.equal(form.button().textContent, "Bridge at new rate");
-    assert.match(form.text(), /The rate changed/);
+    assert.match(form.text(), /The quote changed/);
+    await form.press();
+    assert.equal(calls.sends, 1);
+  } finally {
+    await form.unmount();
+  }
+});
+
+test("the wallet waits after switching to Fast MCTP and after its estimated output falls", async () => {
+  const calls = newCalls();
+  const shown = { ...QUOTE, minReceived: 19.9 };
+  const firstFastQuote = { ...FAST_MCTP, minReceived: 19.97 };
+  const worseEstimate = { ...firstFastQuote, expectedAmountOut: 19.979, expectedAmountOutBaseUnits: "19979000" };
+  const form = await mount(fakeSdk(calls, [shown, firstFastQuote, worseEstimate]), calls);
+  try {
+    await form.pickUsdc("USDC");
+    await form.type("20");
+    await form.press();
+    assert.equal(calls.sends, 0);
+    assert.match(form.text(), /Mayan Fast MCTP/);
+    assert.match(form.text(), /The amount shown is an estimate/);
+    assert.equal(form.button().textContent, "Bridge at new rate");
+    await form.press();
+    assert.equal(calls.sends, 0);
     await form.press();
     assert.equal(calls.sends, 1);
   } finally {

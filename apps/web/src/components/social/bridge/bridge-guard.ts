@@ -3,6 +3,7 @@ import { decodeBlinkQuote, getWormholeChainIdByName, hasBlinkQuoteHash, isNative
 import { normalizeStructTag, normalizeSuiAddress } from "@mysten/sui/utils";
 
 import type { BridgeChain } from "./bridge-config.ts";
+import { fastMctpTerms } from "./bridge-fast-mctp.ts";
 import { CHAINS, sourceAddressKey, type DestinationToken, type QuoteFacts, type SourceToken } from "./bridge-model.ts";
 
 /** What the person asked for; a quote must match all of it before any wallet call. */
@@ -13,11 +14,11 @@ export type BridgeRequest = Readonly<{
   amountIn64: string;
   /** The Blast account's Sui address: the only recipient the card ever sends to. */
   blastAddress: string;
-  /** The connected source wallet: the only refund address. */
+  /** The connected wallet sending the funds. Blink also refunds to this address. */
   sourceAddress: string;
 }>;
 
-export type GuardResult = Readonly<{ ok: true; order: BlinkQuote }> | Readonly<{ ok: false; reason: string }>;
+export type GuardResult = Readonly<{ ok: true }> | Readonly<{ ok: false; reason: string }>;
 
 function sameSourceAddress(chain: BridgeChain, a: string, b: string): boolean {
   return sourceAddressKey(chain, a) === sourceAddressKey(chain, b);
@@ -43,6 +44,14 @@ function coversQuotedMinimum(quote: Quote, decimals: number, signedMinimum: stri
   return shown !== null && quoted !== null && signed >= quoted.n && compareExact({ n: signed, scale: decimals }, shown) >= 0;
 }
 
+/** Checks a bound Mayan quote against the request before any wallet call. */
+export function guardQuote(quote: Quote, request: BridgeRequest, now: number): GuardResult {
+  if (quote.type === "FAST_MCTP") {
+    return fastMctpTerms(quote, request, now) ? { ok: true } : { ok: false, reason: "invalid Fast MCTP terms" };
+  }
+  return guardBlinkQuote(quote, request, now);
+}
+
 /**
  * Checks a bound Mayan quote before the wallet sees it: a Blink order, from the
  * chosen chain and token, for the typed amount, paying the Blast address on Sui
@@ -51,7 +60,7 @@ function coversQuotedMinimum(quote: Quote, decimals: number, signedMinimum: stri
  * The SDK repeats the order checks when it builds the transaction; this keeps a
  * wrong quote from ever reaching a signing prompt.
  */
-export function guardQuote(quote: Quote, request: BridgeRequest, now: number): GuardResult {
+function guardBlinkQuote(quote: Quote, request: BridgeRequest, now: number): GuardResult {
   if (quote.type !== "BLINK") return { ok: false, reason: "not a Blink quote" };
   if (!hasBlinkQuoteHash(quote)) return { ok: false, reason: "no Blink order" };
   let order: BlinkQuote;
@@ -87,7 +96,7 @@ export function guardQuote(quote: Quote, request: BridgeRequest, now: number): G
   if (!sameSourceAddress(request.chain, params.refundAddress, request.sourceAddress)) return { ok: false, reason: "wrong refund address" };
   if (params.referrers.length > 0) return { ok: false, reason: "unexpected referrer" };
   if (!(Date.parse(order.expiresAt) > now)) return { ok: false, reason: "expired" };
-  return { ok: true, order };
+  return { ok: true };
 }
 
 /** The numbers the card shows, read from a quote (bound or not). */
@@ -97,7 +106,9 @@ export function quoteFacts(quote: Quote, token: SourceToken): QuoteFacts {
   return {
     expectedAmountOut: quote.expectedAmountOut,
     minReceived: quote.minReceived,
-    clientRelayerFeeSuccess: quote.clientRelayerFeeSuccess,
+    clientRelayerFeeSuccess: quote.type === "FAST_MCTP"
+      ? (Number(quote.effectiveAmountIn64) - Number(quote.expectedAmountOutBaseUnits)) / 1e6
+      : quote.clientRelayerFeeSuccess,
     etaSeconds: quote.etaSeconds,
     amountIn: Number(quote.effectiveAmountIn64) / 10 ** token.decimals,
     amountInUsd: usdMicros > 0 ? usdMicros / 1e6 : undefined,
