@@ -123,7 +123,7 @@ function useBridgeQuote({ sdk, selection, wallet, blastAddress, atoms, paused, o
   const typed = atoms?.toString() ?? null;
   const settled = useDebouncedValue(typed, QUOTE_DEBOUNCE_MS);
   const typing = settled !== typed;
-  // A bound quote names the source wallet and the Blast address and carries a Blink order.
+  // A bound quote names the source wallet and the Blast address.
   const swapper = wallet && blastAddress ? wallet.address : undefined;
   const destination = swapper ? blastAddress! : undefined;
   const quoteKey = ["bridge", "quote", chain, token.mayan, settled, to.coinType, swapper ?? null, destination ?? null] as const;
@@ -167,7 +167,7 @@ function useSourceReads({ sdk, selection, wallet }: ReadArgs, { quote, settled, 
 
   const evmWallet = wallet?.kind === "evm" ? wallet : null;
   const wrongChain = evmWallet !== null && evmWallet.chainId !== info.chainId;
-  const allowanceKey = ["bridge", "allowance", chain, token.mayan, evmWallet?.address ?? null, settled, to.coinType] as const;
+  const allowanceKey = ["bridge", "allowance", chain, token.mayan, evmWallet?.address ?? null, settled, to.coinType, quote.data?.type ?? null] as const;
   const allowance = useQuery({
     queryKey: allowanceKey,
     queryFn: () => sdk.allowanceEnough(quote.data!, evmWallet!, chain),
@@ -231,7 +231,7 @@ function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent }: R
   const { chain, info, token, to } = selection;
   const queryClient = useQueryClient();
   const [failed, setFailed] = useState<string | null>(null);
-  // The quote inputs a lower fresh rate was found for; any new input clears the prompt.
+  // The inputs for a fresh route or lower rate that needs review.
   const [rateChangedFor, setRateChangedFor] = useState<string | null>(null);
   const [sent, setSent] = useState<readonly BridgeRow[]>([]);
   const running = useRef(false);
@@ -294,7 +294,12 @@ function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent }: R
   const approve = (ask: BridgeRequest, source: EvmWallet) => run(async () => {
     const fresh = await freshQuote(ask);
     if (!fresh) return;
-    await sdk.approve(fresh, source, chain, signal());
+    if (shown && fresh.type !== shown.type) {
+      queryClient.setQueryData(keys.quoteKey, fresh);
+      setRateChangedFor(inputs);
+      return;
+    }
+    await sdk.approve(fresh, ask, source, signal());
     // Re-check on the quote the approval was made for.
     queryClient.setQueryData(keys.allowanceKey, await sdk.allowanceEnough(fresh, source, chain));
   });
@@ -303,7 +308,10 @@ function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent }: R
     const fresh = await freshQuote(ask);
     if (!fresh) return;
     queryClient.setQueryData(keys.quoteKey, fresh);
-    if (shown && fresh.minReceived < shown.minReceived) {
+    const worseQuote = fresh.type === "FAST_MCTP"
+      ? shown && fresh.expectedAmountOut < shown.expectedAmountOut
+      : shown && fresh.minReceived < shown.minReceived;
+    if (shown && (fresh.type !== shown.type || worseQuote)) {
       setRateChangedFor(inputs);
       return;
     }
@@ -314,7 +322,7 @@ function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent }: R
     if (signal().aborted) return;
     const record = (hash: string) => {
       rememberSubmission(ask.blastAddress, hash);
-      setSent((rows) => rows.some((row) => row.hash === hash) ? rows : [{ hash, chain, fromAmount, fromSymbol: token.symbol, toAmount: String(fresh.expectedAmountOut), toSymbol: to.symbol, state: "pending", at: new Date(now()).toISOString() }, ...rows]);
+      setSent((rows) => rows.some((row) => row.hash === hash) ? rows : [{ hash, chain, fromAmount, fromSymbol: token.symbol, toAmount: String(fresh.expectedAmountOut), toSymbol: to.symbol, state: "pending", refundOnSui: fresh.type === "FAST_MCTP", at: new Date(now()).toISOString() }, ...rows]);
     };
     record(await sdk.send(fresh, ask, source, record, signal()));
     routeEvent(fresh, chain, token);
@@ -481,6 +489,7 @@ export function BridgeForm({ sdk, wallets, blastAddress, signedIn, onSignIn, onA
         amount={amount}
         busy={action.kind === "busy"}
         facts={atoms === null ? null : facts}
+        fastMctp={reads.shown?.type === "FAST_MCTP"}
         info={info}
         message={message}
         noteId={noteId}
@@ -657,8 +666,9 @@ function GetPanel({ facts, waiting, failed, refreshing, toIndex, onTo, busy, bla
   );
 }
 
-function QuoteNotes({ facts, amount, info, token, refreshing, message, noteId, rateChanged, reason, busy }: Readonly<{
+function QuoteNotes({ facts, fastMctp, amount, info, token, refreshing, message, noteId, rateChanged, reason, busy }: Readonly<{
   facts: QuoteRows | null;
+  fastMctp: boolean;
   amount: string;
   info: ChainInfo;
   token: SourceToken;
@@ -671,22 +681,34 @@ function QuoteNotes({ facts, amount, info, token, refreshing, message, noteId, r
 }>) {
   return (
     <>
-      {facts ? (
-        <div className={clsx(styles.summary, refreshing && styles.refreshing)}>
-          <p className={styles.sentence}>
-            Send {displayAmount(amount.replace(/,/g, ""), token.symbol)} from {info.label}. You get at least {facts.minimum}.
-          </p>
-          <dl className={coinStyles.terms}>
-            <div><dt>Fee</dt><dd>{facts.fee}</dd></div>
-            <div><dt>Arrives</dt><dd>{facts.eta}</dd></div>
-          </dl>
-        </div>
-      ) : null}
+      {facts ? <QuoteSummary facts={facts} fastMctp={fastMctp} rateChanged={rateChanged} refreshing={refreshing} sent={displayAmount(amount.replace(/,/g, ""), token.symbol)} source={info.label} /> : null}
       {message ? <p className={clsx(coinStyles.status, styles.note)} id={noteId} role="alert"><DiagnosticText message={message} /></p> : null}
-      {rateChanged ? <p className={clsx(coinStyles.status, styles.note)} role="status">The rate changed. Check the new numbers.</p> : null}
+      {rateChanged ? <p className={clsx(coinStyles.status, styles.note)} role="status">The quote changed. Review it before continuing.</p> : null}
       {reason && !message ? <p className={clsx(coinStyles.status, styles.note)} id={noteId}>{reason}</p> : null}
       {busy ? <p aria-hidden="true" className={clsx(coinStyles.status, styles.note)}>{BUSY_TEXT}</p> : null}
     </>
+  );
+}
+
+function QuoteSummary({ facts, fastMctp, rateChanged, refreshing, sent, source }: Readonly<{
+  facts: QuoteRows;
+  fastMctp: boolean;
+  rateChanged: boolean;
+  refreshing: boolean;
+  sent: string;
+  source: string;
+}>) {
+  return (
+    <div className={clsx(styles.summary, refreshing && styles.refreshing)}>
+      <p className={styles.sentence}>
+        Send {sent} from {source}. {fastMctp ? "The amount shown is an estimate." : `You get at least ${facts.minimum}.`}
+      </p>
+      <dl className={coinStyles.terms}>
+        <div><dt>{fastMctp ? "Estimated fee" : "Fee"}</dt><dd>{facts.fee}</dd></div>
+        <div><dt>Arrives</dt><dd>{facts.eta}</dd></div>
+        {fastMctp || rateChanged ? <div><dt>Route</dt><dd>{fastMctp ? "Mayan Fast MCTP" : "Mayan Blink"}</dd></div> : null}
+      </dl>
+    </div>
   );
 }
 
@@ -735,7 +757,8 @@ function BridgeRowView({ row, sdk, onArrived, now }: Readonly<{ row: BridgeRow; 
   const info = row.chain ? CHAINS[row.chain] : null;
   const chain = info?.label ?? "another chain";
   const sentText = displayAmount(row.fromAmount, row.fromSymbol);
-  const line = statusLine(state, chain, toAmount, row.toSymbol, age >= STATUS_GIVE_UP_MS);
+  const refundWallet = row.refundOnSui ? "Blast wallet on Sui" : `${chain} wallet`;
+  const line = statusLine(state, refundWallet, toAmount, row.toSymbol, age >= STATUS_GIVE_UP_MS);
   return (
     <li className={styles.row} data-state={state}>
       <Logo size={24} src={info?.logo ?? null} />
@@ -748,10 +771,10 @@ function BridgeRowView({ row, sdk, onArrived, now }: Readonly<{ row: BridgeRow; 
   );
 }
 
-function statusLine(state: TransferState, chain: string, toAmount: string | null | undefined, symbol: string, gaveUp: boolean): string {
+function statusLine(state: TransferState, refundWallet: string, toAmount: string | null | undefined, symbol: string, gaveUp: boolean): string {
   const received = toAmount ? displayAmount(toAmount, symbol) : null;
   if (state === "done") return `Arrived · ${received ?? symbol}`;
-  if (state === "refunded") return `Refunded to your ${chain} wallet`;
+  if (state === "refunded") return `Refunded to your ${refundWallet}`;
   if (gaveUp) return "Still on the way. Check on Mayan.";
   return received ? `On the way · ≈ ${received}` : "On the way";
 }

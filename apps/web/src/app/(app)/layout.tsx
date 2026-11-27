@@ -25,7 +25,7 @@ export default async function AppLayout({
     return children;
   }
 
-  const { presale: config, presaleDeployment, bridge } = webConfig();
+  const { presale: config, presaleDeployment, bridge, bridgeFastMctp } = webConfig();
   const requestHeaders = await headers();
   const nonce = requestHeaders.get("x-nonce");
   const initialSession = await readHeaderSession(
@@ -50,7 +50,7 @@ export default async function AppLayout({
       <FeelProvider>
         <PresaleProviders config={config} nonce={nonce} privySession={hasPrivySessionCookie(requestHeaders)}>
           <SocialSession>
-            <BridgeProvider enabled={bridge}>
+            <BridgeProvider enabled={bridge} fastMctp={bridgeFastMctp}>
               {shell}
             </BridgeProvider>
           </SocialSession>

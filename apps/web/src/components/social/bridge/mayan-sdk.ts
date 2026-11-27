@@ -5,6 +5,7 @@ import {
   getSwapFromEvmTxPayload,
   isEvmSwapAllowanceEnough,
   swapFromSolana,
+  type Quote,
   type QuoteOptions,
 } from "@mayanfinance/swap-sdk";
 import { Connection, PublicKey, Transaction, VersionedTransaction } from "@solana/web3.js";
@@ -12,6 +13,8 @@ import { BrowserProvider, Contract, JsonRpcProvider, type TransactionRequest } f
 
 import { fetchSourceTokens } from "./bridge-catalog.ts";
 import { mayanRpc, type BridgeChain } from "./bridge-config.ts";
+import { assertFastMctpApproval, assertFastMctpPayload, fastMctpTerms, supportsFastMctp } from "./bridge-fast-mctp.ts";
+import type { BridgeRequest } from "./bridge-guard.ts";
 import { CHAINS, transferState, type SourceToken } from "./bridge-model.ts";
 import { abortableProvider, explorerRows, MAYAN_EXPLORER, type BridgeSdk, type EvmWallet, type SolanaWallet } from "./bridge-sdk.ts";
 
@@ -21,7 +24,7 @@ const ERC20 = ["function balanceOf(address) view returns (uint256)"];
 const TOKEN_2022_PROGRAM = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
 
 /** The Mayan SDK, ethers and web3.js behind the card's `BridgeSdk`, on Mayan's RPCs. */
-export function mayanSdk(): BridgeSdk {
+export function mayanSdk(allowFastMctp = false): BridgeSdk {
   const evmProviders = new Map<BridgeChain, JsonRpcProvider>();
   const evm = (chain: BridgeChain): JsonRpcProvider => {
     let provider = evmProviders.get(chain);
@@ -33,6 +36,22 @@ export function mayanSdk(): BridgeSdk {
   };
   let solana: Connection | null = null;
   const solanaConnection = () => (solana ??= new Connection(mayanRpc("solana"), "confirmed"));
+
+  const evmPayload = async (quote: Quote, request: BridgeRequest, wallet: EvmWallet) => {
+    const { chain, blastAddress, sourceAddress } = request;
+    const fastMctp = quote.type === "FAST_MCTP";
+    if (fastMctp && (!allowFastMctp || !fastMctpTerms(quote, request, Date.now())
+      || wallet.address.toLowerCase() !== sourceAddress.toLowerCase())) {
+      throw new Error("Invalid Fast MCTP transfer");
+    }
+    const chainId = CHAINS[chain].chainId!;
+    const payload = await getSwapFromEvmTxPayload(quote, wallet.address, blastAddress, null, wallet.address, chainId, null, null, {
+      evmProvider: evm(chain),
+      ...(fastMctp ? { refundAddress: blastAddress } : {}),
+    });
+    if (fastMctp) assertFastMctpPayload(payload, quote, request);
+    return payload;
+  };
 
   // Returns the hash once the wallet sends. `sendTransaction` would then poll the
   // wallet's own RPC with no time limit, which never ends for some smart-contract wallets.
@@ -61,12 +80,16 @@ export function mayanSdk(): BridgeSdk {
 
   return {
     tokens: fetchSourceTokens,
-    async quote({ chain, token, to, amountIn64, swapper, destination }) {
-      const [quote] = await fetchQuote(
+    async quote(input) {
+      const { chain, token, to, amountIn64, swapper, destination } = input;
+      const fallback = allowFastMctp && supportsFastMctp(input);
+      const quotes = await fetchQuote(
         { amountIn64, fromToken: token.mayan, fromChain: chain, toToken: to.coinType, toChain: "sui", slippageBps: "auto", swapperAddress: swapper, destinationAddress: destination },
-        BLINK_ONLY,
+        fallback ? { ...BLINK_ONLY, fullList: true, fastMctp: true } : BLINK_ONLY,
       );
-      if (!quote) throw Object.assign(new Error("No Blink route"), { code: "ROUTE_NOT_FOUND" });
+      const quote = quotes.find(({ type }) => type === "BLINK")
+        ?? (fallback ? quotes.find((result) => fastMctpTerms(result, input, Date.now())) : undefined);
+      if (!quote) throw Object.assign(new Error("No supported bridge route"), { code: "ROUTE_NOT_FOUND" });
       return quote;
     },
     async balance(chain, token, owner) {
@@ -76,9 +99,17 @@ export function mayanSdk(): BridgeSdk {
       return BigInt(await new Contract(token.mayan, ERC20, provider).getFunction("balanceOf")(owner));
     },
     allowanceEnough: (quote, wallet, chain) => isEvmSwapAllowanceEnough(quote, wallet.address, evm(chain)),
-    async approve(quote, wallet, chain, signal) {
+    async approve(quote, request, wallet, signal) {
+      const { chain } = request;
+      signal.throwIfAborted();
+      if (quote.type === "FAST_MCTP") await evmPayload(quote, request, wallet);
       const provider = evm(chain);
-      for (const transaction of await getEvmSwapApproveTxs(quote, wallet.address, provider)) {
+      const transactions = await getEvmSwapApproveTxs(quote, wallet.address, provider);
+      if (quote.type === "FAST_MCTP") {
+        if (transactions.length !== 1) throw new Error("Unexpected Fast MCTP approval count");
+        assertFastMctpApproval(transactions[0]!, request.amountIn64);
+      }
+      for (const transaction of transactions) {
         // react-doctor-disable-next-line react-doctor/async-await-in-loop -- Approvals are ordered (a reset to zero comes before the new allowance); each must be mined before the next is signed.
         const hash = await sendEvm(wallet, chain, transaction, signal);
         // react-doctor-disable-next-line react-doctor/async-await-in-loop -- The next approval depends on this receipt.
@@ -87,13 +118,14 @@ export function mayanSdk(): BridgeSdk {
       }
     },
     async send(quote, request, wallet, onSigned, signal) {
+      signal.throwIfAborted();
       if (wallet.kind === "evm") {
-        const chainId = CHAINS[request.chain].chainId!;
-        const payload = await getSwapFromEvmTxPayload(quote, wallet.address, request.blastAddress, null, wallet.address, chainId, null, null, { evmProvider: evm(request.chain) });
+        const payload = await evmPayload(quote, request, wallet);
         const hash = await sendEvm(wallet, request.chain, { to: payload.to, data: payload.data, value: payload.value }, signal);
         onSigned(hash);
         return hash;
       }
+      if (quote.type === "FAST_MCTP") throw new Error("Fast MCTP requires a Base wallet");
       const sign = solanaSigner(wallet, signal);
       // No extra RPCs: every Solana call goes to Mayan's RPC only.
       const { signature } = await swapFromSolana(quote, wallet.address, request.blastAddress, null, sign, solanaConnection(), [], undefined, undefined, undefined, { onTransactionSigned: onSigned });

@@ -334,7 +334,17 @@ is not ready to come back. The server-side CCTP code stays untouched and
 unlinked. When From is USDC, To defaults to USDC (the person can still pick
 SUI). Large USDC amounts reach Circle CCTP V2 through Mayan's FAST_MCTP.
 
-## Above the BLINK cap: FAST_MCTP (follow-up PR)
+## FAST_MCTP fallback on dev
+
+The `dev` Vercel environment can ask for a direct Base USDC → Sui USDC
+transfer alongside BLINK in the same quote request. BLINK wins when available.
+The fallback uses Mayan's verified Base forwarder and Fast MCTP contract, with
+no swap, gas drop, referrer, permit or payload. The card checks the exact Base
+approval and the transfer calldata before opening the wallet. The Sui address
+in that calldata must be the person's Blast wallet. Mayan pays any destination
+refund to that wallet. The card shows an estimate for the direct transfer.
+
+### Broader FAST_MCTP support
 
 BLINK stops near $300 per bridge. FAST_MCTP (Circle CCTP V2 with Mayan's
 relayer, about 35 s, about 4.5 bps) takes larger amounts. PR 1 is BLINK only
@@ -344,7 +354,7 @@ and shows Mayan's max. FAST_MCTP lands in its own PR, only with all of:
   The guard decodes the built EVM calldata (`MayanForwarder.forwardERC20` /
   `forwardEth` wrapping `MayanFastMctp.bridge` or `createOrder`) and the
   Solana ledger instruction, and refuses unless the destination is the Blast
-  address on Sui, the refund is the source wallet, and no referrer is set.
+  address on Sui, any destination refund goes to that same wallet, and no referrer is set.
   **Kill rule:** if any path cannot be checked, that path stays capped at
   BLINK.
 - The ETA from the chosen route (BLINK 1–10 s, FAST_MCTP about 35 s), and
