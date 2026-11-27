@@ -1,6 +1,6 @@
 /**
- * Writes one Next route file per relayed endpoint, from the route tables:
- * private routes, cron routes and first-party reads. `--check` fails on any drift.
+ * Writes the shared 40-second API handler and the explicit relay routes from
+ * the route tables. `--check` fails on any drift.
  *
  *   npm run generate:relay-routes -w @blast/web            # write
  *   npm run generate:relay-routes -w @blast/web -- --check # verify only
@@ -19,6 +19,8 @@ const METHOD_ORDER = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"];
 const DEFAULT_WORK_BUDGET_MS = 30_000;
 /** The relay aborts five seconds after the work budget; Next keeps five more to answer. */
 const RELAY_MARGIN_SECONDS = 10;
+const API_CATCH_ALL_PATH = "/api/[...path]";
+const API_CATCH_ALL_DURATION = 40;
 
 type Relay = "private" | "cron" | "first-party";
 type RelayRoute = { path: RoutePath; relay: Relay; methods: Set<string>; workBudgetMs?: number };
@@ -50,13 +52,25 @@ function relayRoutes(): readonly RelayRoute[] {
   return [...routes.values()];
 }
 
-function relayFileSource(route: RelayRoute): string {
+function relayMethods(route: RelayRoute): string[] {
   const methods = METHOD_ORDER.filter((method) => route.methods.has(method));
   const unknown = [...route.methods].filter((method) => !METHOD_ORDER.includes(method));
   if (unknown.length) throw new Error(`${route.path} declares unsupported methods ${unknown.join(", ")}.`);
-  const config = ['export const runtime = "nodejs";', 'export const dynamic = "force-dynamic";'];
+  return methods;
+}
+
+function maxDuration(route: RelayRoute): number | undefined {
   if (route.workBudgetMs !== undefined) {
-    config.push(`export const maxDuration = ${Math.ceil(route.workBudgetMs / 1000) + RELAY_MARGIN_SECONDS};`);
+    return Math.ceil(route.workBudgetMs / 1000) + RELAY_MARGIN_SECONDS;
+  }
+}
+
+function relayFileSource(route: RelayRoute): string {
+  const methods = relayMethods(route);
+  const config = ['export const runtime = "nodejs";', 'export const dynamic = "force-dynamic";'];
+  const duration = maxDuration(route);
+  if (duration !== undefined) {
+    config.push(`export const maxDuration = ${duration};`);
   }
   const handlers =
     route.relay === "first-party"
@@ -71,6 +85,28 @@ function relayFileSource(route: RelayRoute): string {
             `export const ${method} = ${route.relay === "cron" ? "backendCronRequest" : "backendPrivateRequest"};`,
         );
   return [MARKER, RELAY_IMPORT[route.relay], "", ...config, "", ...handlers, ""].join("\n");
+}
+
+function catchAllFileSource(routes: readonly RelayRoute[]): string {
+  const entries = routes.map((route) => {
+    const methods = relayMethods(route).map((method) => JSON.stringify(method)).join(", ");
+    return `  [${JSON.stringify(route.path)}, [${methods}]],`;
+  });
+  return [
+    MARKER,
+    'import { createPrivateApiCatchAll } from "#web/lib/backend-api/private-api-catch-all.ts";',
+    "",
+    'export const runtime = "nodejs";',
+    'export const dynamic = "force-dynamic";',
+    `export const maxDuration = ${API_CATCH_ALL_DURATION};`,
+    "",
+    "const handle = createPrivateApiCatchAll([",
+    ...entries,
+    "]);",
+    "",
+    ...[...METHOD_ORDER, "OPTIONS"].map((method) => `export const ${method} = handle;`),
+    "",
+  ].join("\n");
 }
 
 /** Route files by URL path, with route groups such as `(mission-control)` left out. */
@@ -92,13 +128,63 @@ function webPath(path: RoutePath): string {
   return path.replace(/:(\w+)/g, "[$1]");
 }
 
+function specificity(path: string): string {
+  return path.split("/").map((segment) => segment.startsWith("[") ? "0" : "1").join("");
+}
+
+function overlaps(candidate: string, explicit: string): boolean {
+  const segments = candidate.split("/");
+  const explicitSegments = explicit.split("/");
+  for (const [index, segment] of explicitSegments.entries()) {
+    if (segment.startsWith("[[...")) return segments.length >= index;
+    if (segment.startsWith("[...")) return segments.length > index;
+    const other = segments[index];
+    if (other === undefined) return false;
+    if (segment !== other && !segment.startsWith("[") && !other.startsWith("[")) return false;
+  }
+  return segments.length === explicitSegments.length;
+}
+
+function catchAllRoutes(routes: readonly RelayRoute[], handWrittenPaths: readonly string[]): Set<RelayRoute> {
+  const candidates: RelayRoute[] = [];
+  const explicit = [...handWrittenPaths];
+  for (const route of routes) {
+    if (route.relay === "private" && route.path.startsWith("/api/") && maxDuration(route) === API_CATCH_ALL_DURATION) {
+      candidates.push(route);
+    } else {
+      explicit.push(webPath(route.path));
+    }
+  }
+
+  // Visit less specific paths first so a retained dynamic route cannot shadow
+  // a more specific path after we move it under /api/[...path].
+  candidates.sort((left, right) => specificity(webPath(left.path)).localeCompare(specificity(webPath(right.path))));
+  const included: RelayRoute[] = [];
+  for (const route of candidates) {
+    const path = webPath(route.path);
+    if (explicit.some((other) => overlaps(path, other))) {
+      explicit.push(path);
+    } else {
+      included.push(route);
+    }
+  }
+  return new Set(included.reverse());
+}
+
 type Plan = { write: Map<string, string>; remove: string[]; handWritten: string[] };
 
 /** What the app directory must hold: an existing file keeps its place, including inside a route group. */
 function relayPlan(): Plan {
   const existing = existingRouteFiles();
-  const write = new Map<string, string>();
-  for (const route of relayRoutes()) {
+  const handWrittenPaths = [...existing]
+    .filter(([, file]) => !readFileSync(file, "utf8").startsWith(MARKER))
+    .map(([url]) => url);
+  const routes = relayRoutes();
+  const shared = catchAllRoutes(routes, handWrittenPaths);
+  const catchAllFile = existing.get(API_CATCH_ALL_PATH) ?? join(APP, API_CATCH_ALL_PATH, "route.ts");
+  const write = new Map([[catchAllFile, catchAllFileSource([...shared])]]);
+  for (const route of routes) {
+    if (shared.has(route)) continue;
     const url = webPath(route.path);
     const file = existing.get(url) ?? join(APP, url, "route.ts");
     write.set(file, relayFileSource(route));
