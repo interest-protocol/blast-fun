@@ -367,8 +367,8 @@ export class MarketStreamHub {
   private cancelLinger: (() => void) | null = null;
   /**
    * Nothing is wanted and the socket stays for hint clients (it streams no topics once the linger ends).
-   * They leave with each drop or pause and come back with their own backoff, so it closes only once it is
-   * up (or the tab is visible) `LINGER_MS` with none attached.
+   * They leave with each drop or pause and come back with their own backoff, so it closes only after
+   * `LINGER_MS` with none attached while the tab is visible; a hidden tab decides once it is shown.
    */
   private keptForHints = false;
   private seq = 0;
@@ -510,7 +510,11 @@ export class MarketStreamHub {
 
   /** The last hint client left: a socket that wants no topics closes a linger after this leave. */
   private hintsLeft(): void {
-    if (!this.connection || !nothingWanted(this.wanted())) return;
+    if (this.connection && nothingWanted(this.wanted())) this.restartLinger();
+  }
+
+  /** The linger counts from now, not from an earlier start. */
+  private restartLinger(): void {
     this.cancelLinger?.();
     this.cancelLinger = null;
     this.linger();
@@ -883,9 +887,7 @@ export class MarketStreamHub {
       // Kept for hint clients: the new socket streams no topics, and they come back to it within a linger, or it closes.
       this.keptForHints = true;
       this.empty(connection);
-      this.cancelLinger?.();
-      this.cancelLinger = null;
-      this.linger();
+      this.restartLinger();
     }
     const params = new URLSearchParams();
     params.set("activity", "true");
