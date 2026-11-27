@@ -7,6 +7,7 @@ import {
 import { normalizeBlockedTerm, parseSocialConfigInput, parseSocialConfigKey, socialConfigFromRows } from "@blast/core/modules/social/config/values.ts";
 import { backfill } from "./backfill.ts";
 import { SALE_METADATA_OPERATOR_COMMANDS } from "../sales/operator.ts";
+import { REFERRAL_PAYMENT_RECORD } from "../referrals/operator.ts";
 import { defaultsSet } from "./defaults.ts";
 import { socialOperatorCommand, type SocialOperatorCommand } from "./framework.ts";
 import { saleTrustClear, saleTrustHistory, saleTrustList, saleTrustSet } from "./trust.ts";
@@ -149,6 +150,7 @@ export const SOCIAL_OPERATOR_COMMANDS: readonly SocialOperatorCommand[] = Object
   termsList,
   defaultsSet,
   backfill,
+  REFERRAL_PAYMENT_RECORD,
   saleTrustSet,
   saleTrustClear,
   saleTrustList,

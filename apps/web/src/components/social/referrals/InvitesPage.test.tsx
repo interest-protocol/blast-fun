@@ -1,18 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { installTestDom } from "../../../../test/fixtures/social/test-dom.ts";
+import { installTestDom, waitFor } from "../../../../test/fixtures/social/test-dom.ts";
 
 const { document } = installTestDom();
 const { act } = await import("react");
 const { createRoot } = await import("react-dom/client");
 const { QueryProvider } = await import("#web/lib/query/provider.tsx");
+const { queryKeys } = await import("#web/lib/query/keys.ts");
 const { createTestQueryClient, settleQueries } = await import("#web/lib/query/test-client.ts");
 const { SocialViewerProvider } = await import("../SignInGate");
-const { InviteesView, InvitesPage } = await import("./InvitesPage");
+const { InvitesPage } = await import("./InvitesPage");
 const { ReferralAccounting } = await import("./ReferralAccounting");
-const cursor = "00000000-0000-4000-8000-000000000001";
-const person = { id: cursor, callsign: "nova", display_name: "Nova", avatar_url: "https://pbs.twimg.com/profile_images/nova_normal.jpg", x_handle: "nova_x" };
-
 test("referral amounts hide unavailable figures and copy readable amounts with the full coin type", async (t) => {
   const coinType = `0x${"a".repeat(64)}::usd::USD`;
   const usd = { coin_type: coinType, symbol: "USD", decimals: 6, volume_atoms: "1234567", revenue_atoms: "123", earnings_atoms: "47" };
@@ -61,102 +59,101 @@ test("referral amounts hide unavailable figures and copy readable amounts with t
   assert.ok([...container.querySelectorAll("dt")].some((label) => label.textContent === "Earnings"));
 });
 
-test("session pending retains the invite list heading and section spacing without private rows", async (t) => {
-  const client = createTestQueryClient();
-  const container = document.createElement("div"); document.body.append(container);
-  const root = createRoot(container);
-  t.after(async () => { await act(async () => root.unmount()); client.clear(); container.remove(); });
-  await act(async () => root.render(<QueryProvider client={client}><SocialViewerProvider signedIn={false} sessionPending><InvitesPage /></SocialViewerProvider></QueryProvider>));
-  const heading = container.querySelector("#invitees-heading")!;
-  assert.equal(heading.textContent, "People you invited");
-  assert.ok(heading.closest(".sec"));
-  assert.equal(container.querySelectorAll("li").length, 0);
-  assert.doesNotMatch(container.textContent!, /Sign in/);
-});
-
-test("Invites page shows a private total, profile links and paged invitees, then clears on sign-out", async (t) => {
+test("the private referral page renders one entry per month and links only confirmed SUI payments", async (t) => {
+  const digest = "4vJ9JU1bJJE96FWSJKvHsmmFADCg4gpZQff4P3bkLKi";
   const reads: string[] = [];
+  let failed = true;
+  let empty = false;
+  let holdRetry = false;
+  const pendingRetry = Promise.withResolvers<Response>();
   t.mock.method(globalThis, "fetch", async (path: string | URL | Request) => {
-    const url = String(path); reads.push(url);
-    return Response.json(url.includes("/invitees") ? url.includes("cursor=")
-      ? { invitees: [{ ...person, id: cursor.replace(/1$/, "2"), callsign: null, display_name: "Legacy member" }], next_cursor: null }
-      : { invitees: [person], next_cursor: cursor }
-      : { invited: 2, volume_usd: "10000.00", unvalued_trades: 0 });
+    reads.push(String(path));
+    if (holdRetry) return pendingRetry.promise;
+    if (failed) return Response.json({ error: { code: "service_unavailable" } }, { status: 503 });
+    if (empty) return Response.json({ months: [] });
+    return Response.json({
+      months: [
+        { month: "2026-12", revenue_atoms: null, earnings_atoms: null, share_bps: null, payment: null },
+        { month: "2026-11", revenue_atoms: "21", earnings_atoms: "7", share_bps: 3429, payment: null },
+        { month: "2026-10", revenue_atoms: "1000000000", earnings_atoms: "300000000", share_bps: 3000, payment: { amount_atoms: "500000000", digest } },
+        { month: "2026-09", revenue_atoms: "0", earnings_atoms: "0", share_bps: 6000, payment: null },
+      ],
+    });
   });
   const client = createTestQueryClient();
-  const container = document.createElement("div"); document.body.append(container);
+  const container = document.createElement("div");
+  document.body.append(container);
   const root = createRoot(container);
-  t.after(async () => { await act(async () => root.unmount()); client.clear(); container.remove(); });
-  const render = (signedIn: boolean) => <QueryProvider client={client}><SocialViewerProvider signedIn={signedIn} callsign={signedIn ? "kai_9" : null}><InvitesPage /></SocialViewerProvider></QueryProvider>;
+  t.after(async () => {
+    await act(async () => root.unmount());
+    client.clear();
+    container.remove();
+  });
+  const render = (signedIn: boolean, sessionPending = false) => (
+    <QueryProvider client={client}>
+      <SocialViewerProvider signedIn={signedIn} callsign={signedIn ? "kai_9" : null} sessionPending={sessionPending}>
+        <InvitesPage />
+      </SocialViewerProvider>
+    </QueryProvider>
+  );
+
+  await act(async () => root.render(render(false, true)));
+  assert.ok(container.querySelector('[aria-label="Loading referral payments"]'));
+  assert.equal(reads.length, 0);
   await act(async () => root.render(render(true)));
   await act(async () => settleQueries(client));
-  assert.equal(container.querySelector("h1")!.textContent, "Invites");
-  assert.equal(container.querySelector('[data-back-bar] a')!.textContent, "Profile");
-  assert.equal(container.querySelector('[data-back-bar] a')!.getAttribute("href"), "/@kai_9");
-  assert.equal(container.querySelector("#invitees-heading")!.tagName, "H2");
-  assert.equal(container.querySelector(".inviteVolume strong")!.textContent, "$10,000.00");
-  assert.ok(container.querySelector('a[href="/@nova"]'));
-  assert.ok(container.querySelector('a[href="https://x.com/nova_x"]'));
-  assert.equal(container.querySelectorAll("li").length, 1);
-  await act(async () => { [...container.querySelectorAll("button")].find((button) => button.textContent === "Load more")!.click(); await settleQueries(client); });
-  assert.equal(container.querySelectorAll("li").length, 2);
-  assert.match(container.textContent!, /Legacy member/);
-  assert.ok(container.querySelectorAll("li")[1].querySelector('img[src*="nova"]'), "launch-code invitees keep their saved avatar");
-  assert.equal(container.querySelectorAll('a[href="https://x.com/nova_x"]').length, 2);
-  assert.equal(container.querySelectorAll("a a").length, 0, "X links are separate from Blast profile links");
-  // The Invites board's row is the face, the name and the X handle: no bare "Source" label, and no joined line without the date.
-  assert.doesNotMatch(container.textContent!, /Source|Joined/);
-  assert.equal(container.querySelectorAll("li")[0]!.querySelector("b")!.textContent, "Nova");
-  assert.ok(reads.some((url) => url.endsWith(`?cursor=${cursor}`)));
-  await act(async () => root.render(render(false)));
-  assert.equal(container.querySelectorAll("li").length, 0);
-  assert.doesNotMatch(container.textContent!, /\$10,000/);
-  assert.match(container.textContent!, /Sign in to see your invites/);
-});
-
-test("invitees without X or an avatar retain the generated avatar and Blast profile link", async (t) => {
-  const client = createTestQueryClient();
-  const container = document.createElement("div"); document.body.append(container);
-  const root = createRoot(container);
-  t.after(async () => { await act(async () => root.unmount()); client.clear(); container.remove(); });
-  await act(async () => root.render(<QueryProvider client={client}><InviteesView
-    invitees={[{ ...person, avatar_url: null, x_handle: null }]} pending={false} failed={false}
-    hasMore={false} loadingMore={false} onMore={() => {}} onRetry={() => {}}
-  /></QueryProvider>));
-  assert.ok(container.querySelector('a[href="/@nova"]'));
-  assert.ok(container.querySelector('[data-avatar="generated"]'));
-  assert.equal(container.querySelectorAll('a[href^="https://x.com/"]').length, 0);
-});
-
-test("each invitee reads \"Joined 24 Oct ’26\" under the name, a member without a profile too", async (t) => {
-  const client = createTestQueryClient();
-  const container = document.createElement("div"); document.body.append(container);
-  const root = createRoot(container);
-  t.after(async () => { await act(async () => root.unmount()); client.clear(); container.remove(); });
-  // Midday UTC, so the reader's zone keeps the same day.
-  const joined = Date.UTC(2026, 9, 24, 12);
-  await act(async () => root.render(<QueryProvider client={client}><InviteesView
-    invitees={[{ ...person, joined_at_ms: joined }, { ...person, id: cursor.replace(/1$/, "2"), callsign: null, display_name: "Legacy member", joined_at_ms: Date.UTC(2025, 2, 3, 12) }, { ...person, id: cursor.replace(/1$/, "3"), callsign: "kai" }]}
-    pending={false} failed={false} hasMore={false} loadingMore={false} onMore={() => {}} onRetry={() => {}}
-  /></QueryProvider>));
-  const identities = [...container.querySelectorAll("li")].map((row) => [...row.querySelector("b")!.parentElement!.children].map((part) => part.textContent));
-  assert.deepEqual(identities, [["Nova", "Joined 24 Oct ’26"], ["Legacy member", "Joined 3 Mar ’25"], ["Nova"]]);
-});
-
-test("failed invitee reads can be retried and an empty list keeps the invite action", async (t) => {
-  let failed = true;
-  t.mock.method(globalThis, "fetch", async (path: string | URL | Request) => String(path).includes("/invitees")
-    ? failed ? Response.json({ error: { code: "service_unavailable" } }, { status: 503 }) : Response.json({ invitees: [], next_cursor: null })
-    : Response.json({ invited: 0, volume_usd: "0.00", unvalued_trades: 0 }));
-  const client = createTestQueryClient();
-  const container = document.createElement("div"); document.body.append(container);
-  const root = createRoot(container);
-  t.after(async () => { await act(async () => root.unmount()); client.clear(); container.remove(); });
-  await act(async () => root.render(<QueryProvider client={client}><SocialViewerProvider signedIn callsign="kai_9"><InvitesPage /></SocialViewerProvider></QueryProvider>));
-  await act(async () => settleQueries(client));
-  assert.match(container.querySelector('[role="alert"]')!.textContent!, /Invites couldn’t load/);
+  assert.match(container.querySelector('[role="alert"]')!.textContent!, /Referral payments couldn’t load/);
+  assert.match(container.querySelector(".err-code")!.textContent!, /service_unavailable/);
   failed = false;
-  await act(async () => { [...container.querySelectorAll("button")].find((button) => button.textContent === "Retry invites")!.click(); await settleQueries(client); });
-  assert.match(container.textContent!, /No invitees yet/);
-  assert.ok(container.querySelector('[aria-label="Copy your invite link"]'));
+  await act(async () => {
+    [...container.querySelectorAll("button")].find((button) => button.textContent === "Try again")!.click();
+    await settleQueries(client);
+  });
+  const statement = container.querySelector('[aria-label="Monthly referral payments"]')!;
+  const months = [...statement.querySelectorAll("li")];
+  const fields = months.map((row) => [...row.querySelectorAll("h2, p, dt, dd")].map((field) => {
+    const value = field.querySelector("[data-amount-fit] > span") ?? field;
+    return value.textContent?.trim().replaceAll("\u00a0", " ");
+  }));
+  assert.deepEqual(fields, [
+    ["December 2026", "Not yet paid", "SUI contributed", "—", "Your share", "—"],
+    ["November 2026", "Not yet paid", "SUI contributed", "0.000000021 SUI", "Your share · 34.29%", "0.000000007 SUI"],
+    ["October 2026", "Paid", "SUI contributed", "1 SUI", "Your share · 30%", "0.3 SUI", "0.5 SUI received"],
+    ["September 2026", "No payout due", "SUI contributed", "0 SUI", "Your share · 60%", "0 SUI"],
+  ]);
+  const links = statement.querySelectorAll("a");
+  assert.equal(links.length, 1);
+  assert.equal(links[0].textContent?.trim(), "Transaction");
+  assert.equal(links[0].getAttribute("href"), `https://suiscan.xyz/mainnet/tx/${digest}`);
+  assert.equal(container.querySelector("h1")?.textContent, "Invites");
+  assert.equal(container.querySelector('[data-back-bar] a')?.getAttribute("href"), "/@kai_9");
+  assert.ok(reads.every((url) => url.endsWith("/me/referrals?view=monthly")));
+  assert.doesNotMatch(container.textContent!, /People you invited|4,820/);
+
+  const refresh = () => act(async () => {
+    await client.refetchQueries({ queryKey: queryKeys.me.referralMonths("kai_9") });
+    await settleQueries(client);
+  });
+  empty = true;
+  await refresh();
+  assert.match(container.textContent!, /No referral payments yet/);
+  failed = true;
+  await refresh();
+  assert.doesNotMatch(container.textContent!, /No referral payments yet/);
+  assert.match(container.querySelector('[role="alert"]')!.textContent!, /Referral payments couldn’t load/);
+  const retry = container.querySelector<HTMLButtonElement>('[role="alert"] button')!;
+  assert.equal(retry.textContent, "Try again");
+  holdRetry = true;
+  await act(async () => retry.click());
+  await waitFor(() => retry.getAttribute("aria-busy") === "true", "the retry to be marked busy");
+  assert.equal(retry.disabled, true);
+  await act(async () => {
+    pendingRetry.resolve(Response.json({ months: [] }));
+    await settleQueries(client);
+  });
+  assert.match(container.textContent!, /No referral payments yet/);
+
+  await act(async () => root.render(render(false)));
+  assert.equal(container.querySelector('[aria-label="Monthly referral payments"]'), null);
+  assert.match(container.textContent!, /Sign in to see your invites/);
 });

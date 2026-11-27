@@ -219,6 +219,7 @@ export const TABLE_OWNERSHIP = {
     "social_referral_reservations",
     "social_referral_entities",
     "social_referral_events",
+    "social_referral_payments",
     "social_competitions",
     // 0090 (R3-24): a sale's public details (cover, tagline, links, launch date) and their insert-only edit log.
     "social_sale_metadata",

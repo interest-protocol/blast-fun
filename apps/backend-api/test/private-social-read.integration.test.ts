@@ -234,7 +234,13 @@ async function verifyPortfolio(call: SocialCall, curvePnl = false): Promise<void
 }
 
 async function verifyPersonal(call: SocialCall, logs: readonly string[]): Promise<void> {
-  for (const path of ["me/transactions", "me/rewards", "me/referrals", "me/referrals/invitees"]) {
+  for (const path of [
+    "me/transactions",
+    "me/rewards",
+    "me/referrals",
+    "me/referrals/invitees",
+    "me/referrals?view=monthly",
+  ]) {
     const response = await call(path);
     assert.equal(
       response.status,
@@ -242,6 +248,9 @@ async function verifyPersonal(call: SocialCall, logs: readonly string[]): Promis
       JSON.stringify({ path, body: await response.clone().text(), logs }),
     );
     assert.equal(response.headers.get("cache-control"), "private, no-store");
+    if (path.endsWith("?view=monthly")) {
+      assert.ok(Array.isArray((await response.json()).months));
+    }
     const head = await call(path, "HEAD");
     assert.equal(head.status, 200);
     assert.equal(await head.text(), "");

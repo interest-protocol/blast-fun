@@ -1,13 +1,28 @@
 # Account referrals and revenue tracking
 
-`/invites` and the owner's profile show the invited people, their referred
-volume, Blast revenue and lifetime earnings per quote coin, plus the current
-referral rate. The standard share is 30% after activation. Approved special
-referrers keep 60%.
-Both private APIs derive the owner from the authenticated session; per-person
-aggregates are visible only to that owner. No payout, paid/unpaid balance,
-wallet collection or transfer execution is implemented. Operators pay monthly
-outside this feature. Earnings are lifetime accrued totals, not an unpaid balance.
+The owner's profile shows lifetime referral activity. `/invites` shows one row
+per UTC month with native SUI collected by Blast from referred bonding-curve
+trades and funded, non-cancelled presales. Revenue belongs to the month Blast
+collected the fee. If the applicable rates differ within a month, the displayed
+share is weighted by each receipt's contribution. Earnings use the applicable
+rates and carry fractions of a mist into later months for each invitee. A dash indicates
+that the figures are still unavailable. The month shows the confirmed amount and
+transaction once a payout is recorded.
+
+The private APIs derive the owner from the authenticated session. Operators pay
+outside Blast and can record one confirmed native SUI transfer per account and
+closed UTC month. After the transfer, run:
+
+```text
+npm run social:operator -- referral record <account-id> <YYYY-MM> <sender> <recipient> <digest> <amount-in-mist> --reason "<reason>"
+```
+
+Use the payout wallet as the sender and a verified wallet on the referral
+account as the recipient. The command checks the executed transaction and the
+recipient's exact SUI balance increase. It is safe to retry the same record.
+The page displays the amount received and a transaction explorer link. Run
+migration `0170_social_referral_payments` and release the API before publishing
+the page.
 
 ## Reserved X identities
 
