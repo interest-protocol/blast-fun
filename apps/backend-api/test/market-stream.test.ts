@@ -133,8 +133,17 @@ test("oversized Discover pages replace the cached page and let clients recover o
   const live = open(relay, target).body!.getReader();
   const discovery = (revision: number, name: string) => {
     const launch = launchSummaryFixture();
-    const page = { pools: [{ ...launch, metadata: { ...(launch.metadata as object), name } }], next_cursor: null };
-    socket.receive({ type: "discovery", revision: String(revision), provenance: provenance(revision), new: page, progress: { pools: [], next_cursor: null } });
+    const page = {
+      pools: [{ ...launch, metadata: { ...(launch.metadata as object), name } }],
+      next_cursor: null,
+    };
+    socket.receive({
+      type: "discovery",
+      revision: String(revision),
+      provenance: provenance(revision),
+      new: page,
+      progress: { pools: [], next_cursor: null },
+    });
   };
   const page = async (reader: ReadableStreamDefaultReader<Uint8Array>) => {
     const entry = await read(reader);
@@ -159,7 +168,13 @@ test("oversized Discover pages replace the cached page and let clients recover o
     } finally {
       await later.cancel();
     }
-    socket.receive({ type: "discovery", revision: "12", provenance: provenance(12), new: null, progress: null });
+    socket.receive({
+      type: "discovery",
+      revision: "12",
+      provenance: provenance(12),
+      new: null,
+      progress: null,
+    });
     assert.equal((await page(live)).view, "near_graduation");
     discovery(13, "Froggy");
     assert.equal((await page(live)).section.state, "available");
