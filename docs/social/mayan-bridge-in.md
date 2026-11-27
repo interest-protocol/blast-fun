@@ -120,7 +120,8 @@ From the top, Aftermath's order minus what a deposit does not need:
 4. **One button**, labelled with the next step: Sign in · Connect wallet ·
    Switch to Base · Enter an amount · Not enough ETH · Approve USDC · Bridge.
 5. **Recent bridges** below the card: last 5 from the explorer by the Blast
-   address, the pending one first. Read once when the screen opens.
+   address, the pending one first. Read on open and retry briefly for transfers
+   this tab submitted that the explorer has yet to list.
 
 One direction only: other chains → Sui. No flip, no Sui → other chain, no swap icon that suggests two ways. Title "Bridge to Sui"; the Bridge button icon is an arrow into the wallet.
 
@@ -298,7 +299,7 @@ PR line (to be filled with measured values):
 | --- | --- | --- | --- |
 | Blast origin | 0; 4 reads per completed bridge | ~0 rps | ~0 rps |
 | price-api.mayan.finance | ≤ 2.5 rps while typing (debounced), 0 at rest | ≤ 250 rps bursts, ~0 at rest | unmeasured |
-| explorer-api (status) | 0.2 rps per pending bridge | bridges in flight × 0.2 | — |
+| explorer-api (status and history) | 0.2 rps per pending bridge, plus 0.2 rps while this tab waits for a recently submitted hash to be indexed | bridges in flight × 0.2, plus 0.2 per tab waiting for the index | ≤ 2,000 rps per poll type if all 10,000 tabs qualify |
 | Source RPC (Mayan's `front-rpc`) | balance reads per input change; Solana send + SDK retries (`submitTransactionWithRetry`) per bridge | per committed action | — |
 
 Mayan's rate limits are unknown: mark unmeasured and ask Mayan for an API key
@@ -308,8 +309,11 @@ Mayan's rate limits are unknown: mark unmeasured and ask Mayan for an API key
 
 The explorer is the record. In memory, the card keeps the just-signed source
 hash (from `onTransactionSigned` or the EVM send) until `/v3/swaps?trader=`
-lists it, so the pending row shows at once. A reload finds it again from the
-explorer. No table, no Blast API, no localStorage of money state.
+lists it, so the pending row shows at once. For a reload before indexing, the
+tab keeps only submitted hashes and timestamps in account-scoped session
+storage. While the tab is visible it checks history every five seconds until
+Mayan lists those hashes or one minute has passed since submission. Mayan
+supplies all amounts and status.
 
 This rule holds for Mayan because the explorer finds every order by its Sui
 destination address, which is always the Blast address: an EVM hash lost to a

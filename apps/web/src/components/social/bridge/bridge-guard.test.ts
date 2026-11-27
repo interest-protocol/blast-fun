@@ -74,6 +74,18 @@ test("wallet approvals cannot use a different token or amount from the embedded 
   assert.equal(reason({ ...base, fromChain: "ethereum" }, BASE_USDC), "wrong chains");
 });
 
+test("a bound quote must protect the minimum shown and expire in the future", () => {
+  const base = QUOTES.baseUsdcToSui;
+  const smaller = withOrder(base, (params) => { params.minAmountOut = String(BigInt(base.minReceivedBaseUnits) - 1n); });
+  assert.equal(reason(smaller, BASE_USDC), "wrong minimum output");
+  assert.equal(reason({ ...base, minReceived: base.minReceived + 1 }, BASE_USDC), "wrong minimum output");
+  assert.equal(reason({ ...base, minReceivedBaseUnits: "invalid" }, BASE_USDC), "wrong minimum output");
+  const subAtom = withOrder({ ...QUOTES.solToSuiUsdc, minReceived: 0.0000001, minReceivedBaseUnits: "0" }, (params) => { params.minAmountOut = "0"; });
+  assert.equal(reason(subAtom, SOLANA_SOL), "wrong minimum output");
+  assert.equal(reason(withOrder(base, (_params, order) => { order.expiresAt = "unknown"; }), BASE_USDC), "unreadable Blink order");
+  assert.equal(reason(base, BASE_USDC, BEFORE_EXPIRY + 24 * 60 * 60 * 1000), "expired");
+});
+
 test("quote facts feed the rows: amount out, floor, fee, time", () => {
   const usdc = CHAINS.base.tokens[1];
   assert.deepEqual(quoteRows(quoteFacts(QUOTES.baseUsdcToSui, usdc), usdc, DESTINATIONS[0]!), {

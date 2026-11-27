@@ -1,3 +1,4 @@
+import { compareExact, exactAtoms, exactNumber } from "@blast/core/web/exact-amount.ts";
 import { decodeBlinkQuote, getWormholeChainIdByName, hasBlinkQuoteHash, isNativeBlinkEvmToken, isNativeBlinkSvmToken, type BlinkQuote, type Quote } from "@mayanfinance/swap-sdk";
 import { normalizeStructTag, normalizeSuiAddress } from "@mysten/sui/utils";
 
@@ -33,6 +34,13 @@ function sameCoinType(a: string, b: string): boolean {
   } catch {
     return false;
   }
+}
+
+function coversQuotedMinimum(quote: Quote, decimals: number, signedMinimum: string): boolean {
+  const shown = exactNumber(quote.minReceived);
+  const quoted = exactAtoms(quote.minReceivedBaseUnits, decimals);
+  const signed = BigInt(signedMinimum);
+  return shown !== null && quoted !== null && signed >= quoted.n && compareExact({ n: signed, scale: decimals }, shown) >= 0;
 }
 
 /**
@@ -72,10 +80,13 @@ export function guardQuote(quote: Quote, request: BridgeRequest, now: number): G
     return { ok: false, reason: "wrong amount" };
   }
   if (!sameCoinType(params.dstToken, request.to.coinType)) return { ok: false, reason: "wrong destination coin" };
+  if (!coversQuotedMinimum(quote, request.to.decimals, params.minAmountOut)) {
+    return { ok: false, reason: "wrong minimum output" };
+  }
   if (normalizeSuiAddress(params.recipient) !== normalizeSuiAddress(request.blastAddress)) return { ok: false, reason: "wrong recipient" };
   if (!sameSourceAddress(request.chain, params.refundAddress, request.sourceAddress)) return { ok: false, reason: "wrong refund address" };
   if (params.referrers.length > 0) return { ok: false, reason: "unexpected referrer" };
-  if (Date.parse(order.expiresAt) <= now) return { ok: false, reason: "expired" };
+  if (!(Date.parse(order.expiresAt) > now)) return { ok: false, reason: "expired" };
   return { ok: true, order };
 }
 

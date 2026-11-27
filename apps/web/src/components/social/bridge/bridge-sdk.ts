@@ -108,8 +108,8 @@ type ExplorerSwap = Readonly<{
 const text = (value: unknown): string | null => (typeof value === "string" && value !== "" ? value : null);
 
 /**
- * `/v3/swaps?trader=` lists swaps the address sent or received; the card keeps
- * the ones that paid it on Sui, newest first, at most `limit`.
+ * The explorer's `trader` filter includes the recipient of an inbound swap.
+ * Keep the rows that paid the Blast address on Sui, newest first.
  */
 export function explorerRows(json: unknown, blastAddress: string, limit = 5): BridgeRow[] {
   const data = (json as { data?: unknown } | null)?.data;

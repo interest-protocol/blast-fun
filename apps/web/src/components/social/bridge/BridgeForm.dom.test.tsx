@@ -203,6 +203,87 @@ test("reopening Bridge does not report an arrival again from the cache", async (
   }
 });
 
+test("reopening before Mayan indexes a submission retries history and resumes watching", async () => {
+  const { environmentManager } = await import("@tanstack/react-query");
+  const wasServer = environmentManager.isServer();
+  environmentManager.setIsServer(() => false);
+  const storageKey = `blast:bridge-submissions:${BLAST}`;
+  window.sessionStorage.removeItem(storageKey);
+  const calls = newCalls();
+  const listed: BridgeRow = { hash: "0xhash", chain: "base", fromAmount: "20", fromSymbol: "USDC", toAmount: "29.81", toSymbol: "SUI", state: "pending", at: new Date(BEFORE_EXPIRY).toISOString() };
+  let reopened = false;
+  let readsAfterReopen = 0;
+  const form = await mount(fakeSdk(calls, [QUOTE], {
+    history: async () => (reopened && ++readsAfterReopen > 1 ? [listed] : []),
+    status: async () => reopened ? { state: "done", toAmount: "29.81" } : { state: "pending", toAmount: null },
+  }), calls);
+  try {
+    await form.pickUsdc();
+    await form.type("20");
+    await form.press();
+    assert.match(window.sessionStorage.getItem(storageKey) ?? "", /^\d+:0xhash$/);
+    reopened = true;
+    await form.remount();
+    await waitFor(() => /Arrived · 29\.81\u00a0SUI/.test(form.text()), "history catches up and status resumes", 12_000);
+    assert.equal(readsAfterReopen, 2);
+    assert.equal(calls.arrived, 1);
+  } finally {
+    await form.unmount();
+    window.sessionStorage.removeItem(storageKey);
+    environmentManager.setIsServer(() => wasServer);
+  }
+});
+
+test("changing the receive coin never relabels an old quote", async () => {
+  const calls = newCalls();
+  let finish: (quote: Quote) => void = () => undefined;
+  const form = await mount(fakeSdk(calls, [QUOTE], {
+    quote: async (input) => {
+      calls.quotes.push(input.swapper);
+      if (input.to.symbol === "USDC") return new Promise<Quote>((resolve) => { finish = resolve; });
+      return QUOTE;
+    },
+  }), calls);
+  try {
+    await form.pickUsdc();
+    await form.type("20");
+    const receiveUsdc = [...form.container.querySelectorAll<HTMLButtonElement>("[aria-label='Coin to receive'] button")].find((button) => button.textContent === "USDC")!;
+    await act(async () => receiveUsdc.click());
+    assert.doesNotMatch(form.text(), /You get at least 29\.3968\s+USDC/);
+    assert.equal(form.button().disabled, true);
+  } finally {
+    await form.unmount();
+    finish(QUOTE);
+  }
+});
+
+test("a failed balance can be retried and blocks signing until it loads", async () => {
+  const calls = newCalls();
+  let failed = true;
+  const form = await mount(fakeSdk(calls, [QUOTE], {
+    balance: async () => {
+      if (failed) throw new Error("balance unavailable");
+      return 1_000_000_000n;
+    },
+  }), calls, evm(), { retryDelay: 0 });
+  try {
+    await form.pickUsdc();
+    await form.type("20");
+    await waitFor(() => /bridge_balance_failed/.test(form.text()), "the balance error");
+    assert.match(form.text(), /Balance —/);
+    assert.equal(form.button().disabled, true);
+    assert.match(dom.document.getElementById(form.button().getAttribute("aria-describedby")!)?.textContent ?? "", /bridge_balance_failed/);
+    assert.equal(calls.sends + calls.approves, 0);
+    const retry = [...form.container.querySelectorAll("button")].find((button) => button.textContent === "Retry balance")!;
+    failed = false;
+    await act(async () => retry.click());
+    await waitFor(() => !form.button().disabled, "the balance read enables Bridge");
+    assert.doesNotMatch(form.text(), /bridge_balance_failed/);
+  } finally {
+    await form.unmount();
+  }
+});
+
 test("closing Bridge while the fresh quote is on its way opens no wallet", async () => {
   const calls = newCalls();
   let hold = false;
