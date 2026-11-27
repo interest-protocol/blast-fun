@@ -60,7 +60,15 @@ function ReferralStatementView({ callsign, getAccessToken }: Readonly<{
   if (summary.isError) {
     return (
       <EmptyState
-        action={<Button onClick={() => void summary.refetch()}>Try again</Button>}
+        action={
+          <Button
+            loading={summary.isFetching}
+            loadingLabel="Retrying referral payments"
+            onClick={() => void summary.refetch()}
+          >
+            Try again
+          </Button>
+        }
         framed
         role="alert"
         title={UNAVAILABLE}

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { installTestDom } from "../../../../test/fixtures/social/test-dom.ts";
+import { installTestDom, waitFor } from "../../../../test/fixtures/social/test-dom.ts";
 
 const { document } = installTestDom();
 const { act } = await import("react");
@@ -64,8 +64,11 @@ test("the private referral page renders one entry per month and links only confi
   const reads: string[] = [];
   let failed = true;
   let empty = false;
+  let holdRetry = false;
+  const pendingRetry = Promise.withResolvers<Response>();
   t.mock.method(globalThis, "fetch", async (path: string | URL | Request) => {
     reads.push(String(path));
+    if (holdRetry) return pendingRetry.promise;
     if (failed) return Response.json({ error: { code: "service_unavailable" } }, { status: 503 });
     if (empty) return Response.json({ months: [] });
     return Response.json({
@@ -138,7 +141,17 @@ test("the private referral page renders one entry per month and links only confi
   await refresh();
   assert.doesNotMatch(container.textContent!, /No referral payments yet/);
   assert.match(container.querySelector('[role="alert"]')!.textContent!, /Referral payments couldn’t load/);
-  assert.match(container.textContent!, /Try again/);
+  const retry = container.querySelector<HTMLButtonElement>('[role="alert"] button')!;
+  assert.equal(retry.textContent, "Try again");
+  holdRetry = true;
+  await act(async () => retry.click());
+  await waitFor(() => retry.getAttribute("aria-busy") === "true", "the retry to be marked busy");
+  assert.equal(retry.disabled, true);
+  await act(async () => {
+    pendingRetry.resolve(Response.json({ months: [] }));
+    await settleQueries(client);
+  });
+  assert.match(container.textContent!, /No referral payments yet/);
 
   await act(async () => root.render(render(false)));
   assert.equal(container.querySelector('[aria-label="Monthly referral payments"]'), null);
