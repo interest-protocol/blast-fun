@@ -71,9 +71,9 @@ test("both coin price consumers show the best known close at once, and after the
   const publish = (at: number, price: string) => act(async () => publishChartPrice(CURVE_POOL_KEY, {
     provenance: { ...curve.provenance, checkpoint: at }, poolKey: CURVE_POOL_KEY, cursor: null, price,
   }));
-  const header = () => container.querySelector('[aria-label="Price chart"]')?.previousElementSibling?.querySelector("strong")?.textContent;
+  const header = () => container.querySelector('[aria-label="Price chart"]')?.firstElementChild?.querySelector("strong")?.textContent;
   // The waiting row keeps the last price's space, unseen, so the page below it does not move.
-  const held = () => container.querySelector('[aria-label="Price chart"]')?.previousElementSibling?.querySelector('strong[aria-hidden="true"]')?.textContent;
+  const held = () => container.querySelector('[aria-label="Price chart"]')?.firstElementChild?.querySelector('strong[aria-hidden="true"]')?.textContent;
   const values = () => [header(), container.querySelector("output")?.textContent];
   await render(checkpoint);
   // A quiet pool's close can predate the page's read: it is still the price.
@@ -141,7 +141,7 @@ test("curve progress advances and a delayed trade or page read cannot undo the b
   const send = (position: number, data: unknown, poolKey = CURVE_POOL_KEY, quoteAmount = 1_000_000_000n) => act(async () => listener.trade({
     checkpoint, poolKey, summary: data, trade: { cursor: `${checkpoint}:0:${position}:0`, timestampMs: 1_800_000_000_000, side: "buy", kind: "buy", price: "0.8", quoteAmount } as MarketTrade["trade"],
   }));
-  const price = () => container.querySelector('[aria-label="Price chart"]')?.previousElementSibling?.querySelector("strong")?.textContent;
+  const price = () => container.querySelector('[aria-label="Price chart"]')?.firstElementChild?.querySelector("strong")?.textContent;
   const figures = () => {
     const card = container.querySelector('[aria-label="Launch progress"]')!;
     return [card.querySelector("b")?.textContent, card.querySelector("strong")?.textContent,
@@ -172,7 +172,7 @@ test("curve progress advances and a delayed trade or page read cannot undo the b
   await send(10, after);
   assert.deepEqual(figures(), ["1,500SUI", "50%", 50, "—", "$2M"]);
   const firstCue = tradeCue();
-  assert.equal(container.querySelector('[aria-label="Price chart"] [data-chart-last-trade]'), null);
+  assert.equal(container.querySelector('[aria-label="Price chart"] [data-chart-last-trade]:not([data-chart-last-trade="headline"])'), null);
   assert.equal(container.querySelectorAll("[data-trade-cue]").length, 1);
   assert.equal(firstCue?.textContent, "Buy · 1\u00a0SUI");
   assert.equal(status(), "New buy");

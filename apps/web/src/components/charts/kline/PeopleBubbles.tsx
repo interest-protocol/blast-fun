@@ -19,7 +19,7 @@ import { SocialAccountContext } from "#web/components/social/use-social-account.
 import { useAppQueryClient } from "#web/lib/query/provider.tsx";
 import { readableUsd } from "#web/lib/market-format.ts";
 import type { Bar } from "./kline-model.ts";
-import { barPeople, layoutBubbles, mousePress, personIdentity, personTrades, profileAt, rememberProfiles, type BarSpan, type Bubble, type Person, type PersonTrade, type SeenProfile } from "./people-bubbles.ts";
+import { barPeople, layoutBubbles, moreWidth, mousePress, personIdentity, personTrades, profileAt, rememberProfiles, type BarSpan, type Bubble, type Person, type PersonTrade, type SeenProfile } from "./people-bubbles.ts";
 import styles from "./PeopleBubbles.module.css";
 
 /** Bubble size in px: a face you can tell apart, still narrow enough for neighbouring bars; a little smaller on phones. */
@@ -28,6 +28,22 @@ const bubbleSize = (plotWidth: number) => plotWidth < 560 ? 18 : BUBBLE_SIZE;
 const NO_PROFILES: ReadonlyMap<string, SeenProfile> = new Map();
 /** A card opens over its bubble, away from the price under it. */
 const CARD_POSITION = { side: "top", sideOffset: 6, collisionPadding: 12, className: styles.cardLayer } as const;
+const EDGE = 12;
+
+/**
+ * Where a bubble's card goes: over the bubble, or under it when the sticky top bar would cover it.
+ * The bar's height changes with the screen and with its notices, so it is measured as the card opens.
+ */
+function useCardPosition() {
+  const [top, setTop] = useState(EDGE);
+  const onOpenChange = useCallback((open: boolean) => {
+    if (!open) return;
+    const bar = document.querySelector("[data-shell-topbar]")?.getBoundingClientRect().bottom ?? 0;
+    setTop(Math.max(0, bar) + EDGE);
+  }, []);
+  const positioner = useMemo(() => ({ ...CARD_POSITION, collisionPadding: { top, right: EDGE, bottom: EDGE, left: EDGE } }), [top]);
+  return { positioner, onOpenChange };
+}
 
 /** The box the plot and its bubbles share. The bubbles sit beside the plot, not inside its image role. */
 export function BubbleStage({ children }: Readonly<{ children: ReactNode }>) {
@@ -187,7 +203,8 @@ const PersonBubble = memo(function PersonBubble({ person, x, y, size, profile }:
   const badge = person.labels[0];
   const count = person.buys + person.sells;
   const page = useBubblePage(who.anonymous ? explorer?.url : profilePagePath(who.callsign), who.anonymous);
-  return <Popover.Root>
+  const { positioner, onOpenChange } = useCardPosition();
+  return <Popover.Root onOpenChange={onOpenChange}>
     <Popover.Trigger
       openOnHover
       delay={80}
@@ -207,7 +224,7 @@ const PersonBubble = memo(function PersonBubble({ person, x, y, size, profile }:
       {count > 1 && <span className={styles.count} aria-hidden="true">{count > 9 ? "9+" : count}</span>}
       {badge && <span className={styles.badge}><WalletLabelIcon label={badge} /></span>}
     </Popover.Trigger>
-    <PopoverSurface positioner={CARD_POSITION} popup={{ className: styles.card }}>
+    <PopoverSurface positioner={positioner} popup={{ className: styles.card }}>
       <PersonCard person={person} who={who} />
     </PopoverSurface>
   </Popover.Root>;
@@ -269,15 +286,16 @@ function TradeList({ trades }: Readonly<{ trades: readonly PersonTrade[] }>) {
 function MoreBubble({ bubble: { people, x, y }, size, profile }: Readonly<{ bubble: Extract<Bubble, { kind: "more" }>; size: number; profile: (person: Person) => TraderProfile | null }>) {
   const text = `${people.length} more ${people.length === 1 ? "trader" : "traders"}`;
   const shown = people.length > 99 ? "99" : String(people.length);
-  return <Popover.Root>
+  const { positioner, onOpenChange } = useCardPosition();
+  return <Popover.Root onOpenChange={onOpenChange}>
     <Popover.Trigger
       openOnHover
       delay={80}
       className={styles.more}
       aria-label={`+${shown}, ${text}`}
-      {...dyn({ left: x - size / 2, top: y - size / 2, height: size, minWidth: size })}
+      {...dyn({ left: x - size / 2, top: y - size / 2, height: size, width: moreWidth(people.length, size) })}
     >+{shown}</Popover.Trigger>
-    <PopoverSurface positioner={CARD_POSITION} popup={{ className: styles.card }}>
+    <PopoverSurface positioner={positioner} popup={{ className: styles.card }}>
       <Popover.Title className={styles.cardName}>{text}</Popover.Title>
       <ul className={styles.cardPeople} tabIndex={scrollable(people.length)} aria-label="Traders">
         {people.map((person) => {

@@ -74,9 +74,14 @@ test("a nonzero amount under a cent reads <$0.01 in the breakdown, never $0.00",
   assert.equal(balanceBreakdown(portfolio, false)[1]!.value, "$0.00");
 });
 
+test("a five-figure balance carries its short form beside the exact one, for the narrow bar to show $12.35K", () => {
+  const html = renderToStaticMarkup(<AccountBalance hidden={false} portfolio={{ status: "ready", summary: { total_usd: 12_345.67, today: null } }} />);
+  assert.match(html, /<span class="balanceExact">\$12,345\.67<\/span><span class="balanceCompact">\$12\.35K<\/span>/);
+});
+
 test("the balance shows a short partial-value marker", () => {
   const portfolio = { status: "ready", summary: { total_usd: null, known_value_usd: 4550.34, unpriced_assets: true, today: null } } as const;
-  assert.match(renderToStaticMarkup(<AccountBalance hidden={false} portfolio={portfolio} />), />\$4,550\.34<\/span>.* · Partial<\/b>/);
+  assert.match(renderToStaticMarkup(<AccountBalance hidden={false} portfolio={portfolio} />), />\$4,550\.34<\/span>.*> · Partial<\/span><\/b>/);
 });
 
 test("the popover's large total is the amount alone on one line; its description names the subtotal", () => {

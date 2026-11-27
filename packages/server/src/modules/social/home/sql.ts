@@ -89,14 +89,20 @@ export function homeSpan(window: HomeWindow, bounds: HomeBounds): HomeSpan {
 /**
  * Which markets a read attributes: public Discover (`almost`: only its
  * Almost graduated curves, `HOME_ALMOST_CURVE_SOURCES`), all shown sales, or
- * specific markets. Discover's `presales` (Trending with `presales=1`) adds
+ * specific markets. `includeStandalone` widens `all` and `ids` from shown
+ * presales to every listed coin (`HOME_LIST_COIN_SOURCES`: presales, launch
+ * vault coins, live curves and tracked pools), keyed by presale id or coin
+ * type. Discover's `presales` (Trending with `presales=1`) adds
  * the presales not trading yet, bounded at the chain clock (`presaleScopeSql`),
  * and its `curves` the live curves traded in the window (`tradedCurveSql`).
  */
 export type SaleScope =
   | Readonly<{ kind: "discover"; almost?: boolean; presales?: Readonly<{ clockMs: number; fromMs: number }>; curves?: TradedCurves }>
-  | Readonly<{ kind: "all" }>
+  | Readonly<{ kind: "all"; includeStandalone?: boolean }>
   | Readonly<{ kind: "ids"; presaleIds: readonly string[]; includeStandalone?: boolean }>;
+
+/** Specific markets keyed by presale id or coin type (a key with `::`); any coin type widens the source to every listed coin. */
+export const idsScope = (keys: readonly string[]): SaleScope => ({ kind: "ids", presaleIds: keys, includeStandalone: keys.some((key) => key.includes("::")) });
 
 /** Whose rows a read keeps: everyone, or the wallets the naming rule names for a set of accounts (a viewer's follows). */
 export type ActorScope =
@@ -167,9 +173,7 @@ export function scopedHomeCoinsSql(scope: SaleScope, params: Params): string {
       WHERE ${listed} AND p.quote_type IS DISTINCT FROM ${params.add(CREATE_TEST_SUI_QUOTE_TYPE)}::text)`;
   }
   const sales = `(SELECT p.presale_id AS source_id,p.*,FALSE AS tracked_pool_only FROM ${SHOWN_PRESALES} p)`;
-  if (scope.kind === "all") {
-    return sales;
-  }
+  if (scope.kind === "all") return scope.includeStandalone ? HOME_LIST_COIN_SOURCES : sales;
   const source = scope.includeStandalone ? HOME_LIST_COIN_SOURCES : sales;
   return `(SELECT p.* FROM ${source} p WHERE p.source_id = ANY(${params.add([...new Set(scope.presaleIds)])}::text[]))`;
 }
@@ -206,7 +210,8 @@ export function rowsWithSql(request: RowsRequest, params: Params): string {
   const tradeFloor = minTradeUsd === undefined ? "" : minTradeSql(minTradeUsd, params);
   const tinyFloor = keepTiny ? "" : `AND NOT ${tinyTradeSql("a")}`;
   return `WITH home_sales AS (
-    SELECT p.source_id, p.presale_id, p.sale_token AS coin_type, p.quote_type, p.quote_symbol, p.quote_decimals, p.sale_decimals
+    SELECT p.source_id, p.presale_id, p.sale_token AS coin_type, p.quote_type, p.quote_symbol, p.quote_decimals, p.sale_decimals,
+      p.sale_symbol, p.sale_name, p.sale_icon_url, p.lifecycle
     FROM ${source} p
   ),
   ${followed}

@@ -1,7 +1,7 @@
 "use client";
 
 import { dispose, init, type Chart, type Crosshair, type DeepPartial, type IndicatorCreate, type KLineData, type Period, type Styles, type VisibleRange } from "klinecharts";
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { candleBucketStart, candleIntervalMs, type CandleInterval } from "@blast/core/modules/launchpad-contract/venue-history.ts";
 import { Button } from "#web/components/blast-ui/Button.tsx";
 import { Checkbox, Switch } from "#web/components/blast-ui/Checkbox.tsx";
@@ -232,7 +232,7 @@ export default function KLineCoinChart({ sources, interval, memeDecimals, quoteD
           remove={drawing.selected && { name: drawingName(drawing.selected.name), onRemove: drawing.removeSelected }} />}
       <BubbleStage>
         <div ref={host} className={styles.plot} role="group" aria-label={`${label}. Arrow keys step through the bars.`} tabIndex={0} data-kline-plot=""
-          onKeyDown={step} onBlur={() => { setStepping(false); view.hovered.set(null); }} {...dyn({ blockSize: plotHeight })} />
+          onKeyDown={step} onBlur={() => { setStepping(false); view.hovered.set(null); }} {...dyn({ "--kline-base": `${plotHeight}px` } as CSSProperties)} />
         {showWalletTags && <PeopleBubbles chart={chart} bars={bars} quoteDecimals={quoteDecimals} quoteUsd={quoteUsd} topInset={8 + LEGEND_ROW * legendRows} line={drawn === "line"} />}
         <LatestButton away={view.away} onLatest={() => {
           const current = chart.current;

@@ -256,10 +256,8 @@ export const homePublishedCoinSchema = homeCoinSchema
     sale: homeCoinSchema.shape.sale.unwrap(),
   });
 
-/** The published Following contract names presale coins and caps their holder preview at ten. */
+/** The published Following contract names every listed coin (a presale's or one without, as Discover does) and caps its holder preview at ten. */
 export const homeFollowingCoinSchema = homeCoinSchema.extend({
-  presale_id: homeCoinSchema.shape.presale_id.unwrap(),
-  sale: homeCoinSchema.shape.sale.unwrap(),
   top_holders: homeCoinSchema.shape.top_holders.extend({
     holders: z.array(homeHolderSchema).max(10),
   }),
@@ -268,14 +266,17 @@ export const homeFollowingCoinSchema = homeCoinSchema.extend({
 export const homeFollowingTapeEventSchema = homeEventSchema.extend({
   actor: feedItemDefinitions.accountActor,
   coin: z.strictObject({
-    presale_id: z.string().regex(SUI_OBJECT_ID_PATTERN),
+    presale_id: z
+      .xor([z.null(), z.string().regex(SUI_OBJECT_ID_PATTERN)])
+      .describe("The coin's presale, or null for a coin launched without one (a launch vault coin, a live curve or a tracked pool)."),
+    coin_type: z.string().min(1),
     symbol: z.string().min(1),
     name: z.string(),
     icon_url: z.xor([z.null(), z.string()]),
     verified_team: z
         .boolean()
         .describe(
-          "R3-23: Blast checked who is behind the sale (social_sale_trust); sent only when true.",
+          "R3-23: Blast checked who is behind the coin (social_sale_trust for a sale, social_coin_trust for a coin without one); sent only when true.",
         )
         .optional(),
     lifecycle: z.string().min(1),
@@ -556,7 +557,8 @@ export const homeFollowingRequestContractSchema = z
     cursor: z.xor([z.null(), z.string().min(1).max(600)]).optional(),
     limit: homeIntegerSchema.min(1).max(30).optional(),
     presale_ids: z
-      .array(z.string().regex(SUI_OBJECT_ID_PATTERN))
+      .array(z.union([z.string().regex(SUI_OBJECT_ID_PATTERN), z.string().regex(COIN_TYPE)]))
+      .describe("Preview mode: each coin's key, its presale id or, for a coin without a presale, its coin type.")
       .min(1)
       .max(50)
       .optional(),
@@ -987,7 +989,7 @@ export const homeFollowingResponseSchema = z.discriminatedUnion("mode", [
     previews: z.record(z.string(), homeActivitySchema),
     as_of: socialAsOfSchema,
   }),
-  // Following threads are a sale's only (the source lists no curve coin), so the published body keeps its shape.
+  // Following threads stay a presale's only (the other modes cover every listed coin), so the published body keeps its shape.
   homeThreadPageSchema.omit({ coin_type: true }).extend({ mode: z.literal("thread"), presale_id: homeThreadPageSchema.shape.presale_id.unwrap() }),
   z.strictObject({
     mode: z.literal("tape"),

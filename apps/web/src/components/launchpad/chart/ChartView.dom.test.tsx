@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import type { ActivityRow } from "@blast/core/modules/launchpad-contract/activity.ts";
-import { installNoopCanvas, installTestDom } from "../../../../test/fixtures/social/test-dom.ts";
+import { installNoopCanvas, installTestDom, waitFor } from "../../../../test/fixtures/social/test-dom.ts";
 
 const dom = installTestDom();
 installNoopCanvas(dom);
@@ -206,6 +206,86 @@ test("compact style controls keep one chart and the trade cue above it", async (
   }
 });
 
+test("one click on an interval button changes the candles; Live has none", async () => {
+  const poolKey = "blast_curve:0x1";
+  const candle = { bucketStart: 1_790_337_600_000, open: "1", high: "2", low: "1", close: "2", volumeQuote: 20n, volumeMeme: 10n, volumeUsd: null, buys: 1, sells: 0, trades: 1 };
+  const page = { poolKey, source: "curve" as const, venue: "blast_curve" as const, interval: "5m" as const, migration: null, candles: Array.from({ length: 12 }, (_, i) => ({ ...candle, bucketStart: candle.bucketStart + i * 300_000 })) };
+  const container = dom.document.createElement("div");
+  dom.document.body.append(container);
+  const root = createRoot(container);
+  const picked: unknown[] = [];
+  const chart = (controls: { interval: "5m" | "1s"; range: "all" | "live" }) => (
+    <AppRouterContext value={{ push() {} } as never}>
+      <ChartView
+        compact
+        source={{ expected: null, curvePoolKey: poolKey, venuePoolKey: null, migration: null, symbol: "PIP", quoteSymbol: "SUI", memeDecimals: 9, quoteDecimals: 9 }}
+        quoteUsd="0.70"
+        state={{ key: `${controls.interval}|${controls.range}`, curve: { state: "available", data: page, provenance: { source: "blast-infra", network: "localnet", deployment: "fixture", checkpoint: 1, timestampMs: 1_790_341_200_000, observedAt: 1_790_341_200_000, lagMs: 0 } }, venue: null, migration: null }}
+        controls={controls}
+        request={chartRequest(controls, 1_790_341_260_000)}
+        hidden={[]}
+        updates={null}
+        pending={false}
+        onControls={(next) => picked.push(next)}
+        onToggle={() => {}}
+        onRefresh={() => {}}
+      />
+    </AppRouterContext>
+  );
+  try {
+    await act(async () => root.render(chart({ interval: "5m", range: "all" })));
+    const group = container.querySelector('[aria-label="Candle interval"]');
+    assert.ok(group, "the intervals are one row of buttons");
+    const hour = [...group.querySelectorAll("button")].find((button) => button.textContent === "1h")!;
+    await act(async () => hour.click());
+    assert.deepEqual(picked, [{ interval: "1h", range: "all" }], "one click, no picker to open or close");
+    await act(async () => root.render(chart({ interval: "1s", range: "live" })));
+    assert.equal(container.querySelector('[aria-label="Candle interval"]'), null, "Live has one interval, so no buttons");
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+  }
+});
+
+test("opening the chart's picker focuses its card, not its first field (focusing a field scrolled the page)", async () => {
+  const poolKey = "blast_curve:0x1";
+  const candle = { bucketStart: 1_790_337_600_000, open: "1", high: "2", low: "1", close: "2", volumeQuote: 20n, volumeMeme: 10n, volumeUsd: null, buys: 1, sells: 0, trades: 1 };
+  const page = { poolKey, source: "curve" as const, venue: "blast_curve" as const, interval: "5m" as const, migration: null, candles: [candle] };
+  const container = dom.document.createElement("div");
+  container.setAttribute("data-blast-ui", "");
+  dom.document.body.append(container);
+  const root = createRoot(container);
+  const controls = { interval: "5m" as const, range: "all" as const };
+  try {
+    await act(async () => root.render(
+      <AppRouterContext value={{ push() {} } as never}>
+        <ChartView
+          compact
+          source={{ expected: null, curvePoolKey: poolKey, venuePoolKey: null, migration: null, symbol: "PIP", quoteSymbol: "SUI", memeDecimals: 9, quoteDecimals: 9 }}
+          quoteUsd="0.70"
+          state={{ key: "5m|all", curve: { state: "available", data: page, provenance: { source: "blast-infra", network: "localnet", deployment: "fixture", checkpoint: 1, timestampMs: 1_790_341_200_000, observedAt: 1_790_341_200_000, lagMs: 0 } }, venue: null, migration: null }}
+          controls={controls}
+          request={chartRequest(controls, 1_790_341_260_000)}
+          hidden={[]}
+          updates={null}
+          pending={false}
+          onControls={() => {}}
+          onToggle={() => {}}
+          onRefresh={() => {}}
+        />
+      </AppRouterContext>,
+    ));
+    const trigger = container.querySelector<HTMLButtonElement>("button.filterTrigger")!;
+    assert.ok(trigger, "the range picker's button");
+    await act(async () => trigger.click());
+    const focused = await waitFor(() => dom.document.activeElement !== dom.document.body && dom.document.activeElement, "focus moves into the picker");
+    assert.ok(focused.matches("[role=dialog]") && focused.querySelector("select"), `focus lands on the card holding the fields, not ${focused.outerHTML.slice(0, 80)}`);
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+  }
+});
+
 test("Live is a line chart on desktop and mobile and keeps the newest trade cue", async (t) => {
   const start = 1_800_000_000_000;
   const now = start;
@@ -277,7 +357,9 @@ test("Live is a line chart on desktop and mobile and keeps the newest trade cue"
   await setMobile(false);
 
   await render("Trade updates delayed.");
-  assert.match(container.querySelector('[role="status"]')?.textContent ?? "", /Trade updates delayed/);
+  // A refused or dropped socket says so in the chart's head, beside the title, not under the plot.
+  assert.equal(container.querySelector("[data-stream-notice]")?.textContent, "Trade updates delayed.");
+  assert.equal(container.querySelector("[data-stream-notice]")?.previousElementSibling?.tagName, "H2");
   assert.doesNotMatch(container.textContent ?? "", /No trades in this range/);
 
   const buy = { cursor: "2:0:1:0", timestampMs: now, side: "buy" as const, price: "93", quoteAmount: 20n, memeAmount: 1_000_000_000n };
