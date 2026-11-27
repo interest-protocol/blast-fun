@@ -56,7 +56,7 @@ function ReferralStatementView({ callsign, getAccessToken }: Readonly<{
     )),
   }, useAppQueryClient());
 
-  if (summary.data) return <MonthlyReferrals months={summary.data.months} />;
+  // A failed refetch keeps the old data; show the failure, never a stale empty list.
   if (summary.isError) {
     return (
       <EmptyState
@@ -69,5 +69,6 @@ function ReferralStatementView({ callsign, getAccessToken }: Readonly<{
       </EmptyState>
     );
   }
+  if (summary.data) return <MonthlyReferrals months={summary.data.months} />;
   return <PendingPanel framed label="Loading referral payments" />;
 }

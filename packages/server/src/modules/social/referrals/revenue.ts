@@ -128,19 +128,28 @@ const MONTHLY_REFERRAL_SQL = `SELECT * FROM (${REFERRAL_RECEIPTS_SQL}, commitmen
    AND EXISTS (SELECT 1 FROM commitments c WHERE c.entity_id=f.entity_id)
    AND NOT EXISTS (SELECT 1 FROM evidence x WHERE x.entity_id=f.entity_id AND x.kind='cancelled')
  GROUP BY f.entity_id,f.total_atoms,month
+), presale_months AS (
+ SELECT *,sum(paid) OVER sale AS paid_through,
+   sum(special_paid) OVER sale AS special_through
+ FROM presale_receipts WINDOW sale AS (PARTITION BY entity_id ORDER BY month)
 ), contributions AS (
  SELECT date_trunc('month',to_timestamp(collected_at_ms/1000.0) AT TIME ZONE 'UTC')::date AS month,
    person_id,quote_revenue AS atoms,CASE WHEN special_revenue THEN quote_revenue ELSE 0 END AS special_atoms
  FROM curve WHERE quote_coin=$6 AND quote_revenue>0
  UNION ALL
- SELECT p.month,c.person_id,div(c.atoms*p.paid,p.total_atoms),
-   div(c.atoms*CASE WHEN c.special_reservation THEN p.paid ELSE p.special_paid END,p.total_atoms)
- FROM commitments c JOIN presale_receipts p ON p.entity_id=c.entity_id
+ -- Allocate each month as the change in the running allocation, so a sale's
+ -- months sum to the lifetime allocation instead of flooring every month.
+ SELECT month,person_id,atoms,CASE WHEN special_reservation THEN atoms ELSE special_atoms END
+ FROM (SELECT p.month,c.person_id,c.special_reservation,
+   div(c.atoms*p.paid_through,p.total_atoms)-div(c.atoms*(p.paid_through-p.paid),p.total_atoms) AS atoms,
+   div(c.atoms*p.special_through,p.total_atoms)-div(c.atoms*(p.special_through-p.special_paid),p.total_atoms) AS special_atoms
+   FROM commitments c JOIN presale_months p ON p.entity_id=c.entity_id) presale
 ), invitee_totals AS (
  SELECT month,person_id,sum(atoms) AS atoms,sum(special_atoms) AS special_atoms,
    sum(atoms)*${STANDARD_REFERRAL_SHARE_BPS}
      +sum(special_atoms)*${SPECIAL_REFERRAL_SHARE_BPS - STANDARD_REFERRAL_SHARE_BPS} AS weighted_atoms
- FROM contributions WHERE atoms>0 GROUP BY month,person_id
+ -- Revenue and special revenue floor apart, so a month can add special atoms alone.
+ FROM contributions WHERE atoms>0 OR special_atoms>0 GROUP BY month,person_id
 -- Carry fractional mist forward so the monthly shares sum to the lifetime share.
 ), invitee_earnings AS (
  SELECT *,sum(weighted_atoms) OVER (PARTITION BY person_id ORDER BY month) AS cumulative
@@ -148,8 +157,8 @@ const MONTHLY_REFERRAL_SQL = `SELECT * FROM (${REFERRAL_RECEIPTS_SQL}, commitmen
 ), totals AS (
  SELECT month,sum(atoms) AS atoms,
    sum(div(cumulative,10000)-div(cumulative-weighted_atoms,10000)) AS earnings,
-   (${STANDARD_REFERRAL_SHARE_BPS}
-     +round(sum(special_atoms)*${SPECIAL_REFERRAL_SHARE_BPS - STANDARD_REFERRAL_SHARE_BPS}/sum(atoms)))::int AS share_bps
+   LEAST(${SPECIAL_REFERRAL_SHARE_BPS},${STANDARD_REFERRAL_SHARE_BPS}
+     +round(sum(special_atoms)*${SPECIAL_REFERRAL_SHARE_BPS - STANDARD_REFERRAL_SHARE_BPS}/NULLIF(sum(atoms),0)))::int AS share_bps
  FROM invitee_earnings GROUP BY month
 ), payments AS (
  SELECT month,amount_atoms,digest FROM social_referral_payments WHERE account_id=$1

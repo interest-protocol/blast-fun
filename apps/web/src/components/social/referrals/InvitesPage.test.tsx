@@ -6,6 +6,7 @@ const { document } = installTestDom();
 const { act } = await import("react");
 const { createRoot } = await import("react-dom/client");
 const { QueryProvider } = await import("#web/lib/query/provider.tsx");
+const { queryKeys } = await import("#web/lib/query/keys.ts");
 const { createTestQueryClient, settleQueries } = await import("#web/lib/query/test-client.ts");
 const { SocialViewerProvider } = await import("../SignInGate");
 const { InvitesPage } = await import("./InvitesPage");
@@ -62,9 +63,11 @@ test("the private referral page renders one entry per month and links only confi
   const digest = "4vJ9JU1bJJE96FWSJKvHsmmFADCg4gpZQff4P3bkLKi";
   const reads: string[] = [];
   let failed = true;
+  let empty = false;
   t.mock.method(globalThis, "fetch", async (path: string | URL | Request) => {
     reads.push(String(path));
     if (failed) return Response.json({ error: { code: "service_unavailable" } }, { status: 503 });
+    if (empty) return Response.json({ months: [] });
     return Response.json({
       months: [
         { month: "2026-12", revenue_atoms: null, earnings_atoms: null, share_bps: null, payment: null },
@@ -123,6 +126,19 @@ test("the private referral page renders one entry per month and links only confi
   assert.equal(container.querySelector('[data-back-bar] a')?.getAttribute("href"), "/@kai_9");
   assert.ok(reads.every((url) => url.endsWith("/me/referrals?view=monthly")));
   assert.doesNotMatch(container.textContent!, /People you invited|4,820/);
+
+  const refresh = () => act(async () => {
+    await client.refetchQueries({ queryKey: queryKeys.me.referralMonths("kai_9") });
+    await settleQueries(client);
+  });
+  empty = true;
+  await refresh();
+  assert.match(container.textContent!, /No referral payments yet/);
+  failed = true;
+  await refresh();
+  assert.doesNotMatch(container.textContent!, /No referral payments yet/);
+  assert.match(container.querySelector('[role="alert"]')!.textContent!, /Referral payments couldn’t load/);
+  assert.match(container.textContent!, /Try again/);
 
   await act(async () => root.render(render(false)));
   assert.equal(container.querySelector('[aria-label="Monthly referral payments"]'), null);

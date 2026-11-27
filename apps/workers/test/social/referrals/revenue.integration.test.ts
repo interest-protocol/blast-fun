@@ -545,8 +545,10 @@ test(
       }),
       feePayment("launch", { origin: launch, quote_amount: fee }),
     ];
+    // Half of one sale, paid 1 atom at the standard rate, then 3 and 1 at the special rate across two months.
+    const halfSale = `0x${"3c".repeat(32)}`;
     await advance(3001);
-    await receipt([...unpartneredBuy(3n), commit(laterSale), funded(laterSale)], 3001, true, standardWallet);
+    await receipt([...unpartneredBuy(3n), commit(laterSale), funded(laterSale), commit(halfSale, 50n * SUI), funded(halfSale)], 3001, true, standardWallet);
     await receipt([
       launchEvent("LaunchTicketCreated", { ticket_id: laterPartnerTicket, meme }),
       launchEvent("LaunchCreated", { launch_id: laterPartnerLaunch, ticket_id: laterPartnerTicket, quote, partner_id: objectId("6") }),
@@ -569,7 +571,7 @@ test(
     assert.equal(standardBeforeSettlement.share_bps, 3000);
     assert.deepEqual(standardBeforeSettlement.assets, beforeRateChange.assets);
     await advance(3002);
-    await receipt([...unpartneredBuy(4n), paid(laterSale, 11n)], 3002, true, standardWallet);
+    await receipt([...unpartneredBuy(4n), paid(laterSale, 11n), paid(halfSale, 1n)], 3002, true, standardWallet);
     await receipt([feePayment("launch", {
       origin: laterPartnerLaunch,
       quote_amount: 3n,
@@ -597,11 +599,11 @@ test(
       [reservationCode, start + 3003],
     );
     await advance(3003);
-    await receipt(unpartneredBuy(5n), 3003, true, standardWallet);
+    await receipt([...unpartneredBuy(5n), paid(halfSale, 3n)], 3003, true, standardWallet);
     await collect();
     const claimed = (await readReferralSummary(db, standardOwner)).accounting!;
     assert.equal(claimed.share_bps, 6000);
-    assert.equal(claimed.assets[0].earnings_atoms, "13"); // prior 7 + new direct 3 + pre-claim reservation 3
+    assert.equal(claimed.assets[0].earnings_atoms, "14"); // floor(7.2 + direct 3 + pre-claim reservation 3 + half sale 2 × .3 + 1 × .3)
 
     const payoutRecipient = objectId("e");
     const payoutSender = objectId("1");
@@ -645,17 +647,21 @@ test(
 
     const november = Date.UTC(2026, 10, 1);
     const nextCurve = objectId("9");
+    // Half of one sale, with a 3-atom fee in October and another in November: 1.5 atoms a month.
+    const splitSale = objectId("3");
     await advance(3004);
     await receipt([
       launchEvent("LaunchCreated", { launch_id: nextCurve, quote }),
       launchEvent("Bought", { launch_id: nextCurve, quote_in: SUI, protocol_quote_fee: 9n }),
+      commit(splitSale, 50n * SUI), funded(splitSale), paid(splitSale, 3n),
     ], 3004);
     await advance(3005, november);
-    await receipt([feePayment("launch", { origin: nextCurve, quote_amount: 9n })], 3005, true, sender, november);
-    await receipt(unpartneredBuy(3n), 3005, true, standardWallet, november);
+    await receipt([feePayment("launch", { origin: nextCurve, quote_amount: 9n }), paid(splitSale, 3n)], 3005, true, sender, november);
+    await receipt([...unpartneredBuy(3n), paid(halfSale, 1n)], 3005, true, standardWallet, november);
     await collect();
     const standardMonths = (await readReferralMonths(db, standardOwner)).months;
     assert.deepEqual(standardMonths.find(({ month }) => month === "2026-11"), {
+      // November adds no half-sale revenue atom but one special atom; the share stays capped at 60%.
       month: "2026-11", revenue_atoms: "3", earnings_atoms: "2", share_bps: 6000, payment: null,
     });
     assert.equal(
@@ -664,8 +670,11 @@ test(
       "sub-mist fractions carry across month boundaries",
     );
     const { months } = await readReferralMonths(db, owner);
-    assert.equal(months.find(({ month }) => month === "2026-10")?.revenue_atoms, "1900000000");
-    assert.equal(months.find(({ month }) => month === "2026-11")?.revenue_atoms, "9");
+    assert.equal(months.find(({ month }) => month === "2026-10")?.revenue_atoms, "1900000001");
+    assert.equal(months.find(({ month }) => month === "2026-11")?.revenue_atoms, "11", "the November fee carries October's half atom");
+    const ownerSui = (await readReferralSummary(db, owner)).accounting!.assets.find(({ coin_type }) => coin_type === quote)!;
+    for (const key of ["revenue_atoms", "earnings_atoms"] as const)
+      assert.equal(String(months.reduce((total, month) => total + BigInt(month[key] ?? 0), 0n)), ownerSui[key]);
 
     const migration =
       "../../../../../packages/core/src/modules/database/migrations/0143_x_referral_revenue";
