@@ -129,6 +129,16 @@ test("a search picks a catalog token by its contract and quotes its own decimals
     const trigger = form.container.querySelector<HTMLButtonElement>("[aria-label^='Coin to send:']")!;
     await act(async () => trigger.click());
     const search = await waitFor(() => dom.document.querySelector<HTMLInputElement>("[aria-label='Search tokens']"), "the token search");
+    const tab = testEvent("keydown", { key: "Tab" });
+    let reachedSheetTrap = false;
+    const sheetTrap = () => { reachedSheetTrap = true; };
+    dom.document.addEventListener("keydown", sheetTrap, { once: true });
+    try {
+      await act(async () => { search.dispatchEvent(tab); });
+      assert.equal(reachedSheetTrap, false, "Tab stays in the token dialog");
+    } finally {
+      dom.document.removeEventListener("keydown", sheetTrap);
+    }
     await act(async () => {
       setInputValue(search, token.mayan);
       search.dispatchEvent(testEvent("input"));
