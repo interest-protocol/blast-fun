@@ -16,7 +16,7 @@ import { isOffered, sealRefusalLine } from "../trades/trade-quote-view";
 
 import clsx from "clsx";
 import { useAnimate } from "motion/react";
-import { useEffect, useEffectEvent, useId, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useEffectEvent, useId, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 
 import type { SocialTransferFee } from "@blast/core/web/contracts/coins.ts";
 import type { SocialTradeQuote, TradeFeeRequired } from "@blast/core/web/contracts/trades.ts";
@@ -87,7 +87,7 @@ type Seal = Readonly<{ key: string | null; press: number; minOut: bigint; warnin
 
 /**
  * The trade screen's body (FEATURE-MAP-R3 §14.1): `You sell` with its coin
- * chip, the flip, `You get`, the presets, the trade's cost in one sentence,
+ * chip, its presets, the flip, `You get`, the trade's cost in one sentence,
  * the button, and under it the one-line detail that opens into four rows. Every figure is the quote's (`swap-model.ts`);
  * the quotes are asked and kept fresh by `useTradeQuoteQuery`.
  */
@@ -452,8 +452,8 @@ export function SwapForm(props: Parameters<typeof useSwapFormControls>[0]) {
   const payLabel = !props.persistent ? "Pay" : tradeAction(inCoin, outCoin, props.focus ?? null) === "buy" ? "You pay" : "You sell";
   return (
     <div className={styles.tradeBody} ref={scope}>
-      <SwapPair balancePending={balancePending} payLabel={payLabel} receiveLabel={props.persistent ? "You get" : "Receive"} field={field} flip={flip} id={id} inCoin={inCoin} inputRef={inputRef} locked={locked} onField={onField} onPick={onPick} outCoin={outCoin} panels={panels} />
-      <AmountPresets selected={selectedSellPreset(field, inCoin)} disabled={locked || !balanceKnown} onPick={pickPreset} />
+      <SwapPair balancePending={balancePending} payLabel={payLabel} receiveLabel={props.persistent ? "You get" : "Receive"} field={field} flip={flip} id={id} inCoin={inCoin} inputRef={inputRef} locked={locked} onField={onField} onPick={onPick} outCoin={outCoin} panels={panels}
+        presets={<AmountPresets selected={selectedSellPreset(field, inCoin)} disabled={locked || !balanceKnown} onPick={pickPreset} />} />
       <TradeLine cost={cost} costId={`${id}-cost`} message={quoteError} noticeId={`${id}-notice`} review={review} symbols={[inCoin.symbol, outCoin.symbol]} warning={warning} />
       {retryBalance ? <Button onClick={retryBalance} size="sm" variant="secondary">Retry balance</Button> : null}
       <SwapAction describedBy={describedBy} waiting={waiting} sessionPending={props.trading.sessionPending && !balancePending} cta={pending ? { ...cta, enabled: false, busy: false, label: `${verb}…` } : cta} pending={pending} successful={successful} onPress={press} />
@@ -470,10 +470,10 @@ function swapDescription({ id, balancePending, warning, review, quoteError, cost
   ].filter(Boolean).join(" ") || undefined;
 }
 
-function SwapPair({ balancePending, payLabel, receiveLabel, id, field, inCoin, outCoin, locked, onField, inputRef, onPick, panels, flip }: Readonly<{
+function SwapPair({ balancePending, payLabel, receiveLabel, id, field, inCoin, outCoin, locked, onField, inputRef, onPick, panels, flip, presets }: Readonly<{
   balancePending: boolean; payLabel: string; receiveLabel: string; id: string; field: TradeAmount; inCoin: WalletCoinView; outCoin: WalletCoinView; locked: boolean;
   onField: (next: TradeAmount) => void; inputRef: RefObject<HTMLInputElement | null>; onPick: (side: "in" | "out") => void;
-  panels: ReturnType<typeof swapPanels>; flip: () => void;
+  panels: ReturnType<typeof swapPanels>; flip: () => void; presets: ReactNode;
 }>) {
   return <>{/* The Swap board's boxes: the label and balance over the amount and its coin, the dollar value under it. */}
       <div className={styles.swapPair}>
@@ -508,6 +508,8 @@ function SwapPair({ balancePending, payLabel, receiveLabel, id, field, inCoin, o
             {(field.mode === "all") ? <span className="sr" id={`${id}-mode`}>Whole balance</span> : null}
           </div>
         </div>
+        {/* The presets are shares of the coin you pay with, so they sit under its box, before the flip. */}
+        {presets}
         <div className={styles.flipSlot}>
           <button aria-label={`Flip: sell ${outCoin.symbol} for ${inCoin.symbol} instead`} className={styles.swapFlip} data-flip="" disabled={locked} onClick={flip} title="Flip" type="button">
             <FlipIcon />

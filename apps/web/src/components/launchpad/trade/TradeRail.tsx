@@ -235,7 +235,6 @@ export function TradeRail<Input extends TradeInput>({
   const shownEstimate = reviewedEstimate(state, venue) ?? preview;
   const received = receiveAmount(shownEstimate, asset, direction);
   const actionLabel = curveLabel(direction, state.input.amount, asset, received);
-  const presets = <TradeAmountPresets ready={ready} amount={amount} state={state} controller={controller} />;
   const rate = curveRate(state.input.amount, amountAsset, asset, direction, received);
   const hasQuote = Boolean(venue) || preview?.minimumAtomic !== undefined;
   const canReview = canReviewTrade(ready, paymentReady, amount.valid, unresolved === null, hasQuote);
@@ -291,7 +290,6 @@ export function TradeRail<Input extends TradeInput>({
           paymentControl={paymentControl}
           receiveAsset={asset}
           received={received}
-          presets={compactSell ? presets : null}
           compactSell={compactSell}
         />
         <TradeOptions
@@ -302,7 +300,6 @@ export function TradeRail<Input extends TradeInput>({
           bps={state.input.slippageBps}
           disabled={!amount.editable}
           setSlippage={(slippageBps) => controller.edit({ ...state.input, slippageBps })}
-          presets={presets}
         />
         {payment.notice}
         <TradeFooter blockedDirection={blockedByOther ? unresolved.direction : undefined} docked={dockedSell}>
@@ -328,7 +325,7 @@ function TradeFooter({ blockedDirection, docked, children }: Readonly<{
   </>;
 }
 
-function TradeOptions({ compactSell, direction, venue, estimate, bps, disabled, setSlippage, presets }: Readonly<{
+function TradeOptions({ compactSell, direction, venue, estimate, bps, disabled, setSlippage }: Readonly<{
   compactSell: boolean;
   direction: TradeDirection;
   venue?: MigratorVenue;
@@ -336,12 +333,10 @@ function TradeOptions({ compactSell, direction, venue, estimate, bps, disabled, 
   bps: bigint;
   disabled: boolean;
   setSlippage(bps: bigint): void;
-  presets: ReactNode;
 }>) {
   const slippage = <SlippageChoices bps={bps} disabled={disabled} onChange={setSlippage} />;
   if (compactSell) return <SellQuote {...estimate} bps={bps} slippage={slippage} />;
   return <>
-    {presets}
     <span aria-hidden="true" className={styles.label}>{SLIPPAGE_LABEL}</span>
     {slippage}
     <TradeEstimate {...estimate} />
@@ -434,7 +429,7 @@ function AmountUnit({
 }
 
 function TradeAmount<Input extends TradeInput>({
-  id, state, asset, amount, ready, controller, paymentControl, receiveAsset, received, presets, compactSell,
+  id, state, asset, amount, ready, controller, paymentControl, receiveAsset, received, compactSell,
 }: Readonly<{
   id: string;
   state: ActionState<Input>;
@@ -445,7 +440,6 @@ function TradeAmount<Input extends TradeInput>({
   paymentControl?: ReactNode;
   receiveAsset: Asset | null;
   received: bigint | null;
-  presets: ReactNode;
   compactSell: boolean;
 }>) {
   return (
@@ -472,7 +466,7 @@ function TradeAmount<Input extends TradeInput>({
           {paymentControl ?? <AmountUnit asset={asset} buying={amount.buying} />}
         </div>
       </FieldGroup>
-      {presets}
+      <TradeAmountPresets ready={ready} amount={amount} state={state} controller={controller} />
       <TradeReceive asset={receiveAsset} received={received} buying={amount.buying} compactSell={compactSell} />
     </div>
   );
