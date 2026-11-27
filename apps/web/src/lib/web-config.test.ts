@@ -94,7 +94,7 @@ test("outside production every value is optional and an unset one turns its feat
 test("the Fast MCTP fallback requires Bridge and the hosted dev environment", () => {
   const enabled = { NEXT_PUBLIC_MAYAN_BRIDGE_ENABLED: "1" };
   assert.equal(parseWebConfig({ ...preview, ...enabled }).bridgeFastMctp, false);
-  assert.equal(parseWebConfig({ ...production, ...enabled }).bridgeFastMctp, false);
+  assert.equal(parseWebConfig({ ...production, ...enabled, VERCEL_TARGET_ENV: "dev" }).bridgeFastMctp, false);
   assert.equal(parseWebConfig({ ...preview, VERCEL_TARGET_ENV: "dev" }).bridgeFastMctp, false);
   assert.equal(parseWebConfig({ ...preview, ...enabled, VERCEL_TARGET_ENV: "dev" }).bridgeFastMctp, true);
 });

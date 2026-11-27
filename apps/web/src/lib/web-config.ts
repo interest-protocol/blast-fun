@@ -67,7 +67,7 @@ export type LiveSocketConfig = Readonly<{ url: string; origin: string }>;
 
 export function parseWebConfig(environment: Environment): WebConfig {
   const relay = parseRelayConfig(environment);
-  const { production } = deploymentIdentity(environment);
+  const { production, target } = deploymentIdentity(environment);
   const presale = readPresaleConfig(environment);
   const bridge = readBridgeEnabled(environment);
 
@@ -82,7 +82,7 @@ export function parseWebConfig(environment: Environment): WebConfig {
     presaleDeployment: readPresaleDeploymentIdentity(environment),
     presale,
     bridge,
-    bridgeFastMctp: bridge && environment.VERCEL_TARGET_ENV === "dev",
+    bridgeFastMctp: bridge && !production && target === "dev",
     development: environment.NODE_ENV === "development",
     liveSocket: liveSocketConfig(environment, relay),
   };
