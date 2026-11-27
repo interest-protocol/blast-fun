@@ -121,6 +121,7 @@ function CoinActivityFeed({ source, compact, initialActivity, start }: CoinActiv
   const poolsKey = pools.join(",");
   const [stream, setStream] = useState({ key: "", live: false });
   const liveScreen = useLiveScreen();
+  const recentOnly = liveScreen && showTape;
   const live = stream.key === poolsKey && stream.live;
   useEffect(() => {
     const hub = poolsKey ? tabMarketStream() : null;
@@ -131,6 +132,7 @@ function CoinActivityFeed({ source, compact, initialActivity, start }: CoinActiv
       pools: poolsKey.split(","),
       expected: network && deployment ? { network, deployment } : null,
       feed,
+      recentOnly,
       hides: (row) => hidesLive(row),
       onState: (state) => setStream({ key: poolsKey, live: state === "live" }),
       schedule: (run, ms) => {
@@ -145,7 +147,7 @@ function CoinActivityFeed({ source, compact, initialActivity, start }: CoinActiv
       following.current = null;
       follow();
     };
-  }, [feed, launchId, network, deployment, poolsKey]);
+  }, [feed, launchId, network, deployment, poolsKey, recentOnly]);
   useMarketPoll({
     live,
     stopWhileLive: liveScreen,
@@ -183,6 +185,7 @@ function CoinActivityFeed({ source, compact, initialActivity, start }: CoinActiv
       onRefresh={() => void feed.refresh(true)}
       onMoreActivity={() => void feed.more()}
       onShowNewerActivity={() => feed.showNewer()}
+      onHistoryOpen={(open) => following.current?.showHistory(open)}
       onWindow={setFlowWindow}
       smallTradeFilter={smallTradeFilter}
     />

@@ -78,6 +78,8 @@ export type LiveTradesOptions = Readonly<{
   pools: readonly string[];
   expected: ExpectedDeployment | null;
   feed: LiveActivityFeed;
+  /** The compact live tape can evict old rows until the reader opens its detailed history. */
+  recentOnly?: boolean;
   /** A row the shown list leaves out (dust under its filter): it takes no row and asks no read until `showHidden`. */
   hides?: (row: ActivityRow) => boolean;
   onState: (state: MarketStreamState) => void;
@@ -96,10 +98,16 @@ export type LiveTradesOptions = Readonly<{
  * the floor doubling each time up to `FRAME_READ_MAX_MS`. Before the list's
  * first answer a read waits a whole floor: the first poll usually answers it.
  */
-export function followLiveTrades(options: LiveTradesOptions): (() => void) & Readonly<{ showHidden: () => void }> {
+export function followLiveTrades(options: LiveTradesOptions): (() => void) & Readonly<{
+  showHidden: () => void;
+  showHistory: (open: boolean) => void;
+}> {
   const { feed } = options;
   let wanted: number | null = null;
   let hidden: number | null = null;
+  let truncated: number | null = null;
+  let newest: number | null = null;
+  let keepHistory = !options.recentOnly;
   let lastRead = Number.NEGATIVE_INFINITY;
   let misses = 0;
   let cancel: (() => void) | null = null;
@@ -141,15 +149,26 @@ export function followLiveTrades(options: LiveTradesOptions): (() => void) & Rea
     expected: options.expected,
     listener: {
       state: (state) => options.onState(state),
-      fence: (_pool, checkpoint) => want(checkpoint),
+      fence: (_pool, checkpoint, detail) => {
+        if (keepHistory || !detail?.tapeResumed) {
+          want(checkpoint);
+        } else {
+          truncated = Math.max(truncated ?? checkpoint, checkpoint);
+        }
+      },
       trade: (frame) => {
+        newest = Math.max(newest ?? frame.checkpoint, frame.checkpoint);
         const row = provisionalActivityRow(options.launchId, frame);
         if (row && options.hides?.(row)) {
           hidden = Math.max(hidden ?? row.checkpoint, row.checkpoint);
           return;
         }
-        // A row the list cannot map, or cannot hold past the cap, comes with a read.
-        if (!row || feed.addLive(row)) want(frame.checkpoint);
+        if (!row) {
+          want(frame.checkpoint);
+        } else if (feed.addLive(row)) {
+          if (keepHistory) want(frame.checkpoint);
+          else truncated = Math.max(truncated ?? frame.checkpoint, frame.checkpoint);
+        }
       },
     },
   });
@@ -164,5 +183,14 @@ export function followLiveTrades(options: LiveTradesOptions): (() => void) & Rea
     hidden = null;
     if (at !== null) want(at);
   };
-  return Object.assign(stop, { showHidden });
+  const showHistory = (open: boolean) => {
+    if (!options.recentOnly) return;
+    keepHistory = open;
+    const at = truncated ?? (feed.readThrough() === null ? newest : null);
+    if (open && at !== null) {
+      want(at);
+      truncated = null;
+    }
+  };
+  return Object.assign(stop, { showHidden, showHistory });
 }

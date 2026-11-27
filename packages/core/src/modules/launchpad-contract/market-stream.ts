@@ -77,6 +77,15 @@ export function marketStreamActivity(request: Request): boolean {
   return values.length === 1;
 }
 
+/** A tab can follow both first-page Bonding views without opening a second socket. */
+export function marketStreamDiscovery(request: Request): boolean {
+  const values = new URL(request.url).searchParams.getAll("discovery");
+  if (values.length > 1 || (values.length === 1 && values[0] !== "true")) {
+    throw new Error("Invalid discovery subscription.");
+  }
+  return values.length === 1;
+}
+
 /** A tab may stream one presale alongside its regular market subscriptions. */
 export function marketStreamPresale(request: Request): string | null {
   const values = new URL(request.url).searchParams.getAll("presale");
@@ -86,22 +95,23 @@ export function marketStreamPresale(request: Request): string | null {
   return values[0] ?? null;
 }
 
-/** Browser reconnects use REST recovery, rather than sharing one subscriber's resume cursor. */
+/** The shared market query. The browser WebSocket transport parses per-pool resume cursors separately. */
 export function marketStreamPools(request: Request): readonly string[] {
   const params = new URL(request.url).searchParams;
   if (
     [...params.keys()].some(
-      (key) => key !== "pool" && key !== "cursor" && key !== "activity" && key !== "price_coin" && key !== "presale",
+      (key) => key !== "pool" && key !== "cursor" && key !== "activity" && key !== "price_coin" && key !== "presale" && key !== "discovery",
     )
   )
     throw new Error("Invalid market stream query.");
   marketStreamActivity(request);
+  const discovery = marketStreamDiscovery(request);
   const pools = params.getAll("pool");
   const presale = marketStreamPresale(request);
   const cursor = params.getAll("cursor");
   const lastId = request.headers.get("last-event-id");
   if (
-    (!pools.length && !presale && !marketStreamActivity(request)) ||
+    (!pools.length && !presale && !marketStreamActivity(request) && !discovery) ||
     pools.length > MARKET_STREAM_BUDGET.maxPoolsPerClient ||
     new Set(pools).size !== pools.length ||
     pools.some((pool) => !POOL_KEY.test(pool)) ||

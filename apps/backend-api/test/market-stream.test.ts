@@ -691,3 +691,56 @@ test("one shared stream combines sanitized activity hints with pool updates and 
     );
   }
 });
+
+test("a cold gateway catches up a tape from its shared snapshot only when coverage is proved", () => {
+  const socket = new Socket();
+  const relay = new MarketStreamRelay(() => socket, expected);
+  const seen: { name: string; data: Record<string, unknown> }[] = [];
+  const sink = {
+    close() {},
+    send(bytes: Uint8Array) {
+      const text = new TextDecoder().decode(bytes);
+      seen.push({
+        name: text.match(/^event: (.+)$/m)![1]!,
+        data: JSON.parse(text.match(/^data: (.+)$/m)![1]!),
+      });
+      return true;
+    },
+  };
+  const cursor = "11:1:1:0";
+  const from = (value: string) =>
+    relay.subscribe(request(), sink, { resume: new Map([[pool(), value]]) });
+  const first = from(cursor);
+  assert.ok(!(first instanceof Response));
+  try {
+    socket.hello();
+    const recent = [13, 12, 11].map((cp) => ({
+      ...trade(cp).trade,
+      timestamp_ms: Date.now() - 500,
+    }));
+    socket.receive({ ...snapshot(pool(), 13), trades: recent });
+    const recovered = seen.find(({ name }) => name === "tape")?.data.trades;
+    assert.ok(Array.isArray(recovered));
+    assert.deepEqual(
+      recovered.map((trade) => trade.cursor),
+      ["13:1:1:0", "12:1:1:0"],
+    );
+    assert.ok(recovered.every((trade) => !Object.hasOwn(trade, "labels")));
+    assert.equal(seen.at(-1)?.data.tape_resumed, true);
+    seen.length = 0;
+    const expired = from("10:1:1:0");
+    assert.ok(!(expired instanceof Response));
+    try {
+      assert.equal(
+        seen.some(({ name }) => name === "tape"),
+        false,
+      );
+      assert.equal(seen.at(-1)?.data.state, "live");
+      assert.equal(seen.at(-1)?.data.tape_resumed, undefined);
+    } finally {
+      expired.stop();
+    }
+  } finally {
+    first.stop();
+  }
+});

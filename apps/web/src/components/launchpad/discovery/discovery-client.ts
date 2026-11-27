@@ -1,7 +1,7 @@
 import { gatedFetch } from "#web/lib/api-gate-client.ts";
-import { parseDiscoveryResponse, type DiscoveryResponse, type DiscoveryViewName } from "@blast/core/modules/launchpad-discovery/rows.ts";
+import { almostGraduated, parseDiscoveryResponse, type DiscoveryResponse, type DiscoveryViewName } from "@blast/core/modules/launchpad-discovery/rows.ts";
 
-import { ALMOST_GRADUATED_BPS, discoveryPageUrl, RAIL_PAGE_SIZE } from "./discovery-model";
+import { discoveryPageUrl, RAIL_PAGE_SIZE } from "./discovery-model";
 import { discoveryNext, discoveryRows, readVisiblePage, withoutTestLaunches } from "#web/lib/test-launches.ts";
 
 /**
@@ -39,14 +39,4 @@ export async function readRailPage(
   }
 }
 
-/**
- * Rows at 60% or more, from a page ordered by progress, highest first. The
- * list ends at the first row below the line, since every row after it is lower.
- */
-export function almostGraduated(answer: DiscoveryResponse): DiscoveryResponse {
-  const { section } = answer;
-  if (section.state !== "available" && section.state !== "stale") return answer;
-  const below = section.data.rows.findIndex((row) => row.progressBps === null || row.progressBps < ALMOST_GRADUATED_BPS);
-  if (below === -1) return answer;
-  return { ...answer, section: { ...section, data: { rows: section.data.rows.slice(0, below), nextCursor: null } } };
-}
+export { almostGraduated };
