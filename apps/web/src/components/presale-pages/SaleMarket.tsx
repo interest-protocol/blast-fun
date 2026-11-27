@@ -460,8 +460,7 @@ export function SaleMarket({
       chart={(extras) => market?.pool ? (
         <CoinPriceCurrencyProvider quoteType={market.quote.type} quoteSymbol={market.quote.symbol}>
           <div className={coinStyles.market} data-sale-market="">
-            <PresaleMarketPrice market={market} move={extras.move} />
-            <ChartCard><SalePoolChart sale={sale} market={market} pool={market.pool} /></ChartCard>
+            <ChartCard head={<PresaleMarketPrice market={market} move={extras.move} />}><SalePoolChart sale={sale} market={market} pool={market.pool} /></ChartCard>
           </div>
           {extras.note}
         </CoinPriceCurrencyProvider>

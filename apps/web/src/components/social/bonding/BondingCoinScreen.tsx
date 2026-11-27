@@ -411,17 +411,18 @@ function CoinMarket({ snapshot, page, chart, activity, poolKey, checkpoint, expe
   const context = coinTradeSource(view, poolKey, lastTrade, receivedAt);
   return <ChartPriceLaunch value={{ poolKey, launchId: page.launchId }}><ChartTradeContext value={context}>
     <div className={styles.market}>
-      <MarketPrice units={priceUnits(view)} price={price?.price} tradeId={tradeId && price?.cursor ? tradeId : null}
-        showCurrency={view.identity.quoteType !== null} activity={context && <ChartLastTrade placement="headline" />} />
       <Reconnecting live={live} />
       {liveOn ? <LifecycleRefresh lifecycle={live.stats?.lifecycle ?? null} /> : null}
-      <CoinMarketCards graduated={graduated} view={view} tick={tick} tradeId={tradeId} stats={stats} chart={chart} activity={activity} />
+      <CoinMarketCards graduated={graduated} view={view} tick={tick} tradeId={tradeId} stats={stats} chart={chart} activity={activity}
+        price={<MarketPrice units={priceUnits(view)} price={price?.price} tradeId={tradeId && price?.cursor ? tradeId : null}
+          showCurrency={view.identity.quoteType !== null} activity={context && <ChartLastTrade placement="headline" />} />} />
     </div>
   </ChartTradeContext></ChartPriceLaunch>;
 }
 
-function CoinMarketCards({ graduated, view, tick, tradeId, stats, chart, activity }: Readonly<{
-  graduated: boolean; view: View; tick: ReturnType<typeof useCoinTrade>["tick"]; tradeId: string | null; stats: LiveCoinStats | null; chart: ReactNode; activity: ReactNode;
+/** The chart comes first at every width, the price row as its head; without a chart the price row stands alone. */
+function CoinMarketCards({ graduated, view, tick, tradeId, stats, chart, activity, price }: Readonly<{
+  graduated: boolean; view: View; tick: ReturnType<typeof useCoinTrade>["tick"]; tradeId: string | null; stats: LiveCoinStats | null; chart: ReactNode; activity: ReactNode; price: ReactNode;
 }>) {
   const phone = usePhoneLayout();
   const phoneProgress = phone && !graduated;
@@ -430,9 +431,8 @@ function CoinMarketCards({ graduated, view, tick, tradeId, stats, chart, activit
     <ProgressCard view={view} tradeId={tradeId}>{phone ? null : facts}</ProgressCard>
   );
   return <>
-    {phoneProgress && overview}
-    {chart && <ChartCard>{chart}</ChartCard>}
-    {!phoneProgress && overview}
+    {chart ? <ChartCard head={price}>{chart}</ChartCard> : price}
+    {overview}
     {phoneProgress && facts ? <div className={`${styles.card} ${styles.progressFacts}`}>{facts}</div> : null}
     {activity}
   </>;
@@ -560,9 +560,8 @@ export function LegacyCoinScreen({ coinType, name, symbol, logoUrl, chart, decim
     <div className={styles.layout} data-no-trade={trade == null || undefined}>
       <CoinPriceCurrencyProvider quoteType={quote.coinType} quoteSymbol={quote.symbol}>
         <div className={styles.market}>
-          <MarketPrice units={units} price={price?.price} tradeId={price?.cursor} showCurrency={!major} />
           <Reconnecting live={live} />
-          <ChartCard><SectionBoundary subject="chart">{chart}</SectionBoundary></ChartCard>
+          <ChartCard head={<MarketPrice units={units} price={price?.price} tradeId={price?.cursor} showCurrency={!major} />}><SectionBoundary subject="chart">{chart}</SectionBoundary></ChartCard>
           <MarketOverview fdv={major ? null : fdvUsd} holders={live.stats?.holders} volume={live.stats?.volumeUsd} venue={major ? null : poolKey.split(":")[0]} />
           <Card title="Trades">
             <SectionBoundary subject="trades" key={poolKeys.join()}>

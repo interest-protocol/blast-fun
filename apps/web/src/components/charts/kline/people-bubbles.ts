@@ -107,6 +107,12 @@ export const STACK_LIMIT = 3;
 const GAP = 1;
 /** Px of the ring drawn around each bubble. */
 export const RING = 2;
+/** Empty px between two bubbles' rings, side by side or stacked. */
+const SPACING = 2;
+/** Px from one bubble's centre to the next one's: the bubble, both rings and the space between them, so no two ever touch. */
+export const bubblePitch = (size: number) => size + 2 * RING + SPACING;
+/** Px wide a "+N" bubble is (no ring): `size` for "+9", wider for "+99", so the layout knows where the next column may start. */
+export const moreWidth = (count: number, size: number) => Math.max(size, Math.ceil(8 + 7.5 * `+${Math.min(count, 99)}`.length));
 /** Px from a bubble's centre to the price it floats over: the gap, the ring and half the bubble. */
 const clearance = (size: number) => size * GAP + RING + size / 2;
 /** Px above the highest price the chart keeps free, so one bubble and its gap fit over the top bar. */
@@ -126,7 +132,11 @@ export type DrawnPrice = Readonly<{
 
 /**
  * Where each bubble goes. Bubbles `size` px wide share a column when their bars are
- * closer than that (zoomed out); a column shows up to `STACK_LIMIT` people, the
+ * closer than one `bubblePitch` (zoomed out), and no two bubbles, rings included,
+ * overlap: columns keep a pitch apart, a column moves just clear of a wide "+N" before it
+ * while it stays over its own traders and otherwise joins that column, and a column
+ * stacks one pitch per bubble (only the viewer's own bubbles, which never fold, can
+ * outgrow a short plot). Each column sits over its own traders. A column shows up to `STACK_LIMIT` people, the
  * viewer's own first and always, then tagged wallets, then the newest, and folds the
  * rest into one "+N". Every column floats one bubble height (`GAP`) over the highest
  * price drawn under it, its own bars' and any of `drawn.spans` within reach (on a line,
@@ -144,42 +154,61 @@ export function layoutBubbles(people: readonly Person[], place: (person: Person)
   // People arrive own first, then newest: keep the viewer's own and the newest visible ones.
   const ownCount = visible.filter((placed) => placed.person.own).length;
   const kept = visible.slice(0, Math.max(ownCount, MAX_PEOPLE));
-  // Columns at least one bubble apart: a new one starts once a person sits `size` px past the last one's start.
-  const row = [...kept].sort((a, b) => a.point.x - b.point.x);
-  const bubbles: Bubble[] = [];
-  let left = -Infinity;
-  let column: Placed[] = [];
-  const flush = () => {
-    if (!column.length) return;
-    const stack = stackColumn(column, height, size, left, drawn);
-    left = stack[0]!.x;
-    bubbles.push(...stack);
-  };
-  for (const placed of row) {
-    if (column.length && placed.point.x - column[0]!.point.x >= size) { flush(); column = []; }
-    column.push(placed);
-  }
-  flush();
-  return bubbles;
+  return placeColumns(columnsOf(kept, bubblePitch(size)), size, (column, least) => stackColumn(column, height, size, least, drawn));
 }
+
+/** People in columns at least one pitch apart: a new one starts once a person sits a pitch past the last one's start. */
+function columnsOf(people: readonly Placed[], pitch: number): Placed[][] {
+  const columns: Placed[][] = [];
+  for (const placed of [...people].sort((a, b) => a.point.x - b.point.x)) {
+    const last = columns.at(-1);
+    if (last && placed.point.x - last[0]!.point.x < pitch) last.push(placed);
+    else columns.push([placed]);
+  }
+  return columns;
+}
+
+type PlacedColumn = Readonly<{ people: readonly Placed[]; bubbles: readonly Bubble[]; least: number }>;
+
+/**
+ * The columns' bubbles, left to right. A column moves right just clear of the one before (a wide "+N"
+ * reaches past a pitch) while it still sits over its own traders; past them it joins that column, its
+ * people folding into the "+N", so nothing drifts off its bars.
+ */
+function placeColumns(columns: readonly (readonly Placed[])[], size: number, stack: (people: readonly Placed[], least: number) => Bubble[]): Bubble[] {
+  const placed: PlacedColumn[] = [];
+  for (const people of columns) {
+    const previous = placed.at(-1);
+    const least = previous ? rightEdge(previous.bubbles, size) + 2 * RING + SPACING + size / 2 : -Infinity;
+    if (previous && least > people.at(-1)!.point.x) {
+      const joined = [...previous.people, ...people];
+      placed[placed.length - 1] = { people: joined, bubbles: stack(joined, previous.least), least: previous.least };
+    } else placed.push({ people, bubbles: stack(people, least), least });
+  }
+  return placed.flatMap((column) => column.bubbles);
+}
+
+/** Px of a column's right edge, rings aside: its widest bubble, a "+N" counted at its full width. */
+const rightEdge = (stack: readonly Bubble[], size: number) =>
+  Math.max(...stack.map((bubble) => bubble.x - size / 2 + (bubble.kind === "more" ? moreWidth(bubble.people.length, size) : size)));
 
 /**
  * One column's bubbles: the ranked people that fit, then a "+N" for the rest. Where the
  * whole stack has no room over or under the price, more of it folds into the "+N" until
  * it fits with its gap; the viewer's own bubbles always show.
  */
-function stackColumn(placed: readonly Placed[], height: number, size: number, previousX: number, { topInset = 0, spans = [], halfBar = 0, line = false }: DrawnPrice): Bubble[] {
+function stackColumn(placed: readonly Placed[], height: number, size: number, least: number, { topInset = 0, spans = [], halfBar = 0, line = false }: DrawnPrice): Bubble[] {
   const ranked = [...placed].sort((a, b) => Number(b.person.own) - Number(a.person.own) || b.person.labels.length - a.person.labels.length || b.person.lastMs - a.person.lastMs);
   const own = ranked.filter((entry) => entry.person.own).length;
   const roomFor = (limit: number) => Math.max(own, ranked.length > limit ? limit - 1 : limit);
-  // Centred on the people a full stack shows, but never closer than one bubble to the column before.
+  // Centred on the people a full stack shows, but no further left than `least`, where it clears the column before.
   const centred = ranked.slice(0, roomFor(STACK_LIMIT));
-  const x = Math.max(centred.reduce((sum, entry) => sum + entry.point.x, 0) / centred.length, previousX + size);
+  const x = Math.max(centred.reduce((sum, entry) => sum + entry.point.x, 0) / centred.length, least);
   // Every price the bubbles could cover: the column's own bars, and whatever is drawn under the bubble or its ring.
   const under = [...placed.map((entry) => entry.point), ...drawnUnder(spans, x, size / 2 + RING, halfBar, line)];
   const ceiling = Math.min(...under.map((span) => span.top));
   const floor = Math.max(...under.map((span) => span.bottom));
-  const step = size * .8;
+  const step = bubblePitch(size);
   const top = Math.min(topInset, height / 2) + size / 2, bottom = Math.max(top, height - size / 2);
   const above = Math.min(ceiling - clearance(size), bottom), below = Math.max(floor + clearance(size), top);
   // Slots that fit over the price or under it, whichever holds more.
