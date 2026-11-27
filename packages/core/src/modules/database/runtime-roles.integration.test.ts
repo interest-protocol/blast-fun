@@ -151,6 +151,7 @@ const SOCIAL_FEED_GRANTS: Readonly<Record<string, readonly string[]>> = {
   social_referral_entities: ["blast_social:SELECT", "blast_watcher:INSERT,SELECT", "blast_web:SELECT"],
   social_referral_events: ["blast_social:SELECT", "blast_watcher:INSERT,SELECT", "blast_web:SELECT"],
   social_referral_payments: [],
+  social_product_feedback: ["blast_web:SELECT"],
   social_blast_workspaces: ["blast_web:INSERT,SELECT,UPDATE"],
   social_blast_workspace_writers: ["blast_web:INSERT,SELECT,UPDATE"],
   social_accounts: ["blast_replica:SELECT", "blast_watcher:SELECT", "blast_web:INSERT,SELECT,UPDATE"],
@@ -379,6 +380,8 @@ test("the web migration shares blast-infra's roles and leaves CREATE on public t
       [
         "blast_watcher:social_wallet_balance_requests:owner:UPDATE",
         ...["account_id", "month", "amount_atoms", "digest"].map((column) => `blast_web:social_referral_payments:${column}:SELECT`),
+        ...["id", "kind", "message"].map((column) => `blast_web:social_product_feedback:${column}:INSERT`),
+        "blast_web:social_product_feedback:reviewed_at:UPDATE",
         // 0165: the admin website's verified mark, never the audited flag.
         ...["presale_id", "verified_team", "verified_by", "verified_at_ms", "note", "updated_at_ms"].map((column) => `blast_web:social_sale_trust:${column}:INSERT`),
         ...["verified_team", "verified_by", "verified_at_ms", "note", "updated_at_ms"].map((column) => `blast_web:social_sale_trust:${column}:UPDATE`),

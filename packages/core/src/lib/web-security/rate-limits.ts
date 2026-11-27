@@ -26,6 +26,7 @@ export type RateBucket =
   | "telemetry"
   | "oauth"
   | "launchpad_telemetry"
+  | "product_feedback"
   | "launchpad_outcome"
   | "launchpad_outcome_commitment"
   | "launchpad_launch_asset"
@@ -322,6 +323,12 @@ export function createRatePolicyRegistry(
       version: 1,
       subjectScope: "ip",
       windows: Object.freeze([oauth]),
+    }),
+    product_feedback: Object.freeze({
+      bucket: "product_feedback",
+      version: 1,
+      subjectScope: "ip",
+      windows: Object.freeze([Object.freeze({ limit: 5, windowSeconds: 60 })]),
     }),
     // Launchpad coin-view beacons (modules/launchpad-telemetry), per client
     // IP. Separate from Mission Control's session-scoped `telemetry` bucket.

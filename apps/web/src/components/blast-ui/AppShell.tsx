@@ -16,9 +16,11 @@ import { RailLinks } from "./RailLinks";
 import styles from "./AppShell.module.css";
 import { BlastMenuTrigger, useMenuHandle, type MenuHandle } from "./BlastMenu";
 import { CreateMenu } from "./CreateMenu";
+import { FeedbackSheet } from "./FeedbackSheet";
 import { MoreNavigation } from "./MoreNavigation";
 import {
   BellIcon,
+  PencilIcon,
   CurveIcon,
   HelmetMark,
   HomeIcon,
@@ -207,6 +209,7 @@ function ShellFrame({
   const transitionProps = "ViewTransition" in React ? { name: transitionName, default: "blast-route", update: "none" } : {};
   const noAside = pageHidesAside(pathname, home, aside);
   const [missingPage, setMissingPage] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const current = missingPage ? null : currentItem !== undefined ? currentItem : shellNavKeyFor(pathname, viewer?.callsign ?? null);
   const ownProfile = viewer?.callsign ? profilePath(viewer.callsign) : signInHref;
 
@@ -262,6 +265,10 @@ function ShellFrame({
           </BlastMenuTrigger>
           <div className={styles.railSpacer} />
           <div className={styles.railFooter}>
+            <Button aria-haspopup="dialog" className={styles.navItem} onClick={() => setFeedbackOpen(true)} variant="nav">
+              <PencilIcon />
+              <span>Send feedback</span>
+            </Button>
             <RailLinks />
             <ServiceStatus />
           </div>
@@ -331,7 +338,7 @@ function ShellFrame({
             Swap
           </button>
           <LaunchDestinations current={current} mobile />
-          <MoreNavigation createMenu={createMenu} key={pathname} />
+          <MoreNavigation createMenu={createMenu} key={pathname} onFeedback={() => setFeedbackOpen(true)} />
         </nav>
       </div>
       <AccountMenu
@@ -346,6 +353,7 @@ function ShellFrame({
         viewer={account}
       />
       <CreateMenu handle={createMenu} />
+      <FeedbackSheet open={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
       {overlays}
     </>
   );
