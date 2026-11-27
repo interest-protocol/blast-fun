@@ -1,9 +1,8 @@
 "use client";
 
-import { useConnectWallet, useWallets } from "@privy-io/react-auth";
-import { useSignTransaction, useWallets as useSolanaWallets } from "@privy-io/react-auth/solana";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { startPrivy, usePrivySession, usePrivySourceWallets, type PrivySourceWallets } from "#web/components/auth/privy-session.ts";
 import { usePreparePrivyWalletPicker } from "#web/components/auth/privy-wallet-picker.ts";
 import { useToast } from "#web/components/blast-ui/Toasts.tsx";
 
@@ -12,6 +11,7 @@ import { useBalancesContext } from "../coins/balances.tsx";
 import { displayAmount } from "./bridge-model.ts";
 import { explorerLink, type BridgeRow, type EvmWallet, type SolanaWallet } from "./bridge-sdk.ts";
 import { BridgeForm, type BridgeWallets } from "./BridgeForm.tsx";
+import { BridgeLoading } from "./BridgeLoading.tsx";
 import { mayanSdk } from "./mayan-sdk.ts";
 
 export type BridgeCardProps = Readonly<{
@@ -30,14 +30,28 @@ function evmChainId(chainId: string): number | null {
  * The lazy chunk behind the Bridge to Sui screen: Privy's connected EVM and
  * Solana wallets, the Mayan SDK, and what happens when a bridge arrives.
  * Connecting a source wallet never links it to the Blast account.
+ *
+ * Privy's provider is never above the page (`PrivySessionProvider`), so the
+ * card never calls Privy's hooks: it starts the SDK and reads the wallets the
+ * runtime publishes, showing the skeleton until they arrive.
  */
-export default function BridgeCard({ blastAddress, signedIn, onSignIn }: BridgeCardProps) {
-  // WalletConnect QR and Coinbase only list once the picker is prepared.
+export default function BridgeCard(props: BridgeCardProps) {
+  // WalletConnect QR and Coinbase only list once the picker is prepared; this also starts Privy.
   usePreparePrivyWalletPicker(true);
-  const { connectWallet } = useConnectWallet();
-  const { wallets: evmWallets } = useWallets();
-  const { wallets: solanaWallets } = useSolanaWallets();
-  const { signTransaction } = useSignTransaction();
+  const { load } = usePrivySession();
+  const source = usePrivySourceWallets();
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    startPrivy(load).catch(() => setFailed(true));
+  }, [load]);
+  // `BridgeScreen`'s boundary says the card could not load and offers a retry, which starts Privy again.
+  if (failed && !source) throw new Error("Privy did not start for Bridge to Sui.");
+  if (!source) return <BridgeLoading />;
+  return <BridgeReady {...props} source={source} />;
+}
+
+function BridgeReady({ blastAddress, signedIn, onSignIn, source }: BridgeCardProps & Readonly<{ source: PrivySourceWallets }>) {
+  const { evm: evmWallets, solana: solanaWallets, connectWallet, signSolanaTransaction: signTransaction } = source;
   const toast = useToast();
   const balances = useBalancesContext();
   const sdk = useMemo(() => mayanSdk(), []);

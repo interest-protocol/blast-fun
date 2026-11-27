@@ -5,10 +5,11 @@ import { JSDOM } from "jsdom";
 import { act, StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { PrivyStart } from "./privy-start.ts";
+import { PrivySourceWalletsStore, PrivyStart } from "./privy-start.ts";
 
 // The page's start; these tests only watch the SDK's wallet clients.
 const start = new PrivyStart();
+const sourceWallets = new PrivySourceWalletsStore();
 
 type Wallet = { name: string; version: string; icon: string; chains: string[]; accounts: never[]; features: Record<string, never> };
 const wallets = new Set<Wallet>();
@@ -46,6 +47,8 @@ registerHooks({
           export const usePrivy = () => ({ ready: false, authenticated: false, user: null, getAccessToken: async () => null, logout: async () => {} });
           export const useLogin = () => ({ login() {} });
           export const useLoginWithOAuth = () => ({ initOAuth: async () => {} });
+          export const useConnectWallet = () => ({ connectWallet() {} });
+          export const useWallets = () => ({ wallets: [] });
         `)}`,
       };
     }
@@ -58,7 +61,7 @@ const noop = () => undefined;
 
 test("T-008: real SDK discovers added and removed wallets after absence while unchanged remounts retain one client", async () => {
   for (const appId of ["server-A", "server-B"]) {
-    renderToStaticMarkup(<PrivySessionRuntime appId={appId} emit={noop} nonce={null} start={start} />);
+    renderToStaticMarkup(<PrivySessionRuntime appId={appId} emit={noop} nonce={null} start={start} wallets={sourceWallets} />);
   }
   assert.equal(walletConnectInstances.size, 0, "server requests create no browser wallet clients");
   const dom = new JSDOM('<div id="mount"></div>', { url: "https://blast.test" });
@@ -66,7 +69,7 @@ test("T-008: real SDK discovers added and removed wallets after absence while un
   const root = createRoot(document.getElementById("mount")!);
   const lateWallet: Wallet = { name: "Late wallet", version: "1.0.0", icon: "data:image/svg+xml,", chains: ["solana:mainnet"], accounts: [], features: {} };
   const render = async (appId = "registry-app") => act(async () => root.render(
-    <StrictMode><PrivySessionRuntime appId={appId} emit={noop} nonce={null} start={start} /></StrictMode>,
+    <StrictMode><PrivySessionRuntime appId={appId} emit={noop} nonce={null} start={start} wallets={sourceWallets} /></StrictMode>,
   ));
   const names = () => document.querySelector("section")?.getAttribute("data-wallets")?.split(",");
   try {
@@ -139,7 +142,7 @@ test("T-008: real SDK discovers added and removed wallets after absence while un
   Object.assign(globalThis, { window: secondDocument.window, document: secondDocument.window.document });
   const secondRoot = createRoot(document.getElementById("mount")!);
   try {
-    await act(async () => secondRoot.render(<PrivySessionRuntime appId="registry-app" emit={noop} nonce={null} start={start} />));
+    await act(async () => secondRoot.render(<PrivySessionRuntime appId="registry-app" emit={noop} nonce={null} start={start} wallets={sourceWallets} />));
     assert.equal(walletConnectInstances.size, 10, "browser documents own independent configurations");
   } finally {
     await act(async () => secondRoot.unmount());
