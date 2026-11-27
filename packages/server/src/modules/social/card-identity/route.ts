@@ -5,7 +5,7 @@ import { CARD_IDENTITY_PATH, cardIdentityCallsigns } from "@blast/core/modules/s
 import { readCardIdentities } from "@blast/server/modules/social/card-identity/read.ts";
 
 export function createCardIdentityRoute(dependencies: { kit: SocialRouteKit; database: () => ReadableDatabase }) {
-  return dependencies.kit.route({ name: `GET ${CARD_IDENTITY_PATH}`, auth: "none", bucket: "social_read", cache: "public" }, async (context) => {
+  return dependencies.kit.route({ name: `GET ${CARD_IDENTITY_PATH}`, auth: "none", bucket: "social_read", cache: "public-fresh" }, async (context) => {
     const callsigns = cardIdentityCallsigns(new URL(context.request.url));
     if (!callsigns) throw new SocialRouteError("invalid_parameter", { extra: { parameter: "callsigns" } });
     return context.json(await readCardIdentities(dependencies.database(), callsigns));

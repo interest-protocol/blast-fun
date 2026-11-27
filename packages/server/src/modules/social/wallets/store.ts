@@ -7,6 +7,10 @@ import type {
   SocialWalletKind,
 } from "@blast/core/modules/social/contracts/me.ts";
 import { SocialRouteError } from "@blast/core/modules/social/route-kit/errors.ts";
+
+import type { SocialCaller } from "../route-kit/route.ts";
+import { assertWalletSessionActive } from "./session.ts";
+
 type HolderRow = { taken: boolean | null; held: boolean | null };
 type WalletRow = {
   address: string;
@@ -25,6 +29,10 @@ const HOLDERS = `
   SELECT bool_or(NOT h.mine) AS taken, bool_or(h.mine) AS held
   FROM social_accounts me
   CROSS JOIN LATERAL (
+    SELECT a.account_id = me.account_id AS mine
+    FROM social_accounts a
+    WHERE a.sui_address = $1 AND a.deleted_at IS NULL
+    UNION ALL
     SELECT w.profile_id IS NOT DISTINCT FROM me.profile_id AS mine
     FROM mission_control_account_wallets w
     WHERE w.sui_address = $1
@@ -79,9 +87,12 @@ export async function linkProvenWallet(
   address: string,
   accountId: string,
   kind: SocialWalletKind,
-  alreadyHeld: boolean,
+  caller: SocialCaller,
 ): Promise<{ wallet: SocialAccountWallet; created: boolean }> {
-  const inserted = alreadyHeld
+  await lockActiveWalletAccount(social, accountId, caller);
+  const current = await holders(social, address, accountId);
+  if (current.taken) throw new SocialRouteError("wallet_taken");
+  const inserted = current.held
     ? null
     : await social.write("social_account_wallets", INSERT_WALLET, [address, accountId, kind]);
   const after = await holders(social, address, accountId);
@@ -94,4 +105,15 @@ export async function linkProvenWallet(
     linked_at_ms: Number(row.linked_at_ms),
   };
   return { wallet, created: inserted?.rowCount === 1 };
+}
+/** Serialize changes to an account's wallet list and recheck its sign-in after waiting. */
+export async function lockActiveWalletAccount(social: ModuleTransaction<"social">, accountId: string, caller: SocialCaller) {
+  const { rows } = await social.read<{ profile_id: string | null; sui_address: string | null }>(
+    "SELECT profile_id, sui_address FROM social_accounts WHERE account_id = $1 AND deleted_at IS NULL FOR UPDATE",
+    [accountId],
+  );
+  const account = rows[0];
+  if (!account) throw new SocialRouteError("account_required");
+  await assertWalletSessionActive(social, caller);
+  return account;
 }

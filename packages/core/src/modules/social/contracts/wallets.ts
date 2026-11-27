@@ -32,12 +32,33 @@ import { walletChallengeMessageSchema, walletChallengeSignatureSchema, walletTim
  *
  * `wallet` names the wallet that signed, for display: `slush` lists the
  * address as "Slush"; anything else (the default) as an external wallet.
- * Unlinking is deferred.
  */
 export const SOCIAL_WALLET_CHALLENGE_ROUTE = "POST /api/social/me/wallets/challenge";
 export const SOCIAL_WALLET_CHALLENGE_PATH = "/api/social/me/wallets/challenge";
 export const SOCIAL_WALLET_LINK_ROUTE = "POST /api/social/me/wallets";
 export const SOCIAL_WALLET_LINK_PATH = "/api/social/me/wallets";
+export const SOCIAL_WALLET_UNLINK_ROUTE = "DELETE /api/social/me/wallets";
+
+export const socialWalletUnlinkRequestSchema = z.strictObject({
+  account_id: socialUuidSchema,
+  address: socialAddressInputSchema,
+  confirm_account_deletion: z.boolean(),
+}).meta({
+  title: "Slush wallet unlink request",
+  description: "DELETE /api/social/me/wallets body. The account must match the caller, and deletion must be confirmed exactly when Slush is its only wallet.",
+});
+
+export type SocialWalletUnlinkRequest = Readonly<z.infer<typeof socialWalletUnlinkRequestSchema>>;
+
+export const socialWalletUnlinkedSchema = z.strictObject({
+  account_deleted: z.boolean(),
+  signed_out: z.boolean(),
+}).meta({
+  title: "Unlinked Slush wallet",
+  description: "DELETE /api/social/me/wallets 200. Indicates whether the account was closed and whether the caller must sign in again.",
+});
+
+export type SocialWalletUnlinked = Readonly<z.infer<typeof socialWalletUnlinkedSchema>>;
 
 /** What a linked wallet is listed as: "Slush", or an external wallet. */
 export const SOCIAL_LINKED_WALLET_KINDS = ["slush", "external"] as const;

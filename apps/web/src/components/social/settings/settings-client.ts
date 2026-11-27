@@ -10,18 +10,18 @@ import {
   type SocialLinkedWalletKind,
   socialWalletChallengeSchema,
   socialWalletLinkedSchema,
+  socialWalletUnlinkedSchema,
+  type SocialWalletUnlinkRequest,
   type SocialWalletChallenge,
   type SocialWalletLinked,
+  type SocialWalletUnlinked,
 } from "@blast/core/web/contracts/wallets.ts";
 
 import type { SettingsPatch } from "./settings-model";
 import { callSocialApi, type ApiResult, type SocialApiOptions } from "../social-api.ts";
 
 /**
- * The settings page's reads and writes: `GET`/`PUT /api/social/me/settings`
- * and the wallet-link pair (`POST /api/social/me/wallets/challenge`, `POST
- * /api/social/me/wallets`), each with the viewer's Privy access token, never
- * cached and without cookies.
+ * Settings and wallet actions use the current viewer's authenticated session.
  */
 type Options = SocialApiOptions;
 
@@ -52,6 +52,10 @@ export function linkWallet(
     },
     socialWalletLinkedSchema,
   );
+}
+
+export function unlinkWallet(options: Options, body: SocialWalletUnlinkRequest): Promise<ApiResult<SocialWalletUnlinked>> {
+  return callSocialApi(options, SOCIAL_WALLET_LINK_PATH, { method: "DELETE", body }, socialWalletUnlinkedSchema);
 }
 
 /** The page's words for a refused or failed save; each says nothing changed and how to recover. */

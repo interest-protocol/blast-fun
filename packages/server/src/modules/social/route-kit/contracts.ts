@@ -45,5 +45,5 @@ export interface SocialAccountLoader {
    * address (a wallet-only account's own, or a wallet linked to an account),
    * or null for a wallet-only visitor who has none yet.
    */
-  resolveWallet(address: string): Promise<SocialAccount | null>;
+  resolveWallet(address: string, sessionId?: string): Promise<SocialAccount | null>;
 }

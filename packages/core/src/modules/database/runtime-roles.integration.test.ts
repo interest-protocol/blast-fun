@@ -154,7 +154,7 @@ const SOCIAL_FEED_GRANTS: Readonly<Record<string, readonly string[]>> = {
   social_blast_workspaces: ["blast_web:INSERT,SELECT,UPDATE"],
   social_blast_workspace_writers: ["blast_web:INSERT,SELECT,UPDATE"],
   social_accounts: ["blast_replica:SELECT", "blast_watcher:SELECT", "blast_web:INSERT,SELECT,UPDATE"],
-  social_account_wallets: ["blast_replica:SELECT", "blast_watcher:SELECT", "blast_web:INSERT,SELECT,UPDATE"],
+  social_account_wallets: ["blast_replica:SELECT", "blast_watcher:SELECT", "blast_web:DELETE,INSERT,SELECT,UPDATE"],
   social_follows: ["blast_replica:SELECT", "blast_watcher:SELECT", "blast_web:DELETE,INSERT,SELECT,UPDATE"],
   social_default_accounts: ["blast_replica:SELECT", "blast_watcher:SELECT", "blast_web:SELECT"],
   social_milestones: ["blast_replica:SELECT", "blast_watcher:INSERT,SELECT,UPDATE", "blast_web:SELECT"],

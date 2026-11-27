@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "account_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "address": {
+      "type": "string",
+      "pattern": "^0x[0-9a-fA-F]{1,64}$"
+    },
+    "confirm_account_deletion": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "account_id",
+    "address",
+    "confirm_account_deletion"
+  ],
+  "additionalProperties": false,
+  "title": "Slush wallet unlink request",
+  "description": "DELETE /api/social/me/wallets body. The account must match the caller, and deletion must be confirmed exactly when Slush is its only wallet.",
+  "$id": "https://blast-v2.invalid/social/contracts/wallet-unlink-request.schema.json"
+}

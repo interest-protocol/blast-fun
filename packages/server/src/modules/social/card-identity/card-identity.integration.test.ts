@@ -7,7 +7,7 @@ import { urlAs } from "../../../../../core/test/fixtures/modules/database/role-f
 import { freshTestDatabase } from "../../../../../core/test/fixtures/modules/database/template.ts";
 import { autocommitReader } from "@blast/core/modules/database/transaction.ts";
 import { PostgresSocialAccounts } from "@blast/server/modules/social/accounts/repository.ts";
-import { createSocialRouteKit, SOCIAL_PUBLIC_CACHE_CONTROL } from "@blast/server/modules/social/route-kit/route.ts";
+import { createSocialRouteKit, SOCIAL_PUBLIC_FRESH_CACHE_CONTROL } from "@blast/server/modules/social/route-kit/route.ts";
 import { CardImageBusyError } from "@blast/core/modules/mission-control/card-images/contracts.ts";
 import { renderSeasonZeroCardPng } from "@blast/server/modules/mission-control/card-renderer/render.ts";
 import { createSeasonZeroCardRecord } from "@blast/core/modules/mission-control/card-renderer/contract.ts";
@@ -36,7 +36,7 @@ test("real runtime role serves all card editions and restricts unpublished artwo
     const names = [...cards.map(({ callsign }) => callsign), "no_card"];
     const publicResponse = await publicRead(new Request(`https://blast.fun${CARD_IDENTITY_PATH}?callsigns=${names.join(",")}`), testClient());
     assert.equal(publicResponse.status, 200, await publicResponse.clone().text());
-    assert.equal(publicResponse.headers.get("cache-control"), SOCIAL_PUBLIC_CACHE_CONTROL);
+    assert.equal(publicResponse.headers.get("cache-control"), SOCIAL_PUBLIC_FRESH_CACHE_CONTROL);
     const identities = await publicResponse.json();
     for (const { callsign, record } of cards) assert.deepEqual(identities[callsign], {
       crew: record.crew, edition: record.edition, published_card_id: record.edition === "blast-launch-day" ? null : record.cardId,

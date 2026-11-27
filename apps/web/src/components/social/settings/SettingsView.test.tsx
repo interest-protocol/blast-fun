@@ -111,6 +111,13 @@ test("UI-07 (§7): the switches' lines follow their state; privacy is available 
   assert.match(early, /aria-label="Public portfolio" class="switch" disabled=""/);
 });
 
+test("Settings offers unlink only for Slush on an active account", () => {
+  const props = { onUnlinkWallet: noop };
+  const labels = [...view(props).matchAll(/aria-label="(Unlink [^"]+)"/g)].map((match) => match[1]);
+  assert.deepEqual(labels, ["Unlink Slush wallet 0x88e1d0a4…35c907af"]);
+  assert.doesNotMatch(view({ ...props, mode: "error", settings: null }), /aria-label="Unlink/);
+});
+
 test("UI-07: loading keeps the groups' shape (aria-busy, placeholders); an error offers a retry; device settings stay usable", () => {
   const loading = view({ mode: "loading", settings: null });
   assert.match(loading, /^<div aria-busy="true" class="set" data-shell-aside="settings" data-surface="">/);

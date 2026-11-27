@@ -18,7 +18,9 @@ import { createSocialMeRoute } from "@blast/server/modules/social/accounts/me-ro
 import { PostgresSocialAccounts } from "@blast/server/modules/social/accounts/repository.ts";
 import type { SocialMeResponse } from "@blast/core/modules/social/contracts/me.ts";
 import { createSocialValidator } from "@blast/core/modules/social/contracts/validate.ts";
-import type { SocialWalletChallenge, SocialWalletLinked } from "@blast/core/modules/social/contracts/wallets.ts";
+import { SOCIAL_WALLET_SESSION_COOKIE } from "@blast/core/modules/social/contracts/wallet-sign-in.ts";
+import { createWalletSessionToken, liveWalletSession, walletSessionTokenHash } from "@blast/core/modules/social/wallet-sign-in/sessions.ts";
+import type { SocialWalletChallenge, SocialWalletLinked, SocialWalletUnlinkRequest } from "@blast/core/modules/social/contracts/wallets.ts";
 import { createSocialRouteKit } from "@blast/server/modules/social/route-kit/route.ts";
 import { createSocialWalletRoutes } from "@blast/server/modules/social/wallets/route.ts";
 import { uuid } from "../../../../../core/test/kit.ts";
@@ -118,6 +120,7 @@ async function withDatabase(run: (fixture: Fixture) => Promise<void>): Promise<v
       limiter,
       accounts,
       primary: () => web,
+      walletSessions: { live: (sessionToken) => liveWalletSession(web, sessionToken, new Date()) },
     });
     await run({
       admin,
@@ -180,6 +183,114 @@ async function meWallets(me: Fixture["me"], did: string) {
   );
   return body.account?.wallets ?? [];
 }
+
+function unlinkRequest(body: SocialWalletUnlinkRequest, headers: Record<string, string>): Request {
+  return new Request(`${ORIGIN}/api/social/me/wallets`, {
+    method: "DELETE",
+    headers: { "content-type": "application/json", origin: ORIGIN, ...headers },
+    body: JSON.stringify(body),
+  });
+}
+
+test("unlinking Slush with a backup keeps the account and permits a signed link elsewhere", { skip }, () =>
+  withDatabase(async ({ admin, routes, me }) => {
+    const slush = signer(41);
+    const address = slush.toSuiAddress();
+    const backup = wallet("aa");
+    await admin.query(
+      `INSERT INTO social_account_wallets (address, account_id, kind, verified_at)
+       VALUES ($1, $3, 'slush', now()), ($2, $3, 'external', now())`,
+      [address, backup, KAI.id],
+    );
+    const original = { account_id: KAI.id, address, confirm_account_deletion: false };
+    const headers = { authorization: `Bearer ${token(KAI.did)}` };
+    const unlink = (body: SocialWalletUnlinkRequest) => routes.unlink.DELETE(unlinkRequest(body, headers), testClient());
+    await refusal(await unlink({ ...original, account_id: NOVA.id }), 409, "wallet_unlink_changed");
+    await refusal(await unlink({ ...original, confirm_account_deletion: true }), 409, "wallet_unlink_changed");
+    await refusal(await unlink({ ...original, address: backup }), 409, "wallet_unlink_changed");
+    assert.equal((await meWallets(me, KAI.did)).length, 2);
+
+    assert.deepEqual(await json(await unlink(original), 200, "wallet-unlink-response"), { account_deleted: false, signed_out: false });
+    assert.deepEqual((await meWallets(me, KAI.did)).map(({ address }) => address), [backup]);
+    const issued = await challenge(routes, NOVA.did, address);
+    await json(await routes.link.POST(...post("/api/social/me/wallets", NOVA.did, linkBody(issued, await signed(slush, issued), { wallet: "slush" }))), 201, "wallet-link-response");
+    assert.deepEqual((await meWallets(me, NOVA.did)).map(({ address, kind }) => [address, kind]), [[address, "slush"]]);
+  }));
+
+test("the last Slush wallet requires confirmation, retains a deleted account, and revokes its sessions", { skip }, () =>
+  withDatabase(async ({ admin, web, routes, me }) => {
+    const accountId = uuid(0xee);
+    const slush = signer(42);
+    const address = slush.toSuiAddress();
+    const walletToken = createWalletSessionToken();
+    const sessionId = uuid(0xef);
+    const headers = { cookie: `${SOCIAL_WALLET_SESSION_COOKIE}=${walletToken}` };
+    await admin.query(
+      "INSERT INTO social_accounts (account_id, sui_address, callsign) VALUES ($1, $2, 'retiring')",
+      [accountId, address],
+    );
+    await admin.query(
+      "INSERT INTO social_account_wallets (address, account_id, kind, verified_at) VALUES ($1, $2, 'slush', now())",
+      [address, accountId],
+    );
+    await admin.query(
+      `INSERT INTO social_wallet_sessions (session_id, token_hash, wallet_address, challenge_id, created_at, expires_at, last_used_at)
+       VALUES ($1, $2, $3, $4, now(), now() + interval '1 day', now())`,
+      [sessionId, walletSessionTokenHash(walletToken), address, uuid(0xfe)],
+    );
+    const unlink = (confirm: boolean) => routes.unlink.DELETE(
+      unlinkRequest({ account_id: accountId, address, confirm_account_deletion: confirm }, headers),
+      testClient(),
+    );
+    await refusal(await unlink(false), 409, "wallet_unlink_changed");
+    assert.equal((await liveWalletSession(web, walletToken, new Date()))?.sessionId, sessionId);
+    assert.deepEqual(await json(await unlink(true), 200, "wallet-unlink-response"), { account_deleted: true, signed_out: true });
+
+    const retired = await admin.query("SELECT deleted_at, sui_address, privacy FROM social_accounts WHERE account_id = $1", [accountId]);
+    assert.equal(retired.rowCount, 1);
+    assert.ok(retired.rows[0].deleted_at instanceof Date);
+    assert.equal(retired.rows[0].sui_address, null);
+    assert.equal(retired.rows[0].privacy, "private");
+    assert.equal((await admin.query("SELECT 1 FROM social_account_callsigns WHERE account_id = $1", [accountId])).rowCount, 0);
+
+    const issued = await challenge(routes, NOVA.did, address);
+    await json(await routes.link.POST(...post("/api/social/me/wallets", NOVA.did, linkBody(issued, await signed(slush, issued), { wallet: "slush" }))), 201, "wallet-link-response");
+    assert.equal(await liveWalletSession(web, walletToken, new Date()), null);
+    const accounts = new PostgresSocialAccounts(() => web);
+    await assert.rejects(accounts.resolveWallet(address, sessionId), { code: "unauthorized" });
+    const destination = await accounts.resolveWallet(address);
+    assert.equal(destination?.account_id, NOVA.id);
+    const response = await me.GET(new Request(`${ORIGIN}/api/social/me`, { headers: { ...headers, "sec-fetch-site": "same-origin" } }), testClient());
+    await refusal(response, 401, "unauthorized");
+    assert.match(response.headers.get("set-cookie") ?? "", /Max-Age=0/);
+  }));
+
+test("a Season Zero member can release their only Slush wallet while retaining the original profile", { skip }, () =>
+  withDatabase(async ({ admin, web, routes }) => {
+    const address = wallet("9c1");
+    await admin.query(
+      `INSERT INTO mission_control_account_identities (profile_id, provider, provider_subject, verified_at)
+       VALUES ($1, 'privy', $2, now())`,
+      [MEMBER.profileId, MEMBER.did],
+    );
+    await admin.query(
+      `INSERT INTO mission_control_account_wallets (wallet_id, profile_id, wallet_kind, sui_address, provider_wallet_reference, is_primary, verified_at)
+       VALUES ($1, $2, 'slush', $3, 'ref-member', true, now())`,
+      [uuid(0xf1), MEMBER.profileId, address],
+    );
+    const accounts = new PostgresSocialAccounts(() => web);
+    const account = await accounts.resolve(MEMBER.did);
+    assert.ok(account);
+    assert.deepEqual(await json(await routes.unlink.DELETE(
+      unlinkRequest({ account_id: account.account_id, address, confirm_account_deletion: true }, { authorization: `Bearer ${token(MEMBER.did)}` }),
+      testClient(),
+    ), 200, "wallet-unlink-response"), { account_deleted: true, signed_out: true });
+    assert.equal((await admin.query("SELECT 1 FROM mission_control_profiles WHERE profile_id = $1 AND sui_address = $2", [MEMBER.profileId, address])).rowCount, 1);
+    assert.equal((await admin.query("SELECT 1 FROM mission_control_account_wallets WHERE sui_address = $1", [address])).rowCount, 0);
+    assert.equal(await accounts.resolve(MEMBER.did), null);
+    assert.equal(await accounts.resolveWallet(address), null);
+    assert.equal((await admin.query("SELECT analytics_account_id($1, NULL) AS account_id", [MEMBER.did])).rows[0].account_id, null);
+  }));
 
 test("T-017-AC-1 (AC-015): challenge, then a personal-message signature, links the address; me lists it", { skip }, () =>
   withDatabase(async ({ admin, routes, me }) => {
