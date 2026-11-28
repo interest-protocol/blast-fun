@@ -10,13 +10,14 @@ import { Checkbox } from "#web/components/blast-ui/Checkbox.tsx";
 import { SearchIcon } from "#web/components/blast-ui/Icons.tsx";
 import { Segmented } from "#web/components/blast-ui/Segmented.tsx";
 import { useShellActions } from "#web/components/blast-ui/shell-actions.tsx";
+import { usePhoneLayout } from "#web/components/blast-ui/use-shell-prefs.ts";
 
 import { HOME_AGES, HOME_ROWS_CHOICES, HOME_SOURCES, HOME_WINDOWS, type HomeSource } from "@blast/core/web/contracts/home.ts";
 
 import styles from "./CoinHome.module.css";
 import { HOME_SECTIONS_MENU_ID, type SectionChange } from "./HomeSections";
 import { HOME_SECTIONS_DEFAULT, moveHomeSection, HOME_SECTION_TITLES, isHomeSectionShown, setHomeSectionShown, shownHomeSections, type HomeSectionPrefs } from "./home-sections";
-import { AGE_LABELS, HOME_DEFAULT_FEED, HOME_TAB_KEYS, HOME_TABS, activeFilterCount, MIN_PARTICIPANT_CHOICES, SOURCE_LABELS, WINDOW_LABELS, controlsApply, tabOf, type HomeTab, type HomeViewState } from "./home-state";
+import { AGE_LABELS, HOME_DEFAULT_FEED, HOME_TAB_KEYS, HOME_TABS, activeFilterCount, MIN_PARTICIPANT_CHOICES, SORT_LABELS, SOURCE_LABELS, WINDOW_LABELS, controlsApply, stageDefaultSort, tabOf, type HeaderSort, type HomeTab, type HomeViewState } from "./home-state";
 
 const SOURCE_OPTIONS = HOME_SOURCES.map((key) => [key, SOURCE_LABELS[key]] as const);
 
@@ -131,13 +132,24 @@ export function HomeSettingsMenu({ sections, onSections, showLabel }: Readonly<{
   </Popover.Root>;
 }
 
+/** The column orders a phone picks here, since its list has no column header. */
+const HEADER_SORTS = ["market_cap", "trending", "held"] as const satisfies readonly HeaderSort[];
+
 export function CoinsListControls({ state, onChange }: ViewProps) {
   const discover = controlsApply(state.source);
+  const phone = usePhoneLayout();
+  // The tab's own order first: a narrowed stage opens on its default, a whole-list tab on the order it names.
+  const tabSort = state.stage === "all" && tabOf(state) ? state.sort : stageDefaultSort(state.stage);
+  // The active order stays listed, so a shared link with another order still shows it.
+  const sorts = [...new Set([tabSort, ...HEADER_SORTS, state.sort])];
   const changed = discover
     ? state.window !== HOME_DEFAULT_FEED.window || activeFilterCount(state) > 0
     : state.window !== HOME_DEFAULT_FEED.window;
   const label = ["Filters", WINDOW_LABELS[state.window], changed ? "active" : null].filter(Boolean).join(", ");
   return <FilterMenu active={changed} label={label}>
+    {discover && phone ? <label>Sort<SelectField aria-label="Sort" value={state.sort} onChange={event => onChange({ ...state, sort: event.target.value as HomeViewState["sort"] })}>
+      {sorts.map(key => <option key={key} value={key}>{SORT_LABELS[key]}</option>)}
+    </SelectField></label> : null}
     <label>Activity window<SelectField aria-label="Activity window" value={state.window} onChange={event => onChange({ ...state, window: event.target.value as HomeViewState["window"] })}>
       {HOME_WINDOWS.map(key => <option key={key} value={key}>{WINDOW_LABELS[key]}</option>)}
     </SelectField></label>

@@ -331,3 +331,19 @@ test("a signed-in viewer keeps the hero's followed backers when the live list la
   assert.ok(!initial.presales.some((row) => row.presale_id === sale.presale_id), "the featured sale is not in the Live list");
   assert.match(container.querySelector('[aria-label="Selected presales"]')?.textContent ?? "", /and 1 person you follow are in/);
 });
+
+test("a touch screen swipes the carousel with no buttons; the arrow keys still move it", async (t) => {
+  const { readFileSync } = await import("#web/test/css-design-px.ts");
+  const css = readFileSync(new URL("./FeaturedPresales.module.css", import.meta.url), "utf8");
+  assert.match(css, /@media \(hover: none\) and \(pointer: coarse\) \{ \.arrows \{ display: none; \} \}/);
+  const container = document.createElement("div"); document.body.append(container);
+  const root = createRoot(container);
+  t.after(async () => { await act(async () => root.unmount()); container.remove(); });
+  await act(async () => root.render(<FeaturedCarousel><a href="#first">First</a><a href="#second">Second</a></FeaturedCarousel>));
+  const track = container.querySelector<HTMLElement>('[aria-roledescription="carousel"]')!;
+  Object.defineProperties(track, { clientWidth: { value: 300 }, scrollWidth: { value: 1236 } });
+  track.scrollLeft = 312;
+  t.mock.method(track, "scrollTo", (options: ScrollToOptions) => { track.scrollLeft = options.left ?? 0; track.dispatchEvent(testEvent("scroll")); });
+  await act(async () => track.dispatchEvent(testEvent("keydown", { key: "ArrowRight", bubbles: true })));
+  assert.equal(container.querySelector(".position")?.getAttribute("aria-label"), "Presale 2 of 2");
+});
