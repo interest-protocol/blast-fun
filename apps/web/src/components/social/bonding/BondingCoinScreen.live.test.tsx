@@ -173,7 +173,8 @@ test("curve progress advances and a delayed trade or page read cannot undo the b
   assert.deepEqual(figures(), ["1,500SUI", "50%", 50, "—", "$2M"]);
   const firstCue = tradeCue();
   assert.equal(container.querySelector('[aria-label="Price chart"] [data-chart-last-trade]:not([data-chart-last-trade="headline"])'), null);
-  assert.equal(container.querySelectorAll("[data-trade-cue]").length, 1);
+  // One copy in the price head and one in the chart foot; CSS shows the head's on a wide screen and the foot's on a phone.
+  assert.equal(container.querySelectorAll("[data-trade-cue]").length, 2);
   assert.equal(firstCue?.textContent, "Buy · 1\u00a0SUI");
   assert.equal(status(), "New buy");
   await send(9, summary);

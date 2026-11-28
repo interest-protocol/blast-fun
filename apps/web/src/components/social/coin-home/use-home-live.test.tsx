@@ -8,7 +8,7 @@ import type { FeedFreshnessSource, FreshnessSignal } from "../home/feed-freshnes
 import { infraProvenanceFixture } from "../../../../../../packages/server/test/fixtures/modules/launchpad-contract/fixtures.ts";
 import { ActivityHints, activityHints, HINT_GAP_MS, type HintSocket } from "../home/activity-hints";
 import { anyFreshness } from "../home/feed-freshness";
-import { buyCueOf, homeHintReads, tradeCueOf, type HomeCueTrade } from "./home-model";
+import { homeHintReads, tradeCueOf, type HomeCueTrade } from "./home-model";
 
 const { document } = installTestDom();
 const { act } = await import("react");
@@ -101,8 +101,9 @@ async function mountLive() {
   let poll: FreshnessSignal = () => undefined;
   const source = anyFreshness(activityHints("home", hints, homeHintReads), { name: "poll", subscribe: (next) => ((poll = next), () => undefined) });
   const batches: HomeCueTrade[][] = [];
+  let queueTrade: (trade: HomeCueTrade) => void = () => undefined;
   function Live() {
-    useHomeLive(query, true, source, (trades) => batches.push([...trades]));
+    queueTrade = useHomeLive(query, true, source, (trades) => batches.push([...trades]));
     return null;
   }
   const container = document.createElement("div");
@@ -116,6 +117,7 @@ async function mountLive() {
   await settleQueries(client);
   return {
     send,
+    marketCue: (cue: HomeCueTrade) => queueTrade(cue),
     batches,
     /** Waits for the 250 ms collection to hand over `count` batches, then for the reads to settle. */
     cued: async (count = 1) => { await waitFor(() => batches.length >= count, `${count} cue batch(es)`); await settleQueries(client); },
@@ -167,19 +169,27 @@ test("a cue from a hint, then the 30 s poll read: no second cue", async () => {
   } finally { await live.done(); }
 });
 
-// Fails if an unpriced buy loses today's read or its cue.
-test("a buy hint with no usd: exactly one read and one cue", async () => {
+// Fails if an unpriced read claims the activity id before a priced cue arrives.
+test("an unpriced buy still refreshes the list and leaves room for the same trade's priced cue", async () => {
   const live = await mountLive();
   try {
     const hint = trade({ usd: undefined });
     live.answer([{ coin_key: COIN, activity_id: hint.activity_id, occurred_at_ms: Date.now() + 1_000, quote_atoms: "2500000000", quote_symbol: "SUI", quote_decimals: 9 }]);
     live.send(hint);
     await live.readsReach(1);
-    await live.cued();
     assert.equal(live.reads(), 1);
+    assert.equal(live.batches.length, 0, "the unpriced read cannot show a cue");
+
+    const cue: HomeCueTrade = {
+      coin_key: COIN, activity_id: hint.activity_id, occurred_at_ms: Date.now(),
+      quote_atoms: "2500000000", quote_symbol: null, quote_decimals: null, usd: "7.25", side: "buy",
+    };
+    live.marketCue(cue);
+    live.marketCue(cue);
+    await live.cued();
     assert.equal(live.batches.length, 1);
-    assert.equal(live.batches[0][0].activity_id, hint.activity_id);
-    assert.equal(buyCueOf(live.batches[0][0])?.text.replace(/\s/gu, " "), "+2.5 SUI", "the read's coin figure");
+    assert.deepEqual(live.batches[0].map((buy) => [buy.activity_id, buy.usd]), [[hint.activity_id, "7.25"]]);
+    assert.equal(live.reads(), 1, "priced cues make no extra read");
   } finally { await live.done(); }
 });
 
@@ -208,15 +218,17 @@ test("a bad or oversized amount is dropped and a fallback read follows", async (
   } finally { await live.done(); }
 });
 
-// Fails if a buy under the server's floor flashes, or a zero-atom buy does.
-test("the hint cue keeps the server's floor: atoms above zero and at least $0.10", async () => {
+// Fails if a buy at the display threshold flashes, or a zero-atom buy does.
+test("hint cues need positive atoms and more than $1", async () => {
   const live = await mountLive();
   try {
     live.send(trade({ usd: "0.099999" }));
     live.send(trade({ quote_atoms: "0", usd: "5" }));
     live.send(trade({ usd: "0.1" }));
+    live.send(trade({ usd: "1" }));
+    live.send(trade({ usd: "1.01" }));
     await live.cued();
-    assert.deepEqual(live.batches.map((batch) => batch.map((buy) => buy.usd)), [["0.1"]]);
+    assert.deepEqual(live.batches.map((batch) => batch.map((buy) => buy.usd)), [["1.01"]]);
     assert.equal(live.reads(), 0, "priced buys make no read, even under the floor");
   } finally { await live.done(); }
 });

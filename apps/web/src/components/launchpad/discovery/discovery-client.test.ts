@@ -5,7 +5,9 @@ import { FIXTURE_TIMESTAMP_MS } from "../../../../../../packages/server/test/fix
 import { discoveryFixtureEngine } from "../../../../../../packages/server/test/fixtures/modules/launchpad-discovery/fixture-engine.ts";
 import { handleDiscoveryRequest } from "@blast/server/modules/launchpad-discovery/resource.ts";
 import { CREATE_SUI_QUOTE_TYPE, CREATE_TEST_SUI_QUOTE_TYPE } from "@blast/core/web/contracts/create.ts";
+import { parseDiscoveryResponse } from "@blast/core/modules/launchpad-discovery/rows.ts";
 import { readRailPage } from "./discovery-client.ts";
+import { liveDiscoveryPage } from "./discovery-live.ts";
 
 type Call = Readonly<{ url: string; init: RequestInit | undefined }>;
 
@@ -58,6 +60,29 @@ const curve = (byte: string, progressBps: number | null, quoteType = CREATE_SUI_
 });
 /** A fetch that answers every read with `body` and `status`. */
 const answering = (body: unknown, status = 200) => (async () => Response.json(body, { status })) as unknown as typeof fetch;
+
+test("a current live page owns the order and pagination token while a newer HTTP page wins during recovery", () => {
+  const first = curve("0a", 7_000);
+  const second = curve("0b", 8_000);
+  const page = (checkpoint: number, rows: readonly unknown[], nextCursor: string, verifiedTeam: string[] = []) =>
+    parseDiscoveryResponse({ view: "near_graduation", verifiedTeam, section: {
+      state: "available", provenance: { ...provenance, checkpoint }, data: { rows, nextCursor },
+    } });
+  const seed = page(7, [first, second], "old-cursor", [first.launchId]);
+  const stream = page(8, [second, first], "live-cursor");
+  const visible = liveDiscoveryPage(stream, seed);
+  assert.ok(visible?.section.state === "available");
+  assert.deepEqual(visible.section.data.rows.map((row) => [row.launchId, row.verifiedTeam]), [
+    [second.launchId, undefined], [first.launchId, true],
+  ]);
+  assert.equal(visible.section.data.nextCursor, "live-cursor");
+  const fresh = page(9, [first], "fallback-cursor");
+  assert.equal(liveDiscoveryPage(stream, fresh), fresh);
+  const oversized = parseDiscoveryResponse({ view: "near_graduation", section: {
+    state: "unavailable", reason: "frame-too-large", provenance: { ...provenance, checkpoint: 10 },
+  } });
+  assert.equal(liveDiscoveryPage(oversized, fresh), fresh);
+});
 
 test("Almost graduated reads curves by progress and lists only those at 60% or more", async () => {
   const urls: string[] = [];

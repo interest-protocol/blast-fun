@@ -123,7 +123,7 @@ the backend, which checks the operator bearer.
 | `receipt-image` | `GET/HEAD /api/presale/receipts/{presale_id}/{wallet}/image` | Share image fetched by X, Telegram and other unfurlers. |
 | `presale-agent-key` | `POST /api/presale/allowlists`, `GET/HEAD /api/presale/allowlists/{id}`, `POST /api/presale/allowlists/{id}/bind`, each with an `X-Blast-Api-Key` of the key's shape (`blast_ak_` + 43 base64url) | AI agents; the route kit verifies the key (one indexed hash lookup). A forged key of the right shape passes the gate, so the kit counts every lookup per client IP first (`presale_api_key_ip`, in memory) and remembers an unknown key for a minute; the Firewall's agent-key rule (below) bounds it at the edge. |
 | `wallet-metadata` | `GET/HEAD /api/social/sign-in/slush-metadata` | Fetched by the Slush wallet (dApp Kit), not by our pages. |
-| `og-image` | `GET/HEAD /api/og` | The social card (an `apps/web/vercel.json` rewrite). |
+| `og-image` | `GET/HEAD /api/og` | The social card (an `apps/web/next.config.ts` rewrite). |
 | `gate-refresh` | `GET /api/gate` with `Sec-Fetch-Site: same-origin` | Re-issues the cookie (below). |
 
 ### `GET /api/gate` and the client retry

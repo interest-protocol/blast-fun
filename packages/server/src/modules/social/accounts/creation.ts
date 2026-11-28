@@ -142,13 +142,14 @@ export async function insertNewAccount(
     // address: it is also the account's `slush` wallet (`me.wallets`, the
     // wallet view). An address another account holds would have signed into
     // that account instead.
-    await social.write(
+    const linked = await social.write(
       "social_account_wallets",
       `INSERT INTO social_account_wallets (address, account_id, kind, verified_at)
        VALUES ($1, $2, 'slush', now())
        ON CONFLICT (address) DO NOTHING`,
       [account.suiAddress, accountId],
     );
+    if (linked.rowCount !== 1) throw new SocialRouteError("account_exists");
   }
   return accountId;
 }

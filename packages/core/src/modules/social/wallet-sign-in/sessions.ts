@@ -67,6 +67,14 @@ export function clearedWalletSessionCookies(): readonly string[] {
 
 export type WalletSession = Readonly<{ sessionId: string; address: string; expiresAt: Date }>;
 
+/** Recheck revocation of an authenticated session in the same snapshot as account ownership. */
+export const WALLET_SESSION_ACTIVE_SQL = `(
+  $2::uuid IS NULL OR EXISTS (
+    SELECT 1 FROM social_wallet_sessions
+    WHERE session_id = $2 AND wallet_address = $1 AND revoked_at IS NULL
+  )
+)`;
+
 /**
  * Stores a new session for a consumed challenge and sweeps a batch of
  * expired rows. A challenge makes at most one session (`challenge_id`

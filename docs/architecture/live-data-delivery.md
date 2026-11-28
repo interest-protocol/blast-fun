@@ -18,6 +18,8 @@ requirements below. Nothing here is a capacity measurement; numbers marked
 | Data | Delivery | Owner |
 | --- | --- | --- |
 | Coin chart candles and header price | The direct market socket (`wss://live.blast.fun/v1/socket`), committed trades as they land | Bun hints role, `MarketStreamRelay` |
+| Blast Mode Discover | Initial HTTP read and later pages over HTTP. The existing market socket replaces the first New and Almost graduated pages, including their pagination tokens. | Committed reader and Bun hints role |
+| Compact coin trade tape | Initial history over HTTP. Committed fills and bounded reconnect catch-up on the same market socket. | Bun hints role, `MarketStreamRelay` |
 | Opening-round bidder count | The same market stream's `opening_round` frames (at most one per pool per checkpoint, never replayed); the page's `router.refresh()` (`refreshIntervalMs`: 30 s, 10 s while a section is stale, 5 s on a conflict) stays as the fallback | Bun hints role, `MarketStreamRelay` |
 | New activity, presale lifecycle, coin identity changes | Hint frames on the same socket ("look now"), then the surface's own coalesced read; a tab without a market subscription opens an activity-only socket (`?activity=true`) | Bun hints role |
 | Holders, coin activity tab, feeds, rankings | Visible-tab poll (15–30 s) plus hint-triggered reads; CDN keys shared per checkpoint | Existing routes |
@@ -122,16 +124,21 @@ keep their polls; then the socket is tried again.
 
 ### A `set` on an open socket, in this order
 
-`{"op":"set","seq":<int>,"pools":[…],"price_coins":[…],"presale":<id>|null}`
+`{"op":"set","seq":<int>,"pools":[…],"price_coins":[…],"presale":<id>|null,"discovery":<bool>}`
 replaces the whole wanted set; `activity` stays as the socket opened, so a
 client that may `set` a presale opens with `activity=true` (without it the
-socket gets presale frames but no `presale_checkpoint` hint). The
+socket gets presale frames but no `presale_checkpoint` hint). The optional
+`discovery` field defaults to false. The browser sends it after the gateway
+advertises `discovery: true` in its hello. When a Discover page exceeds its
+socket frame budget, the gateway sends an unavailable page at that revision
+and the browser reads the view over HTTP until a usable live page arrives. The
 server answers each `set` it does not close on with one
 `event: set` block: `{"seq","ok":true,"held":{…}}`, or
 `{"seq","ok":false,"reason","retry_ms","held":{…}}`. `held` is what the socket
 streams after the answer. A refusal never closes the socket.
 
-1. Frame: a string of at most 8 KiB, JSON, exactly those five keys, `seq` a
+1. Frame: a string of at most 8 KiB, JSON, the five required keys and the optional
+   boolean `discovery`, `seq` a
    safe integer, and pools, coins and presale that pass the same market stream
    parsers as the URL (≤ 2 pools, ≤ 20 coins, no repeats, valid keys).
    Otherwise **close 1008**.
@@ -290,8 +297,9 @@ Each line is the `status` a browser gets.
   `snapshot_unavailable` with reason `unavailable`, or a bad, oversized or out
   of order frame for it, which is dropped): `{state: "recovering", pool_key}`
   once. The relay unsubscribes and subscribes the pool again, at once, then
-  after 5 s, 10 s and every 30 s, and sends `live` with the new fence. Browsers
-  refetch history on a new fence.
+   after 5 s, 10 s and every 30 s, and sends `live` with the new fence. Charts
+   refetch as usual. The compact tape refetches when the fence cannot prove
+   coverage past the browser's last trade.
 - **The reader does not know the pool** (`snapshot_unavailable`, reason
   `not_found`): `{state: "unavailable", pool_key}` once. The relay frees the
   reader's topic and asks again every 60 s.
@@ -306,6 +314,63 @@ Each line is the `status` a browser gets.
 - An oversized hint is dropped.
 
 Older browser hubs ignore `recovering`, `stale` and `fresh`.
+
+### Discover and trade tape
+
+Each reader produces one pair of first pages from the same committed PostgreSQL
+snapshot. It runs the existing newest and bonding-progress queries on demand
+after a relevant market change. Each gateway shares one reader subscription and
+broadcasts only when the page or its pagination token changes. Almost graduated
+starts at 60%, with the same sorting and threshold as HTTP. While the socket
+is unavailable, first-page browsers retry the shared HTTP route every 25–35 s.
+Older pages use the HTTP pagination token. Verified badges come from HTTP.
+
+For the compact tape, resume uses the same gateway's bounded replay ring when
+it covers the cursor. A different gateway can recover from the reader's last
+50 committed fills, provided it finds the exact last cursor and the response
+fits the socket's byte budget. Otherwise the browser reads classified history
+at the new fence. Opening full activity loads history as needed. Normal fills
+on an already connected tape cause no browser request or per-viewer database
+read.
+
+### Local 10,000-tab rehearsal
+
+Use an isolated PostgreSQL 16 listening at `127.0.0.1:55410` with database
+`live_discover_run`, owner `live_load`, password `disposable-fixture` and
+`shared_preload_libraries=pg_stat_statements`. Use a disposable Valkey at
+`127.0.0.1:55411`. The [reader fixture documentation](https://github.com/interest-protocol/blast-infra/tree/main/loadtest)
+describes how to combine the pinned framework and reader migrations. Create
+`blast_infra` and the `pg_stat_statements` extension, apply the roles and
+migrations with `search_path=blast_infra`, then apply
+`apps/backend-api/test/live-discovery-load.sql` as the local database owner.
+Start the built reader from the companion change with:
+
+```sh
+env -i PATH="$PATH" \
+  DATABASE_READ_URL=postgres://live_load_reader:disposable-reader@127.0.0.1:55410/live_discover_run \
+  INFRA_API_KEYS=local-fixture-only-live-socket-api-key \
+  BLAST_DEPLOYMENT_FINGERPRINT=$(printf 'a%.0s' {1..64}) \
+  READER_MAX_LAG_MS=120000 READER_WS_CONNECTIONS=32 HTTP_MAX_CONNECTIONS_PER_PEER=64 \
+  /path/to/blast-infra read --listen-address 127.0.0.1:55412 --metrics-address 127.0.0.1:55413
+```
+
+Run this from the Blast web and gateway checkout:
+
+```sh
+bun --no-env-file apps/backend-api/test/live-discovery.load.ts 10000 3600
+```
+
+The test starts twelve loopback gateways and a local ticket issuer on port
+55414. It counts 6,000 Discover subscribers, 3,000 tabs on three busy pools,
+and 1,000 spread across the other seeded pools. It checks live row order, trade
+continuity, filter changes, a killed gateway, and a fleet-wide reconnect during
+commits. It also checks a burst of commits and reports p95 receive time, the
+slowest reconnection, ticket requests, PostgreSQL statement calls, gateway CPU
+and memory. Pass `1` as the third argument to put all 3,000 busy-pool tabs on a
+single pool. The harness checks that all tabs recover within 45 s and that no
+fixture trades are missing or duplicated. It also flags socket receipt above
+1 s at p95. Measure the product target of 1 s at p95 from commit to paint in a
+browser against the same fixture.
 
 ## Bursts and memory
 

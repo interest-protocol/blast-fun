@@ -9,6 +9,7 @@ import {
 import { createAdminBondingFeatureRoute } from "@blast/server/modules/launchpad-discovery/admin-feature.ts";
 import { createAdminPresaleRoute } from "@blast/server/modules/social/admin-presales/route.ts";
 import { createAdminVerifiedMarkRoute } from "@blast/server/modules/social/admin-verified/route.ts";
+import { adminFeedback } from "@blast/server/modules/feedback/routes.ts";
 import { rewardBlacklistRoute } from "@blast/server/modules/social/rewards/blacklist-runtime.ts";
 import { createAdminGasPoolHealthRoute } from "@blast/server/operators/gas-pool-health.ts";
 import { createAdminLoginAdmissionRoute } from "@blast/server/operators/login-admission.ts";
@@ -60,6 +61,7 @@ export function createBackendOperators(
     presales: createAdminPresaleRoute(primaryPool),
     "bonding-feature": createAdminBondingFeatureRoute(primaryPool),
     "verified-mark": createAdminVerifiedMarkRoute(primaryPool),
+    feedback: adminFeedback,
     "reward-coins": rewardBlacklist,
     "reward-blacklist": rewardBlacklist,
     "gas-pool-health": createAdminGasPoolHealthRoute({

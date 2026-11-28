@@ -31,6 +31,7 @@ import {
   type BlockedTermFinder,
 } from "@blast/server/modules/social/accounts/creation.ts";
 import type { SocialAccountWalletLister } from "@blast/server/modules/social/accounts/me-route.ts";
+import { assertWalletSessionActive } from "@blast/server/modules/social/wallets/session.ts";
 
 /** A callsign path segment longer than this is a malformed parameter, not a callsign to check. */
 const MAX_CALLSIGN_SEGMENT = 64;
@@ -101,6 +102,7 @@ export function createSocialAccountCreationRoutes(dependencies: SocialAccountCre
       try {
         if ((await findBlockedTerm(suggestion.displayName)) !== null) continue;
         await context.transaction(async (social) => {
+          await assertWalletSessionActive(social, caller);
           const accountId = await insertNewAccount(social, { ...identity, ...suggestion, x, referralCallsign: requestReferral(context.request) }, { findBlockedTerm, createId });
           await completeOnboarding(social, accountId, false, { createId });
         }, { isolationLevel: "READ COMMITTED", label: "social.account_create" });
@@ -140,11 +142,14 @@ export function createSocialAccountCreationRoutes(dependencies: SocialAccountCre
             const displayName = requestedName ?? (await derivedDisplayName(callsign, x, findBlockedTerm));
             const identity = caller.kind === "privy" ? { privyDid: caller.did } : { privyDid: null, suiAddress: caller.address };
             await context.transaction(
-              (social) => insertNewAccount(social, { ...identity, callsign, displayName, x, referralCallsign: requestReferral(context.request) }, { findBlockedTerm, createId }),
+              async (social) => {
+                await assertWalletSessionActive(social, caller);
+                return insertNewAccount(social, { ...identity, callsign, displayName, x, referralCallsign: requestReferral(context.request) }, { findBlockedTerm, createId });
+              },
               { isolationLevel: "READ COMMITTED", label: "social.account_create" },
             );
           }
-          const account = caller.kind === "privy" ? await accounts.resolve(caller.did) : await accounts.resolveWallet(caller.address);
+          const account = caller.kind === "privy" ? await accounts.resolve(caller.did) : await accounts.resolveWallet(caller.address, caller.sessionId);
           if (!account) throw new Error("The created account did not resolve.");
           const response: SocialCreateAccountResponse = {
             account: { ...account, wallets: await accounts.wallets(account.account_id) },

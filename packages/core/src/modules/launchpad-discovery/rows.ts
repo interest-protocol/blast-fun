@@ -31,6 +31,8 @@ import {
 /** T-024's views; Hot is not one. */
 export const DISCOVERY_VIEW_NAMES = DISCOVERY_VIEWS;
 export type DiscoveryViewName = DiscoveryView;
+export type BondingLiveView = "new" | "near_graduation";
+export const ALMOST_GRADUATED_BPS = 6_000;
 
 export type DiscoveryRow = Readonly<{
   /** The launch ID (the curve's object ID); the coin route's key. */
@@ -159,6 +161,17 @@ function parsePageData(value: unknown): DiscoveryPageData {
     throw new ContractViolation("data.nextCursor", "must be a page token or null");
   }
   return { rows: data.rows.map((row, index) => parseRow(row, `data.rows[${index}]`)), nextCursor: data.nextCursor };
+}
+
+/** Both live views use the same progress floor and cursor rules as their HTTP pages. */
+export function almostGraduated(answer: DiscoveryResponse): DiscoveryResponse {
+  const { section } = answer;
+  if (section.state !== "available" && section.state !== "stale") return answer;
+  const below = section.data.rows.findIndex(
+    (row) => row.progressBps === null || row.progressBps < ALMOST_GRADUATED_BPS,
+  );
+  if (below === -1) return answer;
+  return { ...answer, section: { ...section, data: { rows: section.data.rows.slice(0, below), nextCursor: null } } };
 }
 
 /**

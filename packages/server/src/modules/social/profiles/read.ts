@@ -64,7 +64,10 @@ export async function ensureMemberAccount(social: ModuleTransaction<"social">, c
 /** Check the primary before opening a write transaction for a replica miss. */
 export async function memberProfileExists(db: ReadableDatabase, callsign: string): Promise<boolean> {
   const result = await db.read<{ exists: boolean }>(
-    `SELECT EXISTS (SELECT 1 FROM mission_control_profiles WHERE callsign = $1) AS exists`,
+    `SELECT EXISTS (
+       SELECT 1 FROM mission_control_profiles p LEFT JOIN social_accounts a ON a.profile_id = p.profile_id
+       WHERE p.callsign = $1 AND a.deleted_at IS NULL
+     ) AS exists`,
     [callsign],
   );
   return result.rows[0]?.exists === true;

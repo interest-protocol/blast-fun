@@ -6,6 +6,7 @@ import { cardHandlers } from "./cards.ts";
 import { COIN_PAGE_HANDLERS } from "./coin-page.ts";
 import { COMMIT_HANDLERS } from "./commit.ts";
 import { FINANCIAL_HANDLERS } from "./financial.ts";
+import { submitFeedback } from "../modules/feedback/routes.ts";
 import { FRONTEND_SECURITY_HANDLERS } from "./frontend-security.ts";
 import { IDENTITY_HANDLERS } from "./identity.ts";
 import { LAUNCH_ASSET_HANDLERS } from "./launch-assets.ts";
@@ -41,6 +42,7 @@ export const PRIVATE_HANDLER_FAMILIES: readonly PrivateHandlers[] = [
   COIN_PAGE_HANDLERS,
   COMMIT_HANDLERS,
   FINANCIAL_HANDLERS,
+  { "feedback.submit": submitFeedback },
   FRONTEND_SECURITY_HANDLERS,
   IDENTITY_HANDLERS,
   LAUNCH_ASSET_HANDLERS,

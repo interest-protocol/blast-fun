@@ -31,11 +31,13 @@ import { useBalancesContext } from "./balances";
 import { CoinSheet, type CoinSheetProps, type CoinSheetTrading, type CoinSheetWallet, type TradeAsk, type TradeOutcome, type WithdrawAsk } from "./CoinSheet";
 import { coinAmt, coinDraftKey, parseSavedCoinScreen, walletCoinViews, type CoinOpening, type CoinScreen, type WalletCoinView } from "./coin-model";
 import { useSignInDraft } from "../sign-in-draft";
+import { accountSwitchSignal } from "../account-selection";
 import { PrivyCoinSignerBridge, type PrivyCoinSigner } from "./signers";
 import { walletSessionSigner } from "./signers-model";
 import { blastWalletSigner } from "../commit/commit-signers";
 import { fetchListedTradeCoins, fetchTradeCoins, presaleCoinView } from "./swap-client";
 import { encodeTradeAction, tradableCoinView, tradeOpening, type TradeAction } from "./swap-model";
+import { clearWithdrawReceipt, readWithdrawReceipt, saveWithdrawReceipt } from "./withdraw-attempt";
 import { runWithdraw } from "./withdraw-flow";
 import { refreshWalletCoinBalance } from "./use-wallet-coin-balance";
 
@@ -281,27 +283,33 @@ export function CoinsHost({ inlineSale, inlineTrade, opening, active = true }: R
       toast(diagnosticMessage("Your Blast wallet is not ready. Reload and try again.", { code: "blast_wallet_missing" }));
       return false;
     }
-    const key = `${accountId}|${signer.address}|${ask.coin.coinType}|${ask.atoms}|${ask.recipient}`;
-    if (attempt.current?.key !== key) attempt.current = { key, requestId: newRequestId(), digest: null };
+    const key = `${viewer.sessionIdentity ?? ""}|${signer.address}|${ask.coin.coinType}|${ask.atoms}|${ask.recipient}`;
+    if (attempt.current?.key !== key) {
+      const receipt = readWithdrawReceipt(key);
+      attempt.current = { key, requestId: receipt?.requestId ?? newRequestId(), digest: receipt?.digest ?? null };
+    }
     const current = attempt.current;
+    const rememberDigest = (digest: string) => {
+      current.digest = digest;
+      saveWithdrawReceipt(key, { requestId: current.requestId, digest });
+    };
     const releaseAttempt = () => {
+      clearWithdrawReceipt(key);
       if (attempt.current === current) attempt.current = null;
     };
     if (client.current === null) client.current = mainnet();
     const result = await runWithdraw(
       {
-        api,
+        api: { ...api, signal: accountSwitchSignal },
         client: client.current,
         signer,
         knownDigest: current.digest,
-        onDigest: (digest) => {
-          current.digest = digest;
-        },
+        onDigest: rememberDigest,
       },
       { requestId: current.requestId, coinType: ask.coin.coinType, atoms: ask.atoms, recipient: ask.recipient },
     );
     if (result.status === "pending") {
-      current.digest = result.digest;
+      rememberDigest(result.digest);
       toast(`${diagnosticMessage("Withdrawal is still being confirmed. Retry to check it; this will not send it again.", { code: "execution_unconfirmed" })} Transaction: ${result.digest}.`);
       balances.changed();
       return "pending";

@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 
 import { bcs } from "@mysten/sui/bcs";
 import { TransactionDataBuilder } from "@mysten/sui/transactions";
-import { fromBase64, normalizeSuiAddress } from "@mysten/sui/utils";
+import { fromBase64, normalizeStructTag, normalizeSuiAddress } from "@mysten/sui/utils";
 import type { Pool } from "pg";
 
 import type { BlastTradeFee } from "@blast/core/lib/blast-trade-fee.ts";
@@ -289,6 +289,45 @@ function landed(sender: string, coin: string, filled: bigint): ExecutedTrade {
   return { success: true, sender, balanceChanges: [{ coinType: coin, address: sender, amount: filled.toString() }], gasMist: 1_500_000n, abort: null };
 }
 
+type SwapPtb = NonNullable<NonNullable<ReturnType<typeof bcs.TransactionData.parse>["V1"]>["kind"]["ProgrammableTransaction"]>;
+
+/**
+ * Mainnet's v3 `confirm_swap_v3` takes the fee off the output, then aborts unless the rest is at least
+ * ⌊⌊input × quote_amount_out ÷ quote_amount_in⌋ × (10⁶ − slippage) ÷ 10⁶⌋, whatever the legs were quoted.
+ * This pins every term, so that floor is the quote's `minOut` on the coin the wallet receives. Returns the swap context's pure arguments.
+ */
+function assertChainFloor({ inputs, commands }: SwapPtb, quote: { sender: string; inCoin: string; outCoin: string; amountIn: bigint; amountOut: bigint; minOut: bigint; slippageBps: number }) {
+  const bytes = (argument: unknown) => Buffer.from(inputs[(argument as { Input: number }).Input]!.Pure!.bytes, "base64");
+  const only = (name: string) => {
+    const found = commands.flatMap((command, at) => (command.MoveCall?.function === name ? [{ at, call: command.MoveCall }] : []));
+    assert.equal(found.length, 1, name);
+    assert.equal(normalizeSuiAddress(found[0]!.call.package), AGGREGATOR_PACKAGE, name);
+    return found[0]!;
+  };
+  const context = only("new_swap_context_v3");
+  const pure = (n: number) => bytes(context.call.arguments[n]);
+  assert.deepEqual(context.call.typeArguments.map((type) => normalizeStructTag(type)), [quote.inCoin, quote.outCoin].map((type) => normalizeStructTag(type)), "the quoted coins");
+
+  assert.equal(quote.slippageBps, 50);
+  assert.equal(quote.minOut, (quote.amountOut * 9_950n + 9_999n) / 10_000n, "the promise: the quoted amount out less 0.5%, rounded up");
+  // The floor scales with the coin the context takes, so that coin must be exactly the quoted input.
+  const [splitAt, index] = (context.call.arguments[5] as { NestedResult: [number, number] }).NestedResult;
+  assert.equal(splitAt, context.at - 1, "nothing touches the input coin between its split and the swap context");
+  assert.equal(bytes(commands[splitAt]!.SplitCoins!.amounts[index]).readBigUInt64LE(), quote.amountIn, "the input coin");
+  assert.equal(pure(2).readBigUInt64LE(), quote.amountIn, "quote_amount_in");
+  assert.equal(pure(3).readBigUInt64LE(), quote.minOut, "quote_amount_out is the minimum itself");
+  assert.equal(pure(4).readBigUInt64LE(), 0n, "so no slippage comes off it again");
+
+  const confirm = only("confirm_swap_v3");
+  assert.equal((confirm.call.arguments[0] as { Result: number }).Result, context.at, "the confirm enforces this context");
+  // The checked coin goes whole to the sender: nothing comes between the check and the transfer.
+  assert.equal(confirm.at, commands.length - 2);
+  const transfer = commands.at(-1)!.TransferObjects!;
+  assert.deepEqual(transfer.objects.map((object) => (object as { Result?: number }).Result), [confirm.at]);
+  assert.equal(normalizeSuiAddress(`0x${bytes(transfer.address).toString("hex")}`), quote.sender);
+  return pure;
+}
+
 test("an embedded wallet's one-hop trade is built over the quoted pool, sponsored, logged, and confirms at or above min_out (R3-31-AC-1, AC-5)", { skip }, async () => {
   await withFixture(async ({ admin, chain, sponsorCalls, executed, create, settle }) => {
     const { quoteId, quote } = await offer({ account: ACCOUNT, sender: EMBEDDED });
@@ -306,12 +345,8 @@ test("an embedded wallet's one-hop trade is built over the quoted pool, sponsore
     const swap = calls.find((call) => call.function === "swap")!;
     const pool = data.kind.ProgrammableTransaction!.inputs[(swap.arguments[2] as { Input: number }).Input]!;
     assert.equal(normalizeSuiAddress(pool.Object!.SharedObject!.objectId), SALE_B_POOL, "the quoted pool");
-    // The minimum is in the transaction: the swap context carries the quoted amount out and the slippage.
-    const context = calls.find((call) => call.function === "new_swap_context_v3")!;
-    const pure = (n: number) => Buffer.from(data.kind.ProgrammableTransaction!.inputs[(context.arguments[n] as { Input: number }).Input]!.Pure!.bytes, "base64");
-    assert.equal(normalizeSuiAddress(context.package), AGGREGATOR_PACKAGE);
-    assert.equal(pure(3).readBigUInt64LE(), quote.amountOut);
-    assert.equal(pure(4).readBigUInt64LE(), 5_000n);
+    const pure = assertChainFloor(data.kind.ProgrammableTransaction!, quote);
+    assert.equal(pure(6).readUInt32LE(), 0, "no fee configured, none taken");
     assert.deepEqual(chain.log.filter((entry) => entry.kind === "execute"), [], "the server executes nothing");
 
     let [logged] = await logRows(admin);
@@ -413,9 +448,8 @@ test("owner 2026-10-08: with Blast's 0.5% fee the sponsored trade pays it inside
     assert.equal(built.amount_out, quote.amountOut.toString(), "the quoted amount out is net of the fee");
     const data = bcs.TransactionData.parse(fromBase64(built.transaction_bytes!)).V1!;
     const { inputs, commands } = data.kind.ProgrammableTransaction!;
-    const context = commands.find((command) => command.MoveCall?.function === "new_swap_context_v3")!.MoveCall!;
-    const pure = (n: number) => Buffer.from(inputs[(context.arguments[n] as { Input: number }).Input]!.Pure!.bytes, "base64");
-    assert.equal(pure(3).readBigUInt64LE(), quote.amountOut, "the on-chain minimum is the net output's");
+    // The router takes the fee before it checks the floor, so the on-chain minimum is the net output's.
+    const pure = assertChainFloor(data.kind.ProgrammableTransaction!, quote);
     assert.equal(pure(6).readUInt32LE(), 5_000);
     assert.equal(normalizeSuiAddress(`0x${pure(7).toString("hex")}`), TEST_FEE_RECEIVER);
     assert.ok(!commands.some((command) => command.TransferObjects && normalizeSuiAddress(`0x${Buffer.from(inputs[(command.TransferObjects.address as { Input: number }).Input]!.Pure!.bytes, "base64").toString("hex")}`) !== EMBEDDED), "no command transfers to anyone but the sender");

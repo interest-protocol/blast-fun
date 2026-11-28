@@ -53,7 +53,7 @@ export interface SocialRouteKitDependencies {
    * The live wallet session a `__Host-blast_wallet` cookie names (Slush
    * sign-in, OA-16), or null. Without it the cookie is never read.
    */
-  walletSessions?: Readonly<{ live(token: string): Promise<Readonly<{ address: string }> | null> }>;
+  walletSessions?: Readonly<{ live(token: string): Promise<Readonly<{ address: string; sessionId?: string }> | null> }>;
   /**
    * Wallet session cookies that named no live session, per client IP
    * (`social_auth_failure`, review L4): read before each session lookup,
@@ -84,7 +84,7 @@ export interface SocialRouteKitDependencies {
  */
 export type SocialCaller =
   | Readonly<{ kind: "privy"; did: string; subject: string }>
-  | Readonly<{ kind: "wallet"; address: string; subject: string }>;
+  | Readonly<{ kind: "wallet"; address: string; sessionId?: string; subject: string }>;
 
 /**
  * Whether a cookie-authenticated request is the site's own: `Sec-Fetch-Site`,
@@ -284,7 +284,7 @@ export function createSocialRouteKit(dependencies: SocialRouteKitDependencies) {
       if (optional) return { caller: null, clearWallet: true };
       throw Object.assign(new SocialRouteError("unauthorized"), { clearWallet: true });
     }
-    return { caller: { kind: "wallet", address: session.address, subject: `sui:${session.address}` }, clearWallet: false };
+    return { caller: { kind: "wallet", address: session.address, sessionId: session.sessionId, subject: `sui:${session.address}` }, clearWallet: false };
   }
 
   async function consume(bucket: SocialRateBucket, caller: SocialCaller | null, ip: string, accountId = caller?.subject): Promise<void> {
@@ -309,7 +309,7 @@ export function createSocialRouteKit(dependencies: SocialRouteKitDependencies) {
       ? null
       : caller.kind === "privy"
         ? await dependencies.accounts.resolve(caller.did)
-        : await dependencies.accounts.resolveWallet(caller.address);
+        : await dependencies.accounts.resolveWallet(caller.address, caller.sessionId);
     if (!account && mode === "required") throw new SocialRouteError("account_required");
     return account;
   }

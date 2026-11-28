@@ -20,7 +20,6 @@ import { Button, IconButton } from "#web/components/blast-ui/Button.tsx";
 import { Switch } from "#web/components/blast-ui/Checkbox.tsx";
 import { InfoIcon } from "#web/components/blast-ui/Icons.tsx";
 import { Popover, PopoverSurface } from "#web/components/blast-ui/Popover.tsx";
-import { Segmented } from "#web/components/blast-ui/Segmented.tsx";
 import { NO_VALUE } from "@blast/core/web/format.ts";
 import { comparePrices } from "@blast/core/modules/launchpad-contract/venue-history.ts";
 import { dyn } from "#web/components/blast-ui/csp-style.ts";
@@ -33,7 +32,6 @@ import { useShellPrefs } from "#web/components/blast-ui/use-shell-prefs.ts";
 import { combinedVolumes, lineCloseTime, poolLinePoints, poolPrices, sourceLineBounds } from "./candle-data";
 import { migrationCaptionOffset, type ExactCandle, type ExactSeries } from "./chart-inspection-model";
 import { useChartInspection } from "./use-chart-inspection";
-import { useMobileChartLayout } from "./use-mobile-chart-layout";
 
 import { saveChartPreference, useChartPreference } from "#web/components/launchpad/chart/chart-preferences.ts";
 import { liveWalletMarkers, walletMarkerBadges, walletMarkers, type PlottedWalletMarker, type WalletChartTrade, type WalletRipple } from "./wallet-markers";
@@ -86,7 +84,6 @@ function liveTimeline(sources: readonly Source[], from: number, to: number, migr
 /** `LineType.WithSteps`; the library loads lazily, so its enum is not imported. */
 const STEP_LINE = 1 as LineType;
 
-const CHART_STYLES = [["line", "Line"], ["candles", "Candles"]] as const;
 export function PoolCandleChart({
   sources,
   compact = false,
@@ -95,7 +92,6 @@ export function PoolCandleChart({
   marketChart,
   discontinuous,
   gapStatus,
-  presentation,
   migrationAt,
   migrationLabel = "Migration",
   quoteSymbol,
@@ -120,8 +116,6 @@ export function PoolCandleChart({
   marketChart?: boolean;
   discontinuous?: boolean;
   gapStatus?: (at: number) => string;
-  /** A compact host owns its single visible style control. */
-  presentation?: "line" | "candles";
   migrationAt?: number;
   migrationLabel?: ReactNode;
   quoteSymbol?: string;
@@ -133,11 +127,9 @@ export function PoolCandleChart({
   quoteUsd?: string | null;
   preview?: ReactNode;
 }>) {
-  const [localMode, setMode] = useState<"line" | "candles">("candles");
-  const [localVolume, setShowVolume] = useState(true);
-  const mobile = useMobileChartLayout();
-  const mode = mobile ? "line" : presentation ?? localMode;
-  const showVolume = presentation ? mode === "candles" : localVolume;
+  const [showVolume, setShowVolume] = useState(true);
+  // Always candles, on every screen and range.
+  const mode = "candles" as const;
   const { showWalletTags, setWalletTags } = useWalletTags();
   const { amountsHidden } = useShellPrefs();
   const { priceAt, observe } = useChartInspection();
@@ -165,7 +157,7 @@ export function PoolCandleChart({
   const readout = { latestAvailable, compact, rollingWindow, plotMode: mode, hidden: amountsHidden, inspected: inspectedPrice, model, quoteSymbol, walletToggle };
   return (
     <>
-      <PoolChartControls compact={compact} mobile={mobile} mode={mode} onModeChange={setMode} showVolume={showVolume} onToggleVolume={() => setShowVolume((value) => !value)} />
+      <PoolChartControls compact={compact} showVolume={showVolume} onToggleVolume={() => setShowVolume((value) => !value)} />
       <div data-chart-stage="">
         <PoolReadout {...readout} mode="line" preview={preview} />
         <div className={styles.plot} data-coin-plot={compact || undefined}>
@@ -209,17 +201,13 @@ function WalletTagsToggle({ available, checked, onChange }: Readonly<{ available
   </label>;
 }
 
-function PoolChartControls({ compact, mobile, mode, onModeChange, showVolume, onToggleVolume }: Readonly<{
+function PoolChartControls({ compact, showVolume, onToggleVolume }: Readonly<{
   compact: boolean;
-  mobile: boolean;
-  mode: "line" | "candles";
-  onModeChange: (mode: "line" | "candles") => void;
   showVolume: boolean;
   onToggleVolume: () => void;
 }>) {
   if (compact) return null;
   return <div className={styles.controls} role="group" aria-label="Price chart controls">
-    {!mobile && <Segmented label="Chart style" options={CHART_STYLES} value={mode} onChange={onModeChange} size="sm" />}
     <Button variant="ghost" size="sm" aria-pressed={showVolume} onClick={onToggleVolume}>
       Volume
     </Button>

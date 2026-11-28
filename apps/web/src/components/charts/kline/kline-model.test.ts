@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { DrawnSeries } from "#web/components/launchpad/chart/chart-geometry.ts";
-import { barChanges, fillGaps, foldTrade, foldTrades, MAX_FILLED_BARS, klineBars, pricePrecision, readChartSettings, toggleIndicator, tradedBars, forcesLine, DEFAULT_CHART_SETTINGS, priceParts, volumeText, rsiValues, fibLabelRows, chartDate, ticksInside, plotHeightFor, topGap, PANE_INDICATORS, type Bar, type IndicatorName } from "./kline-model.ts";
+import { barChanges, fillGaps, foldTrade, foldTrades, MAX_FILLED_BARS, klineBars, pricePrecision, priceParts, volumeText, chartDate, ticksInside, plotHeightFor, topGap, type Bar } from "./kline-model.ts";
 
 const MINUTE = 60_000;
 const T0 = 1_795_188_300_000; // a 5-minute boundary
@@ -75,15 +75,6 @@ test("every trade history has not caught up with stays on the open bars, in time
   assert.equal(foldTrades(history, "1m", []), history);
 });
 
-test("settings survive a reload and ignore anything unknown", () => {
-  assert.deepEqual(readChartSettings(null), DEFAULT_CHART_SETTINGS);
-  assert.deepEqual(readChartSettings("{"), DEFAULT_CHART_SETTINGS);
-  assert.deepEqual(readChartSettings(JSON.stringify({ indicators: ["RSI", "nope", "MA"] })), { indicators: ["MA", "RSI"] });
-  const on = toggleIndicator(DEFAULT_CHART_SETTINGS, "BOLL");
-  assert.deepEqual(on.indicators, ["MA", "BOLL", "VOL"]);
-  assert.deepEqual(toggleIndicator(on, "MA").indicators, ["BOLL", "VOL"]);
-});
-
 test("a quiet coin's series is continuous: flat bars at the previous close through the current bucket, the newest buckets only", () => {
   const M = 60_000;
   const bar = (minute: number, close: number, volume = 1, open = close): Bar => ({ timestamp: minute * M, open, high: Math.max(open, close), low: Math.min(open, close), close, volume });
@@ -94,10 +85,6 @@ test("a quiet coin's series is continuous: flat bars at the previous close throu
   const sparse = fillGaps([bar(0, 1), bar(9, 2)], "1m", 9 * M, 4);
   assert.deepEqual(sparse.map((row) => row.timestamp / M), [0, 6, 7, 8, 9], "only the newest buckets up to the cap are filled");
   assert.equal(fillGaps([bar(0, 1), bar(MAX_FILLED_BARS * 3, 2)], "1m", MAX_FILLED_BARS * 3 * M).length, MAX_FILLED_BARS + 1);
-  assert.equal(tradedBars(fillGaps([bar(0, 2), bar(3, 5)], "1m", 3 * M)), 2);
-  const traded = (count: number) => Array.from({ length: count }, (_, i) => bar(i, 1));
-  assert.equal(forcesLine(traded(9)), true, "nine traded buckets draw a line");
-  assert.equal(forcesLine([...traded(10), bar(10, 1, 0)]), false, "ten traded buckets draw candles; flat bars do not count");
 });
 
 test("an older quiet bucket the server fills later reloads the chart so the plot shows it", () => {
@@ -119,21 +106,6 @@ test("the readout counts four or more leading zeros and gives volume short", () 
   assert.equal(volumeText(15_400), "15.4K");
 });
 
-test("RSI has no reading while the price stands still, and 100 when it only rises", () => {
-  const flat = rsiValues(Array.from({ length: 20 }, () => 0.0000812));
-  assert.ok(flat.every((value) => value === null));
-  const rising = rsiValues(Array.from({ length: 20 }, (_, index) => 1 + index));
-  assert.equal(rising[13], null);
-  assert.equal(rising[14], 100);
-  const mixed = rsiValues(Array.from({ length: 30 }, (_, index) => 10 + (index % 2 ? 1 : -1)));
-  assert.ok(mixed.slice(14).every((value) => value !== null && value > 40 && value < 60));
-});
-
-test("Fibonacci labels closer than 14 px to a kept one are left out", () => {
-  assert.deepEqual(fibLabelRows([0, 5, 30, 35, 50]), [true, false, true, false, true]);
-  assert.deepEqual(fibLabelRows([100, 80, 60, 40]), [true, true, true, true]);
-});
-
 test("axis dates read as short local dates, and a label that would run off the plot is dropped", () => {
   const at = Date.UTC(2026, 10, 26, 14, 30);
   assert.equal(chartDate(at, "HH:mm", "UTC"), "14:30");
@@ -153,16 +125,8 @@ test("the top gap leaves the asked px free over the highest value, as KLineChart
   for (const px of [112, 200, 300]) assert.ok(topGap(px, 200, .06) < 1, `${px}px of 200`);
 });
 
-test("the plot grows by one pane per study, whatever the mix, and its default matches the loading block", () => {
-  // The CSS fallback (--kline-plot-height: 26rem = 416px desktop at the default text size, 306px phone) assumes the default MA + VOL.
-  assert.equal(plotHeightFor(["MA", "VOL"], false), 416);
-  assert.equal(plotHeightFor(["MA", "VOL"], true), 306);
-  for (const phone of [false, true]) {
-    const base = plotHeightFor([], phone);
-    for (let mask = 0; mask < 8; mask++) {
-      const panes = PANE_INDICATORS.filter((_, i) => mask & (1 << i));
-      const all: IndicatorName[] = ["MA", "EMA", "BOLL", ...panes];
-      assert.equal(plotHeightFor(all, phone), base + panes.length * (phone ? 81 : 101), `${phone ? "phone" : "desktop"} ${panes.join("+") || "no panes"}`);
-    }
-  }
+test("the plot's height matches the loading block that holds its place", () => {
+  // The CSS fallback (--kline-plot-height: 26rem = 416px desktop at the default text size, 290px phone).
+  assert.equal(plotHeightFor(false), 416);
+  assert.equal(plotHeightFor(true), 290);
 });

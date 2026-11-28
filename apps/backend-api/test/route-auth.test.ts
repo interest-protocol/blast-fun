@@ -68,6 +68,7 @@ test("only login admission skips the operator bearer, and every admin console pa
     [
       "/api/admin/bonding-feature",
       "/api/admin/coins/:coin_type/reward-blacklist",
+      "/api/admin/feedback",
       "/api/admin/gas-pool/health",
       "/api/admin/partner-keys",
       "/api/admin/presales",

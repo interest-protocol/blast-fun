@@ -175,17 +175,23 @@
   line-height: 20px;
 }
 
-.status {
-  min-height: 20px;
-}
-
-/* Fits the small Try again button, so the slot keeps one height with or without it. */
-.alertSlot {
+/* The plot and what floats over it: a delayed source's notice over the plot's foot, clear of the Latest button. */
+.plotFrame { display: grid; grid-template-columns: minmax(0, 1fr); gap: .5rem; min-inline-size: 0; }
+.plotStage { position: relative; min-inline-size: 0; }
+.alertSlot { position: absolute; inset-block-end: 2.25rem; inset-inline: .5rem 7rem; z-index: 5; pointer-events: none; }
+.alertCard {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   column-gap: .25rem;
-  min-height: 2rem;
+  inline-size: fit-content;
+  max-inline-size: 100%;
+  padding: .25rem .5rem;
+  border-radius: var(--r-inner);
+  background: var(--card);
+  box-shadow: var(--sh-pop);
+  color: var(--ink-2);
+  pointer-events: auto;
 }
 
 .source {
@@ -236,15 +242,42 @@
   justify-content: space-between;
   flex-wrap: wrap;
   gap: .5rem;
-  /* The style picker's height (a 44 px button in a 3 px track), held before data shows it, so the row never grows when candles arrive. */
-  min-block-size: calc(max(44px, 2.75rem) + .375rem);
+  /* One row of 44 px controls, held before data shows them, so the row never grows when candles arrive. */
+  min-block-size: max(44px, 2.75rem);
 }
 .chart .compactHead h2 { margin: 0; font-size: 1.0625rem; font-weight: 650; }
 .compactHead h2 span { color: var(--ink-2); font-weight: 400; white-space: nowrap; }
-.compactTools { display: flex; gap: .5rem; margin-inline-start: auto; }
+/*
+ * One row that never shrinks a control: when the controls outgrow it, the row scrolls sideways.
+ * The block padding keeps focus rings in sight inside the scroller.
+ */
+.compactTools {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  min-inline-size: 0;
+  margin-inline-start: auto;
+  padding-block: 3px;
+  margin-block: -3px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+}
+.compactTools > * { flex: none; scroll-snap-align: start; }
+.tradersToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  min-block-size: max(44px, 2.75rem);
+  color: var(--ink-2);
+  font-size: .8125rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
 /* Takes only the room left beside the title and tools (a zero basis, so its text never wraps the row), on one line. */
 .headNotice { flex: 1 1 0; min-inline-size: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.stylePicker { display: inline-flex; }
 /* One-tap intervals once the chart is wider than about 640 px; the range button then names only the range. */
 .intervalPicker { display: none; }
 @container (width >= 40rem) {
@@ -257,16 +290,14 @@
  * (screen readers keep it); otherwise the title stays to name the unit.
  */
 :global([data-unit-shown]) ~ * .compactHead h2 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-/* A narrow chart's head has no room for the stream's notice, so the status slot under the plot reads it whole; only one of the two is ever shown (and announced). */
+/* A narrow chart's head has no room for the stream's notice, so the card over the plot reads it whole; only one of the two is ever shown (and announced). */
 .slotNotice { display: none; }
 @container (max-width: 30rem) {
   .headNotice { display: none; }
-  .slotNotice { display: inline; }
-}
-/* On a sale page on a phone, the chart's view controls fill its head row: the style picker over Indicators, the range over Traders. */
-@media (max-width: 760px) {
-  :global([data-sale-page]) .compactTools { flex-grow: 1; margin-inline-start: 0; }
-  :global([data-sale-page]) .compactTools > :last-child { margin-inline-start: auto; }
+  .slotNotice { display: flex; }
+  /* The row fills the head: the range at the start, Traders at the end. */
+  .compactTools { flex-grow: 1; margin-inline-start: 0; }
+  .compactTools > .tradersToggle { margin-inline-start: auto; }
 }
 .filters .filterClose,
 .chart .chartRetry { --control-height: max(44px, 2.75rem); }
@@ -282,6 +313,15 @@
  */
 @media (min-width: 1024px) and (pointer: fine), (min-width: 1024px) and (pointer: none) {
   .chart[data-compact-chart] { --kline-grow: clamp(0rem, 100dvh - 60rem, 14rem); }
+}
+/*
+ * A phone gives the price pane up on a short screen, so the time axis still ends above the Trade dock:
+ * 745 px is the shell header, the coin's row, the price and timeframe rows, a 290 px plot and the dock
+ * with the tab bar. `svh` is the screen with the browser's bars shown, and it holds still while they
+ * slide, so scrolling never resizes the chart. At most 88 px goes: the price pane keeps about 112 px, about 55 px of candles under the Traders' faces.
+ */
+@media (max-width: 760px) {
+  .chart[data-compact-chart] { --kline-grow: clamp(-88px, 100svh - 745px, 0px); }
 }
 
 .chart .chartEmpty { justify-content: center; background: transparent; }

@@ -23,7 +23,7 @@ import { SkeletonText } from "#web/components/blast-ui/Skeleton.tsx";
 import { CopyButton } from "#web/components/blast-ui/CopyButton.tsx";
 import { coinTypeName } from "../coins/coin-model";
 import { AddIcon, ChevronIcon, WalletIcon } from "./settings-icons";
-import { COPY, NOTIFICATION_ROWS, shortWallet, walletName, walletRows, walletSince } from "./settings-model";
+import { COPY, LINK_WALLET_BUTTON_ID, NOTIFICATION_ROWS, shortWallet, walletName, walletRows, walletSince } from "./settings-model";
 
 /**
  * Settings (FEATURE-MAP §7) as the Settings board draws it: Appearance (theme), Notifications (eight switches), Transactions, Privacy with its
@@ -67,6 +67,7 @@ export type SettingsViewProps = Readonly<{
   onExplorer(explorer: SocialExplorer): void;
   onCopy(wallet: SocialAccountWallet): boolean | void | Promise<boolean | void>;
   onLinkWallet(): void;
+  onUnlinkWallet?(wallet: SocialAccountWallet): void;
   onLogOut(): void;
   onSignIn(): void;
   onRetry(): void;
@@ -168,7 +169,11 @@ function ExplorerControl({ value, onChange }: Readonly<{ value: SocialExplorer; 
   );
 }
 
-function WalletRow({ wallet, onCopy }: Readonly<{ wallet: SocialAccountWallet; onCopy(wallet: SocialAccountWallet): boolean | void | Promise<boolean | void> }>) {
+function WalletRow({ wallet, onCopy, onUnlink }: Readonly<{
+  wallet: SocialAccountWallet;
+  onCopy(wallet: SocialAccountWallet): boolean | void | Promise<boolean | void>;
+  onUnlink?: SettingsViewProps["onUnlinkWallet"];
+}>) {
   const name = walletName(wallet.kind);
   return (
     <div className={clsx(styles.row, styles.tall, styles.wallet)}>
@@ -179,7 +184,14 @@ function WalletRow({ wallet, onCopy }: Readonly<{ wallet: SocialAccountWallet; o
         <b>{name}</b>
         <InspectValue label={`${name} address · ${walletSince(wallet)}`} value={wallet.address}>{shortWallet(wallet.address)}</InspectValue>
       </span>
-      <CopyButton label={`Copy ${name} address`} onCopy={() => onCopy(wallet)} size="md" />
+      <div className={styles.walletActions}>
+        <CopyButton label={`Copy ${name} address`} onCopy={() => onCopy(wallet)} size="md" />
+        {wallet.kind === "slush" && onUnlink ? (
+          <Button aria-label={`Unlink Slush wallet ${shortWallet(wallet.address)}`} size="md" variant="ghost" onClick={() => onUnlink(wallet)}>
+            Unlink
+          </Button>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -352,9 +364,11 @@ function WalletSettings({ props, busy }: Readonly<{ props: SettingsViewProps; bu
           </span>
         </div>
       ) : (
-        walletRows(props.wallets).map((wallet) => <WalletRow key={wallet.address} onCopy={props.onCopy} wallet={wallet} />)
+        walletRows(props.wallets).map((wallet) => (
+          <WalletRow key={wallet.address} onCopy={props.onCopy} onUnlink={props.mode === "account" ? props.onUnlinkWallet : undefined} wallet={wallet} />
+        ))
       )}
-      <button className={clsx(styles.row, styles.tall, styles.wallet, styles.action)} disabled={busy} onClick={props.onLinkWallet} type="button">
+      <button className={clsx(styles.row, styles.tall, styles.wallet, styles.action)} disabled={busy} id={LINK_WALLET_BUTTON_ID} onClick={props.onLinkWallet} type="button">
         <span aria-hidden="true" className={styles.walletIcon}>
           <AddIcon />
         </span>

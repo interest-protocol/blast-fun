@@ -1,3 +1,4 @@
+import { FEEDBACK_BODY_LIMIT } from "../social/contracts/feedback.ts";
 import { DEVELOP_PRIVATE_ROUTES } from "./private/develop-contracts.ts";
 import { ANALYTICS_PRIVATE_ROUTES } from "./private/analytics-contracts.ts";
 import { VIEWER_THESES_PRIVATE_ROUTES } from "./private/viewer-theses-contracts.ts";
@@ -97,6 +98,12 @@ const IDENTITY_ROUTES: readonly PrivateRouteContract[] = [
     maxBodyBytes: 4096,
   },
   {
+    id: "social.wallet.unlink",
+    method: "DELETE",
+    path: "/api/social/me/wallets",
+    maxBodyBytes: 4096,
+  },
+  {
     id: "social.sign-in.challenge",
     method: "POST",
     path: "/api/social/sign-in/challenge",
@@ -120,6 +127,7 @@ const IDENTITY_ROUTES: readonly PrivateRouteContract[] = [
 export const PRIVATE_ROUTES: readonly PrivateRouteContract[] = Object.freeze([
   ...ANALYTICS_PRIVATE_ROUTES,
   ...VIEWER_THESES_PRIVATE_ROUTES,
+  { id: "feedback.submit", method: "POST", path: "/api/feedback", maxBodyBytes: FEEDBACK_BODY_LIMIT },
   ...DEVELOP_PRIVATE_ROUTES,
   ...CARD_PRIVATE_ROUTES,
   ...FRONTEND_SECURITY_PRIVATE_ROUTES,

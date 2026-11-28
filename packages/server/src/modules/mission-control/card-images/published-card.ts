@@ -7,6 +7,19 @@ import { primaryPool } from "@blast/core/modules/database/pool.ts";
 
 import type { PublishedCardSnapshot } from "@blast/core/modules/mission-control/card-images/contracts.ts";
 
+const PUBLICATION = `c.card_id = $1 AND c.published_at IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM social_accounts a WHERE a.profile_id = c.profile_id AND a.deleted_at IS NOT NULL)`;
+
+/** Checks publication without loading the record or its recruits for a cached render. */
+export async function isCardPublished(cardId: string, pool?: Pool): Promise<boolean> {
+  const result = await autocommitRead(
+    pool ?? primaryPool(), "card",
+    `SELECT 1 FROM mission_control_cards c WHERE ${PUBLICATION}`, [cardId],
+    { label: "card.publication", prepare: true },
+  );
+  return result.rows.length !== 0;
+}
+
 export async function publishedCardSnapshot(
   cardId: string,
   pool?: Pool,
@@ -57,7 +70,7 @@ export async function publishedCardSnapshot(
         LIMIT 5
       ) AS recruit_handles
     FROM mission_control_cards c
-    WHERE c.card_id = $1 AND c.published_at IS NOT NULL`,
+    WHERE ${PUBLICATION}`,
     [cardId],
   );
   const row = result.rows[0];

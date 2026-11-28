@@ -216,6 +216,7 @@ test("OA-31: the controls the press audit found still answer, by the gate's hous
   assert.match(press("presale-pages/presales.module.css", ":global([data-blast-ui]) a.srow2:active"), /scale\(\.99\)/);
   // Flush rows take --hair; a row that is already grey a step deeper.
   assert.match(press("blast-ui/AppShell.module.css", "a.mitem:active"), /background: var\(--hair\)/);
+  assert.match(press("blast-ui/AppShell.module.css", '[role="menuitemradio"].mitem:active'), /background: var\(--hair\)/);
   assert.match(press("social/search/Search.module.css", ".item.kb:active"), /background: var\(--hair-2\)/);
   // Segmented controls dip.
   assert.match(press("blast-ui/blast-ui.css", "[data-blast-ui] .seg button:active"), /opacity: \.6/);
@@ -226,8 +227,14 @@ test("OA-31: only real controls press — rows reused on a div (a pending sale) 
   for (const bare of [/Profile\.module\.css: \.lrow:active/, /presales\.module\.css: .*\(\.lrow\b/]) {
     assert.ok(!selectors.some((selector) => bare.test(selector)), `unscoped row press ${bare}`);
   }
-  const mitem = selectors.filter((selector) => selector.startsWith("blast-ui/AppShell.module.css") && selector.includes(".mitem"));
-  assert.ok(mitem.length > 0 && mitem.every((selector) => selector.includes(':is(a, button).mitem:not([aria-disabled="true"])')), mitem.join("\n"));
+  const mitem = sheets.find((sheet) => sheet.name === "blast-ui/AppShell.module.css")!.rules
+    .flatMap((rule) => split(rule.selector))
+    .filter((selector) => selector.includes(".mitem") && selector.includes(":active"));
+  assert.ok(mitem.length > 0);
+  for (const selector of mitem) {
+    assert.ok(selector.includes(':not([aria-disabled="true"], :disabled)'), selector);
+    assert.ok(keys(selector).every((key) => /^(?:a|button|\[role="menuitem(?:radio)?"\])\.mitem\b/.test(key)), selector);
+  }
 });
 
 test("#614: Blast mode modules leave a shared Button's press to the shared control", () => {

@@ -147,7 +147,7 @@ test("R3-41-AC-7 and OA-43: an inline SUI contribution sends nine-decimal atoms 
   let confirmed = 0;
   function Host() {
     const host = useCommitHost({ presaleDeployed: true, balances: { version: 0, changed: provider.moved } });
-    return <><InlineCommit kit={host.overlays.commitKit!} presaleId={provider.detail.presale.presale_id} nowMs={Date.now()} fallback={null} onCommitted={() => { committed++; }} purchase={{ initialPayCoin: SUI_COIN_TYPE, onConfirmed: () => { confirmed++; } }} />{host.node}</>;
+    return <><InlineCommit kit={host.overlays.commitKit!} presaleId={provider.detail.presale.presale_id} fallback={null} onCommitted={() => { committed++; }} purchase={{ initialPayCoin: SUI_COIN_TYPE, onConfirmed: () => { confirmed++; } }} />{host.node}</>;
   }
   const render = () => root.render(withQueryClient(client, <AppRouterContext value={router}>
     <SocialViewerProvider signedIn callsign="original" getAccessToken={ownerToken}><ToastProvider><Host /></ToastProvider></SocialViewerProvider>

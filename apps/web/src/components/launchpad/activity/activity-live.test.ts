@@ -230,6 +230,28 @@ test("the compact tape shows a burst one trade at a time, even when history conf
 
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 
+test("the compact tape shows a socket trade when the first history read fails", async () => {
+  const feed = createActivityFeed({
+    start: null,
+    reads: {
+      activity: async () => ({ kind: "failed", reason: "not_ready" }),
+      flow: async () => ({ kind: "failed", reason: "not_ready" }),
+    },
+  });
+  const tape = createTradeTape(feed, {
+    instant: () => false,
+    observe: () => () => {},
+    schedule: fakeClock().schedule,
+  });
+  const stop = tape.subscribe(() => {});
+  await feed.refresh(false);
+  const trade = provisionalActivityRow(LAUNCH, frame(CURVE_POOL_KEY, READ_THROUGH + 1))!;
+  feed.addLive(trade);
+  assert.deepEqual(tape.snapshot().rows, [trade]);
+  assert.equal(feed.readThrough(), null);
+  stop();
+});
+
 test("a gap or reconnect asks for one read pinned to the newest checkpoint, at most once per floor, again until it reaches it", async () => {
   const { hub, listener } = fakeHub();
   const clock = fakeClock();
@@ -324,6 +346,75 @@ test("before the list's first answer a frame read waits a whole floor, and a row
   assert.deepEqual(delays(), [FRAME_READ_FLOOR_MS], "coalesced into the waiting read");
   clock.fire();
   assert.deepEqual(reads, [51]);
+});
+
+test("a live tape keeps its window during a burst and reads history when opened or recovery lacks coverage", async () => {
+  const { hub, listener } = fakeHub();
+  const clock = fakeClock();
+  const reads: number[] = [];
+  let checkpoint = READ_THROUGH;
+  const feed: LiveActivityFeed = {
+    addLive: () => true,
+    readThrough: () => checkpoint,
+    refresh: async (_manual, at) => {
+      reads.push(checkpoint = at!);
+      return true;
+    },
+  };
+  const follow = followLiveTrades({ hub, launchId: LAUNCH, pools: [CURVE_POOL_KEY], expected: null, feed, recentOnly: true, onState: () => {}, schedule: clock.schedule, now: clock.now, random: () => 0 });
+  listener().fence!(CURVE_POOL_KEY, READ_THROUGH + 1, { lastEvent: READ_THROUGH + 1, tapeResumed: true });
+  for (let i = 1; i <= LIVE_ROWS_MAX * 2; i++) listener().trade!(frame(CURVE_POOL_KEY, READ_THROUGH + i));
+  assert.equal(clock.timers.length, 0);
+  follow.showHistory(true);
+  follow.showHistory(true);
+  assert.equal(clock.timers.length, 1);
+  clock.fire();
+  await settle();
+  assert.deepEqual(reads, [READ_THROUGH + LIVE_ROWS_MAX * 2]);
+  follow.showHistory(true);
+  listener().fence!(CURVE_POOL_KEY, checkpoint + 1, { lastEvent: checkpoint + 1, tapeResumed: true });
+  clock.advance(FRAME_READ_FLOOR_MS);
+  clock.fire();
+  await settle();
+  assert.equal(reads.length, 2, "recovering fills does not prove coverage for the open activity ledger");
+  follow.showHistory(false);
+  listener().fence!(CURVE_POOL_KEY, checkpoint + 1, { lastEvent: checkpoint + 1 });
+  clock.advance(FRAME_READ_FLOOR_MS);
+  clock.fire();
+  await settle();
+  assert.equal(reads.length, 3);
+  follow();
+});
+
+test("opening history catches up a partially filled tape and keeps that intent after resubscribing", async () => {
+  const { hub, listener } = fakeHub();
+  const clock = fakeClock();
+  const reads: number[] = [];
+  let checkpoint = READ_THROUGH;
+  const feed: LiveActivityFeed = {
+    addLive: () => false,
+    readThrough: () => checkpoint,
+    refresh: async (_manual, at) => {
+      reads.push(checkpoint = at!);
+      return true;
+    },
+  };
+  const options = { hub, launchId: LAUNCH, pools: [CURVE_POOL_KEY], expected: null, feed, recentOnly: true, onState: () => {}, schedule: clock.schedule, now: clock.now, random: () => 0 };
+  const first = followLiveTrades(options);
+  listener().trade!(frame(CURVE_POOL_KEY, READ_THROUGH + 1));
+  assert.equal(clock.timers.length, 0);
+  first.showHistory(true);
+  clock.fire();
+  await settle();
+  assert.deepEqual(reads, [READ_THROUGH + 1]);
+  first();
+
+  const replacement = followLiveTrades({ ...options, historyOpen: true });
+  listener().fence!(CURVE_POOL_KEY, READ_THROUGH + 2, { lastEvent: READ_THROUGH + 2, tapeResumed: true });
+  clock.fire();
+  await settle();
+  assert.deepEqual(reads, [READ_THROUGH + 1, READ_THROUGH + 2]);
+  replacement();
 });
 
 test("under the small-trade filter a burst of dust frames takes no row and asks no read; a real trade still shows, and turning the filter off reads the dust once", () => {

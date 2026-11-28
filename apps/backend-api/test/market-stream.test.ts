@@ -5,11 +5,13 @@ import {
   MARKET_STREAM_PATH,
   marketStreamPools,
 } from "@blast/core/modules/launchpad-contract/market-stream.ts";
+import { INDEXED_POOL_COINS } from "@blast/core/modules/social/portfolio/core-coins.ts";
 import { MarketStreamRelay } from "@blast/server/modules/launchpad-market/stream-relay.ts";
 import type { RelaySocket } from "@blast/server/modules/launchpad-market/stream-relay.ts";
 import {
   infraProvenanceFixture,
   FIXTURE_FINGERPRINT,
+  launchSummaryFixture,
   poolSummaryFixture,
 } from "../../../packages/server/test/fixtures/modules/launchpad-contract/fixtures.ts";
 import { validateBackendFleet } from "../src/app/config/fleet.ts";
@@ -124,6 +126,174 @@ const read = async (reader: ReadableStreamDefaultReader<Uint8Array>) => {
     data: JSON.parse(text.match(/^data: (.+)$/m)![1]!) as Record<string, unknown>,
   };
 };
+
+test("oversized Discover pages replace the cached page and let clients recover on a later revision", async () => {
+  const socket = new Socket();
+  const relay = new MarketStreamRelay(() => socket, expected);
+  const target = new Request(`https://frontend.test${MARKET_STREAM_PATH}?discovery=true`);
+  const live = open(relay, target).body!.getReader();
+  const discovery = (revision: number, name: string) => {
+    const launch = launchSummaryFixture();
+    const page = {
+      pools: [{ ...launch, metadata: { ...(launch.metadata as object), name } }],
+      next_cursor: null,
+    };
+    socket.receive({
+      type: "discovery",
+      revision: String(revision),
+      provenance: provenance(revision),
+      new: page,
+      progress: { pools: [], next_cursor: null },
+    });
+  };
+  const page = async (reader: ReadableStreamDefaultReader<Uint8Array>) => {
+    const entry = await read(reader);
+    assert.equal(entry.event, "discovery");
+    return entry.data.page as { view: string; section: { state: string; reason?: string } };
+  };
+  try {
+    await read(live);
+    socket.receive({ type: "hello", protocol: 1, provenance: provenance(), discovery: true });
+    socket.receive({ type: "pong" });
+    discovery(10, "Froggy");
+    assert.equal((await page(live)).section.state, "available");
+    assert.equal((await page(live)).view, "near_graduation");
+    discovery(11, "x".repeat(B.maxChunkBytes));
+    assert.equal((await page(live)).section.reason, "frame-too-large");
+
+    const later = open(relay, target).body!.getReader();
+    try {
+      await read(later);
+      assert.equal((await page(later)).section.state, "unavailable");
+      assert.equal((await page(later)).view, "near_graduation");
+    } finally {
+      await later.cancel();
+    }
+    socket.receive({
+      type: "discovery",
+      revision: "12",
+      provenance: provenance(12),
+      new: null,
+      progress: null,
+    });
+    assert.equal((await page(live)).view, "near_graduation");
+    discovery(13, "Froggy");
+    assert.equal((await page(live)).section.state, "available");
+    assert.equal((await page(live)).section.state, "empty");
+  } finally {
+    await live.cancel();
+  }
+});
+
+test("Discover streams only live swaps over one dollar to tabs showing the tracked coin", () => {
+  const socket = new Socket();
+  const relay = new MarketStreamRelay(() => socket, expected);
+  const deep = INDEXED_POOL_COINS.find((coin) => coin.symbol === "DEEP")!;
+  const wheels = INDEXED_POOL_COINS.find((coin) => coin.symbol === "Wheels")!;
+  const target = new Request(`https://frontend.test${MARKET_STREAM_PATH}?activity=true`);
+  const attach = () => {
+    const messages: string[] = [];
+    const subscription = relay.subscribe(target, {
+      close() {},
+      send: (bytes) => {
+        messages.push(new TextDecoder().decode(bytes));
+        return true;
+      },
+    });
+    assert.ok(!(subscription instanceof Response));
+    return {
+      ...subscription,
+      view: (coinType: string) =>
+        subscription.set({
+          pools: [],
+          priceCoins: [coinType],
+          presale: null,
+          tradeCues: true,
+        }),
+      cues: () =>
+        messages
+          .filter((message) => message.startsWith("event: trade_cue\n"))
+          .map((message) => JSON.parse(message.match(/^data: (.+)$/m)![1]!)),
+      market: () => messages.filter((message) => message.startsWith("event: market\n")),
+    };
+  };
+  const swap = (
+    coin: typeof deep | typeof wheels,
+    cp: number,
+    usd: string | null,
+    side = "buy",
+  ) => {
+    const value = trade(cp, coin.poolKey);
+    return {
+      ...value,
+      trade: {
+        ...value.trade,
+        coin: coin.coinType,
+        kind: "swap",
+        usd: "500",
+        volume_usd: usd,
+        side,
+      },
+    };
+  };
+  const deepTab = attach();
+  const secondDeepTab = attach();
+  const wheelsTab = attach();
+  const pricesOnly = attach();
+  try {
+    pricesOnly.set({ pools: [], priceCoins: [deep.coinType], presale: null });
+    deepTab.view(deep.coinType);
+    secondDeepTab.view(deep.coinType);
+    wheelsTab.view(wheels.coinType);
+    socket.hello();
+    assert.deepEqual(socket.sent[0], {
+      op: "subscribe",
+      topics: ["activity", `pool:${deep.poolKey}`, `pool:${wheels.poolKey}`],
+    });
+    socket.receive({ ...snapshot(deep.poolKey), trades: [swap(deep, 10, "8").trade] });
+    socket.receive(snapshot(wheels.poolKey));
+    socket.receive(swap(deep, 11, null));
+    socket.receive(swap(deep, 12, "0.99"));
+    socket.receive(swap(deep, 13, "1"));
+    const buy = swap(deep, 14, "1.000000000000000001");
+    socket.receive(buy);
+    socket.receive(buy);
+    const expectedBuy = {
+      coin_type: deep.coinType,
+      cursor: buy.trade.cursor,
+      side: "buy",
+      timestamp_ms: buy.trade.timestamp_ms,
+      quote_atoms: buy.trade.quote_amount,
+      usd: buy.trade.volume_usd,
+    };
+    assert.deepEqual(deepTab.cues(), [expectedBuy]);
+    assert.deepEqual(secondDeepTab.cues(), [expectedBuy]);
+    assert.deepEqual(wheelsTab.cues(), []);
+    assert.deepEqual(pricesOnly.cues(), []);
+    assert.deepEqual(deepTab.market(), []);
+
+    deepTab.view(wheels.coinType);
+    secondDeepTab.stop();
+    assert.deepEqual(socket.sent.at(-1), { op: "unsubscribe", topics: [`pool:${deep.poolKey}`] });
+    socket.receive(swap(deep, 15, "23", "sell"));
+    const sell = swap(wheels, 16, "42.5", "sell");
+    socket.receive(sell);
+    const expectedSell = {
+      coin_type: wheels.coinType,
+      cursor: sell.trade.cursor,
+      side: "sell",
+      timestamp_ms: sell.trade.timestamp_ms,
+      quote_atoms: sell.trade.quote_amount,
+      usd: sell.trade.volume_usd,
+    };
+    assert.deepEqual(deepTab.cues(), [expectedBuy, expectedSell]);
+    assert.deepEqual(wheelsTab.cues(), [expectedSell]);
+  } finally {
+    for (const tab of [deepTab, secondDeepTab, wheelsTab, pricesOnly]) {
+      tab.stop();
+    }
+  }
+});
 
 test("an unpriced fill reaches live clients and is preserved in the next subscriber's fence", async () => {
   const socket = new Socket();
@@ -689,5 +859,58 @@ test("one shared stream combines sanitized activity hints with pool updates and 
     assert.throws(() =>
       marketStreamPools(new Request(`https://frontend.test${MARKET_STREAM_PATH}?${query}`)),
     );
+  }
+});
+
+test("a cold gateway catches up a tape from its shared snapshot only when coverage is proved", () => {
+  const socket = new Socket();
+  const relay = new MarketStreamRelay(() => socket, expected);
+  const seen: { name: string; data: Record<string, unknown> }[] = [];
+  const sink = {
+    close() {},
+    send(bytes: Uint8Array) {
+      const text = new TextDecoder().decode(bytes);
+      seen.push({
+        name: text.match(/^event: (.+)$/m)![1]!,
+        data: JSON.parse(text.match(/^data: (.+)$/m)![1]!),
+      });
+      return true;
+    },
+  };
+  const cursor = "11:1:1:0";
+  const from = (value: string) =>
+    relay.subscribe(request(), sink, { resume: new Map([[pool(), value]]) });
+  const first = from(cursor);
+  assert.ok(!(first instanceof Response));
+  try {
+    socket.hello();
+    const recent = [13, 12, 11].map((cp) => ({
+      ...trade(cp).trade,
+      timestamp_ms: Date.now() - 500,
+    }));
+    socket.receive({ ...snapshot(pool(), 13), trades: recent });
+    const recovered = seen.find(({ name }) => name === "tape")?.data.trades;
+    assert.ok(Array.isArray(recovered));
+    assert.deepEqual(
+      recovered.map((trade) => trade.cursor),
+      ["13:1:1:0", "12:1:1:0"],
+    );
+    assert.ok(recovered.every((trade) => !Object.hasOwn(trade, "labels")));
+    assert.equal(seen.at(-1)?.data.tape_resumed, true);
+    seen.length = 0;
+    const expired = from("10:1:1:0");
+    assert.ok(!(expired instanceof Response));
+    try {
+      assert.equal(
+        seen.some(({ name }) => name === "tape"),
+        false,
+      );
+      assert.equal(seen.at(-1)?.data.state, "live");
+      assert.equal(seen.at(-1)?.data.tape_resumed, undefined);
+    } finally {
+      expired.stop();
+    }
+  } finally {
+    first.stop();
   }
 });

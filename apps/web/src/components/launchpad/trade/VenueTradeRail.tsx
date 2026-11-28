@@ -3,6 +3,7 @@
 import { useId, useSyncExternalStore } from "react";
 
 import { TradeFill } from "#web/components/blast-ui/CoinAmount.tsx";
+import { useCommitClock } from "#web/components/social/commit/commit-clock.ts";
 
 import { StatusText } from "../primitives/StatusText";
 import type { ActionState, SignerKind } from "../transaction/action-machine";
@@ -23,13 +24,6 @@ import { bpsPercent } from "@blast/core/lib/bps.ts";
 
 const SLIPPAGE_CHOICES: readonly bigint[] = [50n, 100n, 200n];
 const SIGNER_LABELS: Readonly<Record<SignerKind, string>> = { wallet: "Sui wallet", privy: "Privy wallet" };
-
-const subscribeSecond = (tick: () => void) => {
-  const timer = setInterval(tick, 1_000);
-  return () => clearInterval(timer);
-};
-const secondSnapshot = () => Math.floor(Date.now() / 1_000) * 1_000;
-const serverClock = () => 0;
 
 const time = (ms: number) => new Date(ms).toISOString().slice(11, 19);
 
@@ -71,8 +65,8 @@ function VenuePanel({ direction, hidden }: Readonly<{ direction: TradeDirection;
   const other = direction === "buy" ? "sell" : "buy";
   const state: ActionState<VenueTradeInput> = useSyncExternalStore(controller.subscribe, controller.getState, controller.getState);
   const otherState = useSyncExternalStore(controllers[other].subscribe, controllers[other].getState, controllers[other].getState);
-  // Re-renders every second so an open review shows its quote expiring; the session's clock decides it.
-  const tick = useSyncExternalStore(subscribeSecond, secondSnapshot, serverClock);
+  // Re-renders every second while a review is open, so it shows its quote expiring; the session's clock decides it.
+  const tick = useCommitClock(state.phase === "review");
   const unresolved = unresolvedTrade<VenueTradeInput>({ [direction]: state, [other]: otherState } as Record<TradeDirection, ActionState<VenueTradeInput>>);
   const blockedByOther = unresolved !== null && unresolved.direction !== direction;
   const id = useId();

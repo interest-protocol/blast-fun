@@ -117,7 +117,7 @@ export const API_GATE_EXEMPTIONS: readonly ApiGateExemption[] = Object.freeze<Ap
     name: "og-image",
     methods: READ,
     path: /^\/api\/og$/,
-    why: "Social card image (a vercel.json rewrite) fetched by unfurlers.",
+    why: "Social card image fetched by unfurlers.",
   },
   {
     name: "gate-refresh",

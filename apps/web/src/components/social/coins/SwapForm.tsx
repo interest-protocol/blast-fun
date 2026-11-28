@@ -27,10 +27,11 @@ import type { WalletCoinView } from "./coin-model";
 import styles from "./coins.module.css";
 import { FlipIcon, KnowCheckIcon } from "./icons";
 import { AmountFit } from "#web/components/blast-ui/AmountFit.tsx";
-import { quoteDiagnostic, canTrade, costSentence, FINDING_PRICE, flippedField, progressVerb, swapCta, swapPanels, swapPayoutWarning, swapQuoteRequest, tradeAction, tradeTitle, txRows, txSummary } from "./swap-model";
+import { quoteDiagnostic, canTrade, costSentence, FINDING_PRICE, flippedField, progressVerb, quoteWithUsd, swapCta, swapPanels, swapPayoutWarning, swapQuoteRequest, tradeAction, tradeTitle, txRows, txSummary } from "./swap-model";
+import { useQuoteUsd } from "../prices/use-quote-usd.ts";
 import { useTradeQuoteQuery } from "../trade/trade-quote-query.ts";
 import { tradeQuoteReader, type TradeQuoteRequester } from "../trades/trades-client.ts";
-import { estimateReads, type TradeRouteFinder } from "../trade/trade-estimate.ts";
+import { estimateReads, usdPriceText, type TradeRouteFinder } from "../trade/trade-estimate.ts";
 import { TRADE_QUOTE_SHOWN_REFRESH_MS, tradeRequestKey, type TradeQuoteSnapshot } from "../trade/trade-quotes.ts";
 import { tokenAmountAtoms, selectedSellPreset, sellPresetAmount, typedAmount, type TradeAmount } from "../trade/trade-ticket.ts";
 import { decimalText, dropDecimal, pasteDecimal } from "#web/lib/decimal-input.ts";
@@ -98,6 +99,8 @@ function quoteWithWalletFee(quote: SocialTradeQuote | null, mist: string | null)
 
 /** A sent trade still confirming: the line beside the off button (DS rule 18). */
 const PENDING_LINE = "Waiting for your wallet. Check it before you trade again.";
+/** The line beside the button while a balance it needs is read. */
+const BALANCE_CHECK_LINE = "Checking your balance…";
 const offeredNow = (quote: SocialTradeQuote) => isOffered(quote, Date.now());
 
 const PRICE_CHANGED_LINE = "The price changed before sending. Nothing was sent.";
@@ -139,14 +142,14 @@ function useSwapFlipMotion(flips: number, scope: RefObject<HTMLDivElement | null
 }
 
 /** Quote presentation is derived once, keeping fee consent and failures tied to their amount. */
-function swapDisplay({ inCoin, outCoin, snapshot, hidden, balanceKnown, outBalanceKnown, key, fee, failure, walletFee, focus, atoms }: Readonly<{
-  inCoin: WalletCoinView; outCoin: WalletCoinView; snapshot: TradeQuoteSnapshot; hidden: boolean; balanceKnown: boolean;
-  outBalanceKnown: boolean;
+function swapDisplay({ inLine, outLine, inCoin, outCoin, snapshot, hidden, key, fee, failure, walletFee, focus, atoms }: Readonly<{
+  inLine: ShownBalance; outLine: ShownBalance;
+  inCoin: WalletCoinView; outCoin: WalletCoinView; snapshot: TradeQuoteSnapshot; hidden: boolean;
   key: string | null; fee: Readonly<{ key: string | null; mist: string }> | null; failure: Failure | null;
   walletFee: SocialTransferFee; focus: string | null; atoms: bigint | null;
 }>) {
   const quoteError = quoteDiagnostic(snapshot);
-  const panels = swapPanels({ inCoin, outCoin, snapshot, hidden, balanceKnown, outBalanceKnown });
+  const panels = swapPanels({ inCoin: inLine.coin, outCoin: outLine.coin, snapshot, hidden, balanceKnown: inLine.known, outBalanceKnown: outLine.known });
   const effectiveFee = fee?.key === key ? fee : null;
   const quote = quoteWithWalletFee(snapshot.quote, effectiveFee?.mist ?? null);
   const effectiveWalletFee = effectiveFee === null ? walletFee : "wallet";
@@ -191,17 +194,48 @@ function useSwapQuotes({ active, inCoin, outCoin, atoms, locked, trading }: Read
   return { key, estimate, sealed, seal, live, setPressed };
 }
 
-function swapReview(seal: Seal | null, quote: SocialTradeQuote | null, cta: ReturnType<typeof swapCta>, warning: string | null) {
+/**
+ * The payout warning to show. Once the sealed quote asks about a new one, the press keeps that question:
+ * a display price that later changes or goes missing must not answer it for the user.
+ */
+function usePayoutWarning(seal: Seal | null, answered: boolean, quote: SocialTradeQuote | null, locked: boolean) {
+  const [kept, setKept] = useState<Readonly<{ press: number; warning: string }> | null>(null);
+  const live = locked ? null : swapPayoutWarning(quote);
+  const asked = !locked && seal !== null && kept?.press === seal.press ? kept.warning : null;
+  if (seal !== null && answered && asked === null && live !== null && live !== seal.warning) setKept({ press: seal.press, warning: live });
+  return { warning: live ?? asked, asked: asked !== null };
+}
+
+function swapReview(seal: Seal | null, quote: SocialTradeQuote | null, cta: ReturnType<typeof swapCta>, asked: boolean) {
   if (seal === null || quote?.min_out == null || !cta.enabled || cta.action !== "trade") return null;
   if (BigInt(quote.min_out) < seal.minOut) return PRICE_MOVED_LINE;
-  return warning !== null && warning !== seal.warning ? "Review the payout before confirming." : null;
+  return asked ? "Review the payout before confirming." : null;
+}
+
+/** What a side's balance line shows: the coin with its number, if there is one to show. Display only; spending reads `useSwapInputBalance`. */
+type ShownBalance = Readonly<{ coin: WalletCoinView; known: boolean }>;
+
+/** The number on screen: the fresh one, else the last one while it is read again. */
+function shownAtoms(read: ReturnType<typeof useWalletCoinBalance>): bigint | undefined {
+  if (read.status === "ready") return read.atoms;
+  return read.status === "loading" ? read.lastAtoms : undefined;
+}
+
+/** One side's balance, read the same way for both coins. */
+function useSwapSideBalance(trading: CoinSheetTrading, coin: WalletCoinView, active: boolean) {
+  const read = useWalletCoinBalance(trading.walletAddress, coin.coinType, active && trading.signedIn && !trading.sessionPending);
+  const held = shownAtoms(read);
+  let line: ShownBalance = { coin, known: false };
+  if (trading.walletAddress === undefined) line = { coin, known: trading.balanceKnown ?? trading.signedIn };
+  else if (held !== undefined) line = { coin: { ...coin, atoms: held }, known: true };
+  return { read, line };
 }
 
 function useSwapInputBalance(trading: CoinSheetTrading, selectedCoin: WalletCoinView, field: TradeAmount, active: boolean) {
   const queries = useAppQueryClient();
   const walletAddress = trading.walletAddress;
   const usesExactBalance = walletAddress !== undefined;
-  const walletBalance = useWalletCoinBalance(walletAddress, selectedCoin.coinType, active && trading.signedIn && !trading.sessionPending);
+  const { read: walletBalance, line } = useSwapSideBalance(trading, selectedCoin, active);
   const known = usesExactBalance ? walletBalance.status === "ready" : trading.balanceKnown ?? trading.signedIn;
   const inCoin = walletBalance.status === "ready" ? { ...selectedCoin, atoms: walletBalance.atoms } : selectedCoin;
   const needsBalance = usesExactBalance && !known && field.mode !== "typed" && field.fixedAtoms === undefined;
@@ -210,7 +244,16 @@ function useSwapInputBalance(trading: CoinSheetTrading, selectedCoin: WalletCoin
   const refresh = (coinType?: string) => {
     if (walletAddress) void refreshWalletCoinBalance(queries, walletAddress, coinType ?? inCoin.coinType);
   };
-  return { inCoin, balanceKnown: known, usesExactBalance, balanceStatus: status, atoms: needsBalance ? null : tokenAmountAtoms(field, inCoin), retryBalance: retry, refreshBalance: refresh };
+  return { inCoin, line, balanceKnown: known, usesExactBalance, balanceStatus: status, atoms: needsBalance ? null : tokenAmountAtoms(field, inCoin), retryBalance: retry, refreshBalance: refresh };
+}
+
+/**
+ * A coin's dollar price, to fill the values a quote came without: its own, else the app's price read,
+ * which is null while old or unknown. Only a coin with no price of its own is asked about.
+ */
+function useSwapSidePrice(coin: WalletCoinView, active: boolean) {
+  const market = useQuoteUsd(active && coin.price === null ? coin.coinType : null);
+  return { coinType: coin.coinType, decimals: coin.decimals, usdPrice: usdPriceText(coin.price) ?? market };
 }
 
 function swapBalanceAction(trading: CoinSheetTrading, active: boolean, balance: ReturnType<typeof useSwapInputBalance>, action: ReturnType<typeof swapCta>) {
@@ -221,7 +264,7 @@ function swapBalanceAction(trading: CoinSheetTrading, active: boolean, balance: 
 }
 
 function swapButtonView(cta: ReturnType<typeof swapCta>, title: string, balancePending: boolean, confirming: boolean, pending: boolean, money: string | null) {
-  if (balancePending) return { action: { ...cta, label: title, enabled: false }, cost: pending ? PENDING_LINE : null };
+  if (balancePending) return { action: { ...cta, label: title, enabled: false }, cost: pending ? PENDING_LINE : BALANCE_CHECK_LINE };
   return { action: confirming ? { ...cta, label: "Confirm swap" } : cta, cost: pending ? PENDING_LINE : cta.reason ?? money };
 }
 
@@ -269,6 +312,9 @@ function useSwapFormControls({
   const [failure, setFailure] = useState<Failure | null>(null);
   const balance = useSwapInputBalance(trading, selectedCoin, field, active);
   const { inCoin, balanceKnown, usesExactBalance, balanceStatus, atoms, retryBalance, refreshBalance } = balance;
+  const { read: outRead, line: outLine } = useSwapSideBalance(trading, outCoin, active);
+  const inPrice = useSwapSidePrice(inCoin, active);
+  const outPrice = useSwapSidePrice(outCoin, active);
   const [fee, setFee] = useState<Readonly<{ key: string | null; mist: string }> | null>(null);
   const { key, estimate, sealed, seal, live, setPressed } = useSwapQuotes({ active, inCoin, outCoin, atoms, locked, trading });
   const { nowMs } = live;
@@ -308,7 +354,9 @@ function useSwapFormControls({
 
   useSwapFlipMotion(flips, scope, animate);
 
-  const { panels, quote, quoteError, shownFailure, summary, rows, rateState, money } = swapDisplay({ inCoin, outCoin, snapshot, hidden, balanceKnown, outBalanceKnown: trading.balanceKnown ?? trading.signedIn, key, fee, failure, walletFee, focus, atoms });
+  // Filled as the screen is drawn: a cached quote does not change when a price arrives later.
+  const priced = { ...snapshot, quote: quoteWithUsd(snapshot.quote, inPrice, outPrice), shown: quoteWithUsd(snapshot.shown, inPrice, outPrice) };
+  const { panels, quote, quoteError, shownFailure, summary, rows, rateState, money } = swapDisplay({ inLine: balance.line, outLine, inCoin, outCoin, snapshot: priced, hidden, key, fee, failure, walletFee, focus, atoms });
   const swapAction = swapCta({
     signedIn: trading.signedIn,
     sessionPending: trading.sessionPending,
@@ -324,8 +372,8 @@ function useSwapFormControls({
     estimate: live === estimate,
   });
   const { pending: balancePending, action: cta } = swapBalanceAction(trading, active, balance, swapAction);
-  const warning = locked ? null : swapPayoutWarning(quote);
-  const review = swapReview(seal, sealed.quote, cta, warning);
+  const { warning, asked } = usePayoutWarning(seal, sealed.quote !== null, quote, locked);
+  const review = swapReview(seal, sealed.quote, cta, asked);
   const waiting = seal !== null && !locked && review === null;
   const title = tradeTitle(inCoin, outCoin, focus);
   const { action, cost } = swapButtonView(cta, title, balancePending, review !== null, pending, money);
@@ -438,11 +486,12 @@ function useSwapFormControls({
     onField(next);
   };
 
-  return { inCoin, outCoin, field, onField: changeField, detail, onDetail, onPick, id, locked, successful, pending, inputRef, scope, panels, summary, rows, rateState, hasQuote: quote?.amount_out != null, cost, warning, review, cta: action, verb, quoteError: shownFailure?.message ?? quoteError, flip, press, waiting, balanceKnown, balancePending, retryBalance, usesExactBalance };
+  const outReading = usesExactBalance && !outLine.known && (trading.sessionPending === true || outRead.status === "loading");
+  return { inCoin, outCoin, field, onField: changeField, detail, onDetail, onPick, id, locked, successful, pending, inputRef, scope, panels, summary, rows, rateState, hasQuote: quote?.amount_out != null, cost, warning, review, cta: action, verb, quoteError: shownFailure?.message ?? quoteError, flip, press, waiting, balanceKnown, balancePending, inBalanceShown: balance.line.known, outReading, retryBalance, usesExactBalance };
 }
 
 export function SwapForm(props: Parameters<typeof useSwapFormControls>[0]) {
-  const { inCoin, outCoin, field, onField, detail, onDetail, onPick, id, locked, successful, pending, inputRef, scope, panels, summary, rows, rateState, hasQuote, cost, warning, review, cta, verb, quoteError, flip, press, waiting, balanceKnown, balancePending, retryBalance, usesExactBalance } = useSwapFormControls(props);
+  const { inCoin, outCoin, field, onField, detail, onDetail, onPick, id, locked, successful, pending, inputRef, scope, panels, summary, rows, rateState, hasQuote, cost, warning, review, cta, verb, quoteError, flip, press, waiting, balanceKnown, balancePending, inBalanceShown, outReading, retryBalance, usesExactBalance } = useSwapFormControls(props);
   const describedBy = swapDescription({ id, balancePending, warning, review, quoteError, cost });
   const pickPreset = (value: string) => {
     const preset = sellPresetAmount(value, inCoin);
@@ -452,7 +501,7 @@ export function SwapForm(props: Parameters<typeof useSwapFormControls>[0]) {
   const payLabel = !props.persistent ? "Pay" : tradeAction(inCoin, outCoin, props.focus ?? null) === "buy" ? "You pay" : "You sell";
   return (
     <div className={styles.tradeBody} ref={scope}>
-      <SwapPair balancePending={balancePending} payLabel={payLabel} receiveLabel={props.persistent ? "You get" : "Receive"} field={field} flip={flip} id={id} inCoin={inCoin} inputRef={inputRef} locked={locked} onField={onField} onPick={onPick} outCoin={outCoin} panels={panels}
+      <SwapPair balancePending={balancePending} inBalanceShown={inBalanceShown} outReading={outReading} payLabel={payLabel} receiveLabel={props.persistent ? "You get" : "Receive"} field={field} flip={flip} id={id} inCoin={inCoin} inputRef={inputRef} locked={locked} onField={onField} onPick={onPick} outCoin={outCoin} panels={panels}
         presets={<AmountPresets selected={selectedSellPreset(field, inCoin)} disabled={locked || !balanceKnown} onPick={pickPreset} />} />
       <TradeLine cost={cost} costId={`${id}-cost`} message={quoteError} noticeId={`${id}-notice`} review={review} symbols={[inCoin.symbol, outCoin.symbol]} warning={warning} />
       {retryBalance ? <Button onClick={retryBalance} size="sm" variant="secondary">Retry balance</Button> : null}
@@ -470,8 +519,8 @@ function swapDescription({ id, balancePending, warning, review, quoteError, cost
   ].filter(Boolean).join(" ") || undefined;
 }
 
-function SwapPair({ balancePending, payLabel, receiveLabel, id, field, inCoin, outCoin, locked, onField, inputRef, onPick, panels, flip, presets }: Readonly<{
-  balancePending: boolean; payLabel: string; receiveLabel: string; id: string; field: TradeAmount; inCoin: WalletCoinView; outCoin: WalletCoinView; locked: boolean;
+function SwapPair({ balancePending, inBalanceShown, outReading, payLabel, receiveLabel, id, field, inCoin, outCoin, locked, onField, inputRef, onPick, panels, flip, presets }: Readonly<{
+  balancePending: boolean; inBalanceShown: boolean; outReading: boolean; payLabel: string; receiveLabel: string; id: string; field: TradeAmount; inCoin: WalletCoinView; outCoin: WalletCoinView; locked: boolean;
   onField: (next: TradeAmount) => void; inputRef: RefObject<HTMLInputElement | null>; onPick: (side: "in" | "out") => void;
   panels: ReturnType<typeof swapPanels>; flip: () => void; presets: ReactNode;
 }>) {
@@ -480,7 +529,7 @@ function SwapPair({ balancePending, payLabel, receiveLabel, id, field, inCoin, o
         <div className={styles.amt} data-panel="">
           <div className={styles.amtTop}>
             <label htmlFor={`${id}-amount`}>{payLabel}</label>
-            <BalanceLine id={`${id}-balance`} pending={balancePending} symbol={inCoin.symbol} text={panels.inBalance} />
+            <BalanceLine id={`${id}-balance`} pending={balancePending && !inBalanceShown} symbol={inCoin.symbol} text={panels.inBalance} />
           </div>
           <div className={styles.amtRow}>
             <AmountFit value={field.typed}>
@@ -518,7 +567,7 @@ function SwapPair({ balancePending, payLabel, receiveLabel, id, field, inCoin, o
         <div aria-live="polite" className={clsx(styles.amt, styles.amtOut)} data-panel="">
           <div className={styles.amtTop}>
             <span className={styles.lbl}>{receiveLabel}</span>
-            <BalanceLine symbol={outCoin.symbol} text={panels.outBalance} />
+            <BalanceLine pending={outReading} symbol={outCoin.symbol} text={panels.outBalance} />
           </div>
           <div className={styles.amtRow}>
             <AmountFit value={panels.out.text}>

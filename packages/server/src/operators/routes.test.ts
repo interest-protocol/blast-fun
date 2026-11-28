@@ -9,6 +9,7 @@ const route = createOperatorRoutes({
   presales: handler("presales"),
   "bonding-feature": handler("bonding-feature"),
   "verified-mark": handler("verified-mark"),
+  feedback: handler("feedback"),
   "reward-coins": handler("reward-coins"),
   "reward-blacklist": handler("reward-blacklist"),
   "gas-pool-health": handler("gas-pool-health"),

@@ -2,7 +2,7 @@
 
 import { diagnosticMessage, publicErrorMessage } from "#web/lib/errors.ts";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, type QueryClient } from "@tanstack/react-query";
 import { normalizeStructTag } from "@mysten/sui/utils";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -10,6 +10,7 @@ import { useState } from "react";
 import { setDevicePref, useDevicePrefs } from "#web/components/blast-ui/device-prefs.ts";
 import { useShellActions } from "#web/components/blast-ui/shell-actions.tsx";
 import { useToast } from "#web/components/blast-ui/Toasts.tsx";
+import type { TokenSource } from "#web/components/social/social-api.ts";
 import { useAppQueryClient } from "#web/lib/query/provider.tsx";
 import type { SocialAccountWallet } from "@blast/core/web/contracts/me.ts";
 import type { SocialExplorer, SocialSettingsResponse } from "@blast/core/web/contracts/settings.ts";
@@ -23,11 +24,19 @@ import { LinkWalletSheet, useLinkWalletSession } from "./LinkWalletSheet";
 import { runWalletLink, type LinkOutcome, type LinkWalletChoice } from "./link-wallet-flow";
 import { TOASTS } from "./settings-model";
 import { SettingsView, type SettingsMode } from "./SettingsView";
+import { UnlinkWalletSheet } from "./UnlinkWalletSheet";
 import { useSettingsRecord, type SettingsRecord } from "./use-settings-record.ts";
 import { useSettingsSaver } from "./use-settings-saver";
+import { useUnlinkWallet } from "./use-unlink-wallet";
 
 const zeroAtoms = 0n;
 const loadLinkWalletDappKit = () => import("./link-wallet-dapp-kit");
+
+function useWalletHoldCoins(client: QueryClient, source: TokenSource | undefined, hasAccountSettings: boolean) {
+  const wallet = useQuery({ ...walletQuery(source ?? (async () => null)), enabled: hasAccountSettings && !!source }, client);
+  if (wallet.data !== undefined) return walletCoinViews(wallet.data).filter((coin) => coin.atoms > zeroAtoms);
+  return wallet.isError || !source ? "error" : "pending";
+}
 
 /**
  * The settings page (FEATURE-MAP §7) with its data: the signed-in account
@@ -58,6 +67,7 @@ export function SettingsScreen() {
   const account = viewer.signedIn ? liveAccount : null;
   const accountId = account?.account_id ?? null;
   const { current, setStored, retry, tokens } = useSettingsRecord(client, accountId, viewer.getAccessToken);
+  const unlink = useUnlinkWallet({ account, getTokenSource: () => tokens.current, refresh, signOut: viewer.signOut });
   const stored = current?.status === "ready" ? current.settings : null;
   const saver = useSettingsSaver({
     accountId,
@@ -70,8 +80,7 @@ export function SettingsScreen() {
 
   const mode = settingsMode(viewer.signedIn, status, account !== null, current, settings);
 
-  const walletRead = useQuery({ ...walletQuery(viewer.getAccessToken ?? (async () => null)), enabled: mode === "account" && !!viewer.getAccessToken }, client);
-  const holdCoins = walletRead.data !== undefined ? walletCoinViews(walletRead.data).filter((coin) => coin.atoms > zeroAtoms) : walletRead.isError || !viewer.getAccessToken ? "error" : "pending";
+  const holdCoins = useWalletHoldCoins(client, viewer.getAccessToken, mode === "account");
 
   const copy = async (wallet: SocialAccountWallet) => {
     try {
@@ -131,6 +140,7 @@ export function SettingsScreen() {
           else setDevicePref("explorer", next);
         }}
         onLinkWallet={link.open}
+        onUnlinkWallet={unlink.open}
         onLogOut={logOut}
         onNotification={(key, on) => saver.change({ patch: { notifications: { [key]: on } } })}
         onPrivate={(on) => saver.change({ patch: { private: on } })}
@@ -145,6 +155,7 @@ export function SettingsScreen() {
         settings={settings}
         wallets={account?.wallets ?? []}
       />
+      {unlink.target ? <UnlinkWalletSheet {...unlink.target} onClose={unlink.close} onConfirm={unlink.confirm} /> : null}
       {link.session !== null ? (
         <LinkWalletSheet
           key={link.session}

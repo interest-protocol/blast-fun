@@ -7,15 +7,17 @@ import { verifyLiveTicket } from "@blast/core/modules/launchpad-contract/live-ti
 import {
   MARKET_STREAM_BUDGET,
   MARKET_STREAM_PATH,
+  marketStreamDiscovery,
   marketStreamPools,
   marketStreamPresale,
   marketStreamPriceCoins,
 } from "@blast/core/modules/launchpad-contract/market-stream.ts";
 import { POOL_KEY } from "@blast/core/modules/launchpad-contract/venues.ts";
 import type { HintSink } from "@blast/server/lib/hint-subscription.ts";
-import type {
-  MarketSet,
-  MarketSubscription,
+import {
+  trackedCuePools,
+  type MarketSet,
+  type MarketSubscription,
 } from "@blast/server/modules/launchpad-market/stream-relay.ts";
 import type { Server, ServerWebSocket, WebSocketHandler } from "bun";
 import type { TrustedSite } from "./contracts.ts";
@@ -95,7 +97,7 @@ export type LiveRelay = Readonly<{
   /** A new socket fits the relay's tables. */
   admits(pools: readonly string[], priceCoins: readonly string[]): boolean;
   /** An open socket may add these pools and coins. */
-  fits(pools: readonly string[], priceCoins: readonly string[]): boolean;
+  fits(pools: readonly string[], priceCoins: readonly string[], tradeCues?: boolean): boolean;
   subscribe(
     request: Request,
     sink: HintSink,
@@ -139,6 +141,8 @@ export type LiveSocketData = {
   pools: readonly string[];
   priceCoins: readonly string[];
   presale: string | null;
+  discovery?: boolean;
+  tradeCues?: boolean;
   /** The relay handle, once admitted: a `set` before it closes the socket. */
   relay?: MarketSubscription;
   lifetime?: ReturnType<typeof setTimeout>;
@@ -156,6 +160,7 @@ type Query = Readonly<{
   pools: readonly string[];
   priceCoins: readonly string[];
   presale: string | null;
+  discovery?: boolean;
   resume: ReadonlyMap<string, string>;
 }>;
 type SetRefusal = "rate" | "per_ip" | "churn" | "busy";
@@ -198,10 +203,17 @@ export function liveSocketQuery(url: URL): Query {
     }
     resume.set(pool, cursor);
   }
-  return { request, pools, priceCoins, presale, resume };
+  return {
+    request,
+    pools,
+    priceCoins,
+    presale,
+    resume,
+    ...(marketStreamDiscovery(request) ? { discovery: true } : {}),
+  };
 }
 
-const KEYS = ["op", "seq", "pools", "price_coins", "presale"].sort().join();
+const SET_KEYS = ["op", "seq", "pools", "price_coins", "presale"].sort().join();
 const strings = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every((item) => typeof item === "string");
 
@@ -210,9 +222,13 @@ const strings = (value: unknown): value is string[] =>
  * cannot drift. `activity` stays as the socket opened. Throws on anything else.
  */
 export function liveSetMessage(frame: Record<string, unknown>): { seq: number } & MarketSet {
-  const { seq, pools, price_coins: coins, presale } = frame;
+  const { discovery, trade_cues: tradeCues, ...required } = frame;
+  const { seq, pools, price_coins: coins, presale } = required;
+  const keys = Object.keys(required).sort().join();
   if (
-    Object.keys(frame).sort().join() !== KEYS ||
+    keys !== SET_KEYS ||
+    ("discovery" in frame && typeof discovery !== "boolean") ||
+    ("trade_cues" in frame && typeof tradeCues !== "boolean") ||
     !Number.isSafeInteger(seq) ||
     !strings(pools) ||
     !strings(coins) ||
@@ -236,6 +252,8 @@ export function liveSetMessage(frame: Record<string, unknown>): { seq: number } 
     pools: marketStreamPools(request),
     priceCoins: marketStreamPriceCoins(request),
     presale: marketStreamPresale(request),
+    ...(discovery === true ? { discovery: true } : {}),
+    ...(tradeCues === true ? { tradeCues: true } : {}),
   };
 }
 
@@ -429,7 +447,36 @@ export function createLiveSocket(options: LiveSocketOptions) {
     data.pools = next.pools;
     data.priceCoins = next.priceCoins;
     data.presale = next.presale;
+    data.discovery = next.discovery;
+    data.tradeCues = next.tradeCues;
   };
+
+  /** Removes stale topics first so refused additions cannot leave the old page subscribed. */
+  function dropUnwanted(
+    data: LiveSocketData,
+    relay: MarketSubscription,
+    next: MarketSet,
+  ): MarketSet {
+    const kept: MarketSet = {
+      pools: data.pools.filter((pool) => next.pools.includes(pool)),
+      priceCoins: data.priceCoins.filter((coin) => next.priceCoins.includes(coin)),
+      presale: next.presale === data.presale ? data.presale : null,
+      ...(next.discovery && data.discovery ? { discovery: true } : {}),
+      ...(next.tradeCues && data.tradeCues ? { tradeCues: true } : {}),
+    };
+    if (
+      kept.pools.length !== data.pools.length ||
+      kept.priceCoins.length !== data.priceCoins.length ||
+      kept.presale !== data.presale ||
+      kept.discovery !== data.discovery ||
+      kept.tradeCues !== data.tradeCues
+    ) {
+      take(data, kept);
+      relay.set(kept);
+    }
+    return kept;
+  }
+
   const hold = (data: LiveSocketData, query: Query) => {
     data.admitted = true;
     address(data.rateKey).sockets++;
@@ -546,7 +593,13 @@ export function createLiveSocket(options: LiveSocketOptions) {
           seq,
           ok: !refusal,
           ...(refusal ? { reason: refusal, retry_ms: retryMs } : {}),
-          held: { pools: data.pools, price_coins: data.priceCoins, presale: data.presale },
+          held: {
+            pools: data.pools,
+            price_coins: data.priceCoins,
+            presale: data.presale,
+            ...(data.discovery ? { discovery: true } : {}),
+            ...(data.tradeCues ? { trade_cues: true } : {}),
+          },
         })}\n\n`,
       );
     };
@@ -564,37 +617,34 @@ export function createLiveSocket(options: LiveSocketOptions) {
     data.rateRefused = false;
     sets.push(now);
 
-    const kept: MarketSet = {
-      pools: data.pools.filter((pool) => next.pools.includes(pool)),
-      priceCoins: data.priceCoins.filter((coin) => next.priceCoins.includes(coin)),
-      presale: next.presale === data.presale ? data.presale : null,
-    };
-    if (
-      kept.pools.length !== data.pools.length ||
-      kept.priceCoins.length !== data.priceCoins.length ||
-      kept.presale !== data.presale
-    ) {
-      take(data, kept);
-      relay.set(kept);
-      if (data.closing) {
-        return;
-      }
+    const kept = dropUnwanted(data, relay, next);
+    if (data.closing) {
+      return;
     }
     const pools = next.pools.filter((pool) => !kept.pools.includes(pool));
     const coins = next.priceCoins.filter((coin) => !kept.priceCoins.includes(coin));
     if (crowded(data.rateKey, pools, coins)) {
       return answer("per_ip", SET_RETRY_MS.per_ip);
     }
+    const keptPoolTopics = new Set([
+      ...kept.pools,
+      ...trackedCuePools(kept.priceCoins, kept.tradeCues),
+    ]);
+    const nextPoolTopics = new Set([
+      ...next.pools,
+      ...trackedCuePools(next.priceCoins, next.tradeCues),
+    ]);
+    const poolJoins = [...nextPoolTopics].filter((pool) => !keptPoolTopics.has(pool));
     const added = addedPools(data.rateKey, now);
-    const over = added.length + pools.length - LIVE_SOCKET.perIp.addedPoolsPerMinute;
+    const over = added.length + poolJoins.length - LIVE_SOCKET.perIp.addedPoolsPerMinute;
     if (over > 0) {
       return answer("churn", added[over - 1]! + MINUTE_MS - now);
     }
-    if (!options.relay.fits(pools, coins)) {
+    if (!options.relay.fits(pools, next.tradeCues ? next.priceCoins : coins, next.tradeCues)) {
       return answer("busy", SET_RETRY_MS.busy);
     }
     take(data, next);
-    added.push(...pools.map(() => now));
+    added.push(...poolJoins.map(() => now));
     answer();
     relay.set(next);
   }

@@ -4,7 +4,7 @@ import { diagnosticMessage, publicErrorCopy } from "#web/lib/errors.ts";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import clsx from "clsx";
 import { IntentLink as Link } from "#web/components/blast-ui/NavigationLink.tsx";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 
 import { Button, ButtonLink, IconButton } from "#web/components/blast-ui/Button.tsx";
 import { DateStamp } from "#web/components/blast-ui/DateStamp.tsx";
@@ -17,6 +17,7 @@ import { NOT_OPEN_YET, opensAt } from "@blast/core/web/format.ts";
 import { presalePath } from "@blast/core/modules/social/items/do-the-same.ts";
 
 import { ChevIcon } from "../profile/icons";
+import { useCommitClock } from "../commit/commit-clock";
 import { PresaleMark } from "../profile/parts";
 import styles from "../profile/Profile.module.css";
 import { pricesByKey, salesPricesQuery } from "../prices/price-client";
@@ -48,16 +49,6 @@ export function NotifyBell({ presale }: Readonly<{ presale: Pick<WatchlistRow, "
       <BellIcon />
     </IconButton>
   );
-}
-
-/** The live clock for open rows' "left" (a second's tick, as the design's timers), from the server's time so markup matches. */
-function useClock(serverNowMs: number): number {
-  const [now, setNow] = useState(serverNowMs);
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
-    return () => window.clearInterval(timer);
-  }, []);
-  return now;
 }
 
 /**
@@ -121,6 +112,15 @@ export function WatchlistCardView({
   );
 }
 
+/**
+ * A row's line. An open one's "left" ticks every second (as the design's timers), so the clock lives here and redraws
+ * only this text. The server's time first, so the markup matches.
+ */
+function WatchlistTime({ presale, serverNowMs }: Readonly<{ presale: WatchlistRow; serverNowMs: number }>) {
+  const nowMs = useCommitClock(presale.phase === "open") || serverNowMs;
+  return <span>{watchlistLine(presale, nowMs)}</span>;
+}
+
 function WatchlistOpening({ start }: Readonly<{ start: number }>) {
   const open = opensAt(start);
   return <span>{open === null ? NOT_OPEN_YET : <>Opens <DateStamp at={open} plain /></>}</span>;
@@ -162,7 +162,7 @@ function WatchlistItem({ presale, nowMs, changeBps }: Readonly<{ presale: Watchl
       <PresaleMark presale={presale} />
       <span className={styles.t}>
         {presale.verifiedTeam ? <span className={styles.named}><b>{presale.name}</b><CoinVerifiedMark /></span> : <b>{presale.name}</b>}
-        <span>{watchlistLine(presale, nowMs)}</span>
+        <WatchlistTime presale={presale} serverNowMs={nowMs} />
       </span>
       <ChevIcon className={styles.chev} />
     </Link>
@@ -179,13 +179,12 @@ function WatchlistItem({ presale, nowMs, changeBps }: Readonly<{ presale: Watchl
  * the watchlist store (live as stars and presale follows change); without
  * one the server’s given `rows` show.
  */
-export function WatchlistCard({ rows: given, nowMs: serverNowMs }: Readonly<{
+export function WatchlistCard({ rows: given, nowMs }: Readonly<{
   rows?: readonly WatchlistRow[] | null;
   /** The server's time for the first render. */
   nowMs: number;
 }>) {
   const { rows, signedIn, retry } = useWatchlistRows();
-  const nowMs = useClock(serverNowMs);
   const items = !signedIn && given ? given : rows?.items.map((item) => rowOfSummary(item.presale)) ?? [];
   const changes = useWatchedChanges(items);
   if (!signedIn && given) {

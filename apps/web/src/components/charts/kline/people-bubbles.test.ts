@@ -38,8 +38,8 @@ test("the viewer's own wallets are marked whatever the address case", () => {
 // Bars 10 px apart on a 1,000 px plot; y grows down, so a bar's pixel y is (40 - price) × 10.
 const px = (price: number) => (40 - price) * 10;
 const place = (person: Person) => ({ x: (person.bar - T0) / MINUTE * 10, top: px(person.high), bottom: px(person.low) });
-const person = (address: string, minute: number, extra: Partial<Person> = {}): Person =>
-  ({ address, bar: T0 + minute * MINUTE, side: "buy", high: 20, low: 10, close: 15, bought: 1, sold: null, buys: 1, sells: 0, labels: [], own: false, lastMs: T0 + minute * MINUTE, trades: [], ...extra });
+const person = (address: string, minute: number, extra: Partial<Extract<Person, { address: string }>> = {}): Person =>
+  ({ address, bar: T0 + minute * MINUTE, side: "buy", high: 20, low: 10, bought: 1, sold: null, buys: 1, sells: 0, labels: [], own: false, lastMs: T0 + minute * MINUTE, trades: [], ...extra });
 const SIZE = 24;
 /** Empty px between a bubble (ring included) and the price at y `price` under it, or over it for `under`. */
 const gapOver = (y: number, price: number) => price - (y + SIZE / 2 + RING);
@@ -53,26 +53,12 @@ test("zoomed in, every person floats one bubble height over their own bar's high
   assert.ok(bubbles.every((bubble) => gapOver(bubble.y, px(20)) >= SIZE && gapOver(bubble.y, px(20)) < SIZE + 1), bubbles.map((bubble) => bubble.y).join());
 });
 
-test("a bubble keeps its gap over a taller neighbouring bar under it, so the line stays readable", () => {
+test("a bubble keeps its gap over a taller neighbouring bar under it, so the price stays readable", () => {
   // The next bar, 10 px to the right, reaches price 30 (y 100): the bubble rises over it too.
   const [bubble] = layoutBubbles([person(A, 0)], place, 1_000, 400, SIZE, { spans: [{ x: 10, top: px(30), bottom: px(25) }, { x: 200, top: 0, bottom: 10 }] });
   assert.ok(gapOver(bubble!.y, px(30)) >= SIZE, String(bubble!.y));
   // A bar far away changes nothing.
   assert.equal(layoutBubbles([person(A, 0)], place, 1_000, 400, SIZE, { spans: [{ x: 200, top: 0, bottom: 10 }] })[0]!.y, layoutBubbles([person(A, 0)], place, 1_000, 400, SIZE)[0]!.y);
-});
-
-test("on a line, the bubble keeps its gap over the line itself, also where it climbs to a bar just out of reach", () => {
-  // Line view: each point is the bar's close. The bubble sits on bar 0 (close y 250); the line climbs to
-  // y 50 at x 30, beyond the bubble's reach, but crosses its right edge (x 14) near y 157.
-  const line = (y: number) => ({ top: y, bottom: y });
-  const spans = [{ x: -10, ...line(250) }, { x: 0, ...line(250) }, { x: 30, ...line(50) }];
-  const onLine = (one: Person) => ({ x: (one.bar - T0) / MINUTE * 10, ...line(250) });
-  const [bubble] = layoutBubbles([person(A, 0)], onLine, 1_000, 400, SIZE, { spans, line: true });
-  const edge = SIZE / 2 + RING;
-  const crossing = 250 + (50 - 250) * edge / 30;
-  assert.ok(gapOver(bubble!.y, crossing) >= SIZE, String(bubble!.y));
-  // Read as candles, the same points are out of reach and the bubble stays down at its own bar.
-  assert.ok(layoutBubbles([person(A, 0)], onLine, 1_000, 400, SIZE, { spans })[0]!.y > crossing);
 });
 
 test("a bar at the top of the plot puts its stack the same gap under the low instead", () => {

@@ -21,6 +21,7 @@ export const IDENTITY_HANDLERS = {
   "social.wallet.challenge": (request, { client }) =>
     socialWalletRoutes().challenge.POST(request, client),
   "social.wallet.link": (request, { client }) => socialWalletRoutes().link.POST(request, client),
+  "social.wallet.unlink": (request, { client }) => socialWalletRoutes().unlink.DELETE(request, client),
   "social.sign-in.challenge": (request, { client }) =>
     socialWalletSignInRoutes().challenge.POST(request, client),
   "social.sign-in.session": (request, { client }) =>

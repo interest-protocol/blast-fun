@@ -14,7 +14,8 @@ export async function readCardIdentities(db: ReadableDatabase, callsigns: readon
       WHERE profile_id = p.profile_id LIMIT 1
     ) c ON true
     JOIN mission_control_season_memberships m ON m.membership_id = c.membership_id
-    WHERE p.callsign = ANY($1::text[])`, [callsigns]);
+    WHERE p.callsign = ANY($1::text[])
+      AND NOT EXISTS (SELECT 1 FROM social_accounts a WHERE a.profile_id = p.profile_id AND a.deleted_at IS NOT NULL)`, [callsigns]);
   const answer: Record<string, CardIdentity | null> = Object.fromEntries(callsigns.map((callsign) => [callsign, null]));
   for (const row of rows) {
     // The renderer uses this immutable allocation too; avoid decompressing avatar JSON for each ring.

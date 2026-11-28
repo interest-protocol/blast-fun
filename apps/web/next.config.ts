@@ -12,6 +12,12 @@ const nextConfig: NextConfig = {
       { source: "/meme/:key", destination: "/coin/:key", permanent: true },
     ];
   },
+  async rewrites() {
+    return {
+      // Serve the image before Next considers the API catch-all.
+      beforeFiles: [{ source: "/api/og", destination: "/social-card.png" }],
+    };
+  },
   outputFileTracingRoot: fileURLToPath(new URL("../..", import.meta.url)),
   outputFileTracingIncludes: {
     "/coin/*/share-image": [

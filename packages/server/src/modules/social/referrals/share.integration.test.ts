@@ -18,8 +18,9 @@ test("runtime lookup supports social accounts, Mission Control members, and only
   try {
     await migrateDatabase(admin);
     const db = autocommitReader(runtime, "social");
+    const newFriendId = randomUUID();
     await admin.query(`INSERT INTO social_accounts (account_id, privy_did, callsign)
-      VALUES ($1, 'did:privy:referral-new', 'new_friend')`, [randomUUID()]);
+      VALUES ($1, 'did:privy:referral-new', 'new_friend')`, [newFriendId]);
     assert.deepEqual(await readReferralInviter(db, "new_friend"), { callsign: "new_friend", crew: null, title: null, avatarUrl: null });
     assert.equal(await readReferralInviter(db, "missing"), null);
     assert.equal(await readReferralInviter(db, "' OR true --"), null);
@@ -58,6 +59,14 @@ test("runtime lookup supports social accounts, Mission Control members, and only
     assert.equal((await readReferralInviter(db, "satoshimedici"))?.avatarUrl, "https://images.example/upload.png");
     await admin.query("UPDATE social_accounts SET picture = 'none', picture_url = NULL WHERE profile_id = $1", [profileId]);
     assert.equal((await readReferralInviter(db, "satoshimedici"))?.avatarUrl, null);
+
+    await admin.query(`INSERT INTO social_referral_reservations (code, x_subject, x_handle, display_name, owner_account_id, claimed_at)
+      VALUES ('reserved_friend', '111222333', 'new_friend', 'New Friend', $1, now())`, [newFriendId]);
+    assert.equal((await readReferralInviter(db, "reserved_friend"))?.callsign, "reserved_friend");
+    await admin.query("UPDATE social_accounts SET deleted_at = now(), privacy = 'private' WHERE profile_id = $1 OR account_id = $2",
+      [profileId, newFriendId]);
+    assert.equal(await readReferralInviter(db, "satoshimedici"), null);
+    assert.equal(await readReferralInviter(db, "reserved_friend"), null);
   } finally {
     await runtime.end();
     await admin.end();

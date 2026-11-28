@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createServer, type Socket } from "node:net";
+import net, { createServer, type Socket } from "node:net";
 import { once } from "node:events";
+import { Duplex } from "node:stream";
+import { setTimeout as delay } from "node:timers/promises";
 
 import { configuredRedis, createRedisConnection, RedisNotReady, redisNamespace, verifyQuotaStorage } from "./redis.ts";
 import { OperationalRateLimited, RedisRateLimitEnforcer } from "./web-security/redis-rate-limits.ts";
@@ -167,6 +169,50 @@ test("hanging quota warming records a fixed failure, settles at its deadline and
   await retry;
 });
 
+
+test("quota commands recover when a socket connects after its deadline", { timeout: 8_000 }, async (t) => {
+  const sockets: Duplex[] = [];
+  const memoryInfo = "maxmemory_policy:noeviction\r\n";
+  const replies = new Map([
+    ["INFO", `$${Buffer.byteLength(memoryInfo)}\r\n${memoryInfo}\r\n`],
+    ["PING", "+PONG\r\n"],
+  ]);
+  t.mock.method(net, "createConnection", () => {
+    const socket = new Duplex({
+      read() {},
+      writev(chunks, callback) {
+        // node-redis writes a complete batch of RESP commands while corked.
+        const batch = Buffer.concat(chunks.map(({ chunk }) => chunk)).toString();
+        for (const command of batch.split(/\*(?=\d+\r\n)/).slice(1)) {
+          const [, , name] = command.split("\r\n");
+          const reply = replies.get(name) ?? "+OK\r\n";
+          setImmediate(() => socket.push(reply));
+        }
+        callback();
+      },
+    });
+    // Let Blast's own deadline fire while the transport is still connecting.
+    const transport = Object.assign(socket, { setTimeout: () => socket });
+    sockets.push(socket);
+    if (sockets.length > 1) queueMicrotask(() => socket.emit("connect"));
+    return transport;
+  });
+
+  const quota = createRedisConnection("redis://127.0.0.1:1", "quota");
+  t.after(() => {
+    quota.close();
+    for (const socket of sockets) socket.destroy();
+  });
+
+  await assert.rejects(quota.execute(["PING"]), /Redis operation unavailable/);
+  const [timedOutSocket] = sockets;
+  assert.ok(timedOutSocket);
+  timedOutSocket.emit("connect");
+  await delay(1_100);
+
+  assert.equal(await quota.execute(["PING"]), "PONG");
+  assert.equal(sockets.length, 2);
+});
 
 test("private replay has a distinct durable connection using the existing quota URL", (t) => {
   const purposes = ["quota", "private-replay"] as const;

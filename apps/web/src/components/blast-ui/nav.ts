@@ -90,6 +90,7 @@ export function canonicalHomePath(pathname: string): string {
 
 export type ShellActionName =
   | "openSignIn"
+  | "openAccountSignIn"
   | "openSearch"
   | "openNotifications"
   | "openFund"

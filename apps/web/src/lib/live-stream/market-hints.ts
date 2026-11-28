@@ -6,18 +6,33 @@ type HintSocket = {
   onmessage: ((event: { data: unknown }) => void) | null;
   onclose: (() => void) | null;
 };
-/** The market stream's handshake: while it has no hello, hint clients wait for it (it reconnects with its own backoff). */
-type Carrier = { hello: string | null; pong: string | null };
+/**
+ * The market stream's handshake: while it has no hello, hint clients wait for it (it reconnects with its own backoff).
+ * `onDemandLost`: told when the tab stops requesting hints, so a stream kept open only for hints can close.
+ */
+type Carrier = { hello: string | null; pong: string | null; onDemandLost?: () => void };
 type Notice = Readonly<{ type: "changed" | "disconnected" }> | Readonly<{ type: "frame"; data: string }>;
 let carrier: Carrier | null = null;
+let hintDemand = false;
 const listeners = new Set<(notice: Notice) => void>();
 const announce = (notice: Notice) => {
   for (const listener of [...listeners]) listener(notice);
 };
 
+/** The tab's hint client still needs a carrier while hidden or waiting to retry. */
+export function hasHintDemand(): boolean {
+  return hintDemand;
+}
+
+export function setHintDemand(needed: boolean): void {
+  if (hintDemand === needed) return;
+  hintDemand = needed;
+  if (!needed) carrier?.onDemandLost?.();
+}
+
 /** The chart carries activity hints too. No activity history or cursor is cached here. */
-export function beginMarketHints() {
-  const owner: Carrier = { hello: null, pong: null };
+export function beginMarketHints(onDemandLost?: () => void) {
+  const owner: Carrier = { hello: null, pong: null, onDemandLost };
   carrier = owner;
   announce({ type: "changed" });
   return {

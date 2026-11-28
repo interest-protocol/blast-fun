@@ -1,10 +1,10 @@
 "use client";
 
 import clsx from "clsx";
+import type { ReactNode } from "react";
 
 import styles from "./AppShell.module.css";
 import { BlastMenu, BlastMenuItem, type MenuHandle } from "./BlastMenu";
-import { Button } from "./Button";
 import { ChevronIcon, VerifiedBadge } from "./Icons";
 import { accountMenuPlacement } from "./menu-placement.ts";
 import { themeLabel, type ThemeSetting } from "./prefs";
@@ -25,20 +25,20 @@ export const ACCOUNT_MENU_ID = "blast-account-menu";
  */
 export function AccountMenu({
   handle,
+  children,
   viewer,
   theme,
   onProfile,
-  onPortfolio,
   onSettings,
   onInvites,
   onCycleTheme,
   onLogOut,
 }: Readonly<{
   handle: MenuHandle<undefined>;
+  children?: ReactNode;
   viewer: ShellViewer | null;
   theme: ThemeSetting;
   onProfile: () => void;
-  onPortfolio: () => void;
   onSettings: () => void;
   onInvites: () => void;
   onCycleTheme: (origin: HTMLElement) => void;
@@ -48,7 +48,7 @@ export function AccountMenu({
   const handleText = viewer.callsign ? `@${viewer.callsign}` : null;
   return (
     <BlastMenu
-      className={styles.menu}
+      className={clsx(styles.menu, styles.accountMenu)}
       handle={handle}
       id={ACCOUNT_MENU_ID}
       label="Account"
@@ -67,9 +67,7 @@ export function AccountMenu({
         </span>
         <ChevronIcon />
       </BlastMenuItem>
-      <BlastMenuItem nativeButton className={styles.mitem} onClick={onPortfolio} render={<Button variant="ghost" />}>
-        <span className={styles.mtext}><b>Portfolio</b></span>
-      </BlastMenuItem>
+      {children}
       <BlastMenuItem nativeButton className={styles.mitem} onClick={onInvites} render={<button type="button" />}>
         <span className={styles.mtext}><b>Invites</b></span>
       </BlastMenuItem>
