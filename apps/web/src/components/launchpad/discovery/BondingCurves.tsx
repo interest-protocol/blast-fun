@@ -52,20 +52,8 @@ export function BondingCurves({ view: saved, onViewChange, now, onOpen }: Readon
   const [paging, setPaging] = useState<Readonly<{ view: Stage; cursors: readonly (string | null)[]; page: number }>>({ view: saved === "near_graduation" ? saved : "new", cursors: [null], page: 1 });
   const live = useLiveDiscovery(paging.page === 1);
   const [fallbackInterval] = useState(() => 25_000 + Math.round(Math.random() * 10_000));
-  // Almost graduated's first page, from the stream or the last read of it; reading it is the stage's own query below.
-  // While it is hidden and the stream is down, it is read at the fallback pace, so it comes back with its first curve.
-  const almostRead = useQuery(
-    {
-      ...railQuery("near_graduation", null),
-      enabled: (query) => !live.live && isEmpty(query.state.data),
-      staleTime: fallbackInterval,
-      refetchInterval: fallbackInterval,
-    },
-    client,
-  );
-  const almostEmpty = isEmpty(liveDiscoveryPage(live.pages.near_graduation, almostRead.data));
-  // A setup saved while Graduated was a stage opens on New.
-  const view: Stage = saved === "graduated" || (saved === "near_graduation" && almostEmpty) ? "new" : saved;
+  const almostEmpty = useAlmostEmpty(live, fallbackInterval);
+  const view = shownStage(saved, almostEmpty);
   const current = paging.view === view ? paging : { view, cursors: [null], page: 1 };
   const cursor = current.cursors[current.page - 1] ?? null;
   const read = useQuery(
@@ -101,11 +89,7 @@ export function BondingCurves({ view: saved, onViewChange, now, onOpen }: Readon
     <>
       <div className={styles.controls}>
         {/* Pills like the Coins tab's Trending / New / Saved: a light second row under Discover's tabs, not a second track. */}
-        <div className={styles.stages} role="group" aria-label="Curve stage">
-          {VIEWS.filter(([key]) => key !== "near_graduation" || !almostEmpty).map(([key, label]) => (
-            <Button key={key} variant="segment" size="xs" type="button" aria-pressed={view === key} onClick={() => choose(key)}>{label}</Button>
-          ))}
-        </div>
+        <StagePills view={view} almostEmpty={almostEmpty} onChoose={choose} />
       </div>
       <BondingResult
         view={view}
@@ -124,6 +108,41 @@ export function BondingCurves({ view: saved, onViewChange, now, onOpen }: Readon
         </div>
       )}
     </>
+  );
+}
+
+/**
+ * Whether Almost graduated has no curve, from the stream or the last read of its first page; that read is
+ * the stage's own query. While it is hidden and the stream is down, it is read at the fallback pace, so it
+ * comes back with its first curve.
+ */
+function useAlmostEmpty(live: ReturnType<typeof useLiveDiscovery>, fallbackInterval: number): boolean {
+  const client = useAppQueryClient();
+  const almostRead = useQuery(
+    {
+      ...railQuery("near_graduation", null),
+      enabled: (query) => !live.live && isEmpty(query.state.data),
+      staleTime: fallbackInterval,
+      refetchInterval: fallbackInterval,
+    },
+    client,
+  );
+  return isEmpty(liveDiscoveryPage(live.pages.near_graduation, almostRead.data));
+}
+
+/** The stage the rail shows: a setup saved while Graduated was a stage, or an empty Almost graduated, opens on New. */
+function shownStage(saved: DiscoveryViewName, almostEmpty: boolean): Stage {
+  return saved === "graduated" || (saved === "near_graduation" && almostEmpty) ? "new" : saved;
+}
+
+/** The stage pills; an empty Almost graduated leaves them. */
+function StagePills({ view, almostEmpty, onChoose }: Readonly<{ view: Stage; almostEmpty: boolean; onChoose: (next: Stage) => void }>) {
+  return (
+    <div className={styles.stages} role="group" aria-label="Curve stage">
+      {VIEWS.filter(([key]) => key !== "near_graduation" || !almostEmpty).map(([key, label]) => (
+        <Button key={key} variant="segment" size="xs" type="button" aria-pressed={view === key} onClick={() => onChoose(key)}>{label}</Button>
+      ))}
+    </div>
   );
 }
 
