@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { mock } from "node:test";
 import { createWorkspaceStore } from "./model";
 
 const { installTestDom } = await import("../../../../../test/fixtures/social/test-dom.ts");
@@ -8,6 +8,7 @@ const { createTestQueryClient } = await import("#web/lib/query/test-client.ts");
 const { document, window } = installTestDom();
 window.scrollTo = () => {};
 const { act } = await import("react");
+const { environmentManager } = await import("@tanstack/react-query");
 const { createRoot } = await import("react-dom/client");
 const { WorkspaceHost } = await import("./WorkspaceHost");
 const { BondingData } = await import("./BondingData");
@@ -178,6 +179,28 @@ test("Bonding: with no curve at 60%, Almost graduated leaves the switch and the 
     assert.doesNotMatch(view.panel().textContent!, /almost graduated/i);
     assert.equal(view.store.getSnapshot().data.controls.Bonding?.view, "near_graduation", "the saved stage comes back with its first curve");
   } finally { await view.dispose(); }
+});
+
+test("Bonding: with the stream down, a hidden Almost graduated comes back with its first curve", async () => {
+  // Query loaded before the test DOM, so it took this for a server and would schedule no refetch timer.
+  const wasServer = environmentManager.isServer();
+  environmentManager.setIsServer(() => false);
+  mock.timers.enable({ apis: ["setInterval"] });
+  let near: readonly unknown[] = [];
+  const view = await mounted((url) => almost(url) ? (near.length ? page(answerView(url), near) : { view: answerView(url), section: { state: "empty", provenance } }) : page(answerView(url), [row("a1", { progressBps: 2800 })]));
+  try {
+    await view.click("Almost graduated");
+    assert.equal(view.panel().querySelector('[aria-label="Curve stage"]')!.textContent, "New");
+    near = [row("b2", { progressBps: 6100 })];
+    await act(async () => mock.timers.tick(36_000));
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 40)); });
+    assert.equal(view.panel().querySelector('[aria-label="Curve stage"]')!.textContent, "NewAlmost graduated", "back at the fallback pace");
+    assert.equal(view.panel().querySelector('[aria-pressed="true"]')?.textContent, "Almost graduated", "the saved stage shows again");
+  } finally {
+    await view.dispose();
+    mock.timers.reset();
+    environmentManager.setIsServer(() => wasServer);
+  }
 });
 
 test("Bonding opens a setup saved on the retired Graduated stage on New", async () => {

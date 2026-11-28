@@ -33,6 +33,7 @@ import type { HomeCoinMarket, HomeHoldersPage } from "@blast/core/modules/social
 import { CREATE_TEST_SUI_QUOTE_TYPE } from "@blast/core/modules/social/contracts/create.ts";
 import { INDEXED_POOL_COINS } from "@blast/core/modules/social/portfolio/core-coins.ts";
 import { readCoinFacts, type HomeDiscoverBase } from "@blast/server/modules/social/home/coins.ts";
+import { HOME_CLOSEST_CURVES } from "@blast/server/modules/social/home/sources.ts";
 import { createSocialHomeRoutes, type SocialHomeRouteDependencies } from "@blast/server/modules/social/home/route.ts";
 import { optionalSource } from "@blast/server/modules/social/optional-source.ts";
 import type { TraderPortfolioRead } from "@blast/server/modules/social/home/traders.ts";
@@ -1423,6 +1424,14 @@ test("Standalone Cetus and Bluefin coins use Discover, without a presale or dupl
     // NATIVE's Cetus pool opened two days ago: when it graduated.
     await admin.query(`INSERT INTO pools (pool_key,venue,coin_type,quote_type,lifecycle,created_checkpoint,created_at_ms)
       VALUES ($1,'cetus',$2,$3,'live',40000,$4)`, [`cetus:${hex("ca1")}`, native, QUOTE, now - 2 * DAY]);
+    // More traded curves than the list holds, each with a dust or unknown target: the rank would drop them, so none takes a slot.
+    const junk = await Promise.all(Array.from({ length: HOME_CLOSEST_CURVES + 1 }, (_, i) => {
+      const id = `b${i.toString(16).padStart(3, "0")}`;
+      return i % 2 === 0 ? curveCoin(id, `DUST${i}`, "900000000", "999000000") : curveCoin(id, `NONE${i}`, "1", null);
+    }));
+    await seedChainRead(admin, {
+      activity: junk.map((coin_type, i) => activity("trade_buy", W.anon, null, now - 4 * MINUTE, { checkpoint: 49_000 + i, coin_type, coin_amount: "1000000000", quote_amount: "5000000", usd_value: "5" })),
+    });
     const almost = await ok<HomeCoinsPage>(await discover("?stage=almost&sort=progress&curve=1&limit=50"), "home-coins-page");
     // Curves traded in the last 24 hours lead by progress, then the rest: a dormant curve never tops a live one.
     assert.deepEqual(almost.coins.map((coin) => coin.symbol), ["SEVENTY", "LOW", "READY", "DORMANT"], "no presale token, dust target or unknown target");

@@ -3,6 +3,7 @@ import { SUI_COIN_TYPE } from "@blast/core/lib/sui/coin-types.ts";
 import { INDEXED_POOL_COINS } from "@blast/core/modules/social/portfolio/core-coins.ts";
 import { SHOWN_PRESALES } from "@blast/core/modules/social/read-model/chain-presales.ts";
 import { HOME_PAGE_MAX } from "@blast/core/modules/social/contracts/home.ts";
+import { HOME_DUST_USD } from "@blast/server/modules/social/home/rank.ts";
 
 const TRACKED_POOL_VALUES = INDEXED_POOL_COINS.map((coin) => {
   const separator = coin.poolKey.indexOf(":");
@@ -93,9 +94,13 @@ export const HOME_CLOSEST_CURVES = 2 * HOME_PAGE_MAX;
  * view's reserve over target, and only the first `HOME_CLOSEST_CURVES`
  * reach the per-coin reads, which see a bounded set however many curves
  * exist; `curveOf` then computes each percent through the SDK, and the
- * rank orders them the same way (`recentlyTraded`). Test-SUI curves are
- * left out before the limit. Same columns as `homeCoinSources`, plus
- * `recently_traded`.
+ * rank orders them the same way (`recentlyTraded`). Before the limit,
+ * the curves the rank would drop anyway are left out, so none takes a slot:
+ * test-SUI curves, curves with no target (no percent), and curves whose
+ * target is dust at the quote's price (`isBlastDust`; a quote with no price
+ * stays, unknown is not small). The dust test on market cap still runs
+ * after the facts read, so the list can end a few short of the limit. Same
+ * columns as `homeCoinSources`, plus `recently_traded`.
  */
 export const homeClosestCurveSources = (tradedIn: string, testQuote: string) => `(SELECT c.source_id,c.presale_id,c.sale_token,c.sale_symbol,c.sale_name,c.sale_icon_url,
   c.sale_decimals,c.lifecycle,c.venue,c.pool_id,c.quote_type,c.quote_symbol,c.quote_decimals,
@@ -105,7 +110,10 @@ export const homeClosestCurveSources = (tradedIn: string, testQuote: string) => 
     NULL::bigint AS start_ms,NULL::bigint AS end_ms,NULL::numeric AS raise_target,NULL::numeric AS total_commitments,NULL::bigint AS participants,
     c.tracked_pool_only,c.recently_traded,c.filled
     FROM (${liveCurves(`
-      AND lp.quote_type IS DISTINCT FROM ${testQuote}`, `,
+      AND lp.quote_type IS DISTINCT FROM ${testQuote}
+      AND (lp.lifecycle='migration_ready' OR lp.graduation_target > 0)
+      AND NOT EXISTS (SELECT 1 FROM chain_read_v1.prices qp WHERE qp.coin_type=lp.quote_type
+        AND lp.graduation_target / 10::numeric ^ q.decimals * qp.usd_price < ${HOME_DUST_USD})`, `,
       ${tradedIn} AS recently_traded,
       CASE WHEN lp.lifecycle='migration_ready' THEN 1 ELSE lp.quote_reserve / nullif(lp.graduation_target, 0) END AS filled`)}) c
     WHERE NOT EXISTS (SELECT 1 FROM chain_read_v1.presales p WHERE p.sale_token=c.sale_token)

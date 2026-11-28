@@ -51,14 +51,23 @@ export function BondingCurves({ view: saved, onViewChange, now, onOpen }: Readon
   // Each stage pages on its own; a stage's pages restart when it is chosen again.
   const [paging, setPaging] = useState<Readonly<{ view: Stage; cursors: readonly (string | null)[]; page: number }>>({ view: saved === "near_graduation" ? saved : "new", cursors: [null], page: 1 });
   const live = useLiveDiscovery(paging.page === 1);
+  const [fallbackInterval] = useState(() => 25_000 + Math.round(Math.random() * 10_000));
   // Almost graduated's first page, from the stream or the last read of it; reading it is the stage's own query below.
-  const almostRead = useQuery({ ...railQuery("near_graduation", null), enabled: false }, client);
+  // While it is hidden and the stream is down, it is read at the fallback pace, so it comes back with its first curve.
+  const almostRead = useQuery(
+    {
+      ...railQuery("near_graduation", null),
+      enabled: (query) => !live.live && isEmpty(query.state.data),
+      staleTime: fallbackInterval,
+      refetchInterval: fallbackInterval,
+    },
+    client,
+  );
   const almostEmpty = isEmpty(liveDiscoveryPage(live.pages.near_graduation, almostRead.data));
   // A setup saved while Graduated was a stage opens on New.
   const view: Stage = saved === "graduated" || (saved === "near_graduation" && almostEmpty) ? "new" : saved;
   const current = paging.view === view ? paging : { view, cursors: [null], page: 1 };
   const cursor = current.cursors[current.page - 1] ?? null;
-  const [fallbackInterval] = useState(() => 25_000 + Math.round(Math.random() * 10_000));
   const read = useQuery(
     {
       ...railQuery(view, cursor),

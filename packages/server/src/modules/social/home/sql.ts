@@ -208,7 +208,7 @@ export function rowsWithSql(request: RowsRequest, params: Params): string {
     ? `home_named AS MATERIALIZED (${namedWalletsOfSql("ARRAY(SELECT DISTINCT r.actor FROM home_rows r)")}),`
     : "";
   const source = scopedHomeCoinsSql(sales, params);
-  // A few curves, all without a sale: their own rows through the coin index, not the whole window.
+  // At most `HOME_CLOSEST_CURVES` curves, all without a sale: their own rows through the coin index, not the whole window.
   const fewCoins = sales.kind === "discover" && sales.almost ? "AND a.coin_type IN (SELECT hs.coin_type FROM home_sales hs)" : "";
   const tradeFloor = minTradeUsd === undefined ? "" : minTradeSql(minTradeUsd, params);
   const tinyFloor = keepTiny ? "" : `AND NOT ${tinyTradeSql("a")}`;
