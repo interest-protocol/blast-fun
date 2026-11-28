@@ -34,6 +34,8 @@
 .controls:empty { display: none; }
 .arrows { display: flex; align-items: center; gap: 0.25rem; }
 .arrows[hidden] { display: none; }
+/* Touch screens swipe the track (a touch stops auto-play); the arrow keys still move it. */
+@media (hover: none) and (pointer: coarse) { .arrows { display: none; } }
 .arrows button svg { width: 1rem; height: 1rem; }
 .previous svg { transform: rotate(-90deg); }
 .next svg { transform: rotate(90deg); }

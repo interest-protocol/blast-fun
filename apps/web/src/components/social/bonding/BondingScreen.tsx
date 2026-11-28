@@ -152,6 +152,8 @@ export function BondingScreen({ hero }: Readonly<{ hero?: BondingHeroSeed | null
     changeView({ search: "", tab: "bonding" });
   }
   const feature = tab === "bonding" && !search.trim() ? <FeaturedCurves key="featured" heroes={heroes} answer={featured.data} details={hero?.details} /> : null;
+  // A coin in the carousel above is not listed again below it.
+  const shownAbove = feature && heroes.length > 0 ? new Set(heroes.map((row) => row.launchId)) : undefined;
   const controls = <BondingControls
     key="catalog-controls"
     tab={tab}
@@ -171,6 +173,7 @@ export function BondingScreen({ hero }: Readonly<{ hero?: BondingHeroSeed | null
       <div aria-busy={settled !== normalized || undefined}>
         <BondingViewResults
           address={address}
+          featured={shownAbove}
           search={settled}
           searchValid={normalized !== null}
           onViewBonding={heroes.length > 0 ? viewBonding : undefined}
@@ -183,8 +186,9 @@ export function BondingScreen({ hero }: Readonly<{ hero?: BondingHeroSeed | null
   );
 }
 
-function BondingViewResults({ address, search, searchValid, onViewBonding, pagination, sort, tab }: Readonly<{
+function BondingViewResults({ address, featured, search, searchValid, onViewBonding, pagination, sort, tab }: Readonly<{
   address: string;
+  featured?: ReadonlySet<string>;
   search: string;
   searchValid: boolean;
   onViewBonding?: () => void;
@@ -196,6 +200,7 @@ function BondingViewResults({ address, search, searchValid, onViewBonding, pagin
   if (tab === "mine") return <MyLaunches address={address} pagination={pagination} search={search} />;
   const activeSort = tab === "bonding" ? sort : "newest";
   return <CatalogResults
+    featured={tab === "bonding" ? featured : undefined}
     pagination={pagination}
     search={search}
     onViewBonding={tab === "graduated" ? onViewBonding : undefined}
@@ -369,6 +374,7 @@ function MyLaunches({
 
 function CatalogResults({
   address,
+  featured,
   ownerScope,
   onViewBonding,
   pagination: { position, setPosition },
@@ -377,6 +383,8 @@ function CatalogResults({
   tab,
 }: Readonly<{
   address?: string;
+  /** Launch ids already shown in the carousel above, left out of this list. */
+  featured?: ReadonlySet<string>;
   ownerScope?: string;
   onViewBonding?: () => void;
   pagination: CatalogPagination;
@@ -419,6 +427,7 @@ function CatalogResults({
       <BondingResults
         answer={read.data}
         error={read.isError}
+        featured={featured}
         nowMs={read.dataUpdatedAt}
         onRetry={() => void read.refetch()}
         onViewBonding={onViewBonding}
@@ -442,6 +451,7 @@ function CatalogResults({
 function BondingResults({
   answer,
   error,
+  featured,
   nowMs,
   onRetry,
   onViewBonding,
@@ -451,6 +461,7 @@ function BondingResults({
 }: Readonly<{
   answer: DiscoveryResponse | undefined;
   error: boolean;
+  featured?: ReadonlySet<string>;
   nowMs: number;
   onRetry: () => void;
   onViewBonding?: () => void;
@@ -480,6 +491,9 @@ function BondingResults({
   if (!answer) return <CardsSkeleton />;
   const page = pageOf(answer);
   if (!page || page.rows.length === 0) return <EmptyBondingResults onViewBonding={onViewBonding} search={search} tab={tab} />;
+  const rows = featured ? page.rows.filter((row) => !featured.has(row.launchId)) : page.rows;
+  // Every curve on this page is in the carousel above: nothing to list twice.
+  if (rows.length === 0) return null;
   const label = TABS.find(([key]) => key === tab)?.[1] ?? "Live";
   return (
     <>
@@ -495,7 +509,7 @@ function BondingResults({
         }
         className={styles.grid}
       >
-        {page.rows.map((row) => (
+        {rows.map((row) => (
           <BondingCard
             key={row.launchId}
             metrics={answer.metrics?.[row.launchId]}
