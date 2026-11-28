@@ -246,9 +246,14 @@ test("T-019-AC-1 (AC-110): A and B each get only their own wallets' data; no par
     // Nova authored nothing anyone acted through.
     assert.deepEqual(nova.totals, { people: 0, volume_usd: "0.00" });
 
-    // Query parameters naming another account, callsign or wallet change nothing.
+    const selected = await ok(await get({ authorization: KAI }, `?wallet=${KAI_SECOND_WALLET}`));
+    assert.equal(selected.balances?.sui.atoms, "2000000000");
+    assert.equal(selected.positions?.find(p => p.presale_id === P.open)?.commitment, "30000000");
+    await refused(await get({ authorization: NOVA }, `?wallet=${W.kai}`), 404, "not_found");
+
+    // An account id, callsign or unrecognized wallet parameter cannot change the owner.
     for (const query of [
-      "?callsign=kai", `?account_id=${FEED_STORY_ACCOUNTS.kai}`, `?wallet=${W.kai}`, `?address=${W.anon}&owner=kai`, "?account=kai",
+      "?callsign=kai", `?account_id=${FEED_STORY_ACCOUNTS.kai}`, `?address=${W.anon}&owner=kai`, "?account=kai",
     ]) {
       assert.deepEqual(await ok(await get({ authorization: NOVA }, query)), nova, query);
     }

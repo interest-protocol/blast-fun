@@ -6,6 +6,7 @@ import { PARTIAL_BALANCE_NOTE } from "#web/components/blast-ui/account-balance-m
 import { Button, ButtonLink, DisclosureSummary, IconButton } from "#web/components/blast-ui/Button.tsx";
 import { Checkbox } from "#web/components/blast-ui/Checkbox.tsx";
 import { CopyAddress } from "#web/components/blast-ui/CopyAddress.tsx";
+import { DiagnosticCode } from "#web/components/blast-ui/DiagnosticText.tsx";
 import { EmptyState } from "#web/components/blast-ui/EmptyState.tsx";
 import { Pager } from "#web/components/blast-ui/Pager.tsx";
 import { Segmented, SegmentedLinks } from "#web/components/blast-ui/Segmented.tsx";
@@ -93,6 +94,7 @@ export type PortfolioCoinControls = Readonly<{
 }>;
 
 export type PortfolioWalletSelection = "all" | AccountSession;
+export const WALLET_UNAVAILABLE = "Could not load both wallets";
 type WalletCard = Readonly<{ session: AccountSession; address?: string; name: string; method: string; active: boolean; total: number | null }>;
 type WalletCoinGroup = WalletCard & Readonly<{ coins: readonly HoldingCoin[]; page: PortfolioCoinControls; sync?: PortfolioViewData["walletSync"] }>;
 type WalletSelection = Readonly<{
@@ -128,7 +130,7 @@ export type PortfolioViewData = Readonly<{
   isPublic: boolean | null | undefined;
   coinPage?: PortfolioCoinControls;
   walletSelection?: WalletSelection;
-  walletUnavailable?: () => void;
+  walletUnavailable?: Readonly<{ message: string; retry: () => void }>;
   /** The visible page in global USD order. */
   coins: readonly HoldingCoin[];
   /** R3-20's 24 h prices by coin key; a key with null has no history (an empty slot), undefined is still reading. */
@@ -199,8 +201,10 @@ export function PortfolioView({
         titleId={TITLE_ID}
       />
       {data.walletSelection ? <WalletFilters selection={data.walletSelection} /> : null}
-      {data.walletUnavailable ? <EmptyState compact role="alert" title="Your other wallet could not load"
-        action={<Button onClick={data.walletUnavailable} size="sm">Try again</Button>} /> : null}
+      {data.walletUnavailable ? <EmptyState compact role="alert" title={WALLET_UNAVAILABLE}
+        action={<Button onClick={data.walletUnavailable.retry} size="sm">Try again</Button>}>
+        <DiagnosticCode generic={WALLET_UNAVAILABLE} message={data.walletUnavailable.message} />
+      </EmptyState> : null}
       <Hero
         compact={tab !== "coins"}
         data={data}

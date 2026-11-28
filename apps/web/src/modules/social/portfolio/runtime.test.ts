@@ -89,13 +89,14 @@ test("T-019-AC-1 (AC-110, amended by OA-10): portfolio and PnL routes are owner-
   ]);
 
   await assertApiAllow("/api/social/me/portfolio", "GET, HEAD, OPTIONS");
-  // Query parameters may shape the response, but cannot select its account or wallets.
+  // The wallet parameter narrows the caller's portfolio to a wallet they own.
   const handler = await readFile(new URL(import.meta.resolve("@blast/server/modules/social/portfolio/route.ts")), "utf8");
   const ownHandler = handler.slice(handler.indexOf("export function createSocialPortfolioRoute"));
   const queryKeys = [...ownHandler.matchAll(/(?:params|searchParams)\.get\("([^"]+)"\)/g)].map((match) => match[1]);
-  assert.deepEqual(queryKeys.sort(), ["hide_small", "page", "q", "view"]);
+  assert.deepEqual(queryKeys.sort(), ["hide_small", "page", "q", "view", "wallet"]);
   assert.match(ownHandler, /auth: "account", account: "required"/);
-  assert.match(ownHandler, /wallets\.wallets\(account\.account_id\)/);
+  assert.match(ownHandler, /wallets\.wallets\(accountId\)/);
+  assert.equal([...ownHandler.matchAll(/addressesOf\((?:context\.)?account\.account_id, params\)/g)].length, 2);
   // OA-10: the public read is GET only, names an account by callsign alone (never a wallet or an
   // account id), never reads the caller, and refuses unless the owner opted in and is public.
   await assertApiAllow("/api/social/profiles/kai_9/portfolio", "GET, HEAD, OPTIONS");

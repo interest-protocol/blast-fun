@@ -78,7 +78,11 @@ function AccountChoices({ active, closeMenu, walletScope }: Readonly<{
     if (!block) {
       return false;
     }
-    toast(WITHDRAWAL_SWITCH_MESSAGE[block], switchNotice);
+    const message = WITHDRAWAL_SWITCH_MESSAGE[block];
+    toast(message, {
+      ...switchNotice,
+      titleContent: <DiagnosticText message={diagnosticMessage(message, { code: "withdrawal_switch_blocked" })} />,
+    });
     return true;
   }
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { pollInterval } from "#web/lib/query/polling.ts";
-import { publicErrorMessage } from "#web/lib/errors.ts";
+import { diagnosticMessage, PublicError, publicErrorMessage } from "#web/lib/errors.ts";
 import { useNow } from "#web/components/presale-pages/presales-client.ts";
 
 import { useQueries, useQuery } from "@tanstack/react-query";
@@ -26,7 +26,7 @@ import { usePayoutToasts, useRewards } from "../rewards/use-rewards";
 import { useSocialAccount, type UseSocialAccount } from "../use-social-account";
 import { combinedPricedFigures, combinePortfolioFigures, portfolioFigures, priceAskOf, pricedFigures } from "./portfolio-model";
 import type { PortfolioTab } from "#web/components/blast-ui/portfolio-navigation.ts";
-import { PortfolioView, type PortfolioMode, type PortfolioViewData, type PortfolioWalletSelection } from "./PortfolioView";
+import { PortfolioView, WALLET_UNAVAILABLE, type PortfolioMode, type PortfolioViewData, type PortfolioWalletSelection } from "./PortfolioView";
 import type { CreatorAccountRead, CreatorWalletRead } from "../launch-rewards/LaunchRewards";
 import { dockToday } from "./today-model";
 import { canonicalizePortfolio } from "./portfolio-tab";
@@ -244,8 +244,11 @@ function usePortfolioWalletIdentities(wallets: ReturnType<typeof useAccountWalle
   const resolving = dual && (identity.isPending || otherIdentity.isPending);
   const bothReady = Boolean(activeAddress && otherAddress);
   const combined = dual && bothReady && activeAddress !== otherAddress;
-  const unavailable = dual && !resolving && !bothReady
-    ? () => { void identity.refetch(); void otherIdentity.refetch(); } : undefined;
+  const error = otherIdentity.error ?? identity.error;
+  const unavailable = dual && !resolving && !bothReady ? {
+    message: diagnosticMessage(WALLET_UNAVAILABLE, error instanceof PublicError ? error : { code: "wallet_missing" }),
+    retry: () => { void identity.refetch(); void otherIdentity.refetch(); },
+  } : undefined;
   return { activeAddress, otherAddress, resolving, combined, unavailable };
 }
 

@@ -5,6 +5,7 @@
 // `sell`); success needs the completed `Bought` or `Sold` event.
 
 import { shortAddress as shortId } from "@blast/core/lib/format.ts";
+import { SUI_COIN_TYPE } from "@blast/core/lib/sui/coin-types.ts";
 import { launchpadDeployment } from "@interest-protocol/blast-sdk/deployments";
 import { LaunchpadTransactions, previewBuy, previewSell } from "@interest-protocol/blast-sdk/launchpad";
 import { Transaction } from "@mysten/sui/transactions";
@@ -79,10 +80,19 @@ export function curveTradeAdapter(direction: TradeDirection, routePayment = requ
   let sponsored: Readonly<{ key: string; transaction: Transaction; reservationId: string; expiresAtMs: number }> | null = null;
   const amountOf = (input: CurveTradeInput, curve: Curve) => parseTradeAmount(direction === "buy" && input.payment ? atomsGrouped(BigInt(input.payment.quoteAmount), curve.quote.decimals) : input.amount, inputDecimals(direction, curve));
 
+  async function readRoutedPayment({ input, signer }: ActionContext<CurveTradeInput>, curve: Curve, payment: NonNullable<CurveTradeInput["payment"]>, walletPaysGas: boolean) {
+    const amount = parseTradeAmount(input.amount, payment.decimals);
+    const funding = BigInt(payment.quoteAmount);
+    if (!amount.ok || funding <= 0n || payment.coinType === curve.launch.quoteType || payment.expiresAtMs <= Date.now()) throw new Error("The payment quote expired or changed. Refresh it and try again.");
+    const minimum = input.minimumOut ?? minimumOut(previewBuy(curve.launch, funding).memeOutNet, input.slippageBps);
+    const routed = await routePayment(signer, input.launchId, payment.quoteId, minimum, walletPaysGas);
+    if (routed.sender !== normalizeSuiAddress(signer.address) || routed.launch_id !== input.launchId || routed.quote_type !== curve.launch.quoteType || routed.payment_type !== payment.coinType || routed.payment_amount !== amount.atomic.toString() || routed.quote_amount !== payment.quoteAmount || routed.min_meme_out !== minimum.toString() || routed.expires_at_ms !== payment.expiresAtMs) throw new Error("The payment route does not match this trade. Nothing was signed.");
+    return routed;
+  }
+
   /** The trade; `payGas` lets a buy's SUI come from the wallet's gas coin when the wallet pays its own gas. */
   function buildTrade(fresh: CurveFresh, { deployment, input, signer }: ActionContext<CurveTradeInput>, payGas: boolean): Transaction {
     const { curve } = fresh;
-    // The server builds a routed buy for the payer its fee check names (gas coin only when the wallet pays).
     if (direction === "buy" && fresh.routed) return Transaction.fromKind(fresh.routed.transaction_kind_bytes);
     const amount = amountOf(input, curve);
     if (!amount.ok) throw new RangeError(AMOUNT_REFUSALS[amount.reason]);
@@ -115,12 +125,7 @@ export function curveTradeAdapter(direction: TradeDirection, routePayment = requ
       let paymentBalance: bigint | null = null;
       if (direction === "buy" && input.payment) {
         const payment = input.payment;
-        const amount = parseTradeAmount(input.amount, payment.decimals);
-        const funding = BigInt(payment.quoteAmount);
-        if (!amount.ok || funding <= 0n || payment.coinType === curve.launch.quoteType || payment.expiresAtMs <= Date.now()) throw new Error("The payment quote expired or changed. Refresh it and try again.");
-        const minimum = input.minimumOut ?? minimumOut(previewBuy(curve.launch, funding).memeOutNet, input.slippageBps);
-        routed = await routePayment(signer, input.launchId, payment.quoteId, minimum);
-        if (routed.sender !== normalizeSuiAddress(signer.address) || routed.launch_id !== input.launchId || routed.quote_type !== curve.launch.quoteType || routed.payment_type !== payment.coinType || routed.payment_amount !== amount.atomic.toString() || routed.quote_amount !== payment.quoteAmount || routed.min_meme_out !== minimum.toString() || routed.expires_at_ms !== payment.expiresAtMs) throw new Error("The payment route does not match this trade. Nothing was signed.");
+        routed = await readRoutedPayment(context, curve, payment, !blastPaysGas(signer));
         paymentBalance = BigInt((await client.core.getBalance({ owner: signer.address, coinType: payment.coinType })).balance.balance);
       }
       return {
@@ -223,6 +228,10 @@ export function curveTradeAdapter(direction: TradeDirection, routePayment = requ
       } catch (error) {
         // Only an outside wallet can cover an unavailable sponsor with its own gas.
         if (signer.kind !== "wallet" || !(error instanceof CurveSponsorshipUnavailable)) throw error;
+        if (input.payment && fresh.routed?.payment_type === SUI_COIN_TYPE) {
+          const walletPaid = await readRoutedPayment(context, fresh.curve, input.payment, true);
+          return { transaction: Transaction.fromKind(walletPaid.transaction_kind_bytes) };
+        }
         return { transaction: buildTrade(fresh, context, true) };
       }
       const bytes = readSponsoredBytes(response.transaction_bytes, kind, signer.address);

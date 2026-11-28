@@ -37,7 +37,8 @@ export async function fetchPortfolio(
   const params = new URLSearchParams();
   if (input.summary) params.set("view", "summary");
   if (input.wallet) params.set("wallet", input.wallet);
-  const result = await callSocialApi(input, params.size ? `${SOCIAL_PORTFOLIO_PATH}?${params}` : SOCIAL_PORTFOLIO_PATH, { method: "GET" }, socialPortfolioSchema);
+  const query = params.toString();
+  const result = await callSocialApi(input, query ? `${SOCIAL_PORTFOLIO_PATH}?${query}` : SOCIAL_PORTFOLIO_PATH, { method: "GET" }, socialPortfolioSchema);
   return result.status === "ok" ? { status: "ready", portfolio: result.body } : result;
 }
 

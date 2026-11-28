@@ -100,7 +100,7 @@ server from an account-bound, sealed quote. This path accepts calls to any
 contract and does not consult `PRESALE_SPONSOR_SWAP_TARGETS`. The server router
 owns fee construction; the sponsor still verifies the caller's wallet,
 deployment identity, simulation, gas cap, reservations and shared budgets.
-The social trade cap still controls whether Blast pays.
+Sponsored social trades have no daily cap. Per-transaction limits and shared budget checks still apply.
 
 `POST /api/presale/sponsor` does not accept the `trade` intent or a caller's
 claim that a transaction was built by the server. The frontend authenticates

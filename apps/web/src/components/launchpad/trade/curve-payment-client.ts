@@ -14,6 +14,7 @@ export async function requestCurvePayment(
   launchId: string,
   quoteId: string,
   minimumMeme: bigint,
+  walletPaysGas = false,
 ): Promise<CurvePaymentBuild> {
   const result = await callSocialApi(
     {
@@ -27,6 +28,7 @@ export async function requestCurvePayment(
         launch_id: launchId,
         quote_id: quoteId,
         min_meme_out: minimumMeme.toString(),
+        ...(walletPaysGas ? { wallet_pays_gas: true } : {}),
       },
     },
     curvePaymentBuildSchema,

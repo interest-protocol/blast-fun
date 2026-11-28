@@ -827,7 +827,9 @@ function useWithdrawWalletFunding({ address, coin, amount, to, touched, check, e
   balanceKnown: boolean;
 }>) {
   const shortage = check.atoms !== null && check.atoms > coin.atoms;
-  const canCheck = enabled && !locked && !!surface && balanceKnown && shortage && check.recipientValid;
+  const ownRecipient = check.recipientValid && check.bad;
+  const canCheck = enabled && !locked && !!surface && balanceKnown && check.recipientValid
+    && (shortage || (ownRecipient && check.atoms !== null && check.atoms > ZERO_ATOMS));
   const funding = useOtherWalletFunds(address, coin.coinType, canCheck);
   const qualifies = (funds: NonNullable<typeof funding.funds>) => withdrawCheck({
     coin: { ...coin, atoms: funds.atoms }, amountText: amount, to, touched, fee: "sponsored", own: funds.address, suiAtoms: ZERO_ATOMS,

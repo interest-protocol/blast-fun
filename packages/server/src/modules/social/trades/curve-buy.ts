@@ -223,7 +223,7 @@ export function createCurveBuyRoute(
       cache: "private",
     },
     async (context) => {
-      const body = await readSocialJson(context.request, ["launch_id"], ["quote_id", "min_meme_out", "sponsor", "direction", "amount", "min_out"]);
+      const body = await readSocialJson(context.request, ["launch_id"], ["quote_id", "min_meme_out", "sponsor", "direction", "amount", "min_out", "wallet_pays_gas"]);
       const input = socialInput(body.sponsor === true ? curveSponsorRequestSchema : curvePaymentRequestSchema, body);
       const wallet = await dependencies.blastWallet(context.caller!);
       if (!wallet) throw new SocialRouteError("blast_wallet_missing");
@@ -255,7 +255,7 @@ export const routedCurveBuy = (request: Request, client: ClientAddress) =>
           manifest: config.manifest,
           mode: config.mode,
           now: Date.now(),
-          useGasCoin: false,
+          useGasCoin: input.wallet_pays_gas === true,
         },
         input,
         accountId,
