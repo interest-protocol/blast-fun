@@ -1,7 +1,7 @@
 import { observeMetric } from "@blast/core/lib/metrics.ts";
 
 /** Fixed quote boundaries only; never attach caller, coin, amount or provider data. */
-type QuoteStage = "durable_quota" | "body_wallet_preparation" | "coin_read" | "route_discovery" | "fullnode_main" | "fullnode_reference" | "fullnode_wallet_balance";
+type QuoteStage = "durable_quota" | "body_wallet_preparation" | "coin_read" | "route_discovery" | "fullnode_main" | "fullnode_reference";
 type QuoteStageOutcome = "ok" | "error" | "refused" | "unavailable";
 
 export function startQuoteStage(stage: QuoteStage): (outcome: QuoteStageOutcome) => void {

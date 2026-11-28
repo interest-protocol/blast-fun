@@ -72,6 +72,9 @@ import { SwapCompetitionNotice } from "../competitions/SwapCompetitionNotice.tsx
 import { SUI_COIN_TYPE, USDC_COIN_TYPE } from "@blast/core/lib/sui/coin-types.ts";
 import { decimalText, dropDecimal, pasteDecimal } from "#web/lib/decimal-input.ts";
 import { useWalletCoinBalance, type WalletCoinBalance } from "./use-wallet-coin-balance";
+import { useOtherWalletFunds, WalletFundingSwitch } from "./WalletFundingSwitch";
+import type { WalletActionDraft } from "./wallet-action-draft";
+import { useAccountWallets } from "../account-wallets";
 import { DiagnosticText } from "#web/components/blast-ui/DiagnosticText.tsx";
 import { SUI_ADDRESS_PLACEHOLDER, SUI_NAME_LOOKUP_LABEL, useSuiAddressLookup } from "#web/lib/sui-address-input.ts";
 
@@ -118,6 +121,8 @@ export type CoinSheetProps = Readonly<{
   /** A persistent page panel; uses the same form without dialog navigation. */
   inline?: boolean;
   draftKey?: string;
+  walletDraft?: WalletActionDraft;
+  walletDraftSurface?: string;
   /** Changes on every open, so each open starts fresh. */
   session: number;
   first: CoinScreen;
@@ -181,7 +186,7 @@ function availableCoinScreen(screen: CoinScreen, coins: readonly WalletCoinView[
   return screen;
 }
 
-function useCoinSteps(props: Pick<CoinSheetProps, "first" | "onScreen" | "inline"> & Readonly<{ titleId: string }>, firstIsPurchase: boolean) {
+function useCoinSteps(props: Pick<CoinSheetProps, "first" | "onScreen" | "inline" | "walletDraft"> & Readonly<{ titleId: string }>, firstIsPurchase: boolean) {
   const { swap } = useSheet();
   const [stack, setStack] = useState<readonly Readonly<{ screen: CoinScreen; returnTrade: TradeState; returnFocus: string | null }>[]>(() => {
     const trade = initialTrade(props.first);
@@ -190,7 +195,12 @@ function useCoinSteps(props: Pick<CoinSheetProps, "first" | "onScreen" | "inline
   });
   const screen = stack[stack.length - 1]!.screen;
   // The trade's pair, amount and detail survive a trip to the picker and back (the gate's `st`).
-  const [trade, setTrade] = useState<TradeState>(() => initialTrade(props.first));
+  const [trade, setTrade] = useState<TradeState>(() => {
+    const initial = initialTrade(props.first);
+    return props.walletDraft && props.first.kind === "trade"
+      ? { ...initial, detail: props.walletDraft.detail === true, field: { typed: props.walletDraft.amount, mode: "typed", unit: "token" } }
+      : initial;
+  });
   /** Coins picked from the picker's list that the wallet does not hold: the trade names them by key. */
   const [picked, setPicked] = useState<readonly WalletCoinView[]>([]);
   const [returnFocus, setReturnFocus] = useState<string | null>(null);
@@ -241,9 +251,10 @@ function opensPurchase(props: Pick<CoinSheetProps, "first" | "wallet" | "extraCo
 
 function CoinSheetBody(props: CoinSheetProps & Readonly<{ titleId: string }>) {
   const [receipt, setReceipt] = useState<ContributionReceipt | null>(null);
+  const draft = props.trading.walletAddress === props.walletDraft?.address ? props.walletDraft : undefined;
   return receipt
     ? <CommitReceipt receipt={receipt} onDone={props.onClose} titleId={props.titleId} />
-    : <CoinSheetForm key={props.holdingsOwner ?? "visitor"} {...props} onConfirmed={setReceipt} />;
+    : <CoinSheetForm key={`${props.holdingsOwner ?? "visitor"}:${draft ? "resumed" : ""}`} {...props} walletDraft={draft} onConfirmed={setReceipt} />;
 }
 
 function walletFailureMessage(wallet: Extract<CoinSheetWallet, { status: "error" }>): string {
@@ -281,6 +292,7 @@ function CoinSheetForm(props: CoinSheetProps & Readonly<{ titleId: string; onCon
   const [browsers, setBrowsers] = useState<Readonly<Record<string, CoinBrowserState>>>({});
   const browser = (mode: string) => ({ state: browsers[mode] ?? EMPTY_COIN_BROWSER, onState: (state: CoinBrowserState) => setBrowsers(current => ({ ...current, [mode]: state })) });
   const hidden = useShellPrefs().amountsHidden;
+  const { hasOther } = useAccountWallets();
   const { screen, trade, setTrade, picked, setPicked, pickCoin, go, back, canBack, returnFocus } = useCoinSteps(props, opensPurchase(props));
   const extraCoins = props.extraCoins ?? [];
   const [purchaseDrafts, setPurchaseDrafts] = useState<Readonly<Record<string, CommitDraft>>>({});
@@ -331,7 +343,7 @@ function CoinSheetForm(props: CoinSheetProps & Readonly<{ titleId: string; onCon
         {head("Withdraw")}
         <CoinBrowser coins={list} owned={balanceKnown} load={props.listHoldings} mode="withdraw" {...browser("withdraw")}>{rows => <div className={styles.coinList}>
           {rows.map((coin) => (
-            <CoinPickerRow balanceKnown={balanceKnown} coin={coin} disabled={balanceKnown && coin.atoms === ZERO_ATOMS} hidden={hidden} key={coin.key} onPick={() => { setPicked(current => [...current.filter(each => each.key !== coin.key), coin]); go({ kind: "wd", key: coin.key }); }} />
+            <CoinPickerRow balanceKnown={balanceKnown} coin={coin} disabled={balanceKnown && coin.atoms === ZERO_ATOMS && !hasOther} hidden={hidden} key={coin.key} onPick={() => { setPicked(current => [...current.filter(each => each.key !== coin.key), coin]); go({ kind: "wd", key: coin.key }); }} />
           ))}
         </div>}</CoinBrowser>
         {list.length === 0 ? <p className={styles.status}>Nothing to withdraw yet. Deposit first.</p> : null}
@@ -427,6 +439,8 @@ function CoinSheetForm(props: CoinSheetProps & Readonly<{ titleId: string; onCon
           balanceKnown={balanceKnown}
           onWithdraw={props.onWithdraw}
           suiAtoms={coinOf("sui").atoms}
+          draft={props.first.kind === "wd" && props.first.key === shown.key ? props.walletDraft : undefined}
+          draftSurface={props.walletDraftSurface}
         />
       </>
     );
@@ -461,6 +475,8 @@ function CoinSheetForm(props: CoinSheetProps & Readonly<{ titleId: string; onCon
           outCoin={outCoin}
           trading={props.trading}
           walletFee={wallet.fee}
+          draftSurface={props.walletDraftSurface}
+          slippageBps={props.walletDraft?.slippageBps}
         />
         <SwapCompetitionNotice competitions={promotions.competitions} coinTypes={[inCoin.coinType, outCoin.coinType]} onNavigate={props.onClose} />
       </>
@@ -788,6 +804,40 @@ function WithdrawAmount({ id, coin, amount, value, locked, balanceKnown, amountR
   );
 }
 
+function withdrawDestinationState(coin: WalletCoinView, check: ReturnType<typeof withdrawCheck>, funding: ReturnType<typeof useOtherWalletFunds>, canSwitch: boolean, hidden: boolean) {
+  if (check.bad) {
+    return { bad: !canSwitch, message: canSwitch ? "Switch accounts to withdraw to this address." : check.message };
+  }
+  const other = funding.funds;
+  if (!other || hidden || check.atoms === null || check.atoms <= other.atoms) return { bad: false, message: check.message };
+  const available = groupDigits(exactText({ n: other.atoms, scale: coin.decimals }));
+  return { bad: false, message: `${funding.name} has ${available} ${coin.symbol}.` };
+}
+
+function useWithdrawWalletFunding({ address, coin, amount, to, touched, check, enabled, locked, surface, balanceKnown }: Readonly<{
+  address: string | null;
+  coin: WalletCoinView;
+  amount: string;
+  to: string;
+  touched: boolean;
+  check: ReturnType<typeof withdrawCheck>;
+  enabled: boolean;
+  locked: boolean;
+  surface?: string;
+  balanceKnown: boolean;
+}>) {
+  const shortage = check.atoms !== null && check.atoms > coin.atoms;
+  const ownRecipient = check.recipientValid && check.bad;
+  const canCheck = enabled && !locked && !!surface && balanceKnown && check.recipientValid
+    && (shortage || (ownRecipient && check.atoms !== null && check.atoms > ZERO_ATOMS));
+  const funding = useOtherWalletFunds(address, coin.coinType, canCheck);
+  const qualifies = (funds: NonNullable<typeof funding.funds>) => withdrawCheck({
+    coin: { ...coin, atoms: funds.atoms }, amountText: amount, to, touched, fee: "sponsored", own: funds.address, suiAtoms: ZERO_ATOMS,
+  }).ready;
+  const canSwitch = funding.funds !== null && qualifies(funding.funds);
+  return { funding, qualifies, canSwitch };
+}
+
 function WithdrawForm({
   active,
   coin: selectedCoin,
@@ -797,6 +847,8 @@ function WithdrawForm({
   trading,
   balanceKnown: listingKnown,
   onWithdraw,
+  draft,
+  draftSurface,
 }: Readonly<{
   active: boolean;
   coin: WalletCoinView;
@@ -806,13 +858,16 @@ function WithdrawForm({
   trading: CoinSheetTrading;
   balanceKnown: boolean;
   onWithdraw: CoinSheetProps["onWithdraw"];
+  draft?: WalletActionDraft;
+  draftSurface?: string;
 }>) {
   const id = useId();
   const enabled = active && trading.signedIn && !trading.sessionPending;
+  const hidden = useShellPrefs().amountsHidden;
   const listing = trading.walletAddress === undefined ? { known: listingKnown, gas: suiAtoms } : null;
   const { coin, balanceKnown, gasKnown, gas, retryBalance } = useWithdrawBalances(selectedCoin, fee, address, enabled, listing);
-  const [amount, setAmount] = useState("");
-  const [to, setTo] = useState("");
+  const [amount, setAmount] = useState(draft?.amount ?? "");
+  const [to, setTo] = useState(draft?.recipient ?? "");
   const [pending, setPending] = useState<Readonly<{ address: string; ask: WithdrawAsk }> | null>(null);
   const pendingAsk = pending !== null && pending.address === address ? pending.ask : null;
   useSignInDraft(`coins:withdraw:${coin.key}`, !trading.signedIn ? { amount, to } : null, (saved) => {
@@ -836,6 +891,10 @@ function WithdrawForm({
   const checking = pendingAsk !== null;
   const canSend = checking || (funded && check.ready);
   const locked = busy || checking;
+  const funding = useWithdrawWalletFunding({
+    address, coin, amount, to, touched, check, enabled, locked, surface: draftSurface, balanceKnown,
+  });
+  const destination = withdrawDestinationState(coin, check, funding.funding, funding.canSwitch, hidden);
   const label = withdrawLabel(check, funded, checking);
   const action = authenticatedAction(trading, label, "Sign in to withdraw", !canSend, busy);
   const send = async () => {
@@ -856,6 +915,15 @@ function WithdrawForm({
     setPending(done === "pending" && address !== null ? { address, ask } : null);
     setBusy(done === true);
   };
+  const withdrawActions = <WithdrawActions
+    action={action}
+    busy={busy}
+    restoringSession={trading.sessionPending === true}
+    checking={checking}
+    retryBalance={retryBalance}
+    failed={failed}
+    onSend={() => void send()}
+  />;
   return (
     <>
       <WithdrawAmount
@@ -873,8 +941,8 @@ function WithdrawForm({
         id={id}
         to={to}
         locked={locked}
-        bad={check.bad}
-        message={trading.signedIn ? check.message : "Sign in to withdraw"}
+        bad={destination.bad}
+        message={trading.signedIn ? destination.message : "Sign in to withdraw"}
         onResolved={setTo}
         onChange={(value) => {
           setTo(value);
@@ -882,15 +950,8 @@ function WithdrawForm({
         }}
       />
       <WithdrawTerms coinType={coin.coinType} fee={fee} />
-      <WithdrawActions
-        action={action}
-        busy={busy}
-        restoringSession={trading.sessionPending === true}
-        checking={checking}
-        retryBalance={retryBalance}
-        failed={failed}
-        onSend={() => void send()}
-      />
+      <WalletFundingSwitch draft={{ screen: { kind: "wd", key: coin.key }, coins: [coin], amount, recipient: to }}
+        funding={funding.funding} qualifies={funding.qualifies} surface={draftSurface} fallback={withdrawActions} />
     </>
   );
 }

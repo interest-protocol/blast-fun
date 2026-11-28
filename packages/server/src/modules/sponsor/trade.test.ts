@@ -720,11 +720,7 @@ test("server-built trades need no contract allowlist, including a new router mod
     assert.equal(normalizeSuiAddress(data.gasData.owner!), SPONSOR);
     assert.equal(s.reservations.reserved()[0]?.intent, "trade");
     assert.deepEqual(s.todayCalls, []);
-    assert.deepEqual(s.limits.calls, [
-      "presale_sponsor_ip",
-      "presale_sponsor_account_daily",
-      "presale_sponsor_global",
-    ]);
+    assert.deepEqual(s.limits.calls, ["presale_sponsor_ip"]);
   }
 });
 
@@ -748,7 +744,7 @@ test("server-built trades still require the caller's wallet, simulation and shar
   assert.equal(otherWallet.chain.state.simulated.length, 0);
 
   const limited = service({ swapTargets: [] });
-  limited.limits.refuse.add("presale_sponsor_global");
+  limited.limits.refuse.add("presale_sponsor_ip");
   await assert.rejects(limited.sponsor.sponsor(request), {
     code: "rate_limited",
   });
@@ -768,6 +764,8 @@ test("server-built trades still require the caller's wallet, simulation and shar
 
 test("a trade is sponsored in-process: its kind unchanged, the sponsor's gas, no presale, and never the presale's daily budget", async () => {
   const s = service({ today: async () => ({ allowed: false }) });
+  s.limits.refuse.add("presale_sponsor_account_daily");
+  s.limits.refuse.add("presale_sponsor_global");
   const kind = await tradeKind(SUI, SALE_B, 100_000_000n);
   const answer = await s.sponsor.sponsor({
     caller: { kind: "privy" as const, did: DID },
@@ -796,50 +794,28 @@ test("a trade is sponsored in-process: its kind unchanged, the sponsor's gas, no
     [row?.intent, row?.presaleId, row?.sender],
     ["trade", null, SENDER],
   );
-  // Review M1: an in-process caller pays the sponsor's per-IP, per-account daily and platform budgets too.
-  assert.deepEqual(s.limits.calls, [
-    "presale_sponsor_ip",
-    "presale_sponsor_account_daily",
-    "presale_sponsor_global",
-  ]);
-  assert.deepEqual(s.limits.subjects, [
-    { ip: "203.0.113.7" },
-    { accountId: DID },
-    {},
-  ]);
+  assert.deepEqual(s.limits.calls, ["presale_sponsor_ip"]);
+  assert.deepEqual(s.limits.subjects, [{ ip: "203.0.113.7" }]);
 });
 
-test("review M1: a full sponsor budget refuses an in-process trade as rate_limited before any slot or pool coin", async () => {
-  for (const bucket of [
-    "presale_sponsor_ip",
-    "presale_sponsor_account_daily",
-    "presale_sponsor_global",
-  ] as const) {
-    const s = service();
-    s.limits.refuse.add(bucket);
-    await assert.rejects(
-      s.sponsor.sponsor({
-        caller: { kind: "privy" as const, did: DID },
-        presaleId: null,
-        sender: SENDER,
-        kindBytes: await tradeKind(SUI, SALE_B, 100_000_000n),
-        intent: "trade",
-        ip: "203.0.113.7",
-      }),
-      (error: unknown) =>
-        error instanceof PresaleRouteError &&
-        error.code === "rate_limited" &&
-        error.retryAfterSeconds === 42,
-      bucket,
-    );
-    assert.equal(
-      s.limits.calls.at(-1),
-      bucket,
-      "the first full budget stops the count",
-    );
-    assert.equal(s.reservations.reserved().length, 0, bucket);
-    assert.equal(s.reservations.rows.length, 0, bucket);
-  }
+test("a full IP request bucket refuses a trade before it reserves gas", async () => {
+  const s = service();
+  s.limits.refuse.add("presale_sponsor_ip");
+  await assert.rejects(
+    s.sponsor.sponsor({
+      caller: { kind: "privy" as const, did: DID },
+      presaleId: null,
+      sender: SENDER,
+      kindBytes: await tradeKind(SUI, SALE_B, 100_000_000n),
+      intent: "trade",
+      ip: "203.0.113.7",
+    }),
+    (error: unknown) =>
+      error instanceof PresaleRouteError &&
+      error.code === "rate_limited" &&
+      error.retryAfterSeconds === 42,
+  );
+  assert.equal(s.reservations.rows.length, 0);
 });
 
 test("server-built trades keep the fee encoded by the router without a second contract policy", async () => {
@@ -965,7 +941,7 @@ test("executing a sponsored trade settles it without counting the presale's dail
   assert.equal(
     h.consumed(),
     0,
-    "the social cap counts trades, not presale_sponsor_exec",
+    "a swap does not spend a daily execution unit",
   );
   assert.deepEqual(h.recorded, [], "a trade is no presale commit");
 });

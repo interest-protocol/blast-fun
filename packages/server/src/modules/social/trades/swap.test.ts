@@ -8,13 +8,12 @@ import type { QueryResult, QueryResultRow } from "pg";
 import { CORE_COINS } from "@blast/core/modules/social/portfolio/core-coins.ts";
 import { COIN_METADATA_SQL } from "@blast/server/modules/social/portfolio/coin-metadata.ts";
 import { readTradeCoins } from "@blast/server/modules/social/trades/coins.ts";
-import { SOCIAL_CONFIG_DEFAULTS } from "@blast/core/modules/social/contracts/config.ts";
 import { SALE_B, SUI } from "../../../../test/fixtures/modules/social/trades/fixtures.ts";
-import { filledOut, fullnodeTradeLookup, sponsoredToday, TRADE_SPONSORED_SINCE_SQL, tradeBody, tradeFeePayer, tradeLogEntry, utcDayStartMs, type TradeRow } from "@blast/server/modules/social/trades/swap.ts";
+import { filledOut, fullnodeTradeLookup, tradeBody, tradeLogEntry, type TradeRow } from "@blast/server/modules/social/trades/swap.ts";
 
 /**
  * Social feed R3-31: the swap path's pure parts — what filled, the trade's
- * log row, the daily cap's day, who pays — and the signer boundary: the
+ * log row, who pays, and the signer boundary: the
  * server's trade code holds no key and signs nothing (AC-7).
  */
 
@@ -99,29 +98,6 @@ test("the bytes to sign are answered only while the trade is built", () => {
   assert.deepEqual(tradeBody(row).network_fee, { payer: "blast", label: "Paid by Blast" });
   assert.equal(tradeBody({ ...row, state: "confirmed", amount_out_filled: "1", settled_at_ms: "1791000005000" }).transaction_bytes, null);
   assert.equal(tradeBody({ ...row, fee_payer: null, tx_bytes: null, digest: null, state: "failed", failure_code: "quote_expired" }).network_fee, null);
-});
-
-test("the daily cap counts sponsored trades since the UTC day's start, for a wallet session as for a Privy account, and a spent cap pays its own fee", async () => {
-  assert.equal(utcDayStartMs(Date.UTC(2026, 9, 5, 16, 30)), Date.UTC(2026, 9, 5));
-  const asked: unknown[][] = [];
-  const db = (count: number) => ({
-    async read<Row extends QueryResultRow>(text: string, values: readonly unknown[] = []): Promise<QueryResult<Row>> {
-      assert.equal(text, TRADE_SPONSORED_SINCE_SQL);
-      asked.push([...values]);
-      return { rows: [{ sponsored: count }] as unknown as Row[], rowCount: 1, command: "SELECT", oid: 0, fields: [] };
-    },
-  });
-  const now = Date.UTC(2026, 9, 5, 16, 30);
-  assert.equal(await sponsoredToday(db(3), row.account_id, now, 20), 3);
-  assert.deepEqual(asked[0], [row.account_id, Date.UTC(2026, 9, 5), 20, now]);
-  const config = { ...SOCIAL_CONFIG_DEFAULTS, trade_sponsor_daily_cap: 2 };
-  assert.equal(await tradeFeePayer(db(1), config, { kind: "privy", accountId: row.account_id }, now), "blast");
-  assert.equal(await tradeFeePayer(db(2), config, { kind: "privy", accountId: row.account_id }, now), "wallet");
-  assert.equal(await tradeFeePayer(db(1), config, { kind: "wallet", accountId: row.account_id }, now), "blast", "a wallet session is sponsored (owner ruling 2026-11-20)");
-  assert.equal(await tradeFeePayer(db(2), config, { kind: "wallet", accountId: row.account_id }, now), "wallet");
-  assert.equal(await tradeFeePayer(db(0), config, { kind: null, accountId: null }, now), "wallet");
-  assert.equal(await tradeFeePayer(db(0), { ...config, trade_sponsor_daily_cap: 0 }, { kind: "privy", accountId: row.account_id }, now), "wallet");
-  assert.equal(SOCIAL_CONFIG_DEFAULTS.trade_sponsor_daily_cap, 20);
 });
 
 test("the server's trade code holds no key and signs nothing: it builds bytes for the wallet (R3-31-AC-7)", () => {

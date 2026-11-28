@@ -779,8 +779,11 @@ async function withdrawKind(recipient = OTHER_WALLET): Promise<string> {
   return kindBytes(kindOf(tx));
 }
 
-test("UI-14 withdraw: no presale, no presale read; the caller's kind unchanged, the sponsor pays, the reservation names no presale", async () => {
+test("UI-14 withdraw: the sponsor pays after the daily budgets are exhausted", async () => {
   const h = harness();
+  h.executed.set(DID, 10);
+  h.limiter.refuse.add("presale_sponsor_account_daily");
+  h.limiter.refuse.add("presale_sponsor_global");
   const encodedKind = await withdrawKind();
   const body = {
     sender: SENDER,

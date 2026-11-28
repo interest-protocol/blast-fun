@@ -23,7 +23,7 @@ import { createPool } from "@blast/core/modules/database/pool.ts";
 import { CHAIN_FIXTURE, resetSharedDatabase, urlAs } from "../../../packages/core/test/fixtures/modules/database/role-fixtures.ts";
 import { likePattern, TRADE_COIN_LIST_SQL } from "@blast/server/modules/social/trades/coin-list.ts";
 import { TRADE_PRICES_SQL, TRADE_SALE_COINS_SQL } from "@blast/server/modules/social/trades/coins.ts";
-import { TRADE_BY_KEY_SQL, TRADE_COLUMNS, TRADE_INSERT_SQL, TRADE_SETTLE_SQL, TRADE_SPONSORED_SINCE_SQL, utcDayStartMs } from "@blast/server/modules/social/trades/swap.ts";
+import { TRADE_BY_KEY_SQL, TRADE_COLUMNS, TRADE_INSERT_SQL, TRADE_SETTLE_SQL } from "@blast/server/modules/social/trades/swap.ts";
 
 const URL_ = process.env.SOCIAL_SCALE_DATABASE_URL ?? "";
 if (!/^postgres(ql)?:\/\/[^@]+@(127\.0\.0\.1|localhost):\d+\/\w+$/.test(URL_)) {
@@ -111,8 +111,6 @@ async function bench() {
   )).rows[0]!;
   const swapStatements: Statement[] = [
     { name: "replay: the key's trade (heavy account, 20,000 trades)", sql: TRADE_BY_KEY_SQL, values: [built.account_id, built.idempotency_key] },
-    { name: "the daily cap: sponsored trades today, up to the cap of 20 (heavy account)", sql: TRADE_SPONSORED_SINCE_SQL, values: [HEAVY, utcDayStartMs(NOW_MS), 20] },
-    { name: "the daily cap: sponsored trades today, up to the cap of 20 (typical account)", sql: TRADE_SPONSORED_SINCE_SQL, values: [id(5_000), utcDayStartMs(NOW_MS), 20] },
     {
       name: "settle: the trade, locked",
       sql: `SELECT ${TRADE_COLUMNS} FROM social_swap_intents WHERE trade_id = $1::uuid AND account_id = $2::uuid FOR UPDATE`,

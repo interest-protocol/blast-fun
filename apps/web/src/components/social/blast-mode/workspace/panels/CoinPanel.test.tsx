@@ -14,6 +14,7 @@ import { notifyShellPrefs } from "#web/components/blast-ui/use-shell-prefs.ts";
 import { QueryProvider } from "#web/lib/query/provider.tsx";
 import { SocialViewerProvider } from "#web/components/social/SignInGate.tsx";
 import { walletCoinViews } from "#web/components/social/coins/coin-model.ts";
+import { waitFor } from "../../../../../../test/fixtures/social/test-dom.ts";
 import { ACCESS_TOKEN, walletReads } from "../../../../../../test/fixtures/social/commit/wallet-reads.ts";
 import type { TradeSendInput } from "#web/components/social/trade/trade-kit.ts";
 import {
@@ -815,12 +816,7 @@ test("fee payment requires explicit consent and hidden panels stop reads and sub
     assert.equal(contentReads, 0);
     assert.equal(submit().disabled, true);
     await act(async () => root.render(render(true)));
-    await act(async () => new Promise((resolve) => setTimeout(resolve, 350)));
-    assert.equal(
-      submit().disabled,
-      false,
-      "verified wallet metadata supports a standalone coin even when discovery cannot resolve it",
-    );
+    await waitFor(() => !submit().disabled, "verified wallet metadata supports a standalone coin even when discovery cannot resolve it");
     assert.match(
       document.querySelector('[aria-label="Trade facts"]')!.textContent!,
       /Network feePaid by Blast.*0.0021 SUI/,

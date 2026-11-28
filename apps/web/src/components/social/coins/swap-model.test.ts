@@ -257,7 +257,7 @@ test("price impact: the quote's, with the gate's amber above 3% and red above 10
   assert.equal(impactUnavailableText(null), "—");
 });
 
-test("R3-33-AC-7: the network fee tells the truth — Paid by Blast while sponsored; a wallet the server answers wallet-pays (a session past the daily cap) pays from its SUI", () => {
+test("R3-33-AC-7: the network fee tells the truth — Paid by Blast while sponsored; a wallet the server answers wallet-pays pays from its SUI", () => {
   const session = quoteOf({ network_fee: { payer: "wallet", label: "Paid from your SUI", estimate_mist: "2565136" } });
   assert.equal(txRows({ outCoin: USDC, quote: session, walletFee: "wallet" })[2]!.value, "Paid from your SUI");
   assert.equal(txSummary({ inCoin: SUI, outCoin: USDC, quote: session, walletFee: "wallet" }).gas, "≈ 0.00257\u00a0SUI", "never `Free`");

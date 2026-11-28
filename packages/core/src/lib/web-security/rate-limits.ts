@@ -511,8 +511,7 @@ const PRESALE_RATE_POLICIES: Readonly<Record<PresaleRateBucket, RatePolicy>> = O
   presale_sponsor_ip: presalePolicy("presale_sponsor_ip", "ip", 120, 600),
   presale_sponsor_exec_ip: presalePolicy("presale_sponsor_exec_ip", "ip", 60, 3_600),
   // One account's share of the platform's daily sponsor cap, counted with it
-  // after the dry run (review H1). This includes trades and abandoned
-  // reservations; one account cannot spend more than 1/200 of the default cap.
+  // after the dry run for capped intents, including abandoned reservations.
   presale_sponsor_account_daily: presalePolicy("presale_sponsor_account_daily", "account", 100, 86_400),
   // Wrong signatures on one reservation (`attemptId` = the reservation id,
   // review H2): two are tolerated; the third expires the reservation. The

@@ -7,11 +7,13 @@ type Fields = Readonly<Record<string, string>>;
 const PREFIX = "blast:sign-in-draft:";
 
 /** Unsigned form inputs only: never store account reads, balances, proofs or executable quotes. */
-export function saveSignInDraft(storage: Pick<Storage, "setItem">, key: string, path: string, fields: Fields, now = Date.now()): void {
+export function saveSignInDraft(storage: Pick<Storage, "setItem">, key: string, path: string, fields: Fields, now = Date.now()): boolean {
   try {
     storage.setItem(PREFIX + key, JSON.stringify({ path, fields, at: now }));
+    return true;
   } catch {
     // Blocked storage still preserves inputs through sign-in in the mounted page.
+    return false;
   }
 }
 

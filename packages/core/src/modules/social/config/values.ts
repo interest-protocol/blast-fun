@@ -3,7 +3,6 @@ import { z } from "zod";
 import {
   DECIMAL_PATTERN,
   MAX_BLOCKED_TERM_LENGTH,
-  MAX_COUNT,
   MAX_MILESTONES,
   MAX_REACTIONS,
   REACTION_KEY_PATTERN,
@@ -44,7 +43,6 @@ const FROM_JSON = {
   decimal: decimalSchema,
   integer_list: integerListSchema,
   reaction_list: reactionListSchema,
-  count: integerSchema.nonnegative().max(MAX_COUNT),
 } satisfies Record<SocialConfigValueType, z.ZodType<SocialConfigValue>>;
 
 const FROM_TEXT = {
@@ -54,7 +52,6 @@ const FROM_TEXT = {
   integer_list: listTextSchema.pipe(z.array(z.string().regex(POSITIVE_INTEGER)))
     .transform((values) => values.map(Number)).pipe(integerListSchema),
   reaction_list: listTextSchema.pipe(reactionListSchema),
-  count: nonnegativeIntegerText.pipe(integerSchema.max(MAX_COUNT)),
 } satisfies Record<SocialConfigValueType, z.ZodType<SocialConfigValue>>;
 
 export function parseSocialConfigKey(text: string): SocialConfigKey | null {

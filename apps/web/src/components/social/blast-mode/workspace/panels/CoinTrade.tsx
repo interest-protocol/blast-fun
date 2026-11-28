@@ -15,6 +15,8 @@ import { useShellActions } from "#web/components/blast-ui/shell-actions.tsx";
 import { useShellPrefs } from "#web/components/blast-ui/use-shell-prefs.ts";
 import { fetchWalletBalance } from "#web/components/social/coins/coins-client.ts";
 import { refreshWalletCoinBalance, useWalletCoinBalance } from "#web/components/social/coins/use-wallet-coin-balance.ts";
+import { useSwapWalletFunding, WalletFundingSwitch } from "#web/components/social/coins/WalletFundingSwitch.tsx";
+import { tradableCoinView } from "#web/components/social/coins/swap-model.ts";
 import { walletIdentityQuery, walletIdentityScope } from "#web/components/social/queries.ts";
 import { useSocialViewer } from "#web/components/social/SignInGate.tsx";
 import { useTradeQuoteQuery } from "#web/components/social/trade/trade-quote-query.ts";
@@ -263,6 +265,43 @@ function useTradeWallet({
   } as const;
 }
 
+function workspaceFundingDraft({ asset, setup, facts, walletRead, coin, atoms }: Readonly<{
+  asset: CoinTradeProps["asset"];
+  setup: CoinTradeProps["coin_setup"];
+  facts: TradeFacts;
+  walletRead: ReturnType<typeof useTradeWallet>;
+  coin: CoinRecord | null;
+  atoms: bigint | null;
+}>) {
+  const { decimals, symbol } = facts;
+  if (decimals === null || atoms === null) return null;
+  const focusCoin = tradableCoinView({
+    coin_type: asset.coin_type, name: coin?.name ?? symbol, symbol, decimals, icon_url: coin?.icon_url ?? null,
+    usd_price: coin?.price_usd ?? null, presale_id: coin?.presale_id ?? asset.presale_id ?? null,
+  });
+  const otherCoin = walletRead.counter.choice.coin;
+  const buy = setup.trade.side === "buy";
+  const [input, output] = buy ? [otherCoin, focusCoin] : [focusCoin, otherCoin];
+  return {
+    screen: { kind: "trade" as const, key: input.key, out: output.key, focus: focusCoin.key },
+    coins: [focusCoin, otherCoin],
+    amount: exactText({ n: atoms, scale: buy ? walletRead.counter.facts.decimals : focusCoin.decimals }),
+    slippageBps: setup.trade.slippage_bps,
+  };
+}
+
+function useWorkspaceWalletFunding(props: CoinTradeProps, facts: TradeFacts, draft: TradeDraft, walletRead: ReturnType<typeof useTradeWallet>, busy: boolean, review: string | null) {
+  const { asset, coin_setup: setup, coin } = props;
+  const { address, paymentCoin, authenticated, supportedNetwork } = walletRead;
+  const shortage = overBalance(draft, facts);
+  const wanted = shortage && setup.trade.side === "sell" ? { ...facts, held: null } : facts;
+  const atoms = amountInAtoms(draft, wanted);
+  const check = props.effective_visibility && !props.unavailable && authenticated && supportedNetwork
+    && !busy && review === null && walletRead.status === "ready" && facts.decimals !== null && shortage;
+  const { funding, qualifies } = useSwapWalletFunding(address, paymentCoin, atoms, check);
+  return { funding, qualifies, surface: "overlay", draft: workspaceFundingDraft({ asset, setup, facts, walletRead, coin, atoms }) };
+}
+
 function useCoinTrade(props: CoinTradeProps) {
   const { asset, coin_setup: setup, onSetupChange, effective_visibility: visible, actions, coin } = props;
   const kit = actions.trade;
@@ -328,6 +367,7 @@ function useCoinTrade(props: CoinTradeProps) {
   // traded again then); a fee offer holds only for the number it was shown on.
   const estimateKey = quote === null ? null : `${quotes.key}@${quote.quoted_at_ms}`;
   const feeOffer = estimateKey !== null && fee?.id === estimateKey ? fee.offer : null;
+  const walletSwitch = useWorkspaceWalletFunding(props, facts, draft, walletRead, busy, review);
   const hidden = useShellPrefs().amountsHidden;
   const quoteLine = tradeQuoteLine({
     draft,
@@ -418,6 +458,14 @@ function useCoinTrade(props: CoinTradeProps) {
     return freshFacts;
   }
 
+  function reportSealRefusal(quote: SocialTradeQuote) {
+    const refused = sealRefusalLine(quote, side === "buy" ? facts.counter?.symbol ?? "USDC" : symbol);
+    if (refused === null) return false;
+    setMessage(refused);
+    if (quote.offer_refused === "insufficient_balance") walletRead.reread();
+    return true;
+  }
+
   /**
    * The sealed quote for the number on screen: the server's, offered, still
    * tradeable, and giving at least what is shown. A lower one is put on
@@ -440,12 +488,7 @@ function useCoinTrade(props: CoinTradeProps) {
     }
     // Refused for this wallet or pool (a short balance, no pool, a failed dry run): the line says why, the estimate
     // stays and the next press asks again. Nothing asks the server on its own.
-    const refused = sealRefusalLine(answer.quote, side === "buy" ? facts.counter?.symbol ?? "USDC" : symbol);
-    if (refused !== null) {
-      setMessage(refused);
-      if (answer.quote.offer_refused === "insufficient_balance") walletRead.reread();
-      return;
-    }
+    if (reportSealRefusal(answer.quote)) return;
     if (
       !isOffered(answer.quote, Date.now()) ||
       tradeCta({ draft, facts: checked, quote: answer.quote, nowMs: Date.now() }).disabled
@@ -570,7 +613,7 @@ function useCoinTrade(props: CoinTradeProps) {
 
   const exact: ExactTradeValue = (...args) => exactTradeValue(hidden, ...args);
   const short: ExactTradeValue = (...args) => exactTradeValue(hidden, ...args, true);
-  return { preference: actions.confirmation, setup, facts, busy, walletRead, authenticated, hidden, change, side, counter, supportedNetwork, cancelReview, setFee, setConsent, setMessage, ready, cta, submit, quoteLine, request, draft, quotes, late, retryQuote, decimals, quote, feeOffer, consent, message, review, reviewKey, symbol, exact, short };
+  return { preference: actions.confirmation, setup, facts, busy, walletRead, walletSwitch, authenticated, hidden, change, side, counter, supportedNetwork, cancelReview, setFee, setConsent, setMessage, ready, cta, submit, quoteLine, request, draft, quotes, late, retryQuote, decimals, quote, feeOffer, consent, message, review, reviewKey, symbol, exact, short };
 }
 
 function balancePending(props: CoinTradeProps, walletStatus: string) {
@@ -627,6 +670,14 @@ export function CoinTrade(props: CoinTradeProps) {
         size={16}
       />
     );
+  const submitAction = <CoinSubmit
+    ready={ready && !unavailable}
+    guest={!authenticated}
+    busy={busy}
+    label={!authenticated ? `Sign in to ${side} ${symbol}` : submitPrerequisite(state, unavailable) ?? (side === "buy" ? buyLabel(draft, facts, symbol, hidden) : `Sell ${symbol}`)}
+    side={side}
+    submit={() => void submit()}
+  />;
   return (
     <CoinDetailsSlots.Provider value={{...detailSlots,trade:tradeSlot}}>
     <section className={tradeStyles.form} aria-label="Trade" data-unavailable={unavailable} data-compact={compact}>
@@ -652,14 +703,7 @@ export function CoinTrade(props: CoinTradeProps) {
         balance={authenticated ? <CoinAvailableBalance side={side} facts={facts} value={short} mark={mark} loading={balancePending(props, walletRead.status)} /> : null}
         detailsSlot={<div className={tradeStyles.detailsSlot} ref={setTradeSlot}/>}
         counterPicker={<CoinCounterPicker active={visible} side={side} counter={counter} wallet={walletRead.wallet} hidden={hidden} disabled={busy || !visible || !supportedNetwork} onChange={() => {cancelReview();setFee(null);setConsent(false);setMessage(null);}}/>}
-        action={<CoinSubmit
-          ready={ready && !unavailable}
-          guest={!authenticated}
-          busy={busy}
-          label={!authenticated ? `Sign in to ${side} ${symbol}` : submitPrerequisite(state, unavailable) ?? (side === "buy" ? buyLabel(draft, facts, symbol, hidden) : `Sell ${symbol}`)}
-          side={side}
-          submit={() => void submit()}
-        />}
+        action={<WalletFundingSwitch {...state.walletSwitch} fallback={submitAction} />}
       />
       <div className={tradeStyles.notices} data-empty={!hasTradeNotice(status, feeOffer)}>
         <CoinDetails kind="trade" label="Trade details" text="Details">

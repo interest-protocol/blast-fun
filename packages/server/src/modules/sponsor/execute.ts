@@ -10,7 +10,7 @@ import type { ExecuteResponse } from "@blast/core/modules/presale/contracts/web-
 import type { PresaleOutcomeRecorder } from "../presale/outcomes/recorder.ts";
 import { recordPresaleMetric } from "@blast/core/modules/presale/redaction/redaction.ts";
 import { PresaleRouteError } from "@blast/core/modules/presale/route-kit/errors.ts";
-import { countsDailyExecution, recordsCommit } from "@blast/core/modules/sponsor/intents.ts";
+import { hasDailySponsorshipLimit, recordsCommit } from "@blast/core/modules/sponsor/intents.ts";
 import {
   readJsonBody,
   type PresaleRequestContext,
@@ -123,14 +123,13 @@ const privyAccountOf = (accountKey: string): string | null =>
  *    `invalid_signature`; nothing is submitted. Each wrong signature counts
  *    in `presale_sponsor_bad_signature` for this reservation; the third
  *    expires it, so one reservation cannot be replayed with junk forever.
- * 4b. The platform's daily cap (`presale_sponsor_exec_global`), counted only
+ * 4b. For capped intents, the platform daily limit (`presale_sponsor_exec_global`), counted only
  *    now (review H2): an expired reservation or a wrong signature never
  *    spends it. Full is `rate_limited`.
  * 5. One conditional update moves `reserved` to `submitted`; only its winner
  *    calls the pool's `execute_tx` (20 s), and the pool signs as sponsor.
  * 6. Effects for the stored digest settle the row (`executed` or
- *    `failed_execution`), count one `presale_sponsor_exec` unit (not for a
- *    social `trade`, which the social cap counts), and link an
+ *    `failed_execution`), count one `presale_sponsor_exec` unit for capped intents, and link an
  *    executed commit to the account. Any other pool outcome looks the digest
  *    up on chain for 15 s; without it the row is `unconfirmed`, 504 with the digest.
  *
@@ -202,8 +201,7 @@ export function createPresaleSponsorExecuteRoute(
         ? context.json(executeResponse(current.digest, current.outcome))
         : context.json(executeResponse(row.digest, outcome));
     }
-    // A `trade` (social R3-31) counts against the social path's own daily cap, never the presale budget.
-    if (countsDailyExecution(row.intent)) {
+    if (hasDailySponsorshipLimit(row.intent)) {
       try {
         const decision = await context.consume("presale_sponsor_exec");
         if (!decision.allowed)
@@ -384,14 +382,15 @@ export function createPresaleSponsorExecuteRoute(
     }
     await dependencies.authorizeSubmission?.(row, context.request.signal);
     reserve(row, work);
-    // Step 4b: the platform's daily cap on sponsored executions (WP3), counted
-    // only for a reservation about to be submitted with a valid signature,
-    // before any gas is spent.
-    const global = await context.consume("presale_sponsor_exec_global");
-    if (!global.allowed)
-      throw new PresaleRouteError("rate_limited", {
-        retryAfterSeconds: global.retryAfterSeconds,
-      });
+    // Only capped intents consume the platform daily budget, after signature verification.
+    if (hasDailySponsorshipLimit(row.intent)) {
+      const global = await context.consume("presale_sponsor_exec_global");
+      if (!global.allowed) {
+        throw new PresaleRouteError("rate_limited", {
+          retryAfterSeconds: global.retryAfterSeconds,
+        });
+      }
+    }
     const pool = dependencies.pool();
     if (!(await executions.submit(row.id, row.privyDid, clock()))) {
       // Another request won the row, or it expired in between: answer from its current state.

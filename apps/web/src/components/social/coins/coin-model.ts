@@ -6,6 +6,7 @@ import { isSmallBalance } from "@blast/core/modules/social/portfolio/small-balan
 import { atomsValue, multiple, px, qty, signPct, usd, usd0 } from "@blast/core/web/format.ts";
 import type { SocialTransferFee, SocialWallet, SocialWalletCoin } from "@blast/core/web/contracts/coins.ts";
 import { SUI_COIN_TYPE, USDC_COIN_TYPE } from "@blast/core/lib/sui/coin-types.ts";
+import type { WalletActionDraft } from "./wallet-action-draft";
 
 /**
  * The coins sheet's view model (canonical UI §14 and the live design's
@@ -120,7 +121,7 @@ export type WalletCoinView = Readonly<{
   presale: Readonly<{ presaleId: string; venue: string; trading: boolean; inPresale?: boolean; quoteSymbol?: string; quoteType?: string; multiple: number | null }> | null;
 }>;
 
-export type CoinOpening = Readonly<{ screen: CoinScreen; coins?: readonly WalletCoinView[] }>;
+export type CoinOpening = Readonly<{ screen: CoinScreen; coins?: readonly WalletCoinView[]; walletDraft?: WalletActionDraft }>;
 export type WalletCoinCatalogPage = Readonly<{ coins: readonly WalletCoinView[]; nextCursor: string | null }>;
 
 /** Public metadata, without a wallet balance, so a swap can be composed before sign-in. */
@@ -296,6 +297,7 @@ export type WithdrawCheck = Readonly<{
   /** The line under the address, and whether it is an error. */
   message: string;
   bad: boolean;
+  recipientValid: boolean;
   /** The amount box's left foot: `USDC`, or `≈ $12.34`. */
   value: string;
   atoms: bigint | null;
@@ -331,7 +333,7 @@ export function withdrawCheck(input: Readonly<{
   const needsFee = coin.coinType !== USDC_COIN_TYPE && fee === "wallet" && input.suiAtoms < SUI_FEE_RESERVE_ATOMS / 4n;
   const minimum = coin.coinType === USDC_COIN_TYPE ? USDC_MIN_WITHDRAW_ATOMS : 1n;
   const prompt = withdrawPrompt(atoms, tooMuch, address, ok && !own, needsFee, minimum);
-  return { ready: prompt === null, label: prompt ?? `Withdraw ${coinAmt(coin, v)}`, message, bad, value, atoms };
+  return { ready: prompt === null, label: prompt ?? `Withdraw ${coinAmt(coin, v)}`, message, bad, recipientValid: ok, value, atoms };
 }
 
 function withdrawPrompt(atoms: bigint | null, tooMuch: boolean, address: string, valid: boolean, needsFee: boolean, minimum: bigint): string | null {

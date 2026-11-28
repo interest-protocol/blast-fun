@@ -6,6 +6,7 @@ import { normalizeSuiAddress, toBase64 } from "@mysten/sui/utils";
 import { defineBlastDeployment, launchpadDeployment } from "@interest-protocol/blast-sdk/deployments";
 import { LaunchpadTransactions } from "@interest-protocol/blast-sdk/launchpad";
 import { CREATE_TEST_SUI_QUOTE_TYPE } from "@blast/core/modules/social/contracts/create.ts";
+import { SUI_COIN_TYPE } from "@blast/core/lib/sui/coin-types.ts";
 import { fixturePrivySigner, fixtureWalletSigner, NON_PRODUCTION_MANIFEST } from "../../../../test/fixtures/launchpad/transaction/fixtures.ts";
 import { createTradeFixtureChain, TRADE_LAUNCH_ID, TRADE_MEME_TYPE } from "../../../../../../packages/core/test/fixtures/launchpad/trade/trade-fixtures.ts";
 import { curveTradeAdapter, type CurveTradeInput } from "./curve-adapter.ts";
@@ -79,7 +80,7 @@ for (const direction of ["buy", "sell"] as const) {
   });
 }
 
-test("past the trade cap an outside wallet pays its own gas; an embedded wallet is refused", async () => {
+test("when sponsorship is unavailable an outside wallet pays its own gas and an embedded wallet is refused", async () => {
   const fixture = createTradeFixtureChain({ quoteType: CREATE_TEST_SUI_QUOTE_TYPE });
   const input: CurveTradeInput = { launchId: TRADE_LAUNCH_ID, direction: "buy", amount: "5", slippageBps: 100n };
   const adapter = curveTradeAdapter("buy", undefined, async () => { throw new CurveSponsorshipUnavailable(); });
@@ -96,4 +97,40 @@ test("past the trade cap an outside wallet pays its own gas; an embedded wallet 
   const embedded = { ...fixturePrivySigner(), accessToken: async () => "fixture-access-token" };
   const refused = await runFreshPreflight({ chain, signer: embedded, adapter, input, reviewId: "embedded-refused" });
   assert.equal(refused.outcome.status, "blocked");
+});
+
+test("a routed SUI buy can use its wallet gas coin when sponsorship is unavailable", async (t) => {
+  const fixture = createTradeFixtureChain({ quoteType: CREATE_TEST_SUI_QUOTE_TYPE });
+  const signer = { ...fixtureWalletSigner(), sponsored: true };
+  const expiresAtMs = Date.now() + 60_000;
+  const input: CurveTradeInput = {
+    launchId: TRADE_LAUNCH_ID, direction: "buy", amount: "1", slippageBps: 100n,
+    payment: { coinType: SUI_COIN_TYPE, symbol: "SUI", decimals: 9, quoteId: "sealed-fixture", quoteAmount: "5000000000", expiresAtMs },
+  };
+  t.mock.method(globalThis, "fetch", async (_url: string, init: RequestInit) => {
+    const request = JSON.parse(String(init.body));
+    const deployment = launchpadDeployment(defineBlastDeployment(NON_PRODUCTION_MANIFEST));
+    const tx = new LaunchpadTransactions(deployment).buy({
+      launch: { objectId: TRADE_LAUNCH_ID, initialSharedVersion: "12" },
+      memeType: TRADE_MEME_TYPE, quoteType: CREATE_TEST_SUI_QUOTE_TYPE, recipient: signer.address,
+      quoteAmount: 5_000_000_000n, minMemeOut: BigInt(request.min_meme_out), useGasCoin: false,
+    });
+    tx.setSender(signer.address);
+    if (request.wallet_pays_gas === true) {
+      const [payment] = tx.splitCoins(tx.gas, [tx.pure.u64(1_000_000_000n)]);
+      tx.transferObjects([payment], signer.address);
+    }
+    return Response.json({
+      launch_id: TRADE_LAUNCH_ID, sender: signer.address, quote_type: CREATE_TEST_SUI_QUOTE_TYPE, quote_amount: "5000000000",
+      payment_type: SUI_COIN_TYPE, payment_amount: "1000000000", min_meme_out: request.min_meme_out, expires_at_ms: expiresAtMs,
+      transaction_kind_bytes: toBase64(await tx.build({ client: fixture.client, onlyTransactionKind: true })),
+    });
+  });
+  const adapter = curveTradeAdapter("buy", undefined, async () => { throw new CurveSponsorshipUnavailable(); });
+  const chain = { client: fixture.client, manifest: NON_PRODUCTION_MANIFEST, mode: "non-production" as const };
+  const { outcome } = await runFreshPreflight({ chain, signer, adapter, input, reviewId: "routed-wallet-gas" });
+  if (outcome.status !== "ready") assert.fail(JSON.stringify(outcome));
+  const data = Transaction.from(outcome.review.transactionBytes).getData();
+  assert.equal(data.gasData.owner, signer.address);
+  assert.ok(data.commands.some(command => command.SplitCoins?.coin.$kind === "GasCoin"));
 });
