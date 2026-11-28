@@ -90,8 +90,8 @@ export function viewStateOf(params: URLSearchParams): HomeViewState {
   const filters = {
     window: isHomeWindow(window) ? window : HOME_DEFAULT_VIEW.window,
     minParticipants,
-    // New offers its own ages only; any other reads as its default.
-    age: stage === "new" ? (isHomeNewAge(age) ? age : HOME_NEW_DEFAULT_AGE) : isHomeAge(age) ? age : HOME_DEFAULT_VIEW.age,
+    // New offers its own ages only; any other reads as its default. New is never implied, so its link names it.
+    age: rawStage === "new" ? (isHomeNewAge(age) ? age : HOME_NEW_DEFAULT_AGE) : isHomeAge(age) ? age : HOME_DEFAULT_VIEW.age,
     tradable: params.get(KEYS.tradable) === "1",
     knownDeployer: params.get(KEYS.knownDeployer) === "1",
   };
