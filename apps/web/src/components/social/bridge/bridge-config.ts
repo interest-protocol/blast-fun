@@ -2,7 +2,7 @@
 
 type Environment = Readonly<Record<string, string | undefined>>;
 
-/** The chains people can bridge from, in the order the chain picker lists them. Each has a BLINK route to Sui. */
+/** The chains people can bridge from, in the order the chain picker lists them. */
 export const BRIDGE_CHAINS = ["base", "ethereum", "arbitrum", "optimism", "polygon", "solana"] as const;
 export type BridgeChain = (typeof BRIDGE_CHAINS)[number];
 

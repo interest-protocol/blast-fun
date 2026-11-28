@@ -6,7 +6,7 @@ import { usePrivySessionMounted } from "#web/components/presale/providers/PrivyS
 
 const BridgeContext = createContext<"off" | "blink" | "fast-fallback">("off");
 
-/** Whether the server turned Bridge to Sui on and enabled the fallback. */
+/** Whether the server turned Bridge to Sui on, and with every Mayan route or Blink only. */
 export function BridgeProvider({ enabled, fastMctp, children }: Readonly<{ enabled: boolean; fastMctp: boolean; children: ReactNode }>) {
   const configured = fastMctp ? "fast-fallback" : "blink";
   return <BridgeContext value={enabled ? configured : "off"}>{children}</BridgeContext>;
@@ -22,6 +22,7 @@ export function useBridge(): boolean {
   return enabled && privy;
 }
 
+/** Every route, not Blink alone: the MCTP routes too, with the safety check before a send. */
 export function useBridgeFastMctp(): boolean {
   return useContext(BridgeContext) === "fast-fallback";
 }

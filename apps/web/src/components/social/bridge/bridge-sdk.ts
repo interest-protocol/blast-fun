@@ -58,7 +58,7 @@ export type BridgeRow = Readonly<{
   toAmount: string | null;
   toSymbol: string;
   state: TransferState;
-  /** Fast MCTP pays any refund to the Blast wallet on Sui. */
+  /** MCTP and Fast MCTP pay any refund to the Blast wallet on Sui. */
   refundOnSui?: boolean;
   /** ISO time the bridge started. */
   at: string;
@@ -95,6 +95,8 @@ export const MAYAN_EXPLORER = "https://explorer-api.mayan.finance";
 /** Mayan's explorer names chains by Wormhole id. */
 const WORMHOLE_CHAINS: Readonly<Record<string, BridgeChain>> = { "1": "solana", "2": "ethereum", "5": "polygon", "23": "arbitrum", "24": "optimism", "30": "base" };
 const SUI_WORMHOLE_ID = "21";
+/** The explorer's names for MCTP and Fast MCTP, with or without a swap. */
+const MCTP_SERVICE = /^MCTP_(FAST_)?(BRIDGE|SWAP)$/;
 
 type ExplorerSwap = Readonly<{
   service?: unknown;
@@ -132,7 +134,7 @@ export function explorerRows(json: unknown, blastAddress: string, limit = 5): Br
       toAmount: text(swap.toAmount),
       toSymbol: text(swap.toTokenSymbol) ?? "",
       state: transferState(text(swap.clientStatus)),
-      ...(swap.service === "MCTP_FAST_BRIDGE" ? { refundOnSui: true } : {}),
+      ...(MCTP_SERVICE.test(String(swap.service)) ? { refundOnSui: true } : {}),
       at,
     });
   }

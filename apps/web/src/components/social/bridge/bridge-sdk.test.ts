@@ -23,6 +23,15 @@ test("explorer rows keep bridges paid to this Blast address on Sui, newest first
   assert.deepEqual(sources.map((row) => [row.hash, row.chain]), [["op", "optimism"], ["pol", "polygon"], ["bsc", null]]);
 });
 
+test("a refund on an MCTP bridge goes to the Blast wallet on Sui, and a Blink one does not", () => {
+  const rows = explorerRows({ data: ["MCTP_BRIDGE", "MCTP_SWAP", "MCTP_FAST_BRIDGE", "MCTP_FAST_SWAP", "BLINK_SWAP"].map((service, index) => (
+    swap(service, `2026-11-28T1${index}:00:00Z`, { service, clientStatus: "REFUNDED" })
+  )) }, BLAST);
+  assert.deepEqual(rows.map((row) => [row.hash, row.state, row.refundOnSui === true]), [
+    ["BLINK_SWAP", "refunded", false], ["MCTP_FAST_SWAP", "refunded", true], ["MCTP_FAST_BRIDGE", "refunded", true], ["MCTP_SWAP", "refunded", true], ["MCTP_BRIDGE", "refunded", true],
+  ]);
+});
+
 test("after a close the wallet gets no request, but one already sent still answers", async () => {
   const methods: string[] = [];
   let answer: (hash: string) => void = () => undefined;

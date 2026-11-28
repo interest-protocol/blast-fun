@@ -96,6 +96,7 @@ function BridgeReady({ blastAddress, signedIn, onSignIn, source }: BridgeCardPro
 
   return (
     <BridgeForm
+      allRoutes={fastMctp}
       blastAddress={blastAddress}
       onArrived={onArrived}
       onSignIn={onSignIn}

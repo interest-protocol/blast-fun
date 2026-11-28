@@ -104,7 +104,8 @@ export function exceedsBalance(atoms: bigint, balance: bigint, token: SourceToke
 export type QuoteFacts = Readonly<{
   expectedAmountOut: number;
   minReceived: number;
-  clientRelayerFeeSuccess?: number | null;
+  /** Mayan's fee in dollars; null or absent when the quote does not say. */
+  fee?: number | null;
   etaSeconds?: number;
   /** The amount sent, in tokens, and its USD value from the Blink quote, to show the fee in the source token too. */
   amountIn?: number;
@@ -136,7 +137,7 @@ export function cutDigits(value: number, digits: number): number {
 }
 
 function feeText(quote: QuoteFacts, from: SourceToken): string {
-  const fee = quote.clientRelayerFeeSuccess;
+  const { fee } = quote;
   // A quote without a fee says nothing about it: never show that as $0.00.
   if (fee === null || fee === undefined) return NO_VALUE;
   const usd = fee > 0 && fee < 0.01 ? "< $0.01" : usdFormat.format(fee);
@@ -181,12 +182,27 @@ export function transferState(clientStatus: string | null | undefined): Transfer
   return "pending";
 }
 
-type QuoteFailure = Readonly<{ code?: unknown; data?: { minAmountIn?: unknown; maxAmountIn?: unknown } | null }>;
+type QuoteFailure = Readonly<{ code?: unknown; message?: unknown; data?: { minAmountIn?: unknown; maxAmountIn?: unknown } | null }>;
+
+/** USDC is the coin most likely to have a price, so offer it unless it is the coin that failed. */
+function noRouteText(chain: ChainInfo, token: SourceToken): string {
+  const isUsdc = token.mayan.toLowerCase() === chain.tokens[1].mayan.toLowerCase();
+  return `No price for ${token.symbol}. ${isUsdc ? "Try another chain" : "Bridge USDC"}. Code: bridge_no_route.`;
+}
+
+/** Mayan names its current limit only in the message, in the source coin. Cut, so the figure still fits. */
+function overLimitText(message: unknown, token: SourceToken): string {
+  const stated = typeof message === "string" ? /Max per swap: (\d+(?:\.\d+)?)/.exec(message)?.[1] : undefined;
+  const limit = stated === undefined ? null : `Largest right now: ${amountText(Number(stated), token.decimals, 4)}\u00a0${token.symbol}.`;
+  return `${limit ?? "Try a smaller amount."} Code: bridge_amount_too_large.`;
+}
 
 /** A short sentence for a failed quote, in Mayan's limits where it gives them. */
-export function quoteErrorText(error: unknown, chain: ChainInfo, token: SourceToken): string {
-  const { code, data } = (error ?? {}) as QuoteFailure;
+export function quoteErrorText(error: unknown, chain: ChainInfo, token: SourceToken, allRoutes = false): string {
+  const { code, data, message } = (error ?? {}) as QuoteFailure;
   if (isPausedError(error)) return PAUSED_TEXT;
+  if (allRoutes && code === "ROUTE_NOT_FOUND") return noRouteText(chain, token);
+  if (allRoutes && code === "BRIDGE_LIMIT_EXCEEDED") return overLimitText(message, token);
   if (code === "AMOUNT_TOO_SMALL" && typeof data?.minAmountIn === "number") return `The smallest amount is ${data.minAmountIn}\u00a0${token.symbol}. Code: bridge_amount_too_small.`;
   if (code === "AMOUNT_TOO_LARGE" && typeof data?.maxAmountIn === "number") return `The largest amount is ${data.maxAmountIn}\u00a0${token.symbol}. Code: bridge_amount_too_large.`;
   if (code === "ROUTE_NOT_FOUND") return `No route from ${chain.label} ${token.symbol} to Sui right now. Code: bridge_no_route.`;

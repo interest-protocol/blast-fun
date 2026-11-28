@@ -33,7 +33,10 @@
 .summary dl dd { font-weight: 500; transition: color var(--t2) var(--ease-std); }
 .summary.refreshing, .summary.refreshing dd { color: var(--muted); }
 .sentence { margin: 0; padding: 0 0.125rem; font-size: 0.875rem; line-height: 1.45; color: var(--ink); text-wrap: pretty; }
-.summary.refreshing .sentence { color: var(--muted); }
+.summary.refreshing .sentence, .sentence.pendingSentence { color: var(--muted); }
+/* The loss pop-up takes the warning colour above 3% and the stronger one above 10%. */
+.lossWarn h2 { color: var(--warn); }
+.lossDown h2 { color: var(--down); }
 
 .note { text-align: left; }
 .action { inline-size: 100%; }

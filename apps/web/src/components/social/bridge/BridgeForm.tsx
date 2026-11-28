@@ -22,10 +22,12 @@ import { TextField } from "#web/components/blast-ui/TextField.tsx";
 import { TransactionLink } from "#web/components/blast-ui/TransactionLink.tsx";
 import { readBrowserStorage, writeBrowserStorage } from "#web/lib/browser-storage.ts";
 import { decimalText, dropDecimal, pasteDecimal } from "#web/lib/decimal-input.ts";
+import { useAppQueryClient } from "#web/lib/query/provider.tsx";
 import { useDebouncedValue } from "#web/lib/use-debounced-value.ts";
 
 import { AmountPresets } from "../coins/AmountPresets.tsx";
 import coinStyles from "../coins/coins.module.css";
+import { priceQuery } from "../prices/price-client.ts";
 import { fmtLive } from "../trade/trade-ticket.ts";
 
 import { BRIDGE_CHAINS, type BridgeChain } from "./bridge-config.ts";
@@ -57,8 +59,10 @@ import {
   type TransferState,
   usdBand,
 } from "./bridge-model.ts";
+import { asksFirst, worstLoss, type Loss } from "./bridge-safety.ts";
 import { explorerLink, mergeRows, type BridgeRow, type BridgeSdk, type EvmWallet, type SolanaWallet, type SourceWallet, type TransferStatus } from "./bridge-sdk.ts";
 import styles from "./bridge.module.css";
+import { BridgeLossSheet } from "./BridgeLossSheet.tsx";
 import { SourceTokenPicker } from "./SourceTokenPicker.tsx";
 import { readSolanaSubmission, solanaSubmissionSignature, SOLANA_RETRY_UNAVAILABLE, subscribeSolanaSubmission, withSolanaSubmissionLock } from "./solana-submission.ts";
 
@@ -78,6 +82,8 @@ export type BridgeFormProps = Readonly<{
   onSignIn: () => void;
   /** A bridge this card watched has arrived: refresh balances, say so once. */
   onArrived: (row: BridgeRow, toAmount: string | null) => void;
+  /** Every Mayan route, with the safety check before a send; off, Blink alone. */
+  allRoutes?: boolean;
   now?: () => number;
 }>;
 
@@ -91,10 +97,20 @@ const BUSY_TEXT = "Confirm in your wallet.";
 const HISTORY_FAILED = "Couldn’t load recent bridges";
 const CHECKING_TEXT = "Checking Solana transfer.";
 
-/** Retry only what may pass on a second try: rate limits, server errors, the network. */
-function retryable(error: unknown): boolean {
-  const code = (error as { code?: unknown } | null)?.code;
-  return !isPausedError(error) && typeof code !== "string";
+/**
+ * Retry only what may pass on a second try. With every route on: the network and
+ * server errors, never a rate limit (the SDK drops the HTTP status; a refused
+ * quote carries `data`, a server error does not). Blink alone also retries
+ * errors with no code.
+ */
+function retryable(error: unknown, allRoutes: boolean): boolean {
+  if (isPausedError(error)) return false;
+  const { code, message } = (error ?? {}) as { code?: unknown; message?: unknown };
+  if (!allRoutes) return typeof code !== "string";
+  if (error instanceof Error) return error instanceof TypeError || message === "Internal server error";
+  // The SDK throws plain objects. Every refusal, a 429 too, has a `data` key, even an empty one;
+  // Mayan's own 5xx answer has none, and neither does the SDK's "outdated" refusal (9999).
+  return typeof message === "string" && !("data" in (error as object)) && code !== 9999;
 }
 
 /** The wallet said no: back to the button, no banner. */
@@ -113,6 +129,7 @@ type ReadArgs = Readonly<{
   atoms: bigint | null;
   paused: boolean;
   onPaused: (error: unknown) => void;
+  allRoutes: boolean;
 }>;
 
 /** Mayan's quote for what is typed, the source balance, the router allowance and the Blast address's history. */
@@ -121,14 +138,14 @@ function useBridgeReads(args: ReadArgs) {
   const source = useSourceReads(args, quoted);
   const history = useBridgeHistory(args.sdk, args.blastAddress);
   const { token, to } = args.selection;
-  const facts = quoted.shown ? quoteRows(quoteFacts(quoted.shown, token), token, to) : null;
+  const facts = quoted.shown ? quoteRows(quoteFacts(quoted.shown, token, args.allRoutes), token, to) : null;
   const refreshing = facts !== null && (quoted.quote.isFetching || quoted.typing);
   const retryHistory = history.isError && !history.isFetching ? () => { void history.refetch(); } : undefined;
   return { ...quoted, ...source, facts, refreshing, history, retryHistory };
 }
 
 /** Mayan's quote for the settled amount, bound to the source wallet and the Blast address once both are known. */
-function useBridgeQuote({ sdk, selection, wallet, blastAddress, atoms, paused, onPaused }: ReadArgs) {
+function useBridgeQuote({ sdk, selection, wallet, blastAddress, atoms, paused, onPaused, allRoutes }: ReadArgs) {
   const { chain, token, to } = selection;
   const typed = atoms?.toString() ?? null;
   const settled = useDebouncedValue(typed, QUOTE_DEBOUNCE_MS);
@@ -155,7 +172,7 @@ function useBridgeQuote({ sdk, selection, wallet, blastAddress, atoms, paused, o
     placeholderData: (previous, query) => (
       query?.queryKey.every((part, index) => index === 4 || part === quoteKey[index]) ? previous : undefined
     ),
-    retry: (count, error) => count < 3 && retryable(error),
+    retry: (count, error) => count < 3 && retryable(error, allRoutes),
     retryDelay: (attempt) => 1000 * 2 ** attempt,
   });
   const shown: Quote | undefined = atoms === null ? undefined : quote.data;
@@ -234,20 +251,21 @@ function useBridgeHistory(sdk: BridgeSdk, blastAddress: string | null) {
 
 type SendKeys = Readonly<{ quoteKey: readonly unknown[]; allowanceKey: readonly unknown[] }>;
 
-function quoteNeedsReview(fresh: Quote, shown: Quote | undefined) {
-  if (!shown) return false;
-  if (fresh.type !== shown.type) return true;
-  return fresh.type === "FAST_MCTP"
-    ? fresh.expectedAmountOut < shown.expectedAmountOut
-    : fresh.minReceived < shown.minReceived;
+/** A new route or a lower minimum than the one on screen: show it and ask again. */
+function quoteNeedsReview(fresh: Quote, agreed: Quote | undefined) {
+  return agreed !== undefined && (fresh.type !== agreed.type || fresh.minReceived < agreed.minReceived);
 }
 
+/** A send waiting on the second press: what was agreed to, and what the worst case loses. */
+type LossAsk = Readonly<{ inputs: string; agreed: Quote; ask: BridgeRequest; source: SourceWallet; amount: string; loss: Loss }>;
+
 /** Approve, switch and bridge: each re-asks Mayan for a bound quote and checks it before any wallet call. */
-function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent, solanaAddress }: Readonly<{
+function useBridgeSend({ sdk, selection, keys, shown, allRoutes, now, onPaused, onSent, solanaAddress }: Readonly<{
   sdk: BridgeSdk;
   selection: Selection;
   keys: SendKeys;
   shown: Quote | undefined;
+  allRoutes: boolean;
   now: () => number;
   onPaused: (error: unknown) => void;
   onSent: () => void;
@@ -255,7 +273,10 @@ function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent, sol
 }>) {
   const { chain, info, token, to } = selection;
   const queryClient = useQueryClient();
+  const priceClient = useAppQueryClient();
   const [failed, setFailed] = useState<string | null>(null);
+  const [lossAsk, setLossAsk] = useState<LossAsk | null>(null);
+  const [lossOpen, setLossOpen] = useState(false);
   // The inputs for a fresh route or lower rate that needs review.
   const [rateChangedFor, setRateChangedFor] = useState<string | null>(null);
   const [sent, setSent] = useState<readonly BridgeRow[]>([]);
@@ -281,7 +302,7 @@ function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent, sol
     } catch (error) {
       if (isPausedError(error)) onPaused(error);
       console.error("Bridge quote failed before signing", error);
-      setFailed(quoteErrorText(error, info, token));
+      setFailed(quoteErrorText(error, info, token, allRoutes));
       return null;
     }
     if (signal().aborted) return null;
@@ -345,12 +366,30 @@ function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent, sol
     queryClient.setQueryData(keys.allowanceKey, await sdk.allowanceEnough(fresh, source, chain));
   });
 
-  const sendBridge = async (ask: BridgeRequest, source: SourceWallet, fromAmount: string) => {
+  /** True when this press must not send: the loss needs a second press, or the card closed while it was read. */
+  const heldForLoss = async (quote: Quote, ask: BridgeRequest, source: SourceWallet, amount: string): Promise<boolean> => {
+    const loss = await worstLoss({
+      quote,
+      chain,
+      token,
+      to,
+      now,
+      read: (coin) => priceClient.fetchQuery(priceQuery({ kind: "coin", id: coin, window: "24h" })),
+    });
+    if (signal().aborted) return true;
+    if (!asksFirst(loss)) return false;
+    setLossAsk({ inputs, agreed: quote, ask, source, amount, loss });
+    setLossOpen(true);
+    return true;
+  };
+
+  /** `agreed` is the quote on screen at the press; `confirmed` means the loss was accepted. */
+  const sendBridge = async (ask: BridgeRequest, source: SourceWallet, fromAmount: string, agreed: Quote | undefined, confirmed: boolean) => {
     if (source.kind === "solana" && readSolanaSubmission(source.address)) return;
     const fresh = await freshQuote(ask);
     if (!fresh) return;
     queryClient.setQueryData(keys.quoteKey, fresh);
-    if (quoteNeedsReview(fresh, shown)) {
+    if (quoteNeedsReview(fresh, agreed)) {
       setRateChangedFor(inputs);
       return;
     }
@@ -358,12 +397,13 @@ function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent, sol
       queryClient.setQueryData(keys.allowanceKey, false);
       return;
     }
+    if (allRoutes && !confirmed && await heldForLoss(fresh, ask, source, fromAmount)) return;
     if (signal().aborted || (source.kind === "solana" && activeSolana.current !== source.address)) return;
     let signedHash: string | undefined;
     const record = (hash: string) => {
       signedHash = hash;
       rememberSubmission(ask.blastAddress, hash);
-      setSent((rows) => rows.some((row) => row.hash === hash) ? rows : [{ hash, chain, fromAmount, fromSymbol: token.symbol, toAmount: String(fresh.expectedAmountOut), toSymbol: to.symbol, state: "pending", refundOnSui: fresh.type === "FAST_MCTP", at: new Date(now()).toISOString() }, ...rows]);
+      setSent((rows) => rows.some((row) => row.hash === hash) ? rows : [{ hash, chain, fromAmount, fromSymbol: token.symbol, toAmount: String(fresh.expectedAmountOut), toSymbol: to.symbol, state: "pending", refundOnSui: fresh.type !== "BLINK", at: new Date(now()).toISOString() }, ...rows]);
     };
     try {
       const hash = await sdk.send(fresh, ask, source, record, signal());
@@ -379,10 +419,17 @@ function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent, sol
     queryClient.removeQueries({ queryKey: ["bridge", "allowance"] });
   };
 
-  const bridge = (ask: BridgeRequest, source: SourceWallet, amount: string) => run(() =>
-    source.kind === "solana"
-      ? withSolanaSubmissionLock(source.address, () => sendBridge(ask, source, amount))
-      : sendBridge(ask, source, amount));
+  const submit = (ask: BridgeRequest, source: SourceWallet, amount: string, agreed: Quote | undefined, confirmed: boolean) => run(() => {
+    const work = () => sendBridge(ask, source, amount, agreed, confirmed);
+    return source.kind === "solana" ? withSolanaSubmissionLock(source.address, work) : work();
+  });
+  const bridge = (ask: BridgeRequest, source: SourceWallet, amount: string) => submit(ask, source, amount, shown, false);
+  // The second press asks Mayan again and sends only if the minimum is no lower than the one the person accepted.
+  const confirmLoss = () => {
+    if (!lossAsk || !lossOpen) return;
+    setLossOpen(false);
+    submit(lossAsk.ask, lossAsk.source, lossAsk.amount, lossAsk.agreed, true);
+  };
 
   const checkSolana = (address: string, blastAddress: string) => run(async () => {
     const result = await sdk.checkSolanaSubmission(address, signal());
@@ -407,7 +454,7 @@ function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent, sol
   const switchTo = (source: EvmWallet) => run(() => source.switchChain(info.chainId!), { switching: true });
 
   const notice = solanaNotice?.address === solanaAddress ? solanaNotice : null;
-  return { busy: step.isPending, switching: step.isPending && step.variables.switching === true, busyText: step.variables?.checkingAddress ? CHECKING_TEXT : BUSY_TEXT, failed: failed ?? (notice?.error ? notice.text : null), setFailed, solanaNotice: notice?.error ? null : notice?.text, rateChanged: rateChangedFor === inputs, sent, approve, bridge, checkSolana, switchTo };
+  return { busy: step.isPending, switching: step.isPending && step.variables.switching === true, busyText: step.variables?.checkingAddress ? CHECKING_TEXT : BUSY_TEXT, failed: failed ?? (notice?.error ? notice.text : null), setFailed, solanaNotice: notice?.error ? null : notice?.text, rateChanged: rateChangedFor === inputs, sent, approve, bridge, checkSolana, switchTo, lossAsk, lossOpen: lossOpen && lossAsk?.inputs === inputs, confirmLoss, dismissLoss: () => setLossOpen(false), clearLoss: () => setLossAsk(null) };
 }
 
 /**
@@ -465,13 +512,14 @@ type ActionInputs = Readonly<{
   solanaPending: boolean;
   signedIn: boolean;
   blastAddress: string | null;
+  allRoutes: boolean;
 }>;
 
 /** What the button does now, and why the last quote failed if it did. */
-function formAction({ reads, send, selection, wallet, atoms, id, paused, signedIn, blastAddress, solanaPending }: ActionInputs) {
+function formAction({ reads, send, selection, wallet, atoms, id, paused, signedIn, blastAddress, solanaPending, allRoutes }: ActionInputs) {
   const { info, token } = selection;
   const quoteSettled = reads.quote.isError && !reads.quote.isFetching && atoms !== null && !reads.typing && !paused;
-  const quoteError = quoteSettled ? quoteErrorText(reads.quote.error, info, token) : null;
+  const quoteError = quoteSettled ? quoteErrorText(reads.quote.error, info, token, allRoutes) : null;
   const action = bridgeAction({
     paused,
     signedIn,
@@ -502,6 +550,26 @@ function formAction({ reads, send, selection, wallet, atoms, id, paused, signedI
   return { action, actionBusy, actionDescription, balance, balanceFailed, disableAction, message, noteId, reason, sourceAction };
 }
 
+/**
+ * Where the money sentence goes, once the quote on screen matches the amount.
+ * With every route on it sits right above the button, and route names stay in
+ * logs and analytics. With Blink alone it leads the quote, which names the
+ * route after a changed quote.
+ */
+function quoteCopy(reads: ReturnType<typeof useBridgeReads>, { info, token }: Selection, amount: string, allRoutes: boolean): Readonly<{ inQuote: string | null; aboveButton: string | null; route: string | null }> {
+  const { current, facts, shown } = reads;
+  const sentence = current && facts && shown
+    ? quoteSentence({ sent: displayAmount(amount.replace(/,/g, ""), token.symbol), source: info.label, minimum: facts.minimum, refund: allRoutes ? refundText(shown, info.label) : null })
+    : null;
+  return allRoutes ? { inQuote: null, aboveButton: sentence, route: null } : { inQuote: sentence, aboveButton: null, route: "Mayan Blink" };
+}
+
+/** The pop-up for the second press; it stays mounted while it closes. */
+function LossStep({ send }: Readonly<{ send: ReturnType<typeof useBridgeSend> }>) {
+  if (!send.lossAsk) return null;
+  return <BridgeLossSheet loss={send.lossAsk.loss} onBack={send.dismissLoss} onClosed={send.clearLoss} onSend={send.confirmLoss} open={send.lossOpen} />;
+}
+
 function useSourceActionFocus() {
   const chainTrigger = useRef<HTMLButtonElement>(null);
   const sourceActionRef = useCallback((button: HTMLButtonElement | null) => {
@@ -518,7 +586,7 @@ function useSourceActionFocus() {
   return { chainTrigger, sourceActionRef };
 }
 
-export function BridgeForm({ sdk, wallets, blastAddress, signedIn, onSignIn, onArrived, now = Date.now }: BridgeFormProps) {
+export function BridgeForm({ sdk, wallets, blastAddress, signedIn, onSignIn, onArrived, allRoutes = false, now = Date.now }: BridgeFormProps) {
   const id = useId();
   const { chainTrigger, sourceActionRef } = useSourceActionFocus();
   const { selection, toIndex, setToIndex, amount, setAmount, chooseChain, chooseToken } = useBridgeInputs();
@@ -532,9 +600,9 @@ export function BridgeForm({ sdk, wallets, blastAddress, signedIn, onSignIn, onA
   const wallet: SourceWallet | null = info.kind === "evm" ? wallets.evm : wallets.solana;
   const { solanaAddress, signature, solanaPending } = usePendingSolanaSubmission(wallet);
   const atoms = amountAtoms(amount, token);
-  const reads = useBridgeReads({ sdk, selection, wallet, blastAddress, atoms: solanaPending ? null : atoms, paused, onPaused });
-  const send = useBridgeSend({ sdk, selection, keys: reads, shown: reads.shown, now, onPaused, onSent: () => setAmount(""), solanaAddress });
-  const { action, actionBusy, actionDescription, balance, balanceFailed, disableAction, message, noteId, reason, sourceAction } = formAction({ reads, send, selection, wallet, atoms, id, paused, signedIn, blastAddress, solanaPending });
+  const reads = useBridgeReads({ sdk, selection, wallet, blastAddress, atoms: solanaPending ? null : atoms, paused, onPaused, allRoutes });
+  const send = useBridgeSend({ sdk, selection, keys: reads, shown: reads.shown, allRoutes, now, onPaused, onSent: () => setAmount(""), solanaAddress });
+  const { action, actionBusy, actionDescription, balance, balanceFailed, disableAction, message, noteId, reason, sourceAction } = formAction({ reads, send, selection, wallet, atoms, id, paused, signedIn, blastAddress, solanaPending, allRoutes });
 
   const request = (): BridgeRequest => ({ chain, token, to: selection.to, amountIn64: atoms!.toString(), blastAddress: blastAddress!, sourceAddress: wallet!.address });
   const press = () => pressAction(action.kind, {
@@ -551,6 +619,7 @@ export function BridgeForm({ sdk, wallets, blastAddress, signedIn, onSignIn, onA
   const locked = send.busy || paused;
   const inputsDisabled = locked || solanaPending;
   const rows = mergeRows(send.sent, reads.history.data ?? []);
+  const copy = quoteCopy(reads, selection, amount, allRoutes);
   const actionButton = (
     <Button
       aria-describedby={actionDescription}
@@ -600,20 +669,20 @@ export function BridgeForm({ sdk, wallets, blastAddress, signedIn, onSignIn, onA
         />
       </div>
       <QuoteNotes
-        amount={reads.current ? amount : null}
         busyText={actionBusy ? send.busyText : null}
         facts={reads.facts}
-        fastMctp={reads.shown?.type === "FAST_MCTP"}
-        info={info}
         message={message}
         noteId={noteId}
         rateChanged={send.rateChanged}
         reason={reason}
         refreshing={reads.refreshing}
-        token={token}
+        route={copy.route}
+        sentence={copy.inQuote}
       />
       <SolanaStatus notice={send.solanaNotice} signature={signature} />
+      <ButtonSentence refreshing={reads.refreshing} text={copy.aboveButton} />
       {sourceAction ? null : actionButton}
+      <LossStep send={send} />
       <p className={styles.powered}>Powered by Mayan</p>
       <RecentBridges
         id={id}
@@ -798,12 +867,27 @@ function GetPanel({ facts, waiting, refreshing, toIndex, onTo, busy, blastAddres
   );
 }
 
-function QuoteNotes({ facts, fastMctp, amount, info, token, refreshing, message, noteId, rateChanged, reason, busyText }: Readonly<{
+/** A Blink order refunds the source wallet; the MCTP routes pay USDC to the Blast wallet. */
+function refundText(quote: Quote, source: string): string {
+  return quote.type === "BLINK" ? `a refund to your ${source} wallet` : "a USDC refund to your Blast wallet minus a refund fee";
+}
+
+/** The one line that carries the money: what leaves, the least that arrives and, with `refund`, what happens otherwise. */
+function quoteSentence({ sent, source, minimum, refund }: Readonly<{ sent: string; source: string; minimum: string; refund: string | null }>): string {
+  return refund
+    ? `Send ${sent} from ${source}: you get at least ${minimum}, or ${refund}.`
+    : `Send ${sent} from ${source}. You get at least ${minimum}.`;
+}
+
+function ButtonSentence({ text, refreshing }: Readonly<{ text: string | null; refreshing: boolean }>) {
+  return text ? <p className={clsx(styles.sentence, refreshing && styles.pendingSentence)}>{text}</p> : null;
+}
+
+function QuoteNotes({ facts, sentence, route, refreshing, message, noteId, rateChanged, reason, busyText }: Readonly<{
   facts: QuoteRows | null;
-  fastMctp: boolean;
-  amount: string | null;
-  info: ChainInfo;
-  token: SourceToken;
+  sentence: string | null;
+  /** Named only after a changed quote. */
+  route: string | null;
   refreshing: boolean;
   message: string | null;
   noteId: string;
@@ -813,7 +897,7 @@ function QuoteNotes({ facts, fastMctp, amount, info, token, refreshing, message,
 }>) {
   return (
     <>
-      {facts ? <QuoteSummary facts={facts} fastMctp={fastMctp} rateChanged={rateChanged} refreshing={refreshing} sent={amount === null ? null : displayAmount(amount.replace(/,/g, ""), token.symbol)} source={info.label} /> : null}
+      {facts ? <QuoteSummary facts={facts} refreshing={refreshing} route={rateChanged ? route : null} sentence={sentence} /> : null}
       {message ? <p className={clsx(coinStyles.status, styles.note)} id={noteId} role="alert"><DiagnosticText message={message} /></p> : null}
       {rateChanged ? <p className={clsx(coinStyles.status, styles.note)} role="status">The quote changed. Review it before continuing.</p> : null}
       {reason && !message ? <p className={clsx(coinStyles.status, styles.note)} id={noteId}>{reason}</p> : null}
@@ -822,23 +906,19 @@ function QuoteNotes({ facts, fastMctp, amount, info, token, refreshing, message,
   );
 }
 
-function QuoteSummary({ facts, fastMctp, rateChanged, refreshing, sent, source }: Readonly<{
+function QuoteSummary({ facts, sentence, route, refreshing }: Readonly<{
   facts: QuoteRows;
-  fastMctp: boolean;
-  rateChanged: boolean;
+  sentence: string | null;
+  route: string | null;
   refreshing: boolean;
-  sent: string | null;
-  source: string;
 }>) {
   return (
     <div className={clsx(styles.summary, refreshing && styles.refreshing)}>
-      {sent ? <p className={styles.sentence}>
-        Send {sent} from {source}. {fastMctp ? "The amount shown is an estimate." : `You get at least ${facts.minimum}.`}
-      </p> : null}
+      {sentence ? <p className={styles.sentence}>{sentence}</p> : null}
       <dl className={coinStyles.terms}>
-        <div><dt>{fastMctp ? "Estimated fee" : "Fee"}</dt><dd>{facts.fee}</dd></div>
+        <div><dt>Fee</dt><dd>{facts.fee}</dd></div>
         <div><dt>Arrives</dt><dd>{facts.eta}</dd></div>
-        {fastMctp || rateChanged ? <div><dt>Route</dt><dd>{fastMctp ? "Mayan Fast MCTP" : "Mayan Blink"}</dd></div> : null}
+        {route ? <div><dt>Route</dt><dd>{route}</dd></div> : null}
       </dl>
     </div>
   );

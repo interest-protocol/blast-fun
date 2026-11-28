@@ -1,10 +1,10 @@
 import { compareExact, exactAtoms, exactNumber } from "@blast/core/web/exact-amount.ts";
 import { decodeBlinkQuote, getWormholeChainIdByName, hasBlinkQuoteHash, isNativeBlinkEvmToken, isNativeBlinkSvmToken, type BlinkQuote, type Quote } from "@mayanfinance/swap-sdk";
-import { normalizeStructTag, normalizeSuiAddress } from "@mysten/sui/utils";
+import { isValidSuiAddress, normalizeStructTag, normalizeSuiAddress } from "@mysten/sui/utils";
 
 import type { BridgeChain } from "./bridge-config.ts";
-import { fastMctpTerms } from "./bridge-fast-mctp.ts";
 import { CHAINS, sourceAddressKey, type DestinationToken, type QuoteFacts, type SourceToken } from "./bridge-model.ts";
+import type { QuoteInput } from "./bridge-sdk.ts";
 
 /** What the person asked for; a quote must match all of it before any wallet call. */
 export type BridgeRequest = Readonly<{
@@ -44,12 +44,74 @@ function coversQuotedMinimum(quote: Quote, decimals: number, signedMinimum: stri
   return shown !== null && quoted !== null && signed >= quoted.n && compareExact({ n: signed, scale: decimals }, shown) >= 0;
 }
 
-/** Checks a bound Mayan quote against the request before any wallet call. */
-export function guardQuote(quote: Quote, request: BridgeRequest, now: number): GuardResult {
-  if (quote.type === "FAST_MCTP") {
-    return fastMctpTerms(quote, request, now) ? { ok: true } : { ok: false, reason: "invalid Fast MCTP terms" };
+const PASSED: GuardResult = { ok: true };
+
+function refused(reason: string): GuardResult {
+  return { ok: false, reason };
+}
+
+/** What a quote must answer: the chain, both coins and the amount we asked Mayan to price. */
+export type QuoteAsk = Pick<QuoteInput, "chain" | "token" | "to" | "amountIn64">;
+
+/** The source side of the quote. The SDK builds the approvals and token transfers from these fields. */
+function sourceRefusal(quote: Quote, { chain, token }: QuoteAsk): string | null {
+  const from = quote.fromToken;
+  if (from?.chainId !== (CHAINS[chain].chainId ?? 0) || from.wChainId !== getWormholeChainIdByName(chain)) return "wrong chains";
+  if (typeof from.contract !== "string" || !sameSourceToken(chain, token, from.contract)
+    || from.decimals !== token.decimals || (token.standard !== undefined && from.standard !== token.standard)) {
+    return "wrong source token";
   }
-  return guardBlinkQuote(quote, request, now);
+  return null;
+}
+
+/** The order Mayan's price API tries them: fastest first. */
+const ROUTE_ORDER = ["FAST_MCTP", "MCTP", "BLINK"] as const;
+/** Our limit, not Mayan's rule: 500 bps is the most its price API documents for `slippageBps`. */
+const MAX_SLIPPAGE_BPS = 500;
+
+/**
+ * Whether the quote that came back is for what we asked, so the card may show it:
+ * the chains, the source coin and amount, the coin on Sui, no referrer, no gas
+ * drop, not gasless, a usable minimum and slippage, and not expired. A Blink
+ * order carries its own expiry, checked before sending.
+ */
+export function checkQuote(quote: Quote, ask: QuoteAsk, now: number): GuardResult {
+  if (!ROUTE_ORDER.some((route) => route === quote.type)) return refused("unsupported route");
+  if (quote.fromChain !== ask.chain || quote.toChain !== "sui") return refused("wrong chains");
+  const source = sourceRefusal(quote, ask);
+  if (source) return refused(source);
+  if (quote.effectiveAmountIn64 !== ask.amountIn64) return refused("wrong amount");
+  if (!sameCoinType(quote.toToken?.contract, ask.to.coinType)) return refused("wrong destination coin");
+  if (quote.referrerBps) return refused("unexpected referrer");
+  if (quote.gasDrop) return refused("unexpected gas drop");
+  if (quote.gasless) return refused("gasless order");
+  if (!(quote.minReceived > 0 && quote.minReceived <= quote.expectedAmountOut)) return refused("wrong minimum output");
+  if (!(quote.slippageBps >= 0 && quote.slippageBps <= MAX_SLIPPAGE_BPS)) return refused("wrong slippage");
+  if (quote.type !== "BLINK" && !(Number(quote.deadline64) * 1000 > now)) return refused("expired");
+  return PASSED;
+}
+
+/** The first route in our order whose quote passes `checkQuote`. */
+export function pickRoute(quotes: readonly Quote[], ask: QuoteAsk, now: number): Quote | undefined {
+  for (const route of ROUTE_ORDER) {
+    const quote = quotes.find((candidate) => candidate.type === route && checkQuote(candidate, ask, now).ok);
+    if (quote) return quote;
+  }
+  return undefined;
+}
+
+/**
+ * Checks a bound Mayan quote before any wallet call. A Blink order is read in
+ * full. For MCTP and Fast MCTP, Mayan's way: check the quote and the recipient
+ * we hand its SDK, then let the SDK build the transaction.
+ */
+export function guardQuote(quote: Quote, request: BridgeRequest, now: number): GuardResult {
+  if (quote.type === "BLINK") return guardBlinkQuote(quote, request, now);
+  const checked = checkQuote(quote, request, now);
+  if (!checked.ok) return checked;
+  // The Blast address is the only recipient, and where a refund goes.
+  const recipient = normalizeSuiAddress(request.blastAddress);
+  return isValidSuiAddress(recipient) && BigInt(recipient) !== 0n ? PASSED : refused("wrong recipient");
 }
 
 /**
@@ -99,16 +161,34 @@ function guardBlinkQuote(quote: Quote, request: BridgeRequest, now: number): Gua
   return { ok: true };
 }
 
+/**
+ * Mayan's fee in dollars: the relayer fee, the protocol fee (on live quotes,
+ * missing from the SDK's types) and Circle's fee in USDC atoms. Null when one
+ * is missing: a partial sum would show less than the person pays.
+ */
+function totalFee(quote: Quote): number | null {
+  const circle = quote.circleMaxFee64;
+  const parts = [
+    quote.clientRelayerFeeSuccess,
+    (quote as Readonly<{ protocolFeeUsd?: unknown }>).protocolFeeUsd,
+    typeof circle === "string" && /^\d+$/.test(circle) ? Number(circle) / 1e6 : null,
+  ];
+  let total = 0;
+  for (const part of parts) {
+    if (typeof part !== "number" || !Number.isFinite(part)) return null;
+    total += part;
+  }
+  return total;
+}
+
 /** The numbers the card shows, read from a quote (bound or not). */
-export function quoteFacts(quote: Quote, token: SourceToken): QuoteFacts {
+export function quoteFacts(quote: Quote, token: SourceToken, allRoutes = false): QuoteFacts {
   const embedded = quote.blinkQuote?.crossChain;
   const usdMicros = Number(embedded?.amountInUsdMicros ?? 0);
   return {
     expectedAmountOut: quote.expectedAmountOut,
     minReceived: quote.minReceived,
-    clientRelayerFeeSuccess: quote.type === "FAST_MCTP"
-      ? (Number(quote.effectiveAmountIn64) - Number(quote.expectedAmountOutBaseUnits)) / 1e6
-      : quote.clientRelayerFeeSuccess,
+    fee: allRoutes ? totalFee(quote) : quote.clientRelayerFeeSuccess,
     etaSeconds: quote.etaSeconds,
     amountIn: Number(quote.effectiveAmountIn64) / 10 ** token.decimals,
     amountInUsd: usdMicros > 0 ? usdMicros / 1e6 : undefined,

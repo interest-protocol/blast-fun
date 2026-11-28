@@ -4,7 +4,7 @@ import test from "node:test";
 
 import type { Quote } from "@mayanfinance/swap-sdk";
 
-import { guardQuote, quoteFacts, type BridgeRequest } from "./bridge-guard.ts";
+import { checkQuote, guardQuote, pickRoute, quoteFacts, type BridgeRequest } from "./bridge-guard.ts";
 import { CHAINS, DESTINATIONS, quoteRows } from "./bridge-model.ts";
 
 // Live Mayan quotes captured 2026-11-26 with placeholder addresses.
@@ -49,7 +49,7 @@ test("a matching Blink quote passes for an EVM token and for native SOL", () => 
 
 test("the guard refuses every quote that is not exactly what was asked", () => {
   const base = QUOTES.baseUsdcToSui;
-  assert.equal(reason({ ...base, type: "SWIFT" }, BASE_USDC), "not a Blink quote");
+  assert.equal(reason({ ...base, type: "SWIFT" }, BASE_USDC), "unsupported route");
   assert.equal(reason({ ...base, blinkQuote: undefined }, BASE_USDC), "no Blink order");
   assert.equal(reason(withOrder(base, (_, crossChain) => delete crossChain.quoteHash), BASE_USDC), "no Blink order");
   assert.equal(reason({ ...base, gasless: true }, BASE_USDC), "gasless order");
@@ -94,4 +94,58 @@ test("quote facts feed the rows: amount out, floor, fee, time", () => {
     fee: "$0.03",
     eta: "About 10\u00a0s",
   });
+});
+
+/** Live Mayan answers captured 2026-11-28 with the same placeholders: Fast MCTP, then MCTP. */
+const live = (pair: string) => JSON.parse(readFileSync(new URL(`../../../../test/fixtures/social/bridge/all-routes-${pair}.json`, import.meta.url), "utf8")) as [Quote, Quote];
+const LIVE_NOW = Date.parse("2026-11-28T11:10:00Z");
+
+test("Fast MCTP is picked first, then MCTP, then Blink, and each works alone", () => {
+  const [fast, mctp] = live("base-usdc-sui");
+  const blink = QUOTES.baseUsdcToSui;
+  assert.equal(pickRoute([blink, mctp, fast], BASE_USDC, LIVE_NOW)?.type, "FAST_MCTP");
+  assert.equal(pickRoute([blink, mctp], BASE_USDC, LIVE_NOW)?.type, "MCTP");
+  assert.equal(pickRoute([blink], BASE_USDC, LIVE_NOW)?.type, "BLINK");
+  assert.equal(pickRoute([{ ...fast, type: "SWIFT" }], BASE_USDC, LIVE_NOW), undefined);
+  // A route that fails a check gives way to the next one.
+  assert.equal(pickRoute([{ ...fast, effectiveAmountIn64: "1" }, mctp], BASE_USDC, LIVE_NOW)?.type, "MCTP");
+});
+
+test("the same checks pass two chains and two coins with no per-coin code", () => {
+  const ethAsk: BridgeRequest = { ...BASE_USDC, token: CHAINS.base.tokens[0], amountIn64: "10000000000000000" };
+  for (const [pair, ask] of [["base-eth-sui", ethAsk], ["solana-sol-usdc", SOLANA_SOL]] as const) {
+    for (const quote of live(pair)) assert.equal(reason(quote, ask, LIVE_NOW), null, `${pair} ${quote.type}`);
+  }
+});
+
+test("an MCTP quote is refused when it is not what was asked", () => {
+  const [fast] = live("base-usdc-sui");
+  const refusal = (change: Partial<Quote>, ask = BASE_USDC) => reason({ ...fast, ...change }, ask, LIVE_NOW);
+  assert.equal(refusal({ toChain: "base" }), "wrong chains");
+  assert.equal(refusal({}, { ...BASE_USDC, token: CHAINS.base.tokens[0] }), "wrong source token");
+  assert.equal(refusal({}, { ...BASE_USDC, amountIn64: "20000001" }), "wrong amount");
+  assert.equal(refusal({}, { ...BASE_USDC, to: DESTINATIONS[1]! }), "wrong destination coin");
+  assert.equal(refusal({ referrerBps: 5 }), "unexpected referrer");
+  assert.equal(refusal({ gasDrop: 1 }), "unexpected gas drop");
+  assert.equal(refusal({ gasless: true }), "gasless order");
+  assert.equal(refusal({ minReceived: 0 }), "wrong minimum output");
+  assert.equal(refusal({ minReceived: fast.expectedAmountOut + 1 }), "wrong minimum output");
+  assert.equal(refusal({ slippageBps: 501 }), "wrong slippage");
+  assert.equal(refusal({ deadline64: String(LIVE_NOW / 1000) }), "expired");
+  for (const blastAddress of ["", "0x0", "not an address"]) assert.equal(refusal({}, { ...BASE_USDC, blastAddress }), "wrong recipient", blastAddress);
+  // The card prices a quote before there is a Blast address.
+  assert.deepEqual(checkQuote(fast, BASE_USDC, LIVE_NOW), { ok: true });
+});
+
+test("the fee adds Mayan's three parts, and a missing part shows no figure", () => {
+  const usdc = CHAINS.base.tokens[1];
+  const [direct] = live("base-usdc-usdc");
+  // A direct USDC bridge loses only the fee: what is sent less what is expected.
+  assert.ok(Math.abs(quoteFacts(direct, usdc, true).fee! - (20 - direct.expectedAmountOut)) <= 0.000002);
+  const [swap] = live("base-eth-sui");
+  assert.ok(Math.abs(quoteFacts(swap, CHAINS.base.tokens[0], true).fee! - 0.039379) < 0.000001);
+  for (const missing of ["clientRelayerFeeSuccess", "protocolFeeUsd", "circleMaxFee64"]) {
+    assert.equal(quoteFacts({ ...direct, [missing]: undefined } as Quote, usdc, true).fee, null, missing);
+  }
+  assert.equal(quoteRows(quoteFacts(direct, usdc, true), usdc, DESTINATIONS[1]!).fee, "$0.02");
 });
