@@ -41,9 +41,9 @@
   .carousel { position: relative; }
   .carousel > .controls { position: absolute; inset-inline: 0.75rem; bottom: 0.25rem; margin: 0; pointer-events: none; }
   .carousel > .controls .segments { flex: 1 1 0; justify-content: center; gap: 0.25rem; height: auto; padding-inline: 0; }
-  /* On the card, the waiting slides need the stronger hairline to stay visible; the current one keeps its mark. */
-  .carousel > .controls .segment { flex: 0 1 1.5rem; max-width: 1.5rem; height: 0.125rem; background: var(--hair-2); }
-  .carousel > .controls .segment[data-current] { background: var(--muted); }
+  /* On the card every bar is muted grey (over 3:1 on the card in both themes); the current one is twice as wide and fills in ink. */
+  .carousel > .controls .segment { flex: 0 1 1rem; max-width: 1rem; height: 0.1875rem; background: var(--muted); }
+  .carousel > .controls .segment[data-current] { flex-basis: 2rem; max-width: 2rem; }
 }
 .arrows button svg { width: 1rem; height: 1rem; }
 .previous svg { transform: rotate(-90deg); }
