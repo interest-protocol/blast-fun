@@ -5,7 +5,7 @@ import { installTestDom, waitFor } from "../../../../test/fixtures/social/test-d
 const { document, window } = installTestDom();
 const { act } = await import("react");
 const { createRoot } = await import("react-dom/client");
-const { CoinsListControls } = await import("./HomeControls.tsx");
+const { CoinTabs, CoinsListControls } = await import("./HomeControls.tsx");
 const { HOME_DEFAULT_FEED } = await import("./home-state.ts");
 type HomeViewState = import("./home-state.ts").HomeViewState;
 
@@ -43,4 +43,20 @@ test("a phone's coin list has no column header row", async () => {
   const { readFileSync } = await import("#web/test/css-design-px.ts");
   const css = readFileSync(new URL("./CoinHome.module.css", import.meta.url), "utf8");
   assert.match(css, /@media \(max-width: 760px\) \{ \.listHead\.cols \{ display: none; \} \}/);
+});
+
+test("a Home tab the trader focuses or touches asks for its list; the current tab does not", async (t) => {
+  const container = document.createElement("div"); document.body.append(container);
+  const root = createRoot(container);
+  t.after(async () => { await act(async () => root.unmount()); container.remove(); });
+  const asked: string[] = [];
+  await act(async () => root.render(<CoinTabs onChange={() => {}} onIntent={(tab) => asked.push(tab)} panelId="coins" state={HOME_DEFAULT_FEED} />));
+  const tabs = [...container.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
+  const current = tabs.find((tab) => tab.getAttribute("aria-selected") === "true")!;
+  const other = tabs.find((tab) => tab !== current)!;
+  await act(async () => { current.focus(); current.dispatchEvent(new window.MouseEvent("pointerdown", { bubbles: true })); });
+  assert.deepEqual(asked, []);
+  await act(async () => other.focus());
+  await act(async () => { other.dispatchEvent(new window.MouseEvent("pointerdown", { bubbles: true })); });
+  assert.deepEqual(asked, [other.id.replace("coins-", ""), other.id.replace("coins-", "")]);
 });
