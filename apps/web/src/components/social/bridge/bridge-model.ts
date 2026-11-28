@@ -144,11 +144,14 @@ export type QuoteRows = Readonly<{ amount: string; minimum: string; fee: string;
 
 const usdFormat = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+/** The significant digits an amount shows. */
+export const SHOWN_DIGITS = 6;
+
 /**
  * Drops digits instead of rounding, so a minimum never shows more than Mayan guarantees.
  * Cut here too because Firefox before 116 ignores `roundingMode` and rounds up.
  */
-export function amountText(value: number, decimals: number, digits = 6): string {
+export function amountText(value: number, decimals: number, digits = SHOWN_DIGITS): string {
   return new Intl.NumberFormat("en-US", { maximumSignificantDigits: digits, maximumFractionDigits: Math.min(decimals, 8), roundingMode: "trunc" }).format(cutDigits(value, digits));
 }
 

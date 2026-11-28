@@ -1,9 +1,9 @@
-import { compareExact, exactAtoms, exactNumber } from "@blast/core/web/exact-amount.ts";
-import { addresses, decodeBlinkQuote, getWormholeChainIdByName, hasBlinkQuoteHash, isNativeBlinkEvmToken, isNativeBlinkSvmToken, type BlinkQuote, type Quote } from "@mayanfinance/swap-sdk";
+import { compareExact, exactAtoms, exactNumber, unitsAt } from "@blast/core/web/exact-amount.ts";
+import { addresses, decodeBlinkQuote, getAmountOfFractionalAmount, getWormholeChainIdByName, hasBlinkQuoteHash, isNativeBlinkEvmToken, isNativeBlinkSvmToken, type BlinkQuote, type Quote } from "@mayanfinance/swap-sdk";
 import { isValidSuiAddress, normalizeStructTag, normalizeSuiAddress } from "@mysten/sui/utils";
 
 import type { BridgeChain } from "./bridge-config.ts";
-import { CHAINS, sourceAddressKey, type DestinationToken, type QuoteFacts, type SourceToken } from "./bridge-model.ts";
+import { CHAINS, cutDigits, SHOWN_DIGITS, sourceAddressKey, type DestinationToken, type QuoteFacts, type SourceToken } from "./bridge-model.ts";
 import type { QuoteInput } from "./bridge-sdk.ts";
 
 /** What the person asked for; a quote must match all of it before any wallet call. */
@@ -71,8 +71,6 @@ const MAX_SLIPPAGE_BPS = 500;
 /** Our margin, not Mayan's rule: time left for the wallet prompt and the source chain. */
 const DEADLINE_HEADROOM_MS = 60_000;
 
-const usdcAtoms = (value: number) => Math.round(value * 1e6);
-
 /**
  * Our check that an auction order signs the chosen coin. `toToken.contract`
  * is not what the SDK signs for Sui: MCTP signs the coin's metadata id and
@@ -83,22 +81,51 @@ function signsChosenCoin(quote: Quote, to: DestinationToken): boolean {
   return typeof signed === "string" && signed !== "" && normalizeSuiAddress(signed) === expected;
 }
 
-/**
- * Our check that what the SDK signs covers the minimum the card shows. An
- * auction order signs `minAmountOut` (SUI is cut to eight decimals). Without an
- * auction no minimum is signed: Circle moves USDC, less the signed fees. That
- * is an upper bound: the contract also takes Mayan's protocol fee.
- */
-function coversShownMinimum(quote: Quote, to: DestinationToken): boolean {
-  if (quote.hasAuction) return quote.minAmountOut >= quote.minReceived;
-  if (to.symbol !== "USDC") return false;
+/** An amount from the quote as the SDK encodes it, cut to `decimals` places (at most eight), or null. */
+function sdkAtoms(amount: number | null | undefined, decimals: number): bigint | null {
+  return typeof amount === "number" && Number.isFinite(amount) ? getAmountOfFractionalAmount(amount, decimals) : null;
+}
+
+/** Whether `signed` atoms cover the quote's minimum at that precision, and the minimum as the card writes it. */
+function coversMinimum(signed: bigint | null, decimals: number, minReceived: number): boolean {
+  const quoted = exactNumber(minReceived);
+  const shown = exactNumber(cutDigits(minReceived, SHOWN_DIGITS));
+  if (signed === null || signed < 0n || !quoted || !shown) return false;
+  return signed >= unitsAt(quoted, decimals, "floor") && compareExact({ n: signed, scale: decimals }, shown) >= 0;
+}
+
+/** A USDC atom string from the quote, or null for anything else. */
+function usdcAtoms(text: string): bigint | null {
+  return exactAtoms(text, 6)?.n ?? null;
+}
+
+/** USDC the SDK is sure to bridge, less the fees it signs, in atoms. Null when the quote does not say. */
+function guaranteedUsdc(quote: Quote): bigint | null {
   // The SDK swaps to USDC first unless the source coin is the route's own input coin.
   const input = quote.type === "MCTP" ? quote.mctpInputContract : quote.fastMctpInputContract;
-  const bridged = quote.fromToken.contract === input ? Number(quote.effectiveAmountIn64) : usdcAtoms(quote.minMiddleAmount ?? Number.NaN);
+  const bridged = quote.fromToken.contract === input ? usdcAtoms(quote.effectiveAmountIn64) : sdkAtoms(quote.minMiddleAmount, 6);
   // The EVM builder signs `redeemRelayerFee`, the Solana one `redeemRelayerFee64`.
-  const redeem = Math.max(usdcAtoms(quote.redeemRelayerFee), Number(quote.redeemRelayerFee64 ?? 0));
-  const circle = Number(quote.circleMaxFee64 ?? 0);
-  return bridged - redeem - circle >= usdcAtoms(quote.minReceived);
+  const evmRedeem = sdkAtoms(quote.redeemRelayerFee, 6);
+  const solanaRedeem = usdcAtoms(quote.redeemRelayerFee64 ?? "0");
+  const circle = usdcAtoms(quote.circleMaxFee64 ?? "0");
+  if (bridged === null || evmRedeem === null || solanaRedeem === null || circle === null) return null;
+  return bridged - (evmRedeem > solanaRedeem ? evmRedeem : solanaRedeem) - circle;
+}
+
+/**
+ * Our check that what the SDK signs covers the minimum the card shows, in whole
+ * atoms and cut as the SDK cuts them. An auction order signs `minAmountOut`, to
+ * at most eight places (SDK 16.1.0), so a SUI minimum loses its ninth. Without
+ * an auction no minimum is signed: Circle moves USDC, less the signed fees.
+ * That is an upper bound: the contract also takes Mayan's protocol fee.
+ */
+function coversShownMinimum(quote: Quote, to: DestinationToken): boolean {
+  if (quote.hasAuction) {
+    // The SDK cuts to the quote's own decimals, so they must be the coin's.
+    const places = Math.min(8, to.decimals);
+    return quote.toToken.decimals === to.decimals && coversMinimum(sdkAtoms(quote.minAmountOut, places), places, quote.minReceived);
+  }
+  return to.symbol === "USDC" && coversMinimum(guaranteedUsdc(quote), to.decimals, quote.minReceived);
 }
 
 /** Our checks on what the SDK signs for the MCTP routes. A Blink order is read in full before sending. */
@@ -114,7 +141,7 @@ function mctpRefusal(quote: Quote, to: DestinationToken, now: number): string | 
  * Whether the quote that came back is for what we asked, so the card may show it:
  * the chains, the source coin and amount, the coin on Sui, no referrer, no gas
  * drop, not gasless, a usable minimum and slippage, and not expired. A Blink
- * order carries its own expiry, checked before sending.
+ * order carries its own expiry, checked before sending with the same margin.
  */
 export function checkQuote(quote: Quote, ask: QuoteAsk, now: number): GuardResult {
   if (!ROUTE_ORDER.some((route) => route === quote.type)) return refused("unsupported route");
@@ -170,7 +197,7 @@ export function guardQuote(quote: Quote, request: BridgeRequest, now: number): G
  * Checks a bound Mayan quote before the wallet sees it: a Blink order, from the
  * chosen chain and token, for the typed amount, paying the Blast address on Sui
  * in the chosen coin, refunding the source wallet, no referrer, not gasless,
- * not expired.
+ * with time left to sign.
  * The SDK repeats the order checks when it builds the transaction; this keeps a
  * wrong quote from ever reaching a signing prompt.
  */
@@ -209,7 +236,7 @@ function guardBlinkQuote(quote: Quote, request: BridgeRequest, now: number): Gua
   if (normalizeSuiAddress(params.recipient) !== normalizeSuiAddress(request.blastAddress)) return { ok: false, reason: "wrong recipient" };
   if (!sameSourceAddress(request.chain, params.refundAddress, request.sourceAddress)) return { ok: false, reason: "wrong refund address" };
   if (params.referrers.length > 0) return { ok: false, reason: "unexpected referrer" };
-  if (!(Date.parse(order.expiresAt) > now)) return { ok: false, reason: "expired" };
+  if (!(Date.parse(order.expiresAt) > now + DEADLINE_HEADROOM_MS)) return { ok: false, reason: "expired" };
   return { ok: true };
 }
 

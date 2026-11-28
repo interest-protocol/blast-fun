@@ -139,7 +139,7 @@ One direction only: other chains → Sui. No flip, no Sui → other chain, no sw
 | Wrong network (EVM) | "Switch to {chain}" under From (`switchChain`) |
 | Quoting | Skeleton rows; previous numbers dimmed, never blank |
 | Quote error | `ROUTE_NOT_FOUND` → "No price for ARB. Bridge USDC." (for USDC, "Try another chain."); limits → Mayan's min/max in plain words; network or server errors → "Couldn't get a price" after backoff; a 429 → the same line at once; the button becomes "Try again" |
-| Too large | `AMOUNT_TOO_LARGE` → "The largest amount is 300 USDC" (Mayan's `maxAmountIn`); `BRIDGE_LIMIT_EXCEEDED` → "Largest right now: 75.94 ETH" when Mayan's message gives a number, else "Try a smaller amount"; the button stays disabled |
+| Too large | `AMOUNT_TOO_LARGE` → "The largest amount is 300 USDC" (Mayan's `maxAmountIn`); `BRIDGE_LIMIT_EXCEEDED` or `ALLOWANCE_TOO_LOW` → "Largest right now: 75.94 ETH" when Mayan's message gives a number, else "Try a smaller amount"; the button stays disabled |
 | SDK outdated | `fetchQuote` code 9999 "Swap SDK is outdated!" or `SDK_VERSION_TOO_OLD` → card says "Bridging is paused. You can still deposit on Sui"; the inputs lock; logs an error so we upgrade |
 | Insufficient balance | "Not enough {symbol}" (native includes source gas) |
 | Approval needed | "Approve {symbol}" (approve tx), then "Bridge" |
@@ -383,12 +383,15 @@ wherever Bridge is on.
     MCTP signs `toToken.currencyId`. Neither is `toToken.contract`, so the card
     pins both IDs for SUI and USDC (read from Sui mainnet, 2026-11-28). SDK
     16.1.0;
-  - at least 60 seconds are left before the quote's deadline;
-  - what the SDK signs covers the minimum on screen. An auction order signs
-    `minAmountOut`. Without an auction no minimum is signed, so the coin on Sui
-    must be USDC, and the amount bridged (or the signed floor of the
-    source-chain swap) less the signed fees must cover it. That is an upper
-    bound: the contract also takes Mayan's protocol fee, which is not signed.
+  - at least 60 seconds are left before the quote's deadline (a Blink order:
+    before its `expiresAt`);
+  - what the SDK signs covers the quote's minimum and the minimum on screen,
+    counted in whole atoms and cut as the SDK cuts them. An auction order signs
+    `minAmountOut` to at most eight places, so a SUI minimum loses its ninth.
+    The quote's decimals for the coin must be the coin's own. Without an auction
+    no minimum is signed, so the coin on Sui must be USDC, and the amount bridged
+    (or the signed floor of the source-chain swap) less the signed fees must
+    cover it. That is an upper bound: the contract also takes Mayan's protocol fee, which is not signed.
     This follows SDK 16.1.0's code; check it again on each upgrade;
   - on EVM, the SDK's transaction goes to Mayan's Forwarder contract.
 
@@ -430,8 +433,8 @@ wherever Bridge is on.
   A quote with no ETA shows "—". A history reply with no list is an error with
   Retry; only an empty list means no bridges.
 - **Errors.** No route: "No price for ARB. Bridge USDC." (for USDC, "Try
-  another chain."). Too large: "Largest right now: 75.94 ETH." when Mayan's
-  message gives a number, else "Try a smaller amount."
+  another chain."). Too large (`ALLOWANCE_TOO_LOW` too): "Largest right now:
+  75.94 ETH." when Mayan's message gives a number, else "Try a smaller amount."
 - **Retries.** Only network and server errors, never a 429. The SDK drops the
   HTTP status, so this reads its error shapes in 16.1.0: every refusal has a
   `data` key and Mayan's own 5xx answer has none. Check it again on each SDK
@@ -495,7 +498,8 @@ Node test runner (`npm test -w apps/web`), as the coin sheet tests do:
   address, an expired quote and, for Blink, a missing order or a refund address
   other than the source wallet; each before any wallet call.
 - `BridgeForm.dom.test.tsx` with a fake SDK module and fake wallets: every
-  state in the table; 9999 error; wallet rejection; rate changed; allowance
+  state in the table; paused on 9999 (the model tests also cover
+  `SDK_VERSION_TOO_OLD`); wallet rejection; rate changed; allowance
   re-check after approval on a fresh quote; wallet/chain change drops the bound
   quote; arrival calls `changed()` once.
 - `coin-model.test.ts`: `bridge` parses and restores.

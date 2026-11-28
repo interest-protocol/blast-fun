@@ -105,11 +105,11 @@ const CHECKING_TEXT = "Checking Solana transfer.";
  */
 function retryable(error: unknown): boolean {
   if (isPausedError(error)) return false;
-  const { code, message } = (error ?? {}) as { code?: unknown; message?: unknown };
+  const { message } = (error ?? {}) as { message?: unknown };
   if (error instanceof Error) return error instanceof TypeError || message === "Internal server error";
   // The SDK throws plain objects. Every refusal, a 429 too, has a `data` key, even an empty one;
-  // Mayan's own 5xx answer has none, and neither does the SDK's "outdated" refusal (9999).
-  return typeof message === "string" && !("data" in (error as object)) && code !== 9999;
+  // Mayan's own 5xx answer has none.
+  return typeof message === "string" && !("data" in (error as object));
 }
 
 /** The wallet said no: back to the button, no banner. */

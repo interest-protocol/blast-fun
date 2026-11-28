@@ -84,6 +84,8 @@ test("a bound quote must protect the minimum shown and expire in the future", ()
   assert.equal(reason(subAtom, SOLANA_SOL), "wrong minimum output");
   assert.equal(reason(withOrder(base, (_params, order) => { order.expiresAt = "unknown"; }), BASE_USDC), "unreadable Blink order");
   assert.equal(reason(base, BASE_USDC, BEFORE_EXPIRY + 24 * 60 * 60 * 1000), "expired");
+  assert.equal(reason(base, BASE_USDC, Date.parse("2026-11-26T08:40:42.863Z")), "expired", "no time left to sign");
+  assert.equal(reason(base, BASE_USDC, Date.parse("2026-11-26T08:40:42Z")), null);
 });
 
 test("quote facts feed the rows: amount out, floor, fee, time", () => {
@@ -170,6 +172,12 @@ test("what the SDK signs must cover the minimum the card shows", () => {
   const [auction] = live("base-eth-sui");
   const ethAsk: BridgeRequest = { ...BASE_USDC, token: CHAINS.base.tokens[0], amountIn64: "10000000000000000" };
   assert.equal(reason({ ...auction, minAmountOut: auction.minReceived - 0.000001 }, ethAsk, LIVE_NOW), unsigned);
+  // The SDK signs eight places, so a ninth the card shows is not covered.
+  const tiny = (amount: number) => reason({ ...auction, minAmountOut: amount, minReceived: amount }, ethAsk, LIVE_NOW);
+  assert.equal(tiny(0.000123456), unsigned);
+  assert.equal(tiny(0.00012345), null);
+  assert.equal(tiny(12.345678912), null, "a ninth place the card does not show");
+  assert.equal(reason({ ...auction, toToken: { ...auction.toToken, decimals: 6 } }, ethAsk, LIVE_NOW), unsigned);
   // Without an auction, only USDC arrives: what is bridged less the signed fees.
   assert.equal(reason({ ...auction, hasAuction: false }, ethAsk, LIVE_NOW), unsigned);
   const [direct] = live("base-usdc-usdc");
@@ -184,6 +192,10 @@ test("what the SDK signs must cover the minimum the card shows", () => {
   assert.equal(reason({ ...swapped, minMiddleAmount: undefined }, ask, LIVE_NOW), unsigned);
   assert.equal(reason({ ...swapped, minMiddleAmount: direct.minReceived }, ask, LIVE_NOW), unsigned);
   assert.equal(reason({ ...swapped, minMiddleAmount: 20 }, ask, LIVE_NOW), null);
+  // The SDK cuts the swap floor to whole atoms, so a part of one never counts.
+  const floor = (minMiddleAmount: number) => reason({ ...swapped, minMiddleAmount, minReceived: 0.010001, redeemRelayerFee: 0.01, redeemRelayerFee64: "10000", circleMaxFee64: "0" }, ask, LIVE_NOW);
+  assert.equal(floor(0.0200009), unsigned);
+  assert.equal(floor(0.020001), null);
 });
 
 test("an EVM send of an MCTP route goes only to Mayan's Forwarder", () => {
