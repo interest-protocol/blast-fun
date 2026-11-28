@@ -49,12 +49,13 @@ function PrivySourceWallets({ wallets }: Pick<PrivySessionRuntimeProps, "wallets
 function PrivySourceWalletsBridge({ wallets }: Pick<PrivySessionRuntimeProps, "wallets">) {
   const { ready } = usePrivy();
   const { connectWallet } = useConnectWallet();
-  const { wallets: evm } = useWallets();
-  const { wallets: solana } = useSolanaWallets();
+  const { ready: evmReady, wallets: evm } = useWallets();
+  const { ready: solanaReady, wallets: solana } = useSolanaWallets();
   const { signTransaction } = useSignTransaction();
+  const sourceReady = ready && evmReady && solanaReady;
   useEffect(() => {
-    wallets.publish(ready ? { evm, solana, connectWallet, signSolanaTransaction: signTransaction } : null);
-  }, [connectWallet, evm, ready, signTransaction, solana, wallets]);
+    wallets.publish(sourceReady ? { evm, solana, connectWallet, signSolanaTransaction: signTransaction } : null);
+  }, [connectWallet, evm, signTransaction, solana, sourceReady, wallets]);
   useEffect(() => () => wallets.publish(null), [wallets]);
   return null;
 }

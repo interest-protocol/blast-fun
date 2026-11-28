@@ -24,6 +24,7 @@ import { readBrowserStorage, writeBrowserStorage } from "#web/lib/browser-storag
 import { decimalText, dropDecimal, pasteDecimal } from "#web/lib/decimal-input.ts";
 import { useDebouncedValue } from "#web/lib/use-debounced-value.ts";
 
+import { AmountPresets } from "../coins/AmountPresets.tsx";
 import coinStyles from "../coins/coins.module.css";
 import { fmtLive } from "../trade/trade-ticket.ts";
 
@@ -43,8 +44,8 @@ import {
   displayAmount,
   exceedsBalance,
   isPausedError,
-  maxField,
   PAUSED_TEXT,
+  presetField,
   QUOTE_FAILED_TEXT,
   quoteErrorText,
   quoteRows,
@@ -425,7 +426,10 @@ function formAction({ reads, send, selection, wallet, atoms, id, paused, signedI
   const noteId = `${id}-bridge-note`;
   const actionDescription = blockedByBalance ? `${id}-balance-error` : message || reason ? noteId : undefined;
   const balance = reads.balance.isSuccess ? reads.balance.data : undefined;
-  return { action, actionDescription, balance, balanceFailed, message, noteId, reason };
+  const sourceAction = action.kind === "connect" || action.kind === "switch";
+  const actionBusy = action.kind === "busy" || (action.kind === "switch" && send.busy);
+  const disableAction = actionDisabled(action) && !actionBusy;
+  return { action, actionBusy, actionDescription, balance, balanceFailed, disableAction, message, noteId, reason, sourceAction };
 }
 
 export function BridgeForm({ sdk, wallets, blastAddress, signedIn, onSignIn, onArrived, now = Date.now }: BridgeFormProps) {
@@ -442,7 +446,7 @@ export function BridgeForm({ sdk, wallets, blastAddress, signedIn, onSignIn, onA
   const atoms = amountAtoms(amount, token);
   const reads = useBridgeReads({ sdk, selection, wallet, blastAddress, atoms, paused, onPaused });
   const send = useBridgeSend({ sdk, selection, keys: reads, shown: reads.shown, now, onPaused, onSent: () => setAmount("") });
-  const { action, actionDescription, balance, balanceFailed, message, noteId, reason } = formAction({ reads, send, selection, wallet, atoms, id, paused, signedIn, blastAddress });
+  const { action, actionBusy, actionDescription, balance, balanceFailed, disableAction, message, noteId, reason, sourceAction } = formAction({ reads, send, selection, wallet, atoms, id, paused, signedIn, blastAddress });
 
   const request = (): BridgeRequest => ({ chain, token, to: selection.to, amountIn64: atoms!.toString(), blastAddress: blastAddress!, sourceAddress: wallet!.address });
   const press = () => pressAction(action.kind, {
@@ -459,10 +463,27 @@ export function BridgeForm({ sdk, wallets, blastAddress, signedIn, onSignIn, onA
   // Nothing to change while a wallet is asked or Mayan has paused this SDK.
   const locked = send.busy || paused;
   const rows = mergeRows(send.sent, reads.history.data ?? []);
+  const actionButton = (
+    <Button
+      aria-describedby={actionDescription}
+      className={styles.action}
+      disabled={disableAction}
+      loading={actionBusy}
+      loadingLabel={BUSY_TEXT}
+      onClick={press}
+      size="lg"
+      variant="primary"
+    >
+      {actionLabel(action, info, token)}
+    </Button>
+  );
 
   return (
     <div className={styles.form}>
-      <ChainChoice chain={chain} disabled={locked} onChange={(next) => { chooseChain(next); send.setFailed(null); }} />
+      <div className={styles.sourceSetup}>
+        <ChainChoice chain={chain} disabled={locked} onChange={(next) => { chooseChain(next); send.setFailed(null); }} />
+        {sourceAction ? actionButton : null}
+      </div>
       <div className={styles.panels}>
         <SendPanel
           amount={amount}
@@ -490,7 +511,7 @@ export function BridgeForm({ sdk, wallets, blastAddress, signedIn, onSignIn, onA
       </div>
       <QuoteNotes
         amount={amount}
-        busy={action.kind === "busy"}
+        busy={actionBusy}
         facts={atoms === null ? null : facts}
         fastMctp={reads.shown?.type === "FAST_MCTP"}
         info={info}
@@ -501,18 +522,7 @@ export function BridgeForm({ sdk, wallets, blastAddress, signedIn, onSignIn, onA
         refreshing={refreshing}
         token={token}
       />
-      <Button
-        aria-describedby={actionDescription}
-        className={styles.action}
-        disabled={actionDisabled(action) && action.kind !== "busy"}
-        loading={action.kind === "busy"}
-        loadingLabel={BUSY_TEXT}
-        onClick={press}
-        size="lg"
-        variant="primary"
-      >
-        {actionLabel(action, info, token)}
-      </Button>
+      {sourceAction ? null : actionButton}
       <p className={styles.powered}>Powered by Mayan</p>
       <RecentBridges
         id={id}
@@ -597,15 +607,6 @@ function SendPanel({ id, amount, onAmount, balance, balanceFailed, onRetryBalanc
         <label htmlFor={`${id}-amount`}>You send</label>
         {connected && balanceFailed ? (
           <Button disabled={busy} onClick={onRetryBalance} size="xs" variant="ghost">Retry balance</Button>
-        ) : connected ? (
-          <Button
-            disabled={balance === undefined || busy}
-            onClick={() => onAmount(maxField(balance!, token))}
-            size="xs"
-            variant="ghost"
-          >
-            Max
-          </Button>
         ) : null}
       </div>
       <div className={coinStyles.amtRow}>
@@ -626,9 +627,19 @@ function SendPanel({ id, amount, onAmount, balance, balanceFailed, onRetryBalanc
         </AmountFit>
         <SourceTokenPicker chain={chain} disabled={busy} key={chain} onChange={onToken} sdk={sdk} token={token} />
       </div>
-      <div className={coinStyles.amtFoot}>
-        <span>{connected ? (balanceFailed ? `Balance ${NO_VALUE}` : balanceText) : `Your ${CHAINS[chain].label} wallet`}</span>
-      </div>
+      {connected ? (
+        <div className={coinStyles.amtFoot}>
+          <span>{balanceFailed ? `Balance ${NO_VALUE}` : balanceText}</span>
+        </div>
+      ) : null}
+      {balance !== undefined ? (
+        <div className={styles.amountPresets}>
+          <AmountPresets
+            disabled={busy || presetField(balance, token, "max") === "0"}
+            onPick={(preset) => onAmount(presetField(balance, token, preset))}
+          />
+        </div>
+      ) : null}
       {connected && balanceFailed ? <p className={clsx(coinStyles.status, styles.note)} id={`${id}-balance-error`} role="alert"><DiagnosticText message={BALANCE_FAILED_TEXT} /></p> : null}
     </div>
   );

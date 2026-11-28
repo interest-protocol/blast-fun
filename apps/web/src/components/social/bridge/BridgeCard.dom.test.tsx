@@ -59,7 +59,9 @@ async function mount(load: () => Promise<PrivyRuntime>) {
   return {
     store,
     text: () => container.textContent ?? "",
-    button: () => container.querySelector<HTMLButtonElement>("button[data-ui-size=lg]"),
+    primary: () => container.querySelector<HTMLButtonElement>("button[data-ui-variant=primary]"),
+    chain: () => container.querySelector<HTMLButtonElement>("[aria-label='From Base. Change chain']")!,
+    send: () => container.querySelector<HTMLInputElement>("[inputmode=decimal]")!,
     loading: () => container.querySelector("[aria-label='Loading Bridge to Sui']") !== null,
     unmount: () => act(async () => root.unmount()),
   };
@@ -82,12 +84,15 @@ test("the card renders with no Privy provider above: skeleton until the runtime 
 
     const connects: Connects = [];
     await act(async () => card.store.publish(sourceWallets(connects, false)));
-    await waitFor(() => card.button()?.textContent === "Connect wallet", "the form asks for a source wallet");
-    await act(async () => card.button()!.click());
+    const connect = await waitFor(() => card.primary()?.textContent === "Connect Base wallet" && card.primary(), "the form asks for the Base wallet");
+    assert.ok(card.chain().compareDocumentPosition(connect) & Node.DOCUMENT_POSITION_FOLLOWING, "connect follows the source chain");
+    assert.ok(connect.compareDocumentPosition(card.send()) & Node.DOCUMENT_POSITION_FOLLOWING, "connect comes before the send amount");
+    assert.ok(!card.text().includes("25%"), "presets wait for the source wallet");
+    await act(async () => connect.click());
     assert.deepEqual(connects, [{ walletChainType: "ethereum-only" }], "connect opens Privy's EVM picker");
 
     await act(async () => card.store.publish(sourceWallets(connects, true)));
-    await waitFor(() => card.button() && card.button()!.textContent !== "Connect wallet", "the connected wallet is the source");
+    await waitFor(() => card.primary()?.textContent === "Bridge", "the connected wallet is the source");
     assert.deepEqual(errors, [], "nothing failed while rendering");
     await card.unmount();
     assert.ok(!card.store.wanted(), "a closed card stops the runtime's wallet hooks");

@@ -132,7 +132,6 @@ function LiveSheet(props: SheetProps) {
   // px/s a pull handed over to the close, so the sheet leaves at the finger's speed (the gate's `sheetFling`).
   const fling = useRef(0);
   const isOpen = useRef(open);
-  const heardEscape = useRef<Event | null>(null);
   const latest = useRef(props);
   useEffect(() => {
     latest.current = props;
@@ -264,10 +263,8 @@ function LiveSheet(props: SheetProps) {
   const onOpenChange = (next: boolean, details: Dialog.Root.ChangeEventDetails) => {
     details.cancel();
     details.allowPropagation();
-    if (next || details.reason !== "escape-key" || !isOpen.current || sheet === null || !isTopSheet(sheet)) return;
-    // Heard twice when focus is inside (the popup's own key handler, then the document's): asked once.
-    if (heardEscape.current === details.event) return;
-    heardEscape.current = details.event;
+    // The key can reach another sheet after React has closed the top sheet in the same event.
+    if (next || details.reason !== "escape-key" || details.event.defaultPrevented || !isOpen.current || sheet === null || !isTopSheet(sheet)) return;
     details.event.preventDefault();
     latest.current.onRequestClose();
   };

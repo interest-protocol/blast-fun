@@ -4,7 +4,7 @@ import test from "node:test";
 
 import type { Quote } from "@mayanfinance/swap-sdk";
 
-import { installTestDom, setInputValue, testEvent, waitFor } from "../../../../test/fixtures/social/test-dom.ts";
+import { installTestDom, recordAnimations, setInputValue, testEvent, waitFor } from "../../../../test/fixtures/social/test-dom.ts";
 
 import type { BridgeRow, BridgeSdk, EvmWallet, QuoteInput } from "./bridge-sdk.ts";
 
@@ -112,6 +112,7 @@ async function mount(sdk: BridgeSdk, calls: Calls, wallet: EvmWallet | null = ev
 const newCalls = (): Calls => ({ quotes: [], sends: 0, approves: 0, arrived: 0 });
 
 test("a search picks a catalog token by its contract and quotes its own decimals", async () => {
+  const motion = recordAnimations();
   const calls = newCalls();
   const token = { symbol: "CBBTC", name: "Coinbase Wrapped BTC", decimals: 8, mayan: "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf", native: false, reserve: 0n, logo: null };
   const requests: QuoteInput[] = [];
@@ -130,16 +131,8 @@ test("a search picks a catalog token by its contract and quotes its own decimals
     const trigger = form.container.querySelector<HTMLButtonElement>("[aria-label^='Coin to send:']")!;
     await act(async () => trigger.click());
     const search = await waitFor(() => dom.document.querySelector<HTMLInputElement>("[aria-label='Search tokens']"), "the token search");
-    const tab = testEvent("keydown", { key: "Tab" });
-    let reachedSheetTrap = false;
-    const sheetTrap = () => { reachedSheetTrap = true; };
-    dom.document.addEventListener("keydown", sheetTrap, { once: true });
-    try {
-      await act(async () => { search.dispatchEvent(tab); });
-      assert.equal(reachedSheetTrap, false, "Tab stays in the token dialog");
-    } finally {
-      dom.document.removeEventListener("keydown", sheetTrap);
-    }
+    assert.equal(search.closest("[role=dialog]")?.getAttribute("aria-modal"), "true");
+    await waitFor(() => dom.document.activeElement === search, "the token search takes focus");
     await act(async () => {
       setInputValue(search, token.mayan);
       search.dispatchEvent(testEvent("input"));
@@ -147,7 +140,9 @@ test("a search picks a catalog token by its contract and quotes its own decimals
     const match = () => [...dom.document.querySelectorAll<HTMLButtonElement>("[role='dialog'] button")].find((button) => button.textContent?.includes("Coinbase Wrapped BTC"));
     await waitFor(() => !!match(), "the matching catalog token");
     await act(async () => match()!.click());
+    await act(async () => motion.finishAll());
     assert.equal(trigger.getAttribute("aria-label"), "Coin to send: CBBTC");
+    assert.equal(dom.document.activeElement, trigger);
     const amount = form.container.querySelector<HTMLInputElement>("[inputmode='decimal']")!;
     await act(async () => {
       setInputValue(amount, "0.0002");
@@ -171,6 +166,9 @@ test("a checked quote bridges on one press, lists the row and reports the arriva
   const form = await mount(fakeSdk(calls, [QUOTE]), calls);
   try {
     await form.pickUsdc();
+    const half = await waitFor(() => [...form.container.querySelectorAll<HTMLButtonElement>("[aria-label='Amount presets'] button")].find((button) => button.textContent === "50%"), "amount presets after the source balance loads");
+    await act(async () => half.click());
+    assert.equal(form.container.querySelector<HTMLInputElement>("[inputmode=decimal]")?.value, "500");
     await form.type("20");
     await waitFor(() => /You get at least 29\.3968 SUI/.test(form.text()), "the money sentence");
     assert.equal(form.button().textContent, "Bridge");

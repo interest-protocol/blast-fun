@@ -13,7 +13,7 @@ import {
   cutDigits,
   DESTINATIONS,
   exceedsBalance,
-  maxField,
+  presetField,
   quoteErrorText,
   quoteRows,
   transferState,
@@ -24,7 +24,7 @@ import {
 const [ETH, USDC] = CHAINS.base.tokens;
 const [POL] = CHAINS.polygon.tokens;
 
-test("typed amounts become atoms; Max and the balance check keep gas back for native tokens", () => {
+test("typed amounts become atoms; presets and the balance check keep gas back for native tokens", () => {
   assert.equal(amountAtoms("20", USDC), 20_000_000n);
   assert.equal(amountAtoms("1,000.5", USDC), 1_000_500_000n);
   assert.equal(amountAtoms("0.0000001", USDC), null, "below one atom");
@@ -32,11 +32,13 @@ test("typed amounts become atoms; Max and the balance check keep gas back for na
   assert.equal(amountAtoms("abc", ETH), null);
   assert.equal(amountAtoms("0.01", ETH), 10_000_000_000_000_000n);
 
-  assert.equal(maxField(5_000_000n, USDC), "5");
-  assert.equal(maxField(25n, { ...USDC, decimals: 8 }), "0.00000025");
-  assert.equal(maxField(1_000_000_000_000_000n, ETH), "0.00098", "0.001 ETH less the 0.00002 reserve");
-  assert.equal(maxField(10_000_000_000_000n, ETH), "0", "balance under the reserve");
-  assert.equal(maxField(1_000_000_000_000_000_000n, POL), "0.7", "1 POL less the 0.3 reserve");
+  assert.equal(presetField(5_000_000n, USDC, "max"), "5");
+  assert.equal(presetField(25n, { ...USDC, decimals: 8 }, "max"), "0.00000025");
+  assert.equal(presetField(5_000_003n, USDC, "50"), "2.500001", "fractional atoms round down");
+  assert.equal(presetField(1_000_000_000_000_000n, ETH, "max"), "0.00098", "0.001 ETH less the 0.00002 reserve");
+  assert.equal(presetField(1_000_000_000_000_000n, ETH, "75"), "0.000735", "the preset uses the amount after the reserve");
+  assert.equal(presetField(10_000_000_000_000n, ETH, "max"), "0", "balance under the reserve");
+  assert.equal(presetField(1_000_000_000_000_000_000n, POL, "max"), "0.7", "1 POL less the 0.3 reserve");
   assert.equal(exceedsBalance(5_000_000n, 5_000_000n, USDC), false);
   assert.equal(exceedsBalance(980_000_000_000_000n, 1_000_000_000_000_000n, ETH), false);
   assert.equal(exceedsBalance(980_000_000_000_001n, 1_000_000_000_000_000n, ETH), true);
@@ -97,7 +99,7 @@ test("the one button names the next step, in order", () => {
     [{ paused: true, signedIn: false }, "Bridge", null, true],
     [{ signedIn: false, sourceConnected: false }, "Sign in", null, false],
     [{ blastAddress: null }, "Bridge", "Loading your account.", true],
-    [{ sourceConnected: false, atoms: null }, "Connect wallet", null, false],
+    [{ sourceConnected: false, atoms: null }, "Connect Base wallet", null, false],
     [{ wrongChain: true }, "Switch to Base", null, false],
     [{ atoms: null }, "Bridge", "Enter an amount.", true],
     [{ balanceReady: false }, "Bridge", "Checking your balance.", true],
