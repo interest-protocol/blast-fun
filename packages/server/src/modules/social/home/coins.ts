@@ -1,4 +1,4 @@
-import { DISPLAY_PRICES } from "@blast/core/modules/social/prices/test-sui.ts";
+import { displayPriceOf } from "@blast/core/modules/social/prices/test-sui.ts";
 import { verifiedTeamSql } from "@blast/server/modules/social/read-model/verified-team.ts";
 import { socialParameter } from "@blast/server/modules/social/route-kit/validation.ts";
 import { z } from "zod";
@@ -241,8 +241,8 @@ function factsSql(scope: SaleScope, params: Params, options: HomePriceOptions = 
   LEFT JOIN chain_read_v1.pools lp ON p.presale_id IS NULL AND lp.coin_type = p.sale_token AND lp.venue = 'blast_curve'
   LEFT JOIN chain_read_v1.coins cs ON p.presale_id IS NULL AND cs.coin_type = p.sale_token
   LEFT JOIN chain_read_v1.presale_coin_supply ps ON p.presale_id IS NOT NULL AND ps.coin_type = p.sale_token
-  LEFT JOIN ${DISPLAY_PRICES} pr ON pr.coin_type = p.sale_token
-  LEFT JOIN ${DISPLAY_PRICES} qp ON qp.coin_type = p.quote_type
+  LEFT JOIN ${displayPriceOf("p.sale_token")} pr ON TRUE
+  LEFT JOIN ${displayPriceOf("p.quote_type")} qp ON TRUE
   LEFT JOIN LATERAL (${rollingPriceAtSql("p.sale_token", cutoff, shorter)}) open_24h ON TRUE
   ${lastPrice}
   LEFT JOIN LATERAL (

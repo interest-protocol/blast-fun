@@ -1,4 +1,4 @@
-import { DISPLAY_PRICES } from "@blast/core/modules/social/prices/test-sui.ts";
+import { displayPricesIn } from "@blast/core/modules/social/prices/test-sui.ts";
 import type { ReadableDatabase } from "@blast/core/modules/database/transaction.ts";
 import { PORTFOLIO_PRICE_MAX_AGE_MS } from "@blast/core/modules/social/contracts/portfolio.ts";
 import { SOCIAL_TRADE_BASE_COINS } from "@blast/core/modules/social/contracts/trades.ts";
@@ -38,7 +38,7 @@ export const TRADE_SALE_COINS_SQL = `
 /** The latest price of each type, by `chain_read_v1.prices`' key. */
 export const TRADE_PRICES_SQL = `
   SELECT coin_type, usd_price::text AS usd_price, as_of_ms::text AS as_of_ms
-  FROM ${DISPLAY_PRICES} WHERE coin_type = ANY($1::text[])`;
+  FROM ${displayPricesIn("$1::text[]")} dp`;
 
 type SaleCoinRow = Readonly<{
   presale_id: string;

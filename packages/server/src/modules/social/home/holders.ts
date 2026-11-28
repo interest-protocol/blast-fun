@@ -10,7 +10,7 @@ import {
   type HomeHoldersPage,
 } from "@blast/core/modules/social/contracts/coin-market.ts";
 import { atomsToUsd, isFreshPrice, type PortfolioPrice } from "@blast/core/modules/social/portfolio/read.ts";
-import { DISPLAY_PRICES } from "@blast/core/modules/social/prices/test-sui.ts";
+import { displayPriceOf } from "@blast/core/modules/social/prices/test-sui.ts";
 import { activityOfAnyEntrySql, addressesOfAccountsSql } from "@blast/core/modules/social/presales/sql.ts";
 import { SHOWN_PRESALES } from "@blast/core/modules/social/read-model/chain-presales.ts";
 import { namedOwnerSql } from "@blast/core/modules/social/read-model/naming.ts";
@@ -82,7 +82,7 @@ const COIN_SQL = `SELECT c.presale_id, c.sale_token AS coin_type, c.sale_decimal
     trim_scale(pr.usd_price)::text AS price_usd, pr.as_of_ms::text AS price_as_of_ms,
     coalesce(cs.supply, cs.total_supply)::text AS supply, lp.pool_id AS launch_id, c.tracked_pool_only
   FROM ${HOME_LIST_COIN_SOURCES} c
-  LEFT JOIN ${DISPLAY_PRICES} pr ON pr.coin_type = c.sale_token
+  LEFT JOIN ${displayPriceOf("c.sale_token")} pr ON TRUE
   LEFT JOIN chain_read_v1.pools lp ON c.presale_id IS NULL AND lp.coin_type = c.sale_token AND lp.venue = 'blast_curve'
   LEFT JOIN chain_read_v1.coins cs ON c.presale_id IS NULL AND cs.coin_type = c.sale_token
   WHERE c.source_id = coalesce((SELECT p.presale_id FROM ${SHOWN_PRESALES} p WHERE p.sale_token = $1 LIMIT 1), $1)

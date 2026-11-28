@@ -99,6 +99,11 @@ button {
   animation: none;
 }
 
+/* A pressed row or card link dims at once while its page loads (`IntentLink`), so the press is seen. */
+a:has(> [data-pending="link"]) {
+  opacity: 0.6;
+}
+
 @media (hover: hover) and (pointer: fine) {
   html[data-blast-cursor="ready"],
   html[data-blast-cursor="ready"] * {

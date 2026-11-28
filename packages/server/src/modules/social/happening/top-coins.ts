@@ -1,6 +1,6 @@
 import { tinyTradeSql } from "@blast/core/modules/social/read-model/trade-size.ts";
 import { optionalSource } from "../optional-source.ts";
-import { DISPLAY_PRICES } from "@blast/core/modules/social/prices/test-sui.ts";
+import { displayPriceOf } from "@blast/core/modules/social/prices/test-sui.ts";
 import type { ReadableDatabase } from "@blast/core/modules/database/transaction.ts";
 import { PORTFOLIO_PRICE_MAX_AGE_MS } from "@blast/core/modules/social/contracts/portfolio.ts";
 import { PUBLIC_PRESALES } from "@blast/core/modules/social/read-model/chain-presales.ts";
@@ -17,7 +17,7 @@ export const TOP_COINS_SQL = `SELECT market.* FROM (WITH shown_coins AS MATERIAL
   UNION ALL SELECT '${SOCIAL_TRADE_BASE_COINS.sui}', NULL, 'Sui', 'SUI', NULL, false
 ), priced AS MATERIALIZED (
   SELECT c.*, trim_scale(pr.usd_price)::text AS price_usd
-  FROM shown_coins c JOIN ${DISPLAY_PRICES} pr ON pr.coin_type = c.coin_type
+  FROM shown_coins c CROSS JOIN ${displayPriceOf("c.coin_type")} pr
   WHERE pr.usd_price > 0 AND pr.as_of_ms >= $2::bigint - ${PORTFOLIO_PRICE_MAX_AGE_MS} AND pr.as_of_ms <= $2::bigint
 ), counted_coins AS MATERIALIZED (
   -- Keep distinct-account sort keys narrow even when canonical coin types are long.

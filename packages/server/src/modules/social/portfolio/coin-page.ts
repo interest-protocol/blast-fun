@@ -1,3 +1,4 @@
+import { chainPriceOf } from "@blast/core/modules/social/prices/keyed.ts";
 import { verifiedTeamSql } from "@blast/server/modules/social/read-model/verified-team.ts";
 import { CORE_COINS, PREFERRED_COINS } from "@blast/core/modules/social/portfolio/core-coins.ts";
 import type { ReadableDatabase } from "@blast/core/modules/database/transaction.ts";
@@ -30,7 +31,7 @@ export async function readPortfolioCoinPage(db: ReadableDatabase, addresses: rea
       LEFT JOIN LATERAL (SELECT * FROM chain_read_v1.coin_metadata WHERE coin_type = h.coin_type OFFSET 0) m ON TRUE
       LEFT JOIN LATERAL (SELECT presale_id,sale_name,sale_symbol,sale_decimals,sale_icon_url,quote_type,pool_id
         FROM ${SHOWN_PRESALES} p WHERE p.sale_token = h.coin_type LIMIT 1) p ON TRUE
-      LEFT JOIN chain_read_v1.prices pr ON pr.coin_type = h.coin_type
+      LEFT JOIN ${chainPriceOf("h.coin_type")} pr ON TRUE
       CROSS JOIN LATERAL (SELECT CASE h.coin_type WHEN $5 THEN 9 WHEN $6 THEN 6 ELSE coalesce(m.decimals,p.sale_decimals,($11::jsonb->h.coin_type->>'decimals')::int)::int END AS decimals) d
     ), valued AS (
       SELECT *, round(value_usd_exact,2) AS value_usd FROM priced

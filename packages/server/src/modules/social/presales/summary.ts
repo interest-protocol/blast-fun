@@ -1,4 +1,4 @@
-import { DISPLAY_PRICES } from "@blast/core/modules/social/prices/test-sui.ts";
+import { displayPriceOf } from "@blast/core/modules/social/prices/test-sui.ts";
 import { z } from "zod";
 
 import type { ReadableDatabase } from "@blast/core/modules/database/transaction.ts";
@@ -74,8 +74,8 @@ type Join = "prices" | "lifecycle" | "interest" | "claims" | "trust" | "pin";
 function joinSql(join: Join): string {
   switch (join) {
     case "prices":
-      return `LEFT JOIN ${DISPLAY_PRICES} qp ON qp.coin_type = p.quote_type
-  LEFT JOIN ${DISPLAY_PRICES} sp ON sp.coin_type = p.sale_token AND p.lifecycle = 'migrated'`;
+      return `LEFT JOIN ${displayPriceOf("p.quote_type")} qp ON TRUE
+  LEFT JOIN ${displayPriceOf("p.sale_token", "p.lifecycle = 'migrated'")} sp ON TRUE`;
     case "lifecycle":
       return `LEFT JOIN LATERAL (
     SELECT max(l.timestamp_ms) FILTER (WHERE l.state = 'opened') AS opened_ms,

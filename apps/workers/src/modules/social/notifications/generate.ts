@@ -10,7 +10,7 @@ import {
 } from "../worker/steps.ts";
 import { VESTING_MAX_MS } from "@blast/core/modules/social/contracts/vesting.ts";
 import { SHOWN_PRESALES, SHOWN_ACTIVITY } from "@blast/core/modules/social/read-model/chain-presales.ts";
-import { DISPLAY_PRICES } from "@blast/core/modules/social/prices/test-sui.ts";
+import { displayPriceOf } from "@blast/core/modules/social/prices/test-sui.ts";
 import { PORTFOLIO_PRICE_MAX_AGE_MS } from "@blast/core/modules/social/contracts/portfolio.ts";
 
 /**
@@ -290,7 +290,7 @@ const CALL_LEVELS = `
     SELECT p.presale_id, p.sale_decimals, p.quote_decimals, pr.usd_price AS price, pr.as_of_ms, claims.net, claims.tokens,
       (SELECT max(l.timestamp_ms) FROM chain_read_v1.presale_lifecycle l WHERE l.presale_id = p.presale_id AND l.state = 'migrated') AS migrated_ms
     FROM ${SHOWN_PRESALES} p
-    JOIN ${DISPLAY_PRICES} pr ON pr.coin_type = p.sale_token
+    CROSS JOIN ${displayPriceOf("p.sale_token")} pr
     CROSS JOIN LATERAL (
       SELECT sum(c.commitment - COALESCE(c.claimed_quote_refund, 0)) AS net, sum(c.claimed_tokens) AS tokens
       FROM (

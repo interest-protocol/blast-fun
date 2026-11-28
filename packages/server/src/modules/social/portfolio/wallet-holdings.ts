@@ -1,3 +1,4 @@
+import { chainPriceOf } from "@blast/core/modules/social/prices/keyed.ts";
 import { CREATE_TEST_SUI_QUOTE_TYPE, TEST_SUI_COIN_TYPES, createQuoteOf } from "@blast/core/modules/social/contracts/create.ts";
 import { verifiedTeamSql } from "@blast/server/modules/social/read-model/verified-team.ts";
 import type { ReadableDatabase } from "@blast/core/modules/database/transaction.ts";
@@ -40,7 +41,7 @@ const WALLET_HOLDINGS_SQL = `SELECT w.owner, s.status, s.checkpoint::text, s.tim
     LEFT JOIN chain_read_v1.wallet_sync s USING (owner)
     LEFT JOIN chain_read_v1.wallet_balances b USING (owner)
     LEFT JOIN LATERAL (SELECT * FROM chain_read_v1.coin_metadata WHERE coin_type = b.coin_type OFFSET 0) m ON TRUE
-    LEFT JOIN chain_read_v1.prices pr ON pr.coin_type = b.coin_type
+    LEFT JOIN ${chainPriceOf("b.coin_type")} pr ON TRUE
     LEFT JOIN LATERAL (SELECT * FROM ${BLAST_LAUNCH_COINS} c WHERE c.coin_type = b.coin_type LIMIT 1) c ON TRUE`;
 
 const DISPLAY_QUOTE_TYPES = [...Object.values(PORTFOLIO_COIN_TYPES), CREATE_TEST_SUI_QUOTE_TYPE];
