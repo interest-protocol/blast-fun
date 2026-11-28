@@ -3,6 +3,7 @@ import { SUI_COIN_TYPE } from "@blast/core/lib/sui/coin-types.ts";
 import { INDEXED_POOL_COINS } from "@blast/core/modules/social/portfolio/core-coins.ts";
 import { SHOWN_PRESALES } from "@blast/core/modules/social/read-model/chain-presales.ts";
 import { HOME_PAGE_MAX } from "@blast/core/modules/social/contracts/home.ts";
+import { chainPriceOf } from "@blast/core/modules/social/prices/keyed.ts";
 import { HOME_DUST_USD } from "@blast/server/modules/social/home/rank.ts";
 
 const TRACKED_POOL_VALUES = INDEXED_POOL_COINS.map((coin) => {
@@ -112,8 +113,8 @@ export const homeClosestCurveSources = (tradedIn: string, testQuote: string) => 
     FROM (${liveCurves(`
       AND lp.quote_type IS DISTINCT FROM ${testQuote}
       AND (lp.lifecycle='migration_ready' OR lp.graduation_target > 0)
-      AND NOT EXISTS (SELECT 1 FROM chain_read_v1.prices qp WHERE qp.coin_type=lp.quote_type
-        AND lp.graduation_target / 10::numeric ^ q.decimals * qp.usd_price < ${HOME_DUST_USD})`, `,
+      AND NOT EXISTS (SELECT 1 FROM ${chainPriceOf("lp.quote_type")} qp
+        WHERE lp.graduation_target / 10::numeric ^ q.decimals * qp.usd_price < ${HOME_DUST_USD})`, `,
       ${tradedIn} AS recently_traded,
       CASE WHEN lp.lifecycle='migration_ready' THEN 1 ELSE lp.quote_reserve / nullif(lp.graduation_target, 0) END AS filled`)}) c
     WHERE NOT EXISTS (SELECT 1 FROM chain_read_v1.presales p WHERE p.sale_token=c.sale_token)
