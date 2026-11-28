@@ -2,6 +2,7 @@ import { z } from "zod";
 import { compareExact, exactDecimal } from "../../lib/exact-amount.ts";
 import { COIN_TYPE_WITH_GENERICS, SUI_OBJECT_ID_PATTERN } from "../../lib/sui/ids.ts";
 import { EVENT_CURSOR } from "./cursor.ts";
+import { signedAtomicSchema } from "./decimal.ts";
 import { POOL_KEY } from "./venues.ts";
 
 /** One browser stream covers the chart's curve and optional recorded venue pool. */
@@ -60,7 +61,7 @@ export const coinStatsFrameSchema = z.object({
   lifecycle: z.string().max(32).nullable(),
   price: decimal,
   market_cap: decimal,
-  market: z.object({ market_cap_usd: decimal, fdv_usd: decimal, change_24h_bps: z.number().int().nullable() }).partial().nullable(),
+  market: z.object({ market_cap_usd: decimal, fdv_usd: decimal, change_24h_bps: signedAtomicSchema.max(80).nullable() }).partial().nullable(),
   quote_usd: z.record(z.string().max(64), z.unknown()).nullable(),
   window_24h: z.object({ volume_quote: decimal, volume_usd: decimal, buys: count, sells: count, trades: count }).partial().nullable(),
   holders: count,
