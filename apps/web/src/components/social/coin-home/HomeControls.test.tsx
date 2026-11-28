@@ -30,6 +30,10 @@ test("a phone sorts Home from the Filters sheet, starting with the tab's own ord
   // A narrowed stage keeps its own order on offer after a column order is picked.
   await render({ ...HOME_DEFAULT_FEED, stage: "almost", sort: "market_cap" });
   assert.deepEqual(options(), ["Progress", "Market cap", "Volume", "Most held"]);
+  // A shared link with another order keeps that order shown and chosen.
+  await render({ ...HOME_DEFAULT_FEED, stage: "almost", sort: "newest" });
+  assert.deepEqual(options(), ["Progress", "Market cap", "Volume", "Most held", "Newest"]);
+  assert.equal(document.querySelector<HTMLSelectElement>('select[aria-label="Sort"]')!.value, "newest");
   // Following and the Watchlist keep their own order: no sort to pick.
   await render({ ...HOME_DEFAULT_FEED, source: "following" });
   assert.deepEqual(options(), []);

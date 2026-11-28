@@ -140,7 +140,8 @@ export function CoinsListControls({ state, onChange }: ViewProps) {
   const phone = usePhoneLayout();
   // The tab's own order first: a narrowed stage opens on its default, a whole-list tab on the order it names.
   const tabSort = state.stage === "all" && tabOf(state) ? state.sort : stageDefaultSort(state.stage);
-  const sorts = [...new Set([tabSort, ...HEADER_SORTS])];
+  // The active order stays listed, so a shared link with another order still shows it.
+  const sorts = [...new Set([tabSort, ...HEADER_SORTS, state.sort])];
   const changed = discover
     ? state.window !== HOME_DEFAULT_FEED.window || activeFilterCount(state) > 0
     : state.window !== HOME_DEFAULT_FEED.window;

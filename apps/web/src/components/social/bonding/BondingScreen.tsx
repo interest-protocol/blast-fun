@@ -137,23 +137,24 @@ export function BondingScreen({ hero }: Readonly<{ hero?: BondingHeroSeed | null
     client,
   );
   const heroes = pageOf(featured.data)?.rows ?? [];
-  // The Live list's first page, shared with CatalogResults through the cache: an empty or failed
+  // The Live list's first page ids, shared with CatalogResults through the cache: an empty or failed
   // list drops its sort, while a pending one keeps it so it never pops in.
   const liveHasRows = useQuery(
     {
       ...bondingCatalogQuery("bonding", sort, settled, null),
       enabled: tab === "bonding" && normalized !== null,
-      select: (answer) => (pageOf(answer)?.rows.length ?? 0) > 0,
+      select: (answer) => pageOf(answer)?.rows.map((row) => row.launchId) ?? [],
     },
     client,
   );
-  const showSort = tab === "bonding" && normalized !== null && (liveHasRows.data ?? liveHasRows.isFetching);
   function viewBonding() {
     changeView({ search: "", tab: "bonding" });
   }
   const feature = tab === "bonding" && !search.trim() ? <FeaturedCurves key="featured" heroes={heroes} answer={featured.data} details={hero?.details} /> : null;
   // A coin in the carousel above is not listed again below it.
   const shownAbove = feature && heroes.length > 0 ? new Set(heroes.map((row) => row.launchId)) : undefined;
+  // A list left with only carousel coins has nothing to arrange.
+  const showSort = tab === "bonding" && normalized !== null && (liveHasRows.data ? liveHasRows.data.some((id) => !shownAbove?.has(id)) : liveHasRows.isFetching);
   const controls = <BondingControls
     key="catalog-controls"
     tab={tab}
