@@ -404,11 +404,19 @@ export function volumeLabel(window: HomeWindow, text: string | null, scope?: Hom
   return `${window} volume: ${partial ? text.slice(0, -1) : text}${detail ? ` (${detail})` : ""}`;
 }
 
-/** Use the venue total when present. Label the narrower fallback from tracked trades. */
-export function marketVolume(coin: Pick<HomeCoin, "activity" | "dex_volume">) {
+/** The one 24h volume (`dex_volume`, or a `coin_stats` frame's `volume_24h`) as a tight figure: `$1.2K`, `$370+` on a partial sum. */
+export function usdVolumeText(volume: Readonly<{ usd: string; usd_complete: boolean }>): string {
+  return `${compactUsdText(volume.usd)}${volume.usd_complete ? "" : "+"}`;
+}
+
+/**
+ * Use the coin's one volume when present (curve trades plus DEX swaps); every page shows it this way.
+ * Label the narrower fallback from tracked trades.
+ */
+export function marketVolume(coin: Pick<HomeCoin, "activity"> & Readonly<{ dex_volume?: Readonly<{ usd: string | null; usd_complete: boolean }> | null }>) {
   const { activity, dex_volume: volume } = coin;
   if (volume) {
-    const text = volume.usd === null ? null : `${compactUsdText(volume.usd)}${volume.usd_complete ? "" : "+"}`;
+    const text = volume.usd === null ? null : usdVolumeText({ usd: volume.usd, usd_complete: volume.usd_complete });
     return { text, label: volumeLabel(activity.window, text) };
   }
   const hasAmounts = activity.bought.length + activity.sold.length + activity.committed.length > 0;

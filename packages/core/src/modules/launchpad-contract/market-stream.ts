@@ -64,10 +64,12 @@ export const coinStatsFrameSchema = z.object({
   market: z.object({ market_cap_usd: decimal, fdv_usd: decimal, change_24h_bps: signedAtomicSchema.max(80).nullable() }).partial().nullable(),
   quote_usd: z.record(z.string().max(64), z.unknown()).nullable(),
   window_24h: z.object({ volume_quote: decimal, volume_usd: decimal, buys: count, sells: count, trades: count }).partial().nullable(),
+  /** The 24h volume every page shows: curve tape trades plus Cetus and Bluefin swaps, `usd_complete` false on a partial sum. */
+  volume_24h: z.object({ usd: decimal, usd_complete: z.boolean() }).partial().nullable(),
   holders: count,
   progress_bps: z.number().int().min(0).max(10_000).nullable(),
   liquidity_quote: decimal,
-}).partial({ lifecycle: true, price: true, market_cap: true, market: true, quote_usd: true, window_24h: true, holders: true, progress_bps: true, liquidity_quote: true });
+}).partial({ lifecycle: true, price: true, market_cap: true, market: true, quote_usd: true, window_24h: true, volume_24h: true, holders: true, progress_bps: true, liquidity_quote: true });
 export type CoinStatsFrame = Readonly<z.infer<typeof coinStatsFrameSchema>>;
 export const displayPriceSnapshotSchema = z.object({
   prices: z.array(z.unknown()).max(MARKET_STREAM_BUDGET.maxPriceCoins),

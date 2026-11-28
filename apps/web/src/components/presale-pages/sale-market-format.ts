@@ -1,4 +1,6 @@
 import { bpsPercent } from "@blast/core/lib/bps.ts";
+import { changeBps } from "@blast/core/modules/social/prices/change.ts";
+import { exactDecimal, exactText, subtractExact } from "@blast/core/web/exact-amount.ts";
 import type { HomeHolder } from "@blast/core/web/contracts/home.ts";
 import { readablePrice } from "#web/lib/market-format.ts";
 
@@ -19,6 +21,16 @@ export function formatMove(move: PriceMove) {
   if (magnitude === "—") return formatChange(move.bps);
   const sign = magnitude === "0" ? "" : move.usd.startsWith("-") ? "-" : "+";
   return `${sign}$${magnitude} (${(Math.abs(move.bps) / 100).toFixed(2)}%)`;
+}
+
+/** The day's move of a dollar price shown now against the read's price 24 hours back, so the move ticks with the price. */
+export function liveDayMove(usdNow: string | null, openUsd: string | null): PriceMove | null {
+  const bps = changeBps(usdNow, openUsd);
+  const now = exactDecimal(usdNow);
+  const open = exactDecimal(openUsd);
+  if (bps === null || !now || !open) return null;
+  const up = subtractExact(now, open);
+  return { usd: up ? exactText(up) : `-${exactText(subtractExact(open, now)!)}`, bps };
 }
 
 export function presaleHolderShare(holder: HomeHolder) {
