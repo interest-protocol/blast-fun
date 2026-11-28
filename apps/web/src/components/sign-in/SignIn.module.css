@@ -12,7 +12,8 @@
 
 .methods { display: flex; flex-direction: column; gap: 0.5rem; }
 .walletGroup { display: flex; flex-direction: column; gap: 0.5rem; margin: 0.3125rem 0; }
-.walletMethods { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; }
+.walletMethods { --wallet-tile-height: 5rem; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; }
+.walletMethods .walletSkeleton { height: var(--wallet-tile-height); border-radius: var(--r-button-lg); }
 .groupLabel { margin: 0; color: var(--muted); font-size: 0.75rem; font-weight: 600; }
 .methods button.method {
   height: 3.4375rem;
@@ -26,7 +27,7 @@
 .methods button.method img { width: 1.5rem; height: 1.5rem; flex: none; }
 .methods button.method[disabled] { cursor: default; }
 .methodLabel { min-width: 0; white-space: normal; }
-.walletMethods button.method { height: auto; min-height: 5rem; min-width: 0; flex-direction: column; justify-content: center; gap: 0.5rem; padding: 0.5rem; font-size: 0.8125rem; line-height: 1.2; text-align: center; overflow-wrap: anywhere; }
+.walletMethods button.method { height: auto; min-height: var(--wallet-tile-height); min-width: 0; flex-direction: column; justify-content: center; gap: 0.5rem; padding: 0.5rem; font-size: 0.8125rem; line-height: 1.2; text-align: center; overflow-wrap: anywhere; }
 
 .spin {
   flex: none;

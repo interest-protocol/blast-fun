@@ -67,6 +67,15 @@ test("a long Sui wallet list keeps its first four choices visible and provides a
   assert.deepEqual([...document.querySelectorAll('[role="group"] button[data-sign-in-method]')].filter((button) => !button.closest("[hidden]")).map((button) => button.textContent), ["OKX Wallet", "Nightly", "Scallop Wallet", "Suiet"]);
 });
 
+test("pending wallet discovery reserves a wallet row without disabling other methods", () => {
+  const html = render(<SignInContent state={SIGN_IN_IDLE} walletAvailable />);
+  const document = new JSDOM(html).window.document;
+  const pending = document.querySelector('[role="status"][aria-label="Finding Sui wallets"]');
+  assert.equal(pending?.getAttribute("aria-busy"), "true");
+  assert.equal(pending?.querySelectorAll(".walletSkeleton[aria-hidden=true]").length, 2);
+  assert.equal(document.querySelector<HTMLButtonElement>('[data-sign-in-method="wallet"]')?.disabled, false);
+});
+
 test("wallet discovery failure offers an in-place retry", () => {
   const html = render(<SignInContent onRetryWallets={() => undefined} state={SIGN_IN_IDLE} suiWallets="unavailable" walletAvailable />);
   const document = new JSDOM(html).window.document;

@@ -9,8 +9,8 @@ import { Button, DisclosureButton } from "#web/components/blast-ui/Button.tsx";
 import { DiagnosticCode } from "#web/components/blast-ui/DiagnosticText.tsx";
 import { EmptyState } from "#web/components/blast-ui/EmptyState.tsx";
 import { GoogleLogo, HelmetMark, WalletIcon, XLogo } from "#web/components/blast-ui/Icons.tsx";
-import { LoadingIndicator } from "#web/components/blast-ui/LoadingIndicator.tsx";
 import { Sheet, SheetClose, SheetHeading } from "#web/components/blast-ui/Sheet.tsx";
+import { SkeletonBox, SkeletonRegion } from "#web/components/blast-ui/Skeleton.tsx";
 import { useShellAction } from "#web/components/blast-ui/shell-actions.tsx";
 import { startPrivy, usePrivyLoginEvents, usePrivySession } from "#web/components/auth/privy-session.ts";
 import { usePreparePrivyWalletPicker } from "#web/components/auth/privy-wallet-picker.ts";
@@ -152,7 +152,10 @@ function SuiWalletOptions({ disabled, onRetry, renderMethod, wallets }: Readonly
     <div aria-labelledby={labelId} className={styles.walletGroup} role="group">
       <p className={styles.groupLabel} id={labelId}>Sui wallets</p>
       {wallets === null ? (
-        <LoadingIndicator label="Finding Sui wallets" />
+        <SkeletonRegion className={styles.walletMethods} label="Finding Sui wallets">
+          <SkeletonBox className={styles.walletSkeleton} />
+          <SkeletonBox className={styles.walletSkeleton} />
+        </SkeletonRegion>
       ) : wallets === "unavailable" ? (
         <EmptyState
           action={onRetry ? <Button disabled={disabled} onClick={onRetry} size="sm" variant="secondary">Try again</Button> : null}
