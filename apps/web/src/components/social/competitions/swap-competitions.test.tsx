@@ -219,9 +219,30 @@ async function mountPromotions(t: TestContext, window: Readonly<{ starts_at_ms: 
       await act(async () => { t.mock.timers.tick(100); await new Promise((resolve) => setImmediate(resolve)); });
     }
   };
+  // Only the competition clock waits an hour or so: the query's own timers are far shorter.
+  const longWaits = new Set<unknown>();
+  const { setTimeout: later, clearTimeout: drop } = globalThis;
+  const spies = [
+    t.mock.method(globalThis, "setTimeout", (run: () => void, ms: number) => {
+      const timer = later(run, ms);
+      if (ms > 1_000_000) longWaits.add(timer);
+      return timer;
+    }),
+    t.mock.method(globalThis, "clearTimeout", (timer: ReturnType<typeof setTimeout>) => { longWaits.delete(timer); drop(timer); }),
+  ];
+  // Before the mocked clock is reset, so the real timer functions come back.
+  t.after(() => spies.forEach((spy) => spy.mock.restore()));
   await act(async () => root.render(withQueryClient(client, <Promotions />)));
   await pass(500);
-  return { seen, pass };
+  return { seen, pass, longWaits };
+}
+
+/** A tab this test can hide and show; it starts visible. */
+function tabVisibility(t: TestContext) {
+  let visibility: DocumentVisibilityState = "visible";
+  Object.defineProperty(document, "visibilityState", { get: () => visibility, configurable: true });
+  t.after(() => { Reflect.deleteProperty(document, "visibilityState"); });
+  return (state: DocumentVisibilityState) => act(async () => { visibility = state; document.dispatchEvent(new window.Event("visibilitychange")); });
 }
 
 test("a competition starts and ends on time with no fresh read, and nothing redraws between", async (t) => {
@@ -265,10 +286,7 @@ test("a wake a millisecond early never loses the change it was for", async (t) =
 
 test("a competition that starts while the tab is hidden redraws nothing until the return", async (t) => {
   const { seen, pass } = await mountPromotions(t, { starts_at_ms: 5_000, ends_at_ms: 20_000 });
-  let visibility: DocumentVisibilityState = "visible";
-  Object.defineProperty(document, "visibilityState", { get: () => visibility, configurable: true });
-  t.after(() => { Reflect.deleteProperty(document, "visibilityState"); });
-  const show = (state: DocumentVisibilityState) => act(async () => { visibility = state; document.dispatchEvent(new window.Event("visibilitychange")); });
+  const show = tabVisibility(t);
   await show("hidden");
   const draws = seen.draws;
   await pass(5_000);
@@ -276,3 +294,17 @@ test("a competition that starts while the tab is hidden redraws nothing until th
   await show("visible");
   assert.deepEqual(seen.live, ["kestrel-week"]);
 });
+
+for (const mountedAs of ["visible", "hidden"] as const) {
+  test(`a hidden tab keeps no competition timer when the screen opened ${mountedAs}`, async (t) => {
+    const show = tabVisibility(t);
+    await show(mountedAs);
+    const { longWaits } = await mountPromotions(t, { starts_at_ms: 3_600_000, ends_at_ms: 7_200_000 });
+    await show("hidden");
+    assert.equal(longWaits.size, 0);
+    await show("visible");
+    assert.equal(longWaits.size, 1);
+    await show("hidden");
+    assert.equal(longWaits.size, 0);
+  });
+}

@@ -46,6 +46,8 @@ function useCompetitionClock(data: TimedCompetitions | undefined): number {
       // `since` is when the set was last judged: a change after it, even a past one, still gets its wake.
       const arm = (since: number) => {
         clearTimeout(timer);
+        // A hidden tab keeps no timer: its return wakes this again.
+        if (document.visibilityState === "hidden") return;
         const next = Math.min(...changeTimes(data).filter((at) => at > since));
         // The longest wait a browser timer takes; a farther change arms again from there.
         if (Number.isFinite(next)) timer = setTimeout(wake, Math.min(next - Date.now(), 2_147_483_647));
