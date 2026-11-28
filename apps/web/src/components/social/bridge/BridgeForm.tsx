@@ -60,7 +60,7 @@ import {
 import { explorerLink, mergeRows, type BridgeRow, type BridgeSdk, type EvmWallet, type SolanaWallet, type SourceWallet } from "./bridge-sdk.ts";
 import styles from "./bridge.module.css";
 import { SourceTokenPicker } from "./SourceTokenPicker.tsx";
-import { readSolanaSubmission, SOLANA_RETRY_UNAVAILABLE, subscribeSolanaSubmission, withSolanaSubmissionLock } from "./solana-submission.ts";
+import { readSolanaSubmission, solanaSubmissionSignature, SOLANA_RETRY_UNAVAILABLE, subscribeSolanaSubmission, withSolanaSubmissionLock } from "./solana-submission.ts";
 
 /** The source wallets Privy has connected, and how to connect one. */
 export type BridgeWallets = Readonly<{
@@ -375,25 +375,25 @@ function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent, sol
       ? withSolanaSubmissionLock(source.address, () => sendBridge(ask, source, amount))
       : sendBridge(ask, source, amount));
 
-  const checkSolana = (source: SolanaWallet, blastAddress: string) => run(async () => {
-    const result = await sdk.checkSolanaSubmission(source.address);
+  const checkSolana = (address: string, blastAddress: string) => run(async () => {
+    const result = await sdk.checkSolanaSubmission(address, signal());
     if (!result) return;
     if (result.state === "failed") {
       forgetSubmission(blastAddress, result.signature);
       setSent((rows) => rows.filter((row) => row.hash !== result.signature));
     }
-    if (signal().aborted || activeSolana.current !== source.address) return;
+    if (signal().aborted || activeSolana.current !== address) return;
     if (result.state === "failed") {
-      setSolanaNotice({ address: source.address, text: "The Solana transfer didn’t go through. You can bridge again. Code: bridge_solana_not_sent.", error: true });
+      setSolanaNotice({ address, text: "The Solana transfer didn’t go through. You can bridge again. Code: bridge_solana_not_sent.", error: true });
     } else if (result.state === "confirmed") {
       onSent();
-      setSolanaNotice({ address: source.address, text: "Your transfer was confirmed on Solana.", error: false });
+      setSolanaNotice({ address, text: "Your transfer was confirmed on Solana.", error: false });
       void queryClient.invalidateQueries({ queryKey: ["bridge", "history", blastAddress] });
       void queryClient.invalidateQueries({ queryKey: ["bridge", "balance", "solana"] });
     } else {
-      setSolanaNotice({ address: source.address, text: "Solana hasn’t confirmed this transfer.", error: false });
+      setSolanaNotice({ address, text: "Solana hasn’t confirmed this transfer.", error: false });
     }
-  }, { checkingAddress: source.address });
+  }, { checkingAddress: address });
 
   const switchTo = (source: EvmWallet) => run(() => source.switchChain(info.chainId!), { switching: true });
 
@@ -529,7 +529,7 @@ export function BridgeForm({ sdk, wallets, blastAddress, signedIn, onSignIn, onA
     switch: () => { if (reads.evmWallet) send.switchTo(reads.evmWallet); },
     retry: () => { void reads.quote.refetch(); },
     approve: () => { if (reads.evmWallet) send.approve(request(), reads.evmWallet); },
-    checkSolana: () => { if (wallet?.kind === "solana" && blastAddress) send.checkSolana(wallet, blastAddress); },
+    checkSolana: () => send.checkSolana(solanaAddress!, blastAddress!),
     bridge: () => { if (wallet) send.bridge(request(), wallet, amount.replace(/,/g, "")); },
   });
 
@@ -620,7 +620,7 @@ function usePendingSolanaSubmission(wallet: SourceWallet | null) {
   const solanaAddress = wallet?.kind === "solana" ? wallet.address : null;
   const signature = useSyncExternalStore(
     solanaAddress ? subscribeSolanaSubmission : noSubscription,
-    () => solanaAddress ? readSolanaSubmission(solanaAddress) : null,
+    () => solanaAddress ? solanaSubmissionSignature(readSolanaSubmission(solanaAddress)) : null,
     () => null,
   );
   return { solanaAddress, signature, solanaPending: signature !== null };
