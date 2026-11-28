@@ -103,3 +103,19 @@ test("a function of the clock names each next turn, one timeout at a time", asyn
   await tick(t, 60_000);
   assert.deepEqual(renders, [NOW, NOW + 10_000, NOW + 20_000, NOW + 30_000], "the last turn names none");
 });
+
+test("a return to the tab catches up at once after the device slept past the time", async (t) => {
+  t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: NOW });
+  const listen = t.mock.method(document, "addEventListener");
+  const unlisten = t.mock.method(document, "removeEventListener");
+  const { renders, unmount } = await probe(t, NOW + 5_000);
+  // Asleep for a minute: the clock moved on, the timer did not fire.
+  t.mock.timers.setTime(NOW + 60_000);
+  assert.deepEqual(renders, [NOW]);
+  await act(async () => { document.dispatchEvent(new Event("visibilitychange")); });
+  assert.deepEqual(renders, [NOW, NOW + 60_000]);
+  await unmount();
+  const added = listen.mock.calls.filter((call) => call.arguments[0] === "visibilitychange").length;
+  const removed = unlisten.mock.calls.filter((call) => call.arguments[0] === "visibilitychange").length;
+  assert.ok(added > 0 && removed === added, "every listener it adds is removed");
+});

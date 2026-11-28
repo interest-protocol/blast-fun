@@ -17,6 +17,9 @@ const LONGEST_TIMEOUT_MS = 2_147_483_647;
  *
  * A decision that turns again and again (a vesting schedule's releases)
  * passes `atMs` as a function of the clock: each turn names the next one.
+ *
+ * A return to the tab checks again at once, so a timer that slept with the
+ * device cannot leave the page behind.
  */
 export function useBoundaryClock(next: number | null | undefined | ((clockMs: number) => number | null | undefined), nowMs: number): number {
   const [passedMs, setPassedMs] = useState<number | null>(null);
@@ -25,13 +28,19 @@ export function useBoundaryClock(next: number | null | undefined | ((clockMs: nu
   useEffect(() => {
     if (atMs === null || atMs === undefined || atMs <= clock) return;
     const delay = () => Math.min(Math.max(0, atMs - Date.now()), LONGEST_TIMEOUT_MS);
+    let timer: ReturnType<typeof setTimeout>;
     // A timer that fires early, or a wait longer than one timeout allows, waits again.
     const wake = () => {
+      clearTimeout(timer);
       if (Date.now() < atMs) timer = setTimeout(wake, delay());
       else setPassedMs(Date.now());
     };
-    let timer = setTimeout(wake, delay());
-    return () => clearTimeout(timer);
+    timer = setTimeout(wake, delay());
+    document.addEventListener("visibilitychange", wake);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", wake);
+    };
   }, [atMs, clock]);
   return clock;
 }

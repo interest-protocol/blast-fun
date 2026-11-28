@@ -124,7 +124,8 @@ function useDetailView({ initial }: Readonly<{ initial: Detail }>) {
     refetchOnWindowFocus: (query) => !(query.state.error instanceof VestingCapabilityUnavailable),
   });
   const schedule = read.data.schedule;
-  const clock = useBoundaryClock((at) => nextChange(schedule, at), initial.now_ms);
+  // Never older than the latest read: its `released` may already count what vested since the page's last turn.
+  const clock = useBoundaryClock((at) => nextChange(schedule, at), read.data.now_ms);
   const now = BigInt(clock),
     amounts = vestingAmounts(schedule, now),
     bounds = scheduleBounds(schedule.terms);

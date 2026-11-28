@@ -86,7 +86,7 @@ async function mount(t: TestContext, detail: Detail["schedule"]) {
   ));
   const claimable = () => [...host.querySelectorAll("h3")].find((heading) => heading.textContent === "Available to claim")?.nextElementSibling?.textContent ?? "";
   const pass = (ms: number) => act(async () => { t.mock.timers.tick(ms); });
-  return { claimable, pass, mounted: globals.vestingViewDraws };
+  return { claimable, pass, client, mounted: globals.vestingViewDraws };
 }
 
 test("a continuous schedule's claimable amount moves each second without redrawing the page", async (t) => {
@@ -114,4 +114,17 @@ test("a stepped schedule's claimable amount changes at its release, the only red
   await page.pass(5 * SECOND);
   t.diagnostic(`VestingDetail view renders in 10 s (stepped): ${globals.vestingViewDraws - page.mounted}`);
   assert.equal(globals.vestingViewDraws - page.mounted, 1);
+});
+
+test("a claim's fresh read shows its payout, even half a minute after the page's last turn", async (t) => {
+  const vesting = schedule({ kind: "linear", start_ms: String(NOW - 3_600 * SECOND), period_ms: "1", periods: String(7_200 * SECOND), cliff_ms: "0" }, "7200");
+  const page = await mount(t, vesting);
+  await page.pass(30 * SECOND);
+  assert.equal(page.claimable(), "3,630TOKEN");
+  // The claim paid what had vested two seconds earlier; the read stamps its own time.
+  await act(async () => {
+    page.client.setQueryData(["vesting", vesting.schedule_id], { now_ms: NOW + 30 * SECOND, schedule: { ...vesting, released: "3628" }, events: [] });
+    t.mock.timers.tick(1); // the query cache tells its readers on the next timer turn
+  });
+  assert.equal(page.claimable(), "2TOKEN");
 });
