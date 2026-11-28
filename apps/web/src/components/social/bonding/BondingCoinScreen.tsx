@@ -430,7 +430,7 @@ function CoinMarket({ snapshot, page, chart, activity, poolKey, checkpoint, expe
     <div className={styles.market}>
       <Reconnecting live={live} />
       {liveOn ? <LifecycleRefresh lifecycle={live.stats?.lifecycle ?? null} /> : null}
-      <CoinMarketCards graduated={graduated} view={view} tick={tick} tradeId={tradeId} stats={stats} chart={chart} activity={activity}
+      <CoinMarketCards graduated={graduated} view={view} tick={tick} tradeId={tradeId} stats={stats} streamed={live.stats} chart={chart} activity={activity}
         price={<MarketPrice units={priceUnits(view)} price={price?.price} tradeId={tradeId && price?.cursor ? tradeId : null}
           showCurrency={view.identity.quoteType !== null} activity={recent} />}
         foot={<><span className={styles.byline}><CreatorByline page={page} />{view.identity.coinType ? <CoinTypeTag coinType={view.identity.coinType} /> : null}</span>{recent}</>} />
@@ -439,13 +439,14 @@ function CoinMarket({ snapshot, page, chart, activity, poolKey, checkpoint, expe
 }
 
 /** The chart comes first at every width, the price row as its head; without a chart the price row stands alone. */
-function CoinMarketCards({ graduated, view, tick, tradeId, stats, chart, activity, price, foot }: Readonly<{
-  graduated: boolean; view: View; tick: ReturnType<typeof useCoinTrade>["tick"]; tradeId: string | null; stats: LiveCoinStats | null; chart: ReactNode; activity: ReactNode; price: ReactNode; foot: ReactNode;
+function CoinMarketCards({ graduated, view, tick, tradeId, stats, streamed, chart, activity, price, foot }: Readonly<{
+  graduated: boolean; view: View; tick: ReturnType<typeof useCoinTrade>["tick"]; tradeId: string | null; stats: LiveCoinStats | null;
+  streamed: LiveCoinStats | null; chart: ReactNode; activity: ReactNode; price: ReactNode; foot: ReactNode;
 }>) {
   const phone = usePhoneLayout();
   const phoneProgress = phone && !graduated;
   const facts = view.curve && view.inputs ? <ProgressFacts view={view} tradeId={tradeId} stats={stats} /> : null;
-  const overview = graduated ? <GraduatedMarketOverview view={view} tick={tick} tradeId={tradeId} stats={stats} /> : (
+  const overview = graduated ? <GraduatedMarketOverview view={view} tick={tick} tradeId={tradeId} stats={stats} streamed={streamed} /> : (
     <ProgressCard view={view} tradeId={tradeId}>{phone ? null : facts}</ProgressCard>
   );
   return <>
@@ -466,23 +467,24 @@ function coinTradeSource(view: View, poolKey: string | null, trade: ReturnType<t
 
 /**
  * The 24h volume Home shows for this coin (curve trades plus DEX swaps), from Home's read of it, so a page read
- * never swaps it for the current pool's own tape; `stats` (newer than the page read) wins once it sends `volume_24h`.
+ * never swaps it for the current pool's own tape. The streamed stats win once they send `volume_24h` and are
+ * newer than that Home read, so the figure never steps back to an older read.
  */
-function useHomeDayVolume(coinType: string | null, stats: LiveCoinStats | null): ReactNode {
+function useHomeDayVolume(coinType: string | null, streamed: LiveCoinStats | null): ReactNode {
   const { data, isLoading } = useQuery({
     ...coinsByIdsQuery(coinType ? [coinType] : [], "24h", undefined, true),
     refetchInterval: marketPoll(useLiveListening()),
   }, useAppQueryClient());
   const key = coinKey(coinType);
   const coin = data?.coins.find((item) => coinKey(item.coin_type) === key) ?? null;
-  return dayVolumeText(coin, stats) ?? (isLoading ? <SkeletonText>0000</SkeletonText> : undefined);
+  return dayVolumeText(coin, statsAfterRead(streamed, data?.as_of.checkpoint ?? null)) ?? (isLoading ? <SkeletonText>0000</SkeletonText> : undefined);
 }
 
-function GraduatedMarketOverview({ view, tick, tradeId, stats }: Readonly<{
-  view: View; tick: ReturnType<typeof useCoinTrade>["tick"]; tradeId: string | null; stats: LiveCoinStats | null;
+function GraduatedMarketOverview({ view, tick, tradeId, stats, streamed }: Readonly<{
+  view: View; tick: ReturnType<typeof useCoinTrade>["tick"]; tradeId: string | null; stats: LiveCoinStats | null; streamed: LiveCoinStats | null;
 }>) {
   // Without the venue's read (an outage) the page shows no market figures, the day's volume among them.
-  const volume = useHomeDayVolume(view.pool ? view.identity.coinType : null, stats);
+  const volume = useHomeDayVolume(view.pool ? view.identity.coinType : null, streamed);
   return <MarketOverview fdv={stats?.fdvUsd ?? (tick ? tick.trade.fdvUsd : view.pool?.fdvUsd)} holders={shownHolders(stats, view.coin?.stats.holders)}
     volumeFigure={volume} venue={view.venue} tradeId={tradeId} />;
 }

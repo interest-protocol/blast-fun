@@ -50,7 +50,7 @@ function harness(t: test.TestContext): Harness {
   return { listeners, stops: () => stops, client, container, root };
 }
 
-function seedRead(client: Harness["client"], coin: string, usd: string) {
+function seedRead(client: Harness["client"], coin: string, usd: string | null) {
   const { queryKey } = priceQuery({ kind: "coin", id: coin, window: "1h" });
   client.setQueryData<SocialPriceHistory | null>(queryKey, () => ({
     presale_id: null, coin_type: coin, tier: "5m", from_ms: 0, points: [],
@@ -105,4 +105,22 @@ test("USDC on a live page reads before the stream, follows the stream, and retur
 
   await waitFor(() => rate() === "0.999", "the read after the streamed rate ages out", 5_000);
   assert.equal(query().isDisabled(), false, "the read runs once the stream has no fresh rate");
+});
+
+// This fails if an expired streamed SUI rate drops to no rate while the read has no price yet.
+test("SUI on a live page keeps its last streamed rate when it ages out and the read has no price", async (t) => {
+  const { listeners, client, container, root } = harness(t);
+  t.mock.method(globalThis, "fetch", async () => { throw new Error("offline"); });
+  const query = seedRead(client, CREATE_SUI_QUOTE_TYPE, null);
+  const rate = () => container.querySelector("output")?.textContent;
+  await act(async () => root.render(<QueryProvider client={client}><Rate id="sui" /></QueryProvider>));
+  assert.equal(rate(), "none", "no rate before the stream's first price");
+
+  await act(async () => {
+    listeners[0]!.state("live");
+    listeners[0]!.prices?.({ checkpoint: 1, prices: [{ coin_type: CREATE_SUI_QUOTE_TYPE, usd_price: "3.42", as_of_ms: Date.now() - PORTFOLIO_PRICE_MAX_AGE_MS + 100 }] });
+  });
+  await waitFor(() => rate() === "3.42", "the streamed rate", 5_000);
+  await waitFor(() => query().isDisabled() === false, "the read runs once the streamed rate ages out", 5_000);
+  assert.equal(rate(), "3.42", "the last streamed rate stands in");
 });

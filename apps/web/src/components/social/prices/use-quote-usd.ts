@@ -39,15 +39,14 @@ function freshFor(asOfMs: number): number {
   return Math.min(PORTFOLIO_PRICE_MAX_AGE_MS, asOfMs + PORTFOLIO_PRICE_MAX_AGE_MS - Date.now());
 }
 
-/** Takes the coin's price from a frame; it ages out unless a newer one comes. USDC keeps its last price as a stand-in. */
+/** Takes the coin's price from a frame; it ages out unless a newer one comes, and stays as the last streamed stand-in. */
 function takePrice(entry: Entry, coin: string, { prices }: DisplayPriceFrame): void {
   const price = prices.find((each) => each.coin_type === coin);
   if (!price || !(Number(price.usd_price) > 0)) return;
   const left = freshFor(price.as_of_ms);
   if (left <= 0) return;
   if (entry.expiry) clearTimeout(entry.expiry);
-  const keep = coin === CREATE_QUOTE_TYPE;
-  entry.expiry = setTimeout(() => publish(entry, { ...entry.rate, fresh: false, usd: keep ? entry.rate.usd : null }), left);
+  entry.expiry = setTimeout(() => publish(entry, { ...entry.rate, fresh: false }), left);
   publish(entry, { ...entry.rate, usd: price.usd_price, fresh: true });
 }
 
