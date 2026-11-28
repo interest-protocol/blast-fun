@@ -175,19 +175,14 @@ export async function readMePresales(db: ReadableDatabase, accountId: string, no
       // Nothing unlocks before the cliff ends (OA-18), then whole steps; the claimable part is what vested and was not claimed.
       const vested = vestedAtoms(total, times, nowMs, vestingSteps(row));
       const claimable = vested > claimed ? vested - claimed : 0n;
-      // A creator's raise vests in the quote coin, so it takes that coin's decimals and price. Its `symbol`
-      // is not sent yet: web tabs opened before the build that reads it parse this answer strictly.
-      const quote = row.asset === "quote";
-      const units = (atoms: bigint) => wholeUnits(atoms.toString(), quote ? presale.quoteDecimals : presale.saleDecimals);
+      const units = (atoms: bigint) => wholeUnits(atoms.toString(), presale.saleDecimals);
       return [{
         schedule_id: row.schedule_id,
         presale: presale.presale,
         total: units(total),
         claimed: units(claimed),
         claimable: units(claimable),
-        claimable_usd: quote
-          ? committedUsdOf(presale, claimable.toString(), Number(units(claimable)), nowMs)
-          : valueOf(presale, Number(units(claimable))),
+        claimable_usd: valueOf(presale, Number(units(claimable))),
         ...times,
         vested_pct: total > 0n ? Number((vested * 100n) / total) : 0,
       }];
