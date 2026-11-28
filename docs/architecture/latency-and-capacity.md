@@ -22,8 +22,8 @@ and counts wait for the thirty-second poll, and prices keep moving rows through
 the price stream. Every other hint still triggers a read. Hidden tabs own
 no hint connection or retry timer. A hidden tab keeps a socket that watches
 pools or prices (a coin chart, Home) for fifteen seconds, so a quick return
-costs no ticket, reconnect or catch-up reads; a socket with neither closes at
-once. A process fans out one upstream subscription;
+costs no ticket or reconnect; screens still run their catch-up read, since
+hints are not delivered while hidden. A hints-only socket closes at once. A process fans out one upstream subscription;
 its clients share one heartbeat timer. Each client retains its own deadline,
 backpressure limit and cancellation ownership.
 
