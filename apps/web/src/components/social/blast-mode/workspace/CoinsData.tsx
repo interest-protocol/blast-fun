@@ -47,7 +47,7 @@ import {
   Pick,
   WindowPick,
 } from "../../coin-home/HomeControls";
-import { HOME_AGES } from "@blast/core/web/contracts/home.ts";
+import { HOME_LAUNCHED_AGES } from "@blast/core/web/contracts/home.ts";
 import {
   activeFilterCount,
   AGE_LABELS,
@@ -134,7 +134,8 @@ function CoinsContent() {
       sort: isHomeViewSort(next.sort) ? next.sort : controls.sort,
       window: next.window,
       min_participants: next.minParticipants as 0 | 2 | 5 | 10,
-      age: next.age,
+      // The hour is New's alone (Home's tab); a saved setup keeps the Launched ages it offers.
+      age: next.age === "1h" ? controls.age : next.age,
       tradable: next.tradable,
       // Left out while off (`setup.ts`).
       known_deployer: next.knownDeployer || undefined,
@@ -315,7 +316,7 @@ function CoinsFilters({ state, change }: Readonly<{ state: HomeViewState; change
       </div>
       <div className={styles.filterRow}>
         <span>Launched</span>
-        <Pick label="Launched" value={state.age} options={HOME_AGES} labels={AGE_LABELS} onPick={(age) => change({ ...state, age })} />
+        <Pick label="Launched" value={state.age} options={HOME_LAUNCHED_AGES} labels={AGE_LABELS} onPick={(age) => change({ ...state, age })} />
       </div>
       <label className={styles.filterRow}>
         <span>Trades in the app only</span>
