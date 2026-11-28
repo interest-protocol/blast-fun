@@ -320,7 +320,8 @@ export function vestingView(vesting: MeVesting, hidden: boolean, nowMs: number, 
 
 function indexedVestingView(vesting: MeVesting, hidden: boolean, nowMs: number): VestingView {
   const hide = (text: string) => (hidden ? HIDDEN_AMOUNT : text);
-  const { presale, symbol } = vesting;
+  const { presale } = vesting;
+  const symbol = vesting.symbol ?? presale.symbol;
   const duration = vestingDurationText(vesting.end_ms - vesting.start_ms);
   const cliffMs = Math.max(0, vesting.cliff_end_ms - vesting.start_ms);
   const claimable = exactDecimal(vesting.claimable);

@@ -201,6 +201,8 @@ test("UI-06 (live design: your holdings): positions, sale coins and vesting rows
   // #173: a creator's raise vests in the quote coin and says so.
   const raise = vestingView({ ...vesting, symbol: "TSUI", total: "690", claimable: "69" }, false, NOW);
   assert.deepEqual([raise.sub, raise.right.kind === "claim" ? raise.right.label : ""], ["690 TSUI · linear over 6 mo", "Claim 69 TSUI"]);
+  // A backend from before #173 sends no symbol: the sale coin's, as before.
+  assert.equal(vestingView({ ...vesting, symbol: undefined }, false, NOW).sub, "400,000 LUMN · linear over 6 mo");
   // OA-18: a 3-month cliff from launch (the design's "linear over 12 mo, 3-mo cliff"): until it ends, "Cliff / ends <day>".
   const start = Date.UTC(2026, 9, 1);
   const cliff = vestingView({ ...vesting, start_ms: start, cliff_end_ms: start + 90 * DAY, end_ms: start + 360 * DAY, claimable: "0", claimed: "0", vested_pct: 0 }, false, start + 10 * DAY);

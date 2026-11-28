@@ -98,9 +98,9 @@ export const meVestingSchema = z.strictObject({
   presale: profilePresaleSchema.meta({
     description: "A presale as profile rows show it.",
   }),
-  symbol: z.string().min(1).meta({
+  symbol: z.string().min(1).optional().meta({
     description:
-      "The coin the schedule pays: the sale coin's symbol, or the quote coin's for a creator's raise.",
+      "The coin the schedule pays: the sale coin's symbol, or the quote coin's for a creator's raise. Optional so web can deploy before the backend that sends it; absent means the sale coin.",
   }),
   total: presalePriceSchema,
   claimed: presalePriceSchema,

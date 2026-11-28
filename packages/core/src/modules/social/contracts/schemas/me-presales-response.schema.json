@@ -709,13 +709,12 @@
           "symbol": {
             "type": "string",
             "minLength": 1,
-            "description": "The coin the schedule pays: the sale coin's symbol, or the quote coin's for a creator's raise."
+            "description": "The coin the schedule pays: the sale coin's symbol, or the quote coin's for a creator's raise. Optional so web can deploy before the backend that sends it; absent means the sale coin."
           }
         },
         "required": [
           "schedule_id",
           "presale",
-          "symbol",
           "total",
           "claimed",
           "claimable",
