@@ -1,9 +1,11 @@
-/* Home's Bonding Curves: one card, three columns set apart by space; narrow, a switch shows one column at a time. */
+/* Home's Bonding Curves: one card, up to three columns set apart by space; narrow, a switch shows one column at a time. */
 .card { container: bonding-curves / inline-size; }
 
 .columns {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  /* One track per column shown: Almost graduated leaves the card while it has no curve. */
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
   /* Wider than any gap inside a row, so a figure reads with its own ticker, not the next column's coin. */
   column-gap: 2.25rem;
 }

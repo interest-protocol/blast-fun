@@ -25,10 +25,10 @@ import { BONDING_COLUMN_ROWS, columnRows, graduatedColumnRows, homeAlmostColumn,
 import { TableCard } from "./TableFooter";
 import styles from "./HomeBondingCurves.module.css";
 
-/** Each column's name and what it says with no rows. */
-const COLUMNS: readonly Readonly<{ key: BondingColumn; title: string; none: string }>[] = [
+/** Each column's name and what it says with no rows. Almost graduated has nothing to say: with no rows it leaves the card. */
+const COLUMNS: readonly Readonly<{ key: BondingColumn; title: string; none?: string }>[] = [
   { key: "new", title: "New", none: "No new curve under 60%." },
-  { key: "almost", title: "Almost graduated", none: "No curve is at 60% yet." },
+  { key: "almost", title: "Almost graduated" },
   { key: "graduated", title: "Graduated", none: "No curve has graduated yet." },
 ];
 
@@ -37,14 +37,15 @@ const STAGE_HISTORY_KEY = "home:bonding-stage";
 /**
  * Home's Bonding Curves: one card, three columns (New, Almost graduated,
  * Graduated), each with the same row limit, including four Blast V1 coins in Graduated.
+ * With no curve at 60% yet, Almost graduated is left out rather than shown empty.
  * Narrow, the same columns become a switch that
  * shows one at a time. The visible tab shares its Discover stream with other live features.
  */
 export function HomeBondingCurves({ nowMs }: Readonly<{ nowMs: number }>) {
   const client = useAppQueryClient();
   const id = useId();
-  const [shown, setShown] = useState<BondingColumn>("new");
-  useListContent(STAGE_HISTORY_KEY, shown, setShown, { restoreOnMount: true });
+  const [chosen, setShown] = useState<BondingColumn>("new");
+  useListContent(STAGE_HISTORY_KEY, chosen, setShown, { restoreOnMount: true });
   const live = useLiveDiscovery(true);
   const [fallbackInterval] = useState(() => 25_000 + Math.round(Math.random() * 10_000));
   const closest = useQuery({
@@ -71,7 +72,8 @@ export function HomeBondingCurves({ nowMs }: Readonly<{ nowMs: number }>) {
   const states = COLUMNS.map((column) => {
     const read = reads[column.key];
     return { ...column, rows: rowsByColumn[column.key], metrics: read.data?.metrics, failed: read.isError || read.data?.section.state === "unavailable" };
-  });
+  }).filter((state) => state.key !== "almost" || state.rows?.length !== 0);
+  const shown = states.some((state) => state.key === chosen) ? chosen : "new";
   // Keep the first-load skeleton. Once settled, the legacy catalog is available even if a live read fails.
   if (states.every((state) => state.rows === null && !state.failed)) return <TableCard className={styles.card}><BondingSkeleton /></TableCard>;
   return (
@@ -83,7 +85,7 @@ export function HomeBondingCurves({ nowMs }: Readonly<{ nowMs: number }>) {
             saveListContent(STAGE_HISTORY_KEY, stage);
             setShown(stage);
           }}
-          options={COLUMNS.map(({ key, title }) => [key, title] as const)}
+          options={states.map(({ key, title }) => [key, title] as const)}
           size="sm"
           stretch
           wrap

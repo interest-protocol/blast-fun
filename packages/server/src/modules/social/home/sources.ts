@@ -2,7 +2,7 @@ import pg from "pg";
 import { SUI_COIN_TYPE } from "@blast/core/lib/sui/coin-types.ts";
 import { INDEXED_POOL_COINS } from "@blast/core/modules/social/portfolio/core-coins.ts";
 import { SHOWN_PRESALES } from "@blast/core/modules/social/read-model/chain-presales.ts";
-import { HOME_ALMOST_GRADUATED_BPS } from "@blast/core/modules/social/contracts/home.ts";
+import { HOME_PAGE_MAX } from "@blast/core/modules/social/contracts/home.ts";
 
 const TRACKED_POOL_VALUES = INDEXED_POOL_COINS.map((coin) => {
   const separator = coin.poolKey.indexOf(":");
@@ -25,10 +25,10 @@ const TRACKED_POOL_SOURCE = `UNION ALL
  * "has a market"); the curve's own lifecycle reaches the item as
  * `HomeCoin.curve.lifecycle` through the facts read. `where` narrows them.
  */
-const liveCurves = (where = "") => `SELECT lp.coin_type AS sale_token,coalesce(m.symbol,m.name,lp.coin_type) AS sale_symbol,
+const liveCurves = (where = "", columns = "") => `SELECT lp.coin_type AS sale_token,coalesce(m.symbol,m.name,lp.coin_type) AS sale_symbol,
       coalesce(m.name,m.symbol,lp.coin_type) AS sale_name,m.icon_url AS sale_icon_url,m.decimals AS sale_decimals,
       lp.venue,lp.pool_id,lp.quote_type,q.symbol AS quote_symbol,q.decimals AS quote_decimals,FALSE AS tracked_pool_only,
-      lp.created_checkpoint,NULL AS created_tx_slot,NULL AS created_event_slot,NULL AS vault_id
+      lp.created_checkpoint,NULL AS created_tx_slot,NULL AS created_event_slot,NULL AS vault_id${columns}
     FROM chain_read_v1.pools lp
     JOIN chain_read_v1.coin_metadata m ON m.coin_type=lp.coin_type
     JOIN chain_read_v1.coin_metadata q ON q.coin_type=lp.quote_type
@@ -81,18 +81,34 @@ export const homeTrendingCoinSources = (tradedIn: string) =>
 /** Reads by id (saved coins, a page's coins) also find a live curve; the id filter reaches every branch. */
 export const HOME_LIST_COIN_SOURCES = homeCoinSources(`UNION ALL ${liveCurves()}\n    ${TRACKED_POOL_SOURCE}`);
 
+/** How many curves Closest to graduating lists at most: two pages of the largest page size. */
+export const HOME_CLOSEST_CURVES = 2 * HOME_PAGE_MAX;
+
 /**
- * Discover's Almost graduated list (`stage=almost`): live curves at the 60%
- * line or past it, and curves ready to migrate. The line is checked here, on
- * the view's reserve and target, so the per-coin reads see only these few;
- * `curveOf` then computes each percent through the SDK. Same columns as
- * `homeCoinSources`.
+ * Discover's Closest to graduating list (`stage=almost`): the live curves
+ * and curves ready to migrate nearest their target, no fixed line. Curves
+ * with a buy or sell in the last 24 hours come first (`tradedIn`, one probe
+ * of the activity coin index per live curve, as Trending's), so a dormant
+ * curve never tops a live one; then the rest. Each group runs by the
+ * view's reserve over target, and only the first `HOME_CLOSEST_CURVES`
+ * reach the per-coin reads, which see a bounded set however many curves
+ * exist; `curveOf` then computes each percent through the SDK, and the
+ * rank orders them the same way (`recentlyTraded`). Test-SUI curves are
+ * left out before the limit. Same columns as `homeCoinSources`, plus
+ * `recently_traded`.
  */
-export const HOME_ALMOST_CURVE_SOURCES = `(SELECT DISTINCT ON (c.sale_token) c.sale_token AS source_id,NULL::text AS presale_id,c.sale_token,c.sale_symbol,c.sale_name,c.sale_icon_url,
-  c.sale_decimals,'migrated'::text AS lifecycle,c.venue,c.pool_id,c.quote_type,c.quote_symbol,c.quote_decimals,
-  NULL::bigint AS start_ms,NULL::bigint AS end_ms,NULL::numeric AS raise_target,NULL::numeric AS total_commitments,NULL::bigint AS participants,
-  c.tracked_pool_only
-  FROM (${liveCurves(`
-      AND (lp.lifecycle='migration_ready' OR lp.quote_reserve * 10000 >= ${HOME_ALMOST_GRADUATED_BPS} * lp.graduation_target)`)}) c
-  WHERE NOT EXISTS (SELECT 1 FROM chain_read_v1.presales p WHERE p.sale_token=c.sale_token)
-  ORDER BY c.sale_token,c.created_checkpoint,c.pool_id)`;
+export const homeClosestCurveSources = (tradedIn: string, testQuote: string) => `(SELECT c.source_id,c.presale_id,c.sale_token,c.sale_symbol,c.sale_name,c.sale_icon_url,
+  c.sale_decimals,c.lifecycle,c.venue,c.pool_id,c.quote_type,c.quote_symbol,c.quote_decimals,
+  c.start_ms,c.end_ms,c.raise_target,c.total_commitments,c.participants,c.tracked_pool_only,c.recently_traded
+  FROM (SELECT DISTINCT ON (c.sale_token) c.sale_token AS source_id,NULL::text AS presale_id,c.sale_token,c.sale_symbol,c.sale_name,c.sale_icon_url,
+    c.sale_decimals,'migrated'::text AS lifecycle,c.venue,c.pool_id,c.quote_type,c.quote_symbol,c.quote_decimals,
+    NULL::bigint AS start_ms,NULL::bigint AS end_ms,NULL::numeric AS raise_target,NULL::numeric AS total_commitments,NULL::bigint AS participants,
+    c.tracked_pool_only,c.recently_traded,c.filled
+    FROM (${liveCurves(`
+      AND lp.quote_type IS DISTINCT FROM ${testQuote}`, `,
+      ${tradedIn} AS recently_traded,
+      CASE WHEN lp.lifecycle='migration_ready' THEN 1 ELSE lp.quote_reserve / nullif(lp.graduation_target, 0) END AS filled`)}) c
+    WHERE NOT EXISTS (SELECT 1 FROM chain_read_v1.presales p WHERE p.sale_token=c.sale_token)
+    ORDER BY c.sale_token,c.created_checkpoint,c.pool_id) c
+  ORDER BY c.recently_traded DESC,c.filled DESC NULLS LAST,c.sale_token
+  LIMIT ${HOME_CLOSEST_CURVES})`;

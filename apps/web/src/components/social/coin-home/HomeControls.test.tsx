@@ -6,7 +6,7 @@ const { document, window } = installTestDom();
 const { act } = await import("react");
 const { createRoot } = await import("react-dom/client");
 const { CoinsListControls } = await import("./HomeControls.tsx");
-const { HOME_DEFAULT_FEED } = await import("./home-state.ts");
+const { HOME_DEFAULT_FEED, HOME_TABS } = await import("./home-state.ts");
 type HomeViewState = import("./home-state.ts").HomeViewState;
 
 test("a phone sorts Home from the Filters sheet, starting with the tab's own order", async (t) => {
@@ -19,8 +19,13 @@ test("a phone sorts Home from the Filters sheet, starting with the tab's own ord
   const render = async (state: HomeViewState) => act(async () => root.render(<CoinsListControls onChange={(next) => picked.push(next)} state={state} />));
   const options = () => [...document.querySelectorAll<HTMLOptionElement>('select[aria-label="Sort"] option')].map((option) => option.textContent);
 
+  // Home opens on Closest to graduating, ordered by progress.
   await render(HOME_DEFAULT_FEED);
   await act(async () => container.querySelector<HTMLButtonElement>("button")!.click());
+  await waitFor(() => document.querySelector('select[aria-label="Sort"]'), "the Filters sheet");
+  assert.deepEqual(options(), ["Progress", "Market cap", "Volume", "Most held"]);
+  // Trending offers its own order first.
+  await render({ ...HOME_DEFAULT_FEED, ...HOME_TABS.trending });
   await waitFor(() => document.querySelector('select[aria-label="Sort"]'), "the Filters sheet");
   assert.deepEqual(options(), ["Trending", "Market cap", "Volume", "Most held"]);
   const select = document.querySelector<HTMLSelectElement>('select[aria-label="Sort"]')!;

@@ -183,6 +183,8 @@ export type FactsRow = Readonly<{
   savers?: number | null;
   savers_1h?: number | null;
   savers_24h?: number | null;
+  /** A Closest to graduating curve with a buy or sell in the last 24 hours (`homeClosestCurveSources`); absent on every other read. */
+  recently_traded?: boolean;
 }>;
 
 type HomePriceOptions = Pick<HomeReadContext, "includeLiveInputs" | "includeRollingChange" | "trackedPoolLaunches">;
@@ -202,6 +204,7 @@ function factsSql(scope: SaleScope, params: Params, options: HomePriceOptions = 
     SELECT s.savers, s.gained_1h, s.gained_24h FROM ${PRESALE_SAVERS} s WHERE p.presale_id IS NOT NULL AND p.lifecycle <> 'migrated' AND s.presale_id = p.presale_id OFFSET 0
   ) sv ON TRUE`,
   } : { columns: "", join: "" };
+  const recentlyTraded = scope.kind === "discover" && scope.almost ? ", p.recently_traded" : "";
   const projectedAt = `CASE WHEN pr.usd_price IS NOT NULL AND pr.as_of_ms <= ${clock}
     THEN greatest(${cutoff}, pr.as_of_ms) ELSE ${cutoff} END`;
   const lastPrice = options.includeRollingChange ? `LEFT JOIN LATERAL (
@@ -231,7 +234,7 @@ function factsSql(scope: SaleScope, params: Params, options: HomePriceOptions = 
     lp.lifecycle AS curve_lifecycle, trunc(lp.quote_reserve)::text AS quote_reserve, trunc(lp.graduation_target)::text AS graduation_target,
     CASE WHEN lp.lifecycle = 'migrated' THEN (
       SELECT min(gp.created_at_ms) FROM chain_read_v1.pools gp WHERE gp.coin_type = p.sale_token AND gp.venue <> 'blast_curve'
-    )::text END AS graduated_ms${savers.columns}
+    )::text END AS graduated_ms${savers.columns}${recentlyTraded}
   FROM ${source} p
   LEFT JOIN LATERAL (
     SELECT max(l.timestamp_ms) FILTER (WHERE l.state = 'opened') AS opened_ms,
@@ -803,6 +806,7 @@ function candidateOf(facts: FactsRow, counts: WindowCountsRow | undefined, span:
     // Only a curve still filling has a place in the progress order.
     progressBps: isFillingCurve(facts) ? curveOf(facts)?.progress_bps ?? null : null,
     lastTradeMs,
+    ...(facts.recently_traded ? { recentlyTraded: true } : {}),
   };
 }
 
@@ -1032,9 +1036,9 @@ export type HomeDiscoverBase = Readonly<{
   trackedMarkets?: TrackedMarkets;
 }>;
 
-/** Which coins a {@link HomeDiscoverBase} holds: Almost graduated reads its few curves alone (`HOME_ALMOST_CURVE_SOURCES`); every other stage, the whole list. */
+/** Which coins a {@link HomeDiscoverBase} holds: Closest to graduating reads its bounded curves alone (`homeClosestCurveSources`); every other stage, the whole list. */
 const baseSetOf = (stage: HomeStage) => (stage === "almost" ? "almost" : "all");
-/** Presales, and live curves traded in the window, join the whole list only: the Almost graduated curves never hold one. */
+/** Presales, and live curves traded in the window, join the whole list only: the Closest to graduating curves never hold one. */
 const basePresales = (stage: HomeStage, context: HomeReadContext) => baseSetOf(stage) === "all" && Boolean(context.includePresales);
 
 /** The key a {@link HomeDiscoverBase} is shared under: only what changes its contents. */
@@ -1060,7 +1064,8 @@ export async function readHomeDiscoverBase(db: ReadableDatabase, window: HomeWin
   const tradeKinds = kinds.filter((kind) => kind === "trade_buy" || kind === "trade_sell");
   const scope: SaleScope = {
     kind: "discover",
-    almost: baseSetOf(stage) === "almost",
+    // Closest to graduating ranks the curves traded in the last 24 hours first, whatever the window.
+    ...(baseSetOf(stage) === "almost" ? { almost: { fromMs: bounds.clockMs - HOME_WINDOW_MS["24h"], toMs: bounds.clockMs, marketCheckpoint: bounds.marketCheckpoint, kinds: tradeKinds } } : {}),
     ...(basePresales(stage, context) ? {
       presales: { clockMs: bounds.clockMs, fromMs: span.fromMs },
       // Live curves join Trending only once traded in the window, so the per-coin reads stay off the idle thousand (#71).

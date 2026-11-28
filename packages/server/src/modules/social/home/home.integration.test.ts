@@ -586,7 +586,7 @@ test("Home volume and Trending share a committed, full-window Cetus and Bluefin 
     await admin.query("DROP VIEW chain_read_v1.dex_swap_volume_tracked_coverage");
     assert.deepEqual(await manifestVolume(), nativeVolume);
 
-    // A curve still filling trades on its curve, not a DEX: no DEX figure. Discover leaves it out (it lists only on Almost graduated); a saved read finds it.
+    // A curve still filling trades on its curve, not a DEX: no DEX figure. Discover leaves it out (it lists only on Closest to graduating); a saved read finds it.
     const filling = coinOf(hex("cf1"), "FILLING");
     await admin.query("INSERT INTO blast_infra_fixture.coin_metadata (coin_type,name,symbol,decimals) VALUES ($1,'FILLING','FILLING',9)", [filling]);
     await admin.query(`INSERT INTO pools (pool_key,venue,coin_type,quote_type,lifecycle,created_checkpoint,created_at_ms,quote_reserve,params)
@@ -1382,7 +1382,7 @@ test("Standalone Cetus and Bluefin coins use Discover, without a presale or dupl
     assert.deepEqual([coin.activity.events,coin.activity.buyers], [1,1]);
     assert.equal(coin.rank.why, "1 participant · 1 trade in the last 24h in its pool");
     assert.equal(page.coins.filter((coin) => coin.symbol === "AFTR").length, 1);
-    // Bonding curves still filling have no vault yet; Almost graduated lists them from their curve pool.
+    // Bonding curves still filling have no vault yet; Closest to graduating lists them from their curve pool.
     const curveCoin = async (id: string, symbol: string, reserve: string, target: string | null, lifecycle = "live") => {
       const coinType = coinOf(hex(id), symbol);
       await admin.query("INSERT INTO blast_infra_fixture.coin_metadata (coin_type,name,symbol,decimals) VALUES ($1,$2,$2,9)", [coinType, symbol]);
@@ -1394,9 +1394,15 @@ test("Standalone Cetus and Bluefin coins use Discover, without a presale or dupl
     const seventy = await curveCoin("c70", "SEVENTY", "5600000000", "8000000000");
     // Ready to migrate counts whatever its reserve reads.
     await curveCoin("c99", "READY", "100000000", "8000000000", "migration_ready");
-    // Almost graduated reads its curves' own trades.
+    // No floor: 28% lists too. LOW traded today; DORMANT, at 40%, has never traded.
+    const low = await curveCoin("c28", "LOW", "2240000000", "8000000000");
+    await curveCoin("c40", "DORMANT", "3200000000", "8000000000");
+    // Closest to graduating reads its curves' own trades.
     await seedChainRead(admin, {
-      activity: [activity("trade_buy", W.anon, null, now - 2 * MINUTE, { checkpoint: 49998, coin_type: seventy, coin_amount: "1000000000", quote_amount: "5000000", usd_value: "5" })],
+      activity: [
+        activity("trade_buy", W.anon, null, now - 2 * MINUTE, { checkpoint: 49998, coin_type: seventy, coin_amount: "1000000000", quote_amount: "5000000", usd_value: "5" }),
+        activity("trade_buy", W.anon, null, now - 3 * MINUTE, { checkpoint: 49997, coin_type: low, coin_amount: "1000000000", quote_amount: "5000000", usd_value: "5" }),
+      ],
       coin_balances: [
         { coin_type: seventy, owner: W.jules, balance: "4000000000", updated_checkpoint: 45_000 },
         // The curve holds the unsold coins: never a holder.
@@ -1407,7 +1413,7 @@ test("Standalone Cetus and Bluefin coins use Discover, without a presale or dupl
     await admin.query("INSERT INTO coins (coin_type,decimals,launcher,creator,metadata,pool_key,created_checkpoint,created_at_ms,currency_supply,balance_0x0) VALUES ($1,9,$2,$2,'{}',$3,41000,$4,1000000000000,0)", [seventy, W.anon, `blast_curve:${hex("c700")}`, now - DAY]);
     const seventyHolders = await ok<HomeHoldersPage>(await holders(`?coin=${encodeURIComponent(seventy)}&limit=10`), "home-holders-page", "public, s-maxage=10");
     assert.deepEqual(seventyHolders.holders.map((holder) => [holder.balance, holder.share_bps]), [["4000000000", 40]]);
-    // A presale's token keeps its presale: a curve on it never makes it an Almost graduated curve.
+    // A presale's token keeps its presale: a curve on it never makes it a Closest to graduating curve.
     const presaleToken = page.coins.find((coin) => coin.presale_id !== null)!.coin_type;
     await admin.query("INSERT INTO blast_infra_fixture.coin_metadata (coin_type,name,symbol,decimals) VALUES ($1,'SALE','SALE',9) ON CONFLICT DO NOTHING", [presaleToken]);
     await admin.query(`INSERT INTO pools (pool_key,venue,coin_type,quote_type,lifecycle,created_checkpoint,created_at_ms,quote_reserve,params)
@@ -1418,13 +1424,14 @@ test("Standalone Cetus and Bluefin coins use Discover, without a presale or dupl
     await admin.query(`INSERT INTO pools (pool_key,venue,coin_type,quote_type,lifecycle,created_checkpoint,created_at_ms)
       VALUES ($1,'cetus',$2,$3,'live',40000,$4)`, [`cetus:${hex("ca1")}`, native, QUOTE, now - 2 * DAY]);
     const almost = await ok<HomeCoinsPage>(await discover("?stage=almost&sort=progress&curve=1&limit=50"), "home-coins-page");
-    assert.deepEqual(almost.coins.map((coin) => coin.symbol), ["READY", "SEVENTY"], "no presale token, dust target or unknown target");
-    const seventyCoin = almost.coins[1];
+    // Curves traded in the last 24 hours lead by progress, then the rest: a dormant curve never tops a live one.
+    assert.deepEqual(almost.coins.map((coin) => coin.symbol), ["SEVENTY", "LOW", "READY", "DORMANT"], "no presale token, dust target or unknown target");
+    const seventyCoin = almost.coins[0];
     assert.deepEqual([seventyCoin?.curve, seventyCoin?.tradable, seventyCoin?.graduated_ms, seventyCoin?.activity.events], [{ lifecycle: "live", progress_bps: 7_000, quote_remaining: "2400000000" }, false, null, 1]);
-    assert.equal(almost.coins[0]?.curve?.lifecycle, "migration_ready");
+    assert.equal(almost.coins[2]?.curve?.lifecycle, "migration_ready");
     // Every other stage leaves curves still filling out: about a thousand of them made the default read time out (#71).
     const all = await ok<HomeCoinsPage>(await discover("?sort=progress&limit=50"), "home-coins-page");
-    assert.equal(all.coins.some((coin) => ["SEVENTY", "READY", "NOTARGET"].includes(coin.symbol)), false, "no curve still filling outside Almost graduated");
+    assert.equal(all.coins.some((coin) => ["SEVENTY", "LOW", "DORMANT", "READY", "NOTARGET"].includes(coin.symbol)), false, "no curve still filling outside Closest to graduating");
     assert.ok(all.coins.every((coin) => !("curve" in coin)), "the curve fields are opt-in");
     const graduated = await ok<HomeCoinsPage>(await discover("?stage=graduated&sort=market_cap&curve=1&limit=50"), "home-coins-page");
     assert.ok(graduated.coins.every((coin) => coin.lifecycle === "migrated" && coin.curve?.lifecycle !== "live"), "no sale and no curve still filling");

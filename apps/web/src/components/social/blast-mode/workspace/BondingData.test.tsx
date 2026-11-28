@@ -151,12 +151,12 @@ test("Bonding: an empty stage says so after its read; a failed read offers Retry
 
 test("Bonding keeps the confirmed empty result and offers Retry if a refresh fails", async () => {
   let failing = false;
-  const view = await mounted((url) => failing ? "error" : { view: answerView(url), section: { state: "empty", provenance } }, { gcTime: 60_000 });
+  const view = await mounted((url) => failing ? "error" : almost(url) ? page(answerView(url), [row("d4", { progressBps: 9000 })]) : { view: answerView(url), section: { state: "empty", provenance } }, { gcTime: 60_000 });
   try {
     assert.match(view.panel().textContent!, /No bonding curves yet/);
     assert.equal(view.panel().querySelector('[aria-label="Refresh bonding curves"]'), null, "no refresh button: choosing a stage reads it again");
     await view.click("Almost graduated");
-    assert.match(view.panel().textContent!, /No curve is almost graduated/);
+    assert.match(view.panel().textContent!, /90% to graduation/);
     failing = true;
     await view.click("New");
     assert.match(view.panel().textContent!, /No bonding curves yet/);
@@ -165,6 +165,18 @@ test("Bonding keeps the confirmed empty result and offers Retry if a refresh fai
     await view.click("Retry");
     assert.equal(view.panel().querySelector('[role="alert"]'), null);
     assert.match(view.panel().textContent!, /No bonding curves yet/);
+  } finally { await view.dispose(); }
+});
+
+test("Bonding: with no curve at 60%, Almost graduated leaves the switch and the rail shows New, keeping the saved stage", async () => {
+  const view = await mounted((url) => almost(url) ? { view: answerView(url), section: { state: "empty", provenance } } : page(answerView(url), [row("a1", { progressBps: 2800 })]));
+  try {
+    await view.click("Almost graduated");
+    assert.equal(view.panel().querySelector('[aria-label="Curve stage"]')!.textContent, "New", "no empty stage on offer");
+    assert.equal(view.panel().querySelector('[aria-pressed="true"]')?.textContent, "New");
+    assert.match(view.panel().textContent!, /FROGFroggy28% to graduation/, "the 28% curve shows under New");
+    assert.doesNotMatch(view.panel().textContent!, /almost graduated/i);
+    assert.equal(view.store.getSnapshot().data.controls.Bonding?.view, "near_graduation", "the saved stage comes back with its first curve");
   } finally { await view.dispose(); }
 });
 

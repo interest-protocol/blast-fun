@@ -36,30 +36,32 @@ const EMPTY: Readonly<Record<Stage, string>> = {
 /** Opens a curve's coin in Blast Mode's middle instead of following the row to its page. */
 export type BondingOpen = Readonly<{ open: (row: DiscoveryRow) => void; isOpen: (row: DiscoveryRow) => boolean }>;
 
-/** Launchpad discovery by stage for Blast Mode's Discover rail: a row opens its coin in the middle. */
+/**
+ * Launchpad discovery by stage for Blast Mode's Discover rail: a row opens its coin in the middle.
+ * With no curve at 60% yet, Almost graduated leaves the stage switch and the rail shows New,
+ * keeping the saved stage so it comes back with its first curve.
+ */
 export function BondingCurves({ view: saved, onViewChange, now, onOpen }: Readonly<{
   view: DiscoveryViewName;
   onViewChange: (next: DiscoveryViewName) => void;
   now: () => number;
   onOpen: BondingOpen;
 }>) {
-  // A setup saved while Graduated was a stage opens on New.
-  const view: Stage = saved === "graduated" ? "new" : saved;
+  const client = useAppQueryClient();
   // Each stage pages on its own; a stage's pages restart when it is chosen again.
-  const [paging, setPaging] = useState<Readonly<{ view: Stage; cursors: readonly (string | null)[]; page: number }>>({ view, cursors: [null], page: 1 });
+  const [paging, setPaging] = useState<Readonly<{ view: Stage; cursors: readonly (string | null)[]; page: number }>>({ view: saved === "near_graduation" ? saved : "new", cursors: [null], page: 1 });
+  const live = useLiveDiscovery(paging.page === 1);
+  // Almost graduated's first page, from the stream or the last read of it; reading it is the stage's own query below.
+  const almostRead = useQuery({ ...railQuery("near_graduation", null), enabled: false }, client);
+  const almostEmpty = isEmpty(liveDiscoveryPage(live.pages.near_graduation, almostRead.data));
+  // A setup saved while Graduated was a stage opens on New.
+  const view: Stage = saved === "graduated" || (saved === "near_graduation" && almostEmpty) ? "new" : saved;
   const current = paging.view === view ? paging : { view, cursors: [null], page: 1 };
   const cursor = current.cursors[current.page - 1] ?? null;
-  const client = useAppQueryClient();
-  const live = useLiveDiscovery(current.page === 1);
   const [fallbackInterval] = useState(() => 25_000 + Math.round(Math.random() * 10_000));
   const read = useQuery(
     {
-      queryKey: [...queryKeys.workspace.bonding, view, cursor],
-      queryFn: async () => {
-        const answer = await readRailPage(view, cursor);
-        if (answer === null || answer.section.state === "unavailable") throw new Error("Bonding curves could not load.");
-        return answer;
-      },
+      ...railQuery(view, cursor),
       // A next page keeps the current rows until it arrives; another stage starts from its skeleton.
       placeholderData: (previous, query) => (query?.queryKey[3] === view ? previous : undefined),
       retry: false,
@@ -91,7 +93,7 @@ export function BondingCurves({ view: saved, onViewChange, now, onOpen }: Readon
       <div className={styles.controls}>
         {/* Pills like the Coins tab's Trending / New / Saved: a light second row under Discover's tabs, not a second track. */}
         <div className={styles.stages} role="group" aria-label="Curve stage">
-          {VIEWS.map(([key, label]) => (
+          {VIEWS.filter(([key]) => key !== "near_graduation" || !almostEmpty).map(([key, label]) => (
             <Button key={key} variant="segment" size="xs" type="button" aria-pressed={view === key} onClick={() => choose(key)}>{label}</Button>
           ))}
         </div>
@@ -114,6 +116,23 @@ export function BondingCurves({ view: saved, onViewChange, now, onOpen }: Readon
       )}
     </>
   );
+}
+
+/** One rail page's read; a stage's first page shares its cache entry with the check for an empty Almost graduated. */
+function railQuery(view: Stage, cursor: string | null) {
+  return {
+    queryKey: [...queryKeys.workspace.bonding, view, cursor],
+    queryFn: async () => {
+      const answer = await readRailPage(view, cursor);
+      if (answer === null || answer.section.state === "unavailable") throw new Error("Bonding curves could not load.");
+      return answer;
+    },
+  };
+}
+
+/** Whether an answer has settled on no rows: a read still loading or failed is not empty. */
+function isEmpty(answer: DiscoveryResponse | undefined): boolean {
+  return answer?.section.state === "empty" || pageOf(answer)?.rows.length === 0;
 }
 
 /** The served rows, or null while the answer has none (empty or not loaded). */
