@@ -48,7 +48,7 @@
 .marketPrice strong { font-family: var(--display); font-size: 2.25rem; font-weight: 650; letter-spacing: -.04em; overflow-wrap: anywhere; }
 .priceHold { display: inline-grid; min-width: 0; }
 .priceHold > * { grid-area: 1 / 1; }
-.priceHold > [aria-hidden], .marketPrice [data-held] { visibility: hidden; }
+.priceHold > [aria-hidden], .marketPrice [data-held], .chartFoot [data-held] { visibility: hidden; }
 :global([data-amounts="hidden"]) .priceFigure > * { display: none; }
 :global([data-amounts="hidden"]) .priceFigure::after { content: "••••"; }
 .marketPrice .amount { flex-wrap: wrap; }
