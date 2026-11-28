@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { QueryClient } from "@tanstack/react-query";
+import { environmentManager, QueryClient } from "@tanstack/react-query";
 import { JSDOM } from "jsdom";
 import { renderToStaticMarkup } from "react-dom/server";
 
@@ -8,9 +8,12 @@ import { coinPagePath } from "@blast/core/modules/launchpad-coin/page-key.ts";
 import { parseDiscoveryResponse } from "@blast/core/modules/launchpad-discovery/rows.ts";
 import { BLAST_V1_COINS } from "@blast/core/modules/social/portfolio/core-coins.ts";
 import { QueryProvider } from "#web/lib/query/provider.tsx";
+import { createTestQueryClient } from "#web/lib/query/test-client.ts";
+import { installLiveSocket, liveTicket, LIVE_TICKET_PATH, type FakeLiveSocket } from "../../../../test/fixtures/lib/live-socket.testing.ts";
+import { installTestDom, waitFor } from "../../../../test/fixtures/social/test-dom.ts";
 import { bondingCatalogQuery, graduatedMarketCapQuery } from "../bonding/bonding-client.ts";
 import { HomeBondingCurves } from "./HomeBondingCurves.tsx";
-import { columnRows } from "./home-model.ts";
+import { columnRows, homeAlmostColumn, homeNewColumn } from "./home-model.ts";
 
 const NOW = 1_790_235_061_218;
 const SUI = "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI";
@@ -44,6 +47,136 @@ test("each column keeps only its own stage, at most ten rows", () => {
   assert.equal(columnRows("graduated", undefined), null, "nothing read yet");
   const empty = parseDiscoveryResponse({ view: "new", section: { state: "empty", provenance } });
   assert.deepEqual(columnRows("graduated", empty), [], "a confirmed empty read is no rows, not loading");
+});
+
+// Fails if a short socket page displaces older eligible rows or revives a launch that has crossed a stage.
+test("Home fills a partial live New page with older curves from the catalog", () => {
+  const live = parseDiscoveryResponse({ view: "new", section: {
+    state: "available",
+    data: { rows: [
+      curve("01", 400),
+      curve("02", null, { lifecycle: "migrated" }),
+      curve("03", 6_000),
+    ], nextCursor: "continued" },
+    provenance,
+  } });
+  const cache = page([
+    curve("04", 400, { createdAtMs: NOW - 1_000 }),
+    curve("03", 5_999),
+    curve("05", 5_999, { createdAtMs: NOW - 200_000 }),
+    curve("06", 400, { createdAtMs: NOW - 300_000 }),
+  ]);
+  const higherRanked = ["0a", "0b", "0c", "0d", "0e", "0f", "10", "11", "12", "13"].map((byte) => curve(byte, 7_000));
+  const almost = parseDiscoveryResponse({ view: "near_graduation", section: {
+    state: "available",
+    data: { rows: [...higherRanked, curve("05", 6_000)], nextCursor: null },
+    provenance: { ...provenance, checkpoint: 8 },
+  } });
+  const newest = homeNewColumn(live, cache, almost);
+  assert.equal(newest.needsCatalogTail, true);
+  assert.deepEqual(newest.rows?.map((row) => row.symbol), ["C01", "C06"]);
+});
+
+// Fails if newer progress leaves an outdated rank or hides a newly eligible curve.
+test("Almost graduated ranks newer progress from either Discover list", () => {
+  const almost = page([curve("01", 8_000), curve("02", 7_500)]);
+  const newest = parseDiscoveryResponse({ view: "new", section: {
+    state: "available",
+    data: { rows: [curve("03", 8_100), curve("02", 9_000)], nextCursor: null },
+    provenance: { ...provenance, checkpoint: 8 },
+  } });
+  assert.deepEqual(homeAlmostColumn(almost, newest)?.map((row) => row.symbol), ["C02", "C03", "C01"]);
+});
+
+// Fails if the open page stops updating across the 60% boundary, an outage, or a return to the tab.
+test("Home subscribes on open and catches up after a socket drop without reloading", async (t) => {
+  const { document } = installTestDom();
+  const { act } = await import("react");
+  const { createRoot } = await import("react-dom/client");
+  const client = createTestQueryClient();
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const live = installLiveSocket();
+  const wasServer = environmentManager.isServer();
+  environmentManager.setIsServer(() => false);
+  t.mock.method(Math, "random", () => 0.5);
+  t.mock.timers.enable({ apis: ["Date", "setInterval"], now: NOW });
+  const launch = (progress: number) => curve("01", progress);
+  let httpCheckpoint = 7;
+  let httpProgress = 5_999;
+  t.mock.method(globalThis, "fetch", async (input: string | URL | Request) => {
+    const url = new URL(String(input), document.URL);
+    if (url.pathname === LIVE_TICKET_PATH) return liveTicket();
+    assert.equal(url.pathname, "/api/launchpad/discovery");
+    const rows = url.searchParams.get("catalog") === "bonding" ? [launch(httpProgress)] : [];
+    return Response.json({ view: "new", section: {
+      state: "available", data: { rows, nextCursor: null }, provenance: { ...provenance, checkpoint: httpCheckpoint },
+    } });
+  });
+  t.after(async () => {
+    await act(() => root.unmount());
+    container.remove();
+    client.clear();
+    live.restore();
+    environmentManager.setIsServer(() => wasServer);
+  });
+
+  const deployment = "ab".repeat(32);
+  const wire = (checkpoint: number) => ({
+    network: "mainnet", deployment_fingerprint: deployment, checkpoint,
+    timestamp_ms: NOW + checkpoint, observed_ms: NOW + checkpoint + 20, lag_ms: 20,
+  });
+  const open = (socket: FakeLiveSocket, checkpoint: number) => {
+    socket.emit("hint", { type: "hello", provenance: wire(checkpoint), set: true, discovery: true });
+    const { seq } = socket.sets().at(-1)!;
+    socket.emit("set", { seq, ok: true, held: { pools: [], price_coins: [], presale: null, discovery: true } });
+  };
+  const show = (socket: FakeLiveSocket, view: "new" | "near_graduation", checkpoint: number, rows: unknown[] | null) => {
+    const asOf = { ...provenance, deployment, checkpoint, timestampMs: NOW + checkpoint, observedAt: NOW + checkpoint + 20, lagMs: 20 };
+    socket.emit("discovery", { revision: String(checkpoint), provenance: wire(checkpoint), page: { view, section: {
+      ...(rows ? { state: "available", data: { rows, nextCursor: null } } : { state: "unavailable", reason: "frame-too-large" }),
+      provenance: asOf,
+    } } });
+  };
+  const setVisibility = (visibility: "hidden" | "visible") => {
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: visibility });
+    document.dispatchEvent(new Event("visibilitychange"));
+  };
+  const list = (title: string) => container.querySelector(`[aria-label="${title} bonding curves"]`);
+  await act(() => root.render(<QueryProvider client={client}><HomeBondingCurves nowMs={NOW} /></QueryProvider>));
+  await waitFor(() => list("New")?.textContent?.includes("$C01"), "the initial HTTP list", 1_500);
+  const first = await waitFor(() => live.sockets[0], "a socket started by Home", 1_500);
+  await act(() => {
+    open(first, 8);
+    show(first, "new", 8, [launch(6_000)]);
+  });
+  assert.equal(list("New"), null);
+  assert.match(list("Almost graduated")?.textContent ?? "", /\$C01.*60%/);
+  await act(() => show(first, "near_graduation", 8, [curve("0f", 7_500), launch(6_000)]));
+
+  await act(() => show(first, "near_graduation", 9, null));
+  assert.match(list("Almost graduated")?.textContent ?? "", /\$C0f.*75%.*\$C01.*60%/, "an unavailable frame keeps the last good page");
+  await act(() => show(first, "new", 10, [launch(5_800)]));
+  assert.match(list("New")?.textContent ?? "", /\$C01.*58%/, "a newer sell updates both columns even while Almost is unavailable");
+  assert.equal(list("Almost graduated")?.textContent?.includes("$C01"), false);
+  await act(() => first.drop());
+  assert.match(list("New")?.textContent ?? "", /\$C01.*58%/, "the last good page stays visible");
+  httpCheckpoint = 11;
+  httpProgress = 6_200;
+  await act(() => t.mock.timers.tick(30_000));
+  await waitFor(() => list("Almost graduated")?.textContent?.includes("62%"), "a newer HTTP list during the outage", 1_500);
+
+  await act(() => setVisibility("hidden"));
+  await act(() => setVisibility("visible"));
+  const replacement = await waitFor(() => live.sockets[1], "a replacement socket on returning", 1_500);
+  await act(() => {
+    open(replacement, 12);
+    show(replacement, "new", 12, [curve("02", 500), launch(6_300)]);
+    show(replacement, "near_graduation", 12, [launch(6_300)]);
+  });
+  assert.match(list("New")?.textContent ?? "", /\$C02.*5%/);
+  assert.match(list("Almost graduated")?.textContent ?? "", /\$C01.*63%/);
 });
 
 test("failed reads show a retry in their columns and keep the legacy coins available", () => {

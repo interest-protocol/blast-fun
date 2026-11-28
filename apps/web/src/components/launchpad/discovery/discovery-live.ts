@@ -16,6 +16,8 @@ export function useLiveDiscovery(enabled: boolean) {
       listener: {
         state: setState,
         discovery: (page) => {
+          // The hub signals recovery separately. Keep the last usable page while HTTP catches up.
+          if (page.section.state === "unavailable") return;
           const view = page.view as BondingLiveView;
           setPages((previous) => (previous[view]?.section.provenance?.checkpoint ?? -1) > (page.section.provenance?.checkpoint ?? -1)
             ? previous
