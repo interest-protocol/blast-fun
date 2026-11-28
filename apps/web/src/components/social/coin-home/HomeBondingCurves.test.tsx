@@ -110,9 +110,15 @@ test("Home subscribes on open and catches up after a socket drop without reloadi
     if (url.pathname === LIVE_TICKET_PATH) return liveTicket();
     assert.equal(url.pathname, "/api/launchpad/discovery");
     const rows = url.searchParams.get("catalog") === "bonding" ? [launch(httpProgress)] : [];
-    return Response.json({ view: "new", section: {
-      state: "available", data: { rows, nextCursor: null }, provenance: { ...provenance, checkpoint: httpCheckpoint },
-    } });
+    const progressCatalog = url.searchParams.get("sort") === "progress" && rows.length > 0;
+    return Response.json({
+      view: "new",
+      verifiedTeam: progressCatalog ? [launch(httpProgress).launchId] : [],
+      section: {
+        ...(progressCatalog ? { state: "stale", reason: "lagging" } : { state: "available" }),
+        data: { rows, nextCursor: null }, provenance: { ...provenance, checkpoint: httpCheckpoint },
+      },
+    });
   });
   t.after(async () => {
     await act(() => root.unmount());
@@ -146,6 +152,7 @@ test("Home subscribes on open and catches up after a socket drop without reloadi
   const list = (title: string) => container.querySelector(`[aria-label="${title} bonding curves"]`);
   await act(() => root.render(<QueryProvider client={client}><HomeBondingCurves nowMs={NOW} /></QueryProvider>));
   await waitFor(() => list("New")?.textContent?.includes("$C01"), "the initial HTTP list", 1_500);
+  await waitFor(() => client.getQueryData(bondingCatalogQuery("bonding", "progress", "", null).queryKey), "the progress catalog", 1_500);
   const first = await waitFor(() => live.sockets[0], "a socket started by Home", 1_500);
   await act(() => {
     open(first, 8);
@@ -153,6 +160,7 @@ test("Home subscribes on open and catches up after a socket drop without reloadi
   });
   assert.equal(list("New"), null);
   assert.match(list("Almost graduated")?.textContent ?? "", /\$C01.*60%/);
+  assert.ok(list("Almost graduated")?.querySelector('[aria-label="Known deployer"]'), "a coin keeps its badge when a live update moves it into Almost graduated");
   await act(() => show(first, "near_graduation", 8, [curve("0f", 7_500), launch(6_000)]));
 
   await act(() => show(first, "near_graduation", 9, null));

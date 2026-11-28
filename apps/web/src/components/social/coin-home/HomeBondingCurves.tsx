@@ -19,7 +19,7 @@ import { SkeletonBox, SkeletonRegion, SkeletonText } from "#web/components/blast
 import { liveDiscoveryPage, useLiveDiscovery } from "#web/components/launchpad/discovery/discovery-live.ts";
 import { useAppQueryClient } from "#web/lib/query/provider.tsx";
 import { readableUsd } from "#web/lib/market-format.ts";
-import { bondingCatalogQuery, graduatedMarketCapQuery } from "../bonding/bonding-client.ts";
+import { bondingCatalogQuery, graduatedMarketCapQuery, pageOf } from "../bonding/bonding-client.ts";
 import { shortCoinType } from "../coins/coin-display.ts";
 import { BONDING_COLUMN_ROWS, columnRows, graduatedColumnRows, homeAlmostColumn, homeNewColumn, type BondingColumn } from "./home-model";
 import { TableCard } from "./TableFooter";
@@ -63,7 +63,9 @@ export function HomeBondingCurves({ nowMs }: Readonly<{ nowMs: number }>) {
   const graduated = useQuery(graduatedMarketCapQuery(), client);
   const reads = { new: fresh, almost: closest, graduated } as const;
   const rowsByColumn = { new: newest, almost, graduated: columnRows("graduated", graduated.data) };
-  const verified = new Set([...(fresh.data?.verifiedTeam ?? []), ...(closest.data?.verifiedTeam ?? [])]);
+  const verified = new Set([fresh.data, closest.data].flatMap((answer) =>
+    pageOf(answer)?.rows.filter((row) => row.verifiedTeam).map((row) => row.launchId) ?? [],
+  ));
   const retry = () => { for (const read of Object.values(reads)) if (read.isError) void read.refetch(); };
   const retrying = Object.values(reads).some((read) => read.isError && read.isFetching);
   const states = COLUMNS.map((column) => {
