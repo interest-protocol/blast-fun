@@ -202,9 +202,9 @@ function partial(text: string): ReactNode {
  * curve trades plus DEX swaps. A read without that sum falls back to the pool's own volume.
  */
 function volumeFigure(coin: HomeCoin | null, live: LiveCoinStats | null, volume: readonly HomeAmount[] | null, loading: boolean): ReactNode {
-  if (!coin) return loading ? <SkeletonText>0000</SkeletonText> : null;
   const shared = dayVolumeText(coin, live);
   if (shared !== null) return partial(shared);
+  if (!coin) return loading ? <SkeletonText>0000</SkeletonText> : null;
   if (!volume) return null;
   const dollars = volumeText({ bought: volume, sold: [], committed: [] });
   if (dollars !== null) return partial(dollars);

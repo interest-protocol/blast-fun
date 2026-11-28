@@ -68,7 +68,7 @@ export function MarketStats(props: Readonly<{ page: CoinPage; expected?: Expecte
             : formatUsd(day.volumeUsd)
           : unavailable}
       </Stat>
-      <Stat term="Indexed holders">{coin && holders != null ? holders.toLocaleString("en-US") : unavailable}</Stat>
+      {coin && holders != null ? <Stat term="Indexed holders">{holders.toLocaleString("en-US")}</Stat> : null}
     </dl>
   );
 }

@@ -168,10 +168,15 @@ function ProgressCard({ view, tradeId, children }: Readonly<{ view: View; tradeI
   </section>;
 }
 
+/** The live holder count once live stats exist, unknown (null) included; the page's read only before them. */
+function shownHolders(stats: LiveCoinStats | null, read: number | null | undefined): number | null {
+  return stats ? stats.holders : read ?? null;
+}
+
 /** `stats` is the coin's live `coin_stats`, newer than the page's read: its holder count moves on each trade. */
 function ProgressFacts({ view, tradeId, stats }: Readonly<{ view: View; tradeId: string | null; stats: LiveCoinStats | null }>) {
   const { economics, coin, venue, lifecycle } = view;
-  const holders = stats?.holders ?? coin?.stats.holders ?? null;
+  const holders = shownHolders(stats, coin?.stats.holders);
   const currency = useCoinPriceCurrency();
   const rate = exactDecimal(currency?.rate);
   const fdv = fdvInQuote(economics?.price, economics?.inputs.currencySupply, economics?.inputs.quoteDecimals);
@@ -478,7 +483,7 @@ function GraduatedMarketOverview({ view, tick, tradeId, stats }: Readonly<{
 }>) {
   // Without the venue's read (an outage) the page shows no market figures, the day's volume among them.
   const volume = useHomeDayVolume(view.pool ? view.identity.coinType : null, stats);
-  return <MarketOverview fdv={stats?.fdvUsd ?? (tick ? tick.trade.fdvUsd : view.pool?.fdvUsd)} holders={stats?.holders ?? view.coin?.stats.holders}
+  return <MarketOverview fdv={stats?.fdvUsd ?? (tick ? tick.trade.fdvUsd : view.pool?.fdvUsd)} holders={shownHolders(stats, view.coin?.stats.holders)}
     volumeFigure={volume} venue={view.venue} tradeId={tradeId} />;
 }
 
