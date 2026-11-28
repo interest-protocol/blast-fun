@@ -1,4 +1,4 @@
-import { withdrawalBlocksAccountSwitch } from "./coins/withdraw-attempt.ts";
+import { withdrawalSwitchBlock } from "./coins/withdraw-attempt.ts";
 
 const PREFERENCE = "blast_active_account";
 const accountSwitch = new AbortController();
@@ -27,7 +27,7 @@ export function rememberAccountSession(session: AccountSession | null): boolean 
 }
 
 export function switchAccountSession(session: AccountSession): boolean {
-  if (withdrawalBlocksAccountSwitch() || !rememberAccountSession(session)) {
+  if (withdrawalSwitchBlock() || !rememberAccountSession(session)) {
     return false;
   }
   accountSwitch.abort();

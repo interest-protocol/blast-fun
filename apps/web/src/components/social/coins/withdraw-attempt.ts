@@ -15,8 +15,12 @@ export async function duringWithdrawalBroadcast<T>(send: () => Promise<T>): Prom
   }
 }
 
-export function withdrawalBlocksAccountSwitch(): boolean {
-  return broadcasts > 0 || unsaved.size > 0;
+export type WithdrawalSwitchBlock = "broadcasting" | "receipt";
+
+export function withdrawalSwitchBlock(): WithdrawalSwitchBlock | null {
+  if (broadcasts > 0) return "broadcasting";
+  if (unsaved.size > 0) return "receipt";
+  return null;
 }
 
 /** Keep the original request and digest for the same withdrawal after an account reload. */

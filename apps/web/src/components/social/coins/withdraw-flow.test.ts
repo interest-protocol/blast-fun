@@ -195,6 +195,7 @@ test("gasless USDC builds from coins or address balances, signs and executes dir
 test("switching during a gasless withdrawal preserves its digest so the original account can retry without sending twice", async (t) => {
   const key = "privy-withdrawal";
   const stored = new Map<string, string>();
+  let storageReady = false;
   let reloads = 0;
   const previousWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
   const browser = {
@@ -202,7 +203,10 @@ test("switching during a gasless withdrawal preserves its digest so the original
     location: { protocol: "https:", reload: () => { reloads += 1; } },
     sessionStorage: {
       getItem: (name: string) => stored.get(name) ?? null,
-      setItem: (name: string, value: string) => { stored.set(name, value); },
+      setItem: (name: string, value: string) => {
+        if (!storageReady) throw new Error("Storage unavailable");
+        stored.set(name, value);
+      },
       removeItem: (name: string) => { stored.delete(name); },
     },
   };
@@ -242,6 +246,9 @@ test("switching during a gasless withdrawal preserves its digest so the original
   assert.equal(selectedAccountSession(browser.document.cookie), "privy");
   const pending = await withdrawal;
   assert.equal(pending.status, "pending");
+  assert.equal(switchAccountSession("wallet"), false, "an unsaved digest blocks the reload");
+  storageReady = true;
+  saveWithdrawReceipt(key, { requestId: REQUEST, digest: pending.digest });
   assert.equal(switchAccountSession("wallet"), true);
   assert.equal(reloads, 1);
 

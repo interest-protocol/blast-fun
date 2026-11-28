@@ -21,7 +21,7 @@ import { resolveDefaultSuiName } from "#web/lib/sui-address-input.ts";
 
 import { switchAccountSession, type AccountSession } from "./account-selection";
 import { fetchWalletIdentity } from "./coins/coins-client";
-import { withdrawalBlocksAccountSwitch } from "./coins/withdraw-attempt";
+import { withdrawalSwitchBlock, type WithdrawalSwitchBlock } from "./coins/withdraw-attempt";
 import { walletIdentityQuery, walletIdentityScope } from "./queries";
 import { useSocialViewer } from "./SignInGate";
 import { requirePrivyAccessToken } from "./use-active-privy-session";
@@ -29,7 +29,10 @@ import { useWalletSession } from "./WalletSession";
 
 const walletCookie = async () => null;
 const SWITCH_FAILED = diagnosticMessage("Could not switch accounts. Try again.", { code: "account_switch_failed" });
-const SWITCH_WITHDRAWAL_PENDING = "Wait for your withdrawal before switching accounts.";
+const WITHDRAWAL_SWITCH_MESSAGE: Record<WithdrawalSwitchBlock, string> = {
+  broadcasting: "Wait for your withdrawal to submit before switching accounts.",
+  receipt: "Retry your withdrawal to check its status before switching accounts. This won’t send it again.",
+};
 const SUI_NAME_FRESH_MS = 5 * 60_000;
 
 export function AccountSwitchItems({ closeMenu }: Readonly<{ closeMenu: () => void }>) {
@@ -56,7 +59,7 @@ function AccountChoices({ active, closeMenu, walletScope }: Readonly<{
   const client = useAppQueryClient();
   const run = useShellActions();
   const labelId = useId();
-  const [status, setStatus] = useState<"idle" | "switching" | "failed" | "withdrawing">("idle");
+  const [status, setStatus] = useState<"idle" | "switching" | "failed" | WithdrawalSwitchBlock>("idle");
   const pending = status === "switching";
 
   const walletQuery = walletIdentityQuery(walletScope, walletCookie);
@@ -65,11 +68,15 @@ function AccountChoices({ active, closeMenu, walletScope }: Readonly<{
   const walletName = (walletAddress && rememberedWalletName(walletAddress)) || "Sui wallet";
   const privyAddress = findEmbeddedSuiWallet(privy.user)?.address;
 
+  function reportWithdrawalBlock(): boolean {
+    const block = withdrawalSwitchBlock();
+    if (!block) return false;
+    setStatus(block);
+    return true;
+  }
+
   function signIn(session: AccountSession) {
-    if (withdrawalBlocksAccountSwitch()) {
-      setStatus("withdrawing");
-      return;
-    }
+    if (reportWithdrawalBlock()) return;
     if (!wallet.keepAccount(active)) {
       setStatus("failed");
       return;
@@ -82,17 +89,14 @@ function AccountChoices({ active, closeMenu, walletScope }: Readonly<{
     if (session === active || pending) {
       return;
     }
-    if (withdrawalBlocksAccountSwitch()) {
-      setStatus("withdrawing");
-      return;
-    }
+    if (reportWithdrawalBlock()) return;
     setStatus("switching");
     const verified = session === "wallet"
       ? client.fetchQuery({ ...walletQuery, staleTime: 0 })
       : verifyPrivyAccount(privy.getAccessToken);
     void verified.then(() => {
       if (!switchAccountSession(session)) {
-        setStatus(withdrawalBlocksAccountSwitch() ? "withdrawing" : "failed");
+        setStatus(withdrawalSwitchBlock() ?? "failed");
       }
     }).catch((cause: unknown) => {
       setStatus("failed");
@@ -121,7 +125,9 @@ function AccountChoices({ active, closeMenu, walletScope }: Readonly<{
         <BlastMenuItem className={styles.mitem} closeOnClick={false} disabled={pending} onClick={() => signIn("wallet")}>Sign in with Slush</BlastMenuItem>
       )}
       {pending && <LoadingIndicator className={styles.accountMenuPending} label="Switching accounts" />}
-      {status === "withdrawing" && <div className={styles.accountMenuLabel} role="alert">{SWITCH_WITHDRAWAL_PENDING}</div>}
+      {(status === "broadcasting" || status === "receipt") && (
+        <div className={styles.accountMenuLabel} role="alert">{WITHDRAWAL_SWITCH_MESSAGE[status]}</div>
+      )}
       {status === "failed" && <div className={styles.accountMenuLabel} role="alert"><DiagnosticText message={SWITCH_FAILED} /></div>}
     </>
   );

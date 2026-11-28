@@ -26,7 +26,6 @@ import type { SocialWallet } from "@blast/core/web/contracts/coins.ts";
 import { useTradeKit } from "../feed-ui/shell-bridge";
 import { presaleDetailQuery, walletIdentityQuery, walletIdentityScope, walletQuery } from "../queries";
 import { useSocialViewer } from "../SignInGate";
-import { useSocialAccount } from "../use-social-account";
 import { requestTradeQuote } from "../trades/trades-client";
 import { useBalancesContext } from "./balances";
 import { CoinSheet, type CoinSheetProps, type CoinSheetTrading, type CoinSheetWallet, type TradeAsk, type TradeOutcome, type WithdrawAsk } from "./CoinSheet";
@@ -150,7 +149,6 @@ export function CoinsHost({ inlineSale, inlineTrade, opening, active = true }: R
   const { hideSmallBalances } = useShellPrefs();
   const pinnedKeys = JSON.stringify(useCoinPins());
   const viewer = useSocialViewer();
-  const { account } = useSocialAccount();
   const accountId = viewer.signedIn ? walletIdentityScope(viewer) : null;
   const walletSession = useRef<AbortController | null>(null);
   const tradeKit = useTradeKit();
@@ -285,7 +283,7 @@ export function CoinsHost({ inlineSale, inlineTrade, opening, active = true }: R
       toast(diagnosticMessage("Your Blast wallet is not ready. Reload and try again.", { code: "blast_wallet_missing" }));
       return false;
     }
-    const key = `${account?.account_id ?? accountId}|${signer.address}|${ask.coin.coinType}|${ask.atoms}|${ask.recipient}`;
+    const key = `${viewer.sessionIdentity ?? ""}|${signer.address}|${ask.coin.coinType}|${ask.atoms}|${ask.recipient}`;
     if (attempt.current?.key !== key) {
       const receipt = readWithdrawReceipt(key);
       attempt.current = { key, requestId: receipt?.requestId ?? newRequestId(), digest: receipt?.digest ?? null };
@@ -311,7 +309,7 @@ export function CoinsHost({ inlineSale, inlineTrade, opening, active = true }: R
       { requestId: current.requestId, coinType: ask.coin.coinType, atoms: ask.atoms, recipient: ask.recipient },
     );
     if (result.status === "pending") {
-      if (current.digest !== result.digest) rememberDigest(result.digest);
+      rememberDigest(result.digest);
       toast(`${diagnosticMessage("Withdrawal is still being confirmed. Retry to check it; this will not send it again.", { code: "execution_unconfirmed" })} Transaction: ${result.digest}.`);
       balances.changed();
       return "pending";
