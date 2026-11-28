@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { DrawnSeries } from "#web/components/launchpad/chart/chart-geometry.ts";
-import { barChanges, fillGaps, foldTrade, foldTrades, MAX_FILLED_BARS, klineBars, pricePrecision, priceParts, volumeText, chartDate, ticksInside, plotHeightFor, paneGaps, type Bar } from "./kline-model.ts";
+import { barChanges, fillGaps, foldTrade, foldTrades, MAX_FILLED_BARS, klineBars, pricePrecision, priceParts, volumeText, chartDate, ticksInside, plotHeightFor, paneGaps, floorBarHeight, type Bar } from "./kline-model.ts";
 
 const MINUTE = 60_000;
 const T0 = 1_795_188_300_000; // a 5-minute boundary
@@ -132,4 +132,13 @@ test("the plot's height matches the loading block that holds its place", () => {
   // The CSS fallback (--kline-plot-height: 26rem = 416px desktop at the default text size, 428px phone).
   assert.equal(plotHeightFor(false), 416);
   assert.equal(plotHeightFor(true), 428);
+});
+
+test("a floor volume bar is its share of the tallest bar in view, at least a pixel when it traded", () => {
+  assert.equal(floorBarHeight(50, 100, 60), 30);
+  assert.equal(floorBarHeight(100, 100, 60), 60);
+  assert.equal(floorBarHeight(0.001, 100, 60), 1, "a traded bar stays visible");
+  assert.equal(floorBarHeight(0, 100, 60), 0);
+  assert.equal(floorBarHeight(undefined, 100, 60), 0);
+  assert.equal(floorBarHeight(5, 0, 60), 0, "a quiet view draws nothing");
 });

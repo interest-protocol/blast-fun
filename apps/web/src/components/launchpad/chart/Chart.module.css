@@ -169,6 +169,7 @@
 
 .note {
   margin: 0;
+  padding-inline: var(--coin-chart-heading-inset, 0);
   overflow-wrap: anywhere;
   color: var(--lp-muted);
   font-size: 13px;
@@ -321,14 +322,16 @@
  * shell header, the back row with the balance, the coin's row, the price row), the 52 px controls row under
  * it, and the Trade dock with the tab bar (165 px). It is in rem, as those rows grow with the root text on a
  * wider phone.
- * Below that plus 360 px the floor wins and the plot's foot reaches under the dock until the page scrolls.
+ * Below that plus 360 px the floor wins and the plot's foot reaches under the dock until the page scrolls;
+ * a phone on its side lowers the floor, so the whole plot still fits its screen under the header.
  * `svh` is the screen with the browser's bars shown, and it holds still while they slide, so scrolling
  * never resizes the chart. The controls row sits under the plot, so the candles come straight after the price.
+ * The query is the chart's phone layout (`useMobileChartLayout`), so a touch screen wider than 760 px sizes the same way.
  */
-@media (max-width: 760px) {
+@media (max-width: 760px), (pointer: coarse) {
   .chart[data-compact-chart] {
     --coin-chart-chrome: 28.25rem;
-    --kline-grow: calc(clamp(360px, 100svh - var(--coin-chart-chrome) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px), 520px) - 428px);
+    --kline-grow: calc(clamp(min(360px, 100svh - 6rem), 100svh - var(--coin-chart-chrome) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px), 520px) - 428px);
   }
   .chart[data-compact-chart] > .compactHead { order: 1; }
 }

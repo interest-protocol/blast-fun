@@ -1,5 +1,5 @@
 import { registerIndicator, registerOverlay, type Chart } from "klinecharts";
-import { FLOOR_VOLUME_SHARE } from "./kline-model.ts";
+import { floorBarHeight, FLOOR_VOLUME_SHARE } from "./kline-model.ts";
 
 export const BLAST_GRADUATION = "blastGraduation";
 export const BLAST_FLOOR_VOLUME = "blastFloorVolume";
@@ -45,7 +45,7 @@ export function registerStudies() {
       const colors = indicator.extendData;
       for (let index = first; index < last; index++) {
         const bar = bars[index];
-        const height = bar?.volume ? Math.max(1, band * bar.volume / tallest) : 0;
+        const height = floorBarHeight(bar?.volume, tallest, band);
         if (!bar || !height) continue;
         ctx.fillStyle = bar.close > bar.open ? colors.up : bar.close < bar.open ? colors.down : colors.flat;
         ctx.fillRect(xAxis.convertToPixel(index) - halfGapBar, bounding.height - height, Math.max(1, gapBar), height);

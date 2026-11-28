@@ -232,8 +232,7 @@ export default function KLineCoinChart({ sources, interval, memeDecimals, quoteD
     current.setStyles(themeStyles(colors));
     current.removeIndicator({ id: "VOL" });
     current.removeIndicator({ id: FLOOR_VOLUME });
-    // A phone's plot runs from 360 px (the price pane 335) to 520 px, so its pane may give up the change.
-    current.setPaneOptions({ id: "candle_pane", minHeight: layout.pane ? layout.price : 300 });
+    current.setPaneOptions({ id: "candle_pane", minHeight: layout.price });
     if (layout.pane) {
       current.createIndicator(volumeCreate(colors), true);
       current.setPaneOptions({ id: VOLUME_PANE, height: layout.pane, minHeight: Math.round(layout.pane * .6) });

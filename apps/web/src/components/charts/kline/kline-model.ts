@@ -164,6 +164,12 @@ const TIME_AXIS = 25;
 /** The share of a phone's price pane, from its floor, that the volume bars may reach. */
 export const FLOOR_VOLUME_SHARE = .15;
 
+/** A floor volume bar's px: its share of the tallest bar in view, of `band`; at least 1 px when it traded, none when not. */
+export function floorBarHeight(volume: number | undefined, tallest: number, band: number): number {
+  if (!volume || !(tallest > 0)) return 0;
+  return Math.max(1, band * Math.min(volume, tallest) / tallest);
+}
+
 /** The plot's height in px: price pane, volume pane with its separator (none on a phone), time axis. */
 export function plotHeightFor(phone: boolean): number {
   const layout = phone ? PANE_LAYOUT.phone : PANE_LAYOUT.desktop;
