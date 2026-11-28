@@ -64,7 +64,7 @@ export async function launchPageContext(): Promise<LaunchPageContext> {
     const config = runtimeConfig();
     return {
       rules,
-      creator_x_available: Boolean(config.launchCreatorXBearerToken && config.creatorClaimSigner),
+      creator_x_available: Boolean(config.launchCreatorXSocialDataKey && config.creatorClaimSigner),
       publish: { available: true, reasons: [] },
     };
   } catch {
@@ -119,10 +119,10 @@ export function socialLaunchRoutes(): SocialLaunchRoutes {
           ?? context.transaction((social) => creatorCommitmentOf(social, accountId), { label: "social.creator_commitment" });
       },
       readPublishedLaunch: confirmedLaunchPublication,
-      resolveCreatorX: creatorXLookup(config.launchCreatorXBearerToken, config.launchCreatorXLookupConcurrency),
+      resolveCreatorX: creatorXLookup(config.launchCreatorXSocialDataKey, config.launchCreatorXLookupConcurrency),
       async canAssignCreatorX(signal) {
         const signer = config.creatorClaimSigner;
-        if (!config.launchCreatorXBearerToken || !signer) return false;
+        if (!config.launchCreatorXSocialDataKey || !signer) return false;
         const chain = await configuredLaunchReadChain();
         if (!chain) return false;
         const keys = await createCreatorCapsChain(chain).signerPublicKeys({ signal }).catch((): readonly string[] => []);

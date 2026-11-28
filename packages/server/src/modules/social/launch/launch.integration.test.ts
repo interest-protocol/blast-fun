@@ -318,16 +318,17 @@ test("the existing deployment builds the coin, registration and launch with a 0x
 test("a published X assignment recovers after a closed tab and only the assigned X identity gets a claim", { skip }, () =>
   withDatabase(async ({ admin, database, kit, routes: make, png }) => {
     const id = uuid(0x10a);
-    const subject = "18934567890123456789";
+    const subject = "1893456789012345679";
     const launchId = OBJECT("1a");
     const unrelatedId = OBJECT("1b");
     const createDigest = "11111111111111111111111111111111";
     let lookups = 0;
     let preparedCommitment: string | undefined;
-    const resolveCreatorX = creatorXLookup("fixture-token", 1, async (url) => {
+    const resolveCreatorX = creatorXLookup("fixture-token", 1, async (url, request) => {
       lookups += 1;
-      assert.equal(url, "https://api.x.com/2/users/by/username/mira");
-      return Response.json({ data: { id: subject, username: "Mira" } });
+      assert.equal(url, "https://api.socialdata.tools/twitter/user/mira");
+      assert.equal(new Headers(request?.headers).get("authorization"), "Bearer fixture-token");
+      return Response.json({ id: Number(subject), id_str: subject, screen_name: "Mira" });
     });
     const launchpad = launchpadDeployment(DEPLOYMENT).originalPackageId;
     const client = {
