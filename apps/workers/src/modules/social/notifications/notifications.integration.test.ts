@@ -410,6 +410,7 @@ test("UI-13: the routes page, count and mark read the caller's own notifications
     const afterPrivate = await json<SocialNotificationPage>(await routes.page.GET(request(kai, "/api/social/me/notifications"), testClient()), "notification-page");
     assert.equal(afterPrivate.items.some((item) => item.kind === "follow"), false);
     assert.equal(afterPrivate.unread_count, page.items.length - 1);
+    assert.deepEqual(await newest(kai), { unread_count: page.items.length - 1, newest_unread_id: highestId(afterPrivate.items.map((item) => item.id)) }, "a hidden actor's alert is never the newest");
 
     // Signed out, or without an account.
     await json(await routes.unread.GET(request(null, "/api/social/me/notifications/unread"), testClient()), "error", 401);

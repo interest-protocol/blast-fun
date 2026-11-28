@@ -61,8 +61,9 @@ async function notificationReadThrough(request: Request): Promise<string | null>
  * - The page and the writes count in `social_notification` (per account).
  * - The unread count counts in `social_me_read`, like the account's other
  *   own reads. The shell reads it on load and focus; a visible tab polls it
- *   with `?newest=1` every minute to spot new alerts. The newest ID is the
- *   same capped index scan read backwards, in the same statement.
+ *   with `?newest=1` every minute to spot new alerts. The newest ID comes
+ *   from the same statement: the unread index read from the top, above the
+ *   "Mark all as read" watermark.
  *
  * Metrics: `social.notifications` with `operation` (`page`, `unread`,
  * `unread_newest`, `read`, `read_all`) through `timed`, sampled for reads.

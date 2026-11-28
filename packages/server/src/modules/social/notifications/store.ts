@@ -71,17 +71,23 @@ const PAGE_SQL = `
   ORDER BY n.occurred_at_ms DESC, n.notification_id DESC
   LIMIT $4`;
 
-/** An account's unread, shown notifications (`n`); the scan the count and the newest ID share. */
+/**
+ * An account's unread, shown notifications (`n`), shared by the count and the
+ * newest ID. The watermark is a scalar subquery, not a join, so it bounds the
+ * `social_notifications_unread_idx` scan: with everything read through it, the
+ * newest-ID scan stops at once instead of walking every row below it.
+ */
 const UNREAD_ROWS = `social_notifications n
-    CROSS JOIN ${READ_THROUGH} AS through
     LEFT JOIN social_accounts actor ON actor.account_id = n.actor_account_id
-    WHERE n.account_id = $1 AND n.read_at IS NULL AND n.notification_id > through.id AND ${STILL_NAMED}
+    WHERE n.account_id = $1 AND n.read_at IS NULL
+      AND n.notification_id > (SELECT COALESCE(max(r.read_through), 0) FROM social_notification_reads r WHERE r.account_id = $1)
+      AND ${STILL_NAMED}
       AND EXISTS (SELECT 1 FROM ${SHOWN_PRESALES} p WHERE p.presale_id = n.presale_id)`;
 
 const UNREAD_SQL = `
   SELECT count(*)::int AS unread FROM (SELECT 1 FROM ${UNREAD_ROWS} LIMIT ${NOTIFICATION_UNREAD_CAP}) AS unread`;
 
-/** The count and the highest unread ID in one statement; the ID walks `social_notifications_unread_idx` backwards. */
+/** The count and the highest unread ID in one statement; the ID reads `social_notifications_unread_idx` from the top, above the watermark. */
 const UNREAD_NEWEST_SQL = `
   SELECT (${UNREAD_SQL}) AS unread,
     (SELECT n.notification_id::text FROM ${UNREAD_ROWS} ORDER BY n.notification_id DESC LIMIT 1) AS newest`;
