@@ -5,7 +5,10 @@ import type { TradeRoute } from "@blast/core/modules/social/trades/cetus-route.t
 import { SOCIAL_PRICES_PATH } from "@blast/core/modules/social/contracts/prices.ts";
 
 import { installTestDom, setInputValue, waitFor } from "../../../../test/fixtures/social/test-dom.ts";
+import { DEFAULT_SWAP_MODE, FIXTURE_COINS } from "../../../../test/fixtures/social/coins/coins-fixture-model.ts";
+import { fixtureQuote } from "../../../../test/fixtures/social/coins/swap-fixture.ts";
 import type { TradeRouteFinder } from "../trade/trade-estimate.ts";
+import type { CoinSheetTrading } from "./SwapForm.tsx";
 import { PUBLIC_BASE_COINS, type WalletCoinView } from "./coin-model.ts";
 
 const dom = installTestDom();
@@ -69,7 +72,8 @@ function server(t: TestContext, options: Readonly<{ balances: Record<string, str
 type Viewer = Readonly<{ signedIn: boolean; sessionPending: boolean; active: boolean }>;
 const READY: Viewer = { signedIn: true, sessionPending: false, active: true };
 
-async function openSwap(t: TestContext, pair: readonly [WalletCoinView, WalletCoinView], findRoute: TradeRouteFinder, first: Viewer = READY) {
+async function openSwap(t: TestContext, pair: readonly [WalletCoinView, WalletCoinView], findRoute: TradeRouteFinder, first: Viewer = READY,
+  money: Partial<Pick<CoinSheetTrading, "requestQuote" | "trade">> = {}) {
   const container = dom.document.createElement("div");
   dom.document.body.append(container);
   const root = createRoot(container);
@@ -86,7 +90,7 @@ async function openSwap(t: TestContext, pair: readonly [WalletCoinView, WalletCo
       onFlip={(next) => { setCoins([coins[1], coins[0]]); setField(next); }} onPick={() => {}} hidden={false} walletFee="sponsored"
       // The host says it holds no coin list yet, as it does when Trade is opened directly.
       trading={{ signedIn: viewer.signedIn, sessionPending: viewer.sessionPending, balanceKnown: false, walletAddress: ADDRESS, onSignIn() {}, listCoins: async () => [], findRoute,
-        requestQuote: async () => ({ status: "error" }), trade: async () => ({ status: "traded" }) }} />;
+        requestQuote: async () => ({ status: "error" }), trade: async () => ({ status: "traded" }), ...money }} />;
   }
   const settle = () => act(() => settleQueries(client, 30_000));
   /** The estimate leaves after the typing pause; its balances and prices follow. */
@@ -238,4 +242,69 @@ test("a failed balance read of the coin you receive and an old price both show a
   assert.match(receive!, /SUI—$/, "the dollar value is a dash");
   assert.doesNotMatch(screen.container.textContent!, /\$8\.00|Low payout|could not load/);
   assert.equal(screen.swap().disabled, false);
+});
+
+/** A sealed quote for 10 USDC to 4 SUI, with no dollar value for what you receive. */
+function sealedAnswer(ask: Parameters<CoinSheetTrading["requestQuote"]>[0]): Awaited<ReturnType<CoinSheetTrading["requestQuote"]>> {
+  return { status: "ok", httpStatus: 200, body: { ...fixtureQuote(ask, FIXTURE_COINS, DEFAULT_SWAP_MODE, Date.now()), quote_id: "q1.sealed", expires_at_ms: Date.now() + 60_000,
+    amount_out: "4000000000", min_out: "3999000000", price_impact_bps: 0, amount_in_usd: "10.00", amount_out_usd: null, offer_refused: null, dry_run: "passed" } };
+}
+
+test("once a sealed quote asks for a payout review, a price that later goes missing never sends it without the second press", async (t) => {
+  const prices: Record<string, string> = {};
+  const api = server(t, { balances: { [USDC.coinType]: "50000000", [SUI.coinType]: "7000000000" }, prices });
+  let answer: () => void = () => {};
+  let sent = 0;
+  const screen = await openSwap(t, [USDC, SUI], routes(() => 4_000_000_000n), READY, {
+    requestQuote: async (ask) => {
+      await new Promise<void>((resolve) => { answer = resolve; });
+      return sealedAnswer(ask);
+    },
+    trade: async () => { sent += 1; return { status: "traded" }; },
+  });
+  await screen.type("10");
+  assert.doesNotMatch(screen.container.textContent!, /Low payout/);
+  await act(async () => screen.swap().click());
+  const reprice = async (price: string | null, shown: () => boolean) => {
+    if (price === null) delete prices[SUI.coinType];
+    else prices[SUI.coinType] = price;
+    await act(() => screen.client.refetchQueries({ type: "active", predicate: (query) => JSON.stringify(query.queryKey).includes("price") }));
+    await waitFor(shown, "the new price to reach the screen");
+  };
+  await reprice("2", () => screen.container.textContent!.includes("Low payout"));
+  await act(async () => answer());
+  await screen.settle();
+  assert.match(screen.container.textContent!, /Review the payout before confirming\./);
+
+  await reprice(null, () => screen.panels()[1]!.endsWith("SUI—"));
+  // The balances are read again while the question is on screen.
+  api.state.held = [];
+  await act(async () => { void invalidateAfter(screen.client, { kind: "trade" }); });
+  await waitFor(() => api.state.held!.length === 2 && screen.max().disabled, "the form to notice both balances are being read again");
+  await act(async () => { api.state.held!.splice(0).forEach((release) => release()); });
+  api.state.held = null;
+  await screen.settle();
+
+  assert.equal(sent, 0);
+  assert.match(screen.container.textContent!, /Low payout\. About 20% below/);
+  assert.match(screen.container.textContent!, /Review the payout before confirming\./);
+  await act(async () => screen.swap().click());
+  await screen.settle();
+  assert.equal(sent, 1);
+});
+
+test("a low payout already on screen at the press needs no second press when the sealed quote agrees", async (t) => {
+  server(t, { balances: { [USDC.coinType]: "50000000", [SUI.coinType]: "7000000000" }, prices: { [SUI.coinType]: "2" } });
+  let sent = 0;
+  const screen = await openSwap(t, [USDC, SUI], routes(() => 4_000_000_000n), READY, {
+    requestQuote: async (ask) => sealedAnswer(ask),
+    trade: async () => { sent += 1; return { status: "traded" }; },
+  });
+  await screen.type("10");
+  assert.match(screen.container.textContent!, /Low payout\. About 20% below/);
+
+  await act(async () => screen.swap().click());
+  await screen.settle();
+
+  assert.equal(sent, 1);
 });

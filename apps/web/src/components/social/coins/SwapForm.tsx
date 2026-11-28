@@ -194,10 +194,22 @@ function useSwapQuotes({ active, inCoin, outCoin, atoms, locked, trading }: Read
   return { key, estimate, sealed, seal, live, setPressed };
 }
 
-function swapReview(seal: Seal | null, quote: SocialTradeQuote | null, cta: ReturnType<typeof swapCta>, warning: string | null) {
+/**
+ * The payout warning to show. Once the sealed quote asks about a new one, the press keeps that question:
+ * a display price that later changes or goes missing must not answer it for the user.
+ */
+function usePayoutWarning(seal: Seal | null, answered: boolean, quote: SocialTradeQuote | null, locked: boolean) {
+  const [kept, setKept] = useState<Readonly<{ press: number; warning: string }> | null>(null);
+  const live = locked ? null : swapPayoutWarning(quote);
+  const asked = !locked && seal !== null && kept?.press === seal.press ? kept.warning : null;
+  if (seal !== null && answered && asked === null && live !== null && live !== seal.warning) setKept({ press: seal.press, warning: live });
+  return { warning: live ?? asked, asked: asked !== null };
+}
+
+function swapReview(seal: Seal | null, quote: SocialTradeQuote | null, cta: ReturnType<typeof swapCta>, asked: boolean) {
   if (seal === null || quote?.min_out == null || !cta.enabled || cta.action !== "trade") return null;
   if (BigInt(quote.min_out) < seal.minOut) return PRICE_MOVED_LINE;
-  return warning !== null && warning !== seal.warning ? "Review the payout before confirming." : null;
+  return asked ? "Review the payout before confirming." : null;
 }
 
 /** What a side's balance line shows: the coin with its number, if there is one to show. Display only; spending reads `useSwapInputBalance`. */
@@ -360,8 +372,8 @@ function useSwapFormControls({
     estimate: live === estimate,
   });
   const { pending: balancePending, action: cta } = swapBalanceAction(trading, active, balance, swapAction);
-  const warning = locked ? null : swapPayoutWarning(quote);
-  const review = swapReview(seal, sealed.quote, cta, warning);
+  const { warning, asked } = usePayoutWarning(seal, sealed.quote !== null, quote, locked);
+  const review = swapReview(seal, sealed.quote, cta, asked);
   const waiting = seal !== null && !locked && review === null;
   const title = tradeTitle(inCoin, outCoin, focus);
   const { action, cost } = swapButtonView(cta, title, balancePending, review !== null, pending, money);
