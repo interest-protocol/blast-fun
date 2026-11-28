@@ -15,6 +15,7 @@ import { useShellAction } from "#web/components/blast-ui/shell-actions.tsx";
 import { startPrivy, usePrivyLoginEvents, usePrivySession } from "#web/components/auth/privy-session.ts";
 import { usePreparePrivyWalletPicker } from "#web/components/auth/privy-wallet-picker.ts";
 import { usePrivySessionMounted } from "#web/components/presale/providers/PrivySessionProvider.tsx";
+import { switchAccountSession, type AccountSession } from "#web/components/social/account-selection.ts";
 import { useSocialViewer } from "#web/components/social/SignInGate.tsx";
 import { useWalletSession } from "#web/components/social/WalletSession.tsx";
 import { diagnosticMessage } from "#web/lib/errors.ts";
@@ -75,6 +76,9 @@ export function SignInContent({
   onMethod,
   unavailable = false,
   headingId = HEADING_ID,
+  additionalAccount,
+  resumeAccount,
+  onResumeAccount,
 }: Readonly<{
   state: SignInState;
   walletAvailable: boolean;
@@ -84,10 +88,14 @@ export function SignInContent({
   /** No Privy session: the methods show but cannot start. */
   unavailable?: boolean;
   headingId?: string;
+  additionalAccount?: AccountSession;
+  resumeAccount?: AccountSession;
+  onResumeAccount?: (account: AccountSession) => void;
 }>) {
   const waiting = waitingMethod(state);
   const disabled = unavailable || methodsDisabled(state);
-  const message = signInMessage(state);
+  const message = signInMessage(state, additionalAccount !== undefined);
+  const title = signInTitle(additionalAccount);
 
   const renderMethod = (method: SignInMethod) => {
     const suiWallet = typeof method !== "string";
@@ -120,13 +128,22 @@ export function SignInContent({
       <span aria-hidden="true" className={styles.mark}>
         <HelmetMark />
       </span>
-      <SheetHeading id={headingId} title="Join Blast" />
+      <SheetHeading id={headingId} title={title} />
       <div className={styles.methods}>
-        {SOCIAL_SIGN_IN_METHODS.map(renderMethod)}
+        {resumeAccount === "privy" ? (
+          <Button className={styles.method} data-sign-in-method="resume-privy" disabled={disabled} onClick={() => onResumeAccount?.("privy")} size="lg" variant="ink">
+            Continue with Privy
+          </Button>
+        ) : additionalAccount !== "wallet" && SOCIAL_SIGN_IN_METHODS.map(renderMethod)}
         {walletAvailable ? (
           <SuiWalletOptions disabled={disabled} onRetry={onRetryWallets} renderMethod={renderMethod} wallets={suiWallets} />
         ) : null}
-        {renderMethod("wallet")}
+        {resumeAccount !== "privy" && additionalAccount !== "wallet" && renderMethod("wallet")}
+        {resumeAccount === "wallet" && (
+          <Button className={styles.method} data-sign-in-method="resume-wallet" disabled={disabled} onClick={() => onResumeAccount?.("wallet")} size="lg" variant="secondary">
+            Continue with Sui wallet
+          </Button>
+        )}
       </div>
       {message ? (
         <p className={styles.message} role={message.alert ? "alert" : "status"}>
@@ -138,6 +155,16 @@ export function SignInContent({
       </p>
     </>
   );
+}
+
+function signInTitle(additionalAccount?: AccountSession): string {
+  if (additionalAccount === "wallet") {
+    return "Sign in with Slush";
+  }
+  if (additionalAccount === "privy") {
+    return "Sign in with Privy";
+  }
+  return "Join Blast";
 }
 
 function SuiWalletOptions({ disabled, onRetry, renderMethod, wallets }: Readonly<{
@@ -213,20 +240,25 @@ type SignInFlow = Readonly<{
   state: SignInState;
   walletAvailable: boolean;
   start: (method: SignInMethod) => void;
+  resume: (account: AccountSession) => void;
   reset: () => void;
 }>;
 
-function readAttempt(): ReturnType<typeof storedAttempt> {
+function readAttempt() {
   try {
-    return storedAttempt(window.sessionStorage.getItem(SIGN_IN_ATTEMPT_STORAGE_KEY));
+    const saved = window.sessionStorage.getItem(SIGN_IN_ATTEMPT_STORAGE_KEY);
+    const [savedMethod, intent] = saved?.split(":") ?? [];
+    const method = storedAttempt(savedMethod ?? null);
+    const switchToPrivy = intent === "switch";
+    return method ? { method, switchToPrivy } : null;
   } catch {
     return null;
   }
 }
 
-function writeAttempt(method: ReturnType<typeof storedAttempt>): void {
+function writeAttempt(method: ReturnType<typeof storedAttempt>, switchToPrivy = false): void {
   try {
-    if (method) window.sessionStorage.setItem(SIGN_IN_ATTEMPT_STORAGE_KEY, method);
+    if (method) window.sessionStorage.setItem(SIGN_IN_ATTEMPT_STORAGE_KEY, switchToPrivy ? `${method}:switch` : method);
     else window.sessionStorage.removeItem(SIGN_IN_ATTEMPT_STORAGE_KEY);
   } catch {
     // Blocked storage only costs the cancel message after a redirect.
@@ -241,62 +273,90 @@ function writeAttempt(method: ReturnType<typeof storedAttempt>): void {
  * session (`WalletSession.tsx`, OA-16; Privy is not involved). A signed-in viewer ends any attempt.
  */
 function useSignInFlow(
-  onReturn: (outcome: Readonly<{ signedIn: true; method: SignInMethod } | { signedIn: false; state: SignInState }>) => void,
+  onReturn: (outcome: Readonly<{ signedIn: boolean; additionalAccount?: AccountSession }>) => void,
+  additionalAccount?: AccountSession,
 ): SignInFlow {
   const { load } = usePrivySession();
   const viewer = useSocialViewer();
   const wallet = useWalletSession();
   const [state, setState] = useState<SignInState>(SIGN_IN_IDLE);
+  const resume = (account: AccountSession) => {
+    if (!switchAccountSession(account)) setState({ status: "switch-failed" });
+  };
   const live = useRef({ onReturn });
   useEffect(() => {
     live.current = { onReturn };
   });
 
-  // Privy's login events are shared by every flow: only a wallet login this sheet opened is answered.
+  const finish = useCallback((method: SignInMethod, target?: AccountSession) => {
+    if (target) {
+      if (!switchAccountSession(target)) {
+        setState({ status: "failed", method });
+        live.current.onReturn({ signedIn: false, additionalAccount: target });
+      }
+      return;
+    }
+    setState(SIGN_IN_IDLE);
+    live.current.onReturn({ signedIn: true });
+  }, []);
+
+  // Only answer Privy wallet logins this sheet started.
   const walletLoginOpen = useRef(false);
+  const attemptGeneration = useRef(0);
   usePrivyLoginEvents((event) => {
-    if (event.kind === "oauth") {
-      const method = readAttempt();
+    if (event.kind === "oauth" || event.kind === "oauth-error") {
+      const attempt = readAttempt();
       writeAttempt(null);
-      if (method && !event.wasAlreadyAuthenticated) live.current.onReturn({ signedIn: true, method });
-    } else if (event.kind === "oauth-error") {
-      const method = readAttempt();
-      writeAttempt(null);
-      if (!method) return;
-      const next = oauthErrorState(method, event.code);
-      setState(next);
-      live.current.onReturn({ signedIn: false, state: next });
-    } else if (event.kind === "login") {
-      // EVM and Solana wallets: Privy's own wallet list (OA-12).
-      if (!walletLoginOpen.current || event.wasAlreadyAuthenticated || (event.loginMethod !== "siwe" && event.loginMethod !== "siws")) return;
-      walletLoginOpen.current = false;
-      live.current.onReturn({ signedIn: true, method: "wallet" });
-    } else {
-      if (!walletLoginOpen.current) return;
+      if (!attempt) {
+        return;
+      }
+      const target = attempt.switchToPrivy ? "privy" : undefined;
+      if (event.kind === "oauth-error") {
+        setState(oauthErrorState(attempt.method, event.code));
+        live.current.onReturn({ signedIn: false, additionalAccount: target });
+      } else if (!event.wasAlreadyAuthenticated || target) {
+        finish(attempt.method, target);
+      }
+      return;
+    }
+    if (!walletLoginOpen.current) {
+      return;
+    }
+    const target = wallet.selection === "wallet" ? "privy" : additionalAccount;
+    if (event.kind === "login-error") {
       walletLoginOpen.current = false;
       setState(walletLoginErrorState(event.code));
+    } else if (event.wasAlreadyAuthenticated ? target !== undefined : event.loginMethod === "siwe" || event.loginMethod === "siws") {
+      walletLoginOpen.current = false;
+      finish("wallet", target);
     }
   });
 
+  const failPrivyAttempt = useCallback((generation: number, state: SignInState) => {
+    if (generation === attemptGeneration.current) {
+      writeAttempt(null);
+      setState(state);
+    }
+  }, []);
+
   const start = useCallback(
     (method: SignInMethod) => {
+      const generation = ++attemptGeneration.current;
       setState({ status: "waiting", method });
       void (async () => {
         if (typeof method !== "string") {
           // Sui wallets use the app's own session (OA-16): no Privy step.
           // Discovery loads the module before showing a wallet so its popup can open on the click.
           const signers = suiWalletSignerModule;
-          if (signers === null) {
-            setState({ status: "failed", method });
+          const result = signers ? await wallet.signIn(signers.suiWalletSigner(method.wallet)) : "failed";
+          if (generation !== attemptGeneration.current) {
             return;
           }
-          const result = await wallet.signIn(signers.suiWalletSigner(method.wallet));
-          if (result !== "signed-in") {
-            setState({ status: result === "rate-limited" ? "rate-limited" : result === "cancelled" ? "cancelled" : "failed", method });
-            return;
+          if (result === "signed-in") {
+            finish(method, wallet.selection === "privy" ? "wallet" : additionalAccount);
+          } else {
+            setState({ status: result, method });
           }
-          setState(SIGN_IN_IDLE);
-          live.current.onReturn({ signedIn: true, method });
           return;
         }
         // Privy's SDK loads with the first sign-in; the pressed method waits up to 15 s for it to start.
@@ -304,7 +364,10 @@ function useSignInFlow(
         try {
           privy = await startPrivy(load);
         } catch {
-          setState({ status: "stalled" });
+          failPrivyAttempt(generation, { status: "stalled" });
+          return;
+        }
+        if (generation !== attemptGeneration.current) {
           return;
         }
         if (method === "wallet") {
@@ -313,22 +376,26 @@ function useSignInFlow(
           return;
         }
         document.dispatchEvent(new Event(SIGN_IN_DRAFT_EVENT));
-        writeAttempt(method);
+        writeAttempt(method, additionalAccount === "privy" || wallet.selection === "wallet");
         try {
           await privy.initOAuth({ provider: PRIVY_OAUTH_PROVIDERS[method] });
         } catch {
-          writeAttempt(null);
-          setState({ status: "failed", method });
+          failPrivyAttempt(generation, { status: "failed", method });
         }
       })();
     },
-    [load, wallet],
+    [additionalAccount, failPrivyAttempt, finish, load, wallet],
   );
 
-  const reset = useCallback(() => setState(SIGN_IN_IDLE), []);
+  const reset = useCallback(() => {
+    attemptGeneration.current += 1;
+    walletLoginOpen.current = false;
+    writeAttempt(null);
+    setState(SIGN_IN_IDLE);
+  }, []);
 
   // A signed-in viewer has nothing left to wait for.
-  return { state: viewer.signedIn ? SIGN_IN_IDLE : state, walletAvailable: wallet.available, start, reset };
+  return { state: viewer.signedIn && !additionalAccount ? SIGN_IN_IDLE : state, walletAvailable: wallet.available, start, resume, reset };
 }
 
 /**
@@ -344,27 +411,53 @@ export function SignInSheet() {
 
 function PrivySignInSheet() {
   const viewer = useSocialViewer();
-  const [open, setOpen] = useState(false);
-  usePreparePrivyWalletPicker(open && !viewer.signedIn);
-  const flow = useSignInFlow((outcome) => setOpen(!outcome.signedIn));
-  const suiWallets = useSuiSignInWallets(open && !viewer.signedIn && flow.walletAvailable);
+  const resumeAccount = useResumableAccount();
+  const [mode, setMode] = useState<"default" | AccountSession | null>(null);
+  const additionalAccount = mode === "wallet" || mode === "privy" ? mode : undefined;
+  const open = mode !== null && (additionalAccount !== undefined || !viewer.signedIn);
+  usePreparePrivyWalletPicker(open && mode !== "wallet");
+  const flow = useSignInFlow((outcome) => setMode(outcome.signedIn ? null : (outcome.additionalAccount ?? "default")), additionalAccount);
+  const showWallets = flow.walletAvailable && mode !== "privy";
+  const suiWallets = useSuiSignInWallets(open && showWallets);
+  const choices = mode === "wallet" && suiWallets.wallets !== null && suiWallets.wallets !== "unavailable"
+    ? suiWallets.wallets.filter((choice) => choice.slush)
+    : suiWallets.wallets;
   const { reset } = flow;
 
   useShellAction("openSignIn", () => {
     if (viewer.signedIn) return;
     reset();
-    setOpen(true);
+    setMode("default");
   });
+  useShellAction("openAccountSignIn", (account) => {
+    if (account !== "wallet" && account !== "privy") return;
+    reset();
+    setMode(account);
+  });
+
+  function close() {
+    reset();
+    setMode(null);
+  }
 
   return (
     <Sheet
       initialFocus={() => document.getElementById(HEADING_ID)?.closest('[role="dialog"]')?.querySelector<HTMLElement>("[data-sign-in-method]") ?? null}
       labelledBy={HEADING_ID}
-      onRequestClose={() => setOpen(false)}
-      open={open && !viewer.signedIn}
+      onRequestClose={close}
+      open={open}
     >
-      <SheetClose onClick={() => setOpen(false)} />
-      <SignInContent onMethod={flow.start} onRetryWallets={suiWallets.retry} state={flow.state} suiWallets={suiWallets.wallets} walletAvailable={flow.walletAvailable} />
+      <SheetClose onClick={close} />
+      <SignInContent
+        additionalAccount={additionalAccount}
+        onMethod={flow.start}
+        onResumeAccount={flow.resume}
+        resumeAccount={mode === "default" ? resumeAccount : undefined}
+        onRetryWallets={suiWallets.retry}
+        state={flow.state}
+        suiWallets={choices}
+        walletAvailable={showWallets}
+      />
     </Sheet>
   );
 }
@@ -397,8 +490,20 @@ export function SignInCard({ returnTo }: Readonly<{ returnTo: string }>) {
   );
 }
 
+function useResumableAccount(): AccountSession | undefined {
+  const privy = usePrivySession();
+  const wallet = useWalletSession();
+  if (wallet.selection === "wallet" && !wallet.active && privy.authenticated) {
+    return "privy";
+  }
+  if (wallet.selection === "privy" && privy.ready && !privy.authenticated && wallet.active) {
+    return "wallet";
+  }
+}
+
 function PrivySignInCard({ returnTo }: Readonly<{ returnTo: string }>) {
   const viewer = useSocialViewer();
+  const resumeAccount = useResumableAccount();
   usePreparePrivyWalletPicker(!viewer.signedIn);
   const flow = useSignInFlow(() => undefined);
   const suiWallets = useSuiSignInWallets(!viewer.signedIn && flow.walletAvailable);
@@ -408,6 +513,8 @@ function PrivySignInCard({ returnTo }: Readonly<{ returnTo: string }>) {
     <SignInContent
       headingId="blast-sign-in-page-title"
       onMethod={flow.start}
+      onResumeAccount={flow.resume}
+      resumeAccount={resumeAccount}
       state={flow.state}
       onRetryWallets={suiWallets.retry}
       suiWallets={suiWallets.wallets}

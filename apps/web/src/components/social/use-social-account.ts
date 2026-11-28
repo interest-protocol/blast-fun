@@ -4,7 +4,6 @@ import { publicErrorMessage, PublicError, publicErrorCopy } from "#web/lib/error
 
 import { useQuery } from "@tanstack/react-query";
 
-import { usePrivySession } from "#web/components/auth/privy-session.ts";
 import { queryKeys } from "#web/lib/query/keys.ts";
 import { useAppQueryClient } from "#web/lib/query/provider.tsx";
 import { useHydrated } from "#web/components/ui-libraries/use-hydrated.tsx";
@@ -18,6 +17,7 @@ import {
   type SocialAccountState,
 } from "./social-account-client";
 import { useWalletSession } from "./WalletSession";
+import { useActivePrivySession } from "./use-active-privy-session";
 import { useSocialAccountSession, type SocialAccountSessionStatus } from "./use-social-account-session";
 
 export type UseSocialAccount = SocialAccountState & Readonly<{
@@ -45,13 +45,13 @@ export const SocialAccountContext = createContext<UseSocialAccount | null>(null)
  * a wallet session still reads `me`.
  */
 export function useSocialAccountRead(enabled = true): UseSocialAccount {
-  const privy = usePrivySession();
+  const privy = useActivePrivySession();
   const wallet = useWalletSession();
   const hydrated = useHydrated();
-  const { getAccessToken, user } = privy;
+  const { getAccessToken, user, walletActive } = privy;
   const ready = hydrated && privy.ready;
   const authenticated = privy.authenticated;
-  const identity = authenticated ? (user?.id ?? "") : wallet.active ? "wallet" : "";
+  const identity = authenticated ? (user?.id ?? "") : walletActive ? "wallet" : "";
   const walletRefresh = wallet.refresh;
   const client = useAppQueryClient();
   const tokenSource = useRef(getAccessToken);
@@ -59,7 +59,7 @@ export function useSocialAccountRead(enabled = true): UseSocialAccount {
     tokenSource.current = getAccessToken;
   }, [getAccessToken]);
 
-  const settled = socialAccountFromSession({ ready, authenticated, wallet: wallet.active });
+  const settled = socialAccountFromSession({ ready, authenticated, wallet: walletActive });
   // One `me` read per signed-in identity (a shared query, OA-38), again on `refresh`.
   const enabledRead = settled === null && enabled;
   const query = useQuery(
@@ -81,7 +81,7 @@ export function useSocialAccountRead(enabled = true): UseSocialAccount {
   const fetched = enabledRead ? query.data : undefined;
   // Retain the read's provenance even when a refused wallet response clears its hint.
   const state = settled ?? fetched ?? (query.isError ? SOCIAL_ACCOUNT_ERROR : SOCIAL_ACCOUNT_LOADING);
-  const { sessionStatus, resetRefusal } = useSocialAccountSession({ ready, authenticated, wallet: wallet.active, accountState: state });
+  const { sessionStatus, resetRefusal } = useSocialAccountSession({ ready, authenticated, wallet: walletActive, accountState: state });
   const refresh = useCallback(() => {
     resetRefusal();
     void client.invalidateQueries({ queryKey: queryKeys.me.account(identity), exact: true });

@@ -1,11 +1,14 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
 
 import { startPrivy, usePrivySession } from "#web/components/auth/privy-session.ts";
 
 import { findEmbeddedSuiWallet } from "#web/components/mission-control/privy-embedded-wallet.ts";
 
+import { accountSwitchSignal } from "../account-selection";
+import { useSocialViewer } from "../SignInGate";
+import { useWalletSession } from "../WalletSession";
 import type { WithdrawSigner } from "./withdraw-flow";
 
 /** The key-format code (Privy's Sui signer), loaded at the first signature, not with the page. */
@@ -28,18 +31,35 @@ export type PrivyCoinSigner = Readonly<{
  * Privy does not start.
  */
 export function PrivyCoinSignerBridge({ onChange }: Readonly<{ onChange: (signer: PrivyCoinSigner | null) => void }>) {
-  const { runtime, load } = usePrivySession();
+  const session = usePrivySession();
+  const { load } = session;
+  const { selection } = useWalletSession();
+  const { sessionIdentity } = useSocialViewer();
+  const active = selection !== "wallet" && sessionIdentity !== "wallet";
+  const runtime = active ? session.runtime : null;
   const latest = useRef(runtime);
-  useEffect(() => {
+  useLayoutEffect(() => {
     latest.current = runtime;
   });
-  useEffect(() => {
-    const embedded = () => (latest.current?.authenticated ? findEmbeddedSuiWallet(latest.current.user) : null);
-    const started = async () => latest.current ?? startPrivy(load);
+  useLayoutEffect(() => {
+    if (!active) {
+      return;
+    }
+    let registered = true;
+    const isActive = () => registered && !accountSwitchSignal.aborted;
+    const embedded = () => (isActive() && latest.current?.authenticated ? findEmbeddedSuiWallet(latest.current.user) : null);
+    function signingRuntime(address: string) {
+      const current = latest.current;
+      if (!current || embedded()?.address !== address) throw new Error("The active account changed.");
+      return current;
+    }
     onChange({
       address: () => embedded()?.address ?? null,
       async createWallet() {
-        await (await started()).createWallet({ chainType: "sui" });
+        if (!isActive()) throw new Error("The active account changed.");
+        const current = latest.current ?? await startPrivy(load);
+        if (!isActive()) throw new Error("The active account changed.");
+        await current.createWallet({ chainType: "sui" });
       },
       signer() {
         const wallet = embedded();
@@ -49,13 +69,18 @@ export function PrivyCoinSignerBridge({ onChange }: Readonly<{ onChange: (signer
           address: wallet.address,
           async signTransaction(bytes) {
             const { privySuiSigner } = await loadPrivyKey();
-            const key = privySuiSigner(wallet, async (input) => (await started()).signRawHash(input));
-            return (await key.signTransaction(bytes)).signature;
+            const key = privySuiSigner(wallet, (input) => signingRuntime(wallet.address).signRawHash(input));
+            const { signature } = await key.signTransaction(bytes);
+            signingRuntime(wallet.address);
+            return signature;
           },
         };
       },
     });
-    return () => onChange(null);
-  }, [load, onChange]);
+    return () => {
+      registered = false;
+      onChange(null);
+    };
+  }, [active, load, onChange]);
   return null;
 }

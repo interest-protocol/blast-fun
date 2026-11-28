@@ -71,6 +71,17 @@ test("SSR validates the Privy cookie cryptographically and prefers it to a walle
   assert.doesNotMatch(JSON.stringify(result), new RegExp(`${jwt}|${walletToken}|did:privy|sessionId|wallets`));
 });
 
+test("SSR reads the selected Slush profile when both sessions remain signed in", async () => {
+  const f = fixture();
+  const both = `privy-token=${await token()}; __Host-blast_wallet=${walletToken}`;
+  const slush = await f.read(`${both}; blast_active_account=wallet`);
+  assert.equal(slush?.viewer?.accountId, walletAccount.account_id);
+  assert.deepEqual(f.calls, [`session:${walletToken}`, "wallet:0xwallet"]);
+  assert.equal((await f.read(`${both}; blast_active_account=privy`))?.viewer?.accountId, account.account_id);
+  assert.equal(await f.read("blast_active_account=wallet"), null);
+  assert.equal(await f.read(`__Host-blast_wallet=${walletToken}; blast_active_account=privy`), null);
+});
+
 test("SSR validates direct wallet sessions on a hard refresh and keeps answers request-local", async () => {
   const f = fixture();
   const wallet = await f.read(`__Host-blast_wallet=${walletToken}`);
@@ -97,6 +108,7 @@ test("missing, refreshable, malformed, duplicated and hint-only cookies stay unr
   for (const cookie of ["", "privy-session=t", `privy-session=t; __Host-blast_wallet=${walletToken}`, "__Host-blast_wallet_hint=1", "privy-token=", "privy-token=not-a-jwt", "privy-token=a.b.c; privy-token=d.e.f", `privy-token=${"x".repeat(8193)}`]) {
     assert.equal(await f.read(cookie), null, cookie.slice(0, 100));
   }
+  assert.equal((await f.read(`blast_active_account=privy; __Host-blast_wallet=${walletToken}`, false))?.signedIn, false, "without Privy, an explicit Privy selection is signed out");
   assert.deepEqual(f.calls, []);
   assert.equal((await f.read("", false))?.signedIn, false, "without Privy, no credentials is signed out");
 });

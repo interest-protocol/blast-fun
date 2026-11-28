@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, type ReactNode } from "react";
 
-import { usePrivySession, type PrivySession } from "#web/components/auth/privy-session.ts";
+import type { PrivySession } from "#web/components/auth/privy-session.ts";
 import { useRestorePrivyWallet } from "#web/components/auth/privy-wallet-picker.ts";
 import type { ActivitySession } from "#web/components/analytics/account-activity.ts";
 import { AccountActivity } from "#web/components/analytics/AccountActivity.tsx";
@@ -21,6 +21,8 @@ import {
   useSocialAccountRead,
 } from "./use-social-account";
 import { useWalletSession, WalletSessionProvider } from "./WalletSession";
+import type { AccountSession } from "./account-selection";
+import { useActivePrivySession } from "./use-active-privy-session";
 
 /**
  * The social layer of a launch page, inside the Privy session (the presale
@@ -32,16 +34,16 @@ import { useWalletSession, WalletSessionProvider } from "./WalletSession";
  * every `useSocialAccount` below it. New accounts get saved random identities
  * during that load; the sign-in sheet lives in the app shell (`SocialShell`).
  */
-export function SocialSession({ children }: Readonly<{ children: ReactNode }>) {
+export function SocialSession({ children, initialSelection = null }: Readonly<{ children: ReactNode; initialSelection?: AccountSession | null }>) {
   return (
-    <WalletSessionProvider>
+    <WalletSessionProvider initialSelection={initialSelection}>
       <SocialSessionViewer>{children}</SocialSessionViewer>
     </WalletSessionProvider>
   );
 }
 
 function SocialSessionViewer({ children }: Readonly<{ children: ReactNode }>) {
-  const privy = usePrivySession();
+  const privy = useActivePrivySession();
   useRestorePrivyWallet(privy.ready && privy.authenticated ? privy.user?.wallet : undefined);
   const wallet = useWalletSession();
   const account = useSocialAccountRead();
@@ -65,22 +67,23 @@ function SocialSessionViewer({ children }: Readonly<{ children: ReactNode }>) {
     });
     return () => controller.abort();
   }, [privyId, getAccessToken, client]);
-  const { end } = wallet;
+  const { end, keepAccount } = wallet;
   const { logout: privyLogout } = privy;
   const logout = useCallback(async () => {
     await end();
     await privyLogout();
-  }, [end, privyLogout]);
+    keepAccount(null);
+  }, [end, keepAccount, privyLogout]);
   const activityEnabled = isAccountActivityEnabled();
   const activitySession = activityEnabled
-    ? settledActivitySession(account, privy, wallet.active)
+    ? settledActivitySession(account, privy, privy.walletActive)
     : null;
   return (
     <SocialAccountContext value={account}>
       <SocialViewerProvider
         sessionIdentity={account.sessionIdentity}
         accountId={account.account?.account_id ?? null}
-        {...socialViewerProps({ ...privy, logout }, account, wallet.active)}
+        {...socialViewerProps({ ...privy, logout }, account, privy.walletActive)}
       >
         {activityEnabled && <AccountActivity session={activitySession} />}
         {children}
