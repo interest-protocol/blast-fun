@@ -56,7 +56,6 @@ import { AmountFit } from "#web/components/blast-ui/AmountFit.tsx";
 import { canTrade, pairFor, pickedPair, tradeTitle, type SwapPair } from "./swap-model";
 import { SwapForm, type CoinSheetTrading } from "./SwapForm";
 import { useCommitKit } from "../feed-ui/shell-bridge";
-import { useCommitClock } from "../commit/commit-clock";
 import { CommitReceipt } from "../commit/CommitReceipt";
 import type { ContributionReceipt } from "../commit/commit-receipt";
 import { InlineCommit } from "../commit/InlineCommit";
@@ -278,7 +277,6 @@ function CoinPickerRow({ coin, balanceKnown, hidden, disabled, onPick }: Readonl
 
 function CoinSheetForm(props: CoinSheetProps & Readonly<{ titleId: string; onConfirmed: (receipt: ContributionReceipt) => void }>) {
   const commitKit = useCommitKit();
-  const commitNowMs = useCommitClock();
   const storedPins = useCoinPins();
   const [browsers, setBrowsers] = useState<Readonly<Record<string, CoinBrowserState>>>({});
   const browser = (mode: string) => ({ state: browsers[mode] ?? EMPTY_COIN_BROWSER, onState: (state: CoinBrowserState) => setBrowsers(current => ({ ...current, [mode]: state })) });
@@ -438,7 +436,7 @@ function CoinSheetForm(props: CoinSheetProps & Readonly<{ titleId: string; onCon
     // OA-48: named for the action that opened it (`Buy KSTL`, `Sell KSTL`, `Trade`); the flip and the picker re-name it at once.
     if (outCoin.presale?.inPresale) return <>
       <CoinHead canBack={canBack} coin={outCoin} id={props.titleId} pending={purchasePending} onBack={() => back()} onChangeCoin={() => go({ kind: "pickt", side: "out" })} title={`Buy ${outCoin.symbol}`} />
-      {commitKit ? <InlineCommit key={outCoin.presale.presaleId} kit={commitKit} presaleId={outCoin.presale.presaleId} nowMs={commitNowMs}
+      {commitKit ? <InlineCommit key={outCoin.presale.presaleId} kit={commitKit} presaleId={outCoin.presale.presaleId}
         purchase={{ active: props.open, onConfirmed: props.onConfirmed, initialPayCoin: inCoin.coinType, initialPaymentCoin: inCoin,
           draft: purchaseDrafts[outCoin.key], onDraftChange: savePurchaseDraft, onDetails: props.onClose, onPendingChange }}
         fallback={<PresaleLoading symbol={outCoin.symbol} quoteSymbol={outCoin.presale.quoteSymbol} />} /> : <div className={commitStyles.purchaseRead}><p role="status">Presale purchases are unavailable here.</p><Link className={commitStyles.detailsLink} href={`/presale/${outCoin.presale.presaleId}`} onClick={props.onClose} prefetch={false}>Presale details →</Link></div>}

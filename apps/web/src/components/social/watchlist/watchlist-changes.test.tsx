@@ -23,7 +23,7 @@ const price = (n: number, change: number | null): SocialPriceHistory => ({
 const router = { bfcacheId: "test", back() {}, forward() {}, refresh() {}, hmrRefresh() {}, push() {}, replace() {}, prefetch: async () => {} };
 
 /** The card for a visitor's given rows, the prices read answered by `answer` (its first call's path recorded). */
-async function mount(t: TestContext, answer: () => Promise<Response>) {
+async function mount(t: TestContext, answer: () => Promise<Response>, rows = [coin(1, "CETUS", "0.0951"), coin(2, "NAVX", "0.0412"), coin(3, "QUIET", "0.5")]) {
   const client = createTestQueryClient();
   const asked: string[] = [];
   const originalFetch = globalThis.fetch;
@@ -41,7 +41,7 @@ async function mount(t: TestContext, answer: () => Promise<Response>) {
     globalThis.fetch = originalFetch;
   });
   await act(async () => root.render(<QueryProvider client={client}><AppRouterContext value={router}>
-    <WatchlistCard nowMs={0} rows={[coin(1, "CETUS", "0.0951"), coin(2, "NAVX", "0.0412"), coin(3, "QUIET", "0.5")]} />
+    <WatchlistCard nowMs={0} rows={rows} />
   </AppRouterContext></QueryProvider>));
   const values = () => [...container.querySelectorAll(".v")].map((cell) => [...cell.children].map((child) => child.className === "text" ? "skeleton" : `${child.className}:${child.textContent}`));
   const waitForPrices = () => waitFor(
@@ -71,4 +71,13 @@ test("a failed prices read leaves each coin row's price alone, with no change li
   const { values, waitForPrices } = await mount(t, async () => new Response(null, { status: 503 }));
   await waitForPrices();
   assert.deepEqual(values(), [[":$0.0951"], [":$0.0412"], [":$0.5"]]);
+});
+
+test("an open sale's row counts its time left down on its own", async (t) => {
+  t.mock.timers.enable({ apis: ["setInterval", "Date"], now: 1_000_000 });
+  const sale: WatchlistRow = { ...coin(1, "OPENS", "0"), phase: "open", price_usd: null, multiple: null, end_ms: 1_090_000, fill_pct: 73 };
+  const { container } = await mount(t, async () => new Response(null, { status: 503 }), [sale]);
+  assert.match(container.textContent!, /73% filled · 1m 30s left/);
+  await act(async () => { t.mock.timers.tick(5_000); });
+  assert.match(container.textContent!, /73% filled · 1m 25s left/);
 });

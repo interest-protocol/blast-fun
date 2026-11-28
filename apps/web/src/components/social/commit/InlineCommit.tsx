@@ -6,6 +6,7 @@ import { diagnosticMessage, publicErrorMessage } from "#web/lib/errors.ts";
 import { useState, useRef, useSyncExternalStore, useEffect, useLayoutEffect, type ReactNode } from "react";
 
 import { walletCoinViews, type WalletCoinView } from "../coins/coin-model";
+import { useCommitClock } from "./commit-clock";
 import type { CommitFacts, CommitKit } from "./commit-kit";
 import type { QuoteSnapshot } from "./commit-quote";
 import { commitFactsAt, viaEntryOf } from "./commit-view";
@@ -64,10 +65,9 @@ type InlineCommitPurchase = Readonly<{
   onConfirmed?: (receipt: ContributionReceipt) => void;
 }>;
 
-export function InlineCommit({ kit, presaleId, nowMs, fallback, onCommitted, purchase: purchaseState }: Readonly<{
+export function InlineCommit({ kit, presaleId, fallback, onCommitted, purchase: purchaseState }: Readonly<{
   kit: CommitKit;
   presaleId: string;
-  nowMs: number;
   fallback: ReactNode;
   onCommitted?: () => void;
   purchase?: InlineCommitPurchase;
@@ -89,6 +89,8 @@ export function InlineCommit({ kit, presaleId, nowMs, fallback, onCommitted, pur
   // The pay coin the person picked outlives that fresh panel and any re-read: only the amount and why reset.
   const [payCoin, setPayCoin] = useState<WalletCoinView | undefined>(undefined);
   const draftChange = (next: CommitDraft) => { setPayCoin(next.paymentCoin); onDraftChange?.(next); };
+  // Its own clock: a second's tick redraws this panel, not the page or sheet around it.
+  const nowMs = useCommitClock();
   const facts = commitFactsAt(snapshot.facts, nowMs);
   const sale = facts?.sale ?? null;
   if (facts === null && (snapshot.loading || !snapshot.failed)) return <div className={purchase ? styles.purchaseRead : undefined} aria-busy="true" data-presale-state="loading">{fallback}</div>;
