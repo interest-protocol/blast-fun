@@ -26,6 +26,7 @@ import type { SocialWallet } from "@blast/core/web/contracts/coins.ts";
 import { useTradeKit } from "../feed-ui/shell-bridge";
 import { presaleDetailQuery, walletIdentityQuery, walletIdentityScope, walletQuery } from "../queries";
 import { useSocialViewer } from "../SignInGate";
+import { useSocialAccount } from "../use-social-account";
 import { requestTradeQuote } from "../trades/trades-client";
 import { useBalancesContext } from "./balances";
 import { CoinSheet, type CoinSheetProps, type CoinSheetTrading, type CoinSheetWallet, type TradeAsk, type TradeOutcome, type WithdrawAsk } from "./CoinSheet";
@@ -37,6 +38,7 @@ import { walletSessionSigner } from "./signers-model";
 import { blastWalletSigner } from "../commit/commit-signers";
 import { fetchListedTradeCoins, fetchTradeCoins, presaleCoinView } from "./swap-client";
 import { encodeTradeAction, tradableCoinView, tradeOpening, type TradeAction } from "./swap-model";
+import { clearWithdrawReceipt, readWithdrawReceipt, saveWithdrawReceipt } from "./withdraw-attempt";
 import { runWithdraw } from "./withdraw-flow";
 import { refreshWalletCoinBalance } from "./use-wallet-coin-balance";
 
@@ -148,6 +150,7 @@ export function CoinsHost({ inlineSale, inlineTrade, opening, active = true }: R
   const { hideSmallBalances } = useShellPrefs();
   const pinnedKeys = JSON.stringify(useCoinPins());
   const viewer = useSocialViewer();
+  const { account } = useSocialAccount();
   const accountId = viewer.signedIn ? walletIdentityScope(viewer) : null;
   const walletSession = useRef<AbortController | null>(null);
   const tradeKit = useTradeKit();
@@ -282,10 +285,18 @@ export function CoinsHost({ inlineSale, inlineTrade, opening, active = true }: R
       toast(diagnosticMessage("Your Blast wallet is not ready. Reload and try again.", { code: "blast_wallet_missing" }));
       return false;
     }
-    const key = `${accountId}|${signer.address}|${ask.coin.coinType}|${ask.atoms}|${ask.recipient}`;
-    if (attempt.current?.key !== key) attempt.current = { key, requestId: newRequestId(), digest: null };
+    const key = `${account?.account_id ?? accountId}|${signer.address}|${ask.coin.coinType}|${ask.atoms}|${ask.recipient}`;
+    if (attempt.current?.key !== key) {
+      const receipt = readWithdrawReceipt(key);
+      attempt.current = { key, requestId: receipt?.requestId ?? newRequestId(), digest: receipt?.digest ?? null };
+    }
     const current = attempt.current;
+    const rememberDigest = (digest: string) => {
+      current.digest = digest;
+      saveWithdrawReceipt(key, { requestId: current.requestId, digest });
+    };
     const releaseAttempt = () => {
+      clearWithdrawReceipt(key);
       if (attempt.current === current) attempt.current = null;
     };
     if (client.current === null) client.current = mainnet();
@@ -295,14 +306,12 @@ export function CoinsHost({ inlineSale, inlineTrade, opening, active = true }: R
         client: client.current,
         signer,
         knownDigest: current.digest,
-        onDigest: (digest) => {
-          current.digest = digest;
-        },
+        onDigest: rememberDigest,
       },
       { requestId: current.requestId, coinType: ask.coin.coinType, atoms: ask.atoms, recipient: ask.recipient },
     );
     if (result.status === "pending") {
-      current.digest = result.digest;
+      if (current.digest !== result.digest) rememberDigest(result.digest);
       toast(`${diagnosticMessage("Withdrawal is still being confirmed. Retry to check it; this will not send it again.", { code: "execution_unconfirmed" })} Transaction: ${result.digest}.`);
       balances.changed();
       return "pending";

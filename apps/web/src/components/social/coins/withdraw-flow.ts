@@ -18,6 +18,7 @@ import {
 import type { ApiResult, SocialApiOptions } from "#web/components/social/social-api.ts";
 import { putTransfer } from "./coins-client";
 import { USDC_MIN_WITHDRAW_ATOMS } from "./coin-model";
+import { duringWithdrawalBroadcast } from "./withdraw-attempt";
 import { USDC_COIN_TYPE } from "@blast/core/lib/sui/coin-types.ts";
 
 /**
@@ -178,10 +179,12 @@ async function sendGasless(deps: WithdrawDependencies, request: WithdrawRequest,
   }
   if (deps.api.signal?.aborted) return notSent(CANCELLED);
 
-  const signature = signed.signature;
   const digest = TransactionDataBuilder.getDigestFromBytes(bytes);
-  deps.onDigest?.(digest);
-  return settleSent(deps, request, await executeOnFullnode(deps.client, bytes, signature), digest, bytes);
+  const sent = await duringWithdrawalBroadcast(() => {
+    deps.onDigest?.(digest);
+    return executeOnFullnode(deps.client, bytes, signed.signature);
+  });
+  return settleSent(deps, request, sent, digest, bytes);
 }
 
 /** Any other coin, on Blast's gas: the sponsor's `withdraw` intent pays the fee. */
@@ -206,13 +209,16 @@ async function sendSponsored(deps: WithdrawDependencies, request: WithdrawReques
   }
   if (deps.api.signal?.aborted) return notSent(CANCELLED);
 
-  const sent = await signed.send();
+  const sent = await duringWithdrawalBroadcast(async () => {
+    const answer = await signed.send();
+    // A lost reply may follow a send. Keep that digest and settle these exact bytes.
+    if (answer.status !== "refused") deps.onDigest?.(signed.digest);
+    return answer;
+  });
   if (sent.status === "refused") {
     return refusedWithdrawal(sent.refusal);
   }
 
-  // Executed, or possibly sent (a lost reply): settle these exact bytes, never build another withdrawal.
-  deps.onDigest?.(signed.digest);
   return settleSent(deps, request, sent, signed.digest, signed.bytes);
 }
 
