@@ -79,6 +79,7 @@ async function mount(sdk: BridgeSdk, calls: Calls, wallet: SourceWallet | null =
   const text = () => container.textContent ?? "";
   return {
     container,
+    client,
     button,
     text,
     rerender: render,
@@ -318,20 +319,24 @@ test("a terminal Fast MCTP history row wins over a cached pending status", async
 
 test("a failed history read offers a retry and a successful empty read clears it", async () => {
   const calls = newCalls();
-  let failed = true;
+  let reads = 0;
+  const answer = Promise.withResolvers<BridgeRow[]>();
   const sdk = fakeSdk(calls, [], { history: async () => {
-    if (failed) throw new Error("Mayan unavailable");
-    return [];
+    if (++reads <= 2) throw new Error("Mayan unavailable");
+    return answer.promise;
   } });
-  const form = await mount(sdk, calls);
+  const form = await mount(sdk, calls, evm(), { retryDelay: 0 });
   try {
     const retry = await waitFor(() => [...form.container.querySelectorAll("button")].find((button) => button.textContent === "Retry history"), "the history retry action");
     assert.match(form.text(), /Couldn’t load recent bridges/);
     assert.match(form.text(), /Code: bridge_history_failed\./);
-    failed = false;
     await act(async () => retry.click());
-    await waitFor(() => !form.text().includes("Recent bridges"), "the recovered empty history");
+    await waitFor(() => reads === 3, "the manual history retry starts");
+    await act(async () => answer.resolve([]));
+    await waitFor(() => form.client.getQueryState(["bridge", "history", BLAST])?.status === "success", "the retry settles successfully");
+    assert.doesNotMatch(form.text(), /Recent bridges/);
   } finally {
+    answer.resolve([]);
     await form.unmount();
   }
 });
@@ -437,17 +442,48 @@ test("closing Bridge while the fresh quote is on its way opens no wallet", async
 test("closing Bridge while the allowance is checked opens no wallet", async () => {
   const calls = newCalls();
   let hold = false;
-  let release: (enough: boolean) => void = () => undefined;
+  const started = Promise.withResolvers<void>();
+  const allowance = Promise.withResolvers<boolean>();
   const sdk = fakeSdk(calls, [QUOTE]);
-  const form = await mount({ ...sdk, allowanceEnough: (...args) => hold ? new Promise<boolean>((resolve) => { release = resolve; }) : sdk.allowanceEnough(...args) }, calls);
+  const form = await mount({ ...sdk, allowanceEnough: (...args) => {
+    if (!hold) return sdk.allowanceEnough(...args);
+    started.resolve();
+    return allowance.promise;
+  } }, calls);
   await form.pickUsdc();
   await form.type("20");
   hold = true;
   await act(async () => form.button().click());
-  await waitFor(() => form.button().hasAttribute("aria-busy"), "the press is running");
+  await started.promise;
   await form.unmount();
-  await act(async () => release(true));
+  await act(async () => allowance.resolve(true));
   assert.equal(calls.sends, 0);
+});
+
+test("history can confirm a watched bridge before the status read does", async () => {
+  const calls = newCalls();
+  const listed: BridgeRow = { hash: "0xhash", chain: "base", fromAmount: "20", fromSymbol: "USDC", toAmount: "29.81", toSymbol: "SUI", state: "done", at: new Date(BEFORE_EXPIRY).toISOString() };
+  let arrived = false;
+  const status = Promise.withResolvers<{ state: "done"; toAmount: string }>();
+  const form = await mount(fakeSdk(calls, [QUOTE], {
+    history: async () => arrived ? [listed] : [],
+    status: () => status.promise,
+  }), calls);
+  try {
+    await form.pickUsdc();
+    await form.type("20");
+    await form.press();
+    await waitFor(() => /On the way/.test(form.text()), "the pending bridge");
+    arrived = true;
+    await act(async () => { await form.client.invalidateQueries({ queryKey: ["bridge", "history", BLAST] }); });
+    await waitFor(() => calls.arrived === 1, "history confirms arrival");
+    await act(async () => status.resolve({ state: "done", toAmount: "29.81" }));
+    await form.remount();
+    assert.equal(calls.arrived, 1, "the status result and reopened history do not announce twice");
+  } finally {
+    status.resolve({ state: "done", toAmount: "29.81" });
+    await form.unmount();
+  }
 });
 
 test("closing Bridge while the SDK prepares the send aborts it before the wallet", async () => {
