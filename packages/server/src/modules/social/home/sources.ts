@@ -1,8 +1,9 @@
 import pg from "pg";
 import { SUI_COIN_TYPE } from "@blast/core/lib/sui/coin-types.ts";
 import { INDEXED_POOL_COINS } from "@blast/core/modules/social/portfolio/core-coins.ts";
-import { SHOWN_PRESALES } from "@blast/core/modules/social/read-model/chain-presales.ts";
-import { HOME_PAGE_MAX } from "@blast/core/modules/social/contracts/home.ts";
+import { PUBLIC_PRESALES, SHOWN_PRESALES } from "@blast/core/modules/social/read-model/chain-presales.ts";
+import { CREATE_TEST_SUI_QUOTE_TYPE } from "@blast/core/modules/social/contracts/create.ts";
+import { HOME_NEW_LIMIT, HOME_PAGE_MAX } from "@blast/core/modules/social/contracts/home.ts";
 import { chainPriceOf } from "@blast/core/modules/social/prices/keyed.ts";
 import { HOME_DUST_USD } from "@blast/server/modules/social/home/rank.ts";
 
@@ -25,7 +26,8 @@ const TRACKED_POOL_SOURCE = `UNION ALL
  * The opening round is left out: its price is not public until it closes.
  * Their source lifecycle is `migrated` like every listed coin (it means
  * "has a market"); the curve's own lifecycle reaches the item as
- * `HomeCoin.curve.lifecycle` through the facts read. `where` narrows them.
+ * `HomeCoin.curve.lifecycle` through the facts read. `where` narrows them;
+ * `columns` adds more (New: the curve's creation as `launched_ms`).
  */
 const liveCurves = (where = "", columns = "") => `SELECT lp.coin_type AS sale_token,coalesce(m.symbol,m.name,lp.coin_type) AS sale_symbol,
       coalesce(m.name,m.symbol,lp.coin_type) AS sale_name,m.icon_url AS sale_icon_url,m.decimals AS sale_decimals,
@@ -121,3 +123,48 @@ export const homeClosestCurveSources = (tradedIn: string, testQuote: string) => 
     ORDER BY c.sale_token,c.created_checkpoint,c.pool_id) c
   ORDER BY c.recently_traded DESC,c.filled DESC NULLS LAST,c.sale_token
   LIMIT ${HOME_CLOSEST_CURVES})`;
+
+/**
+ * Discover's New list (`stage=new`): the coins launched after `from` (a
+ * bigint SQL expression), newest first, at most `HOME_NEW_LIMIT`. A live
+ * curve and a curve coin that migrated count from their curve's creation, a
+ * sale from its migration: the `launched_ms` the facts read gives each, so
+ * the age filter agrees with this cut. Catalog coins never launched here.
+ * Test-SUI markets are cut before the limit, so they never take a place.
+ * Same columns as `homeCoinSources`; the per-coin reads see only these.
+ */
+export const homeNewCoinSources = (from: string) => `(SELECT n.source_id,n.presale_id,n.sale_token,n.sale_symbol,n.sale_name,n.sale_icon_url,
+  n.sale_decimals,n.lifecycle,n.venue,n.pool_id,n.quote_type,n.quote_symbol,n.quote_decimals,
+  n.start_ms,n.end_ms,n.raise_target,n.total_commitments,n.participants,n.tracked_pool_only
+  FROM (
+  SELECT p.presale_id AS source_id,p.presale_id,p.sale_token,p.sale_symbol,p.sale_name,p.sale_icon_url,
+    p.sale_decimals,p.lifecycle,p.venue,p.pool_id,p.quote_type,p.quote_symbol,p.quote_decimals,
+    p.start_ms,p.end_ms,p.raise_target,p.total_commitments,p.participants,FALSE AS tracked_pool_only,lc.migrated_ms AS launched_ms
+  FROM ${PUBLIC_PRESALES} p
+  CROSS JOIN LATERAL (
+    SELECT max(l.timestamp_ms) AS migrated_ms FROM chain_read_v1.presale_lifecycle l WHERE l.presale_id = p.presale_id AND l.state = 'migrated'
+  ) lc
+  WHERE p.lifecycle = 'migrated' AND lc.migrated_ms > ${from}
+  UNION ALL
+  (SELECT DISTINCT ON (c.sale_token) c.sale_token,NULL::text,c.sale_token,c.sale_symbol,c.sale_name,c.sale_icon_url,
+    c.sale_decimals,'migrated'::text,c.venue,c.pool_id,c.quote_type,c.quote_symbol,c.quote_decimals,
+    NULL::bigint,NULL::bigint,NULL::numeric,NULL::numeric,NULL::bigint,c.tracked_pool_only,c.launched_ms
+  FROM (
+    SELECT v.meme_type AS sale_token,coalesce(m.symbol,m.name,v.meme_type) AS sale_symbol,
+      coalesce(m.name,m.symbol,v.meme_type) AS sale_name,m.icon_url AS sale_icon_url,m.decimals AS sale_decimals,
+      v.venue,v.pool_id,v.quote_type,q.symbol AS quote_symbol,q.decimals AS quote_decimals,
+      FALSE AS tracked_pool_only,v.created_checkpoint,v.created_tx_slot,v.created_event_slot,v.vault_id,lp.created_at_ms AS launched_ms
+    FROM chain_read_v1.vaults v
+    JOIN chain_read_v1.pools lp ON lp.coin_type=v.meme_type AND lp.venue='blast_curve' AND lp.created_at_ms > ${from}
+    JOIN chain_read_v1.coin_metadata m ON m.coin_type=v.meme_type
+    JOIN chain_read_v1.coin_metadata q ON q.coin_type=v.quote_type
+    WHERE v.origin_kind='launch' AND m.decimals IS NOT NULL AND q.decimals IS NOT NULL AND q.symbol IS NOT NULL
+    UNION ALL ${liveCurves(`
+      AND lp.created_at_ms > ${from}`, ",lp.created_at_ms AS launched_ms")}
+  ) c
+  WHERE c.quote_type IS DISTINCT FROM ${pg.escapeLiteral(CREATE_TEST_SUI_QUOTE_TYPE)}
+    AND NOT EXISTS (SELECT 1 FROM chain_read_v1.presales p WHERE p.sale_token=c.sale_token)
+  ORDER BY c.sale_token,c.created_checkpoint,c.created_tx_slot,c.created_event_slot,c.vault_id)
+  ) n
+  ORDER BY n.launched_ms DESC,n.source_id
+  LIMIT ${HOME_NEW_LIMIT})`;

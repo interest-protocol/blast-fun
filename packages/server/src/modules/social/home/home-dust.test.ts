@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { HOME_DEFAULT_QUERY } from "@blast/core/modules/social/contracts/home.ts";
-import { curveOf, isBlastDust, raiseUsdOf } from "@blast/server/modules/social/home/coins.ts";
+import { HOME_DEFAULT_QUERY, HOME_NEW_LIMIT } from "@blast/core/modules/social/contracts/home.ts";
+import { curveOf, homeDiscoverBaseKey, isBlastDust, raiseUsdOf } from "@blast/server/modules/social/home/coins.ts";
+import { homeNewCoinSources } from "@blast/server/modules/social/home/sources.ts";
 import { encodeCursor } from "@blast/server/modules/social/home/codec.ts";
 import { decodeHomeCursor, encodeHomeCursor, HOME_DUST_USD, homeOrder, pageOf, passesFilters, type Rankable } from "@blast/server/modules/social/home/rank.ts";
 
@@ -160,4 +161,19 @@ test("curve progress is a percent of each curve's own target, so SUI and USDC cu
   assert.deepEqual(curveOf(facts("live", "1", "0")), { lifecycle: "live", progress_bps: null, quote_remaining: null });
   assert.equal(curveOf(facts("unknown", "1", "2")), null);
   assert.equal(curveOf({ curve_lifecycle: null, quote_reserve: null, graduation_target: null }), null);
+});
+
+test("New has its own capped base and key; its age narrows that base", () => {
+  const context = { nowMs: 0, hiddenKinds: [], terms: null };
+  const key = (stage: "all" | "new" | "almost" | "graduated") => homeDiscoverBaseKey("24h", stage, context);
+  assert.notEqual(key("new"), key("all"));
+  assert.notEqual(key("new"), key("almost"));
+  assert.equal(key("graduated"), key("all"), "Graduated filters the whole list");
+  assert.match(homeNewCoinSources("$3::bigint"), new RegExp(`ORDER BY n\\.launched_ms DESC,n\\.source_id\\s+LIMIT ${HOME_NEW_LIMIT}\\)$`));
+  const now = 10 * 86_400_000;
+  const candidate = { participants: 0, launchedMs: now - 2 * 3_600_000, tradable: false, knownDeployer: false, listed: false, progressBps: 100, nowMs: now };
+  const fresh = { ...HOME_DEFAULT_QUERY, stage: "new" as const };
+  assert.equal(passesFilters({ ...fresh, age: "24h" }, candidate), true, "a curve still filling is new");
+  assert.equal(passesFilters({ ...fresh, age: "1h" }, candidate), false);
+  assert.equal(passesFilters({ ...fresh, age: "1h" }, { ...candidate, launchedMs: now - 60_000 }), true);
 });

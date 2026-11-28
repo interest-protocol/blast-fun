@@ -7,7 +7,7 @@ import { namedWalletsOfSql, namedWalletsSql } from "@blast/core/modules/social/r
 import { tinyTradeSql, tradeUnderUsdSql } from "@blast/core/modules/social/read-model/trade-size.ts";
 import { SocialRouteError } from "@blast/core/modules/social/route-kit/errors.ts";
 
-import { HOME_DISCOVER_COIN_SOURCES, HOME_LIST_COIN_SOURCES, homeClosestCurveSources, homeTrendingCoinSources } from "@blast/server/modules/social/home/sources.ts";
+import { HOME_DISCOVER_COIN_SOURCES, HOME_LIST_COIN_SOURCES, homeClosestCurveSources, homeNewCoinSources, homeTrendingCoinSources } from "@blast/server/modules/social/home/sources.ts";
 
 import { HOME_KINDS, HOME_WINDOW_MS, type HomeWindow } from "@blast/core/modules/social/contracts/home.ts";
 
@@ -89,7 +89,8 @@ export function homeSpan(window: HomeWindow, bounds: HomeBounds): HomeSpan {
 /**
  * Which markets a read attributes: public Discover (`almost`: only its
  * Closest to graduating curves, `homeClosestCurveSources`, the ones traded
- * in its span first), all shown sales, or
+ * in its span first; `launched`: only the coins launched after `fromMs`,
+ * `homeNewCoinSources`), all shown sales, or
  * specific markets. `includeStandalone` widens `all` and `ids` from shown
  * presales to every listed coin (`HOME_LIST_COIN_SOURCES`: presales, launch
  * vault coins, live curves and tracked pools), keyed by presale id or coin
@@ -98,7 +99,7 @@ export function homeSpan(window: HomeWindow, bounds: HomeBounds): HomeSpan {
  * and its `curves` the live curves traded in the window (`tradedCurveSql`).
  */
 export type SaleScope =
-  | Readonly<{ kind: "discover"; almost?: TradedCurves; presales?: Readonly<{ clockMs: number; fromMs: number }>; curves?: TradedCurves }>
+  | Readonly<{ kind: "discover"; almost?: TradedCurves; launched?: Readonly<{ fromMs: number }>; presales?: Readonly<{ clockMs: number; fromMs: number }>; curves?: TradedCurves }>
   | Readonly<{ kind: "all"; includeStandalone?: boolean }>
   | Readonly<{ kind: "ids"; presaleIds: readonly string[]; includeStandalone?: boolean }>;
 
@@ -166,6 +167,7 @@ function tradedCurveSql(curves: TradedCurves, params: Params): string {
 
 function discoverSourcesSql(scope: Extract<SaleScope, { kind: "discover" }>, params: Params): string {
   if (scope.almost) return homeClosestCurveSources(tradedCurveSql(scope.almost, params), `${params.add(CREATE_TEST_SUI_QUOTE_TYPE)}::text`);
+  if (scope.launched) return homeNewCoinSources(`${params.add(scope.launched.fromMs)}::bigint`);
   return scope.curves ? homeTrendingCoinSources(tradedCurveSql(scope.curves, params)) : HOME_DISCOVER_COIN_SOURCES;
 }
 
@@ -208,8 +210,13 @@ export function rowsWithSql(request: RowsRequest, params: Params): string {
     ? `home_named AS MATERIALIZED (${namedWalletsOfSql("ARRAY(SELECT DISTINCT r.actor FROM home_rows r)")}),`
     : "";
   const source = scopedHomeCoinsSql(sales, params);
-  // At most `HOME_CLOSEST_CURVES` curves, all without a sale: their own rows through the coin index, not the whole window.
-  const fewCoins = sales.kind === "discover" && sales.almost ? "AND a.coin_type IN (SELECT hs.coin_type FROM home_sales hs)" : "";
+  // A few coins: their own rows through the coin and sale indexes, not the whole window
+  // (Closest to graduating: at most `HOME_CLOSEST_CURVES` curves, all without a sale).
+  const fewCoins = sales.kind !== "discover" ? ""
+    : sales.almost ? "AND a.coin_type IN (SELECT hs.coin_type FROM home_sales hs)"
+    : sales.launched ? `AND (a.coin_type IN (SELECT hs.coin_type FROM home_sales hs)
+        OR a.presale_id IN (SELECT hs.presale_id FROM home_sales hs WHERE hs.presale_id IS NOT NULL))`
+    : "";
   const tradeFloor = minTradeUsd === undefined ? "" : minTradeSql(minTradeUsd, params);
   const tinyFloor = keepTiny ? "" : `AND NOT ${tinyTradeSql("a")}`;
   return `WITH home_sales AS (

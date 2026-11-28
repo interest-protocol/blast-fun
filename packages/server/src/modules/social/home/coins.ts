@@ -21,6 +21,7 @@ import {
   HOME_TOP_HOLDERS,
   HOME_WINDOW_MS,
   HOME_MAX_HOLDERS,
+  HOME_NEW_SPAN_MS,
   type HomeActivity,
   type HomeTopHolders,
   type HomeCoin,
@@ -1036,8 +1037,12 @@ export type HomeDiscoverBase = Readonly<{
   trackedMarkets?: TrackedMarkets;
 }>;
 
-/** Which coins a {@link HomeDiscoverBase} holds: Closest to graduating reads its bounded curves alone (`homeClosestCurveSources`); every other stage, the whole list. */
-const baseSetOf = (stage: HomeStage) => (stage === "almost" ? "almost" : "all");
+/**
+ * Which coins a {@link HomeDiscoverBase} holds: Closest to graduating reads its
+ * bounded curves alone (`homeClosestCurveSources`), New its newest launches
+ * (`homeNewCoinSources`); every other stage, the whole list.
+ */
+const baseSetOf = (stage: HomeStage) => (stage === "almost" || stage === "new" ? stage : "all");
 /** Presales, and live curves traded in the window, join the whole list only: the Closest to graduating curves never hold one. */
 const basePresales = (stage: HomeStage, context: HomeReadContext) => baseSetOf(stage) === "all" && Boolean(context.includePresales);
 
@@ -1066,6 +1071,8 @@ export async function readHomeDiscoverBase(db: ReadableDatabase, window: HomeWin
     kind: "discover",
     // Closest to graduating ranks the curves traded in the last 24 hours first, whatever the window.
     ...(baseSetOf(stage) === "almost" ? { almost: { fromMs: bounds.clockMs - HOME_WINDOW_MS["24h"], toMs: bounds.clockMs, marketCheckpoint: bounds.marketCheckpoint, kinds: tradeKinds } } : {}),
+    // New's widest age: the age filter then narrows the same base (`passesFilters`).
+    ...(baseSetOf(stage) === "new" ? { launched: { fromMs: bounds.clockMs - HOME_NEW_SPAN_MS } } : {}),
     ...(basePresales(stage, context) ? {
       presales: { clockMs: bounds.clockMs, fromMs: span.fromMs },
       // Live curves join Trending only once traded in the window, so the per-coin reads stay off the idle thousand (#71).
@@ -1085,7 +1092,8 @@ export async function readHomeDiscoverBase(db: ReadableDatabase, window: HomeWin
       const id = row.presale_id ?? row.coin_type;
       return commits && isPresaleNotTrading(row) ? saleCandidateOf(row, counts.get(id), commits.get(id), span) : candidateOf(row, counts.get(id), span);
     })
-    .filter((candidate) => !isBlastDust(candidate.facts, candidate.marketCapUsd));
+    // A fresh curve starts under the dust line; New lists every launch (its base is capped instead).
+    .filter((candidate) => baseSetOf(stage) === "new" || !isBlastDust(candidate.facts, candidate.marketCapUsd));
   const [{ candidates, markets: trackedMarkets }, dexVolumes] = await Promise.all([
     withTrackedMarket(live, context, step),
     context.includeDexVolume ? step("base_dex_volumes", () => readDexVolumes(db, onDex(live.map(({ facts }) => facts).filter((row) => !isPresaleNotTrading(row))), span.window, bounds, kinds)) : undefined,

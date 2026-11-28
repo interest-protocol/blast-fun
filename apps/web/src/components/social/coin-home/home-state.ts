@@ -1,13 +1,16 @@
 import {
   HOME_DEFAULT_QUERY,
+  HOME_NEW_DEFAULT_AGE,
   HOME_PAGE_DEFAULT,
   HOME_PAGE_LAST,
   isHomeAge,
+  isHomeNewAge,
   isHomeSort,
   isHomeSource,
   isHomeStage,
   isHomeWindow,
   type HomeAge,
+  type HomeNewAge,
   type HomeQuery,
   type HomeSort,
   type HomeSource,
@@ -27,7 +30,7 @@ import {
  */
 export type HomeViewState = Readonly<{
   source: HomeSource;
-  /** Which coins Discover lists: every coin, the curves closest to graduating, or coins on a DEX. */
+  /** Which coins Discover lists: every coin, the curves closest to graduating, the newest launches, or coins on a DEX. */
   stage: HomeStage;
   sort: HomeSort;
   window: HomeWindow;
@@ -87,7 +90,8 @@ export function viewStateOf(params: URLSearchParams): HomeViewState {
   const filters = {
     window: isHomeWindow(window) ? window : HOME_DEFAULT_VIEW.window,
     minParticipants,
-    age: isHomeAge(age) ? age : HOME_DEFAULT_VIEW.age,
+    // New offers its own ages only; any other reads as its default.
+    age: stage === "new" ? (isHomeNewAge(age) ? age : HOME_NEW_DEFAULT_AGE) : isHomeAge(age) ? age : HOME_DEFAULT_VIEW.age,
     tradable: params.get(KEYS.tradable) === "1",
     knownDeployer: params.get(KEYS.knownDeployer) === "1",
   };
@@ -132,7 +136,7 @@ export function viewSearchOf(state: HomeViewState): string {
   if (sorted) params.set(KEYS.sort, state.sort);
   if (state.window !== HOME_DEFAULT_VIEW.window) params.set(KEYS.window, state.window);
   if (state.minParticipants !== 0) params.set(KEYS.minParticipants, String(state.minParticipants));
-  if (state.age !== "all") params.set(KEYS.age, state.age);
+  if (state.age !== stageDefaultAge(state.stage)) params.set(KEYS.age, state.age);
   if (state.tradable) params.set(KEYS.tradable, "1");
   if (state.knownDeployer) params.set(KEYS.knownDeployer, "1");
   if (state.page > 1) params.set(KEYS.page, String(state.page));
@@ -165,9 +169,10 @@ export function discoverQueryOf(state: HomeViewState, rows: number = HOME_PAGE_D
   return { ...HOME_DEFAULT_QUERY, stage: state.stage, sort: state.sort, window: state.window, minParticipants: state.minParticipants, age: state.age, tradable: state.tradable, knownDeployer: state.knownDeployer, limit: rows, page: state.page, presales: true };
 }
 
-/** How many filters are away from their default (the Filters button's badge). */
-export function activeFilterCount(state: Pick<HomeViewState, "age" | "minParticipants" | "tradable" | "knownDeployer">): number {
-  return (state.minParticipants !== 0 ? 1 : 0) + (state.age !== "all" ? 1 : 0) + (state.tradable ? 1 : 0) + (state.knownDeployer ? 1 : 0);
+/** How many filters are away from their default (the Filters button's badge). New's age is its own control, not a filter. */
+export function activeFilterCount(state: Pick<HomeViewState, "age" | "minParticipants" | "tradable" | "knownDeployer"> & Partial<Pick<HomeViewState, "stage">>): number {
+  const age = state.stage !== "new" && state.age !== "all";
+  return (state.minParticipants !== 0 ? 1 : 0) + (age ? 1 : 0) + (state.tradable ? 1 : 0) + (state.knownDeployer ? 1 : 0);
 }
 
 /** Whether the sort and the filters apply: Discover only (Following and the Watchlist have their own order). */
@@ -190,7 +195,7 @@ export const BLAST_MODE_SORT_LABELS: Readonly<Record<HomeSort, string>> = { ...S
 export const HOME_TABS = {
   almost: { label: "Closest to graduating", stage: "almost", sort: "progress" },
   trending: { label: "Trending", stage: "all", sort: "relevant" },
-  new: { label: "New", stage: "all", sort: "newest" },
+  new: { label: "New", stage: "new", sort: "newest" },
   graduated: { label: "Graduated", stage: "graduated", sort: "market_cap" },
   last: { label: "Last trade", stage: "all", sort: "last_trade" },
 } as const satisfies Record<string, Readonly<{ label: string; stage: HomeStage; sort: HomeSort }>>;
@@ -201,7 +206,25 @@ export const HOME_TAB_KEYS = Object.keys(HOME_TABS) as HomeTab[];
 export function stageDefaultSort(stage: HomeStage): HomeSort {
   if (stage === "almost") return "progress";
   if (stage === "graduated") return "market_cap";
+  if (stage === "new") return "newest";
   return HOME_TABS.trending.sort;
+}
+
+/** The launch age a stage opens on: New its last day, every other stage any time. */
+export function stageDefaultAge(stage: HomeStage): HomeAge {
+  return stage === "new" ? HOME_NEW_DEFAULT_AGE : HOME_DEFAULT_VIEW.age;
+}
+
+/**
+ * A tab's view (or query), from the one shown: its stage and order, and the
+ * age it opens on. New opens on its default age, and leaving it drops that
+ * age; between other tabs the Launched filter stays. The tab prefetch builds
+ * here too, so a tab press reads what was prefetched.
+ */
+export function withTab<State extends Readonly<{ stage: HomeStage; sort: HomeSort; age: HomeAge }>>(state: State, tab: HomeTab): State {
+  const { stage, sort } = HOME_TABS[tab];
+  const age = stage === "new" ? (state.stage === "new" ? state.age : HOME_NEW_DEFAULT_AGE) : state.stage === "new" ? HOME_DEFAULT_VIEW.age : state.age;
+  return { ...state, stage, sort, age };
 }
 
 /** The selected tab: a narrowed stage is its tab whatever the column order; on every coin, the tab whose order is shown, or none when a column header reorders the list. */
@@ -213,7 +236,9 @@ export function tabOf(state: Pick<HomeViewState, "stage" | "sort">): HomeTab | n
 export type HeaderSort = Extract<HomeSort, "market_cap" | "trending" | "held">;
 
 export const WINDOW_LABELS: Readonly<Record<HomeWindow, string>> = { "1h": "1h", "24h": "24h" };
-export const AGE_LABELS: Readonly<Record<HomeAge, string>> = { "24h": "Last 24h", "7d": "Last 7 days", "30d": "Last 30 days", all: "Any time" };
+export const AGE_LABELS: Readonly<Record<HomeAge, string>> = { "1h": "Last hour", "24h": "Last 24h", "7d": "Last 7 days", "30d": "Last 30 days", all: "Any time" };
+/** New's ages, one word each (its control on the tab). */
+export const NEW_AGE_LABELS: Readonly<Record<HomeNewAge, string>> = { "1h": "1h", "24h": "24h", "7d": "7d" };
 export const SOURCE_LABELS: Readonly<Record<HomeSource, string>> = { discover: "Discover", following: "Following", watchlist: "Watchlist" };
 
 /** The spoken summary after a change: `Discover · Closest to graduating · 12 coins · page 2 of 3 · sorted by Progress · last 24 hours`. */
