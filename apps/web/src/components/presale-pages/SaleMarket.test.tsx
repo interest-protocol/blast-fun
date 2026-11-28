@@ -479,7 +479,7 @@ test("a graduated pool's price names its move as the last 24 hours", async (t) =
 
 test("on the live screen, a graduated sale's market reads slow down once the stream carries the coin's stats, and speed up when it drops", async (t) => {
   const { LiveScreen, useLiveListening } = await import("#web/components/launchpad/coin/LiveScreen.tsx");
-  // Shows when the screen reports its stream listening, so a step waits for it instead of a fixed sleep.
+  // Shows when the screen reports its stream listening (live and carrying the coin's stats).
   function Listening() { return useLiveListening() ? <i data-listening="" /> : null; }
   const live = installLiveSocket();
   const client = createTestQueryClient();
@@ -525,7 +525,7 @@ test("on the live screen, a graduated sale's market reads slow down once the str
     socket.emit("status", { state: "live", pool_key: poolKey, checkpoint: 10, cursor: "10:0:0:0", provenance: provenance(10) });
     socket.emit("hint", { type: "hello", provenance: provenance(1) });
   });
-  await waitFor(() => container.querySelector("[data-listening]"), "the screen listens", 5_000);
+  assert.equal(container.querySelector("[data-listening]"), null, "a live stream without the coin's stats is not listening");
   assert.deepEqual(timers(), [15_000, 15_000], "live without the coin's stats: the reads keep their timer, so the numbers never freeze");
   await act(async () => {
     socket.emit("stats", {
@@ -534,6 +534,7 @@ test("on the live screen, a graduated sale's market reads slow down once the str
     });
   });
   await waitFor(() => /FDV\$1\.25M/.test(container.textContent ?? ""), "the live FDV", 5_000);
+  await waitFor(() => container.querySelector("[data-listening]"), "the screen listens once the stats arrive", 5_000);
   assert.deepEqual(timers(), [60_000, 60_000], "live with the coin's stats: a read a minute");
   assert.equal(live.sockets.length, 1, "the chart's socket, not a second one");
   assert.deepEqual(socket.query.getAll("pool"), [poolKey], "the stream is not widened");

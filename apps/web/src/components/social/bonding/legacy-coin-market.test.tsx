@@ -71,7 +71,7 @@ test("on the live screen, a legacy coin's FDV read keeps polling until the strea
   const { createRoot } = await import("react-dom/client");
   const { LegacyCoinScreen } = await import("./BondingCoinScreen.tsx");
   const { LiveScreen, useLiveListening } = await import("#web/components/launchpad/coin/LiveScreen.tsx");
-  // Shows when the screen reports its stream listening, so a step waits for it instead of a fixed sleep.
+  // Shows when the screen reports its stream listening (live and carrying the coin's stats).
   function Listening() { return useLiveListening() ? <i data-listening="" /> : null; }
   const live = installLiveSocket();
   const coin = BLAST_V1_COINS[2];
@@ -105,13 +105,14 @@ test("on the live screen, a legacy coin's FDV read keeps polling until the strea
     socket.emit("status", { state: "live", pool_key: coin.poolKey, checkpoint: 10, cursor: "10:0:0:0", provenance: provenance(10) });
     socket.emit("hint", { type: "hello", provenance: provenance(1) });
   });
-  await waitFor(() => container.querySelector("[data-listening]"), "the screen listens", 5_000);
+  assert.equal(container.querySelector("[data-listening]"), null, "a live stream without the coin's stats is not listening");
   assert.equal(typeof polls(), "number", "live without the coin's stats: the read keeps polling, so the FDV never freezes");
   await act(async () => socket.emit("stats", {
     type: "coin_stats", coin: coin.coinType, pool_key: coin.poolKey, checkpoint: 11, timestamp_ms: Date.now(), cursor: "11:0:0:0",
     provenance: provenance(11), holders: 1_204, market: { fdv_usd: "1250000.5" }, window_24h: { volume_usd: "8400.25" },
   }));
   await waitFor(() => /FDV\$1\.25M/.test(container.textContent ?? ""), "the live FDV", 5_000);
+  await waitFor(() => container.querySelector("[data-listening]"), "the screen listens once the stats arrive", 5_000);
   assert.equal(polls(), false, "the stream carries the FDV: the read rests");
 });
 

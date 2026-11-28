@@ -393,9 +393,7 @@ export function SaleMarket({
 }>) {
   const client = useAppQueryClient();
   const listening = useLiveListening();
-  // Whether the stream has sent this coin's stats; it is joined from the reads below, so it is kept here.
-  const [statsHeard, setStatsHeard] = useState(false);
-  const refetchInterval = marketPoll(listening && statsHeard);
+  const refetchInterval = marketPoll(listening);
   const query = useQuery(
     {
       ...coinsByIdsQuery([sale.presale_id], "24h", HOME_MAX_HOLDERS),
@@ -419,8 +417,7 @@ export function SaleMarket({
   // The chart's own pool, so the tab's stream does not widen; a pool the stream cannot key is never joined.
   const streamed = poolKey !== null && MIGRATOR_POOL_KEY.test(poolKey);
   const live = useLiveCoin({ coin: sale.sale_token, pools: streamed ? [poolKey] : [], expected: null, enabled: liveScreen && streamed });
-  useReportListening(live.live);
-  if ((live.stats !== null) !== statsHeard) setStatsHeard(live.stats !== null);
+  useReportListening(live.live && live.stats !== null);
   const coin =
     query.data?.coins.find(
       (item) =>

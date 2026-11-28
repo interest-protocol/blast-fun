@@ -3,7 +3,7 @@ import test from "node:test";
 import type { CoinTradeListener, MarketTrade } from "#web/components/launchpad/market-stream-hub.ts";
 import { installTestDom, recordAnimations, waitFor } from "../../../../test/fixtures/social/test-dom.ts";
 import { coinScreenFixture } from "../../../../test/fixtures/social/bonding/coin-screen-fixtures.ts";
-import { curvePoolSummary, CURVE_POOL_KEY, VENUE_POOL_KEY } from "../../../../../../packages/core/test/fixtures/modules/launchpad-coin/fixtures.ts";
+import { COIN_FIXTURE, curvePoolSummary, CURVE_POOL_KEY, VENUE_POOL_KEY } from "../../../../../../packages/core/test/fixtures/modules/launchpad-coin/fixtures.ts";
 import type { CoinPage } from "@blast/core/modules/launchpad-coin/contracts.ts";
 import type { SocialPriceHistory } from "@blast/core/web/contracts/prices.ts";
 import { HIDDEN_AMOUNT } from "@blast/core/web/format.ts";
@@ -276,4 +276,39 @@ test("curve progress advances and a delayed trade or page read cannot undo the b
   assert.equal(findCurrency("SUI").getAttribute("aria-pressed"), "true");
   assert.equal(chartCurrency(), "SUI");
   assert.equal(price(), "—");
+});
+
+test("on the live screen, a coin page listens only once its stream sends the coin's stats, so a coin without them keeps its timed reads", async (t) => {
+  const { installLiveSocket, LIVE_TICKET_PATH, liveTicket } = await import("../../../../test/fixtures/lib/live-socket.testing.ts");
+  const { LiveScreen, useLiveListening } = await import("#web/components/launchpad/coin/LiveScreen.tsx");
+  const { AppRouterContext } = await import("next/dist/shared/lib/app-router-context.shared-runtime");
+  const router = { bfcacheId: "test", back() {}, forward() {}, refresh() {}, hmrRefresh() {}, push() {}, replace() {}, prefetch: async () => {} };
+  const live = installLiveSocket();
+  t.mock.method(globalThis, "fetch", async (input: RequestInfo | URL) => String(input) === LIVE_TICKET_PATH ? liveTicket() : Response.json({}, { status: 404 }));
+  const page = coinScreenFixture("migrated");
+  const deployment = "f".repeat(64);
+  // Shows when the screen reports its stream listening (live and carrying the coin's stats).
+  function Listening() { return useLiveListening() ? <i data-listening="" /> : null; }
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const client = createTestQueryClient();
+  t.after(async () => { await act(async () => root.unmount()); client.clear(); container.remove(); live.restore(); });
+  const slots = { activity: null, chart: null, discovery: null, execution: null, holders: null, market: null, overview: null, theses: null };
+  await act(async () => root.render(<AppRouterContext value={router}><QueryProvider client={client}><LiveScreen enabled><Listening />
+    <BondingCoinScreen page={page} details={null} slots={slots} expected={{ network: "mainnet", deployment }} />
+  </LiveScreen></QueryProvider></AppRouterContext>));
+  await waitFor(() => live.sockets.some((socket) => socket.query.getAll("pool").includes(VENUE_POOL_KEY)), "the stream joins the coin's pool", 5_000);
+  const socket = live.sockets.find((each) => each.query.getAll("pool").includes(VENUE_POOL_KEY))!;
+  const provenance = (checkpoint: number) => ({ network: "mainnet", deployment_fingerprint: deployment, checkpoint, timestamp_ms: Date.now(), observed_ms: Date.now(), lag_ms: 0 });
+  await act(async () => {
+    socket.emit("status", { state: "live", pool_key: VENUE_POOL_KEY, checkpoint: 326274010, cursor: "326274010:0:0:0", provenance: provenance(326274010) });
+    socket.emit("hint", { type: "hello", provenance: provenance(326274010) });
+  });
+  assert.equal(container.querySelector("[data-listening]"), null, "a live stream without the coin's stats is not listening, so the page keeps re-reading");
+  await act(async () => socket.emit("stats", {
+    type: "coin_stats", coin: COIN_FIXTURE.coinType, pool_key: VENUE_POOL_KEY, checkpoint: 326274011, timestamp_ms: Date.now(), cursor: "326274011:0:0:0",
+    provenance: provenance(326274011), holders: 1_204, market: { fdv_usd: "1250000.5" }, window_24h: { volume_usd: "8400.25" },
+  }));
+  await waitFor(() => container.querySelector("[data-listening]"), "the screen listens once the stats arrive", 5_000);
 });
