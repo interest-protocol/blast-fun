@@ -35,9 +35,18 @@ if (process.versions.bun) {
     },
   });
 
-  const { GET } = await import("./route.ts");
+  const { GET, healthCacheControl } = await import("./route.ts");
 
-  test("health route authenticates only backend probes, coalesces reads, and returns safe uncached facts", async (t) => {
+  test("the CDN keeps a health answer only for what is left of its 5 s", () => {
+    assert.equal(healthCacheControl(10_000, 10_000), "public, max-age=0, s-maxage=5");
+    assert.equal(healthCacheControl(10_000, 11_200), "public, max-age=0, s-maxage=3");
+    assert.equal(healthCacheControl(10_000, 14_500), "no-store");
+    assert.equal(healthCacheControl(10_000, 30_000), "no-store");
+    // A clock that reads the check as later than now still never shares past 5 s.
+    assert.equal(healthCacheControl(12_000, 10_000), "public, max-age=0, s-maxage=5");
+  });
+
+  test("health route authenticates only backend probes, coalesces reads, and returns safe facts the CDN may share briefly", async (t) => {
     const origin = "https://health-fixture.blast.test";
     const key = "health-fixture-key-01234567890123456789";
     installRuntimeConfig({ BLAST_INFRA_ORIGIN: origin, BLAST_INFRA_API_KEY: key });
@@ -70,7 +79,7 @@ if (process.versions.bun) {
     );
     const [first, second] = await Promise.all([GET(), GET()]);
     assert.equal(first.status, 200);
-    assert.equal(first.headers.get("cache-control"), "no-store");
+    assert.match(first.headers.get("cache-control") ?? "", /^public, max-age=0, s-maxage=[1-5]$/);
     const body = await first.json();
     assert.deepEqual(await second.json(), body);
     assert.equal(backendReads, 1);

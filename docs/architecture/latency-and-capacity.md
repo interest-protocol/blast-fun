@@ -27,6 +27,12 @@ backpressure limit and cancellation ownership.
 Keep the five-second minimum between freshness reads and the thirty-second
 visible polling fallback. Public discovery permits ten seconds of edge freshness
 and twenty seconds of stale revalidation; private answers retain no-store.
+The service health answer is shared for at most five seconds since it was
+checked, by the process and then by the edge for what is left (no stale
+revalidation, nothing kept in the browser). Its fifteen-second visible poll from
+10,000 tabs is about 667 browser requests/s. Function and backend requests
+fall from the same 667/s to about one per edge region every five seconds; the
+infra probe stays at one per process every five seconds at most.
 This policy deliberately does **not** promise three-second fresh discovery.
 Lifecycle query invalidation already spreads requests over up to one second.
 Changing these limits needs an explicit freshness/cost decision and matching
