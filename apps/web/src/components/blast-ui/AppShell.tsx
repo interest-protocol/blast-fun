@@ -366,7 +366,7 @@ function LaunchDestinations({ current, mobile = false }: Readonly<{ current: She
   const Item = mobile ? TabItem : RailItem;
   return (
     <>
-      <Item current={current} href={BONDING_PATH} icon={<CurveIcon />} item="bonding" label="Bonding" prefetch={false} />
+      <Item current={current} href={BONDING_PATH} icon={<CurveIcon />} item="bonding" label="Bonding" />
       <Item current={current} href={PRESALES_PATH} icon={<TicketIcon />} item="presales" label="Presales" />
     </>
   );
