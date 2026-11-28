@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { getWalletUniqueIdentifier } from "@mysten/dapp-kit-react";
 import { SLUSH_WALLET_NAME } from "@mysten/slush-wallet";
 import {
   getWallets,
@@ -16,13 +17,17 @@ import { normalizeSuiAddress, toBase64 } from "@mysten/sui/utils";
 
 import { walletSessionSigner } from "../social/coins/signers-model.ts";
 import { walletCommitSigner } from "../social/commit/commit-signers.ts";
-import { forgetWalletConnection, socialDAppKit, suiWalletSigner } from "./sui-wallet-signer.ts";
+import { forgetWalletConnection, socialDAppKit, subscribeSuiSignInWallets, suiWalletSigner } from "./sui-wallet-signer.ts";
 
 const ADDRESS = normalizeSuiAddress("0xa");
 const OTHER = normalizeSuiAddress("0xb");
 const bytes = new Uint8Array([1, 2, 3]);
 
-function walletFixture(name: string = SLUSH_WALLET_NAME) {
+function walletFixture(
+  name: string = SLUSH_WALLET_NAME,
+  personalSigning = true,
+  id = name === SLUSH_WALLET_NAME ? "com.mystenlabs.suiwallet" : `test:${name}`,
+) {
   const account = (address: string) => new ReadonlyWalletAccount({
     address,
     publicKey: new Uint8Array(32),
@@ -41,7 +46,7 @@ function walletFixture(name: string = SLUSH_WALLET_NAME) {
   let silentRefusal: Error | null = null;
   let disconnects = 0;
   const wallet = {
-    id: "com.mystenlabs.suiwallet",
+    id,
     version: "1.0.0",
     name,
     icon: "data:image/svg+xml;base64,PHN2Zy8+",
@@ -68,13 +73,15 @@ function walletFixture(name: string = SLUSH_WALLET_NAME) {
           return () => { listeners.delete(notify); };
         },
       },
-      "sui:signPersonalMessage": {
-        version: "1.1.0",
-        async signPersonalMessage({ account, message }) {
-          signed.push(account.address);
-          return { bytes: toBase64(message), signature: "personal-signature" };
+      ...(personalSigning ? {
+        "sui:signPersonalMessage": {
+          version: "1.1.0" as const,
+          async signPersonalMessage({ account, message }: Parameters<SuiSignPersonalMessageFeature["sui:signPersonalMessage"]["signPersonalMessage"]>[0]) {
+            signed.push(account.address);
+            return { bytes: toBase64(message), signature: "personal-signature" };
+          },
         },
-      },
+      } : {}),
       "sui:signTransaction": {
         version: "2.0.0",
         async signTransaction({ account, transaction }) {
@@ -83,11 +90,11 @@ function walletFixture(name: string = SLUSH_WALLET_NAME) {
         },
       },
     },
-  } satisfies WalletWithFeatures<StandardConnectFeature & StandardDisconnectFeature & StandardEventsFeature & SuiSignTransactionFeature & SuiSignPersonalMessageFeature>;
+  } satisfies WalletWithFeatures<StandardConnectFeature & StandardDisconnectFeature & StandardEventsFeature & SuiSignTransactionFeature & Partial<SuiSignPersonalMessageFeature>>;
   const unregister = getWallets().register(wallet);
   const kit = socialDAppKit();
   const unsubscribe = kit.stores.$connection.subscribe(() => {});
-  const uiWallet = kit.stores.$wallets.get().find((candidate) => candidate.name === name);
+  const uiWallet = kit.stores.$wallets.get().find((candidate) => getWalletUniqueIdentifier(candidate) === id);
   assert.ok(uiWallet);
   return {
     kit, uiWallet, primary, other, signed,
@@ -209,7 +216,7 @@ test("an account not authorized by Slush is refused before signing", async (t) =
   assert.deepEqual(f.signed, []);
 });
 
-for (const [method, name] of [["nightly", "Nightly"], ["scallop", "Scallop Wallet"], ["mahalo", "Mahalo"]] as const) {
+for (const name of ["Nightly", "Scallop Wallet", "Mahalo", "OKX Wallet"]) {
   test(`${name} signs in and reconnects for commits and withdrawals using its authorized account`, async (t) => {
     const stored = new Map<string, string>();
     Object.defineProperty(globalThis, "localStorage", { configurable: true, value: {
@@ -220,12 +227,12 @@ for (const [method, name] of [["nightly", "Nightly"], ["scallop", "Scallop Walle
     t.after(() => { Reflect.deleteProperty(globalThis, "localStorage"); });
     const f = walletFixture(name);
     t.after(async () => { await f.kit.disconnectWallet(); f.cleanup(); });
-    const signer = suiWalletSigner(method);
+    const signer = suiWalletSigner(f.uiWallet);
     assert.equal(await signer.connect(), ADDRESS);
     assert.equal(await signer.signPersonalMessage("challenge"), "personal-signature");
     await signer.disconnect();
     assert.equal(f.kit.stores.$connection.get().isConnected, false);
-    assert.equal([...stored.values()].includes(name), true, "wallet choice survives page reloads");
+    assert.equal(stored.get(`blast:social:sign-in:v1:wallet-id:${ADDRESS}`), getWalletUniqueIdentifier(f.uiWallet));
     f.change([f.other, f.primary], [f.other, f.primary]);
     await walletCommitSigner(ADDRESS).signTransaction(bytes);
     assert.equal(f.kit.stores.$connection.get().wallet?.name, name);
@@ -235,17 +242,46 @@ for (const [method, name] of [["nightly", "Nightly"], ["scallop", "Scallop Walle
     await f.kit.disconnectWallet();
     stored.set(`blast:social:sign-in:v1:wallet:${OTHER}`, name);
     await walletCommitSigner(OTHER).signTransaction(bytes);
-    assert.equal(f.kit.stores.$connection.get().wallet?.name, name, "a fresh address reads the persisted wallet choice");
+    assert.equal(f.kit.stores.$connection.get().wallet?.name, name, "an existing name-only choice still works");
     f.change([f.other]);
     await assert.rejects(walletCommitSigner(ADDRESS).signTransaction(bytes), /has not authorized/);
     assert.deepEqual(f.signed, [ADDRESS, ADDRESS, ADDRESS, OTHER]);
   });
 }
 
-test("a missing Sui extension fails without connecting another wallet", async () => {
-  for (const method of ["nightly", "scallop", "mahalo"] as const) {
-    await assert.rejects(suiWalletSigner(method).connect(), /not available.*Install it/);
-  }
+test("wallets with the same name reconnect by the saved wallet ID", async (t) => {
+  const first = walletFixture("Shared Wallet", true, "test:first");
+  const chosen = walletFixture("Shared Wallet", true, "test:chosen");
+  const address = normalizeSuiAddress("0xc");
+  const { chains, features, publicKey } = chosen.primary;
+  const account = new ReadonlyWalletAccount({ address, chains, features, publicKey });
+  chosen.change([account]);
+  Object.defineProperty(globalThis, "localStorage", { configurable: true, value: {
+    getItem: (key: string) => key === `blast:social:sign-in:v1:wallet-id:${address}` ? "test:chosen" : null,
+  } });
+  t.after(async () => {
+    await chosen.kit.disconnectWallet();
+    chosen.cleanup();
+    first.cleanup();
+    Reflect.deleteProperty(globalThis, "localStorage");
+  });
+
+  await walletCommitSigner(address).signTransaction(bytes);
+  assert.deepEqual(chosen.signed, [address]);
+  assert.equal(first.connects(), 0);
+});
+
+test("discovery follows wallet registration and removal and skips wallets that cannot sign in", (t) => {
+  const available: string[][] = [];
+  const unsubscribe = subscribeSuiSignInWallets((wallets) => available.push(wallets.map(({ wallet }) => wallet.name)));
+  t.after(unsubscribe);
+  const transactionOnly = walletFixture("Transaction-only wallet", false);
+  t.after(transactionOnly.cleanup);
+  const okx = walletFixture("OKX Wallet");
+  assert.ok(available.at(-1)?.includes("OKX Wallet"));
+  assert.ok(!available.at(-1)?.includes("Transaction-only wallet"));
+  okx.cleanup();
+  assert.ok(!available.at(-1)?.includes("OKX Wallet"));
 });
 
 test("a refused storage write keeps the latest wallet choice for this page", async (t) => {
@@ -256,7 +292,7 @@ test("a refused storage write keeps the latest wallet choice for this page", asy
   t.after(() => { Reflect.deleteProperty(globalThis, "localStorage"); });
   const f = walletFixture("Nightly");
   t.after(async () => { await f.kit.disconnectWallet(); f.cleanup(); });
-  const signer = suiWalletSigner("nightly");
+  const signer = suiWalletSigner(f.uiWallet);
   await signer.connect();
   await signer.disconnect();
   await walletCommitSigner(ADDRESS).signTransaction(bytes);

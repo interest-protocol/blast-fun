@@ -25,7 +25,8 @@
 .methods button.method svg { width: 1.1875rem; height: 1.1875rem; flex: none; }
 .methods button.method img { width: 1.5rem; height: 1.5rem; flex: none; }
 .methods button.method[disabled] { cursor: default; }
-.walletMethods button.method { height: 5rem; min-width: 0; flex-direction: column; justify-content: center; gap: 0.5rem; padding: 0.5rem; font-size: 0.8125rem; line-height: 1.2; text-align: center; white-space: normal; }
+.methodLabel { min-width: 0; white-space: normal; }
+.walletMethods button.method { height: auto; min-height: 5rem; min-width: 0; flex-direction: column; justify-content: center; gap: 0.5rem; padding: 0.5rem; font-size: 0.8125rem; line-height: 1.2; text-align: center; overflow-wrap: anywhere; }
 
 .spin {
   flex: none;
