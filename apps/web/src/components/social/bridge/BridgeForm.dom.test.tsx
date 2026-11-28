@@ -345,7 +345,7 @@ test("a terminal Fast MCTP history row wins over a cached pending status", async
     await waitFor(() => statusReads === 1 && form.text().includes("On the way"), "the cached pending transfer");
     refreshed = true;
     await form.remount();
-    await waitFor(() => form.text().includes("Refunded to your Blast wallet on Sui"), "the terminal refund from history");
+    await waitFor(() => form.text().includes("Refunded in USDC to your Blast wallet on Sui"), "the terminal refund from history");
     assert.doesNotMatch(form.text(), /On the way/);
   } finally {
     await form.unmount();

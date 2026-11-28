@@ -88,7 +88,10 @@ export type BridgeFormProps = Readonly<{
 const QUOTE_DEBOUNCE_MS = 400;
 const QUOTE_FRESH_MS = 60_000;
 const BALANCE_FRESH_MS = 60_000;
-const STATUS_POLL_MS = 5_000;
+/** Mayan's docs: poll a pending swap every 2 seconds. */
+const STATUS_POLL_MS = 2_000;
+/** Ours: the history list is not in Mayan's docs, and is only re-asked while it lacks a hash this tab just sent. */
+const INDEXING_POLL_MS = 5_000;
 const STATUS_GIVE_UP_MS = 30 * 60_000;
 const INDEXING_WINDOW_MS = 60_000;
 const BUSY_TEXT = "Confirm in your wallet.";
@@ -238,7 +241,7 @@ function useBridgeHistory(sdk: BridgeSdk, blastAddress: string | null) {
     refetchOnWindowFocus: false,
     refetchInterval: (query) => {
       const listed = query.state.data ?? [];
-      return blastAddress && recentSubmissions(blastAddress).some(({ hash }) => !listed.some((row) => row.hash === hash)) ? STATUS_POLL_MS : false;
+      return blastAddress && recentSubmissions(blastAddress).some(({ hash }) => !listed.some((row) => row.hash === hash)) ? INDEXING_POLL_MS : false;
     },
     retry: 1,
   });
@@ -970,7 +973,7 @@ function BridgeRowView({ row, sdk, onArrived, now }: Readonly<{ row: BridgeRow; 
       return result;
     },
     enabled: watching,
-    // Every 5 s while the page is visible; it stops once Mayan settles it.
+    // Only while the page is visible; it stops once Mayan settles the swap.
     refetchInterval: (query) => (query.state.data?.state ?? "pending") === "pending" && now() - Date.parse(row.at) < STATUS_GIVE_UP_MS ? STATUS_POLL_MS : false,
     retry: 1,
   });
@@ -986,8 +989,9 @@ function BridgeRowView({ row, sdk, onArrived, now }: Readonly<{ row: BridgeRow; 
   const info = row.chain ? CHAINS[row.chain] : null;
   const chain = info?.label ?? "another chain";
   const sentText = displayAmount(row.fromAmount, row.fromSymbol);
-  const refundWallet = row.refundOnSui ? "Blast wallet on Sui" : `${chain} wallet`;
-  const line = statusLine(state, refundWallet, toAmount, row.toSymbol, age >= STATUS_GIVE_UP_MS);
+  // Mayan's docs: an MCTP or Fast MCTP refund pays USDC to the recipient, not the coin sent.
+  const refundedTo = row.refundOnSui ? "in USDC to your Blast wallet on Sui" : `to your ${chain} wallet`;
+  const line = statusLine(state, refundedTo, toAmount, row.toSymbol, age >= STATUS_GIVE_UP_MS);
   return (
     <li className={styles.row} data-state={state}>
       <Logo size={24} src={info?.logo ?? null} />
@@ -1000,10 +1004,10 @@ function BridgeRowView({ row, sdk, onArrived, now }: Readonly<{ row: BridgeRow; 
   );
 }
 
-function statusLine(state: TransferState, refundWallet: string, toAmount: string | null | undefined, symbol: string, gaveUp: boolean): string {
+function statusLine(state: TransferState, refundedTo: string, toAmount: string | null | undefined, symbol: string, gaveUp: boolean): string {
   const received = toAmount ? displayAmount(toAmount, symbol) : null;
   if (state === "done") return `Arrived · ${received ?? symbol}`;
-  if (state === "refunded") return `Refunded to your ${refundWallet}`;
+  if (state === "refunded") return `Refunded ${refundedTo}`;
   if (gaveUp) return "Still on the way. Check on Mayan.";
   return received ? `On the way · ≈ ${received}` : "On the way";
 }

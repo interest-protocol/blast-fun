@@ -78,6 +78,8 @@ test("quote errors read as plain sentences with Mayan's limits, each saying what
   assert.equal(read({ code: "AMOUNT_TOO_SMALL", message: "Amount too small (min ~0.00043 ETH)", data: { minAmountIn: 0.00043 } }), "The smallest amount is 0.00043\u00a0ETH. Code: bridge_amount_too_small.");
   assert.equal(read({ code: "BRIDGE_LIMIT_EXCEEDED", message: "CCTP does not have enough capacity for this amount. Max per swap: 75.94588242742242" }), "Largest right now: 75.94\u00a0ETH. Code: bridge_amount_too_large.");
   assert.equal(read({ code: "BRIDGE_LIMIT_EXCEEDED", message: "Over capacity." }), "Try a smaller amount. Code: bridge_amount_too_large.");
+  assert.equal(read({ code: "ALLOWANCE_TOO_LOW", message: "Over the fast limit." }), "Try a smaller amount. Code: bridge_amount_too_large.");
+  assert.equal(read({ code: "SDK_VERSION_TOO_OLD", message: "Upgrade sdk" }), "Bridging is paused. You can still deposit on Sui. Code: bridge_paused.");
   assert.equal(read({ code: "ROUTE_NOT_FOUND" }), "No price for ETH. Bridge USDC. Code: bridge_no_route.");
   assert.equal(read({ code: "ROUTE_NOT_FOUND" }, USDC), "No price for USDC. Try another chain. Code: bridge_no_route.");
   assert.equal(read(new TypeError("Failed to fetch")), "Couldn’t get a price. Code: bridge_quote_failed.");

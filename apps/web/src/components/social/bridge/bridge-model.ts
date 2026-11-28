@@ -234,7 +234,7 @@ export function quoteErrorText(error: unknown, chain: ChainInfo, token: SourceTo
   const { code, data, message } = (error ?? {}) as QuoteFailure;
   if (isPausedError(error)) return PAUSED_TEXT;
   if (code === "ROUTE_NOT_FOUND") return noRouteText(chain, token);
-  if (code === "BRIDGE_LIMIT_EXCEEDED") return overLimitText(message, token);
+  if (code === "BRIDGE_LIMIT_EXCEEDED" || code === "ALLOWANCE_TOO_LOW") return overLimitText(message, token);
   if (code === "AMOUNT_TOO_SMALL" && typeof data?.minAmountIn === "number") return `The smallest amount is ${data.minAmountIn}\u00a0${token.symbol}. Code: bridge_amount_too_small.`;
   if (code === "AMOUNT_TOO_LARGE" && typeof data?.maxAmountIn === "number") return `The largest amount is ${data.maxAmountIn}\u00a0${token.symbol}. Code: bridge_amount_too_large.`;
   return QUOTE_FAILED_TEXT;
@@ -247,10 +247,13 @@ export const TOKENS_FAILED_TEXT = "Couldn’t load tokens. Code: bridge_tokens_f
 export const LOAD_FAILED_TEXT = "Bridge to Sui couldn’t load. Code: bridge_load_failed.";
 export const SEND_FAILED_TEXT = "The bridge didn’t start. Check your wallet before you try again. Code: bridge_send_failed.";
 
-/** Mayan answers 9999 when it stops this SDK version; the card pauses and we upgrade. */
+/**
+ * This SDK version is too old for Mayan: their SDK throws 9999 and their price API
+ * answers `SDK_VERSION_TOO_OLD`. The card pauses and we upgrade.
+ */
 export function isPausedError(error: unknown): boolean {
   const code = (error as { code?: unknown } | null)?.code;
-  return code === 9999 || code === "9999";
+  return code === 9999 || code === "9999" || code === "SDK_VERSION_TOO_OLD";
 }
 
 /** What the main button says and does, in the order the checks run. */

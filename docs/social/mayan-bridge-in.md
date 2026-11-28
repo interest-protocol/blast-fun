@@ -140,7 +140,7 @@ One direction only: other chains → Sui. No flip, no Sui → other chain, no sw
 | Quoting | Skeleton rows; previous numbers dimmed, never blank |
 | Quote error | `ROUTE_NOT_FOUND` → "No price for ARB. Bridge USDC." (for USDC, "Try another chain."); limits → Mayan's min/max in plain words; network or server errors → "Couldn't get a price" after backoff; a 429 → the same line at once; the button becomes "Try again" |
 | Too large | `AMOUNT_TOO_LARGE` → "The largest amount is 300 USDC" (Mayan's `maxAmountIn`); `BRIDGE_LIMIT_EXCEEDED` → "Largest right now: 75.94 ETH" when Mayan's message gives a number, else "Try a smaller amount"; the button stays disabled |
-| SDK outdated | `fetchQuote` code 9999 "Swap SDK is outdated!" → card says "Bridging is paused. You can still deposit on Sui"; the inputs lock; logs an error so we upgrade |
+| SDK outdated | `fetchQuote` code 9999 "Swap SDK is outdated!" or `SDK_VERSION_TOO_OLD` → card says "Bridging is paused. You can still deposit on Sui"; the inputs lock; logs an error so we upgrade |
 | Insufficient balance | "Not enough {symbol}" (native includes source gas) |
 | Approval needed | "Approve {symbol}" (approve tx), then "Bridge" |
 | Signing | `LoadingIndicator` "Confirm in your wallet" |
@@ -149,7 +149,7 @@ One direction only: other chains → Sui. No flip, no Sui → other chain, no sw
 | Blast session changed | Sign-out or account switch: close the card's quote and pending state, return to Deposit |
 | On the way | Pending row: amounts, Mayan's ETA, "View on Mayan" |
 | Arrived | Row turns "Arrived · 25.2 SUI"; balances refresh; one quiet toast |
-| Refunded | "Refunded to your {chain} wallet" with the explorer link |
+| Refunded | MCTP and Fast MCTP: "Refunded in USDC to your Blast wallet on Sui". Blink: "Refunded to your {chain} wallet". Both with the explorer link |
 | Wallet rejected | Back to the Bridge button, no error banner |
 
 ## Wallet flow (Privy)
@@ -204,10 +204,10 @@ calls it while open so WalletConnect QR and Coinbase show.
   `isEvmSwapAllowanceEnough` on the fresh quote before the deposit (slow
   Ethereum approvals can outlive the price).
 - **Solana:** `swapFromSolana(quote, swapper, dest, null, sign, connection,
-  ..., { onTransactionSigned })`. Always pass our `Connection` (on Mayan's
+  ...)`. Always pass our `Connection` (on Mayan's
   Solana RPC); without it the SDK falls back to `rpc.ankr.com`. `sign` serializes the SDK's web3.js
   transaction, has Privy sign the bytes, and deserializes it.
-  `onTransactionSigned` records the signature at once so the pending row
+  Our signer callback records the signature at once so the pending row
   exists even if sending is slow.
 - **Recipient and refund guard** (Blink; see [Routes](#routes) for the MCTP
   routes): one synchronous check before any wallet
@@ -234,7 +234,7 @@ calls it while open so WalletConnect QR and Coinbase show.
 - Supply chain: 16.1.0 was published two days before this plan and handles
   user funds. Before the flag goes on, read the diff from the previous minor
   (`npm diff`), and keep the lockfile integrity hashes. Upgrades are explicit
-  PRs; a 9999 "outdated" error is the signal to make one.
+  PRs; an "outdated" refusal (9999 or `SDK_VERSION_TOO_OLD`) is the signal to make one.
 - The `bridge` screen body is a `React.lazy` boundary; nothing from these
   packages enters any route's first-load JS. Compare the build route table
   before and after.
@@ -248,7 +248,9 @@ boolean:
   (ship dark). Production keeps them off ([Routes](#routes)).
 - RPCs: Mayan's own, `https://front-rpc.mayan.finance/<chain>`, the one its
   widget uses (open CORS, no key). Jose's ruling 2026-11-26: no custom RPCs and
-  no RPC variables, so every chain is always shown.
+  no RPC variables, so every chain is always shown. Mayan's docs differ: they
+  ask for `options.evmProvider` on your own RPC and never mention this one
+  ([Where we differ](#where-we-differ-from-mayans-docs)).
 - Chains: Base, Ethereum, Arbitrum, Optimism, Polygon and Solana. Each has a
   route to Sui (checked against live quotes 2026-11-26). On that day Unichain,
   Linea, Avalanche and Monad quoted only FAST_MCTP; they are not listed. BSC has
@@ -292,7 +294,7 @@ Test both builders, flag on and off, in `web-security.test.ts`.
   compare with the shown minimum; then sign.
 - Source balance: one RPC read per (wallet, chain, token) change and after a
   submit. Not polled.
-- Status: poll `swap/trx/{hash}` every 5 s while pending and visible; stop on
+- Status: poll `swap/trx/{hash}` every 2 s (Mayan's docs) while pending and visible; stop on
   `COMPLETED` or `REFUNDED`; after 30 min stop and show "Still on the way —
   check on Mayan".
 - On `COMPLETED`: `useBalancesContext().changed()` (`coins/balances.tsx`),
@@ -306,16 +308,17 @@ PR line (to be filled with measured values):
 | --- | --- | --- | --- |
 | Blast origin | 0; 4 reads per completed bridge | ~0 rps | ~0 rps |
 | price-api.mayan.finance | ≤ 2.5 rps while typing (debounced), 0 at rest | ≤ 250 rps bursts, ~0 at rest | unmeasured |
-| explorer-api (status and history) | 0.2 rps per pending bridge, plus 0.2 rps while this tab waits for a recently submitted hash to be indexed | bridges in flight × 0.2, plus 0.2 per tab waiting for the index | ≤ 2,000 rps per poll type if all 10,000 tabs qualify |
+| explorer-api (status and history) | 0.5 rps per pending bridge, plus 0.2 rps while this tab waits for a recently submitted hash to be indexed (calculated) | bridges in flight × 0.5, plus 0.2 per tab waiting for the index | one pending bridge per tab: ≤ 5,000 rps of status and 2,000 rps of history, from the users' own IPs |
 | Source RPC (Mayan's `front-rpc`) | balance reads per input change; Solana send + SDK retries (`submitTransactionWithRetry`) per bridge | per committed action | — |
 
-Mayan's rate limits are unknown: mark unmeasured and ask Mayan for an API key
-(`QuoteOptions.apiKey`) and limits before turning the flag on for everyone.
+Mayan's rate limits are per IP and their size is unmeasured. Their docs
+recommend starting without an API key and asking for one on rate limits, so we
+send none.
 
 ## Pending state across reloads
 
 The explorer is the record. In memory, the card keeps the just-signed source
-hash (from `onTransactionSigned` or the EVM send) until `/v3/swaps?trader=`
+hash (from our Solana signer callback or the EVM send) until `/v3/swaps?trader=`
 lists it, so the pending row shows at once. For a reload before indexing, the
 tab keeps only submitted hashes and timestamps in account-scoped session
 storage. While the tab is visible it checks history every five seconds until
@@ -448,12 +451,38 @@ wherever Bridge is on.
   (calculated). Each POST asks three routes; how Mayan counts that is
   unmeasured. Blast: at most one batched price read per send press, reused for
   10 seconds, with no polling. Per send, only the SDK's chain reads
-  (unmeasured). Explorer polling is unchanged. Ask Mayan for an API key and its
-  limits before production.
+  (unmeasured). Status polling follows Mayan's docs: every 2 s per pending
+  bridge, so 0.5 rps (calculated). We send no API key: Mayan recommends
+  starting without one and asking when rate limits are hit.
 - **Production is off (our hold).** `lib/web-config.ts` keeps Bridge off when
   the deployment is production, even with the flag set. Before it goes on: one
   small real bridge per call shape, signed by Jose, then a code change that
   lifts the hold.
+
+### Where we differ from Mayan's docs
+
+Checked against all of `docs.mayan.finance/llms-full.txt` on 2026-11-28. Each
+item here is our choice, not Mayan's rule.
+
+- **RPC.** Their docs ask for your own RPC for `options.evmProvider` and do not
+  mention `front-rpc.mayan.finance`, so it has no documented limit or promise.
+  We use it under Jose's 2026-11-26 ruling. Settle this before production: our
+  own RPC per chain, or Mayan's written OK.
+- **Blink.** Their docs never mention it. What this page says about Blink comes
+  from SDK 16.1.0's code and from live quotes.
+- **Gas for Max.** Max keeps a fixed amount of the native coin per chain,
+  because it runs before there is a transaction to estimate. Their docs offer
+  `estimateQuoteRequiredGasAprox2`, which needs the quote and the built payload.
+- **Chains.** The six chains are a fixed list. Their docs say to skip a chain
+  that `/v3/chains` marks inactive; we do not read it, so such a chain would
+  fail at the quote. All six and Sui were active on 2026-11-28.
+- **Explorer link.** "View on Mayan" opens Mayan's page for the swap, built from
+  the source hash. Their docs say to use `txs[].scannerUrl`, which links each
+  transaction on its chain's explorer.
+- **Refunds.** The sentence names the refund fee but not its amount. The quote
+  carries it (`clientRelayerFeeRefund`). A refunded row names USDC, not the
+  amount: their docs do not say which explorer field holds it.
+- **Watching.** We stop polling a swap after 30 minutes and point to Mayan.
 
 ## Tests
 
