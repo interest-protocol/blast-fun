@@ -8,6 +8,7 @@ import { NON_PRODUCTION_MANIFEST } from "../../../../test/fixtures/launchpad/tra
 import { LaunchpadSignerProvider } from "../transaction/LaunchpadSignerProvider";
 import { readCurve } from "./curve-read";
 import { CurveTradeProvider } from "./CurveTradeProvider";
+import { diagnosticMessage, publicErrorCopy } from "#web/lib/errors.ts";
 import { CurveTradeRail, CurveTradeUnavailable } from "./CurveTradeRail";
 import { indicativeEstimate } from "./curve-trade-rail-model";
 import { createTradeFixtureChain, TRADE_LAUNCH_ID, type TradeLifecycle } from "../../../../../../packages/core/test/fixtures/launchpad/trade/trade-fixtures.ts";
@@ -87,7 +88,7 @@ test("without a released deployment the rail says so and offers nothing to sign"
   assert.doesNotMatch(html, /<button/);
 });
 
-test("an unavailable reason with a code keeps the sentence and shows the code on its own line", () => {
-  const html = renderToStaticMarkup(<CurveTradeUnavailable reason="This coin can’t be bought here. Open its page to trade. Code: trade_coin_mismatch." />);
-  assert.match(html, /This coin can’t be bought here\. Open its page to trade\.<span class="err-code"> Code: trade_coin_mismatch\.<\/span>/);
+test("Home's can't-buy message keeps its sentence in the status and its code on the line under it", () => {
+  const html = renderToStaticMarkup(<CurveTradeUnavailable reason={diagnosticMessage(publicErrorCopy("trade_coin_mismatch"), { code: "trade_coin_mismatch" })} />);
+  assert.match(html, /This coin can’t be bought here\. Open its page to trade\.<\/span><span class="err-code">Code: trade_coin_mismatch\.<\/span><\/p>/);
 });

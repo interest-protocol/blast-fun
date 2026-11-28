@@ -2,7 +2,7 @@
 
 import { useId, useSyncExternalStore } from "react";
 
-import { DiagnosticText } from "#web/components/blast-ui/DiagnosticText.tsx";
+import { splitDiagnostic } from "#web/lib/errors.ts";
 import { StatusText } from "../primitives/StatusText";
 import type { ActionState, SignerKind } from "../transaction/action-machine";
 import { useLaunchpadSigners } from "../transaction/LaunchpadSignerProvider";
@@ -187,10 +187,12 @@ export function CurveTradeRail() {
 
 /** The trade rail where the app has no released deployment to trade on: honest, with nothing to sign. A reason's code, when it has one, shows on its own line. */
 export function CurveTradeUnavailable({ reason }: Readonly<{ reason: string }>) {
+  const { text, detail } = splitDiagnostic(reason);
   return (
     <div className={styles.rail}>
       <p className={styles.notice} data-trade-unavailable="">
-        <StatusText tone="caution"><DiagnosticText message={reason} /></StatusText>
+        <StatusText tone="caution">{text}</StatusText>
+        {detail !== null ? <span className="err-code">{detail}</span> : null}
       </p>
     </div>
   );
