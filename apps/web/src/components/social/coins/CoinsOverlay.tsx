@@ -20,22 +20,26 @@ const loadingToast = "opening-wallet";
 const failureToast = "wallet-open-failed";
 
 function loadCoinsHost(loading: { current: boolean }, toast: ShowToast, onLoaded: (host: typeof CoinsHost) => void) {
-  loadLazily(loading, toast, () => import("./CoinsHost").then(module => module.CoinsHost), onLoaded);
+  loadLazily(loading, toast, "Opening wallet…", () => import("./CoinsHost").then(module => module.CoinsHost), onLoaded);
+}
+
+function loadCurveBuySheet(loading: { current: boolean }, toast: ShowToast, onLoaded: (sheet: typeof CurveBuySheet) => void) {
+  loadLazily(loading, toast, "Opening…", () => import("./CurveBuySheet").then(module => module.CurveBuySheet), onLoaded);
 }
 
 /** Loads a lazy wallet part once, with a pending toast when it is slow and a retry when it fails. */
-function loadLazily<T>(loading: { current: boolean }, toast: ShowToast, load: () => Promise<T>, onLoaded: (part: T) => void) {
+function loadLazily<T>(loading: { current: boolean }, toast: ShowToast, label: string, load: () => Promise<T>, onLoaded: (part: T) => void) {
   if (loading.current) return;
   loading.current = true;
   sonner.dismiss(failureToast);
-  const pending = window.setTimeout(() => toast("Opening wallet…", { id: loadingToast, tone: "pending" }), T4);
+  const pending = window.setTimeout(() => toast(label, { id: loadingToast, tone: "pending" }), T4);
   void load().then(onLoaded, () => {
     const { text, detail } = splitDiagnostic(diagnosticMessage("Wallet couldn’t open.", { code: "request_failed" }));
     toast(text, {
       id: failureToast,
       tone: "error",
       sub: detail ?? undefined,
-      action: { label: "Try again", onClick: () => loadLazily(loading, toast, load, onLoaded) },
+      action: { label: "Try again", onClick: () => loadLazily(loading, toast, label, load, onLoaded) },
     });
   }).finally(() => {
     loading.current = false;
@@ -79,7 +83,7 @@ export function CoinsOverlay() {
     const buy = curveBuyOf(tradeOpening(argument)?.action ?? null);
     if (!buy || !curveSetup) return openTrade(argument);
     setCurveBuy(current => ({ buy, seq: (current?.seq ?? 0) + 1 }));
-    if (!CurveHost) loadLazily(loadingCurve, toast, () => import("./CurveBuySheet").then(module => module.CurveBuySheet), loaded => setCurveHost(() => loaded));
+    if (!CurveHost) loadCurveBuySheet(loadingCurve, toast, loaded => setCurveHost(() => loaded));
   });
   useSignInDraft(coinDraftKey("open"), null, (saved) => {
     const next = parseSavedCoinScreen(saved.screen);

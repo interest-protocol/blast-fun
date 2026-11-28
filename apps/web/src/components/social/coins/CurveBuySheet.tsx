@@ -44,7 +44,7 @@ export function CurveBuySheet({ request, setup, onGraduated }: Readonly<{
 
   function graduated(launchId: string) {
     const coin = coins[launchId];
-    setCoins(current => Object.fromEntries(Object.entries(current).filter(([id]) => id !== launchId)));
+    setCoins(current => withoutLaunch(current, launchId));
     if (launchId !== shown) return;
     setShown(null);
     if (open && coin) {
@@ -53,7 +53,14 @@ export function CurveBuySheet({ request, setup, onGraduated }: Readonly<{
     }
   }
 
+  /** Once the sheet has gone, a closed launch with nothing held is forgotten; a held one stays until it settles. */
+  function closed() {
+    setShown(null);
+    if (shown && !held.has(shown)) setCoins(current => withoutLaunch(current, shown));
+  }
+
   function heldChange(launchId: string, value: boolean) {
+    if (!value && launchId !== shown) setCoins(current => withoutLaunch(current, launchId));
     setHeld(current => {
       if (current.has(launchId) === value) return current;
       const next = new Set(current);
@@ -68,7 +75,7 @@ export function CurveBuySheet({ request, setup, onGraduated }: Readonly<{
   const mounted = Object.entries(coins).filter(([id]) => id === shown || held.has(id));
   const title = shown && coins[shown] ? `Buy $${coins[shown].symbol}` : "Buy";
   return <>
-    <TradeSheet open={open} title={title} onClose={() => setOpen(false)} onClosed={() => setShown(null)}>
+    <TradeSheet open={open} title={title} onClose={() => setOpen(false)} onClosed={closed}>
       {availability.status === "available" ? <div ref={setPlacement} /> : <CurveTradeUnavailable reason={availability.reason} />}
     </TradeSheet>
     {available ? mounted.map(([launchId, coin]) => (
@@ -89,15 +96,21 @@ export function CurveBuySheet({ request, setup, onGraduated }: Readonly<{
   </>;
 }
 
+function withoutLaunch(coins: Readonly<Record<string, SocialTradeCoin>>, launchId: string): Readonly<Record<string, SocialTradeCoin>> {
+  return Object.fromEntries(Object.entries(coins).filter(([id]) => id !== launchId));
+}
+
 /** Home's rows follow the market feed on their own; the rail refreshes its own curve and wallet reads. */
 function keepHomeLive() {}
 
 /** One rail's own element: inside the open sheet when it is the one shown, otherwise kept off the page. */
 function CurveRail({ placement, children }: Readonly<{ placement: HTMLElement | null; children: ReactNode }>) {
+  // react-doctor-disable-next-line react-doctor/no-unguarded-browser-global-in-render-or-hook-init -- This sheet loads only in the browser, after a Buy press; the rail needs its own node from the first render so a held trade survives the sheet closing.
   const [host] = useState(() => document.createElement("div"));
   useEffect(() => {
     if (placement) placement.replaceChildren(host);
     else host.remove();
   }, [placement, host]);
+  useEffect(() => () => host.remove(), [host]);
   return createPortal(children, host);
 }

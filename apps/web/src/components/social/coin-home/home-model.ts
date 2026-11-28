@@ -2,6 +2,7 @@ import { coinPagePath } from "@blast/core/modules/launchpad-coin/page-key.ts";
 import { ago, bxSigned, fillPercent, qs, qsRaised, qm, raisedShort, short, shortAddress, signPct, timeUntil, usd0 } from "@blast/core/web/format.ts";
 import { amtExact, atLeastPow10, bxUsdExact, compareExact, exactAtoms, exactDecimal, groupedExact, numShortExact, shortQtyExact, unitsAt } from "@blast/core/web/exact-amount.ts";
 import type { FeedItemActor } from "@blast/core/web/contracts/items.ts";
+import type { SocialTradeCoin } from "@blast/core/web/contracts/trades.ts";
 import { HOME_RECENT_BUY_MIN_USD, type HomeTapeEvent, type HomeActivity, type HomeAmount, type HomeCoin, type HomeEvent, type HomeKind, type HomeParticipant, type HomeRecentBuy, type HomeSide, type HomeWindow } from "@blast/core/web/contracts/home.ts";
 import type { DiscoveryResponse, DiscoveryRow } from "@blast/core/modules/launchpad-discovery/rows.ts";
 import { HOME_BONDING_ROWS } from "@blast/core/modules/launchpad-discovery/bonding.ts";
@@ -709,4 +710,15 @@ export function homeBuyRoute(coin: HomeCoin, nowMs: number): HomeBuyRoute | null
   const sale = coin.sale;
   if (!sale || coin.presale_id === null) return null;
   return saleLifecycleAt(coin.lifecycle, sale.start_ms, nowMs) === "open" && sale.end_ms > nowMs ? "join" : null;
+}
+
+/**
+ * The row's coin as the trade sheet names it. A curve buy carries its launch, so the sheet
+ * mounts the coin page's curve rail; an open sale carries its quote, so the sheet joins it.
+ */
+export function tradeCoinOf(coin: HomeCoin, route: HomeBuyRoute): SocialTradeCoin {
+  const base = { coin_type: coin.coin_type, symbol: coin.symbol, name: coin.name, decimals: coin.decimals, icon_url: coin.icon_url, usd_price: coin.price_usd, presale_id: coin.presale_id };
+  if (route === "curve" && coin.launch_id !== null) return { ...base, launch_id: coin.launch_id };
+  if (route === "join") return { ...base, in_presale: true, quote_symbol: coin.quote.symbol, quote_type: coin.quote.type };
+  return base;
 }

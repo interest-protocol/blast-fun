@@ -7,8 +7,8 @@ import { AppRouterContext } from "next/dist/shared/lib/app-router-context.shared
 
 import { QueryProvider } from "#web/lib/query/provider.tsx";
 import type { HomeCoin, HomeWindow } from "@blast/core/modules/social/contracts/home.ts";
-import { CoinCard, tradeCoinOf } from "./CoinCard";
-import { homeBuyRoute, type HomeBuyTier, type HomePop, type HomeTradeSide } from "./home-model";
+import { CoinCard } from "./CoinCard";
+import { homeBuyRoute, tradeCoinOf, type HomeBuyTier, type HomePop, type HomeTradeSide } from "./home-model";
 import { CoinList, type ListProps } from "./sources";
 import { installTestDom, recordAnimations, waitFor } from "../../../../test/fixtures/social/test-dom.ts";
 import { installLiveSocket, liveTicket } from "../../../../test/fixtures/lib/live-socket.testing.ts";

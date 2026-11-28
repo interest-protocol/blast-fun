@@ -366,6 +366,7 @@ function StandaloneCurveSession({
     heldRef.current = onHeldChange;
   }, [onMigrated, onHeldChange]);
   useEffect(() => {
+    // react-doctor-disable-next-line react-doctor/no-pass-data-to-parent -- Home's Buy sheet keeps a rail mounted while its trade is unresolved; only the session knows when that is.
     heldRef.current?.(held);
   }, [held]);
   // A trade still settling keeps its rail: the move to the pool waits until it resolves.
