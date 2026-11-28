@@ -60,7 +60,7 @@ export async function fetchHappening(signal?: AbortSignal): Promise<SocialHappen
   if (response.status !== 200) throw responseError(body, response, "Live activity could not load. Try again shortly.");
   const parsed = happeningReadSchema.safeParse(body);
   if (!parsed.success) throw new PublicError("Live activity returned an unreadable response. Try again.", { ...responseDiagnostic(response), code: "invalid_response" });
-  // The server leaves test sales out of every row (`PUBLIC_PRESALES`); this drops any row whose quote still names Test SUI, with no extra read.
+  // The server leaves test sales out of every row (`PUBLIC_ACTIVITY` for the tape, `PUBLIC_PRESALES` for the rest); this drops any row whose quote still names Test SUI, with no extra read.
   return withoutTestHappening(parsed.data);
 }
 
