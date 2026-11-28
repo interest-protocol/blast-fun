@@ -632,7 +632,7 @@ test("T-020 alignment: a cliff holds back everything until it ends, and NUMERIC 
   });
 });
 
-test("#173: a creator's raise vests in the quote coin, with its symbol, decimals and price", { skip }, async () => {
+test("#173: a creator's raise vests in the quote coin, with its decimals and price", { skip }, async () => {
   await withFixture(async ({ admin, get }) => {
     const P = FEED_STORY_PRESALES;
     const DAY = 86_400_000;
@@ -645,10 +645,12 @@ test("#173: a creator's raise vests in the quote coin, with its symbol, decimals
       ],
     });
     const body = await ok<SocialMePresales>(await get("/api/social/me/presales", { authorization: KAI }), "me-presales-response", "private, no-store");
-    const rows = body.vestings.map((v) => [v.schedule_id, v.symbol, v.total, v.claimable, v.claimable_usd]).sort(([a], [b]) => String(a).localeCompare(String(b)));
+    // `symbol` is not sent yet: tabs on web builds before this change parse strictly and would reject it.
+    assert.ok(body.vestings.every((v) => v.symbol === undefined));
+    const rows = body.vestings.map((v) => [v.schedule_id, v.total, v.claimable, v.claimable_usd]).sort(([a], [b]) => String(a).localeCompare(String(b)));
     assert.deepEqual(rows, [
-      ["vs-raise", "USDC", "690", "69", "69.00"],
-      ["vs-token", "MIGR", "400000", "40000", "168.00"],
+      ["vs-raise", "690", "69", "69.00"],
+      ["vs-token", "400000", "40000", "168.00"],
     ]);
   });
 });

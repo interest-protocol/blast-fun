@@ -100,7 +100,7 @@ export const meVestingSchema = z.strictObject({
   }),
   symbol: z.string().min(1).optional().meta({
     description:
-      "The coin the schedule pays: the sale coin's symbol, or the quote coin's for a creator's raise. Optional so web can deploy before the backend that sends it; absent means the sale coin.",
+      "The coin the schedule pays: the sale coin's symbol, or the quote coin's for a creator's raise. Optional while older web builds still parse this answer strictly; when absent the payout coin is unknown, and web shows the sale coin's symbol.",
   }),
   total: presalePriceSchema,
   claimed: presalePriceSchema,
