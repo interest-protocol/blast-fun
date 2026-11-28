@@ -1,4 +1,8 @@
 const PREFERENCE = "blast_active_account";
+const accountSwitch = new AbortController();
+
+/** Cancels work from the old account while the browser reloads. */
+export const accountSwitchSignal = accountSwitch.signal;
 
 export type AccountSession = "privy" | "wallet";
 
@@ -20,6 +24,7 @@ export function switchAccountSession(session: AccountSession): boolean {
   if (!rememberAccountSession(session)) {
     return false;
   }
+  accountSwitch.abort();
   // Start the selected account with a fresh server render, query cache, and transaction forms.
   window.location.reload();
   return true;

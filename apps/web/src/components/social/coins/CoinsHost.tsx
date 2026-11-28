@@ -31,6 +31,7 @@ import { useBalancesContext } from "./balances";
 import { CoinSheet, type CoinSheetProps, type CoinSheetTrading, type CoinSheetWallet, type TradeAsk, type TradeOutcome, type WithdrawAsk } from "./CoinSheet";
 import { coinAmt, coinDraftKey, parseSavedCoinScreen, walletCoinViews, type CoinOpening, type CoinScreen, type WalletCoinView } from "./coin-model";
 import { useSignInDraft } from "../sign-in-draft";
+import { accountSwitchSignal } from "../account-selection";
 import { PrivyCoinSignerBridge, type PrivyCoinSigner } from "./signers";
 import { walletSessionSigner } from "./signers-model";
 import { blastWalletSigner } from "../commit/commit-signers";
@@ -290,7 +291,7 @@ export function CoinsHost({ inlineSale, inlineTrade, opening, active = true }: R
     if (client.current === null) client.current = mainnet();
     const result = await runWithdraw(
       {
-        api,
+        api: { ...api, signal: accountSwitchSignal },
         client: client.current,
         signer,
         knownDigest: current.digest,

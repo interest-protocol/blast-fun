@@ -172,10 +172,11 @@ async function sendGasless(deps: WithdrawDependencies, request: WithdrawRequest,
     return preparationFailed(error);
   }
 
-  const signed = await signExactly(signer, bytes);
+  const signed = await signExactly(signer, bytes, deps.api.signal);
   if (signed.status === "unsigned") {
     return notSent(signed.reason === "mismatch" ? walletUnsignedMessage(signed) : CANCELLED);
   }
+  if (deps.api.signal?.aborted) return notSent(CANCELLED);
 
   const signature = signed.signature;
   const digest = TransactionDataBuilder.getDigestFromBytes(bytes);
@@ -197,12 +198,13 @@ async function sendSponsored(deps: WithdrawDependencies, request: WithdrawReques
     return refusedWithdrawal(sponsorship);
   }
 
-  const signed = await signSponsored({ api: deps.api, sponsorship: sponsorship.body, kind, signer });
+  const signed = await signSponsored({ api: deps.api, sponsorship: sponsorship.body, kind, signer, signal: deps.api.signal });
   if (signed.status === "unsigned") {
     return notSent(signed.reason === "mismatch" && signed.error === undefined
       ? diagnosticMessage("Blast returned a different transaction. Nothing was signed.", { code: "invalid_response" })
       : signed.reason === "mismatch" ? walletUnsignedMessage(signed) : CANCELLED);
   }
+  if (deps.api.signal?.aborted) return notSent(CANCELLED);
 
   const sent = await signed.send();
   if (sent.status === "refused") {

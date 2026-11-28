@@ -78,6 +78,7 @@ export function SignInContent({
   headingId = HEADING_ID,
   additionalAccount,
   resumeAccount,
+  onResumeAccount,
 }: Readonly<{
   state: SignInState;
   walletAvailable: boolean;
@@ -89,6 +90,7 @@ export function SignInContent({
   headingId?: string;
   additionalAccount?: AccountSession;
   resumeAccount?: AccountSession;
+  onResumeAccount?: (account: AccountSession) => void;
 }>) {
   const waiting = waitingMethod(state);
   const disabled = unavailable || methodsDisabled(state);
@@ -129,7 +131,7 @@ export function SignInContent({
       <SheetHeading id={headingId} title={title} />
       <div className={styles.methods}>
         {resumeAccount === "privy" ? (
-          <Button className={styles.method} data-sign-in-method="resume-privy" disabled={disabled} onClick={() => switchAccountSession("privy")} size="lg" variant="ink">
+          <Button className={styles.method} data-sign-in-method="resume-privy" disabled={disabled} onClick={() => onResumeAccount?.("privy")} size="lg" variant="ink">
             Continue with Privy
           </Button>
         ) : additionalAccount !== "wallet" && SOCIAL_SIGN_IN_METHODS.map(renderMethod)}
@@ -138,7 +140,7 @@ export function SignInContent({
         ) : null}
         {resumeAccount !== "privy" && additionalAccount !== "wallet" && renderMethod("wallet")}
         {resumeAccount === "wallet" && (
-          <Button className={styles.method} data-sign-in-method="resume-wallet" disabled={disabled} onClick={() => switchAccountSession("wallet")} size="lg" variant="secondary">
+          <Button className={styles.method} data-sign-in-method="resume-wallet" disabled={disabled} onClick={() => onResumeAccount?.("wallet")} size="lg" variant="secondary">
             Continue with Sui wallet
           </Button>
         )}
@@ -238,6 +240,7 @@ type SignInFlow = Readonly<{
   state: SignInState;
   walletAvailable: boolean;
   start: (method: SignInMethod) => void;
+  resume: (account: AccountSession) => void;
   reset: () => void;
 }>;
 
@@ -277,6 +280,9 @@ function useSignInFlow(
   const viewer = useSocialViewer();
   const wallet = useWalletSession();
   const [state, setState] = useState<SignInState>(SIGN_IN_IDLE);
+  const resume = (account: AccountSession) => {
+    if (!switchAccountSession(account)) setState({ status: "switch-failed" });
+  };
   const live = useRef({ onReturn });
   useEffect(() => {
     live.current = { onReturn };
@@ -316,12 +322,13 @@ function useSignInFlow(
     if (!walletLoginOpen.current) {
       return;
     }
+    const target = wallet.selection === "wallet" ? "privy" : additionalAccount;
     if (event.kind === "login-error") {
       walletLoginOpen.current = false;
       setState(walletLoginErrorState(event.code));
-    } else if (!event.wasAlreadyAuthenticated && (event.loginMethod === "siwe" || event.loginMethod === "siws")) {
+    } else if (event.wasAlreadyAuthenticated ? target !== undefined : event.loginMethod === "siwe" || event.loginMethod === "siws") {
       walletLoginOpen.current = false;
-      finish("wallet", wallet.selection === "wallet" ? "privy" : additionalAccount);
+      finish("wallet", target);
     }
   });
 
@@ -388,7 +395,7 @@ function useSignInFlow(
   }, []);
 
   // A signed-in viewer has nothing left to wait for.
-  return { state: viewer.signedIn && !additionalAccount ? SIGN_IN_IDLE : state, walletAvailable: wallet.available, start, reset };
+  return { state: viewer.signedIn && !additionalAccount ? SIGN_IN_IDLE : state, walletAvailable: wallet.available, start, resume, reset };
 }
 
 /**
@@ -444,6 +451,7 @@ function PrivySignInSheet() {
       <SignInContent
         additionalAccount={additionalAccount}
         onMethod={flow.start}
+        onResumeAccount={flow.resume}
         resumeAccount={mode === "default" ? resumeAccount : undefined}
         onRetryWallets={suiWallets.retry}
         state={flow.state}
@@ -505,6 +513,7 @@ function PrivySignInCard({ returnTo }: Readonly<{ returnTo: string }>) {
     <SignInContent
       headingId="blast-sign-in-page-title"
       onMethod={flow.start}
+      onResumeAccount={flow.resume}
       resumeAccount={resumeAccount}
       state={flow.state}
       onRetryWallets={suiWallets.retry}

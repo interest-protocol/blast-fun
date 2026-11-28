@@ -9,6 +9,7 @@ import styles from "#web/components/blast-ui/AppShell.module.css";
 import { BlastMenuItem, BlastMenuRadioGroup, BlastMenuRadioItem, BlastMenuRadioItemIndicator } from "#web/components/blast-ui/BlastMenu.tsx";
 import { DiagnosticText } from "#web/components/blast-ui/DiagnosticText.tsx";
 import { CheckIcon } from "#web/components/blast-ui/Icons.tsx";
+import { LoadingIndicator } from "#web/components/blast-ui/LoadingIndicator.tsx";
 import { useShellActions } from "#web/components/blast-ui/shell-actions.tsx";
 import { findEmbeddedSuiWallet } from "#web/components/mission-control/privy-embedded-wallet.ts";
 import { usePrivySessionMounted } from "#web/components/presale/providers/PrivySessionProvider.tsx";
@@ -74,7 +75,7 @@ function AccountChoices({ active, closeMenu, walletScope }: Readonly<{
     }
     setStatus("switching");
     const verified = session === "wallet"
-      ? client.fetchQuery(walletQuery)
+      ? client.fetchQuery({ ...walletQuery, staleTime: 0 })
       : verifyPrivyAccount(privy.getAccessToken);
     void verified.then(() => {
       if (!switchAccountSession(session)) {
@@ -106,7 +107,7 @@ function AccountChoices({ active, closeMenu, walletScope }: Readonly<{
       {!wallet.active && active === "privy" && (
         <BlastMenuItem className={styles.mitem} closeOnClick={false} disabled={pending} onClick={() => signIn("wallet")}>Sign in with Slush</BlastMenuItem>
       )}
-      {pending && <div className={styles.accountMenuLabel} role="status">Switching accounts…</div>}
+      {pending && <LoadingIndicator className={styles.accountMenuPending} label="Switching accounts" />}
       {status === "failed" && <div className={styles.accountMenuLabel} role="alert"><DiagnosticText message={SWITCH_FAILED} /></div>}
     </>
   );

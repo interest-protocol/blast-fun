@@ -354,6 +354,13 @@
   color: var(--muted);
   font-size: 0.8125rem;
 }
+.accountMenuPending {
+  padding: 0.375rem 0.625rem;
+  color: var(--muted);
+  /* Keep the status out of the accessibility tree until the shared ring appears. */
+  animation: accountMenuPending var(--t4) step-end !important;
+}
+@keyframes accountMenuPending { from { visibility: hidden; } }
 .accountMenuCheck { display: flex; flex: none; }
 .accountMenuCheck svg { width: 1rem; height: 1rem; }
 .acctMe .mtext > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
