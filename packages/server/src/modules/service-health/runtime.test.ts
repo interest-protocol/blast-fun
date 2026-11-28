@@ -37,13 +37,14 @@ if (process.versions.bun) {
 
   const { GET, healthCacheControl } = await import("./route.ts");
 
-  test("the CDN keeps a health answer only for what is left of its 5 s", () => {
-    assert.equal(healthCacheControl(10_000, 10_000), "public, max-age=0, s-maxage=5");
-    assert.equal(healthCacheControl(10_000, 11_200), "public, max-age=0, s-maxage=3");
-    assert.equal(healthCacheControl(10_000, 14_500), "no-store");
+  test("the CDN keeps a health answer only for what is left of its 5 s, less 1 s for the trip", () => {
+    assert.equal(healthCacheControl(10_000, 10_000), "public, max-age=0, s-maxage=4");
+    assert.equal(healthCacheControl(10_000, 11_200), "public, max-age=0, s-maxage=2");
+    assert.equal(healthCacheControl(10_000, 13_000), "public, max-age=0, s-maxage=1");
+    assert.equal(healthCacheControl(10_000, 13_001), "no-store");
     assert.equal(healthCacheControl(10_000, 30_000), "no-store");
-    // A clock that reads the check as later than now still never shares past 5 s.
-    assert.equal(healthCacheControl(12_000, 10_000), "public, max-age=0, s-maxage=5");
+    // A clock that reads the check as later than now still never shares past 4 s.
+    assert.equal(healthCacheControl(12_000, 10_000), "public, max-age=0, s-maxage=4");
   });
 
   test("health route authenticates only backend probes, coalesces reads, and returns safe facts the CDN may share briefly", async (t) => {
@@ -79,7 +80,7 @@ if (process.versions.bun) {
     );
     const [first, second] = await Promise.all([GET(), GET()]);
     assert.equal(first.status, 200);
-    assert.match(first.headers.get("cache-control") ?? "", /^public, max-age=0, s-maxage=[1-5]$/);
+    assert.match(first.headers.get("cache-control") ?? "", /^public, max-age=0, s-maxage=[1-4]$/);
     const body = await first.json();
     assert.deepEqual(await second.json(), body);
     assert.equal(backendReads, 1);
