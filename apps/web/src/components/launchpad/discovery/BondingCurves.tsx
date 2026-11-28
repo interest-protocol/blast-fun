@@ -139,9 +139,10 @@ function railQuery(view: Stage, cursor: string | null) {
   };
 }
 
-/** Whether an answer has settled on no rows: a read still loading or failed is not empty. */
+/** Whether an answer has settled on no rows and no next page: a read still loading or failed is not empty. */
 function isEmpty(answer: DiscoveryResponse | undefined): boolean {
-  return answer?.section.state === "empty" || pageOf(answer)?.rows.length === 0;
+  const page = pageOf(answer);
+  return answer?.section.state === "empty" || (page?.rows.length === 0 && page.nextCursor === null);
 }
 
 /** The served rows, or null while the answer has none (empty or not loaded). */

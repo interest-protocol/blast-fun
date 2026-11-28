@@ -45,7 +45,6 @@ export function HomeBondingCurves({ nowMs }: Readonly<{ nowMs: number }>) {
   const client = useAppQueryClient();
   const id = useId();
   const [chosen, setShown] = useState<BondingColumn>("new");
-  useListContent(STAGE_HISTORY_KEY, chosen, setShown, { restoreOnMount: true });
   const live = useLiveDiscovery(true);
   const [fallbackInterval] = useState(() => 25_000 + Math.round(Math.random() * 10_000));
   const closest = useQuery({
@@ -74,6 +73,8 @@ export function HomeBondingCurves({ nowMs }: Readonly<{ nowMs: number }>) {
     return { ...column, rows: rowsByColumn[column.key], metrics: read.data?.metrics, failed: read.isError || read.data?.section.state === "unavailable" };
   }).filter((state) => state.key !== "almost" || state.rows?.length !== 0);
   const shown = states.some((state) => state.key === chosen) ? chosen : "new";
+  // History keeps the stage this visit shows, not one that left the card.
+  useListContent(STAGE_HISTORY_KEY, shown, setShown, { restoreOnMount: true });
   // Keep the first-load skeleton. Once settled, the legacy catalog is available even if a live read fails.
   if (states.every((state) => state.rows === null && !state.failed)) return <TableCard className={styles.card}><BondingSkeleton /></TableCard>;
   return (
