@@ -147,13 +147,13 @@ export function VestingsList({
               <PresaleMark presale={view.presale} />
               <span className={styles.t}>
                 <b>{view.title}</b>
-                <span className="num">{compact ? `${view.balances.available} ${view.presale.symbol}` : vestingSub(view.sub)}</span>
+                <span className="num">{compact ? `${view.balances.available} ${view.symbol}` : vestingSub(view.sub)}</span>
               </span>
             </Link>
-            {compact ? null : <dl className={vestingStyles.balances} aria-label={`${view.presale.symbol} vesting balances`}>
-              <div><dt>Claimed</dt><dd>{view.balances.claimed} <span>{view.presale.symbol}</span></dd></div>
-              <div><dt>Unclaimed</dt><dd>{view.balances.remaining} <span>{view.presale.symbol}</span></dd></div>
-              <div><dt>Available to claim</dt><dd>{view.balances.available} <span>{view.presale.symbol}</span></dd></div>
+            {compact ? null : <dl className={vestingStyles.balances} aria-label={`${view.symbol} vesting balances`}>
+              <div><dt>Claimed</dt><dd>{view.balances.claimed} <span>{view.symbol}</span></dd></div>
+              <div><dt>Unclaimed</dt><dd>{view.balances.remaining} <span>{view.symbol}</span></dd></div>
+              <div><dt>Available to claim</dt><dd>{view.balances.available} <span>{view.symbol}</span></dd></div>
             </dl>}
             <div className={compact ? undefined : vestingStyles.action}><Right claims={claims} label={compact ? "Claim" : undefined} presaleId={view.presale.presale_id} right={view.right} /></div>
             {compact ? null : <>

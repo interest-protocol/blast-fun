@@ -295,6 +295,8 @@ function deliveredPosition(position: MePresalePosition, committed: string, hide:
 
 export type VestingView = Readonly<{
   presale: ProfilePresale;
+  /** The coin the schedule pays (a creator's raise vests in the quote coin). */
+  symbol: string;
   title: string;
   sub: string;
   bar: number;
@@ -318,7 +320,7 @@ export function vestingView(vesting: MeVesting, hidden: boolean, nowMs: number, 
 
 function indexedVestingView(vesting: MeVesting, hidden: boolean, nowMs: number): VestingView {
   const hide = (text: string) => (hidden ? HIDDEN_AMOUNT : text);
-  const { presale } = vesting;
+  const { presale, symbol } = vesting;
   const duration = vestingDurationText(vesting.end_ms - vesting.start_ms);
   const cliffMs = Math.max(0, vesting.cliff_end_ms - vesting.start_ms);
   const claimable = exactDecimal(vesting.claimable);
@@ -332,7 +334,7 @@ function indexedVestingView(vesting: MeVesting, hidden: boolean, nowMs: number):
       : claimable !== null && claimable.n > 0n
         ? {
           kind: "claim",
-          label: `Claim ${hide(available)} ${presale.symbol}`,
+          label: `Claim ${hide(available)} ${symbol}`,
           target: {
             key: `vesting:${vesting.schedule_id}`,
             kind: "claim_vesting",
@@ -340,7 +342,7 @@ function indexedVestingView(vesting: MeVesting, hidden: boolean, nowMs: number):
             scheduleId: vesting.schedule_id,
             vesting: { claimed: vesting.claimed, claimable: vesting.claimable },
             // The gate's `Claimed N SYM` / `Name · label`; the schedule's label is not served (A-05), so the row's "Vesting".
-            done: { title: `Claimed ${available} ${presale.symbol}`, sub: `${presale.name} · Vesting` },
+            done: { title: `Claimed ${available} ${symbol}`, sub: `${presale.name} · Vesting` },
           },
         }
         : nowMs >= vesting.end_ms
@@ -348,8 +350,9 @@ function indexedVestingView(vesting: MeVesting, hidden: boolean, nowMs: number):
           : { kind: "figures", top: "Up to date", bottom: "next unlock soon", tone: null };
   return {
     presale,
+    symbol,
     title: `${presale.name} · Vesting`,
-    sub: `${hide(qty(Number(vesting.total)))} ${presale.symbol} · linear over ${duration}${cliffMs ? `, ${vestingDurationText(cliffMs).replace(" ", "-")} cliff` : ""}`,
+    sub: `${hide(qty(Number(vesting.total)))} ${symbol} · linear over ${duration}${cliffMs ? `, ${vestingDurationText(cliffMs).replace(" ", "-")} cliff` : ""}`,
     bar: vesting.vested_pct,
     progress: `${vesting.vested_pct}% unlocked${nowMs < vesting.end_ms ? " · fully vested" : " · fully unlocked"}`,
     fullyVestAtMs: nowMs < vesting.end_ms ? vesting.end_ms : undefined,

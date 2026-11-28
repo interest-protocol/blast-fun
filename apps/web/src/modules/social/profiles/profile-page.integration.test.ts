@@ -632,6 +632,27 @@ test("T-020 alignment: a cliff holds back everything until it ends, and NUMERIC 
   });
 });
 
+test("#173: a creator's raise vests in the quote coin, with its symbol, decimals and price", { skip }, async () => {
+  await withFixture(async ({ admin, get }) => {
+    const P = FEED_STORY_PRESALES;
+    const DAY = 86_400_000;
+    const times = { start_ms: NOW - 18 * DAY, cliff_ms: "0", end_ms: String(NOW + 162 * DAY) };
+    await seedChainRead(admin, {
+      vesting_schedules: [
+        // 690 USDC (6 decimals) of the raise beside 400,000 of the sale coin (9 decimals); 10% vested of each.
+        { schedule_id: "vs-raise", share: "raise", asset: "quote", presale_id: P.migratedRecently, beneficiary: FEED_STORY_WALLETS.kai, total: "690000000", claimed: "0", ...times },
+        { schedule_id: "vs-token", presale_id: P.migratedRecently, beneficiary: FEED_STORY_WALLETS.kai, total: "400000000000000", claimed: "0", ...times },
+      ],
+    });
+    const body = await ok<SocialMePresales>(await get("/api/social/me/presales", { authorization: KAI }), "me-presales-response", "private, no-store");
+    const rows = body.vestings.map((v) => [v.schedule_id, v.symbol, v.total, v.claimable, v.claimable_usd]).sort(([a], [b]) => String(a).localeCompare(String(b)));
+    assert.deepEqual(rows, [
+      ["vs-raise", "USDC", "690", "69", "69.00"],
+      ["vs-token", body.vestings[0]!.presale.symbol, "400000", "40000", "168.00"],
+    ]);
+  });
+});
+
 async function png(width: number, height: number): Promise<Buffer> {
   const { default: sharp } = await import("sharp");
   return sharp({ create: { width, height, channels: 3, background: "#ff4c98" } }).withMetadata({ exif: { IFD0: { Copyright: "secret" } } }).png().toBuffer();

@@ -102,6 +102,8 @@ export function portfolioCoins(
 export type VestingScheduleRow = Readonly<{
   schedule_id: string;
   presale_id: string;
+  /** What the schedule pays: the sale coin, or the raise in the quote coin (`quote`). */
+  asset: "sale_token" | "quote";
   total: string;
   claimed: string;
   start_ms: string;
@@ -113,7 +115,7 @@ export type VestingScheduleRow = Readonly<{
 
 /** Vesting schedules paying the wallets (blast-infra's beneficiary index), soonest end first. */
 const VESTINGS_SQL = `
-  SELECT schedule_id, presale_id, total::text AS total, claimed::text AS claimed, start_ms::text AS start_ms,
+  SELECT schedule_id, presale_id, asset, total::text AS total, claimed::text AS claimed, start_ms::text AS start_ms,
     ${vestingMsSql("start_ms + cliff_ms")} AS cliff_end_ms, ${vestingMsSql("end_ms")} AS end_ms, ${vestingStepsSql("v")}
   FROM chain_read_v1.vesting_schedules v
   WHERE beneficiary = ANY($1::text[])

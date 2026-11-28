@@ -98,6 +98,10 @@ export const meVestingSchema = z.strictObject({
   presale: profilePresaleSchema.meta({
     description: "A presale as profile rows show it.",
   }),
+  symbol: z.string().min(1).meta({
+    description:
+      "The coin the schedule pays: the sale coin's symbol, or the quote coin's for a creator's raise.",
+  }),
   total: presalePriceSchema,
   claimed: presalePriceSchema,
   claimable: presalePriceSchema,
