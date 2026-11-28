@@ -363,7 +363,7 @@ test("trades above $1 pop, at most 3 a row and 12 a page, biggest first", () => 
   assert.equal(popsOn(trade("a", "1", "1")), false, "exactly $1 does not pop");
   assert.equal(popsOn(trade("a", "1", "1.000000000000000001")), true);
   assert.equal(popsOn(trade("a", "1", "0.5", "sell")), false);
-  assert.equal(popsOn(trade("a", "1")), true, "a read's unpriced buy pops in its own coin");
+  assert.equal(popsOn(trade("a", "1")), false, "a buy with unknown USD value does not pop");
 
   const first = addPops([], [trade("a", "s", "5"), trade("a", "b", "500", "sell")]);
   assert.deepEqual(first.map(pop => [pop.id, pop.slot, pop.cue.text]), [["b", 0, "\u2212$500"], ["s", 1, "+$5"]]);

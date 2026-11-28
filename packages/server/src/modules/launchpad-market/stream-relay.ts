@@ -5,6 +5,7 @@ import { publicErrorResponse } from "@blast/core/lib/http-errors.ts";
 import { EVENT_CURSOR, compareEventCursors } from "@blast/core/modules/launchpad-contract/cursor.ts";
 import {
   MARKET_STREAM_BUDGET as B,
+  marketTradeCueSchema,
   marketStreamPools,
   marketStreamActivity,
   marketStreamDiscovery,
@@ -25,6 +26,7 @@ import type { WebSocket } from "undici";
 import { POOL_KEY } from "@blast/core/modules/launchpad-contract/venues.ts";
 import { parseOpeningRound } from "@blast/core/modules/launchpad-contract/activity.ts";
 import type { DiscoveryResponse } from "@blast/core/modules/launchpad-discovery/rows.ts";
+import { indexedPoolCoin } from "@blast/core/modules/social/portfolio/core-coins.ts";
 import {
   DisplayPriceFeed,
   type DisplayPriceReader,
@@ -55,6 +57,7 @@ export type MarketSet = Readonly<{
   priceCoins: readonly string[];
   presale: string | null;
   discovery?: boolean;
+  tradeCues?: boolean;
 }>;
 /** A socket's handle: `set` changes its pools, coins and presale in place; kept pools keep their fence. */
 export type MarketSubscription = Readonly<{
@@ -66,6 +69,7 @@ type Client = {
   pools: readonly string[];
   priceCoins: readonly string[];
   activity: boolean;
+  cuePools: readonly string[];
   presale: string | null;
   prices?: DisplayPriceSubscription;
   resume: Map<string, string>;
@@ -74,6 +78,7 @@ type Client = {
 };
 type Topic = {
   clients: Set<Client>;
+  cueClients: Set<Client>;
   fence?: Frame;
   cursor?: string;
   priceMissing?: boolean;
@@ -280,6 +285,10 @@ function validateMarketBody(frame: Frame): void {
   if (frame.type === "opening_round") parseOpeningRound(frame.opening_round, "opening_round");
 }
 
+export function trackedCuePools(coins: readonly string[], enabled?: boolean): readonly string[] {
+  return enabled ? [...new Set(coins.flatMap((coin) => indexedPoolCoin(coin)?.poolKeys ?? []))] : [];
+}
+
 export class MarketStreamRelay {
   readonly #connect: () => RelaySocket;
   readonly #expected: ExpectedDeployment;
@@ -336,8 +345,9 @@ export class MarketStreamRelay {
   }
 
   /** Whether an open socket may add these pools and coins: the pool and coin tables only, as it is already a client. */
-  fits(pools: readonly string[], priceCoins: readonly string[]): boolean {
-    const added = pools.filter((pool) => !this.#topics.has(pool)).length;
+  fits(pools: readonly string[], priceCoins: readonly string[], tradeCues?: boolean): boolean {
+    const requested = new Set([...pools, ...trackedCuePools(priceCoins, tradeCues)]);
+    const added = [...requested].filter((pool) => !this.#topics.has(pool)).length;
     return this.#topics.size + added <= B.maxTopics && (this.#prices?.admits(priceCoins) ?? true);
   }
 
@@ -366,6 +376,7 @@ export class MarketStreamRelay {
       pools: [],
       priceCoins: [],
       activity: marketStreamActivity(request) || presale !== null,
+      cuePools: [],
       presale: null,
       resume: new Map(options.resume),
       sink,
@@ -375,6 +386,7 @@ export class MarketStreamRelay {
         this.#setDiscovery(client, false);
         this.#leavePresale(client);
         this.#releaseTopics(client, client.pools);
+        this.#setCues(client, []);
         sink.close();
         if (!this.#clients.size) this.#disconnect();
       },
@@ -414,8 +426,12 @@ export class MarketStreamRelay {
       this.#joinPresale(client, next.presale);
       if (next.presale && client.activity && this.#hintReady) this.#send(client, event("hint", this.#hintPong(true)));
     }
-    const fresh = added.filter((pool) => !this.#topics.has(pool));
+    const cuePools = trackedCuePools(next.priceCoins, next.tradeCues);
+    const fresh = [...new Set([...added, ...cuePools])].filter((pool) => !this.#topics.has(pool));
     this.#joinTopics(client, added);
+    if (this.#clients.has(client)) {
+      this.#setCues(client, cuePools);
+    }
     this.#subscribeFresh(fresh);
   }
 
@@ -520,13 +536,39 @@ export class MarketStreamRelay {
     for (const pool of pools) {
       if (!this.#clients.has(client)) return;
       client.pools = [...client.pools, pool];
-      let topic = this.#topics.get(pool);
-      if (!topic) {
-        topic = { clients: new Set(), ring: [], ringBytes: 0 };
-        this.#topics.set(pool, topic);
-      }
+      const topic = this.#topic(pool);
       topic.clients.add(client);
       this.#catchUp(client, pool, topic);
+    }
+  }
+
+  #topic(pool: string): Topic {
+    const current = this.#topics.get(pool);
+    if (current) {
+      return current;
+    }
+    const topic: Topic = { clients: new Set(), cueClients: new Set(), ring: [], ringBytes: 0 };
+    this.#topics.set(pool, topic);
+    return topic;
+  }
+
+  #setCues(client: Client, pools: readonly string[]): void {
+    const previous = client.cuePools;
+    client.cuePools = pools;
+    for (const pool of pools) {
+      if (!previous.includes(pool)) {
+        this.#topic(pool).cueClients.add(client);
+      }
+    }
+    for (const pool of previous) {
+      if (pools.includes(pool)) {
+        continue;
+      }
+      const topic = this.#topics.get(pool);
+      if (topic) {
+        topic.cueClients.delete(client);
+        this.#releaseEmptyTopic(pool, topic);
+      }
     }
   }
 
@@ -588,12 +630,19 @@ export class MarketStreamRelay {
       const topic = this.#topics.get(pool);
       if (!topic) continue;
       topic.clients.delete(client);
-      if (!topic.clients.size) {
-        clearTimeout(topic.deadline);
-        clearTimeout(topic.retry);
-        this.#topics.delete(pool);
-        if (this.#ready && !this.#ending) this.#subscribe("unsubscribe", [pool]);
-      }
+      this.#releaseEmptyTopic(pool, topic);
+    }
+  }
+
+  #releaseEmptyTopic(pool: string, topic: Topic): void {
+    if (topic.clients.size || topic.cueClients.size) {
+      return;
+    }
+    clearTimeout(topic.deadline);
+    clearTimeout(topic.retry);
+    this.#topics.delete(pool);
+    if (this.#ready && !this.#ending) {
+      this.#subscribe("unsubscribe", [pool]);
     }
   }
 
@@ -746,7 +795,7 @@ export class MarketStreamRelay {
     )
       throw new Fatal();
     this.#ready = true;
-    this.#hello = { type: "hello", provenance: frame.provenance, heartbeat: true, heartbeat_ms: B.heartbeatMs, set: true, ...(frame.discovery === true ? { discovery: true } : {}) };
+    this.#hello = { type: "hello", provenance: frame.provenance, heartbeat: true, heartbeat_ms: B.heartbeatMs, set: true, trade_cues: true, ...(frame.discovery === true ? { discovery: true } : {}) };
     this.#hint(this.#hello);
     this.#readyAt = Date.now();
     const fenced = [...this.#topics].filter(([, topic]) => topic.resuming && topic.cursor);
@@ -915,8 +964,35 @@ export class MarketStreamRelay {
       const bytes = event("market", stampRelay(withoutLabels(frame), Date.now()), cursor);
       if (bytes.byteLength > B.maxChunkBytes) throw new Error("frame-too-large");
       this.#remember(topic, cursor, bytes);
-      if (frame.type === "trade") topic.trades = [object(withoutLabels(frame.trade)), ...(topic.trades ?? [])].slice(0, 50);
+      if (frame.type === "trade") {
+        const trade = object(frame.trade);
+        topic.trades = [object(withoutLabels(trade)), ...(topic.trades ?? [])].slice(0, 50);
+        if (topic.cueClients.size) {
+          this.#tradeCue(pool, topic.cueClients, trade);
+        }
+      }
       for (const client of topic.clients) this.#send(client, bytes);
+    }
+  }
+
+  #tradeCue(pool: string, clients: ReadonlySet<Client>, trade: Frame): void {
+    if (trade.kind !== "swap") {
+      return;
+    }
+    const cue = marketTradeCueSchema.safeParse({
+      coin_type: trade.coin,
+      cursor: trade.cursor,
+      side: trade.side,
+      timestamp_ms: trade.timestamp_ms,
+      quote_atoms: trade.quote_amount,
+      usd: trade.volume_usd,
+    });
+    if (!cue.success || !indexedPoolCoin(cue.data.coin_type)?.poolKeys.some((key) => key === pool)) {
+      return;
+    }
+    const bytes = event("trade_cue", cue.data);
+    for (const client of clients) {
+      this.#send(client, bytes);
     }
   }
 

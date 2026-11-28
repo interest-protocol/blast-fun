@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { compareExact, exactDecimal } from "../../lib/exact-amount.ts";
 import { COIN_TYPE_WITH_GENERICS, SUI_OBJECT_ID_PATTERN } from "../../lib/sui/ids.ts";
 import { EVENT_CURSOR } from "./cursor.ts";
 import { POOL_KEY } from "./venues.ts";
@@ -18,6 +19,19 @@ export const MARKET_STREAM_BUDGET = Object.freeze({
 export const MARKET_STREAM_PATH = "/api/launchpad/market/stream";
 
 export const displayPriceCoinSchema = z.string().max(320).regex(/^[\w:<>,]+$/).regex(COIN_TYPE_WITH_GENERICS);
+export const marketTradeCueSchema = z.object({
+  coin_type: displayPriceCoinSchema,
+  cursor: z.string().regex(EVENT_CURSOR),
+  side: z.enum(["buy", "sell"]),
+  timestamp_ms: z.number().int().positive(),
+  quote_atoms: z.string().max(128).regex(/^[1-9][0-9]*$/),
+  usd: z.string().max(128).refine((value) => {
+    const amount = exactDecimal(value);
+    return amount !== null && compareExact(amount, { n: 1n, scale: 0 }) > 0;
+  }),
+});
+export type MarketTradeCue = Readonly<z.infer<typeof marketTradeCueSchema>>;
+
 export const displayPriceSchema = z.object({
   coin_type: displayPriceCoinSchema,
   usd_price: z.string().max(128).regex(/^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/),
