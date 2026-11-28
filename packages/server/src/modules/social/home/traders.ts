@@ -18,6 +18,7 @@ import { participantOf, sideAcross, sideOf } from "@blast/server/modules/social/
 import { readPeople, type HomeReadContext } from "@blast/server/modules/social/home/coins.ts";
 import { Params, ROW_ORDER, SIDES_GROUP, sidesSelect, homeSpan, readHomeBounds, rowsWithSql, selectHome, visibleKinds, type GroupedRow, type SideRow } from "@blast/server/modules/social/home/sql.ts";
 import { readPnlLedger } from "@blast/server/modules/social/portfolio/pnl-ledger.ts";
+import { readSteps } from "@blast/server/modules/social/read-steps.ts";
 
 /** Global public PnL since launch; the activity window only scopes each visible row's details. */
 
@@ -155,6 +156,11 @@ async function calculateTraderPortfolios(db: ReadableDatabase, ledger: TraderLed
   return answer;
 }
 
+/** The `who` key `home_who` gives an account's rows. */
+function accountWho(accountId: string): string {
+  return `a:${accountId}`;
+}
+
 type CoinRow = Readonly<{ presale_id: string; coin_type: string; symbol: string; icon_url: string | null; decimals: number }>;
 
 const KINDS: readonly HomeKind[] = ["trade_buy", "trade_sell", "presale_commit", "presale_claim"];
@@ -201,19 +207,20 @@ export function parseTradersQuery(params: URLSearchParams): HomeTradersQuery & {
 }
 
 export async function readHomeTraders(db: ReadableDatabase, window: HomeWindow, context: HomeTradersContext, query: HomeTradersQuery = HOME_TRADERS_DEFAULT_QUERY): Promise<HomeTradersPage> {
+  const step = readSteps("home_traders", { window });
   const [bounds, asOf, accounts] = await Promise.all([
-    readHomeBounds(db, context.nowMs),
-    readAsOf(db),
-    context.portfolios.db.read<{ account_id: string }>(`SELECT a.account_id::text AS account_id
+    step("bounds", () => readHomeBounds(db, context.nowMs)),
+    step("as_of", () => readAsOf(db)),
+    step("accounts", () => context.portfolios.db.read<{ account_id: string }>(`SELECT a.account_id::text AS account_id
       FROM social_accounts a JOIN social_account_identities i USING (account_id)
       WHERE a.portfolio_public AND a.privacy = 'public' AND a.sharing_since IS NOT NULL AND i.callsign IS NOT NULL
-      ORDER BY a.account_id`),
+      ORDER BY a.account_id`)),
   ]);
   if (!asOf) throw new SocialRouteError("service_unavailable");
   const accountIds = accounts.rows.map((row) => row.account_id);
   const [people, portfolios] = await Promise.all([
-    readPeople(context.portfolios.db, accountIds),
-    readTraderPortfolios(db, context.portfolios, accountIds, context.nowMs),
+    step("people", () => readPeople(context.portfolios.db, accountIds)),
+    step("portfolios", () => readTraderPortfolios(db, context.portfolios, accountIds, context.nowMs)),
   ]);
   const accountByKey = new Map<string, string>();
   const candidates: HomeTrader[] = accountIds.flatMap((id) => {
@@ -231,8 +238,8 @@ export async function readHomeTraders(db: ReadableDatabase, window: HomeWindow, 
   if (query.search) {
     const term = query.search.toLowerCase();
     const handle = term.replace(/^@/, "");
-    const wallets = await context.portfolios.db.read<{ account_id: string }>(`SELECT DISTINCT account_id::text AS account_id
-      FROM social_wallet_owners WHERE account_id = ANY($1::uuid[]) AND strpos(lower(address), $2) > 0`, [accountIds, term]);
+    const wallets = await step("search_wallets", () => context.portfolios.db.read<{ account_id: string }>(`SELECT DISTINCT account_id::text AS account_id
+      FROM social_wallet_owners WHERE account_id = ANY($1::uuid[]) AND strpos(lower(address), $2) > 0`, [accountIds, term]));
     const walletMatches = new Set(wallets.rows.map((row) => row.account_id));
     matches = ranked.filter((trader) => trader.actor.type === "account" && (
       trader.actor.display_name?.toLowerCase().includes(term) || trader.actor.callsign.toLowerCase().includes(handle) ||
@@ -247,22 +254,25 @@ export async function readHomeTraders(db: ReadableDatabase, window: HomeWindow, 
 
   const span = homeSpan(window, bounds);
   const request = { span, bounds, kinds: visibleKinds(context.hiddenKinds), sales: { kind: "all" } as const, actors: { kind: "everyone" } as const };
+  const selectedIds = selected.map((trader) => accountByKey.get(trader.key)!);
   const grouped = new Params();
-  const selectedIds = grouped.add(selected.map((trader) => accountByKey.get(trader.key)!));
+  const groupedIds = grouped.add(selectedIds);
   const groupedText = selectHome(rowsWithSql(request, grouped), `SELECT '' AS sale, w.who, w.account_id::text AS account_id, min(w.actor) AS wallet, count(*)::text AS events_total,
       max(w.timestamp_ms)::text AS latest_ms, (array_agg(w.kind ORDER BY ${ROW_ORDER("w")}))[1] AS latest_kind,
       count(DISTINCT w.sale)::int AS coins_total
-    FROM home_who w WHERE w.account_id = ANY(${selectedIds}::uuid[])
+    FROM home_who w WHERE w.account_id = ANY(${groupedIds}::uuid[])
     GROUP BY w.who, w.account_id`);
   assertChainReadThroughViews(groupedText);
-  const activity = (await db.read<TraderRow>(groupedText, grouped.values)).rows;
-  const activityByAccount = new Map(activity.map((row) => [row.account_id, row]));
-  const whoByKey = new Map(selected.map((trader) => [trader.key, activityByAccount.get(accountByKey.get(trader.key)!)?.who ?? `c:${accountByKey.get(trader.key)!}`]));
+  // An account's rows are keyed `a:<account_id>` (`home_who`), so its sides need not wait for its activity.
   const sides = new Params();
-  const whos = sides.add(selected.map((trader) => whoByKey.get(trader.key)!));
+  const whos = sides.add(selectedIds.map(accountWho));
   const sidesText = selectHome(rowsWithSql({ ...request, keepTiny: true }, sides), `${sidesSelect()} WHERE w.who = ANY(${whos}::text[]) ${SIDES_GROUP}`);
   assertChainReadThroughViews(sidesText);
-  const sideRows = (await db.read<SideRow>(sidesText, sides.values)).rows;
+  const [activity, sideRows] = await Promise.all([
+    step("activity", () => db.read<TraderRow>(groupedText, grouped.values)).then((result) => result.rows),
+    step("sides", () => db.read<SideRow>(sidesText, sides.values)).then((result) => result.rows),
+  ]);
+  const activityByAccount = new Map(activity.map((row) => [row.account_id, row]));
   const sidesByWho = new Map<string, SideRow[]>();
   for (const side of sideRows) {
     const rows = sidesByWho.get(side.who);
@@ -270,14 +280,14 @@ export async function readHomeTraders(db: ReadableDatabase, window: HomeWindow, 
     else sidesByWho.set(side.who, [side]);
   }
   const saleIds = [...new Set(sideRows.map((row) => row.sale))];
-  const coins = saleIds.length === 0 ? [] : (await db.read<CoinRow>(
+  const coins = saleIds.length === 0 ? [] : (await step("coins", () => db.read<CoinRow>(
     `SELECT p.presale_id, p.sale_token AS coin_type, p.sale_symbol AS symbol, p.sale_icon_url AS icon_url, p.sale_decimals::int AS decimals FROM ${SHOWN_PRESALES} p WHERE p.presale_id = ANY($1::text[])`,
     [saleIds],
-  )).rows;
+  ))).rows;
   const facts = new Map(coins.map((row) => [row.presale_id, row]));
   const list = selected.map((trader) => {
     const grouped = activityByAccount.get(accountByKey.get(trader.key)!);
-    const mine = sidesByWho.get(whoByKey.get(trader.key)!) ?? [];
+    const mine = sidesByWho.get(accountWho(accountByKey.get(trader.key)!)) ?? [];
     const across = (kind: HomeKind) => sideAcross(mine.filter((side) => side.kind === kind));
     const [buys, sells, commits, claims] = KINDS.map(across);
     return { ...trader, ...(grouped ? { latest_ms: Number(grouped.latest_ms), latest_kind: grouped.latest_kind as HomeKind, events_total: Number(grouped.events_total), coins_total: grouped.coins_total } : {}), buys: buys!, sells: sells!, commits: commits!, claims: claims!,

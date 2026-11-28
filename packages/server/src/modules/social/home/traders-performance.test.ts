@@ -21,13 +21,14 @@ function fixture(count: number, publicCount = count) {
     if (sql.includes("FROM chain_read_v1.blast_pnl_period")) return [{ first_checkpoint: "1" }];
     if (sql.includes("FROM chain_read_v1.watermark")) return [{ market_checkpoint: "1", market_timestamp_ms: "1000", presale_checkpoint: "1", presale_timestamp_ms: "1000", observed_ms: "1000" }];
     if (sql.includes("FROM social_accounts a JOIN social_account_identities i")) return ids.slice(0, publicCount).map((id) => ({ account_id: id }));
-    if (sql.includes("AS coins_total")) return ids.map((id) => ({ sale: "", who: id, account_id: id, wallet: id, events_total: "1", latest_ms: "1000", latest_kind: "trade_buy", coins_total: 1 }));
+    if (sql.includes("AS coins_total")) return ids.map((id) => ({ sale: "", who: `a:${id}`, account_id: id, wallet: id, events_total: "1", latest_ms: "1000", latest_kind: "trade_buy", coins_total: 1 }));
     if (sql.includes("FROM social_account_identities")) return ids.map((id) => ({ account_id: id, callsign: callsign(id), display_name: null, avatar_url: null, x_handle: null, verified: false }));
     if (sql.includes("FROM social_follows")) return [];
     if (sql.includes("a.portfolio_public")) return ids.slice(0, publicCount).map((id) => ({ account_id: id }));
     if (sql.includes("WHERE w.who = ANY")) {
       detailReads++;
-      detailAccounts = values.find((value): value is string[] => Array.isArray(value) && value.some((id) => ids.includes(id))) ?? [];
+      const whos = values.find((value): value is string[] => Array.isArray(value) && value.some((who) => ids.includes(String(who).slice(2)))) ?? [];
+      detailAccounts = whos.map((who) => who.slice(2));
       return [];
     }
     if (sql.includes("CROSS JOIN LATERAL") && sql.includes("FROM chain_read_v1.blast_pnl_activity a")) {
@@ -68,6 +69,21 @@ test("100 public candidates holding a coin keep the same top ten while bounding 
   assert.equal(metrics.peak, 4, "the account workers bound concurrent ledger queries");
   assert.equal(metrics.detailReads, 1);
   assert.deepEqual(metrics.detailAccounts, f.ids.slice(0, 10));
+});
+
+test("the page's sides read starts while its activity read is still running", async () => {
+  const f = fixture(10);
+  const events: string[] = [];
+  const db: ReadableDatabase = { async read(sql, args) {
+    const name = sql.includes("AS coins_total") ? "activity" : sql.includes("WHERE w.who = ANY") ? "sides" : null;
+    if (name) events.push(`${name} start`);
+    if (name === "activity") await setImmediate();
+    const result = await f.db.read(sql, args);
+    if (name) events.push(`${name} end`);
+    return result as never;
+  } };
+  await readHomeTraders(db, "24h", { nowMs: 1000, hiddenKinds: [], terms: null, portfolios: { db, wallets: f.wallets } });
+  assert.ok(events.indexOf("sides start") < events.indexOf("activity end"), events.join(", "));
 });
 
 test("private candidates never load wallets and an empty public leaderboard skips all activity details", async () => {
