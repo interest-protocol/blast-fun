@@ -59,10 +59,12 @@ async function readAccount(
 ): Promise<HeaderSession | null> {
   const startedMs = performance.now();
   try {
-    const signal = AbortSignal.any([request.signal, AbortSignal.timeout(HEADER_SESSION_TIMEOUT_MS)]);
+    const deadline = AbortSignal.timeout(HEADER_SESSION_TIMEOUT_MS);
+    const signal = AbortSignal.any([request.signal, deadline]);
     const response = await readMe(new Request(request.url, { headers, signal }));
     if (!response.ok) {
-      recordWait(startedMs, `status_${response.status}`);
+      // The relay answers its own 503 when the 1 s deadline aborts it: that wait is a timeout.
+      recordWait(startedMs, deadline.aborted && !request.signal.aborted ? "timeout" : `status_${response.status}`);
       return response.status === 401 && !privyEnabled ? SIGNED_OUT : null;
     }
     const { account }: SocialMeResponse = await response.json();

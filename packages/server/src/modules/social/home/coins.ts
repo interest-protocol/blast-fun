@@ -891,7 +891,7 @@ export async function assembleCoins(
   const step = readSteps(input.read, { window: span.window });
   const { terms: termsReader, trackedPoolMarket } = context;
   const trackedMarketRead = input.trackedMarkets ?? (needsTrackedMarket && trackedPoolMarket
-    ? step("tracked_market", () => optionalSource("tracked_pool_market", trackedPoolMarket, {}))
+    ? optionalSource("tracked_pool_market", () => step("tracked_market", trackedPoolMarket), {})
     : null);
   const [grouped, holders, dexVolumes] = await Promise.all([
     // The window's activity again, for each coin's newest traders (the first scan is `readSides`).
@@ -999,7 +999,7 @@ async function withTrackedMarket(candidates: readonly Candidate[], context: Home
   const lacks = (candidate: Candidate) => candidate.facts.tracked_pool_only && (candidate.fdvUsd === null || candidate.marketCapUsd === null);
   if (!candidates.some(lacks) || !context.trackedPoolMarket) return { candidates };
   const trackedPoolMarket = context.trackedPoolMarket;
-  const markets = await step("base_tracked_market", () => optionalSource("tracked_pool_market", trackedPoolMarket, {}));
+  const markets = await optionalSource("tracked_pool_market", () => step("base_tracked_market", trackedPoolMarket), {});
   return { markets, candidates: candidates.map((candidate) => {
     const market = lacks(candidate) ? markets[candidate.coinType] : undefined;
     if (!market) return candidate;
@@ -1044,11 +1044,17 @@ export function homeDiscoverBaseKey(window: HomeWindow, stage: HomeStage, contex
     Boolean(context.includeLiveInputs), Boolean(context.includeRollingChange), basePresales(stage, context)]);
 }
 
+/** The window's bounds and the watermark; a missing watermark fails inside the timed step, so it logs as a failure. */
+async function readBoundsAndAsOf(db: ReadableDatabase, nowMs: number): Promise<readonly [HomeBounds, NonNullable<Awaited<ReturnType<typeof readAsOf>>>]> {
+  const [bounds, asOf] = await Promise.all([readHomeBounds(db, nowMs), readAsOf(db)]);
+  if (!asOf) throw new SocialRouteError("service_unavailable");
+  return [bounds, asOf];
+}
+
 export async function readHomeDiscoverBase(db: ReadableDatabase, window: HomeWindow, stage: HomeStage, context: HomeReadContext): Promise<HomeDiscoverBase> {
   const labels = { window, set: baseSetOf(stage), presales: basePresales(stage, context) };
   const step = readSteps("home_discover", labels);
-  const [bounds, asOf] = await step("bounds", () => Promise.all([readHomeBounds(db, context.nowMs), readAsOf(db)]));
-  if (!asOf) throw new SocialRouteError("service_unavailable");
+  const [bounds, asOf] = await step("bounds", () => readBoundsAndAsOf(db, context.nowMs));
   const span = homeSpan(window, bounds);
   const kinds = visibleKinds(context.hiddenKinds);
   const tradeKinds = kinds.filter((kind) => kind === "trade_buy" || kind === "trade_sell");
@@ -1132,8 +1138,7 @@ export async function readHomeCoinsByIds(
   context: HomeReadContext,
 ): Promise<HomeCoinsByIds> {
   const step = readSteps("home_coins", { window });
-  const [bounds, asOf] = await step("bounds", () => Promise.all([readHomeBounds(db, context.nowMs), readAsOf(db)]));
-  if (!asOf) throw new SocialRouteError("service_unavailable");
+  const [bounds, asOf] = await step("bounds", () => readBoundsAndAsOf(db, context.nowMs));
   const span = homeSpan(window, bounds);
   const kinds = visibleKinds(context.hiddenKinds);
   const scope = idsScope(presaleIds);

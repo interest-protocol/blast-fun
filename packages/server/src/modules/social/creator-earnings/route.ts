@@ -28,8 +28,12 @@ export function createCreatorEarningsRoute(
       }), { keys: [...query.keys()], cursor: query.get("cursor") }, "invalid_parameter");
       const sender = await readStep("creator_earnings", "blast_wallet", () => dependencies.blastWallet(context.caller!));
       if (!sender) throw new SocialRouteError("blast_wallet_missing");
-      const chain = await readStep("creator_earnings", "chain", () => dependencies.chain(context.request.signal));
-      if (!chain) throw new SocialRouteError("claim_unavailable");
+      // A missing chain fails inside its timed step, so it logs as a failure.
+      const chain = await readStep("creator_earnings", "chain", async () => {
+        const read = await dependencies.chain(context.request.signal);
+        if (!read) throw new SocialRouteError("claim_unavailable");
+        return read;
+      });
       return context.json(
         await readCreatorEarnings(
           dependencies.database(),

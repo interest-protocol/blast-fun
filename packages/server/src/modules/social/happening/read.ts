@@ -328,12 +328,18 @@ function velocityOf(windowRaised: string, presale: FeedItemPresale): number {
   return target > 0 ? Number(windowRaised) / target : 0;
 }
 
+/** The watermark; a missing one fails inside its timed step, so it logs as a failure. */
+async function readPresentAsOf(db: ReadableDatabase): Promise<NonNullable<Awaited<ReturnType<typeof readAsOf>>>> {
+  const asOf = await readAsOf(db);
+  if (!asOf) throw new SocialRouteError("service_unavailable");
+  return asOf;
+}
+
 /** The whole `GET /api/social/happening` body. */
 export async function readHappening(db: ReadableDatabase, request: HappeningRequest): Promise<SocialHappeningResponse> {
   const { config, nowMs, recentPresales } = request;
   const step = readSteps("happening");
-  const [bounds, asOf] = await settledAll([step("bounds", () => readBounds(db)), step("as_of", () => readAsOf(db))]);
-  if (!asOf) throw new SocialRouteError("service_unavailable");
+  const [bounds, asOf] = await settledAll([step("bounds", () => readBounds(db)), step("as_of", () => readPresentAsOf(db))]);
   const clockMs = Math.min(nowMs, bounds.presaleMs);
   const hidden = new Set(request.hiddenKinds);
   const kinds = [...HAPPENING_TAPE_KINDS, "trade_buy", "trade_sell"].filter((kind) => !hidden.has(kind));
