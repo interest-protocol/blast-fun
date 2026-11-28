@@ -83,11 +83,15 @@
  * once the end is reached and never shows on a sheet that fits. A CTA or dock
  * already holds that edge.
  */
+/* Longhands only: a browser without color-mix drops the cue and keeps the card colour. */
 .sheet:not(.hasCta, .hasDock) {
-  background:
-    linear-gradient(transparent, var(--card) 70%) bottom / 100% 2.5rem no-repeat local,
-    radial-gradient(farthest-side at 50% 100%, color-mix(in srgb, var(--ink) 22%, transparent), transparent) bottom / 100% 1rem no-repeat scroll,
-    var(--card);
+  background-image:
+    linear-gradient(transparent, var(--card) 70%),
+    radial-gradient(farthest-side at 50% 100%, color-mix(in srgb, var(--ink) 22%, transparent), transparent);
+  background-position: bottom;
+  background-size: 100% 2.5rem, 100% 1rem;
+  background-repeat: no-repeat;
+  background-attachment: local, scroll;
 }
 
 .close {
