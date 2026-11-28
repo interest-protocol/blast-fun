@@ -41,8 +41,8 @@ function Rail({ atoms }: Readonly<{ atoms: bigint | null }>) {
   return null;
 }
 
-async function mount(signedIn: boolean, atoms: bigint | null) {
-  world.viewer = signedIn ? { signedIn, callsign: "me", getAccessToken: async () => "token" } : { signedIn, callsign: null };
+async function mount(signedIn: boolean, atoms: bigint | null, callsign: string | null = "me") {
+  world.viewer = signedIn ? { signedIn, callsign, getAccessToken: async () => "token" } : { signedIn, callsign: null };
   world.reads = 0;
   const client = createTestQueryClient();
   const container = dom.document.createElement("div");
@@ -73,6 +73,14 @@ test("a signed-in holder reads the portfolio once per open, and once more after 
   await render(null);
   assert.equal(container.textContent, "");
   assert.equal(world.reads, 2);
+});
+
+test("a callsign that arrives after the rail read is the same account", async () => {
+  const { container, render } = await mount(true, 10n, null);
+  world.viewer = { signedIn: true, callsign: "me", getAccessToken: async () => "token" };
+  await render(10n);
+  assert.match(container.textContent ?? "", /^In at \$100/);
+  assert.equal(world.reads, 1);
 });
 
 test("another account starts with no balance, so nothing is read for it until its own rail reads", async () => {

@@ -1,7 +1,7 @@
 "use client";
 
 import { isValidStructTag, normalizeStructTag } from "@mysten/sui/utils";
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 import { useSocialViewer } from "#web/components/social/SignInGate.tsx";
 
@@ -12,6 +12,15 @@ const Publish = createContext<((coinType: string, atoms: bigint) => void) | null
 const NONE = BigInt(0);
 const EMPTY: Balances = {};
 
+type Owner = Readonly<{ session: string | null; callsign: string | null }>;
+
+/** One signed-in account: a session or callsign known on both sides must match; one not yet known matches. */
+function sameOwner(stored: Owner | null, now: Owner | null): boolean {
+  if (!stored || !now) return false;
+  const agree = (a: string | null, b: string | null) => a === null || b === null || a === b;
+  return agree(stored.session, now.session) && agree(stored.callsign, now.callsign);
+}
+
 const canonical = (coinType: string | null) => (coinType && isValidStructTag(coinType) ? normalizeStructTag(coinType) : null);
 
 /**
@@ -21,24 +30,30 @@ const canonical = (coinType: string | null) => (coinType && isValidStructTag(coi
  * The last read stands until a newer one: a rail that stops reading (a closed phone sheet, a hidden tab,
  * a failed read) or unmounts says nothing new, and two rails on one coin agree because both read the chain.
  * Every read belongs to the signed-in account: another account starts empty, so it never reads for a coin
- * only the last one held.
+ * only the last one held. Same account as the viewer cache scope: a session or callsign arriving later is
+ * the same viewer.
  */
 export function HeldBalanceProvider({ children }: Readonly<{ children: ReactNode }>) {
   const viewer = useSocialViewer();
-  const owner = viewer.signedIn ? `${viewer.sessionIdentity ?? ""}:${viewer.callsign ?? ""}` : null;
-  const [store, setStore] = useState<Readonly<{ owner: string | null; balances: Balances }>>({ owner, balances: EMPTY });
-  const balances = store.owner === owner ? store.balances : EMPTY;
+  const owner: Owner | null = viewer.signedIn ? { session: viewer.sessionIdentity ?? null, callsign: viewer.callsign } : null;
+  const [store, setStore] = useState<Readonly<{ owner: Owner | null; balances: Balances }>>({ owner, balances: EMPTY });
+  const balances = sameOwner(store.owner, owner) ? store.balances : EMPTY;
   // Rails publish from passive effects, after this layout effect: a read lands with the account it was made for.
   // A ref, not a dependency, so a new account does not make every rail publish its last account's balance again.
   const ownerRef = useRef(owner);
   useLayoutEffect(() => {
     ownerRef.current = owner;
-  }, [owner]);
-  const publish = useCallback((coinType: string, atoms: bigint) => setStore((current) => {
-    const at = ownerRef.current;
-    const held = current.owner === at ? current.balances : EMPTY;
-    return current.owner === at && held[coinType] === atoms ? current : { owner: at, balances: { ...held, [coinType]: atoms } };
-  }), []);
+  });
+  // Made once: a rail's effect depends on it, and must not run again for any other render.
+  const [publish] = useState(() => (coinType: string, atoms: bigint) => {
+    setStore((current) => {
+      const at = ownerRef.current;
+      if (!at) return current;
+      if (!sameOwner(current.owner, at)) return { owner: at, balances: { [coinType]: atoms } };
+      if (current.balances[coinType] === atoms && current.owner?.session === at?.session && current.owner?.callsign === at?.callsign) return current;
+      return { owner: at, balances: { ...current.balances, [coinType]: atoms } };
+    });
+  });
   return <Publish value={publish}><Held value={balances}>{children}</Held></Publish>;
 }
 
