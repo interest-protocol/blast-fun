@@ -373,6 +373,13 @@ wherever Bridge is on.
     16.1.0's code; check it again on each upgrade;
   - on EVM, the SDK's transaction goes to Mayan's Forwarder contract.
 
+  Known limit: this refuses the MCTP backup for a native coin into USDC on the
+  five EVM chains. In two samples its shown minimum was about 0.001 USDC above
+  the signed one: the gap equals 0.5% of the redeem fee. In 72 live quotes on
+  2026-11-28 (about $0.90, $20 and $5,000 on all 24 pairs), Fast MCTP was
+  offered, passed and was picked every time, and every EVM transaction went to
+  the Forwarder.
+
   The destination we give the SDK is the signed-in Blast Sui address.
 - **How we send: Mayan's way.** For MCTP and Fast MCTP the SDK builds the
   transaction (`getEvmSwapApproveTxs`, `getSwapFromEvmTxPayload`,
