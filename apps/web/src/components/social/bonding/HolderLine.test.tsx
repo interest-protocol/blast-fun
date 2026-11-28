@@ -66,6 +66,9 @@ test("a signed-in holder reads the portfolio once per open, and once more after 
   // A sell of all of it: the rail reads nothing held, and the line goes even though the portfolio still lists the coin.
   await render(0n);
   assert.equal(container.textContent, "");
+  // The rail stops reading (a phone sheet closes): the sell-all still stands.
+  await render(null);
+  assert.equal(container.textContent, "");
   assert.equal(world.reads, 2);
 });
 
