@@ -58,13 +58,13 @@ async function readAccount(
   privyEnabled: boolean,
 ): Promise<HeaderSession | null> {
   const startedMs = performance.now();
+  const deadline = AbortSignal.timeout(HEADER_SESSION_TIMEOUT_MS);
   try {
-    const deadline = AbortSignal.timeout(HEADER_SESSION_TIMEOUT_MS);
     const signal = AbortSignal.any([request.signal, deadline]);
     const response = await readMe(new Request(request.url, { headers, signal }));
     if (!response.ok) {
-      // The relay answers its own 503 when the 1 s deadline aborts it: that wait is a timeout.
-      recordWait(startedMs, deadline.aborted && !request.signal.aborted ? "timeout" : `status_${response.status}`);
+      // The relay answers its own 503 when either signal aborts it, so the signals say why the wait ended.
+      recordWait(startedMs, cutShort(request, deadline) ?? `status_${response.status}`);
       return response.status === 401 && !privyEnabled ? SIGNED_OUT : null;
     }
     const { account }: SocialMeResponse = await response.json();
@@ -72,15 +72,16 @@ async function readAccount(
     // First-time account creation remains in the existing client sign-in flow.
     return account ? { signedIn: true, viewer: shellViewerOf(account), viewerLoading: false, viewerError: false } : null;
   } catch (error) {
-    recordWait(startedMs, waitFailure(request, error));
+    const timedOut = error instanceof DOMException && error.name === "TimeoutError";
+    recordWait(startedMs, timedOut ? "timeout" : (cutShort(request, deadline) ?? "failed"));
     return null;
   }
 }
 
-/** Why the read ended early: the 1 s wait ran out, the visitor left, or it failed. */
-function waitFailure(request: Request, error: unknown): string {
-  if (error instanceof DOMException && error.name === "TimeoutError") return "timeout";
-  return request.signal.aborted ? "aborted" : "failed";
+/** Why the read ended early: the 1 s wait ran out, or the visitor left. */
+function cutShort(request: Request, deadline: AbortSignal): "timeout" | "aborted" | null {
+  if (deadline.aborted) return "timeout";
+  return request.signal.aborted ? "aborted" : null;
 }
 
 /** A refreshable or malformed cookie leaves the browser to resolve Privy's session. */
