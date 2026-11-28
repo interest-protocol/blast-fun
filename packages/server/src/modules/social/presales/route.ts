@@ -37,6 +37,7 @@ import { readBackerSamples, withBackerSamples } from "@blast/server/modules/soci
 import { SUI_OBJECT_ID_PATTERN } from "@blast/core/lib/sui/ids.ts";
 import { routeSegments } from "@blast/core/modules/backend-api/route-path.ts";
 import { PRESALE_READ, webPath } from "@blast/server/modules/partner-api/v1/paths.ts";
+import { readStep } from "@blast/server/modules/social/read-steps.ts";
 
 export type PresaleListRequest = Readonly<{
   status: PresaleListStatus;
@@ -137,7 +138,7 @@ export async function readPresalePage(
   options: Readonly<{ nowMs: number; config: SocialConfig; terms: PresaleTermsSource }>,
 ): Promise<SocialPresaleDetail | null> {
   const db = chainViewsOnly(database);
-  const asOf = await asOfOrUnavailable(db);
+  const asOf = await readStep("presale", "as_of", () => asOfOrUnavailable(db));
   return readPresaleDetail(db, presaleId, { ...options, asOf });
 }
 

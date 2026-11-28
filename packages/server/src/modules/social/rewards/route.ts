@@ -3,6 +3,7 @@ import type { SocialAccountWalletLister } from "@blast/server/modules/social/acc
 import { SOCIAL_REWARDS_ROUTE } from "@blast/core/modules/social/contracts/rewards.ts";
 import type { SocialRouteKit } from "@blast/server/modules/social/route-kit/route.ts";
 import { parseRewardsQuery, readRewardsPage, type RewardsWaitingReader } from "@blast/server/modules/social/rewards/read.ts";
+import { readStep } from "@blast/server/modules/social/read-steps.ts";
 
 export type SocialRewardsRouteDependencies = Readonly<{
   kit: SocialRouteKit;
@@ -32,7 +33,8 @@ export function createSocialRewardsRoute(dependencies: SocialRewardsRouteDepende
       { name: SOCIAL_REWARDS_ROUTE, auth: "account", account: "required", bucket: "social_read", cache: "private" },
       async (context) => {
         const query = parseRewardsQuery(new URL(context.request.url));
-        const addresses = (await wallets.wallets(context.account!.account_id)).map((wallet) => wallet.address);
+        const accountWallets = await readStep("rewards", "wallets", () => wallets.wallets(context.account!.account_id));
+        const addresses = accountWallets.map((wallet) => wallet.address);
         return context.json(await readRewardsPage(database(), addresses, query, { nowMs: now(), network, waiting: waiting ? waiting() : null }));
       },
     ),

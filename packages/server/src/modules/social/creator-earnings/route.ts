@@ -26,9 +26,9 @@ export function createCreatorEarningsRoute(
       const { cursor } = socialInput(z.object({
         keys: z.array(z.literal("cursor")), cursor: socialAddressSchema.nullable(),
       }), { keys: [...query.keys()], cursor: query.get("cursor") }, "invalid_parameter");
-      const sender = await dependencies.blastWallet(context.caller!);
+      const sender = await readStep("creator_earnings", "blast_wallet", () => dependencies.blastWallet(context.caller!));
       if (!sender) throw new SocialRouteError("blast_wallet_missing");
-      const chain = await dependencies.chain(context.request.signal);
+      const chain = await readStep("creator_earnings", "chain", () => dependencies.chain(context.request.signal));
       if (!chain) throw new SocialRouteError("claim_unavailable");
       return context.json(
         await readCreatorEarnings(
@@ -47,3 +47,4 @@ import { z } from "zod";
 
 import { socialAddressSchema } from "@blast/core/modules/social/contracts/primitives.ts";
 import { socialInput } from "@blast/server/modules/social/route-kit/validation.ts";
+import { readStep } from "@blast/server/modules/social/read-steps.ts";
