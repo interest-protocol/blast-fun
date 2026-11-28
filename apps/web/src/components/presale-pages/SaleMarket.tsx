@@ -538,6 +538,7 @@ function PresaleMarketPrice({ market, move, activity }: Readonly<{ market: HomeC
 /** The 24h move under a phone's chart, so the price row above it stays one line. */
 function PresaleMarketMove({ market, move }: Readonly<{ market: HomeCoinMarket; move?: PriceMove | null }>) {
   const { live, last, prices } = usePresaleHeadline(market);
-  const change = live ? presaleChange(move, last, prices.usd) : null;
-  return change && <PriceChange change={change} />;
+  const change = presaleChange(move, last, prices.usd);
+  // While an older price holds, the line keeps its space unseen, so the content below does not move.
+  return change && <PriceChange change={change} held={live ? undefined : true} />;
 }
