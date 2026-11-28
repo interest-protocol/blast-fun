@@ -17,6 +17,7 @@ import { assertFastMctpApproval, assertFastMctpPayload, fastMctpTerms, supportsF
 import type { BridgeRequest } from "./bridge-guard.ts";
 import { CHAINS, transferState, type SourceToken } from "./bridge-model.ts";
 import { abortableProvider, explorerRows, MAYAN_EXPLORER, type BridgeSdk, type EvmWallet, type SolanaWallet } from "./bridge-sdk.ts";
+import { readSolanaSubmission, rememberSolanaSubmission, settleSolanaSubmission, withSolanaSubmissionLock } from "./solana-submission.ts";
 
 /** Blink only: Mayan's one route that refunds on the source chain and needs no relayer on Sui. */
 const BLINK_ONLY: QuoteOptions = { blink: true, swift: false, mctp: false, fastMctp: false, wormhole: false, shuttle: false, monoChain: false, gasless: false };
@@ -126,11 +127,17 @@ export function mayanSdk(allowFastMctp = false): BridgeSdk {
         return hash;
       }
       if (quote.type === "FAST_MCTP") throw new Error("Fast MCTP requires a Base wallet");
+      if (readSolanaSubmission(wallet.address)) throw new Error("Another Solana transfer is awaiting confirmation");
       const sign = solanaSigner(wallet, signal);
-      // No extra RPCs: every Solana call goes to Mayan's RPC only.
-      const { signature } = await swapFromSolana(quote, wallet.address, request.blastAddress, null, sign, solanaConnection(), [], undefined, undefined, undefined, { onTransactionSigned: onSigned });
+      const onTransactionSigned = (signature: string) => {
+        // Mayan invokes this synchronously before it broadcasts the signed transaction.
+        rememberSolanaSubmission(wallet.address, signature);
+        onSigned(signature);
+      };
+      const { signature } = await swapFromSolana(quote, wallet.address, request.blastAddress, null, sign, solanaConnection(), [], undefined, undefined, undefined, { onTransactionSigned });
       return signature;
     },
+    checkSolanaSubmission: (address) => withSolanaSubmissionLock(address, () => settleSolanaSubmission(solanaConnection(), address)),
     async history(blastAddress) {
       const response = await fetch(`${MAYAN_EXPLORER}/v3/swaps?trader=${encodeURIComponent(blastAddress)}&limit=20`);
       if (!response.ok) throw new Error(`Mayan explorer ${response.status}`);
