@@ -148,7 +148,7 @@ type Socket = "connecting" | "open" | "reconnecting" | "paused" | "refused";
 /** A stream with no hello by then is given up on (its socket counts as failed if it never spoke). */
 export const HELLO_DEADLINE_MS = 10_000;
 const LEGACY_HEARTBEAT_TIMEOUT_MS = 45_000;
-/** A hidden tab keeps its stream this long, so a quick tab flip costs no reconnect or history read. */
+/** A hidden tab keeps a stream that watches pools or prices this long, so a quick tab flip costs no reconnect or history read. */
 export const HIDDEN_GRACE_MS = 15_000;
 /**
  * With nothing wanted, the socket stays open this long, so the next page's screens reuse it with one `set`.
@@ -828,7 +828,8 @@ export class MarketStreamHub {
         this.connect();
       }
     } else if (this.connection?.source && !this.cancelHidden) {
-      if (!this.connection.pools.size) return this.pause();
+      // A socket that watches no pool or price (hints only) has nothing to keep for a quick return.
+      if (!this.connection.pools.size && !this.connection.priceCoins.size) return this.pause();
       this.cancelHidden = this.deps.schedule(() => {
         this.cancelHidden = null;
         this.pause();

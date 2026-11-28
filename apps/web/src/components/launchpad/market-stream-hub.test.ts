@@ -240,6 +240,22 @@ test("a late subscriber to a live pool starts from what the stream already deliv
   assert.equal(early.trades.length, 2);
 });
 
+test("Home's price-only stream gets the same 15 s when hidden; longer pauses it", () => {
+  const s = setup();
+  const home = watcher([]);
+  s.hub.subscribe({ pools: [], priceCoins: [SUI], expected: null, listener: home.listener });
+  s.source().hello();
+  s.setVisible(false);
+  assert.equal(s.source().closed, false, "a quick tab flip keeps Home's socket");
+  s.setVisible(true);
+  assert.equal(s.sources.length, 1, "coming back asks for no new ticket or socket");
+  s.setVisible(false);
+  s.fire(HIDDEN_GRACE_MS);
+  assert.equal(s.source().closed, true);
+  s.setVisible(true);
+  assert.equal(s.sources.length, 2);
+});
+
 test("a hidden tab keeps its stream for 15 s; longer pauses it, and showing it again reconnects", async () => {
   const s = setup();
   const chart = watcher();
@@ -890,16 +906,23 @@ test("after the last hint subscriber leaves, a short tab hide cannot keep an unu
   assert.equal(s.sources.length, 1, "showing the tab opens no socket");
 });
 
+/** Home's prices, then left during the linger for an open sale whose hint client joins late. */
+async function homeThenLateSale(s: ReturnType<typeof setup>) {
+  const { hints, fallback } = activityClient(s);
+  const home = s.hub.subscribe({ pools: [], priceCoins: [SUI], expected: null, listener: watcher([]).listener });
+  s.source().hello();
+  home.stop();
+  await settle();
+  const leave = hints.subscribe("sale", () => {});
+  await settle();
+  return { hints, fallback, leave };
+}
+
 for (const hiddenFor of [1_000, LINGER_MS]) {
-  test(`a sale that subscribes late in the linger resumes on the hub after a ${hiddenFor} ms tab hide`, async (t) => {
+  test(`a sale that subscribes late in the linger keeps Home's socket through a ${hiddenFor} ms tab hide`, async (t) => {
     const s = setup();
-    const { hints, fallback } = activityClient(s);
-    const home = s.hub.subscribe({ pools: [], priceCoins: [SUI], expected: null, listener: watcher([]).listener });
-    s.source().hello();
-    home.stop();
-    await settle();
-    t.after(hints.subscribe("sale", () => {}));
-    await settle();
+    const { hints, fallback, leave } = await homeThenLateSale(s);
+    t.after(leave);
 
     s.setVisible(false);
     s.advance(hiddenFor);
@@ -907,13 +930,35 @@ for (const hiddenFor of [1_000, LINGER_MS]) {
     s.advance(ACTIVITY_ONLY_GRACE_MS);
 
     assert.equal(fallback.opened(), 0, "the sale waits for the hub");
-    assert.equal(s.sources.length, 2);
-    assert.equal(new URL(s.source().url, "https://blast.test").search, "?activity=true");
-    s.source().hello();
+    assert.equal(s.sources.length, 1, "Home's prices keep the socket through a hide under 15 s");
+    assert.equal(s.source().closed, false);
+    await settle();
     s.source().emit("hint", { type: "pong" });
+    await settle();
     assert.equal(hints.connected(), true);
   });
 }
+
+test("a sale that subscribes late in the linger resumes on the hub after a tab hide past the 15 s grace", async (t) => {
+  const s = setup();
+  const { hints, fallback, leave } = await homeThenLateSale(s);
+  t.after(leave);
+
+  s.setVisible(false);
+  s.advance(LINGER_MS);
+  s.source().answer();
+  s.advance(HIDDEN_GRACE_MS - LINGER_MS);
+  assert.equal(s.source().closed, true);
+  s.setVisible(true);
+  s.advance(ACTIVITY_ONLY_GRACE_MS);
+
+  assert.equal(fallback.opened(), 0, "the sale waits for the hub");
+  assert.equal(s.sources.length, 2);
+  assert.equal(new URL(s.source().url, "https://blast.test").search, "?activity=true");
+  s.source().hello();
+  s.source().emit("hint", { type: "pong" });
+  assert.equal(hints.connected(), true);
+});
 
 test("an open sale uses the hub after repeated drops even when its hint retry takes longer than the linger", async (t) => {
   const s = setup();
