@@ -111,6 +111,30 @@ async function mount(sdk: BridgeSdk, calls: Calls, wallet: EvmWallet | null = ev
 
 const newCalls = (): Calls => ({ quotes: [], sends: 0, approves: 0, arrived: 0 });
 
+test("switching the source network keeps keyboard focus in the send flow", async () => {
+  const calls = newCalls();
+  const switched = Promise.withResolvers<void>();
+  const wrongNetwork = { ...evm(), chainId: 1, switchChain: () => switched.promise };
+  const form = await mount(fakeSdk(calls, [QUOTE]), calls, wrongNetwork);
+  try {
+    const button = form.button();
+    assert.equal(button.textContent, "Switch to Base");
+    button.focus();
+    await act(async () => button.click());
+    await waitFor(() => button.getAttribute("aria-busy") === "true", "the switch is pending");
+    assert.equal(button.disabled, false, "the busy action remains focusable");
+    await form.rerender(evm());
+    assert.equal(form.button(), button, "a wallet event may arrive before the switch returns");
+    await act(async () => switched.resolve());
+    await waitFor(() => form.button() !== button, "the switch has finished");
+    const chain = form.container.querySelector('[aria-label="From Base. Change chain"]');
+    assert.equal(dom.document.activeElement, chain);
+  } finally {
+    switched.resolve();
+    await form.unmount();
+  }
+});
+
 test("a search picks a catalog token by its contract and quotes its own decimals", async () => {
   const motion = recordAnimations();
   const calls = newCalls();

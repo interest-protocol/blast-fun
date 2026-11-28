@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { track } from "@vercel/analytics";
 import clsx from "clsx";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type Ref } from "react";
 
 import type { Quote } from "@mayanfinance/swap-sdk";
 
@@ -271,7 +271,7 @@ function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent }: R
 
   // One wallet step at a time; its pending state is the card's busy state.
   const step = useMutation({
-    mutationFn: (work: () => Promise<void>) => work(),
+    mutationFn: ({ work }: Readonly<{ work: () => Promise<void>; switching: boolean }>) => work(),
     // Run now even offline: the quote fails with its copy, instead of pausing and prompting the wallet on reconnect.
     networkMode: "always",
     onError: (error) => {
@@ -288,12 +288,12 @@ function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent }: R
     onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ["bridge", "balance"] }); },
     onSettled: () => { running.current = false; },
   });
-  const run = (work: () => Promise<void>) => {
+  const run = (work: () => Promise<void>, switching = false) => {
     // The ref also stops a second press that lands before the busy render.
     if (running.current) return;
     running.current = true;
     setFailed(null);
-    step.mutate(work);
+    step.mutate({ work, switching });
   };
 
   const approve = (ask: BridgeRequest, source: EvmWallet) => run(async () => {
@@ -337,9 +337,9 @@ function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent }: R
     queryClient.removeQueries({ queryKey: ["bridge", "allowance"] });
   });
 
-  const switchTo = (source: EvmWallet) => run(() => source.switchChain(info.chainId!));
+  const switchTo = (source: EvmWallet) => run(() => source.switchChain(info.chainId!), true);
 
-  return { busy: step.isPending, failed, setFailed, rateChanged: rateChangedFor === inputs, sent, approve, bridge, switchTo };
+  return { busy: step.isPending, switching: step.isPending && step.variables.switching, failed, setFailed, rateChanged: rateChangedFor === inputs, sent, approve, bridge, switchTo };
 }
 
 /**
@@ -408,7 +408,7 @@ function formAction({ reads, send, selection, wallet, atoms, id, paused, signedI
     signedIn,
     blastAddress,
     sourceConnected: wallet !== null,
-    wrongChain: reads.wrongChain,
+    wrongChain: reads.wrongChain || send.switching,
     atoms,
     balanceReady: reads.balance.isSuccess,
     insufficient: atoms !== null && reads.balance.data !== undefined && exceedsBalance(atoms, reads.balance.data, token),
@@ -434,6 +434,18 @@ function formAction({ reads, send, selection, wallet, atoms, id, paused, signedI
 
 export function BridgeForm({ sdk, wallets, blastAddress, signedIn, onSignIn, onArrived, now = Date.now }: BridgeFormProps) {
   const id = useId();
+  const chainTrigger = useRef<HTMLButtonElement>(null);
+  const sourceActionRef = useCallback((button: HTMLButtonElement | null) => {
+    if (!button) return;
+    return () => {
+      const doc = button.ownerDocument;
+      if (doc.activeElement !== button) return;
+      // When the wallet action leaves, the next Tab from the chain goes to the send amount.
+      queueMicrotask(() => {
+        if (!button.isConnected && doc.activeElement === doc.body) chainTrigger.current?.focus({ preventScroll: true });
+      });
+    };
+  }, []);
   const { selection, toIndex, setToIndex, amount, setAmount, chooseChain, chooseToken } = useBridgeInputs();
   const { chain, info, token } = selection;
   const [paused, setPaused] = useState(false);
@@ -468,9 +480,11 @@ export function BridgeForm({ sdk, wallets, blastAddress, signedIn, onSignIn, onA
       aria-describedby={actionDescription}
       className={styles.action}
       disabled={disableAction}
+      focusableDisabled={sourceAction}
       loading={actionBusy}
       loadingLabel={BUSY_TEXT}
       onClick={press}
+      ref={sourceAction ? sourceActionRef : undefined}
       size="lg"
       variant="primary"
     >
@@ -481,7 +495,7 @@ export function BridgeForm({ sdk, wallets, blastAddress, signedIn, onSignIn, onA
   return (
     <div className={styles.form}>
       <div className={styles.sourceSetup}>
-        <ChainChoice chain={chain} disabled={locked} onChange={(next) => { chooseChain(next); send.setFailed(null); }} />
+        <ChainChoice chain={chain} disabled={locked} onChange={(next) => { chooseChain(next); send.setFailed(null); }} triggerRef={chainTrigger} />
         {sourceAction ? actionButton : null}
       </div>
       <div className={styles.panels}>
@@ -555,7 +569,7 @@ function pressAction(kind: BridgeAction["kind"], handlers: PressHandlers): void 
 }
 
 /** The source chain: six choices, so a menu (a tab row holds three at most). */
-function ChainChoice({ chain, disabled, onChange }: Readonly<{ chain: BridgeChain; disabled: boolean; onChange: (chain: BridgeChain) => void }>) {
+function ChainChoice({ chain, disabled, onChange, triggerRef }: Readonly<{ chain: BridgeChain; disabled: boolean; onChange: (chain: BridgeChain) => void; triggerRef: Ref<HTMLButtonElement> }>) {
   const chosen = CHAINS[chain];
   return (
     <BlastMenu
@@ -567,6 +581,7 @@ function ChainChoice({ chain, disabled, onChange }: Readonly<{ chain: BridgeChai
           aria-label={`From ${chosen.label}. Change chain`}
           className={styles.chainPick}
           disabled={disabled}
+          ref={triggerRef}
           render={<DisclosureButton><Logo size={24} src={chosen.logo} />From {chosen.label}</DisclosureButton>}
         />
       }

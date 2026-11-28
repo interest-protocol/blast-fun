@@ -205,7 +205,7 @@ function useCoinSteps(props: Pick<CoinSheetProps, "first" | "onScreen" | "inline
   const go = (next: CoinScreen, nextTrade?: TradeState) => {
     const active = document.activeElement;
     const side = active?.getAttribute("data-coin-pick");
-    const label = screen.kind === "fund" ? (next.kind === "bridge" ? "Bridge" : "Withdraw") : active?.getAttribute("aria-label");
+    const label = next.kind === "bridge" ? "Bridge" : screen.kind === "fund" ? "Withdraw" : active?.getAttribute("aria-label");
     const fallbackFocus = screen.kind === "pick" ? '[aria-label="Search your coins"]' : '[aria-label="Search coins"]';
     const focus = side ? `[data-coin-pick=${JSON.stringify(side)}]` : label ? `[aria-label=${JSON.stringify(label)}]` : active?.id ? `#${CSS.escape(active.id)}` : fallbackFocus;
     swap(() => {
@@ -401,7 +401,7 @@ function CoinSheetForm(props: CoinSheetProps & Readonly<{ titleId: string; onCon
           <div className={styles.quietActs} data-three={bridge ? "" : undefined}>
             <Button className={styles.quietAct} onClick={() => go({ kind: "dep" })} variant="ghost"><ArrowDownIcon />Deposit</Button>
             <Button className={styles.quietAct} onClick={() => go({ kind: "wd", key: coin.key })} variant="ghost"><ArrowUpIcon />Withdraw</Button>
-            {bridge ? <Button className={styles.quietAct} onClick={() => go({ kind: "bridge" })} variant="ghost"><BridgeIcon />Bridge</Button> : null}
+            {bridge ? <Button aria-label="Bridge" className={styles.quietAct} onClick={() => go({ kind: "bridge" })} variant="ghost"><BridgeIcon />Bridge</Button> : null}
           </div>
         </div>
       </>
