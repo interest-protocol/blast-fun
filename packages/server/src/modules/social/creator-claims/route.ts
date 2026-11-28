@@ -1,5 +1,5 @@
 import { encodeCreatorClaimAttestation, encodeCreatorClaimMessage, type LaunchState } from "@interest-protocol/blast-sdk/launchpad";
-import { normalizeSuiAddress, toBase64, toHex } from "@mysten/sui/utils";
+import { normalizeStructTag, normalizeSuiAddress, toBase64, toHex } from "@mysten/sui/utils";
 
 import { recordMetric } from "@blast/core/lib/metrics.ts";
 import type { ReadableDatabase } from "@blast/core/modules/database/transaction.ts";
@@ -7,22 +7,26 @@ import type { SponsorResponse } from "@blast/core/modules/presale/contracts/web-
 import { PresaleRouteError } from "@blast/core/modules/presale/route-kit/errors.ts";
 import type { SocialTransferFee } from "@blast/core/modules/social/contracts/coins.ts";
 import {
+  CREATOR_CAPS_ELIGIBILITY_ROUTE,
   CREATOR_CAPS_ROUTE,
   CREATOR_COMMITMENT_ROUTE,
   type CreatorCapsClaim,
+  type CreatorCapsEligibility,
   type CreatorCommitment,
 } from "@blast/core/modules/social/contracts/creator-claims.ts";
 import { SocialRouteError } from "@blast/core/modules/social/route-kit/errors.ts";
-import { readSocialJson, type SocialCaller, type SocialRouteKit } from "@blast/server/modules/social/route-kit/route.ts";
+import { readSocialJson, type SocialCaller, type SocialRequestContext, type SocialRouteKit } from "@blast/server/modules/social/route-kit/route.ts";
 import type { SponsorCaller } from "@blast/server/modules/sponsor/caller.ts";
 import type { CreatorCapsChain } from "./chain.ts";
+import type { ReadPublishedLaunch } from "@blast/server/modules/social/launch/reconcile.ts";
+import { readLaunchCreatorXRecipient, recordLaunchPublished } from "@blast/server/modules/social/launch/store.ts";
 import { creatorCommitmentOf, readCreatorCommitment } from "./commitment.ts";
 import type { CreatorClaimSigner } from "./signer.ts";
 import { SUI_OBJECT_ID_PATTERN } from "@blast/core/lib/sui/ids.ts";
 
 /**
  * The creator commitment and creator-caps routes (contract in `contracts/creator-claims.ts`).
- * Who may claim is read from the launch on chain, never taken from the client or the indexer.
+ * The launch on chain determines the recipient. Account claims require server-verified identity.
  */
 
 export type CreatorCapsSponsorRequest = Readonly<{ caller: SponsorCaller; sender: string; kindBytes: Uint8Array; ip: string; signal: AbortSignal }>;
@@ -37,6 +41,8 @@ export type CreatorClaimRouteDependencies = Readonly<{
   signer: () => CreatorClaimSigner | null;
   /** The caller's Blast wallet: a Privy session's embedded Sui wallet, a wallet session's own address. */
   blastWallet: (caller: SocialCaller) => Promise<string | null>;
+  linkedXSubject: (did: string) => Promise<string | null>;
+  readPublishedLaunch: ReadPublishedLaunch;
   /** The presale sponsor's server-built `creator_caps`; throws its `PresaleRouteError`s. */
   sponsor: (request: CreatorCapsSponsorRequest) => Promise<SponsorResponse>;
   now?: () => number;
@@ -58,28 +64,78 @@ function sponsorRefusal(error: unknown): never {
 }
 
 export function createCreatorClaimRoutes(dependencies: CreatorClaimRouteDependencies) {
-  const { kit, database, chain, signer, blastWallet, sponsor } = dependencies;
+  const { kit, database, chain, signer, blastWallet, linkedXSubject, sponsor } = dependencies;
   const now = dependencies.now ?? Date.now;
 
-  /** An account recipient's attestation for `claimant`, once the launch names this account and the chain holds our key. */
-  async function accountAttestation(
-    launch: LaunchState,
-    commitment: Uint8Array,
-    accountId: string,
-    claimant: string,
-    reads: CreatorCapsChain,
-    signal: AbortSignal,
-  ): Promise<Readonly<{ attestation: Uint8Array; expiresAtMs: number }>> {
-    const own = await readCreatorCommitment(database(), accountId);
-    if (own === null || !sameBytes(own, commitment)) throw new SocialRouteError("not_creator_recipient");
+  async function verifyAccountRecipient(context: SocialRequestContext, launch: LaunchState, commitment: Uint8Array) {
+    const caller = context.caller!;
+    const db = database();
+    const assignedX = await readLaunchCreatorXRecipient(db, launch.objectId, commitment);
+    if (assignedX === null) {
+      const own = await readCreatorCommitment(db, context.account!.account_id);
+      if (own === null || !sameBytes(own, commitment)) {
+        throw new SocialRouteError("not_creator_recipient");
+      }
+      return null;
+    }
+
+    if (caller.kind !== "privy" || !sameBytes(assignedX.creator_x_commitment, commitment)
+      || (assignedX.published_launch_id !== null && assignedX.published_launch_id !== launch.objectId)) {
+      throw new SocialRouteError("not_creator_recipient");
+    }
+    const subject = await linkedXSubject(caller.did).catch(() => {
+      throw new SocialRouteError("service_unavailable");
+    });
+    if (subject !== assignedX.creator_x_subject) {
+      throw new SocialRouteError("not_creator_recipient");
+    }
+    if (assignedX.published_launch_id === launch.objectId) return null;
+
+    const proof = assignedX.creation && await dependencies.readPublishedLaunch(assignedX.creation, context.request.signal);
+    if (!proof || proof.launchId !== launch.objectId || normalizeStructTag(proof.memeType) !== normalizeStructTag(launch.memeType)) {
+      throw new SocialRouteError("not_creator_recipient");
+    }
+    return { accountId: assignedX.account_id, draftId: assignedX.draft_id };
+  }
+
+  async function admittedSigner(reads: CreatorCapsChain, signal: AbortSignal): Promise<CreatorClaimSigner> {
     const key = signer();
     if (key === null || !(await reads.signerPublicKeys({ signal })).includes(Buffer.from(key.publicKey).toString("hex"))) {
       recordMetric("social.creator_caps", { outcome: "claim_unavailable", reason: key === null ? "no_signer" : "signer_mismatch" });
       throw new SocialRouteError("claim_unavailable");
     }
+    return key;
+  }
+
+  async function accountAttestation(launch: LaunchState, commitment: Uint8Array, claimant: string, key: CreatorClaimSigner) {
     const expiresAtMs = now() + CREATOR_CLAIM_ATTESTATION_MS;
     const message = encodeCreatorClaimMessage({ memeType: launch.memeType, accountCommitment: commitment, claimant, expiryMs: BigInt(expiresAtMs) });
     return { attestation: encodeCreatorClaimAttestation(BigInt(expiresAtMs), await key.sign(message)), expiresAtMs };
+  }
+
+  async function eligibleClaim(context: SocialRequestContext, launchId: unknown) {
+    if (typeof launchId !== "string" || !SUI_OBJECT_ID_PATTERN.test(launchId)) throw new SocialRouteError("invalid_request");
+    const caller = context.caller!;
+    const wallet = await blastWallet(caller);
+    if (wallet === null) throw new SocialRouteError("blast_wallet_missing");
+    const claimant = normalizeSuiAddress(wallet);
+
+    const reads = await chain();
+    if (reads === null) throw new SocialRouteError("claim_unavailable");
+    const launch = await reads.launch(launchId);
+    if (launch === null) throw new SocialRouteError("not_found");
+    // The recipient is consumed by the claim or cleared by an administrator's reassignment.
+    const recipient = launch.creatorRecipient;
+    if (recipient === null) throw new SocialRouteError("creator_caps_claimed");
+    const target = { caller, claimant, reads, launch };
+    if (recipient.kind === "address") {
+      if (normalizeSuiAddress(recipient.address) !== claimant) throw new SocialRouteError("not_creator_recipient");
+      return { ...target, recipient: "address" as const, account: null };
+    }
+
+    const assignment = await verifyAccountRecipient(context, launch, recipient.accountCommitment);
+    const key = await admittedSigner(reads, context.request.signal);
+    return { ...target, recipient: "account" as const, account: { assignment, key, commitment: recipient.accountCommitment } };
   }
 
   const commitment = kit.route(
@@ -93,36 +149,35 @@ export function createCreatorClaimRoutes(dependencies: CreatorClaimRouteDependen
     },
   );
 
+  const eligibility = kit.route(
+    { name: CREATOR_CAPS_ELIGIBILITY_ROUTE, auth: "account", account: "required", bucket: "social_read", cache: "private" },
+    async (context) => {
+      const launchId = new URL(context.request.url).searchParams.get("launch_id");
+      const { launch, claimant } = await eligibleClaim(context, launchId);
+      return context.json({ launch_id: launch.objectId, claimant } satisfies CreatorCapsEligibility);
+    },
+  );
+
   const caps = kit.route(
     { name: CREATOR_CAPS_ROUTE, auth: "account", account: "required", bucket: "social_claim", cache: "private" },
     async (context) => {
       const { launch_id: launchId } = await readSocialJson(context.request, ["launch_id"]);
-      if (typeof launchId !== "string" || !SUI_OBJECT_ID_PATTERN.test(launchId)) throw new SocialRouteError("invalid_request");
-      const caller = context.caller!;
-      // Blast's gas pool pays for a Privy embedded wallet and a wallet session alike (owner ruling 2026-11-20).
-      const fee: SocialTransferFee = "sponsored";
-      const claimant = await blastWallet(caller);
-      if (claimant === null) throw new SocialRouteError("blast_wallet_missing");
-
-      const reads = await chain();
-      if (reads === null) throw new SocialRouteError("claim_unavailable");
-      const launch = await reads.launch(launchId);
-      if (launch === null) throw new SocialRouteError("not_found");
-      // The recipient is consumed by the claim and cleared by an administrator's reassignment.
-      const recipient = launch.creatorRecipient;
-      if (recipient === null) throw new SocialRouteError("creator_caps_claimed");
-
-      const { signal } = context.request;
-      let attestation: Uint8Array | null = null;
-      let expiresAtMs: number | null = null;
-      if (recipient.kind === "address") {
-        if (normalizeSuiAddress(recipient.address) !== normalizeSuiAddress(claimant)) throw new SocialRouteError("not_creator_recipient");
-      } else {
-        ({ attestation, expiresAtMs } = await accountAttestation(launch, recipient.accountCommitment, context.account!.account_id, claimant, reads, signal));
+      const { caller, claimant, reads, launch, recipient, account } = await eligibleClaim(context, launchId);
+      const assignment = account?.assignment;
+      if (assignment) {
+        const outcome = await context.transaction(
+          (social) => recordLaunchPublished(social, assignment.accountId, assignment.draftId, launch.objectId),
+          { label: "social.launch_published" },
+        );
+        if (outcome.kind !== "already" && outcome.kind !== "recorded") throw new SocialRouteError("not_creator_recipient");
       }
 
-      const labels = { recipient: recipient.kind, fee };
-      const kindBytes = await reads.kind({ launch, claimant, attestation });
+      const { signal } = context.request;
+      // Blast pays for embedded wallets and wallet sessions alike.
+      const fee: SocialTransferFee = "sponsored";
+      const signed = account ? await accountAttestation(launch, account.commitment, claimant, account.key) : null;
+      const labels = { recipient, fee };
+      const kindBytes = await reads.kind({ launch, claimant, attestation: signed?.attestation ?? null });
       const simulation = await reads.simulate(kindBytes, claimant, { signal });
       if (simulation.status === "failure") {
         recordMetric("social.creator_caps", { outcome: "dry_run_failed", reason: simulation.reason, ...labels });
@@ -133,17 +188,17 @@ export function createCreatorClaimRoutes(dependencies: CreatorClaimRouteDependen
       return context.json({
         launch_id: launch.objectId,
         meme_type: launch.memeType,
-        recipient: recipient.kind,
-        claimant: normalizeSuiAddress(claimant),
+        recipient,
+        claimant,
         fee,
         transaction_kind_bytes: toBase64(kindBytes),
         sponsored,
-        attestation_expires_at_ms: expiresAtMs,
+        attestation_expires_at_ms: signed?.expiresAtMs ?? null,
       } satisfies CreatorCapsClaim);
     },
   );
 
-  return Object.freeze({ commitment, caps });
+  return Object.freeze({ commitment, eligibility, caps });
 }
 
 export type CreatorClaimRoutes = ReturnType<typeof createCreatorClaimRoutes>;

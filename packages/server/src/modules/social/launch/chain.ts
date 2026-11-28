@@ -45,7 +45,7 @@ export type LaunchStepInput = Readonly<{
   rules: LaunchRules;
   logoUrl: string;
   creator: string;
-  accountCommitment: string;
+  accountCommitment: string | null;
   template: MemeTemplate;
   coin: LaunchPublishCoin | null;
   /** A Blast wallet's step is sponsored: its SUI comes from the account's own coins, never the gas coin. */
@@ -55,6 +55,7 @@ export type LaunchStepInput = Readonly<{
 export async function launchStepTransaction(input: LaunchStepInput): Promise<Transaction> {
   const { deployment, draft, rules } = input;
   if (input.step === "publish_coin") {
+    if (input.accountCommitment === null) throw new Error("Publication needs a creator commitment.");
     const launchpad = launchpadDeployment(deployment);
     const module = await input.template.bytecode({
       decimals: draft.decimals,

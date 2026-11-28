@@ -11,6 +11,15 @@ import { z } from "zod";
 import { LAUNCH_HANDLE_MAX, LAUNCH_LINK_MAX } from "@blast/core/modules/social/launch/model.ts";
 import { normalizeSaleLink, normalizeTelegram, normalizeXHandle } from "@blast/core/modules/social/sales/validate.ts";
 
+function launchFeeAssignment(verified: boolean, handle: string | undefined): Pick<LaunchPageDetails, "creatorFeeAssignment"> {
+  if (!verified || !handle) return {};
+  // The draft has been immutable since the server verified the handle and pinned its X ID.
+  const recipient = normalizeXHandle(handle);
+  return recipient.ok && recipient.value
+    ? { creatorFeeAssignment: { provider: "x", handleAtAssignment: recipient.value } }
+    : {};
+}
+
 /** Public projection of a confirmed publication; drafts and account identities never leave this read. */
 export async function readLaunchDetails(
   launchId: string,
@@ -23,12 +32,15 @@ export async function readLaunchDetails(
     });
   const { rows } = await db.read<{
     body: unknown;
+    creator_x_verified: boolean;
     logo_url: string | null;
     cover_url: string | null;
     cover_width: number | null;
     cover_height: number | null;
   }>(
-    `SELECT body, logo_url, cover_url, cover_width, cover_height FROM social_launch_drafts WHERE published_launch_id = $1`,
+    `SELECT body, logo_url, cover_url, cover_width, cover_height,
+      creator_x_subject IS NOT NULL AS creator_x_verified
+      FROM social_launch_drafts WHERE published_launch_id = $1`,
     [launchId],
   );
   const row = rows[0];
@@ -42,6 +54,7 @@ export async function readLaunchDetails(
       docs_url: z.string().max(LAUNCH_LINK_MAX),
       audit_url: z.string().max(LAUNCH_LINK_MAX),
       x_handle: z.string().max(LAUNCH_HANDLE_MAX),
+      creator_x_handle: z.string().max(LAUNCH_HANDLE_MAX).optional(),
       telegram: z.string().max(LAUNCH_HANDLE_MAX),
     }).parse(row.body);
   } catch {
@@ -61,6 +74,7 @@ export async function readLaunchDetails(
     tagline: draft.tagline,
     ...(row.logo_url?.startsWith("https://") ? { iconUrl: row.logo_url } : {}),
     links,
+    ...launchFeeAssignment(row.creator_x_verified, draft.creator_x_handle),
     cover:
       row.cover_url && row.cover_width && row.cover_height
         ? {

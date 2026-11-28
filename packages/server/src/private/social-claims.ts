@@ -8,6 +8,7 @@ export const SOCIAL_CLAIMS_HANDLERS = {
   "social.me.claim": (request, { client }) => socialClaimRoutes().claim(request, client),
   "social.me.creator-earnings": (request, { client }) => creatorEarningsRoute()(request, client),
   "social.me.creator-commitment": (request, { client }) => creatorClaimRoutes().commitment(request, client),
+  "social.me.creator-caps.eligibility": (request, { client }) => creatorClaimRoutes().eligibility(request, client),
   "social.me.creator-caps": (request, { client }) => creatorClaimRoutes().caps(request, client),
   "social.me.launch-claims": (request, { client }) => launchClaimRoutes().claim(request, client),
 } satisfies PrivateHandlers;

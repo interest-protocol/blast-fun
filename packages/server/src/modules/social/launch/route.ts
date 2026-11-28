@@ -1,3 +1,5 @@
+import { randomBytes } from "node:crypto";
+
 import { routeSegments } from "@blast/core/modules/backend-api/route-path.ts";
 import {
   SOCIAL_LAUNCH_COVER_PATH,
@@ -43,6 +45,8 @@ import { socialInput } from "@blast/server/modules/social/route-kit/validation.t
 import type { BlockedTermFinder } from "@blast/server/modules/social/accounts/creation.ts";
 import { CREATE_LOGO_FOLDER, CREATE_LOGO_IMAGE } from "@blast/server/modules/social/create/logo.ts";
 import type { CreateLogoStore } from "@blast/server/modules/social/create/route.ts";
+import { ACCOUNT_COMMITMENT_BYTES } from "@blast/server/modules/social/creator-claims/commitment.ts";
+import type { ReadPublishedLaunch } from "@blast/server/modules/social/launch/reconcile.ts";
 import { launchStepTransaction } from "@blast/server/modules/social/launch/chain.ts";
 import type { MemeTemplate } from "@blast/server/modules/social/launch/meme-template.ts";
 import {
@@ -53,6 +57,7 @@ import {
   recordLaunchPublished,
   saveLaunchDraft,
   saveLaunchPublication,
+  type LaunchCreatorX,
   type LaunchPublication,
   type LaunchStepPlan,
   setLaunchCover,
@@ -81,6 +86,9 @@ export type SocialLaunchRoutesDependencies = Readonly<{
   commitment: (context: SocialRequestContext, accountId: string) => Promise<Uint8Array>;
   /** The launch's Meme type, read from the chain, or null when no such launch exists. */
   launchMemeType: (launchId: string) => Promise<string | null>;
+  readPublishedLaunch: ReadPublishedLaunch;
+  resolveCreatorX: (handle: string) => Promise<string | null>;
+  canAssignCreatorX: (signal: AbortSignal) => Promise<boolean>;
   /** Pins all wallet gas references before any publication plan is returned. */
   preparePublication: (transaction: Transaction) => Promise<Readonly<{ transaction: string; digest: string }>>;
   /** Null while unknown; only a confirmed failure permits replacing pinned bytes. */
@@ -186,9 +194,8 @@ const storedCoinType = (coinType: string): string => {
  *
  * A publish step is built from the stored draft, never from the body: the
  * body names only the step, the creating wallet and the objects earlier
- * steps created. The creator recipient is the account's own commitment and
- * the first buy goes to the creating wallet. Once a later step names the
- * coin, the draft is frozen and can never publish a second coin.
+ * steps created. The first saved plan pins the recipient. The first buy
+ * goes to the creating wallet even when another account receives the fees.
  */
 export function createSocialLaunchRoutes(dependencies: SocialLaunchRoutesDependencies) {
   const { kit, database } = dependencies;
@@ -287,6 +294,29 @@ export function createSocialLaunchRoutes(dependencies: SocialLaunchRoutesDepende
     if (recorded === "not_found") throw new SocialRouteError("not_found");
     if (recorded === "conflict") throw new SocialRouteError("draft_published", { extra: { coin_type: row.coinType } });
     return coin;
+  }
+
+  async function verifyStandardLaunch(coinType: string, publication: LaunchPublication, launchId: string): Promise<void> {
+    const memeType = await dependencies.launchMemeType(launchId).catch(() => {
+      throw new SocialRouteError("service_unavailable");
+    });
+    const publishedCoin = await dependencies.publicationCoin(publication);
+    if (!memeType || storedCoinType(publishedCoin.coin_type) !== coinType || storedCoinType(memeType) !== coinType) {
+      throw new SocialRouteError("not_found");
+    }
+  }
+
+  async function publicationRecipient(context: Context, row: LaunchDraftRow, handle: string | undefined) {
+    if (row.creatorX) return { creatorX: row.creatorX, commitment: toHex(row.creatorX.commitment) };
+    if (!handle) {
+      const commitment = await dependencies.commitment(context, context.account!.account_id);
+      return { creatorX: null, commitment: toHex(commitment) };
+    }
+    if (!(await dependencies.canAssignCreatorX(context.request.signal))) throw new SocialRouteError("creator_x_unavailable");
+    const subject = await dependencies.resolveCreatorX(handle);
+    if (subject === null) throw new SocialRouteError("creator_x_not_found");
+    const creatorX: LaunchCreatorX = { subject, commitment: randomBytes(ACCOUNT_COMMITMENT_BYTES) };
+    return { creatorX, commitment: toHex(creatorX.commitment) };
   }
 
   async function executablePlan(context: Context, transaction: Transaction, step: (typeof LAUNCH_PUBLISH_STEPS)[number], fee: "wallet" | "sponsored", creator: string): Promise<Readonly<{ step: LaunchPublishStep; digest: string }>> {
@@ -407,12 +437,18 @@ export function createSocialLaunchRoutes(dependencies: SocialLaunchRoutesDepende
         const body = await readJson(context.request, 1_024);
         exactKeys(body, ["launch_id"]);
         const launchId = socialInput(z.string().regex(SUI_OBJECT_ID_PATTERN), body.launch_id);
+        if (row.publishedLaunchId === launchId) return context.json(await respond(row));
+        if (row.publishedLaunchId !== null) throw new SocialRouteError("draft_published");
         if (row.coinType === null || row.publication === null) throw new SocialRouteError("draft_incomplete", { extra: { issue_count: 1 } });
-        const memeType = await dependencies.launchMemeType(launchId).catch(() => {
-          throw new SocialRouteError("service_unavailable");
-        });
-        const publishedCoin = await dependencies.publicationCoin(row.publication);
-        if (!memeType || storedCoinType(publishedCoin.coin_type) !== row.coinType || storedCoinType(memeType) !== row.coinType) throw new SocialRouteError("not_found");
+        if (row.creatorX) {
+          const saved = row.publication.steps.create_launch;
+          const verified = saved && await dependencies.readPublishedLaunch(saved, context.request.signal);
+          if (!verified || verified.launchId !== launchId || storedCoinType(verified.memeType) !== row.coinType) {
+            throw new SocialRouteError("not_found");
+          }
+        } else {
+          await verifyStandardLaunch(row.coinType, row.publication, launchId);
+        }
         const accountId = context.account!.account_id;
         const outcome = await timed("social.launch", () => context.transaction((social) => recordLaunchPublished(social, accountId, row.draftId, launchId), { label: "social.launch_published" }), { operation: "published" });
         if (outcome.kind === "not_found") throw new SocialRouteError("not_found");
@@ -458,14 +494,15 @@ export function createSocialLaunchRoutes(dependencies: SocialLaunchRoutesDepende
         const issues = launchIssues(draft, { rules: current, logoUrl: row.logoUrl });
         if (issues.length > 0) throw new SocialRouteError("draft_incomplete", { extra: { issue_count: issues.length } });
         const coin = await verifiedCoin(context, row, step, body.coin);
+        const recipient = step === "publish_coin" ? await publicationRecipient(context, row, draft.creator_x_handle) : null;
         const transaction = await launchStepTransaction({ step, deployment, draft, rules: current, logoUrl: row.logoUrl!, creator,
-          accountCommitment: toHex(await dependencies.commitment(context, accountId)), template: dependencies.template!, coin, sponsored: fee === "sponsored" });
+          accountCommitment: recipient?.commitment ?? null, template: dependencies.template, coin, sponsored: fee === "sponsored" });
         const executable = await executablePlan(context, transaction, step, fee, creator);
         const plan: LaunchPublishPlan = { draft_id: row.draftId, version: row.version,
           deployment_fingerprint: fingerprint,
           launchpad_original_package_id: launchpadDeployment(deployment).originalPackageId,
           core_original_package_id: deployment.packages.core.originalPackageId, steps: [executable.step] };
-        const persisted = await context.transaction((social) => saveLaunchPublication(social, accountId, row.draftId, row.version, creator, fee, step, { digest: executable.digest, plan }, retained.replaces), { label: "social.launch_publication" });
+        const persisted = await context.transaction((social) => saveLaunchPublication(social, accountId, row.draftId, row.version, creator, fee, step, { digest: executable.digest, plan }, retained.replaces, recipient?.creatorX ?? null), { label: "social.launch_publication" });
         if (persisted.plan.deployment_fingerprint !== fingerprint) {
           throw new SocialRouteError("publish_unavailable", { extra: { reasons: ["launchpad_not_deployed"] } });
         }

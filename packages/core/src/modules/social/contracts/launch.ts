@@ -85,6 +85,7 @@ export type LaunchPublishBlocker = (typeof LAUNCH_PUBLISH_BLOCKERS)[number];
 /** What the page needs before any draft loads: the rules, or why launching is off. */
 export type LaunchPageContext = Readonly<{
   rules: LaunchRules | null;
+  creator_x_available?: boolean;
   publish: Readonly<{ available: boolean; reasons: readonly LaunchPublishBlocker[] }>;
 }>;
 
@@ -104,7 +105,7 @@ export const launchDraftSchema = z.strictObject({
   graduation_target: launchAmountSchema, curve_bps: launchBpsSchema, pool_bps: launchBpsSchema,
   recipients: z.array(launchRecipientSchema).max(16).readonly(),
   venue: z.enum(MIGRATOR_VENUES), pool_fee: z.number().int().min(1).max(1_000_000),
-  creator_fee_bps: launchBpsSchema, holders_fee_bps: launchBpsSchema,
+  creator_fee_bps: launchBpsSchema, creator_x_handle: z.string().max(64).optional(), holders_fee_bps: launchBpsSchema,
   auto_lp_fee_bps: launchBpsSchema, burn_fee_bps: launchBpsSchema,
   fee_recipients: z.array(launchRecipientSchema).max(16).readonly(), first_buy: launchAmountSchema,
   tagline: z.string().max(160), site: z.string().max(2_048),

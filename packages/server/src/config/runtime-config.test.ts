@@ -89,6 +89,14 @@ test("unset optionals leave their features off", () => {
   assert.equal(parseRuntimeConfig({ ...base, LAUNCH_ASSET_BLOB_READ_WRITE_TOKEN: " launch-token " }).launchAssetBlobToken, "launch-token");
 });
 
+test("the shared SocialData key enables new X fee assignments only with the launch flag", () => {
+  const environment = { ...base, SOCIAL_DATA_API_KEY: " fixture-key " };
+  assert.equal(parseRuntimeConfig(environment).launchCreatorXSocialDataKey, null);
+  assert.equal(parseRuntimeConfig({ ...environment, LAUNCH_CREATOR_X_ENABLED: "false" }).launchCreatorXSocialDataKey, null);
+  assert.equal(parseRuntimeConfig({ ...environment, LAUNCH_CREATOR_X_ENABLED: "true" }).launchCreatorXSocialDataKey, "fixture-key");
+  assert.equal(parseRuntimeConfig({ ...base, LAUNCH_CREATOR_X_ENABLED: "true" }).launchCreatorXSocialDataKey, null);
+});
+
 // This fails if a set but invalid value booted (as a default, or as the feature off), or if its message repeated the value.
 test("a set but invalid value stops boot, naming the variable and never the value", () => {
   const rows: ReadonlyArray<readonly [string, Readonly<Record<string, string>>]> = [
