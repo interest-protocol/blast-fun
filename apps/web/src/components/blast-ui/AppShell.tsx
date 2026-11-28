@@ -348,7 +348,6 @@ function ShellFrame({
         onCycleTheme={(origin) => applyTheme(nextTheme(prefs.theme), origin)}
         onLogOut={logOut}
         onProfile={() => router.push(ownProfile)}
-        onPortfolio={() => router.push(PORTFOLIO_PATH)}
         onSettings={() => router.push(SETTINGS_PATH)}
         onInvites={() => router.push(INVITES_PATH)}
         theme={prefs.theme}
