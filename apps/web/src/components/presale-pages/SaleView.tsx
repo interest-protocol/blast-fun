@@ -13,6 +13,8 @@ import { CoinCover, CoinIdentityHeader, CoinTradingActivity } from "#web/compone
 import { BlastMenu, BlastMenuItem, BlastMenuLinkItem, BlastMenuTrigger } from "#web/components/blast-ui/BlastMenu.tsx";
 import { usePhoneLayout } from "#web/components/blast-ui/use-shell-prefs.ts";
 import { useTabBarAutoHide } from "#web/components/blast-ui/use-tabbar-autohide.ts";
+import { useChartClock } from "#web/components/launchpad/chart/use-chart-clock.ts";
+import { useBoundaryClock } from "#web/components/social/use-boundary-clock.ts";
 import { EmptyState } from "#web/components/blast-ui/EmptyState.tsx";
 import { Segmented } from "#web/components/blast-ui/Segmented.tsx";
 import { SkeletonText } from "#web/components/blast-ui/Skeleton.tsx";
@@ -504,13 +506,19 @@ function SaleNotice({ detail, now }: Readonly<{ detail: SocialPresaleDetail; now
   );
 }
 
+/** "5m ago" labels move on every 30 s, not with the countdown's second; `now` is the page's time until the first step. */
+const AGO_STEP_MS = 30_000;
+function useAgoClock(now: number): number {
+  return Math.max(useChartClock(AGO_STEP_MS, true) ?? 0, now);
+}
+
 /** "People you follow" in this sale (the Sale board's card): the five largest, then "See all N". */
 export function FriendsCard({
   detail,
   entry,
   narrow,
   onSeeAll,
-}: Readonly<{ detail: SocialPresaleDetail; entry: SocialPresaleViewerEntry | null; now?: number; narrow?: boolean; onSeeAll: () => void }>) {
+}: Readonly<{ detail: SocialPresaleDetail; entry: SocialPresaleViewerEntry | null; narrow?: boolean; onSeeAll: () => void }>) {
   const sale = detail.presale;
   const list = entry?.following ?? [];
   if (sale.phase === "pending" || list.length === 0) return null;
@@ -648,6 +656,7 @@ function BackersTable({
   overOneK: boolean;
   onFilter: (key: "following" | "big") => void;
 }>) {
+  const agoNow = useAgoClock(now);
   const followed = new Set(entry?.following.map((row) => row.account.callsign) ?? []);
   let rows: readonly SocialPresaleBacker[] = followingOnly ? followedBackerRows(detail.presale, entry) : detail.backers.top;
   if (overOneK) rows = rows.filter((row) => n(row.commitment_usd) >= 1_000);
@@ -691,7 +700,7 @@ function BackersTable({
             {rows.length === 0 ? (
               <tr><td className={cx("muted")} colSpan={7}>No backers match.</td></tr>
             ) : shown.map((row, index) => (
-              <BackerRow following={!!row.account && followed.has(row.account.callsign)} key={row.wallet} now={now} rank={index + 1} row={row} sale={detail.presale} />
+              <BackerRow following={!!row.account && followed.has(row.account.callsign)} key={row.wallet} now={agoNow} rank={index + 1} row={row} sale={detail.presale} />
             ))}
           </tbody>
         </table>
@@ -811,13 +820,14 @@ function subline(item: FeedItem, detail: SocialPresaleDetail): string | null {
 }
 
 function ActivityRows({ detail, now, items, empty = "No activity yet" }: Readonly<{ detail: SocialPresaleDetail; now: number; items?: readonly FeedItem[]; empty?: string }>) {
+  const agoNow = useAgoClock(now);
   const activity = items ?? detail.activity;
   if (activity.length === 0) return <EmptyState title={empty} />;
   const sale = detail.presale;
   return (
     <div className={cx("fr-list act-list")}>
       {activity.map((item) => {
-        const when = <span className={cx("when")}>{ago(item.occurred_at_ms, now)}</span>;
+        const when = <span className={cx("when")}>{ago(item.occurred_at_ms, agoNow)}</span>;
         if (!item.actor) {
           return (
             <div className={cx("fr-row")} key={item.entry_id}>
@@ -1279,8 +1289,10 @@ function TradingVesting({ detail }: Readonly<{ detail: SocialPresaleDetail }>) {
  * tiles) and Activity (trades, holders, posts), then the team's and buyers'
  * vesting and, folded away, the presale's own history.
  */
-function TradingSale({ detail, claims, children, nowMs }: Readonly<{ detail: SocialPresaleDetail; claims?: ReactNode; children: ReactNode; nowMs: number }>) {
+function TradingSale({ detail, claims, children, nowMs: pageNowMs }: Readonly<{ detail: SocialPresaleDetail; claims?: ReactNode; children: ReactNode; nowMs: number }>) {
   const phone = usePhoneLayout();
+  // The market's "delayed" note judges a minute's lag, so a 30 s step is enough.
+  const nowMs = useAgoClock(pageNowMs);
   const claimCard = claims ? <div className={cx("trading-mobile-claims")}>{claims}</div> : null;
   return <>
     {phone ? claimCard : null}
@@ -1325,6 +1337,8 @@ function SaleAnalytics({ detail, viewerEntry, me, now }: Readonly<{
     [detail, viewerEntry, overlays, me, viewer.callsign],
   );
   const sale = detail.presale;
+  // An open sale's chart runs to the current minute.
+  const plotNow = Math.max(useChartClock(60_000, sale.phase === "open") ?? 0, now);
   const hasMomentum = sale.phase === "open" && detail.backers.top.length > 0;
   const hasLaunchPrice = sale.phase === "trading" && sale.price_usd !== null &&
     qp(quoteOf(sale), { usd: sale.presale_price_usd, quote: sale.presale_price_quote }) !== null;
@@ -1354,7 +1368,7 @@ function SaleAnalytics({ detail, viewerEntry, me, now }: Readonly<{
             ))}
           </div>
         </div>
-        <RaiseChart detail={detail} marks={marks} nowMs={now} overlays={overlays} />
+        <RaiseChart detail={detail} marks={marks} nowMs={plotNow} overlays={overlays} />
       </section>
     ) : null}
     {hasMomentum ? <Momentum detail={detail} /> : null}
@@ -1390,14 +1404,11 @@ export function SaleView({
   commit?: SaleCommit;
   me?: Readonly<{ avatar_url: string | null }> | null;
 }>) {
-  const [nowState, setNow] = useState(nowMs);
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
-    return () => window.clearInterval(timer);
-  }, []);
-  useTabBarAutoHide();
-  const now = nowState;
   const sale = detail.presale;
+  // The page's time moves only when an open sale ends (`fundingState` closes it then); the countdowns,
+  // "ago" labels and chart read their own clocks. Opening waits for the server's read.
+  const now = useBoundaryClock(sale.phase === "open" ? sale.end_ms : null, nowMs);
+  useTabBarAutoHide();
   const trading = sale.phase === "trading";
   const initialTab = useLinkedSaleTab();
   const [tab, setTab] = useState<TabKey>(initialTab);

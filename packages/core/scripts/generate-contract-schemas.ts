@@ -117,6 +117,7 @@ import {
 } from "../src/modules/social/contracts/me.ts";
 import {
   socialNotificationPageSchema,
+  socialNotificationUnreadNewestSchema,
   socialNotificationUnreadSchema,
 } from "../src/modules/social/contracts/notifications.ts";
 import {
@@ -453,6 +454,7 @@ const socialContracts = {
   "as-of": socialAsOfSchema,
   "error": socialErrorSchema,
   "notification-unread-response": socialNotificationUnreadSchema,
+  "notification-unread-newest-response": socialNotificationUnreadNewestSchema,
   "onboarding-complete-request": socialOnboardingCompleteRequestSchema,
   "onboarding-complete-response": socialOnboardingCompleteResponseSchema,
   "onboarding-shown-response": socialOnboardingShownResponseSchema,

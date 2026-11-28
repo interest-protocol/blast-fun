@@ -10,7 +10,10 @@ import { SUI_OBJECT_ID_PATTERN } from "@blast/core/lib/sui/ids.ts";
  * - `GET /api/social/me/notifications?cursor=&limit=`: a page, newest event
  *   first (`notification-page`), with the unread count.
  * - `GET /api/social/me/notifications/unread`: the unread count only
- *   (`notification-unread-response`), for the shell's badge.
+ *   (`notification-unread-response`), for the shell's badge. With
+ *   `?newest=1` it also names the newest unread notification
+ *   (`notification-unread-newest-response`), so a tab can spot a new alert
+ *   without reading the list.
  * - `POST /api/social/me/notifications/{id}/read`: marks one read.
  * - `POST /api/social/me/notifications/read`: marks notifications through the
  *   fetched ID in `{ through }`. Older clients with an empty body mark all read.
@@ -91,6 +94,20 @@ export const socialNotificationUnreadSchema = z
   });
 
 export type SocialNotificationUnread = Readonly<z.infer<typeof socialNotificationUnreadSchema>>;
+
+/** The query parameter that asks the unread route for `newest_unread_id` too; older callers never send it. */
+export const NOTIFICATION_UNREAD_NEWEST_PARAMETER = "newest";
+
+export const socialNotificationUnreadNewestSchema = socialNotificationUnreadSchema
+  .extend({
+    newest_unread_id: z.xor([z.null(), z.string().regex(NOTIFICATION_ID_PATTERN)]),
+  })
+  .meta({
+    title: "The caller's unread count and newest unread notification",
+    description: `GET /api/social/me/notifications/unread?newest=1 200: the unread count (capped at ${NOTIFICATION_UNREAD_CAP}) and the highest unread notification id, or null when none is unread.`,
+  });
+
+export type SocialNotificationUnreadNewest = Readonly<z.infer<typeof socialNotificationUnreadNewestSchema>>;
 
 export const socialNotificationPageSchema = z
   .strictObject({

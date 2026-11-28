@@ -23,6 +23,7 @@ import { valueCommitments } from "@blast/server/modules/social/portfolio/positio
 import { pricedBalances, readPortfolioPositions, readPortfolioPrices, readPortfolioTotals } from "@blast/core/modules/social/portfolio/read.ts";
 import { portfolioHistoryRange, readPortfolioHistory, readPortfolioTrend } from "@blast/server/modules/social/portfolio/trend.ts";
 import { SOCIAL_PORTFOLIO_HISTORY_ROUTE } from "@blast/core/modules/social/contracts/portfolio.ts";
+import { readStep, readSteps } from "@blast/server/modules/social/read-steps.ts";
 
 export type SocialPortfolioRouteDependencies = Readonly<{
   kit: SocialRouteKit;
@@ -68,19 +69,22 @@ export async function assemblePortfolio(
 ): Promise<SocialPortfolio> {
   const { db, accountId, addresses, now } = input;
   const nowMs = now();
-  const positionsRead = readPortfolioPositions(db, addresses, nowMs);
+  const read = input.view === "summary" ? "portfolio_summary" : "portfolio";
+  // The public portfolio shares this read; its owner's view is the one that waits on the private reads.
+  const step = readSteps(read, { public: input.trendPublicSinceMs !== undefined });
+  const positionsRead = step("positions", () => readPortfolioPositions(db, addresses, nowMs));
   const ledgerRead = input.view === "summary"
-    ? positionsRead.then((positions) => readCostBasisLedgerOrNull(db, addresses, positions.map((position) => position.presale_id)))
-    : readCostBasisLedgerOrNull(db, addresses);
-  const [wallet, prices, positions, totals, vesting, ledger, trend] = await Promise.all([
-    optionalPart("coins", () => readWalletHoldings(db, addresses)),
-    readPortfolioPrices(db),
+    ? positionsRead.then((positions) => step("cost_basis", () => readCostBasisLedgerOrNull(db, addresses, positions.map((position) => position.presale_id))))
+    : step("cost_basis", () => readCostBasisLedgerOrNull(db, addresses));
+  const [wallet, prices, positions, totals, vesting, ledger, trend] = await step("parts", () => Promise.all([
+    step("coins", () => optionalPart("coins", () => readWalletHoldings(db, addresses))),
+    step("prices", () => readPortfolioPrices(db)),
     positionsRead,
-    readPortfolioTotals(db, accountId),
-    optionalPart("vesting", () => readPortfolioVesting(db, addresses, input.utilityVestings)),
+    step("totals", () => readPortfolioTotals(db, accountId)),
+    step("vesting", () => optionalPart("vesting", () => readPortfolioVesting(db, addresses, input.utilityVestings))),
     ledgerRead,
-    optionalPart("trend", () => readPortfolioTrend(db, accountId, nowMs, input.trendPublicSinceMs ?? null)),
-  ]);
+    step("trend", () => optionalPart("trend", () => readPortfolioTrend(db, accountId, nowMs, input.trendPublicSinceMs ?? null))),
+  ]));
   const atoms = wallet ? walletCash(wallet) : null;
   const holdings = wallet?.holdings.filter((coin) => coin.coin_type !== PORTFOLIO_COIN_TYPES.sui && coin.coin_type !== PORTFOLIO_COIN_TYPES.usdc) ?? null;
   const valuedAt = now();
@@ -126,7 +130,7 @@ export async function assemblePortfolio(
     prices_as_of_ms: asOf.length ? Math.min(...asOf) : null,
     unavailable: PORTFOLIO_PARTS.filter((part) => parts[part] === null),
   };
-  return input.view === "summary" ? summarizePortfolio(db, portfolio, now()) : portfolio;
+  return input.view === "summary" ? step("today", () => summarizePortfolio(db, portfolio, now())) : portfolio;
 }
 
 /** Verified account wallets only; the primary supplies all portfolio data. */
@@ -164,7 +168,9 @@ export function createSocialPortfolioRoute(dependencies: SocialPortfolioRouteDep
       async (context) => {
         const account = context.account;
         if (!account) throw new TypeError("The kit loads the account of a required-account route.");
-        const addresses = (await wallets.wallets(account.account_id)).map((wallet) => wallet.address);
+        const view = new URL(context.request.url).searchParams.get("view") === "summary" ? "summary" : "full";
+        const accountWallets = await readStep(view === "summary" ? "portfolio_summary" : "portfolio", "wallets", () => wallets.wallets(account.account_id), { public: false });
+        const addresses = accountWallets.map((entry) => entry.address);
         const db = database();
         const body: SocialPortfolio = await assemblePortfolio({
           db,
@@ -172,7 +178,7 @@ export function createSocialPortfolioRoute(dependencies: SocialPortfolioRouteDep
           addresses,
           now,
           utilityVestings: walletVestings ? () => walletVestings(context.caller!) : undefined,
-          view: new URL(context.request.url).searchParams.get("view") === "summary" ? "summary" : "full",
+          view,
         });
         return context.json(body);
       },

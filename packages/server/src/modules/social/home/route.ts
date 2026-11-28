@@ -32,6 +32,8 @@ import { homeDiscoverBaseKey, parseHolderLimit, parsePresaleIds, readHomeCoinsBy
 import { parseDiscussionQuery, readHomeDiscussion } from "@blast/server/modules/social/home/discussion.ts";
 import { readHomeFollowing } from "@blast/server/modules/social/home/following.ts";
 import { readFollowingRequest } from "@blast/server/modules/social/home/following-request.ts";
+import { observeMetric } from "@blast/core/lib/metrics.ts";
+import { READ_STEP_SAMPLE_RATE, readStep } from "@blast/server/modules/social/read-steps.ts";
 import { sharedLoad, type ReadCache, type ReadLoad, type SharedPublicRead } from "@blast/server/modules/social/read-cache.ts";
 import type { HomeCoinsPage, HomeCoinsByIds, HomeActivityStreamPage, HomeThreadPage } from "@blast/core/modules/social/contracts/home.ts";
 import { parseTradersQuery, readHomeTraders, type TraderLedger } from "@blast/server/modules/social/home/traders.ts";
@@ -114,7 +116,16 @@ export function createSocialHomeRoutes(dependencies: SocialHomeRouteDependencies
       const baseCache = dependencies.caches?.discoverBase;
       const load = () => {
         const db = database();
-        const base = baseCache && (() => baseCache.read(homeDiscoverBaseKey(query.window, query.stage, ctxRead), () => readHomeDiscoverBase(db, query.window, query.stage, ctxRead)));
+        const base = baseCache && (async () => {
+          let built = false;
+          const value = await baseCache.read(homeDiscoverBaseKey(query.window, query.stage, ctxRead), () => {
+            built = true;
+            return readStep("home_discover", "base", () => readHomeDiscoverBase(db, query.window, query.stage, ctxRead), { window: query.window });
+          });
+          // How often this process's page builds reuse its window read (one in flight counts as reused).
+          observeMetric("social.home_discover_base", { window: query.window, outcome: built ? "built" : "reused" }, { sampleRate: READ_STEP_SAMPLE_RATE });
+          return value;
+        });
         return readHomeDiscover(db, query, ctxRead, base);
       };
       const key = JSON.stringify([query, ctxRead.hiddenKinds, ctxRead.includeMobileMarket, ctxRead.includeLiveInputs, ctxRead.includeRollingChange, ctxRead.includeDexVolume, ctxRead.includeCurve, ctxRead.includeRecentBuys, ctxRead.includeRecentBuyUsd, ctxRead.includePresales]);

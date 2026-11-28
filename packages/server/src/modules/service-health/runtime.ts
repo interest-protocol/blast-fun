@@ -4,21 +4,21 @@ import { z } from "zod";
 import { processSingleton } from "@blast/core/lib/process-singleton.ts";
 import { runtimeConfig } from "@blast/server/config/runtime-config.ts";
 import { marketUpstream } from "@blast/server/modules/launchpad-market/shared-runtime.ts";
-import type { ServiceHealth } from "@blast/core/modules/service-health/contracts.ts";
+import { HEALTH_SHARED_MS, type ServiceHealth } from "@blast/core/modules/service-health/contracts.ts";
 import { readServiceHealth } from "./read.ts";
 
 const backendHealthSchema = z.object({
   status: z.enum(["ok", "standby", "starting", "draining", "halted", "db_unreachable", "lagging"]),
 });
 
-/** Coalesce visitors' probes per process; never cache an answer in the browser or CDN. */
+/** Coalesce visitors' probes per process for `HEALTH_SHARED_MS`; the route lets the CDN keep the rest of it. */
 export function serviceHealth(): Promise<ServiceHealth> {
   const cache = processSingleton("service-health", () => ({
     reading: null as Promise<ServiceHealth> | null,
     expiresAt: 0,
   }));
   if (!cache.reading || Date.now() >= cache.expiresAt) {
-    cache.expiresAt = Date.now() + 5_000;
+    cache.expiresAt = Date.now() + HEALTH_SHARED_MS;
     cache.reading = readServiceHealth({ backend: readBackend, sui: readSui });
   }
   return cache.reading;

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "unread_count": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "newest_unread_id": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "pattern": "^[1-9][0-9]{0,18}$"
+        }
+      ]
+    }
+  },
+  "required": [
+    "unread_count",
+    "newest_unread_id"
+  ],
+  "additionalProperties": false,
+  "title": "The caller's unread count and newest unread notification",
+  "description": "GET /api/social/me/notifications/unread?newest=1 200: the unread count (capped at 100) and the highest unread notification id, or null when none is unread.",
+  "$id": "https://blast-v2.invalid/social/contracts/notification-unread-newest-response.schema.json"
+}

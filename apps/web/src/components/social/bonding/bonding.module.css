@@ -290,7 +290,6 @@
   .featuredTitle { gap: 0.25rem; }
   .featuredTitle b { font-size: 1.0625rem; }
   .tagline, .featuredRaise, .featuredBody > .figures, .cardMetrics { display: none; }
-  .card:has(.change) .meter .figures > :last-child:not(:first-child) { display: none; }
   .card { gap: 0.5rem; padding: 0.75rem; }
   .grid { gap: 0.625rem; }
   .title > span { white-space: normal; overflow-wrap: anywhere; }

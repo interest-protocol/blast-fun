@@ -2,6 +2,7 @@ import { timed } from "@blast/core/lib/metrics.ts";
 import type { ReadableDatabase } from "@blast/core/modules/database/transaction.ts";
 import {
   isNotificationId,
+  NOTIFICATION_UNREAD_NEWEST_PARAMETER,
   notificationIdSchema,
   SOCIAL_NOTIFICATION_READ_ROUTE,
   SOCIAL_NOTIFICATIONS_READ_ALL_ROUTE,
@@ -19,6 +20,7 @@ import {
   parseNotificationPage,
   readNotificationPage,
   readUnreadCount,
+  readUnreadNewest,
 } from "./store.ts";
 
 export type SocialNotificationRoutesDependencies = Readonly<{
@@ -57,12 +59,14 @@ async function notificationReadThrough(request: Request): Promise<string | null>
  * (never by a provider identity), `Cache-Control: private, no-store`.
  *
  * - The page and the writes count in `social_notification` (per account).
- * - The unread count, read by the shell on load, on focus and after a
- *   mark-read, takes no bucket: it is one capped index read, cheaper than
- *   the rate-limit write that would guard it.
+ * - The unread count counts in `social_me_read`, like the account's other
+ *   own reads. The shell reads it on load and focus; a visible tab polls it
+ *   with `?newest=1` every minute to spot new alerts. The newest ID comes
+ *   from the same statement: the unread index read from the top, above the
+ *   "Mark all as read" watermark.
  *
- * Metrics: `social.notifications` with `operation` (`page`, `unread`, `read`,
- * `read_all`) through `timed`, sampled for reads.
+ * Metrics: `social.notifications` with `operation` (`page`, `unread`,
+ * `unread_newest`, `read`, `read_all`) through `timed`, sampled for reads.
  */
 export function createSocialNotificationRoutes(dependencies: SocialNotificationRoutesDependencies) {
   const { kit, database } = dependencies;
@@ -98,6 +102,15 @@ export function createSocialNotificationRoutes(dependencies: SocialNotificationR
         { name: SOCIAL_NOTIFICATIONS_UNREAD_ROUTE, auth: "account", account: "required", bucket: "social_me_read", cache: "private" },
         async (context) => {
           const accountId = context.account!.account_id;
+          if (new URL(context.request.url).searchParams.get(NOTIFICATION_UNREAD_NEWEST_PARAMETER) === "1") {
+            const body = await timed(
+              "social.notifications",
+              () => read(context, "social.notifications_unread", (db) => readUnreadNewest(db, accountId)),
+              { operation: "unread_newest" },
+              { sampleRate: 0.05 },
+            );
+            return context.json(body);
+          }
           const unread = await timed(
             "social.notifications",
             () => read(context, "social.notifications_unread", (db) => readUnreadCount(db, accountId)),

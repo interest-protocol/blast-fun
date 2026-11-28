@@ -28,7 +28,10 @@ export function FollowedTape({ window, nowMs }: Readonly<{ window: HomeWindow; n
   const viewer = useSocialViewer();
   const client = useAppQueryClient();
   const token = viewer.getAccessToken;
-  const query = useQuery({ ...followingTapeQuery(token ?? (async () => null), viewer.callsign ?? "", window), enabled: viewer.signedIn && token !== undefined }, client);
+  // The callsign is part of the cache key, so the read waits for it (as the
+  // Following list does); reading before it arrives sends the read twice.
+  const enabled = viewer.signedIn && token !== undefined && viewer.callsign !== null;
+  const query = useQuery({ ...followingTapeQuery(token ?? (async () => null), viewer.callsign ?? "", window), enabled }, client);
   const events = query.data?.events ?? [];
   if (!viewer.signedIn || events.length === 0) return null;
   return (

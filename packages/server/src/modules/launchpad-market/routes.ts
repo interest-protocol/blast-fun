@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { publicJson } from "@blast/core/lib/http-errors.ts";
-import { recordMetric } from "@blast/core/lib/metrics.ts";
+import { observeMetric, recordMetric } from "@blast/core/lib/metrics.ts";
 import type { ClientAddress } from "@blast/core/lib/web-security/client-address.ts";
 import type { LaunchpadMarketRateBucket, RateBucket, RateLimitPort } from "@blast/core/lib/web-security/rate-limits.ts";
 import { classifiedActivityPath } from "@blast/core/modules/launchpad-contract/activity.ts";
@@ -471,6 +471,9 @@ function metric(route: MarketRouteName, outcome: string, fields: Record<string, 
   recordMetric("launchpad.market_route", { route, outcome, ...fields });
 }
 
+/** One in ten answered market reads logs its time; a failed one always logs as `launchpad.market_route`. */
+const MARKET_READ_SAMPLE_RATE = 0.1;
+
 export function createMarketRelay(dependencies: Pick<MarketRoutesDependencies, "upstream" | "timeoutMs">) {
   const timeoutMs = dependencies.timeoutMs ?? 3_000;
 
@@ -484,6 +487,7 @@ export function createMarketRelay(dependencies: Pick<MarketRoutesDependencies, "
     }
     let status: number;
     let text: string;
+    const startedMs = performance.now();
     try {
       const input = new URL(path, upstream.origin);
       const init: RequestInit = {
@@ -504,6 +508,9 @@ export function createMarketRelay(dependencies: Pick<MarketRoutesDependencies, "
       metric(route, "unreachable");
       return refusal(502, "unreachable", "Market data could not be read.");
     }
+    // How long the market answer took, per route (launch and holder rewards among them); a
+    // cached upstream's shared hits and joined reads count, so this is the reader's wait.
+    observeMetric("launchpad.market_read", { route, status, durationMs: Math.round(performance.now() - startedMs) }, { sampleRate: MARKET_READ_SAMPLE_RATE });
     if (status === 401 || status === 403) {
       // blast-infra refused this server's key: an operator's problem, never the reader's.
       metric(route, "upstream_refused", { status });

@@ -17,10 +17,12 @@ test("the foreground reader silently baselines, deduplicates, consumes returns a
   let pulses = 0;
   let count = 1;
   let mounted = true;
-  t.mock.method(globalThis, "fetch", async () => Response.json({
-    items: ids.map((id) => ({ id, kind: "claim", title: id, sub: "Ready", occurred_at_ms: 1, read: false, href: "/notifications", presale: null, actor: null })),
-    unread_count: ids.length, next_cursor: null,
-  }));
+  const urls: string[] = [];
+  t.mock.method(globalThis, "fetch", async (input: RequestInfo | URL) => {
+    urls.push(String(input instanceof Request ? input.url : input));
+    const newest = ids.reduce<string | null>((max, id) => max === null || BigInt(id) > BigInt(max) ? id : max, null);
+    return Response.json({ unread_count: ids.length, newest_unread_id: newest });
+  });
   Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
   const token = async () => "token";
   const setCount = (value: number) => { count = value; };
@@ -60,8 +62,44 @@ test("the foreground reader silently baselines, deduplicates, consumes returns a
   ids = ["6", "5", "4"];
   await refresh();
   assert.equal(pulses, 2);
+  ids = ["7", "5", "4"];
+  await refresh();
+  assert.equal(count, 3);
+  assert.equal(pulses, 3, "one alert read and another arrived: the count stays, the alert still pops");
+  assert.ok(urls.length > 0 && urls.every((url) => url.endsWith("/api/social/me/notifications/unread?newest=1")), "the poll never reads the list");
   await act(async () => root.unmount());
   mounted = false;
+});
+
+test("an older backend's count-only answer keeps the count and never pops; its first ID is the starting point", async (t) => {
+  const client = createTestQueryClient();
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  let answer: object = { unread_count: 2 };
+  let count = 0;
+  let pulses = 0;
+  t.mock.method(globalThis, "fetch", async () => Response.json(answer));
+  Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+  const token = async () => "token";
+  function Session() {
+    const subscribe = useNotificationArrivals("account", token, (value) => { count = value; });
+    useEffect(() => subscribe(() => { pulses++; }), [subscribe]);
+    return null;
+  }
+  const refresh = async () => { await act(async () => { await client.refetchQueries({ queryKey: queryKeys.me.notifications.arrivals() }); }); };
+  t.after(async () => { await act(async () => root.unmount()); client.clear(); container.remove(); });
+  await act(async () => { root.render(withQueryClient(client, <Session />)); await settleQueries(client); });
+  assert.equal(count, 2);
+  answer = { unread_count: 3 };
+  await refresh();
+  assert.equal(count, 3);
+  answer = { unread_count: 3, newest_unread_id: "9" };
+  await refresh();
+  assert.equal(pulses, 0, "the first ID after the deploy is the starting point");
+  answer = { unread_count: 4, newest_unread_id: "10" };
+  await refresh();
+  assert.equal(pulses, 1);
 });
 
 test("a slow snapshot cannot restore unread notifications cleared while it was in flight", async (t) => {
@@ -69,7 +107,7 @@ test("a slow snapshot cannot restore unread notifications cleared while it was i
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
-  const snapshot = { items: [], unread_count: 4, next_cursor: null };
+  const snapshot = { unread_count: 4, newest_unread_id: null };
   let answer: ((response: Response) => void) | undefined;
   let hold = false;
   let count = 4;

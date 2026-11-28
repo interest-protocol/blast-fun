@@ -33,6 +33,7 @@ import { saleMetadataJoinSql } from "@blast/server/modules/social/sales/store.ts
 import { TEST_SUI_COIN_TYPES_SQL } from "@blast/server/modules/social/read-model/blast-launch-coins.ts";
 import { verifiedTeamSql } from "@blast/server/modules/social/read-model/verified-team.ts";
 import { DISCOVERY_PARTICIPANT_CAP, DISCOVERY_PRESALE_GOAL_FRACTION, DISCOVERY_VOLUME_CAP, DISCOVERY_WEIGHTS } from "@blast/core/modules/social/discovery/relevance.ts";
+import { readSteps } from "@blast/server/modules/social/read-steps.ts";
 
 /**
  * Home's live public reads (contract in `contracts/happening.ts`), every one
@@ -327,11 +328,18 @@ function velocityOf(windowRaised: string, presale: FeedItemPresale): number {
   return target > 0 ? Number(windowRaised) / target : 0;
 }
 
+/** The watermark; a missing one fails inside its timed step, so it logs as a failure. */
+async function readPresentAsOf(db: ReadableDatabase): Promise<NonNullable<Awaited<ReturnType<typeof readAsOf>>>> {
+  const asOf = await readAsOf(db);
+  if (!asOf) throw new SocialRouteError("service_unavailable");
+  return asOf;
+}
+
 /** The whole `GET /api/social/happening` body. */
 export async function readHappening(db: ReadableDatabase, request: HappeningRequest): Promise<SocialHappeningResponse> {
   const { config, nowMs, recentPresales } = request;
-  const [bounds, asOf] = await settledAll([readBounds(db), readAsOf(db)]);
-  if (!asOf) throw new SocialRouteError("service_unavailable");
+  const step = readSteps("happening");
+  const [bounds, asOf] = await settledAll([step("bounds", () => readBounds(db)), step("as_of", () => readPresentAsOf(db))]);
   const clockMs = Math.min(nowMs, bounds.presaleMs);
   const hidden = new Set(request.hiddenKinds);
   const kinds = [...HAPPENING_TAPE_KINDS, "trade_buy", "trade_sell"].filter((kind) => !hidden.has(kind));
@@ -339,17 +347,17 @@ export async function readHappening(db: ReadableDatabase, request: HappeningRequ
   // Dependent sale reads start as soon as candidates/pins settle, alongside Top coins.
   const presales = async () => {
     const [candidates, pins] = await settledAll([
-      Promise.resolve().then(() => db.read<CandidateRow>(CANDIDATES_SQL, [clockMs, HAPPENING_TODAY_MAX, bounds.presaleCheckpoint, nowMs, recentPresales ?? null])),
-      Promise.resolve().then(() => db.read<PinnedRow>(PINNED_SQL, [HAPPENING_TODAY_MAX, nowMs])),
+      step("candidates", () => db.read<CandidateRow>(CANDIDATES_SQL, [clockMs, HAPPENING_TODAY_MAX, bounds.presaleCheckpoint, nowMs, recentPresales ?? null])),
+      step("pins", () => db.read<PinnedRow>(PINNED_SQL, [HAPPENING_TODAY_MAX, nowMs])),
     ]);
     const ids = [...new Set([...candidates.rows, ...pins.rows].map((row) => row.presale_id))];
     const openIds = candidates.rows.filter((row) => row.role === "open").map((row) => row.presale_id);
     const [chips, windows, interested] = await settledAll([
-      readPresaleChips(db, ids, nowMs),
+      step("chips", () => readPresaleChips(db, ids, nowMs)),
       openIds.length
-        ? Promise.resolve().then(() => db.read<{ presale_id: string; raised: string }>(WINDOW_SQL, [openIds, clockMs, config.fastest_window_ms, bounds.presaleCheckpoint]))
+        ? step("window", () => db.read<{ presale_id: string; raised: string }>(WINDOW_SQL, [openIds, clockMs, config.fastest_window_ms, bounds.presaleCheckpoint]))
         : null,
-      ids.length ? Promise.resolve().then(() => db.read<{ presale_id: string; interested: number }>(INTERESTED_SQL, [ids])) : null,
+      ids.length ? step("interested", () => db.read<{ presale_id: string; interested: number }>(INTERESTED_SQL, [ids])) : null,
     ]);
     const windowOf = new Map((windows?.rows ?? []).map((row) => [row.presale_id, row.raised]));
     const interestedOf = new Map((interested?.rows ?? []).map((row) => [row.presale_id, row.interested]));
@@ -390,12 +398,12 @@ export async function readHappening(db: ReadableDatabase, request: HappeningRequ
   };
   const [[lastHour, tape, topCoins, activeCurves], lists] = await settledAll([
     settledAll([
-      Promise.resolve().then(() => db.read<{ wallets: number; usd: string; unpriced: number }>(LAST_HOUR_SQL, [clockMs, bounds.presaleCheckpoint])),
-      Promise.resolve().then(() => db.read<TapeRow>(TAPE_SQL, [clockMs, kinds, bounds.presaleCheckpoint, bounds.marketCheckpoint, HAPPENING_TAPE_MAX])),
-      hidden.has("trade_buy") ? Promise.resolve(null) : readTopCoins(db, Math.min(nowMs, bounds.marketMs), nowMs, bounds.marketCheckpoint),
-      recentPresales === "2" ? readActiveCurves(db, nowMs, Math.min(nowMs, bounds.marketMs), bounds.marketCheckpoint, kinds) : null,
+      step("last_hour", () => db.read<{ wallets: number; usd: string; unpriced: number }>(LAST_HOUR_SQL, [clockMs, bounds.presaleCheckpoint])),
+      step("tape", () => db.read<TapeRow>(TAPE_SQL, [clockMs, kinds, bounds.presaleCheckpoint, bounds.marketCheckpoint, HAPPENING_TAPE_MAX])),
+      hidden.has("trade_buy") ? Promise.resolve(null) : step("top_coins", () => readTopCoins(db, Math.min(nowMs, bounds.marketMs), nowMs, bounds.marketCheckpoint)),
+      recentPresales === "2" ? step("active_curves", () => readActiveCurves(db, nowMs, Math.min(nowMs, bounds.marketMs), bounds.marketCheckpoint, kinds)) : null,
     ]),
-    presales(),
+    step("presales", presales),
   ]);
 
   return {

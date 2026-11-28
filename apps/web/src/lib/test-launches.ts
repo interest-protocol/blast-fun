@@ -91,17 +91,6 @@ const BY_IDS_MAX = 50;
 const pendingPresales = new Map<string, Promise<boolean | undefined>>();
 
 /**
- * The test sales among the presales Home's live activity names. Its trade
- * rows and top coins carry no quote coin, so they are looked up by id.
- */
-export function testPresaleIds(read: SocialHappeningResponse, readCoins: ReadSaleCoins): Promise<ReadonlySet<string>> {
-  const named: string[] = [];
-  for (const event of read.tape) if (event.presale_id && event.quote_symbol === null) named.push(event.presale_id);
-  for (const coin of [...(read.top_coins?.trending ?? []), ...(read.top_coins?.gainers ?? [])]) if (coin.presale_id) named.push(coin.presale_id);
-  return testPresalesAmong(named, readCoins);
-}
-
-/**
  * The test sales among `ids`, for rows that name a presale but not its quote
  * coin. Each new id is looked up once (by id, 50 per read, in parallel, one
  * holder per coin) and remembered; a lookup already in flight is shared. A
@@ -129,14 +118,14 @@ export async function testPresalesAmong(ids: Iterable<string>, readCoins: ReadSa
 }
 
 /**
- * Home's live activity without test sales. A row goes when its quote symbol
- * is Test SUI, or its presale or coin belongs to a test sale: one listed in
- * the same answer, or one of `testIds` (see `testPresaleIds`).
+ * Home's live activity without test sales. The server already leaves them
+ * out; this drops any row whose quote symbol is Test SUI, and the rows of a
+ * sale listed in the same answer under it.
  */
-export function withoutTestHappening<Read extends SocialHappeningResponse>(read: Read, testIds: ReadonlySet<string> = new Set()): Read {
+export function withoutTestHappening<Read extends SocialHappeningResponse>(read: Read): Read {
   const lists = [read.fastest, read.opening_soon, read.today, read.recent_presales ?? []];
-  const test = lists.flat().filter(({ presale }) => isTestQuoteSymbol(presale.quote_symbol) || testIds.has(presale.presale_id)).map(({ presale }) => presale);
-  const presaleIds = new Set([...testIds, ...test.map((presale) => presale.presale_id)]);
+  const test = lists.flat().filter(({ presale }) => isTestQuoteSymbol(presale.quote_symbol)).map(({ presale }) => presale);
+  const presaleIds = new Set(test.map((presale) => presale.presale_id));
   const coinTypes = new Set(test.flatMap((presale) => (presale.coin_type ? [presale.coin_type] : [])));
   const isTest = (row: Readonly<{ presale_id: string | null; coin_type?: string | null }>) =>
     (row.presale_id !== null && presaleIds.has(row.presale_id)) || (!!row.coin_type && coinTypes.has(row.coin_type));

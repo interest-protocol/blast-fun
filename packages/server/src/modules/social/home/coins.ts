@@ -42,6 +42,7 @@ import { latestWindowPriceSql, rollingPriceAtSql } from "@blast/server/modules/s
 import { PRICE_TIER_SPAN_MS, type PricePoint } from "@blast/core/modules/social/contracts/prices.ts";
 import type { readTrackedPoolLaunches, readTrackedPoolMarket, TrackedPoolMarket } from "@blast/server/modules/launchpad-market/legacy-fdv.ts";
 import { optionalSource } from "@blast/server/modules/social/optional-source.ts";
+import { readStep, readSteps, type ReadSteps } from "@blast/server/modules/social/read-steps.ts";
 import { curveProgressBps } from "@blast/core/modules/launchpad-contract/discovery.ts";
 import { LAUNCH_LIFECYCLES, quoteRemaining, type LaunchLifecycle } from "@blast/core/modules/launchpad-contract/discovery-views.ts";
 import {
@@ -862,6 +863,8 @@ function withTrackedPoolMarket(
 export async function assembleCoins(
   db: ReadableDatabase,
   input: Readonly<{
+    /** The answer these coins go into, for its step timings (`readStep`). */
+    read: "home_discover" | "home_coins" | "home_following";
     candidates: readonly Candidate[];
     sides: readonly SideRow[];
     span: HomeSpan;
@@ -885,23 +888,26 @@ export async function assembleCoins(
     (context.includeMobileMarket && facts.supply === null) ||
     !observedHomePrice(facts.price_usd, facts.price_as_of_ms, context.nowMs)
   ));
-  const trackedMarketRead = input.trackedMarkets ?? (needsTrackedMarket && context.trackedPoolMarket
-    ? optionalSource("tracked_pool_market", context.trackedPoolMarket, {})
+  const step = readSteps(input.read, { window: span.window });
+  const { terms: termsReader, trackedPoolMarket } = context;
+  const trackedMarketRead = input.trackedMarkets ?? (needsTrackedMarket && trackedPoolMarket
+    ? optionalSource("tracked_pool_market", () => step("tracked_market", trackedPoolMarket), {})
     : null);
   const [grouped, holders, dexVolumes] = await Promise.all([
-    readTopParticipants(db, { span, bounds, kinds, sales: { kind: "ids", presaleIds: ids, includeStandalone: candidates.some(({ facts }) => facts.presale_id === null) }, actors }, HOME_PREVIEW_ROWS * 2),
-    readTopHolders(db, trading, bounds.clockMs, context.holderLimit),
+    // The window's activity again, for each coin's newest traders (the first scan is `readSides`).
+    step("participants", () => readTopParticipants(db, { span, bounds, kinds, sales: { kind: "ids", presaleIds: ids, includeStandalone: candidates.some(({ facts }) => facts.presale_id === null) }, actors }, HOME_PREVIEW_ROWS * 2)),
+    step("holders", () => readTopHolders(db, trading, bounds.clockMs, context.holderLimit)),
     input.dexVolumes ?? (context.includeDexVolume
-      ? readDexVolumes(db, onDex(trading), span.window, bounds, kinds)
+      ? step("dex_volumes", () => readDexVolumes(db, onDex(trading), span.window, bounds, kinds))
       : null),
   ]);
   const holderAccounts = [...holders.values()].flat().flatMap((row) => (row.account_id === null ? [] : [row.account_id]));
   const [people, supplies, posts, sparks, mobileMarket, trackedMarkets] = await Promise.all([
-    readPeople(db, [...grouped.flatMap((row) => (row.account_id === null ? [] : [row.account_id])), ...holderAccounts]),
-    context.terms ? readSupplies(context.terms, missingSupply, context.signal) : null,
-    readDiscussionCounts(db, presaleIds),
-    readSparks(db, trading, context.nowMs),
-    context.includeMobileMarket ? readMobileMarket(db, trading, context.nowMs - HOME_WINDOW_MS["1h"]) : null,
+    step("people", () => readPeople(db, [...grouped.flatMap((row) => (row.account_id === null ? [] : [row.account_id])), ...holderAccounts])),
+    termsReader ? step("supplies", () => readSupplies(termsReader, missingSupply, context.signal)) : null,
+    step("posts", () => readDiscussionCounts(db, presaleIds)),
+    step("sparks", () => readSparks(db, trading, context.nowMs)),
+    context.includeMobileMarket ? step("mobile_market", () => readMobileMarket(db, trading, context.nowMs - HOME_WINDOW_MS["1h"])) : null,
     trackedMarketRead,
   ]);
   const candidateIds = new Set(ids);
@@ -989,10 +995,11 @@ function recentPageBuys(sides: readonly SideRow[], coins: readonly HomeCoin[], w
  * shared tracked pool snapshot (one process-cached read for every catalog
  * coin), with the same fallbacks as the item (`withTrackedPoolMarket`).
  */
-async function withTrackedMarket(candidates: readonly Candidate[], context: HomeReadContext): Promise<{ candidates: readonly Candidate[]; markets?: TrackedMarkets }> {
+async function withTrackedMarket(candidates: readonly Candidate[], context: HomeReadContext, step: ReadSteps): Promise<{ candidates: readonly Candidate[]; markets?: TrackedMarkets }> {
   const lacks = (candidate: Candidate) => candidate.facts.tracked_pool_only && (candidate.fdvUsd === null || candidate.marketCapUsd === null);
   if (!candidates.some(lacks) || !context.trackedPoolMarket) return { candidates };
-  const markets = await optionalSource("tracked_pool_market", context.trackedPoolMarket, {});
+  const trackedPoolMarket = context.trackedPoolMarket;
+  const markets = await optionalSource("tracked_pool_market", () => step("base_tracked_market", trackedPoolMarket), {});
   return { markets, candidates: candidates.map((candidate) => {
     const market = lacks(candidate) ? markets[candidate.coinType] : undefined;
     if (!market) return candidate;
@@ -1037,9 +1044,17 @@ export function homeDiscoverBaseKey(window: HomeWindow, stage: HomeStage, contex
     Boolean(context.includeLiveInputs), Boolean(context.includeRollingChange), basePresales(stage, context)]);
 }
 
-export async function readHomeDiscoverBase(db: ReadableDatabase, window: HomeWindow, stage: HomeStage, context: HomeReadContext): Promise<HomeDiscoverBase> {
-  const [bounds, asOf] = await Promise.all([readHomeBounds(db, context.nowMs), readAsOf(db)]);
+/** The window's bounds and the watermark; a missing watermark fails inside the timed step, so it logs as a failure. */
+async function readBoundsAndAsOf(db: ReadableDatabase, nowMs: number): Promise<readonly [HomeBounds, NonNullable<Awaited<ReturnType<typeof readAsOf>>>]> {
+  const [bounds, asOf] = await Promise.all([readHomeBounds(db, nowMs), readAsOf(db)]);
   if (!asOf) throw new SocialRouteError("service_unavailable");
+  return [bounds, asOf];
+}
+
+export async function readHomeDiscoverBase(db: ReadableDatabase, window: HomeWindow, stage: HomeStage, context: HomeReadContext): Promise<HomeDiscoverBase> {
+  const labels = { window, set: baseSetOf(stage), presales: basePresales(stage, context) };
+  const step = readSteps("home_discover", labels);
+  const [bounds, asOf] = await step("bounds", () => readBoundsAndAsOf(db, context.nowMs));
   const span = homeSpan(window, bounds);
   const kinds = visibleKinds(context.hiddenKinds);
   const tradeKinds = kinds.filter((kind) => kind === "trade_buy" || kind === "trade_sell");
@@ -1053,8 +1068,9 @@ export async function readHomeDiscoverBase(db: ReadableDatabase, window: HomeWin
     } : {}),
   };
   const [facts, sides] = await Promise.all([
-    readCoinFacts(db, scope, span, context),
-    readSides(db, { span, bounds, kinds, sales: scope, actors: { kind: "everyone" } }, context.includeRecentBuys ? context.nowMs - HOME_RECENT_BUY_MS : undefined),
+    step("facts", () => readCoinFacts(db, scope, span, context)),
+    // The first scan of the window's activity (`assembleCoins` scans it again for the page's traders).
+    step("sides", () => readSides(db, { span, bounds, kinds, sales: scope, actors: { kind: "everyone" } }, context.includeRecentBuys ? context.nowMs - HOME_RECENT_BUY_MS : undefined)),
   ]);
   const counts = countsOf(sides);
   // A sale not trading yet scores its commits only: a claim is a refund or a payout, never traction.
@@ -1066,8 +1082,8 @@ export async function readHomeDiscoverBase(db: ReadableDatabase, window: HomeWin
     })
     .filter((candidate) => !isBlastDust(candidate.facts, candidate.marketCapUsd));
   const [{ candidates, markets: trackedMarkets }, dexVolumes] = await Promise.all([
-    withTrackedMarket(live, context),
-    context.includeDexVolume ? readDexVolumes(db, onDex(live.map(({ facts }) => facts).filter((row) => !isPresaleNotTrading(row))), span.window, bounds, kinds) : undefined,
+    withTrackedMarket(live, context, step),
+    context.includeDexVolume ? step("base_dex_volumes", () => readDexVolumes(db, onDex(live.map(({ facts }) => facts).filter((row) => !isPresaleNotTrading(row))), span.window, bounds, kinds)) : undefined,
   ]);
   // Volume (and Relevant, which weighs it) ranks by the same aggregate the cell shows.
   const scored = candidates.map((candidate) => {
@@ -1098,7 +1114,7 @@ export async function readHomeDiscover(db: ReadableDatabase, query: HomeQuery, c
     nowMs: bounds.clockMs,
   }));
   const { page, nextCursor, pageNumber, pages, total, ranked } = pageOf(eligible, query.sort, cursor, query.limit, query.page);
-  const coins = await assembleCoins(db, { candidates: page, sides, span, bounds, kinds, actors: { kind: "everyone" }, scope: "pool", context, dexVolumes, trackedMarkets });
+  const coins = await readStep("home_discover", "assemble", () => assembleCoins(db, { read: "home_discover", candidates: page, sides, span, bounds, kinds, actors: { kind: "everyone" }, scope: "pool", context, dexVolumes, trackedMarkets }), { window: query.window });
   const recentBuys = context.includeRecentBuys ? recentPageBuys(sides, coins, context.includeRecentBuyUsd === true) : [];
   return { coins, page: pageNumber, pages, total, ...(query.ranked ? { ranked } : {}), next_cursor: nextCursor, window: query.window, clock_ms: bounds.clockMs, as_of: asOf,
     ...(recentBuys.length > 0 && { recent_buys: recentBuys }) };
@@ -1121,22 +1137,22 @@ export async function readHomeCoinsByIds(
   window: HomeWindow,
   context: HomeReadContext,
 ): Promise<HomeCoinsByIds> {
-  const [bounds, asOf] = await Promise.all([readHomeBounds(db, context.nowMs), readAsOf(db)]);
-  if (!asOf) throw new SocialRouteError("service_unavailable");
+  const step = readSteps("home_coins", { window });
+  const [bounds, asOf] = await step("bounds", () => readBoundsAndAsOf(db, context.nowMs));
   const span = homeSpan(window, bounds);
   const kinds = visibleKinds(context.hiddenKinds);
   const scope = idsScope(presaleIds);
   const actors: ActorScope = { kind: "everyone" };
   const [facts, sides] = await Promise.all([
-    readCoinFacts(db, scope, span, context),
-    readSides(db, { span, bounds, kinds, sales: scope, actors }),
+    step("facts", () => readCoinFacts(db, scope, span, context)),
+    step("sides", () => readSides(db, { span, bounds, kinds, sales: scope, actors })),
   ]);
   const counts = countsOf(sides);
   const found = presaleIds.flatMap((id) => {
     const row = facts.get(id);
     return row ? [candidateOf(row, counts.get(id), span)] : [];
   });
-  const coins = await assembleCoins(db, { candidates: found, sides, span, bounds, kinds, actors, scope: "pool", context });
+  const coins = await step("assemble", () => assembleCoins(db, { read: "home_coins", candidates: found, sides, span, bounds, kinds, actors, scope: "pool", context }));
   const tradesVisible = kinds.includes("trade_buy") && kinds.includes("trade_sell");
   const poolVolumes = Object.fromEntries(coins.map((coin) => {
     const sourceId = coin.presale_id ?? coin.coin_type;

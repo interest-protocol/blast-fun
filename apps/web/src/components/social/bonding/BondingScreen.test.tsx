@@ -103,11 +103,10 @@ async function mount(
     );
     const body = (await response.json()) as DiscoveryResponse;
     if (body.section.state === "available" || body.section.state === "stale") {
-      const first = body.section.data.rows[0]!;
+      // The first two rows carry markets: the first is the featured curve, which the list below leaves out.
       return Response.json({
         ...body,
-        metrics: {
-          [first.launchId]: {
+        metrics: Object.fromEntries(body.section.data.rows.slice(0, 2).map((first) => [first.launchId, {
             holders: 0,
             market: {
               market_cap_usd: "50", fdv_usd: "0",
@@ -119,8 +118,7 @@ async function mount(
               basis: "usd_price",
               baseline_resolution_ms: 300_000,
             },
-          },
-        },
+          }])),
       });
     }
     return Response.json(body);
@@ -405,7 +403,8 @@ test("R3-23: a verified curve shows the mark after its name on the featured slid
   assert.equal(html.match(/aria-label="Known deployer"/g)?.length, 1, "only the verified slide is marked");
   assert.match(html, /<b>(?:[^<]* )?<span class="markTail"><span>[^< ]+<\/span> <svg aria-label="Known deployer"/, "the mark follows the name's last word, wrapping with it");
 
-  trusted = first;
+  // The list's own first card: the first curve overall is the featured one, left out of the list.
+  trusted = async (coinTypes) => new Set(coinTypes.slice(1, 2));
   t.after(() => { trusted = async () => new Set(); });
   const { container } = await mount(t);
   const list = container.querySelector('ol[aria-label="Bonding curves"]')!;
@@ -413,4 +412,16 @@ test("R3-23: a verified curve shows the mark after its name on the featured slid
   assert.equal(marks(cards[0]!), 1);
   assert.equal(marks(cards[0]!.querySelector("b")!), 1, "the mark follows the name, inside the link's accessible name");
   assert.equal(cards.slice(1).reduce((sum, card) => sum + marks(card), 0), 0);
+});
+
+test("the featured curve is not listed again below it, and every card keeps the same figures", async (t) => {
+  const { container } = await mount(t);
+  const featured = [...container.querySelectorAll('[data-list-row^="featured:"]')].map((slide) => slide.getAttribute("data-list-row")!.slice("featured:".length));
+  assert.ok(featured.length > 0);
+  const listed = [...container.querySelectorAll('ol[aria-label="Bonding curves"] [data-list-row]')].map((row) => row.getAttribute("data-list-row"));
+  assert.ok(listed.length > 0);
+  assert.deepEqual(listed.filter((id) => featured.includes(id!)), []);
+  const { readFileSync } = await import("#web/test/css-design-px.ts");
+  const css = readFileSync(new URL("./bonding.module.css", import.meta.url), "utf8");
+  assert.doesNotMatch(css, /:has\(\.change\)/, "a price change hides no figure");
 });

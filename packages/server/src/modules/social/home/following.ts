@@ -163,7 +163,7 @@ async function readFollowingCoins(
   const pageNumber = cursor === null ? request.page ?? 1 : 1;
   const start = (pageNumber - 1) * limit;
   const page = after.slice(start, start + limit);
-  const assembled = await assembleCoins(db, { candidates: page, sides, span, bounds, kinds, actors, scope: "followed", context });
+  const assembled = await assembleCoins(db, { read: "home_following", candidates: page, sides, span, bounds, kinds, actors, scope: "followed", context });
   const coins: HomeCoin[] = assembled.map((coin, index) => ({ ...coin, qualified: page[index]!.qualified, discussion: { posts: page[index]!.posts } }));
   const last = page.at(-1);
   return {
