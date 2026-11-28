@@ -14,7 +14,13 @@ export type LiveCoinStats = Readonly<{
   lifecycle: string | null;
   holders: number | null;
   fdvUsd: string | null;
+  /**
+   * The frame's `volume_24h`: the one 24h volume Home shows too (curve tape trades plus DEX swaps,
+   * whole minutes). Null when the frame has none; `window_24h` is the tape alone and never stands in.
+   */
   volumeUsd: string | null;
+  /** False when `volumeUsd` is a partial sum (an unpriced trade, or coverage short of the window): it shows "+". */
+  volumeComplete: boolean;
 }>;
 
 const DECIMAL = /^-?\d+(\.\d+)?$/;
@@ -36,13 +42,15 @@ export function liveCoinStats(value: unknown): LiveCoinStats | null {
   const frame = record(value);
   const checkpoint = count(frame?.checkpoint);
   if (!frame || frame.type !== "coin_stats" || typeof frame.pool_key !== "string" || checkpoint === null) return null;
+  const volume = record(frame.volume_24h);
   return {
     poolKey: frame.pool_key,
     checkpoint,
     lifecycle: typeof frame.lifecycle === "string" ? frame.lifecycle : null,
     holders: count(frame.holders),
     fdvUsd: decimal(record(frame.market)?.fdv_usd),
-    volumeUsd: decimal(record(frame.window_24h)?.volume_usd),
+    volumeUsd: decimal(volume?.usd),
+    volumeComplete: volume?.usd_complete !== false,
   };
 }
 

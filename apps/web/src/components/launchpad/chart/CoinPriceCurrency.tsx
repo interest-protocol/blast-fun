@@ -26,7 +26,8 @@ export function CoinPriceCurrencyProvider({ quoteType, quoteSymbol, children }: 
   quoteSymbol: string;
   children: ReactNode;
 }>) {
-  const rate = useQuoteUsd(quoteType);
+  // The quote's live rate: the page's dollar figures move with each SUI or USDC tick.
+  const rate = useQuoteUsd(quoteType, { live: true });
   const [selected, setCurrency] = useState<Currency>("usd");
   const currency = rate ? selected : "quote";
   const value = useMemo<CoinPriceCurrency>(() => ({

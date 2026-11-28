@@ -14,6 +14,7 @@ import {
 } from "@blast/core/modules/launchpad-contract/market-stream.ts";
 import { POOL_KEY } from "@blast/core/modules/launchpad-contract/venues.ts";
 import type { HintSink } from "@blast/server/lib/hint-subscription.ts";
+import { limitedPriceCoins } from "@blast/server/modules/launchpad-market/display-price-feed.ts";
 import {
   trackedCuePools,
   type MarketSet,
@@ -36,6 +37,7 @@ export const LIVE_SOCKET = Object.freeze({
     sockets: 8,
     opensPerMinute: 20,
     pools: 4,
+    /** Distinct price coins; Create's quote coins (`CREATE_QUOTE_TYPES`) do not count. */
     priceCoins: 40,
     /** Pools added by `set` on this instance; each can cost an upstream snapshot. */
     addedPoolsPerMinute: 40,
@@ -434,7 +436,8 @@ export function createLiveSocket(options: LiveSocketOptions) {
     return (
       !!entry &&
       (distinct(entry.pools, pools) > LIVE_SOCKET.perIp.pools ||
-        distinct(entry.priceCoins, priceCoins) > LIVE_SOCKET.perIp.priceCoins)
+        new Set(limitedPriceCoins([...entry.priceCoins.keys(), ...priceCoins])).size >
+          LIVE_SOCKET.perIp.priceCoins)
     );
   };
   /** Moves this socket's share of the address tables from what it holds to `next`. */

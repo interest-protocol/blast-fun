@@ -15,6 +15,7 @@ const { SaleView } = await import("./SaleView.tsx");
 const { SaleTradeFeed } = await import("./SaleTrades.tsx");
 const { ChartLastTrade } = await import("#web/components/launchpad/chart/ChartLastTrade.tsx");
 const { coinsByIdsQuery } = await import("../social/coin-home/home-client.ts");
+const { marketVolume } = await import("../social/coin-home/home-model.ts");
 const { createTestQueryClient, withQueryClient } = await import(
   "#web/lib/query/test-client.ts"
 );
@@ -155,7 +156,7 @@ test("missing, loading, genuine zero, tiny ownership, and failed refresh remain 
 test("only a migrated sale mounts market data, with a separate query key from Home's ten holders", () => {
   const client = createTestQueryClient();
   const coin = fixtureMarket();
-  const query = coinsByIdsQuery([coin.presale_id!], "24h", 100);
+  const query = coinsByIdsQuery([coin.presale_id!], "24h", 100, true);
   assert.notDeepEqual(
     query.queryKey,
     coinsByIdsQuery([coin.presale_id!], "24h").queryKey,
@@ -268,6 +269,14 @@ test("Coin board: Volume 24h shows a compact total without a breakdown", () => {
   assert.match(unpriced, />31\.7M USDC</, "compact like the neighbouring figures, never a wrapped long amount");
   assert.doesNotMatch(unpriced, /data-inspect-value/);
   assert.doesNotMatch(renderToStaticMarkup(view(coin, { volume: [unnamed] })), /Volume 24h|an unlisted coin/);
+  // A read with the day's sum (curve trades plus DEX swaps) shows Home's figure for the same coin, not the pool's own volume.
+  const summed = { ...coin, dex_volume: { usd: "52340.5", usd_complete: false, venues: {
+    cetus: { usd: "52340.5", usd_complete: true }, bluefin: { usd: null, usd_complete: false },
+  } } };
+  const home = marketVolume(summed).text!;
+  assert.equal(renderToStaticMarkup(view(summed, { volume: [amount("31700000.00", true)] })).match(/<dt>Volume 24h<\/dt><dd>([\s\S]*?)<\/dd>/)?.[1],
+    `${home}<span class="sr-only"> partial total</span>`);
+  assert.equal(home, "$52.3K+");
   const priceNamed = tile([amount(null, false), unnamed]);
   assert.equal((priceNamed.match(/<i class="[^"]*sale-volume-amount/g) ?? []).length, 1, "only the named coin's amount is drawn");
 });
@@ -436,11 +445,13 @@ test("a resting read's age is no delay while the live screen hears the coin; a f
 
 test("the live coin's FDV, holders and day's volume replace the last read's", () => {
   const coin = fixtureMarket();
-  const live = { poolKey: "cetus:0x9", checkpoint: 9, lifecycle: "migrated", holders: 1_204, fdvUsd: "1250000.5", volumeUsd: "8400.25" };
+  const live = { poolKey: "cetus:0x9", checkpoint: 9, lifecycle: "migrated", holders: 1_204, fdvUsd: "1250000.5", volumeUsd: "8400.25", volumeComplete: true };
   const html = renderToStaticMarkup(view(coin, { market: fixtureCoinMarket(), live, chart: () => <section>Chart fixture</section> }));
   assert.match(html, /<dt>FDV<\/dt><dd>.*\$1\.25M/);
   assert.match(html, /<dt>Holders<\/dt><dd>[^<]*1,204/);
   assert.match(html, /<dt>Volume 24h<\/dt><dd>\$8\.4K<\/dd>/);
+  const short = renderToStaticMarkup(view(coin, { live: { ...live, volumeComplete: false }, chart: () => null }));
+  assert.match(short, /<dt>Volume 24h<\/dt><dd>\$8\.4K\+<span class="sr-only"> partial total<\/span><\/dd>/, "a partial sum reads as Home's does");
   // Missing live figures keep the read's.
   const partial = renderToStaticMarkup(view(coin, { market: fixtureCoinMarket(), live: { ...live, fdvUsd: null, volumeUsd: null }, chart: () => null }));
   assert.match(partial, /<dt>FDV<\/dt><dd>.*\$412\.7M/);
@@ -467,14 +478,19 @@ test("a graduated pool's price names its move as the last 24 hours", async (t) =
     client.clear();
     container.remove();
   });
-  await act(async () => publishChartPrice(poolKey, {
-    poolKey, cursor: null, price: "0.4",
-    provenance: { source: "blast-infra", network: "mainnet", deployment: null, checkpoint: 5, timestampMs: FIXTURE_NOW + 1, observedAt: FIXTURE_NOW + 1, lagMs: 0 } as never,
+  // A pool price in atoms per atom: 0.0004127 is $0.4127 a token (9 and 6 decimals, USDC at par before its first streamed rate).
+  const publish = (price: string, checkpoint: number) => act(async () => publishChartPrice(poolKey, {
+    poolKey, cursor: null, price,
+    provenance: { source: "blast-infra", network: "mainnet", deployment: null, checkpoint, timestampMs: FIXTURE_NOW + checkpoint, observedAt: FIXTURE_NOW + checkpoint, lagMs: 0 } as never,
   }));
+  await publish("0.0004127", 5);
   await act(async () => root.render(withQueryClient(client, <SaleMarket nowMs={FIXTURE_NOW} sale={detail.presale} terms={detail.terms} />)));
+  // The move is the shown price against the read's price 24 hours back ($0.399), not the read's own move.
   await waitFor(() => /\+\$0\.0137/.test(container.textContent ?? ""), "the day's move", 5_000);
-  assert.match(container.textContent!, /\+\$0\.0137 \(3\.42%\) 24h/);
+  assert.match(container.textContent!, /\+\$0\.0137 \(3\.43%\) 24h/);
   assert.doesNotMatch(container.textContent!, /today/);
+  await publish("0.000798", 6);
+  await waitFor(() => /\+\$0\.399 \(100\.00%\) 24h/.test(container.textContent ?? ""), "the move follows the next trade", 5_000);
 });
 
 test("on the live screen, a graduated sale's market reads slow down once the stream carries the coin's stats, and speed up when it drops", async (t) => {
@@ -508,7 +524,7 @@ test("on the live screen, a graduated sale's market reads slow down once the str
   });
   const { pollInterval } = await import("#web/lib/query/polling.ts");
   // The period each market read's timer follows now: 15 or 60 (s).
-  const timers = () => [marketKey, coinsByIdsQuery([detail.presale.presale_id], "24h", 100).queryKey].map((key) => {
+  const timers = () => [marketKey, coinsByIdsQuery([detail.presale.presale_id], "24h", 100, true).queryKey].map((key) => {
     const query = client.getQueryCache().find({ queryKey: key, exact: true })!;
     const interval = query.observers[0]!.options.refetchInterval;
     const ms = typeof interval === "function" ? interval(query as never) : interval;
@@ -521,13 +537,15 @@ test("on the live screen, a graduated sale's market reads slow down once the str
   const provenance = (checkpoint: number) => ({ network: "mainnet", deployment_fingerprint: null, checkpoint, timestamp_ms: FIXTURE_NOW + checkpoint, observed_ms: FIXTURE_NOW + checkpoint, lag_ms: 0 });
   await act(async () => {
     socket.emit("status", { state: "live", pool_key: poolKey, checkpoint: 10, cursor: "10:0:0:0", provenance: provenance(10) });
-    socket.emit("hint", { type: "hello", provenance: provenance(1) });
+    // The relay takes `set`, so the page's quote coin joins this socket rather than a new one.
+    socket.emit("hint", { type: "hello", set: true, provenance: provenance(1) });
     socket.emit("stats", {
       type: "coin_stats", coin: detail.presale.sale_token, pool_key: poolKey, checkpoint: 11, timestamp_ms: FIXTURE_NOW + 11, cursor: "11:0:0:0",
-      provenance: provenance(11), holders: 1_204, market: { fdv_usd: "1250000.5" }, window_24h: { volume_usd: "8400.25" },
+      provenance: provenance(11), holders: 1_204, market: { fdv_usd: "1250000.5" }, volume_24h: { usd: "8400.25", usd_complete: false },
     });
   });
   await waitFor(() => /FDV\$1\.25M/.test(container.textContent ?? ""), "the live FDV", 5_000);
+  assert.match(container.textContent!, /Volume 24h\$8\.4K\+/, "the frame's volume_24h, by Home's rule");
   assert.deepEqual(timers(), [60_000, 60_000], "live with the coin's stats: a read a minute");
   assert.equal(live.sockets.length, 1, "the chart's socket, not a second one");
   assert.deepEqual(socket.query.getAll("pool"), [poolKey], "the stream is not widened");

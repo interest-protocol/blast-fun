@@ -155,6 +155,9 @@ export const CREATE_QUOTES: readonly CreateQuote[] = Object.freeze([
   { quote_type: CREATE_TEST_SUI_QUOTE_TYPE, symbol: "TEST_SUI", decimals: 9, name: "Test Sui", note: "Fake coins for testing" },
 ]);
 
+/** Create's quote coin types, normalized: the few coins every coin page prices its dollar rate from. */
+export const CREATE_QUOTE_TYPES: ReadonlySet<string> = new Set(CREATE_QUOTES.map((quote) => quote.quote_type));
+
 /** The quote of a coin type, or null for one Create does not raise. */
 export function createQuoteOf(quoteType: string): CreateQuote | null {
   // RPC type tags may omit leading zeros in the package address.

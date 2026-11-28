@@ -52,6 +52,11 @@ import { pollInterval } from "#web/lib/query/polling.ts";
 import { legacyCoinMarketQuery } from "./bonding-client.ts";
 import { useLiveListening, useLiveScreen, useReportListening } from "#web/components/launchpad/coin/LiveScreen.tsx";
 import { statsAfterRead, useLiveCoin, type LiveCoin, type LiveCoinStats } from "#web/components/launchpad/coin/live-coin.ts";
+import { dayVolumeText } from "#web/components/social/coin-home/home-model.ts";
+import { coinsByIdsQuery } from "#web/components/social/coin-home/home-client.ts";
+import { coinKey } from "#web/components/launchpad/market-stream-hub.ts";
+import { SkeletonText } from "#web/components/blast-ui/Skeleton.tsx";
+import { marketPoll } from "#web/components/presale-pages/sale-market-poll.ts";
 import type { ExpectedDeployment } from "@blast/core/modules/launchpad-contract/provenance.ts";
 import styles from "./bonding-coin.module.css";
 import { ChartCard, CoinCover, CoinIdentityHeader, CoinPriceFigure, CoinTradingActivity, Fact, MarketOverview, MarketPriceRow, useLastPrice } from "./CoinPageParts.tsx";
@@ -163,16 +168,23 @@ function ProgressCard({ view, tradeId, children }: Readonly<{ view: View; tradeI
   </section>;
 }
 
-function ProgressFacts({ view, tradeId }: Readonly<{ view: View; tradeId: string | null }>) {
+/** The live holder count once live stats exist, unknown (null) included; the page's read only before them. */
+function shownHolders(stats: LiveCoinStats | null, read: number | null | undefined): number | null {
+  return stats ? stats.holders : read ?? null;
+}
+
+/** `stats` is the coin's live `coin_stats`, newer than the page's read: its holder count moves on each trade. */
+function ProgressFacts({ view, tradeId, stats }: Readonly<{ view: View; tradeId: string | null; stats: LiveCoinStats | null }>) {
   const { economics, coin, venue, lifecycle } = view;
+  const holders = shownHolders(stats, coin?.stats.holders);
   const currency = useCoinPriceCurrency();
   const rate = exactDecimal(currency?.rate);
   const fdv = fdvInQuote(economics?.price, economics?.inputs.currencySupply, economics?.inputs.quoteDecimals);
   const fdvLabel = fdv && rate ? readableUsd(exactText(multiplyExact(fdv, rate))) : null;
-  if (!fdvLabel && !coin && !venue) return null;
+  if (!fdvLabel && holders === null && !venue) return null;
   return <dl className={styles.stats}>
     {fdvLabel && <Fact label="FDV"><LiveFigureCue tradeId={tradeId} value={fdvLabel}>{fdvLabel}</LiveFigureCue></Fact>}
-    {coin ? <Fact label="Holders">{coin.stats.holders.toLocaleString("en-US")}</Fact> : null}
+    {holders === null ? null : <Fact label="Holders">{holders.toLocaleString("en-US")}</Fact>}
     {venue ? <Fact label={lifecycle === "migrated" ? "Trading on" : "Graduates to"}><DexIdentity venue={venue} size={18} /></Fact> : null}
   </dl>;
 }
@@ -418,7 +430,7 @@ function CoinMarket({ snapshot, page, chart, activity, poolKey, checkpoint, expe
     <div className={styles.market}>
       <Reconnecting live={live} />
       {liveOn ? <LifecycleRefresh lifecycle={live.stats?.lifecycle ?? null} /> : null}
-      <CoinMarketCards graduated={graduated} view={view} tick={tick} tradeId={tradeId} stats={stats} chart={chart} activity={activity}
+      <CoinMarketCards graduated={graduated} view={view} tick={tick} tradeId={tradeId} stats={stats} streamed={live.stats} chart={chart} activity={activity}
         price={<MarketPrice units={priceUnits(view)} price={price?.price} tradeId={tradeId && price?.cursor ? tradeId : null}
           showCurrency={view.identity.quoteType !== null} activity={recent} />}
         foot={<><span className={styles.byline}><CreatorByline page={page} />{view.identity.coinType ? <CoinTypeTag coinType={view.identity.coinType} /> : null}</span>{recent}</>} />
@@ -427,13 +439,14 @@ function CoinMarket({ snapshot, page, chart, activity, poolKey, checkpoint, expe
 }
 
 /** The chart comes first at every width, the price row as its head; without a chart the price row stands alone. */
-function CoinMarketCards({ graduated, view, tick, tradeId, stats, chart, activity, price, foot }: Readonly<{
-  graduated: boolean; view: View; tick: ReturnType<typeof useCoinTrade>["tick"]; tradeId: string | null; stats: LiveCoinStats | null; chart: ReactNode; activity: ReactNode; price: ReactNode; foot: ReactNode;
+function CoinMarketCards({ graduated, view, tick, tradeId, stats, streamed, chart, activity, price, foot }: Readonly<{
+  graduated: boolean; view: View; tick: ReturnType<typeof useCoinTrade>["tick"]; tradeId: string | null; stats: LiveCoinStats | null;
+  streamed: LiveCoinStats | null; chart: ReactNode; activity: ReactNode; price: ReactNode; foot: ReactNode;
 }>) {
   const phone = usePhoneLayout();
   const phoneProgress = phone && !graduated;
-  const facts = view.curve && view.inputs ? <ProgressFacts view={view} tradeId={tradeId} /> : null;
-  const overview = graduated ? <GraduatedMarketOverview view={view} tick={tick} tradeId={tradeId} stats={stats} /> : (
+  const facts = view.curve && view.inputs ? <ProgressFacts view={view} tradeId={tradeId} stats={stats} /> : null;
+  const overview = graduated ? <GraduatedMarketOverview view={view} tick={tick} tradeId={tradeId} stats={stats} streamed={streamed} /> : (
     <ProgressCard view={view} tradeId={tradeId}>{phone ? null : facts}</ProgressCard>
   );
   return <>
@@ -452,11 +465,28 @@ function coinTradeSource(view: View, poolKey: string | null, trade: ReturnType<t
   };
 }
 
-function GraduatedMarketOverview({ view, tick, tradeId, stats }: Readonly<{
-  view: View; tick: ReturnType<typeof useCoinTrade>["tick"]; tradeId: string | null; stats: LiveCoinStats | null;
+/**
+ * The 24h volume Home shows for this coin (curve trades plus DEX swaps), from Home's read of it, so a page read
+ * never swaps it for the current pool's own tape. The streamed stats win once they send `volume_24h` and are
+ * newer than that Home read, so the figure never steps back to an older read.
+ */
+function useHomeDayVolume(coinType: string | null, streamed: LiveCoinStats | null): ReactNode {
+  const { data, isLoading } = useQuery({
+    ...coinsByIdsQuery(coinType ? [coinType] : [], "24h", undefined, true),
+    refetchInterval: marketPoll(useLiveListening()),
+  }, useAppQueryClient());
+  const key = coinKey(coinType);
+  const coin = data?.coins.find((item) => coinKey(item.coin_type) === key) ?? null;
+  return dayVolumeText(coin, statsAfterRead(streamed, data?.as_of.checkpoint ?? null)) ?? (isLoading ? <SkeletonText>0000</SkeletonText> : undefined);
+}
+
+function GraduatedMarketOverview({ view, tick, tradeId, stats, streamed }: Readonly<{
+  view: View; tick: ReturnType<typeof useCoinTrade>["tick"]; tradeId: string | null; stats: LiveCoinStats | null; streamed: LiveCoinStats | null;
 }>) {
-  return <MarketOverview fdv={stats?.fdvUsd ?? (tick ? tick.trade.fdvUsd : view.pool?.fdvUsd)} holders={stats?.holders ?? view.coin?.stats.holders}
-    volume={stats?.volumeUsd ?? view.pool?.stats.day.volumeUsd} venue={view.venue} tradeId={tradeId} />;
+  // Without the venue's read (an outage) the page shows no market figures, the day's volume among them.
+  const volume = useHomeDayVolume(view.pool ? view.identity.coinType : null, streamed);
+  return <MarketOverview fdv={stats?.fdvUsd ?? (tick ? tick.trade.fdvUsd : view.pool?.fdvUsd)} holders={shownHolders(stats, view.coin?.stats.holders)}
+    volumeFigure={volume} venue={view.venue} tradeId={tradeId} />;
 }
 
 function coinPageMarket(page: CoinPage, view: View) {
@@ -569,7 +599,8 @@ export function LegacyCoinScreen({ coinType, name, symbol, logoUrl, chart, decim
           <Reconnecting live={live} />
           <ChartCard head={<MarketPrice units={units} price={price?.price} tradeId={price?.cursor} showCurrency={!major} />}
             foot={<span className={styles.byline}><CoinTypeTag coinType={coinType} /></span>}><SectionBoundary subject="chart">{chart}</SectionBoundary></ChartCard>
-          <MarketOverview fdv={major ? null : fdvUsd} holders={live.stats?.holders} volume={live.stats?.volumeUsd} venue={major ? null : poolKey.split(":")[0]} />
+          <MarketOverview fdv={major ? null : fdvUsd} holders={live.stats?.holders}
+            volumeFigure={dayVolumeText(null, live.stats) ?? undefined} venue={major ? null : poolKey.split(":")[0]} />
           <Card title="Trades">
             <SectionBoundary subject="trades" key={poolKeys.join()}>
               <IndexedPoolTrades poolKeys={poolKeys} units={units} />

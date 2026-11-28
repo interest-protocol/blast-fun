@@ -15,7 +15,17 @@ import {
   blastInfraFetch,
   blastInfraReadOrigin,
 } from "@blast/core/modules/read-routing/blast-infra.ts";
+import { CREATE_QUOTE_TYPES } from "@blast/core/modules/social/contracts/create.ts";
 import { readBoundedText } from "../../lib/web-security/request-body.ts";
+
+/**
+ * The coins that count toward a price limit: all but Create's quote coins. Every coin page prices its quote and
+ * every tab shares those few rows, so the shared table keeps a row for each. Exact (normalized) strings only, so
+ * the reserve stays at their count and one read still fits blast-infra's 128 coins.
+ */
+export function limitedPriceCoins(coins: Iterable<string>): string[] {
+  return [...coins].filter((coin) => !CREATE_QUOTE_TYPES.has(coin));
+}
 
 export type DisplayPriceReader = (
   coins: readonly string[],
@@ -87,9 +97,9 @@ export class DisplayPriceFeed {
     return new Set([...this.#subscribers].flatMap((subscriber) => subscriber.coins));
   }
 
-  /** Whether these coins fit the shared price table next to every current subscriber's. */
+  /** Whether these coins fit the shared price table next to every current subscriber's; quote coins always fit. */
   admits(coins: readonly string[]): boolean {
-    return new Set([...this.#coins(), ...coins]).size <= MARKET_STREAM_BUDGET.maxPriceCoins;
+    return new Set(limitedPriceCoins([...this.#coins(), ...coins])).size <= MARKET_STREAM_BUDGET.maxPriceCoins - CREATE_QUOTE_TYPES.size;
   }
 
   subscribe(coins: readonly string[], send: Subscriber["send"]): DisplayPriceSubscription | undefined {

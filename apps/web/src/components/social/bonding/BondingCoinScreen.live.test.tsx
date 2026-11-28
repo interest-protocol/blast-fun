@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { CoinTradeListener, MarketTrade } from "#web/components/launchpad/market-stream-hub.ts";
+import type { CoinTradeListener, MarketStreamListener, MarketTrade } from "#web/components/launchpad/market-stream-hub.ts";
 import { installTestDom, recordAnimations, waitFor } from "../../../../test/fixtures/social/test-dom.ts";
 import { coinScreenFixture } from "../../../../test/fixtures/social/bonding/coin-screen-fixtures.ts";
 import { curvePoolSummary, CURVE_POOL_KEY, VENUE_POOL_KEY } from "../../../../../../packages/core/test/fixtures/modules/launchpad-coin/fixtures.ts";
@@ -12,7 +12,9 @@ import { quotePriceType } from "@blast/core/web/contracts/create.ts";
 installTestDom();
 const { act } = await import("react");
 const { createRoot } = await import("react-dom/client");
-const { MarketStreamHub } = await import("#web/components/launchpad/market-stream-hub.ts");
+const { coinKey, MarketStreamHub } = await import("#web/components/launchpad/market-stream-hub.ts");
+const { LiveScreen } = await import("#web/components/launchpad/coin/LiveScreen.tsx");
+const { AppRouterContext } = await import("next/dist/shared/lib/app-router-context.shared-runtime");
 const { QueryProvider } = await import("#web/lib/query/provider.tsx");
 const { createTestQueryClient } = await import("#web/lib/query/test-client.ts");
 const { priceQuery } = await import("#web/components/social/prices/price-client.ts");
@@ -277,4 +279,66 @@ test("curve progress advances and a delayed trade or page read cannot undo the b
   assert.equal(findCurrency("SUI").getAttribute("aria-pressed"), "true");
   assert.equal(chartCurrency(), "SUI");
   assert.equal(price(), "—");
+});
+
+// This fails if Holders keeps the page read's count while the stream moves it, shows an unknown count as 0, or the
+// dollar rate waits on its 60 s read after the stream sends the quote coin's price.
+test("a bonding coin's holders and dollar rate follow the stream, and an unknown holder count shows no figure", async (t) => {
+  const page = coinScreenFixture("live");
+  assert.ok(page.curve.state === "available" && page.coin.state === "available");
+  const read = page.curve;
+  const quote = quotePriceType(read.data.launch.quoteType);
+  const client = createTestQueryClient({ queries: { gcTime: Infinity } });
+  client.setQueryData<SocialPriceHistory | null>(priceQuery({ kind: "coin", id: quote, window: "1h" }).queryKey, () => ({
+    presale_id: null, coin_type: quote, tier: "5m", from_ms: 0, points: [],
+    price_usd: "2", price_as_of_ms: Date.now(), price_24h_usd: null,
+    change_24h_bps: null, day_open_usd: null, day_open_ms: null,
+  }));
+  const original = Object.getOwnPropertyDescriptor(globalThis, "WebSocket");
+  Object.defineProperty(globalThis, "WebSocket", { value: class {}, configurable: true, writable: true });
+  const listeners: MarketStreamListener[] = [];
+  t.mock.method(MarketStreamHub.prototype, "observe", () => () => {});
+  t.mock.method(MarketStreamHub.prototype, "subscribe", ({ listener }: { listener: MarketStreamListener }) => {
+    listeners.push(listener);
+    return { state: () => "live", ready: () => true, stop: () => {} };
+  });
+  const container = document.createElement("div");
+  container.setAttribute("data-blast-ui", "");
+  document.body.append(container);
+  const root = createRoot(container);
+  t.after(async () => {
+    await act(async () => root.unmount());
+    container.remove();
+    if (original) Object.defineProperty(globalThis, "WebSocket", original);
+    else Reflect.deleteProperty(globalThis, "WebSocket");
+    client.clear();
+  });
+  const unknown = { ...page, coin: { ...page.coin, data: { ...page.coin.data, stats: { ...page.coin.data.stats, holders: null } } } };
+  const slots = { activity: null, chart: <ChartCurrencyProbe />, discovery: null, execution: null, holders: null, market: null, overview: null, theses: null };
+  await act(async () => root.render(
+    <AppRouterContext value={{ bfcacheId: "test", back() {}, forward() {}, refresh() {}, push() {}, replace() {}, prefetch: async () => {} }}>
+      <QueryProvider client={client}>
+        <LiveScreen enabled>
+          <BondingCoinScreen page={unknown} details={null} slots={slots} expected={{ network: "mainnet", deployment: "fixture" }} />
+        </LiveScreen>
+      </QueryProvider>
+    </AppRouterContext>,
+  ));
+  const progress = () => container.querySelector('[aria-label="Launch progress"]')?.textContent ?? "";
+  const rate = () => container.querySelector('[aria-label="Chart currency"]')?.textContent?.trim();
+  assert.ok(progress(), "the progress card is drawn");
+  assert.doesNotMatch(progress(), /Holders/, "an unknown count is no figure, never 0");
+  assert.equal(rate(), "USD 2", "the 60 s read stands in before the stream's first price");
+  const checkpoint = read.provenance.checkpoint! + 5;
+  const quoteKey = coinKey(quote);
+  assert.ok(quoteKey);
+  await act(async () => {
+    for (const listener of listeners) {
+      listener.stats?.({ type: "coin_stats", coin: read.data.launch.coinType, pool_key: CURVE_POOL_KEY, checkpoint, timestamp_ms: Date.now(), cursor: `${checkpoint}:0:0:0`, provenance: {}, holders: 1_204 });
+      listener.state("live");
+      listener.prices?.({ checkpoint, prices: [{ coin_type: quoteKey, usd_price: "3.42", as_of_ms: Date.now() }] });
+    }
+  });
+  await waitFor(() => /Holders1,204/.test(progress()), "the stream's holder count", 5_000);
+  await waitFor(() => rate() === "USD 3.42", "the stream's quote price", 5_000);
 });

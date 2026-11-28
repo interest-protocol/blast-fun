@@ -10,12 +10,15 @@ function frame(checkpoint: number, extra: Record<string, unknown> = {}) {
 }
 
 test("a coin_stats frame gives the header its numbers; missing or malformed ones stay null", () => {
+  // The day's volume is `volume_24h` (curve trades plus DEX swaps) with its completeness; the tape's own sum never stands in.
   assert.deepEqual(liveCoinStats(frame(7, {
     lifecycle: "migrated", holders: 1_204,
-    market: { fdv_usd: "1250000.5", market_cap_usd: "1" }, window_24h: { volume_usd: "8400.25", trades: 3 },
-  })), { poolKey: POOL, checkpoint: 7, lifecycle: "migrated", holders: 1_204, fdvUsd: "1250000.5", volumeUsd: "8400.25" });
+    market: { fdv_usd: "1250000.5", market_cap_usd: "1" }, window_24h: { volume_usd: "99", trades: 3 },
+    volume_24h: { usd: "8400.25", usd_complete: false },
+  })), { poolKey: POOL, checkpoint: 7, lifecycle: "migrated", holders: 1_204, fdvUsd: "1250000.5", volumeUsd: "8400.25", volumeComplete: false });
+  assert.equal(liveCoinStats(frame(7, { window_24h: { volume_usd: "8400.25" } }))?.volumeUsd, null, "today's frame: the read keeps the volume");
   assert.deepEqual(liveCoinStats(frame(7, { holders: -1, market: { fdv_usd: "1e9" }, window_24h: null })),
-    { poolKey: POOL, checkpoint: 7, lifecycle: null, holders: null, fdvUsd: null, volumeUsd: null });
+    { poolKey: POOL, checkpoint: 7, lifecycle: null, holders: null, fdvUsd: null, volumeUsd: null, volumeComplete: true });
   assert.equal(liveCoinStats({ ...frame(7), type: "price" }), null);
   assert.equal(liveCoinStats(frame(-1)), null);
   assert.equal(liveCoinStats(null), null);
