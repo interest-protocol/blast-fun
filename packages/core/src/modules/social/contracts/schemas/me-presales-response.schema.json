@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://blast-v2.invalid/social/contracts/me-presales-response.schema.json",
   "title": "Social viewer presales",
-  "description": "GET /api/social/me/presales 200 (private, no-store): the caller's own presale positions, followed presales, sale coins held and vesting schedules, each with its presale's summary, each position and coin with its sale coin's cost basis and P&L (R3-32). Created presales match the caller\u2019s uncontested linked wallets or verified app publications.",
+  "description": "GET /api/social/me/presales 200 (private, no-store): the caller's own presale positions, followed presales, sale coins held and vesting schedules, each with its presale's summary, each position and coin with its sale coin's cost basis and P&L (R3-32). Created presales match the caller’s uncontested linked wallets or verified app publications.",
   "type": "object",
   "properties": {
     "positions": {
@@ -705,6 +705,11 @@
                 "pattern": "^(0|[1-9][0-9]*)\\.[0-9]{2}$"
               }
             ]
+          },
+          "symbol": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The coin the schedule pays: the sale coin's symbol, or the quote coin's for a creator's raise. Optional while older web builds still parse this answer strictly; when absent the payout coin is unknown, and web shows the sale coin's symbol."
           }
         },
         "required": [
