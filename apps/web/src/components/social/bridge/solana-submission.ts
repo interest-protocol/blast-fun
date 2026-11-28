@@ -2,7 +2,7 @@ import type { Connection } from "@solana/web3.js";
 
 import { browserStorage, readBrowserStorage, writeBrowserStorage } from "#web/lib/browser-storage.ts";
 
-import type { SolanaExpiry } from "./solana-expiry.ts";
+import type { SolanaExpiry, SolanaSubmissionState } from "./solana-expiry.ts";
 
 const CHANGE = "blast:solana-bridge-submission";
 const keyFor = (address: string) => `${CHANGE}:${address}`;
@@ -45,13 +45,11 @@ export function rememberSolanaSubmission(address: string, signature: string, exp
   window.dispatchEvent(new Event(CHANGE));
 }
 
-export type SolanaSubmissionState = "pending" | "confirmed" | "failed";
-
 /** A missing signature can mean the RPC lost its history. Clear only after a finalized result or a complete expiry proof. */
 export async function settleSolanaSubmission(
   connection: Pick<Connection, "getSignatureStatuses">,
   address: string,
-  verifyExpiry: (expiry: SolanaExpiry, signature: string) => Promise<boolean>,
+  verifyExpiry: (expiry: SolanaExpiry, signature: string) => Promise<SolanaSubmissionState>,
 ): Promise<Readonly<{ signature: string; state: SolanaSubmissionState }> | null> {
   const saved = readSolanaSubmission(address);
   const signature = solanaSubmissionSignature(saved);
@@ -65,8 +63,8 @@ export async function settleSolanaSubmission(
     const expiry = Number(slot) > 0 && blockhash && Number(height) > 0
       && Number.isSafeInteger(Number(slot)) && Number.isSafeInteger(Number(height))
       ? { slot: Number(slot), blockhash, lastValidBlockHeight: Number(height) } : null;
-    if (!expiry || !await verifyExpiry(expiry, signature)) return { signature, state: "pending" };
-    state = "failed";
+    state = expiry ? await verifyExpiry(expiry, signature) : "pending";
+    if (state === "pending") return { signature, state };
   }
 
   const storage = browserStorage("local");

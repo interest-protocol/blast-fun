@@ -1,6 +1,7 @@
 import { mayanRpc } from "./bridge-config.ts";
 
 export type SolanaExpiry = Readonly<{ slot: number; blockhash: string; lastValidBlockHeight: number }>;
+export type SolanaSubmissionState = "pending" | "confirmed" | "failed";
 
 // A Solana blockhash is valid through age 150. The following finalized block closes the window.
 const BLOCKHASH_VALID_AGE = 150;
@@ -20,9 +21,9 @@ type FinalizedBlock = Readonly<{
 }>;
 
 /** A missing signature index entry is inconclusive. Prove absence from every finalized block in the validity window. */
-export async function verifySolanaExpiry(expiry: SolanaExpiry, signature: string, signal: AbortSignal, request = fetch): Promise<boolean> {
+export async function verifySolanaExpiry(expiry: SolanaExpiry, signature: string, signal: AbortSignal, request = fetch): Promise<SolanaSubmissionState> {
   const [slots] = await rpcBatch(request, [{ method: "getBlocksWithLimit", params: [expiry.slot + 1, BLOCKS_TO_CHECK, FINALIZED] }], signal);
-  if (!Array.isArray(slots) || slots.length !== BLOCKS_TO_CHECK || !slots.every(Number.isSafeInteger)) return false;
+  if (!Array.isArray(slots) || slots.length !== BLOCKS_TO_CHECK || !slots.every(Number.isSafeInteger)) return "pending";
 
   let previous = { slot: expiry.slot, blockhash: expiry.blockhash, blockHeight: expiry.lastValidBlockHeight - BLOCKHASH_VALID_AGE };
   for (let offset = 0; offset < slots.length; offset += BLOCKS_PER_REQUEST) {
@@ -31,13 +32,22 @@ export async function verifySolanaExpiry(expiry: SolanaExpiry, signature: string
     const blocks = await rpcBatch(request, batch.map((slot) => ({ method: "getBlock", params: [slot, SIGNATURES] })), signal);
     for (const [index, slot] of batch.entries()) {
       const block = readFinalizedBlock(blocks[index]);
-      if (!block || slot <= previous.slot || block.parentSlot !== previous.slot || block.previousBlockhash !== previous.blockhash || block.blockHeight !== previous.blockHeight + 1) return false;
-      if (block.signatures.includes(signature)) return false;
-      if (block.blockHeight > expiry.lastValidBlockHeight) return true;
+      if (!block || slot <= previous.slot || block.parentSlot !== previous.slot || block.previousBlockhash !== previous.blockhash || block.blockHeight !== previous.blockHeight + 1) return "pending";
+      if (block.signatures.includes(signature)) return findFinalizedReceipt(request, slot, block.blockhash, signature, signal);
+      if (block.blockHeight > expiry.lastValidBlockHeight) return "failed";
       previous = { slot, blockhash: block.blockhash, blockHeight: block.blockHeight };
     }
   }
-  return false;
+  return "pending";
+}
+
+async function findFinalizedReceipt(request: typeof fetch, slot: number, blockhash: string, signature: string, signal: AbortSignal): Promise<SolanaSubmissionState> {
+  const [value] = await rpcBatch(request, [{ method: "getBlock", params: [slot, { ...SIGNATURES, transactionDetails: "full", encoding: "json" }] }], signal);
+  const block = value as { blockhash?: unknown; transactions?: Array<{ transaction?: { signatures?: unknown[] }; meta?: object }> } | null;
+  if (block?.blockhash !== blockhash || !Array.isArray(block.transactions)) return "pending";
+  const meta = block.transactions.find(({ transaction }) => transaction?.signatures?.[0] === signature)?.meta;
+  if (!meta || !("err" in meta)) return "pending";
+  return meta.err === null ? "confirmed" : "failed";
 }
 
 function readFinalizedBlock(value: unknown): FinalizedBlock | null {

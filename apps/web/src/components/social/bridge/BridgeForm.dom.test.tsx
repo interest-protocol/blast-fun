@@ -132,7 +132,7 @@ test("a lost Solana send response stays blocked after reopening until expiry is 
     }, source, async (expiry, signature) => {
       assert.deepEqual(expiry, { slot: 200, blockhash: "blockhash", lastValidBlockHeight: 340 });
       assert.equal(signature, "sol-hash");
-      return expiryProven;
+      return expiryProven ? "failed" : "pending";
     }),
     status: async () => ({ state: "pending", toAmount: null }),
   });
