@@ -1092,8 +1092,8 @@ export async function readHomeDiscoverBase(db: ReadableDatabase, window: HomeWin
       const id = row.presale_id ?? row.coin_type;
       return commits && isPresaleNotTrading(row) ? saleCandidateOf(row, counts.get(id), commits.get(id), span) : candidateOf(row, counts.get(id), span);
     })
-    // A fresh curve starts under the dust line; New lists every launch (its base is capped instead).
-    .filter((candidate) => baseSetOf(stage) === "new" || !isBlastDust(candidate.facts, candidate.marketCapUsd));
+    // A fresh curve starts under the dust line, so New keeps its live curves; a sale or a graduated coin still needs the line.
+    .filter((candidate) => (baseSetOf(stage) === "new" && ["live", "migration_ready"].includes(candidate.facts.curve_lifecycle ?? "")) || !isBlastDust(candidate.facts, candidate.marketCapUsd));
   const [{ candidates, markets: trackedMarkets }, dexVolumes] = await Promise.all([
     withTrackedMarket(live, context, step),
     context.includeDexVolume ? step("base_dex_volumes", () => readDexVolumes(db, onDex(live.map(({ facts }) => facts).filter((row) => !isPresaleNotTrading(row))), span.window, bounds, kinds)) : undefined,

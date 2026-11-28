@@ -200,8 +200,8 @@ export function isHomeSort(value: unknown): value is HomeSort {
  * `new`: coins launched in the last `HOME_NEW_AGES` span (7 days), newest
  * first, at most `HOME_NEW_LIMIT`: live bonding curves by their curve's
  * creation, curve coins that migrated by the same time, sales by their
- * migration. Dust stays: a fresh curve is small by nature, and Bonding's New
- * lists it. `age` narrows it to `1h`, `24h` or `7d`; any other age is 7 days.
+ * migration. A live curve under the dust line is still listed (a fresh curve
+ * is small by nature); a sale or a graduated coin under it is not. `age` narrows it to `1h`, `24h` or `7d`; any other age is 7 days.
  */
 export const HOME_STAGES = ["all", "new", "almost", "graduated"] as const;
 export type HomeStage = (typeof HOME_STAGES)[number];
