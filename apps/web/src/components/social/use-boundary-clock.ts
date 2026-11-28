@@ -14,10 +14,14 @@ const LONGEST_TIMEOUT_MS = 2_147_483_647;
  * once, at `atMs`. From then on the clock is the browser's own, which may
  * run ahead of a server-aligned `nowMs`; whatever it opens is judged again
  * when acted on (a Blast's quote and the server refuse an early commit).
+ *
+ * A decision that turns again and again (a vesting schedule's releases)
+ * passes `atMs` as a function of the clock: each turn names the next one.
  */
-export function useBoundaryClock(atMs: number | null | undefined, nowMs: number): number {
+export function useBoundaryClock(next: number | null | undefined | ((clockMs: number) => number | null | undefined), nowMs: number): number {
   const [passedMs, setPassedMs] = useState<number | null>(null);
   const clock = passedMs !== null && passedMs > nowMs ? passedMs : nowMs;
+  const atMs = typeof next === "function" ? next(clock) : next;
   useEffect(() => {
     if (atMs === null || atMs === undefined || atMs <= clock) return;
     const delay = () => Math.min(Math.max(0, atMs - Date.now()), LONGEST_TIMEOUT_MS);
