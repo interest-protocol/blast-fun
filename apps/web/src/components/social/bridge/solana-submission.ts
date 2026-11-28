@@ -2,6 +2,8 @@ import type { Connection } from "@solana/web3.js";
 
 import { browserStorage, readBrowserStorage, writeBrowserStorage } from "#web/lib/browser-storage.ts";
 
+import type { SolanaExpiry } from "./solana-expiry.ts";
+
 const CHANGE = "blast:solana-bridge-submission";
 const keyFor = (address: string) => `${CHANGE}:${address}`;
 
@@ -33,26 +35,43 @@ export function withSolanaSubmissionLock<T>(address: string, work: () => Promise
   });
 }
 
-export function rememberSolanaSubmission(address: string, signature: string) {
-  if (!writeBrowserStorage("local", keyFor(address), signature)) throw unavailable();
+export function solanaSubmissionSignature(saved: string | null): string | null {
+  return saved?.split(":", 1)[0] || null;
+}
+
+export function rememberSolanaSubmission(address: string, signature: string, expiry: SolanaExpiry) {
+  const { slot, blockhash, lastValidBlockHeight } = expiry;
+  if (!writeBrowserStorage("local", keyFor(address), `${signature}:${slot}:${blockhash}:${lastValidBlockHeight}`)) throw unavailable();
   window.dispatchEvent(new Event(CHANGE));
 }
 
 export type SolanaSubmissionState = "pending" | "confirmed" | "failed";
 
-/** A missing signature can mean the RPC lost its history. Only a finalized result releases the wallet. */
+/** A missing signature can mean the RPC lost its history. Clear only after a finalized result or a complete expiry proof. */
 export async function settleSolanaSubmission(
   connection: Pick<Connection, "getSignatureStatuses">,
   address: string,
+  verifyExpiry: (expiry: SolanaExpiry, signature: string) => Promise<boolean>,
 ): Promise<Readonly<{ signature: string; state: SolanaSubmissionState }> | null> {
-  const signature = readSolanaSubmission(address);
+  const saved = readSolanaSubmission(address);
+  const signature = solanaSubmissionSignature(saved);
   if (!signature) return null;
   const { value: [status] } = await connection.getSignatureStatuses([signature], { searchTransactionHistory: true });
-  if (status?.confirmationStatus !== "finalized") return { signature, state: "pending" };
+  let state: SolanaSubmissionState;
+  if (status?.confirmationStatus === "finalized") {
+    state = status.err ? "failed" : "confirmed";
+  } else {
+    const [, slot, blockhash, height] = saved!.split(":");
+    const expiry = Number(slot) > 0 && blockhash && Number(height) > 0
+      && Number.isSafeInteger(Number(slot)) && Number.isSafeInteger(Number(height))
+      ? { slot: Number(slot), blockhash, lastValidBlockHeight: Number(height) } : null;
+    if (!expiry || !await verifyExpiry(expiry, signature)) return { signature, state: "pending" };
+    state = "failed";
+  }
 
   const storage = browserStorage("local");
   if (!storage) throw unavailable();
   storage.removeItem(keyFor(address));
   window.dispatchEvent(new Event(CHANGE));
-  return { signature, state: status.err ? "failed" : "confirmed" };
+  return { signature, state };
 }

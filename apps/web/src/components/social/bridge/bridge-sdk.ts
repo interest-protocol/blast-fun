@@ -80,7 +80,7 @@ export type BridgeSdk = Readonly<{
    * `signal` aborts before the wallet is asked, if it has not been asked yet.
    */
   send(quote: Quote, request: BridgeRequest, wallet: SourceWallet, onSigned: (hash: string) => void, signal: AbortSignal): Promise<string>;
-  checkSolanaSubmission(address: string): Promise<Readonly<{ signature: string; state: SolanaSubmissionState }> | null>;
+  checkSolanaSubmission(address: string, signal: AbortSignal): Promise<Readonly<{ signature: string; state: SolanaSubmissionState }> | null>;
   history(blastAddress: string): Promise<BridgeRow[]>;
   /** Mayan's state for a source transaction, and what arrived once it has. */
   status(hash: string): Promise<TransferStatus>;

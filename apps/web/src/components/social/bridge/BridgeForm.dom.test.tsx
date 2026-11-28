@@ -112,24 +112,28 @@ async function mount(sdk: BridgeSdk, calls: Calls, wallet: SourceWallet | null =
 
 const newCalls = (): Calls => ({ quotes: [], sends: 0, approves: 0, arrived: 0 });
 
-test("a lost Solana send response stays blocked after reopening until Solana confirms a failure", async () => {
+test("a lost Solana send response stays blocked after reopening until expiry is verified", async () => {
   const calls = newCalls();
   const address = "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM";
-  let finalized = false;
+  let expiryProven = false;
   let rpcFails = true;
   const sdk = fakeSdk(calls, [QUOTES.solToSuiUsdc], {
     async send(_quote, _request, _wallet, onSigned) {
       calls.sends += 1;
-      rememberSolanaSubmission(address, "sol-hash");
+      rememberSolanaSubmission(address, "sol-hash", { slot: 200, blockhash: "blockhash", lastValidBlockHeight: 340 });
       onSigned("sol-hash");
       throw new Error("RPC disconnected after broadcasting");
     },
     checkSolanaSubmission: (source) => settleSolanaSubmission({
       async getSignatureStatuses() {
         if (rpcFails) throw new Error("RPC unavailable");
-        return { context: { slot: 180 }, value: [finalized ? { confirmationStatus: "finalized", confirmations: null, slot: 170, err: { InstructionError: [0, "Custom"] } } : null] };
+        return { context: { slot: 360 }, value: [null] };
       },
-    }, source),
+    }, source, async (expiry, signature) => {
+      assert.deepEqual(expiry, { slot: 200, blockhash: "blockhash", lastValidBlockHeight: 340 });
+      assert.equal(signature, "sol-hash");
+      return expiryProven;
+    }),
     status: async () => ({ state: "pending", toAmount: null }),
   });
   Object.defineProperty(navigator, "locks", { configurable: true, value: {
@@ -140,8 +144,8 @@ test("a lost Solana send response stays blocked after reopening until Solana con
     await act(async () => form.container.querySelector<HTMLButtonElement>("[aria-label='From Base. Change chain']")!.click());
     const item = await waitFor(() => [...dom.document.querySelectorAll<HTMLElement>("[role='menuitemradio']")].find((option) => option.textContent === "Solana"), "Solana in the source chain menu");
     await act(async () => item.click());
-    await act(async () => [...form.container.querySelectorAll<HTMLButtonElement>("[aria-label='Coin to receive'] button")].find((option) => option.textContent === "USDC")!.click());
   };
+  const receiveUsdc = () => act(async () => [...form.container.querySelectorAll<HTMLButtonElement>("[aria-label='Coin to receive'] button")].find((option) => option.textContent === "USDC")!.click());
   const check = async (copy: RegExp) => {
     assert.equal(form.button().textContent, "Check Solana transfer");
     await act(async () => form.button().click());
@@ -151,6 +155,7 @@ test("a lost Solana send response stays blocked after reopening until Solana con
 
   try {
     await pickSolana();
+    await receiveUsdc();
     await form.type("0.1");
     await form.press();
     assert.equal(calls.sends, 1);
@@ -161,13 +166,15 @@ test("a lost Solana send response stays blocked after reopening until Solana con
     rpcFails = false;
     await check(/hasn’t confirmed/);
     assert.ok(form.container.querySelector("a[href='https://explorer.solana.com/tx/sol-hash']"), "the saved signature remains available after reopening");
-    finalized = true;
+    expiryProven = true;
     await check(/didn’t go through/);
     assert.equal(form.button().textContent, "Bridge");
     assert.equal(form.button().disabled, true, "a new send requires re-entering the amount");
+    await receiveUsdc();
     await form.type("0.1");
+    await waitFor(() => !form.button().disabled, "the new transfer can be sent");
     await form.press();
-    assert.equal(calls.sends, 2, "a deliberate new send is allowed after finalized failure");
+    assert.equal(calls.sends, 2, "a deliberate new send is allowed after verified expiry");
   } finally {
     await form.unmount();
     Reflect.deleteProperty(navigator, "locks");
