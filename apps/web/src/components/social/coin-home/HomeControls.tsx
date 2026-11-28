@@ -145,7 +145,12 @@ export function NewAgePick({ age, onAge }: Readonly<{ age: HomeNewAge; onAge: (a
   return <Segmented label="Launched" onChange={onAge} options={NEW_AGE_OPTIONS} size="chip" value={age} />;
 }
 
-/** New with nothing launched in its span: launch one, or look back the whole week. */
+/**
+ * New with nothing launched in its span: launch one, or look back the whole week.
+ * Not marked `listEmpty`: while lists are late that marker hides the section, and
+ * this empty must keep its age chips and 7d action. The list's `data-list-none`
+ * still hides the row tools.
+ */
 export function NewLaunchEmpty({ age, onAge, compact }: Readonly<{ age: HomeViewState["age"]; onAge?: (age: HomeNewAge) => void; compact?: boolean }>) {
   return <EmptyState
     action={<>
@@ -153,7 +158,6 @@ export function NewLaunchEmpty({ age, onAge, compact }: Readonly<{ age: HomeView
       {age !== "7d" && onAge ? <Button onClick={() => onAge("7d")} size="sm">7d</Button> : null}
     </>}
     compact={compact}
-    listEmpty
     role="status"
     title="Be first"
   />;

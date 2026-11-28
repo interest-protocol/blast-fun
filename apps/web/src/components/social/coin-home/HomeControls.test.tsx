@@ -87,6 +87,8 @@ test("New shows its one age control, not the Launched filter; its empty state la
   const actions = [...container.querySelectorAll<HTMLElement>("a, button")];
   assert.deepEqual(actions.map((action) => action.textContent), ["Launch", "7d"]);
   assert.equal(container.textContent?.includes("No coins"), false);
+  // Late lists hide a section marked list-empty; New's empty keeps its controls.
+  assert.equal(container.querySelector("[data-list-empty]"), null);
   await act(async () => (actions[1] as HTMLButtonElement).click());
   assert.deepEqual(ageAsked, ["7d"]);
   await act(async () => root.render(<NewLaunchEmpty age="7d" onAge={() => {}} />));
