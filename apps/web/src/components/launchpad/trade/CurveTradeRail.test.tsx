@@ -86,3 +86,8 @@ test("without a released deployment the rail says so and offers nothing to sign"
   assert.match(html, /data-trade-unavailable/);
   assert.doesNotMatch(html, /<button/);
 });
+
+test("an unavailable reason with a code keeps the sentence and shows the code on its own line", () => {
+  const html = renderToStaticMarkup(<CurveTradeUnavailable reason="This coin can’t be bought here. Open its page to trade. Code: trade_coin_mismatch." />);
+  assert.match(html, /This coin can’t be bought here\. Open its page to trade\.<span class="err-code"> Code: trade_coin_mismatch\.<\/span>/);
+});

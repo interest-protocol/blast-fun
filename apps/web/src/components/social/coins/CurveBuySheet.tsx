@@ -8,13 +8,15 @@ import { CurveTradeUnavailable } from "#web/components/launchpad/trade/CurveTrad
 import type { CurveTradeSetup } from "#web/components/launchpad/trade/server-availability.ts";
 import { TradeSheet } from "#web/components/launchpad/trade/TradeSheet.tsx";
 import type { SocialTradeCoin } from "@blast/core/modules/social/contracts/trades.ts";
+import { diagnosticMessage, publicErrorCopy } from "#web/lib/errors.ts";
 
 /** One Home Buy on a coin still on its curve: the launch, and the row's coin. */
 export type CurveBuy = Readonly<{ launchId: string; coin: SocialTradeCoin }>;
 /** Each press is a new request, so a second press on the same coin reopens its sheet. */
 export type CurveBuyRequest = Readonly<{ buy: CurveBuy; seq: number }>;
 
-const MISMATCHED = "This coin can’t be bought here. Open its page to trade.";
+// The launch read back another coin than the row listed.
+const MISMATCHED = diagnosticMessage(publicErrorCopy("trade_coin_mismatch"), { code: "trade_coin_mismatch" });
 
 /**
  * Home's Buy sheet for coins on their curve: the coin page's curve rail, with its amount presets.
