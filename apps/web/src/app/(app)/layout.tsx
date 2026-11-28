@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 
 import { FeelProvider } from "#web/components/blast-feel/index.ts";
 import { BlastUiRoot } from "#web/components/blast-ui/BlastUiRoot.tsx";
+import { serverTradeAvailability, type CurveTradeSetup } from "#web/components/launchpad/trade/server-availability.ts";
 import { PresaleProviders } from "#web/components/presale/providers/PresaleProviders.tsx";
 import { selectedAccountSession } from "#web/components/social/account-selection.ts";
 import { SocialSession } from "#web/components/social/SocialSession.tsx";
@@ -20,7 +21,7 @@ export default async function AppLayout({
   rail,
   banner,
 }: Readonly<{ children: ReactNode; rail: ReactNode; banner: ReactNode }>) {
-  const { social } = await requestLaunchFlags();
+  const { social, trading } = await requestLaunchFlags();
   if (!social) {
     return children;
   }
@@ -33,10 +34,16 @@ export default async function AppLayout({
     backendPrivateServerRead,
     config.privyAppId.status === "available",
   );
+  // Request-local, no I/O: a Home row's Buy mounts the coin page's curve rail with it.
+  const curveTrade: CurveTradeSetup = {
+    availability: serverTradeAvailability(webConfig(), trading),
+    connection: { privyAppId: webConfig().privyAppId, nonce: nonce ?? "" },
+  };
 
   const shell = (
     <SocialShell
       banner={banner}
+      curveTrade={curveTrade}
       initialSession={initialSession}
       presaleDeployed={mainnetIdentity(presaleDeployment) !== null}
       rail={rail}

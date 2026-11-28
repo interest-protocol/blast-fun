@@ -693,3 +693,20 @@ function saleStatus(coin: HomeCoin, sale: NonNullable<HomeCoin["sale"]>, nowMs: 
   if (lifecycle === "cancelled") return { text: "Cancelled" };
   return { text: lifecycle.charAt(0).toUpperCase() + lifecycle.slice(1) };
 }
+
+/** How a Home row's Buy trades: on the curve, in the swap, or by joining the open sale; null draws no Buy. */
+export type HomeBuyRoute = "curve" | "swap" | "join";
+
+/**
+ * The route a row's Buy opens. A curve coin buys on its live curve, a listed coin the
+ * swap can trade buys in the swap (the server's `tradable`), and an open sale is joined
+ * before it ends. Anything else (an opening round, a curve ready to migrate, an upcoming,
+ * ended, funded or cancelled sale) has nothing to buy right now, so it shows no Buy.
+ */
+export function homeBuyRoute(coin: HomeCoin, nowMs: number): HomeBuyRoute | null {
+  if (coin.curve?.lifecycle === "live" && coin.launch_id !== null) return "curve";
+  if (coin.lifecycle === "migrated") return coin.tradable ? "swap" : null;
+  const sale = coin.sale;
+  if (!sale || coin.presale_id === null) return null;
+  return saleLifecycleAt(coin.lifecycle, sale.start_ms, nowMs) === "open" && sale.end_ms > nowMs ? "join" : null;
+}

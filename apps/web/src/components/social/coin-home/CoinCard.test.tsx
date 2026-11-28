@@ -7,8 +7,8 @@ import { AppRouterContext } from "next/dist/shared/lib/app-router-context.shared
 
 import { QueryProvider } from "#web/lib/query/provider.tsx";
 import type { HomeCoin, HomeWindow } from "@blast/core/modules/social/contracts/home.ts";
-import { CoinCard } from "./CoinCard";
-import type { HomeBuyTier, HomePop, HomeTradeSide } from "./home-model";
+import { CoinCard, tradeCoinOf } from "./CoinCard";
+import { homeBuyRoute, type HomeBuyTier, type HomePop, type HomeTradeSide } from "./home-model";
 import { CoinList, type ListProps } from "./sources";
 import { installTestDom, recordAnimations, waitFor } from "../../../../test/fixtures/social/test-dom.ts";
 import { installLiveSocket, liveTicket } from "../../../../test/fixtures/lib/live-socket.testing.ts";
@@ -395,4 +395,25 @@ test("a row pops each trade, sized and coloured by the trade, each in its own sl
   assert.deepEqual(shown([pop("1", 0, "+$420", "big"), pop("2", 2, "+$1.2K", "huge"), pop("3", 1, "\u2212$15", "small", "sell")]), [
     ["+$420", "big", "buy", "0"], ["+$1.2K", "huge", "buy", "2"], ["\u2212$15", "small", "sell", "1"],
   ]);
+});
+
+test("Buy picks the coin's own way in: its curve, its open sale, or the swap once it trades on a pool", () => {
+  const launch = "0x" + "a".repeat(64);
+  const curve: HomeCoin = { ...coin, lifecycle: "live", venue: "blast", launch_id: launch, curve: { lifecycle: "live", progress_bps: 4000, quote_remaining: "1" } };
+  const sale: HomeCoin = { ...coin, lifecycle: "open", venue: "blast", presale_id: "0xsale", sale: { start_ms: 100, end_ms: 900, raise_target: "10", raised: "1", participants: 1 } };
+  assert.equal(homeBuyRoute(curve, 500), "curve");
+  assert.equal(homeBuyRoute({ ...curve, curve: { ...curve.curve!, lifecycle: "migration_ready" } }, 500), null);
+  assert.equal(homeBuyRoute(coin, 500), "swap");
+  assert.equal(homeBuyRoute({ ...coin, tradable: false }, 500), null);
+  assert.equal(homeBuyRoute(sale, 500), "join");
+  assert.equal(homeBuyRoute(sale, 50), null, "not open yet");
+  assert.equal(homeBuyRoute(sale, 900), null, "ended");
+
+  // The curve buy names its launch, the join its quote; the swap carries only the coin.
+  assert.equal(tradeCoinOf(curve, "curve").launch_id, launch);
+  assert.deepEqual(
+    [tradeCoinOf(sale, "join").in_presale, tradeCoinOf(sale, "join").quote_symbol, tradeCoinOf(sale, "join").quote_type],
+    [true, "SUI", "0x2::sui::SUI"],
+  );
+  assert.deepEqual(Object.keys(tradeCoinOf(coin, "swap")).sort(), ["coin_type", "decimals", "icon_url", "name", "presale_id", "symbol", "usd_price"]);
 });

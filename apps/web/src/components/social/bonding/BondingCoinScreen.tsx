@@ -9,7 +9,7 @@ import { NO_VALUE, shortAddress as shortId } from "@blast/core/web/format.ts";
 import { MEME_TOTAL_SUPPLY_WHOLE_TOKENS } from "@interest-protocol/blast-sdk/launchpad";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import type { VenuePoolKey } from "#web/components/launchpad/activity/activity-live.ts";
@@ -26,7 +26,7 @@ import { CopyAddress } from "#web/components/blast-ui/CopyAddress.tsx";
 import { DexIdentity } from "#web/components/blast-ui/DexIdentity.tsx";
 import { Disclosure } from "#web/components/blast-ui/Disclosure.tsx";
 import { EmptyState } from "#web/components/blast-ui/EmptyState.tsx";
-import { Sheet, SheetClose, SheetHeading } from "#web/components/blast-ui/Sheet.tsx";
+import { TradeSheet } from "#web/components/launchpad/trade/TradeSheet.tsx";
 import { useHydrated } from "#web/components/ui-libraries/use-hydrated.tsx";
 import { SectionBoundary } from "#web/components/launchpad/primitives/SectionBoundary.tsx";
 import type { TerminalSlots } from "#web/components/launchpad/LaunchpadTerminal.tsx";
@@ -475,7 +475,6 @@ function CoinTradePlacement({ execution, symbol }: Readonly<{ execution: ReactNo
   const hydrated = useHydrated();
   const [open, setOpen] = useState(false);
   const [host, setHost] = useState<HTMLDivElement | null>(null);
-  const title = useId();
   // The portal stays mounted when its destination changes or the sheet closes.
   const placeExecution = useCallback((destination: HTMLElement | null) => {
     if (!destination) return;
@@ -493,11 +492,9 @@ function CoinTradePlacement({ execution, symbol }: Readonly<{ execution: ReactNo
             setOpen(true);
           }} size="lg" variant="primary">Trade</Button>
         </div>
-        <Sheet open={open} onRequestClose={() => setOpen(false)} labelledBy={title} className={styles.tradeSheet} hasDock>
-          <SheetHeading id={title} title={symbol ? `Trade $${symbol}` : "Trade"} />
-          <SheetClose onClick={() => setOpen(false)} />
+        <TradeSheet open={open} title={symbol ? `Trade $${symbol}` : "Trade"} onClose={() => setOpen(false)}>
           <div ref={placeExecution} />
-        </Sheet>
+        </TradeSheet>
       </>
     ) : (
       <aside className={styles.aside} id="coin-trade" tabIndex={-1}>

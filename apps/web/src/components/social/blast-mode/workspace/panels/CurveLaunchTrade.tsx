@@ -7,7 +7,7 @@ import { StandaloneCurveTrade } from "#web/components/launchpad/trade/CoinTrade.
 import { CurveTradeUnavailable } from "#web/components/launchpad/trade/CurveTradeRail.tsx";
 import { queryKeys } from "#web/lib/query/keys.ts";
 import { useAppQueryClient } from "#web/lib/query/provider.tsx";
-import { CurveTradeSetupContext } from "../curve-trade-context";
+import { CurveTradeSetupContext } from "#web/components/launchpad/trade/curve-trade-context.ts";
 import type { CoinAsset, CoinRecord } from "./coin-reads";
 import { curveLaunchQuery, mayTradeOnCurve } from "./curve-launch";
 

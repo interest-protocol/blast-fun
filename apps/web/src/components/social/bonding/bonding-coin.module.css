@@ -1,4 +1,4 @@
-.page, .tradeSheet { --lp-ink: var(--ink); --lp-muted: var(--muted); --lp-line: var(--hair); --lp-surface: var(--raised); --lp-canvas: var(--card); --lp-up: var(--up); --lp-down: var(--down); --lp-accent-text: var(--ink); --lp-accent: var(--ink); --lp-font-mono: var(--mono); }
+.page { --lp-ink: var(--ink); --lp-muted: var(--muted); --lp-line: var(--hair); --lp-surface: var(--raised); --lp-canvas: var(--card); --lp-up: var(--up); --lp-down: var(--down); --lp-accent-text: var(--ink); --lp-accent: var(--ink); --lp-font-mono: var(--mono); }
 .page { max-width: 73.75rem; margin: 0 auto; padding-bottom: 2rem; }
 /* A wide window gives its extra width to the chart: the trade column keeps its 22.5rem. */
 @media (min-width: 1440px) {
@@ -192,7 +192,5 @@
   .marketPrice { flex-basis: 100%; }
 }
 
-.tradeSheet > :first-child { padding-inline-end: 2.75rem; overflow-wrap: anywhere; }
-.tradeSheet:has([data-compact-sell][data-sell-dock]) > :last-child { margin-block-end: 0; }
 
 .progressPercent { margin-inline-start: auto; font-variant-numeric: tabular-nums; white-space: nowrap; }

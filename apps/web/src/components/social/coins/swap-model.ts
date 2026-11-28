@@ -539,8 +539,20 @@ export function decodeTradeAction(text: string | undefined): TradeAction | null 
   const ok =
     typeof coin.coin_type === "string" && typeof coin.symbol === "string" && typeof coin.name === "string" &&
     Number.isSafeInteger(coin.decimals) && (coin.icon_url === null || typeof coin.icon_url === "string") &&
-    (coin.usd_price === null || typeof coin.usd_price === "string") && (coin.presale_id === null || typeof coin.presale_id === "string");
+    (coin.usd_price === null || typeof coin.usd_price === "string") && (coin.presale_id === null || typeof coin.presale_id === "string") &&
+    optional(coin.launch_id, "string") && optional(coin.in_presale, "boolean") &&
+    optional(coin.quote_symbol, "string") && optional(coin.quote_type, "string");
   return ok ? { side: value.side, coin: coin as unknown as SocialTradeCoin } : null;
+}
+
+function optional(value: unknown, type: "string" | "boolean"): boolean {
+  return value === undefined || typeof value === type;
+}
+
+/** A Home row's Buy on a coin still on its curve (it names the launch): the curve's own buy sheet, not the swap. */
+export function curveBuyOf(action: TradeAction | null): Readonly<{ launchId: string; coin: SocialTradeCoin }> | null {
+  const launchId = action?.side === "buy" ? action.coin.launch_id : undefined;
+  return action && launchId ? { launchId, coin: action.coin } : null;
 }
 
 /** The pair a coin page's Buy or Sell opens (a sale, or SUI against USDC): Buy spends USDC on the coin, Sell turns the coin into USDC (the gate's `openSaleTrade`). */

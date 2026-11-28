@@ -10,6 +10,8 @@ import { useListTraversal } from "#web/components/blast-ui/list-restoration.ts";
 import { ToastProvider } from "#web/components/blast-ui/Toasts.tsx";
 import { shellViewerOf } from "#web/components/blast-ui/shell-viewer.ts";
 import { PORTFOLIO_LOADING } from "#web/components/blast-ui/portfolio.ts";
+import { CurveTradeSetupContext } from "#web/components/launchpad/trade/curve-trade-context.ts";
+import type { CurveTradeSetup } from "#web/components/launchpad/trade/server-availability.ts";
 import { SignInSheet } from "#web/components/sign-in/SignIn.tsx";
 
 import { AccountAvatar } from "./AccountAvatar";
@@ -59,10 +61,10 @@ const renderAccountAvatar: RenderAvatar = (props) => <AccountAvatar {...props} /
  * `rail` fills the right column on every page but the coin Home, whose ledger takes the width; it
  * column and `banner` sits above the page; both may be empty.
  */
-type SocialShellProps = Readonly<{ banner?: ReactNode; initialSession?: HeaderSession | null; rail?: ReactNode; presaleDeployed?: boolean; children: ReactNode }>;
+type SocialShellProps = Readonly<{ banner?: ReactNode; curveTrade?: CurveTradeSetup | null; initialSession?: HeaderSession | null; rail?: ReactNode; presaleDeployed?: boolean; children: ReactNode }>;
 
-export function SocialShell(props: SocialShellProps) {
-  return <ToastProvider><SocialShellContent {...props} /></ToastProvider>;
+export function SocialShell({ curveTrade = null, ...props }: SocialShellProps) {
+  return <ToastProvider><CurveTradeSetupContext value={curveTrade}><SocialShellContent {...props} /></CurveTradeSetupContext></ToastProvider>;
 }
 
 function SocialShellContent({
