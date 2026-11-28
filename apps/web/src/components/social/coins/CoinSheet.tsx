@@ -27,7 +27,7 @@ import clsx from "clsx";
 import type { SocialTransferFee } from "@blast/core/web/contracts/coins.ts";
 import { bpsToPct } from "@blast/core/modules/social/prices/change.ts";
 
-import { ArrowDownIcon, ArrowUpIcon, PreviousIcon } from "#web/components/blast-ui/Icons.tsx";
+import { ArrowDownIcon, ArrowUpIcon, BridgeIcon, PreviousIcon } from "#web/components/blast-ui/Icons.tsx";
 import { usePrice } from "../prices/price-client";
 import { CopyButton } from "#web/components/blast-ui/CopyButton.tsx";
 import {
@@ -76,6 +76,8 @@ import { useOtherWalletFunds, WalletFundingSwitch } from "./WalletFundingSwitch"
 import type { WalletActionDraft } from "./wallet-action-draft";
 import { useAccountWallets } from "../account-wallets";
 import { DiagnosticText } from "#web/components/blast-ui/DiagnosticText.tsx";
+import { useBridge } from "../bridge/bridge-context.tsx";
+import { BridgeScreen } from "../bridge/BridgeScreen.tsx";
 import { SUI_ADDRESS_PLACEHOLDER, SUI_NAME_LOOKUP_LABEL, useSuiAddressLookup } from "#web/lib/sui-address-input.ts";
 
 export type { CoinSheetTrading, TradeAsk, TradeOutcome } from "./SwapForm";
@@ -212,7 +214,7 @@ function useCoinSteps(props: Pick<CoinSheetProps, "first" | "onScreen" | "inline
   const go = (next: CoinScreen, nextTrade?: TradeState) => {
     const active = document.activeElement;
     const side = active?.getAttribute("data-coin-pick");
-    const label = screen.kind === "fund" ? "Withdraw" : active?.getAttribute("aria-label");
+    const label = next.kind === "bridge" ? "Bridge" : screen.kind === "fund" ? "Withdraw" : active?.getAttribute("aria-label");
     const fallbackFocus = screen.kind === "pick" ? '[aria-label="Search your coins"]' : '[aria-label="Search coins"]';
     const focus = side ? `[data-coin-pick=${JSON.stringify(side)}]` : label ? `[aria-label=${JSON.stringify(label)}]` : active?.id ? `#${CSS.escape(active.id)}` : fallbackFocus;
     swap(() => {
@@ -322,6 +324,7 @@ function CoinSheetForm(props: CoinSheetProps & Readonly<{ titleId: string; onCon
 
   const balanceKnown = props.wallet.status === "ready";
   const wallet = props.wallet.status === "ready" ? props.wallet : { address: null, fee: "wallet" as const, coins: PUBLIC_PREFERRED_COINS };
+  const bridge = useBridge();
   // Favourite shortcuts keep their saved order; the browser ranks holdings by USD value.
   const pins = storedPins;
   const coins = pinSort(withPreferredCoins(wallet.coins), pins);
@@ -405,9 +408,10 @@ function CoinSheetForm(props: CoinSheetProps & Readonly<{ titleId: string; onCon
           >
             <SwapIcon />Trade
           </Button>
-          <div className={styles.quietActs}>
+          <div className={styles.quietActs} data-three={bridge ? "" : undefined}>
             <Button className={styles.quietAct} onClick={() => go({ kind: "dep" })} variant="ghost"><ArrowDownIcon />Deposit</Button>
             <Button className={styles.quietAct} onClick={() => go({ kind: "wd", key: coin.key })} variant="ghost"><ArrowUpIcon />Withdraw</Button>
+            {bridge ? <Button aria-label="Bridge" className={styles.quietAct} onClick={() => go({ kind: "bridge" })} variant="ghost"><BridgeIcon />Bridge</Button> : null}
           </div>
         </div>
       </>
@@ -422,6 +426,21 @@ function CoinSheetForm(props: CoinSheetProps & Readonly<{ titleId: string; onCon
       </div>
       {!props.trading.signedIn ? <Button loading={props.trading.sessionPending === true} loadingLabel="Restoring session" onClick={props.trading.onSignIn} size="lg" variant="primary">Sign in to get your address</Button> : null}
       {fund ? <Button aria-label="Withdraw" onClick={() => go({ kind: "pick", mode: "withdraw" })} size="lg" variant="secondary"><ArrowUpIcon />Withdraw</Button> : null}
+      {fund && bridge ? <Button aria-label="Bridge" onClick={() => go({ kind: "bridge" })} size="lg" variant="secondary"><BridgeIcon />Bridge</Button> : null}
+    </>
+  );
+
+  // Bridge to Sui: coins from another chain arrive in this Blast wallet.
+  // A new Blast session starts a new form (key), so nothing from the last account carries over.
+  const bridgeScreen = (): ReactNode => !bridge ? depositScreen(false) : (
+    <>
+      {head("Bridge to Sui")}
+      <BridgeScreen
+        blastAddress={wallet.address}
+        key={wallet.address ?? "signed-out"}
+        onSignIn={props.trading.onSignIn}
+        signedIn={props.trading.signedIn}
+      />
     </>
   );
 
@@ -513,6 +532,7 @@ function CoinSheetForm(props: CoinSheetProps & Readonly<{ titleId: string; onCon
       case "coin": return coinScreen(shown);
       case "fund": return depositScreen(true);
       case "dep": return depositScreen(false);
+      case "bridge": return bridgeScreen();
       case "wd": return withdrawScreen(shown);
       case "trade": return tradeScreen();
       case "pickt": return tradePickerScreen(shown);

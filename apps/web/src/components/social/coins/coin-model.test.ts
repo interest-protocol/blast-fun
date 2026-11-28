@@ -23,6 +23,7 @@ test("OAuth navigation restores only recognized screens and discards account dat
   assert.deepEqual(parseCoinScreen({ kind: "pick", mode: "deposit" }), { kind: "dep" });
   assert.deepEqual(parseCoinScreen({ kind: "dep", key: "usdc" }), { kind: "dep" });
   assert.deepEqual(parseCoinScreen({ kind: "fund" }), { kind: "fund" });
+  assert.deepEqual(parseCoinScreen({ kind: "bridge", amount: "5" }), { kind: "bridge" });
   assert.deepEqual(parseCoinScreen({ kind: "pickt", side: "out" }), { kind: "pickt", side: "out" });
   assert.deepEqual(parseCoinScreen({ kind: "all" }), { kind: "all" });
   assert.deepEqual(parseCoinScreen({ kind: "wd", key: "sui" }), { kind: "wd", key: "sui" });
@@ -32,6 +33,7 @@ test("OAuth navigation restores only recognized screens and discards account dat
 test("the shell opens the address for deposits and a coin picker for withdrawals", () => {
   assert.deepEqual(firstScreen("deposit", null), { kind: "dep" });
   assert.deepEqual(firstScreen("withdraw", null), { kind: "pick", mode: "withdraw" });
+  assert.deepEqual(firstScreen("bridge", null), { kind: "bridge" });
   assert.deepEqual(firstScreen("coin", "kstl"), { kind: "coin", key: "kstl" });
   assert.deepEqual(firstScreen("coin", null), { kind: "all" });
   // R3-10: "All coins" has no shell action of its own, so one reserved key opens it (`coin-model.ts`).

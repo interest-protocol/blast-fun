@@ -85,6 +85,9 @@
 [data-blast-ui] .tradeAct { width: 100%; }
 .quietActs { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
 [data-blast-ui] .quietAct { min-height: max(44px, 2.75rem); color: var(--ink-2); }
+/* With Bridge the three quiet ways share one row: icon over label, so no label wraps at 320px. */
+.quietActs[data-three] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+[data-blast-ui] .quietActs[data-three] .quietAct { flex-direction: column; gap: 0.25rem; --control-pad: 0.5rem; --control-height: 3.5rem; --control-coarse-height: 3.5rem; min-height: 3.5rem; }
 /* The sheet fits the coin screen; the deeper screens keep the fixed height that stops lists and the swap form from jumping. */
 [data-blast-ui] .sheet.sheet:has(> [data-coin-screen="coin"]) { height: auto; }
 

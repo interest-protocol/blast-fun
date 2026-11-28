@@ -29,6 +29,7 @@ export type CoinScreen =
   | Readonly<{ kind: "pick"; mode: "withdraw" }>
   | Readonly<{ kind: "fund" }>
   | Readonly<{ kind: "dep" }>
+  | Readonly<{ kind: "bridge" }>
   | Readonly<{ kind: "all" }>
   | Readonly<{ kind: "pickt"; side: "in" | "out" }>
   | Readonly<{ kind: "trade"; key: string; out?: string; focus?: string }>
@@ -41,6 +42,7 @@ export function parseCoinScreen(value: unknown): CoinScreen | null {
     case "all": return { kind: "all" };
     case "fund": return { kind: "fund" };
     case "dep": return { kind: "dep" };
+    case "bridge": return { kind: "bridge" };
     case "pick":
       if (!("mode" in value)) return null;
       if (value.mode === "deposit") return { kind: "dep" };
@@ -79,9 +81,10 @@ export function parseSavedCoinScreen(screen: string | undefined): CoinScreen | n
   catch { return null; }
 }
 
-/** What the shell opens: `openDeposit()`, `openWithdraw()`, `openCoin(key)`, `openCoin("all")`. */
-export function firstScreen(action: "deposit" | "withdraw" | "coin", key: string | null): CoinScreen {
+/** What the shell opens: `openDeposit()`, `openWithdraw()`, `openBridge()`, `openCoin(key)`, `openCoin("all")`. */
+export function firstScreen(action: "deposit" | "withdraw" | "bridge" | "coin", key: string | null): CoinScreen {
   if (action === "deposit") return { kind: "dep" };
+  if (action === "bridge") return { kind: "bridge" };
   if (action === "withdraw") return { kind: "pick", mode: "withdraw" };
   return key && key !== ALL_COINS_KEY ? { kind: "coin", key } : { kind: "all" };
 }
@@ -94,6 +97,7 @@ export const SCREEN_LABEL: Readonly<Record<CoinScreen["kind"], string>> = {
   coin: "Coin",
   fund: "Fund",
   dep: "Deposit",
+  bridge: "Bridge to Sui",
   wd: "Withdraw",
   trade: "Trade",
 };

@@ -27,3 +27,6 @@
 
 /* Deposit and Withdraw: two equal 40px columns, 8px apart. */
 .actions { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0.5rem; }
+/* Deposit, Withdraw and Bridge share the narrow column: icon over label, one row. */
+.actions[data-three] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.actions[data-three] > * { flex-direction: column; gap: 0.25rem; --control-pad: 0.5rem; --control-height: 3.5rem; --control-coarse-height: 3.5rem; }

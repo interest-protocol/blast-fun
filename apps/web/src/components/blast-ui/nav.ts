@@ -98,6 +98,8 @@ export type ShellActionName =
   | "toggleBlastMode"
   // Settings (UI-07): the right column's Withdraw (§14.2).
   | "openWithdraw"
+  // Bridge to Sui: coins from another chain into the Blast wallet (off while its flag is off).
+  | "openBridge"
   // Coins (UI-14): one coin's sheet, by its key (`usdc`, `sui` or a presale id).
   | "openCoin"
   // Coins (UI-14 §14.2): the whole list, which is a screen and not a coin.

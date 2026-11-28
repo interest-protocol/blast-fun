@@ -91,6 +91,13 @@ test("outside production every value is optional and an unset one turns its feat
   assert.equal(parseWebConfig({ ...preview, PRIVY_APP_ID: "  " }).privyAppId, null);
 });
 
+test("Bridge needs its flag and stays off in production", () => {
+  const enabled = { NEXT_PUBLIC_MAYAN_BRIDGE_ENABLED: "1" };
+  assert.equal(parseWebConfig(preview).bridge, false);
+  assert.equal(parseWebConfig({ ...preview, ...enabled }).bridge, true);
+  assert.equal(parseWebConfig({ ...production, ...enabled }).bridge, false);
+});
+
 // This fails if the direct socket can be configured without the secret its
 // tickets are signed with, or on a plain ws:// host.
 test("the live socket needs a wss:// /v1/socket URL and the hints upstream", () => {

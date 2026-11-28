@@ -16,7 +16,7 @@ export type { ShellActionName } from "./nav.ts";
  * - `openSearch` (rail Search, top-bar search icon, `/`), `openNotifications`
  *   (the rail and top-bar bell while there is no notifications page),
  *   `openFund` (the header), `openDeposit` (the portfolio card's Deposit, Settings' Deposit), `openWithdraw` (Settings'
- *   Withdraw) and `openCoin` (a coin row of the profile's holdings) do nothing.
+ *   Withdraw), `openBridge` (Bridge beside them) and `openCoin` (a coin row of the profile's holdings) do nothing.
  *
  * An action may take one argument: `openCoin`
  * the coin's key (UI-14), `openTrade` the side and the sale's coin
