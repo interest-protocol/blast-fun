@@ -120,7 +120,11 @@ function useBridgeReads(args: ReadArgs) {
   const quoted = useBridgeQuote(args);
   const source = useSourceReads(args, quoted);
   const history = useBridgeHistory(args.sdk, args.blastAddress);
-  return { ...quoted, ...source, history };
+  const { token, to } = args.selection;
+  const facts = quoted.shown ? quoteRows(quoteFacts(quoted.shown, token), token, to) : null;
+  const refreshing = facts !== null && (quoted.quote.isFetching || quoted.typing);
+  const retryHistory = history.isError && !history.isFetching ? () => { void history.refetch(); } : undefined;
+  return { ...quoted, ...source, facts, refreshing, history, retryHistory };
 }
 
 /** Mayan's quote for the settled amount, bound to the source wallet and the Blast address once both are known. */
@@ -543,10 +547,9 @@ export function BridgeForm({ sdk, wallets, blastAddress, signedIn, onSignIn, onA
     bridge: () => { if (wallet) send.bridge(request(), wallet, amount.replace(/,/g, "")); },
   });
 
-  const facts = reads.shown ? quoteRows(quoteFacts(reads.shown, token), token, selection.to) : null;
-  const refreshing = facts !== null && (reads.quote.isFetching || reads.typing);
   // Nothing to change while a wallet is asked or Mayan has paused this SDK.
   const locked = send.busy || paused;
+  const inputsDisabled = locked || solanaPending;
   const rows = mergeRows(send.sent, reads.history.data ?? []);
   const actionButton = (
     <Button
@@ -576,7 +579,7 @@ export function BridgeForm({ sdk, wallets, blastAddress, signedIn, onSignIn, onA
           amount={amount}
           balance={balance}
           balanceFailed={balanceFailed}
-          busy={locked || solanaPending}
+          busy={inputsDisabled}
           chain={chain}
           connected={wallet !== null}
           id={id}
@@ -588,10 +591,10 @@ export function BridgeForm({ sdk, wallets, blastAddress, signedIn, onSignIn, onA
         />
         <GetPanel
           blastAddress={blastAddress}
-          busy={locked || solanaPending}
-          facts={facts}
+          busy={inputsDisabled}
+          facts={reads.facts}
           onTo={setToIndex}
-          refreshing={refreshing}
+          refreshing={reads.refreshing}
           toIndex={toIndex}
           waiting={atoms !== null && !message}
         />
@@ -599,14 +602,14 @@ export function BridgeForm({ sdk, wallets, blastAddress, signedIn, onSignIn, onA
       <QuoteNotes
         amount={reads.current ? amount : null}
         busyText={actionBusy ? send.busyText : null}
-        facts={atoms === null ? null : facts}
+        facts={reads.facts}
         fastMctp={reads.shown?.type === "FAST_MCTP"}
         info={info}
         message={message}
         noteId={noteId}
         rateChanged={send.rateChanged}
         reason={reason}
-        refreshing={refreshing}
+        refreshing={reads.refreshing}
         token={token}
       />
       <SolanaStatus notice={send.solanaNotice} signature={signature} />
@@ -616,7 +619,7 @@ export function BridgeForm({ sdk, wallets, blastAddress, signedIn, onSignIn, onA
         id={id}
         now={now}
         onArrived={onArrived}
-        onRetry={reads.history.isError && !reads.history.isFetching ? () => { void reads.history.refetch(); } : undefined}
+        onRetry={reads.retryHistory}
         rows={rows}
         sdk={sdk}
       />
