@@ -11,12 +11,15 @@ import { findBlockedTerm } from "@blast/core/modules/social/config/reader.ts";
 import type { LaunchPageContext } from "@blast/core/modules/social/contracts/launch.ts";
 import type { LaunchRules } from "@blast/core/modules/social/launch/model.ts";
 import { runtimeConfig } from "@blast/server/config/runtime-config.ts";
+import { configuredLaunchReadChain } from "@blast/server/modules/launchpad-coin/chain.ts";
+import { createCreatorCapsChain } from "@blast/server/modules/social/creator-claims/chain.ts";
+import { creatorXLookup } from "@blast/server/modules/social/launch/creator-x.ts";
 import { launchAssetStore } from "@blast/server/modules/launch-assets/store.ts";
 import { expireUnsubmittedCreation } from "@blast/server/modules/sponsor/reservations.ts";
 import { sponsorService } from "@blast/server/modules/sponsor/runtime.ts";
 import { createBluefinOptions, createCetusTiers, createNode } from "@blast/server/modules/social/create/runtime.ts";
 import { creatorCommitmentOf, readCreatorCommitment } from "@blast/server/modules/social/creator-claims/commitment.ts";
-import { replacedWalletGas } from "@blast/server/modules/social/launch/reconcile.ts";
+import { readPublishedLaunch, replacedWalletGas, type ReadPublishedLaunch } from "@blast/server/modules/social/launch/reconcile.ts";
 import { launchMemeTemplate } from "@blast/server/modules/social/launch/meme-template.ts";
 import { createSocialLaunchRoutes, type SocialLaunchRoutes } from "@blast/server/modules/social/launch/route.ts";
 import { launchDeployment, readLaunchRules } from "@blast/server/modules/social/launch/rules.ts";
@@ -58,11 +61,22 @@ export async function launchPageContext(): Promise<LaunchPageContext> {
   try {
     const rules = await launchRules();
     if (rules.quotes.length === 0) return { rules, publish: { available: false, reasons: ["quote_not_admitted"] } };
-    return { rules, publish: { available: true, reasons: [] } };
+    const config = runtimeConfig();
+    return {
+      rules,
+      creator_x_available: Boolean(config.launchCreatorXBearerToken && config.creatorClaimSigner),
+      publish: { available: true, reasons: [] },
+    };
   } catch {
     return { rules: null, publish: { available: false, reasons: ["launch_config"] } };
   }
 }
+
+export const confirmedLaunchPublication: ReadPublishedLaunch = (saved, signal) => {
+  const client = createNode();
+  if (!client) throw new Error("The creation node is not configured.");
+  return readPublishedLaunch(client, saved, signal);
+};
 
 async function missingPublicationStatus(client: ClientWithCoreApi, saved: LaunchStepPlan, creator: string, accountKey: string | null): Promise<"failed" | "pending"> {
   const sponsorship = saved.plan.steps[0].sponsorship;
@@ -82,6 +96,7 @@ async function missingPublicationStatus(client: ClientWithCoreApi, saved: Launch
 export function socialLaunchRoutes(): SocialLaunchRoutes {
   return processSingleton("social.launch-routes", () => {
     const accounts = socialAccounts();
+    const config = runtimeConfig();
     const database = () => autocommitReader(primaryPool(), "social", { label: "social.launch" });
     return createSocialLaunchRoutes({
       kit: sharedSocialRouteKit(),
@@ -102,6 +117,16 @@ export function socialLaunchRoutes(): SocialLaunchRoutes {
       async commitment(context, accountId) {
         return (await readCreatorCommitment(database(), accountId))
           ?? context.transaction((social) => creatorCommitmentOf(social, accountId), { label: "social.creator_commitment" });
+      },
+      readPublishedLaunch: confirmedLaunchPublication,
+      resolveCreatorX: creatorXLookup(config.launchCreatorXBearerToken, config.launchCreatorXLookupConcurrency),
+      async canAssignCreatorX(signal) {
+        const signer = config.creatorClaimSigner;
+        if (!config.launchCreatorXBearerToken || !signer) return false;
+        const chain = await configuredLaunchReadChain();
+        if (!chain) return false;
+        const keys = await createCreatorCapsChain(chain).signerPublicKeys({ signal }).catch((): readonly string[] => []);
+        return keys.includes(Buffer.from(signer.publicKey).toString("hex"));
       },
       async launchMemeType(launchId) {
         const client = createNode();

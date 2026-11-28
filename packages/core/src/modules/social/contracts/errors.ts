@@ -48,6 +48,8 @@ export const SOCIAL_ERRORS = {
   allowlist_not_found: { status: 422, retryAfter: false },
   invalid_logo: { status: 422, retryAfter: false },
   publish_unavailable: { status: 409, retryAfter: false },
+  creator_x_not_found: { status: 422, retryAfter: false },
+  creator_x_unavailable: { status: 503, retryAfter: true },
   logo_upload_unavailable: { status: 503, retryAfter: true },
   // Coins (UI-14): withdrawals from the Blast wallet.
   blast_wallet_missing: { status: 409, retryAfter: false },
@@ -172,6 +174,8 @@ export const SOCIAL_ERROR_MESSAGES: Readonly<Record<SocialErrorCode, string>> = 
   allowlist_not_found: "That allowlist was not found. Upload it again.",
   invalid_logo: "Use a PNG, JPEG or WebP image from 64 to 4,096 pixels on each side, under 2 MB.",
   publish_unavailable: "Publishing is not available yet.",
+  creator_x_not_found: "We couldn’t find that X account. Check the handle and try again.",
+  creator_x_unavailable: "Assigning fees to X is temporarily unavailable. Try again shortly.",
   logo_upload_unavailable: "Logo uploads are not available right now.",
   blast_wallet_missing: "Your Blast wallet is not set up yet.",
   invalid_recipient: "Send to a Sui address other than your Blast wallet.",

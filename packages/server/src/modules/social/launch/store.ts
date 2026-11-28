@@ -11,6 +11,8 @@ import { storedCoverOf } from "@blast/server/modules/social/sales/store.ts";
  * reaches its own drafts; another account's id reads as not found.
  */
 
+export type LaunchCreatorX = Readonly<{ commitment: Buffer; subject: string }>;
+
 export type LaunchStepPlan = Readonly<{ digest: string; plan: LaunchPublishPlan }>;
 export type LaunchPublication = Readonly<{ creator: string; fee: "wallet" | "sponsored"; steps: Partial<Record<LaunchPublishStepKind, LaunchStepPlan>> }>;
 
@@ -22,6 +24,7 @@ export type LaunchDraftRow = Readonly<{
   cover: StoredCover | null;
   /** The coin the draft published, once a later step named it. */
   coinType: string | null;
+  creatorX: LaunchCreatorX | null;
   publication: LaunchPublication | null;
   publishedLaunchId: string | null;
   createdAtMs: number;
@@ -40,6 +43,8 @@ type RawRow = {
   cover_source_width: number | null;
   cover_source_height: number | null;
   coin_type: string | null;
+  creator_x_subject: string | null;
+  creator_x_commitment: Buffer | null;
   publication: LaunchPublication | null;
   published_launch_id: string | null;
   created_at_ms: string;
@@ -48,7 +53,7 @@ type RawRow = {
 
 const TABLE = "social_launch_drafts";
 const COLUMNS = `draft_id::text, version, body, logo_url, cover_key, cover_url, cover_width, cover_height, cover_source_width,
-  cover_source_height, coin_type, publication, published_launch_id,
+  cover_source_height, coin_type, creator_x_subject, creator_x_commitment, publication, published_launch_id,
   (extract(epoch FROM created_at) * 1000)::bigint::text AS created_at_ms,
   (extract(epoch FROM updated_at) * 1000)::bigint::text AS updated_at_ms`;
 
@@ -59,6 +64,9 @@ const toRow = (row: RawRow): LaunchDraftRow => ({
   logoUrl: row.logo_url,
   cover: storedCoverOf(row),
   coinType: row.coin_type,
+  creatorX: row.creator_x_subject && row.creator_x_commitment
+    ? { subject: row.creator_x_subject, commitment: row.creator_x_commitment }
+    : null,
   publication: row.publication,
   publishedLaunchId: row.published_launch_id,
   createdAtMs: Number(row.created_at_ms),
@@ -70,6 +78,28 @@ const READ_SQL = `SELECT ${COLUMNS} FROM ${TABLE} WHERE draft_id = $1 AND accoun
 export async function readLaunchDraft(db: ReadableDatabase, accountId: string, draftId: string): Promise<LaunchDraftRow | null> {
   const { rows } = await db.read<RawRow>(READ_SQL, [draftId, accountId]);
   return rows[0] ? toRow(rows[0]) : null;
+}
+
+type CreatorXRow = Readonly<{
+  draft_id: string;
+  account_id: string;
+  published_launch_id: string | null;
+  creator_x_commitment: Buffer;
+  creator_x_subject: string;
+  creation: LaunchStepPlan | null;
+}>;
+
+/** Prefer the confirmed launch binding. A commitment match can recover an interrupted publish. */
+export async function readLaunchCreatorXRecipient(db: ReadableDatabase, launchId: string, commitment: Uint8Array): Promise<CreatorXRow | null> {
+  const columns = "draft_id, account_id, published_launch_id, creator_x_commitment, creator_x_subject";
+  const { rows } = await db.read<CreatorXRow>(`SELECT * FROM (
+    SELECT ${columns}, NULL::jsonb AS creation FROM ${TABLE}
+      WHERE published_launch_id = $1 AND creator_x_commitment IS NOT NULL
+    UNION ALL
+    SELECT ${columns}, publication->'steps'->'create_launch' AS creation FROM ${TABLE}
+      WHERE creator_x_commitment = $2 AND published_launch_id IS DISTINCT FROM $1
+  ) AS recipients ORDER BY (published_launch_id = $1) DESC NULLS LAST LIMIT 1`, [launchId, Buffer.from(commitment)]);
+  return rows[0] ?? null;
 }
 
 const LIST_SQL = `SELECT draft_id::text AS id, version, COALESCE(body->>'name', '') AS name, COALESCE(body->>'symbol', '') AS symbol, logo_url,
@@ -203,7 +233,7 @@ export async function deleteLaunchDraft(social: ModuleTransaction<"social">, acc
 }
 
 /** Only the winner is returned to a signer. Every retry returns the same executable bytes. */
-export async function saveLaunchPublication(social: ModuleTransaction<"social">, accountId: string, draftId: string, version: number, creator: string, fee: LaunchPublication["fee"], step: LaunchPublishStepKind, proposed: LaunchStepPlan, replaces: string | null = null): Promise<LaunchStepPlan> {
+export async function saveLaunchPublication(social: ModuleTransaction<"social">, accountId: string, draftId: string, version: number, creator: string, fee: LaunchPublication["fee"], step: LaunchPublishStepKind, proposed: LaunchStepPlan, replaces: string | null, creatorX: LaunchCreatorX | null): Promise<LaunchStepPlan> {
   const { rows } = await social.read<RawRow>(`${READ_SQL} FOR UPDATE`, [draftId, accountId]);
   const row = rows[0];
   if (!row) throw new SocialRouteError("not_found");
@@ -213,6 +243,11 @@ export async function saveLaunchPublication(social: ModuleTransaction<"social">,
   const current = publication.steps[step];
   if (current && current.digest !== replaces) return current;
   const next = { ...publication, steps: { ...publication.steps, [step]: proposed } };
-  await social.write(TABLE, `UPDATE ${TABLE} SET publication = $3::jsonb, updated_at = clock_timestamp() WHERE draft_id = $1 AND account_id = $2`, [draftId, accountId, JSON.stringify(next)]);
+  await social.write(TABLE, `UPDATE ${TABLE}
+    SET publication = $3::jsonb, updated_at = clock_timestamp(),
+      creator_x_subject = COALESCE(creator_x_subject, $4),
+      creator_x_commitment = COALESCE(creator_x_commitment, $5)
+    WHERE draft_id = $1 AND account_id = $2`,
+  [draftId, accountId, JSON.stringify(next), creatorX?.subject ?? null, creatorX?.commitment ?? null]);
   return proposed;
 }

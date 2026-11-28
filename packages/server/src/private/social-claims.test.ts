@@ -16,6 +16,7 @@ test("claims transport preserves original caller and Origin authority", async ()
     const paths: Readonly<Record<string, string>> = {
       "social.me.creator-earnings": "/api/social/me/creator-earnings",
       "social.me.creator-commitment": "/api/social/me/creator-commitment",
+      "social.me.creator-caps.eligibility": "/api/social/me/creator-caps",
       "social.me.creator-caps": "/api/social/me/creator-caps",
       "social.me.launch-claims": "/api/social/me/launch-claims/id",
     };

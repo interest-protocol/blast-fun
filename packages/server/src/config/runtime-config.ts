@@ -109,6 +109,8 @@ export type RuntimeConfig = Readonly<{
   presaleSettingsDefaults: AccountSettings;
   /** Null while `CREATOR_CLAIM_SIGNER_KEY` is unset: account claims stay off. */
   creatorClaimSigner: CreatorClaimSigner | null;
+  launchCreatorXBearerToken: string | null;
+  launchCreatorXLookupConcurrency: number;
   /** `LAUNCH_ASSET_BLOB_READ_WRITE_TOKEN`; null keeps launch asset uploads off. */
   launchAssetBlobToken: string | null;
   cardImages: CardImageSettings;
@@ -174,6 +176,8 @@ export function parseRuntimeConfig(environment: Environment): RuntimeConfig {
     },
     presaleSettingsDefaults: presaleSettingsDefaults(environment),
     creatorClaimSigner: creatorClaimSignerFromEnvironment(environment),
+    launchCreatorXBearerToken: environment.LAUNCH_CREATOR_X_BEARER_TOKEN?.trim() || null,
+    launchCreatorXLookupConcurrency: concurrencyFromEnvironment(environment, "LAUNCH_CREATOR_X_LOOKUP_CONCURRENCY", 4, 16),
     launchAssetBlobToken: environment.LAUNCH_ASSET_BLOB_READ_WRITE_TOKEN?.trim() || null,
     cardImages: cardImageSettingsFromEnvironment(environment),
     defillama: defillamaSettings(environment, deployment),

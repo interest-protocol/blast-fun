@@ -4,20 +4,29 @@ import { generateKeyPairSync, sign } from "node:crypto";
 import test from "node:test";
 
 import { defineBlastDeployment, launchpadDeployment } from "@interest-protocol/blast-sdk/deployments";
+import { encodeCreatorClaimMessage, type LaunchState } from "@interest-protocol/blast-sdk/launchpad";
+import { bcs } from "@mysten/sui/bcs";
+import type { ClientWithCoreApi } from "@mysten/sui/client";
+import { Ed25519Keypair, Ed25519PublicKey } from "@mysten/sui/keypairs/ed25519";
 import { buildMemePackageBytecode } from "@interest-protocol/blast-sdk/launchpad/template";
 import { Transaction } from "@mysten/sui/transactions";
-import { fromHex, toBase64 } from "@mysten/sui/utils";
+import { fromHex, toBase64, toHex } from "@mysten/sui/utils";
 import type { Pool } from "pg";
 
 import { createPrivyTokenVerifier } from "@blast/core/lib/privy-adapter/token-verifier.ts";
 import { PostgresRateLimitEnforcer } from "@blast/core/modules/database/postgres-rate-limits.ts";
 import { createPool, createRuntimePool } from "@blast/core/modules/database/pool.ts";
-import { autocommitReader } from "@blast/core/modules/database/transaction.ts";
+import { autocommitReader, type ReadableDatabase } from "@blast/core/modules/database/transaction.ts";
 import { PostgresSocialAccounts } from "@blast/server/modules/social/accounts/repository.ts";
 import { CREATE_SUI_QUOTE_TYPE } from "@blast/core/modules/social/contracts/create.ts";
+import { CREATOR_CAPS_PATH, type CreatorCapsClaim, type CreatorCapsEligibility } from "@blast/core/modules/social/contracts/creator-claims.ts";
 import type { LaunchDraftResponse, LaunchPublishPlan } from "@blast/core/modules/social/contracts/launch.ts";
 import { blankLaunchDraft, LAUNCH_DEAD_ADDRESS, type LaunchDraft, type LaunchRules } from "@blast/core/modules/social/launch/model.ts";
 import { createSocialRouteKit } from "@blast/server/modules/social/route-kit/route.ts";
+import { createCreatorClaimRoutes } from "@blast/server/modules/social/creator-claims/route.ts";
+import { creatorClaimSigner } from "@blast/server/modules/social/creator-claims/signer.ts";
+import { creatorXLookup } from "@blast/server/modules/social/launch/creator-x.ts";
+import { readPublishedLaunch, type ReadPublishedLaunch } from "@blast/server/modules/social/launch/reconcile.ts";
 import { creatorCommitmentOf } from "@blast/server/modules/social/creator-claims/commitment.ts";
 import type { CreateLogoStore } from "@blast/server/modules/social/create/route.ts";
 import type { MemeTemplate } from "@blast/server/modules/social/launch/meme-template.ts";
@@ -108,8 +117,16 @@ async function refusal(response: Response, status: number, code: string): Promis
 }
 
 type Routes = ReturnType<typeof createSocialLaunchRoutes>;
+type Fixture = Readonly<{
+  admin: Pool;
+  database: () => ReadableDatabase;
+  kit: ReturnType<typeof createSocialRouteKit>;
+  routes: (overrides?: Partial<SocialLaunchRoutesDependencies>) => Routes;
+  logos: Map<string, Buffer>;
+  png: Buffer;
+}>;
 
-async function withDatabase(run: (fixture: Readonly<{ admin: Pool; routes: (overrides?: Partial<SocialLaunchRoutesDependencies>) => Routes; logos: Map<string, Buffer>; png: Buffer }>) => Promise<void>): Promise<void> {
+async function withDatabase(run: (fixture: Fixture) => Promise<void>): Promise<void> {
   const database = await freshTestDatabase();
   const { url } = database;
   const admin = createPool(url, { max: 4 });
@@ -141,6 +158,7 @@ async function withDatabase(run: (fixture: Readonly<{ admin: Pool; routes: (over
         return { url: `https://blob.example/${pathname}` };
       },
     };
+    const readDatabase = () => autocommitReader(web, "social", { label: "social.launch-test" });
     const routes = (overrides: Partial<SocialLaunchRoutesDependencies> = {}) => createSocialLaunchRoutes({
       kit,
       rules: async () => RULES,
@@ -151,16 +169,19 @@ async function withDatabase(run: (fixture: Readonly<{ admin: Pool; routes: (over
       template: TEMPLATE,
       wallets: async (accountId) => (await accounts.wallets(accountId)).map((row) => row.address),
       commitment: (context, accountId) => context.transaction((social) => creatorCommitmentOf(social, accountId), { label: "test.commitment" }),
+      readPublishedLaunch: async () => null,
+      resolveCreatorX: async () => null,
+      canAssignCreatorX: async () => false,
       launchMemeType: async (launchId) => (launchId === OBJECT("1a") ? COIN : null),
       // The chain builder is real; this fixture retains balance intents without making RPC calls.
       preparePublication: async (transaction) => ({ transaction: await transaction.toJSON({ supportedIntents: ["CoinWithBalance"] }), digest: DIGEST }),
       publicationStatus: async () => "pending",
       publicationCoin: async () => ({ coin_type: COIN, sealed_treasury_cap: SEALED_TREASURY_CAP, ticket: { object_id: OBJECT("7c"), version: "12", digest: DIGEST }, currency: { object_id: OBJECT("cc"), version: "12", digest: DIGEST } }),
       findBlockedTerm: async (text) => (text.toLowerCase().includes("rugpull") ? "rugpull" : null),
-      database: () => autocommitReader(web, "social", { label: "social.launch-test" }),
+      database: readDatabase,
       ...overrides,
     });
-    await run({ admin, routes, logos, png });
+    await run({ admin, database: readDatabase, kit, routes, logos, png });
   } finally {
     await web.end();
     await admin.end();
@@ -292,6 +313,143 @@ test("the existing deployment builds the coin, registration and launch with a 0x
     await admin.query("UPDATE social_launch_drafts SET body=$2::jsonb WHERE draft_id=$1",[id,JSON.stringify(draft.draft)]);
     await ok(await routes.published.POST(request(KAI.did, path(id, "/published"), { method: "POST", json: { launch_id: OBJECT("1a") } }), testClient()));
     await refusal(await routes.publish.POST(request(KAI.did, path(id, "/publish"), { method: "POST", json: { version: draft.version, step: "publish_coin", creator: KAI.wallet } }), testClient()), 409, "draft_published");
+  }));
+
+test("a published X assignment recovers after a closed tab and only the assigned X identity gets a claim", { skip }, () =>
+  withDatabase(async ({ admin, database, kit, routes: make, png }) => {
+    const id = uuid(0x10a);
+    const subject = "18934567890123456789";
+    const launchId = OBJECT("1a");
+    const unrelatedId = OBJECT("1b");
+    const createDigest = "11111111111111111111111111111111";
+    let lookups = 0;
+    let preparedCommitment: string | undefined;
+    const resolveCreatorX = creatorXLookup("fixture-token", 1, async (url) => {
+      lookups += 1;
+      assert.equal(url, "https://api.x.com/2/users/by/username/mira");
+      return Response.json({ data: { id: subject, username: "Mira" } });
+    });
+    const launchpad = launchpadDeployment(DEPLOYMENT).originalPackageId;
+    const client = {
+      core: {
+        async getTransaction({ digest }: { digest: string }) {
+          assert.equal(digest, createDigest);
+          return { $kind: "Transaction", Transaction: {
+            digest,
+            effects: { status: { success: true }, changedObjects: [{
+              idOperation: "Created", objectId: launchId,
+              outputOwner: { $kind: "Shared", Shared: { initialSharedVersion: "21" } },
+            }] },
+            objectTypes: { [launchId]: `${launchpad}::launch::Launch<${COIN},${CREATE_SUI_QUOTE_TYPE}>` },
+          } };
+        },
+      },
+    } as unknown as ClientWithCoreApi;
+    const readPublished: ReadPublishedLaunch = (step, signal) => readPublishedLaunch(client, step, signal);
+    const routes = make({
+      canAssignCreatorX: async () => true,
+      resolveCreatorX,
+      readPublishedLaunch: readPublished,
+      template: {
+        bytecode(input) {
+          preparedCommitment = input.accountCommitment;
+          return TEMPLATE.bytecode(input);
+        },
+      },
+      preparePublication: async (tx) => ({
+        transaction: await tx.toJSON({ supportedIntents: ["CoinWithBalance"] }),
+        digest: tx.getData().commands[0]?.$kind === "Publish" ? DIGEST : createDigest,
+      }),
+    });
+    const draft = await finishedDraft(routes, png, id, named({ creator_x_handle: "@Mira", x_handle: "PipCoin" }));
+    assert.equal(draft.draft.creator_x_handle, "Mira");
+    const publish = (step: string, coin?: unknown) => routes.publish.POST(request(KAI.did, path(id, "/publish"), {
+      method: "POST", json: { version: draft.version, step, creator: KAI.wallet, ...(coin ? { coin } : {}) },
+    }), testClient());
+    const first = await ok<LaunchPublishPlan>(await publish("publish_coin"));
+    assert.deepEqual(await ok(await publish("publish_coin")), first);
+    assert.equal(lookups, 1);
+    const { rows: [pinned] } = await admin.query("SELECT creator_x_subject, creator_x_commitment FROM social_launch_drafts WHERE draft_id = $1", [id]);
+    assert.equal(pinned.creator_x_subject, subject);
+    assert.equal(toHex(pinned.creator_x_commitment), preparedCommitment);
+    await refusal(await routes.draft.PUT(request(KAI.did, path(id), { method: "PUT", json: {
+      version: draft.version, draft: named({ creator_x_handle: "Kai" }),
+    } }), testClient()), 409, "draft_published");
+    await ok(await publish("create_launch", {
+      coin_type: COIN, sealed_treasury_cap: SEALED_TREASURY_CAP,
+      ticket: { object_id: OBJECT("7c"), version: "12", digest: DIGEST },
+      currency: { object_id: OBJECT("cc"), initial_shared_version: "13" },
+    }));
+    const record = (objectId: string) => routes.published.POST(request(KAI.did, path(id, "/published"), {
+      method: "POST", json: { launch_id: objectId },
+    }), testClient());
+    await refusal(await record(unrelatedId), 404, "not_found");
+    assert.equal((await admin.query("SELECT published_launch_id FROM social_launch_drafts WHERE draft_id = $1", [id])).rows[0].published_launch_id, null);
+
+    assert.equal(await readLaunchDetails(launchId, database()), null);
+    const signer = creatorClaimSigner(Ed25519Keypair.generate());
+    const built: string[] = [];
+    const sponsored: string[] = [];
+    const claims = createCreatorClaimRoutes({
+      kit,
+      database,
+      readPublishedLaunch: readPublished,
+      signer: () => signer,
+      blastWallet: async (caller) => caller.kind === "privy" && caller.did === MIRA.did ? MIRA.wallet : KAI.wallet,
+      linkedXSubject: async (did) => did === MIRA.did ? subject : "18123456789012345678",
+      chain: async () => ({
+        async launch(objectId) {
+          return { objectId, memeType: COIN, creatorRecipient: {
+            kind: "account", accountCommitment: pinned.creator_x_commitment,
+          } } as LaunchState;
+        },
+        async signerPublicKeys() { return [toHex(signer.publicKey)]; },
+        async kind({ claimant, attestation }) {
+          built.push(claimant);
+          assert.ok(attestation);
+          const [expiry, signature] = bcs.tuple([bcs.u64(), bcs.vector(bcs.u8())]).parse(attestation);
+          const message = encodeCreatorClaimMessage({
+            memeType: COIN, accountCommitment: pinned.creator_x_commitment, claimant, expiryMs: BigInt(expiry),
+          });
+          assert.ok(await new Ed25519PublicKey(signer.publicKey).verify(message, Uint8Array.from(signature)));
+          return Uint8Array.of(1);
+        },
+        async simulate() { return { status: "success" }; },
+      }),
+      async sponsor({ sender }) {
+        sponsored.push(sender);
+        return { reservation_id: "fixture", transaction_bytes: "AA==", sponsor_signature: "", expires_at_ms: Date.now() + 120_000, gas_budget: "5000000" };
+      },
+    });
+    const eligibility = (did: string, objectId = launchId) => claims.eligibility(
+      request(did, `${ORIGIN}${CREATOR_CAPS_PATH}?launch_id=${objectId}`), testClient());
+    await refusal(await eligibility(KAI.did), 403, "not_creator_recipient");
+    await refusal(await eligibility(MIRA.did, unrelatedId), 403, "not_creator_recipient");
+    assert.deepEqual(await ok<CreatorCapsEligibility>(await eligibility(MIRA.did)), {
+      launch_id: launchId, claimant: MIRA.wallet,
+    });
+    assert.equal(await readLaunchDetails(launchId, database()), null);
+    assert.deepEqual(built, []);
+    assert.deepEqual(sponsored, []);
+
+    const claim = (did: string, objectId = launchId) => claims.caps(request(did, `${ORIGIN}${CREATOR_CAPS_PATH}`, {
+      method: "POST", json: { launch_id: objectId },
+    }), testClient());
+    await refusal(await claim(KAI.did), 403, "not_creator_recipient");
+    await refusal(await claim(MIRA.did, unrelatedId), 403, "not_creator_recipient");
+    assert.deepEqual(built, []);
+    assert.deepEqual(sponsored, []);
+    const prepared = await ok<CreatorCapsClaim>(await claim(MIRA.did));
+    assert.equal(prepared.claimant, MIRA.wallet);
+    assert.deepEqual(sponsored, [MIRA.wallet]);
+    assert.equal((await ok<LaunchDraftResponse>(await record(launchId))).published_launch_id, launchId);
+    const publicDetails = await readLaunchDetails(launchId, database());
+    assert.deepEqual(publicDetails?.creatorFeeAssignment, { provider: "x", handleAtAssignment: "Mira" });
+    assert.deepEqual(publicDetails?.links, [{ label: "X", url: "https://x.com/PipCoin" }]);
+    assert.doesNotMatch(JSON.stringify(publicDetails), new RegExp(subject));
+    await refusal(await claim(KAI.did), 403, "not_creator_recipient");
+    assert.deepEqual(built, [MIRA.wallet]);
+    assert.deepEqual(sponsored, [MIRA.wallet]);
   }));
 
 test("an unfinished draft, a blocked word or a missing deployment never builds a transaction", { skip }, () =>

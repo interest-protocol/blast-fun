@@ -38,6 +38,7 @@ const LAUNCH_ID = `0x${"1a".repeat(32)}`;
 const MEME = `0x${"c0".repeat(32)}::meme::MEME`;
 const OWN = new Uint8Array(32).fill(7);
 const OTHER = new Uint8Array(32).fill(9);
+const X_RECIPIENT = "18934567890123456789";
 const keys = generateKeyPairSync("ec", { namedCurve: "P-256" });
 
 function bearer(): string {
@@ -80,6 +81,8 @@ type Options = Readonly<{
   launch?: "absent";
   chain?: "off";
   stored?: Uint8Array | null;
+  xAssignment?: Readonly<{ launchId: string; commitment: Uint8Array; subject: string }>;
+  linkedXSubject?: (did: string) => Promise<string | null>;
   signer?: CreatorClaimSigner | null;
   chainKey?: Uint8Array;
   simulation?: CreatorCapsSimulation;
@@ -92,7 +95,16 @@ function harness(options: Options = {}) {
   const built: Parameters<CreatorCapsChain["kind"]>[0][] = [];
   const sponsored: CreatorCapsSponsorRequest[] = [];
   const minted: unknown[][] = [];
+  const signed: Uint8Array[] = [];
   const query = async (text: string, values: readonly unknown[] = []) => {
+    const assignment = options.xAssignment;
+    if (text.includes("AS recipients") && assignment && assignment.launchId === values[0]) {
+      return rows([{
+        published_launch_id: assignment.launchId,
+        creator_x_commitment: Buffer.from(assignment.commitment),
+        creator_x_subject: assignment.subject,
+      }]);
+    }
     if (/^INSERT INTO social_creator_commitments/.test(text)) {
       minted.push([...values]);
       stored ??= values[1] as Buffer;
@@ -130,8 +142,16 @@ function harness(options: Options = {}) {
     kit,
     database: () => ({ async read<Row extends QueryResultRow>(text: string, values?: readonly unknown[]) { return (await query(text, values)) as unknown as QueryResult<Row>; } }),
     chain: async () => (options.chain === "off" ? null : chain),
-    signer: () => signer,
+    readPublishedLaunch: async () => null,
+    signer: () => signer && {
+      publicKey: signer.publicKey,
+      sign(message) {
+        signed.push(message);
+        return signer.sign(message);
+      },
+    },
     blastWallet: async (caller) => (caller.kind === "privy" ? EMBEDDED : caller.address),
+    linkedXSubject: options.linkedXSubject ?? (async () => null),
     sponsor: options.sponsor ?? (async (request) => {
       sponsored.push(request);
       return { reservation_id: "r-1", transaction_bytes: "AA==", sponsor_signature: "", expires_at_ms: NOW + 110_000, gas_budget: "5000000" };
@@ -145,6 +165,7 @@ function harness(options: Options = {}) {
     built,
     sponsored,
     minted,
+    signed,
     commitment: (as: "embedded" | "session" | "none" = "embedded") =>
       routes.commitment(new Request(`${ORIGIN}${CREATOR_COMMITMENT_PATH}`, { headers: { origin: ORIGIN, ...auth(as) } }), testClient()),
     caps: (body: unknown, as: "embedded" | "session" | "none" = "embedded") =>
@@ -227,6 +248,62 @@ test("a wallet session claims for its own address, sponsored like an embedded wa
   assert.equal(claim.fee, "sponsored");
   assert.equal(claim.sponsored?.reservation_id, "r-1");
   assert.deepEqual(h.sponsored.map((r) => [r.caller.kind, r.sender]), [["wallet", SESSION_WALLET]]);
+});
+
+test("the assigned X user can claim for their verified session's wallet without a Blast creator commitment", async () => {
+  const h = harness({
+    stored: null,
+    xAssignment: { launchId: LAUNCH_ID, commitment: OWN, subject: X_RECIPIENT },
+    async linkedXSubject(did) {
+      assert.equal(did, DID);
+      return X_RECIPIENT;
+    },
+  });
+
+  const claim = await claimOf(await h.caps({ launch_id: LAUNCH_ID }));
+  assert.equal(claim.claimant, EMBEDDED);
+  assert.equal(claim.sponsored?.reservation_id, "r-1");
+});
+
+test("a different X ID, a missing X link, and a wallet-only session cannot claim the X recipient's caps", async () => {
+  const xAssignment = { launchId: LAUNCH_ID, commitment: OWN, subject: X_RECIPIENT };
+  const other = harness({ xAssignment, linkedXSubject: async () => "18934567890123456788" });
+  const unlinked = harness({ xAssignment });
+  const wallet = harness({ xAssignment, linkedXSubject: async () => X_RECIPIENT });
+
+  await assertError(await other.caps({ launch_id: LAUNCH_ID }), "not_creator_recipient");
+  await assertError(await unlinked.caps({ launch_id: LAUNCH_ID }), "not_creator_recipient");
+  await assertError(await wallet.caps({ launch_id: LAUNCH_ID }, "session"), "not_creator_recipient");
+  assert.equal(other.built.length + unlinked.built.length + wallet.built.length, 0);
+  assert.equal(other.signed.length + unlinked.signed.length + wallet.signed.length, 0);
+  assert.equal(other.sponsored.length + unlinked.sponsored.length + wallet.sponsored.length, 0);
+});
+
+test("an X assignment for a different launch or commitment cannot authorize a claim", async () => {
+  const copiedCommitment = harness({
+    stored: null,
+    xAssignment: { launchId: EMBEDDED, commitment: OWN, subject: X_RECIPIENT },
+    linkedXSubject: async () => X_RECIPIENT,
+  });
+  const changedCommitment = harness({
+    xAssignment: { launchId: LAUNCH_ID, commitment: OTHER, subject: X_RECIPIENT },
+    linkedXSubject: async () => X_RECIPIENT,
+  });
+
+  await assertError(await copiedCommitment.caps({ launch_id: LAUNCH_ID }), "not_creator_recipient");
+  await assertError(await changedCommitment.caps({ launch_id: LAUNCH_ID }), "not_creator_recipient");
+  assert.equal(copiedCommitment.built.length + changedCommitment.built.length, 0);
+});
+
+test("an unavailable X identity provider stops the claim before sponsorship", async () => {
+  const h = harness({
+    xAssignment: { launchId: LAUNCH_ID, commitment: OWN, subject: X_RECIPIENT },
+    async linkedXSubject() { throw new Error("provider unavailable"); },
+  });
+
+  await assertError(await h.caps({ launch_id: LAUNCH_ID }), "service_unavailable");
+  assert.equal(h.signed.length, 0);
+  assert.equal(h.sponsored.length, 0);
 });
 
 test("an address recipient needs no attestation and is only its own wallet's to claim", async () => {

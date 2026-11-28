@@ -1,7 +1,24 @@
-import type { ClientWithCoreApi, SuiClientTypes } from "@mysten/sui/client";
+import { readLaunchCreation } from "@interest-protocol/blast-sdk/launchpad";
+import { TransactionError, type ClientWithCoreApi, type SuiClientTypes } from "@mysten/sui/client";
 import { Transaction } from "@mysten/sui/transactions";
 
 import type { LaunchStepPlan } from "./store.ts";
+
+export type PublishedLaunch = Readonly<{ launchId: string; memeType: string }>;
+export type ReadPublishedLaunch = (saved: LaunchStepPlan, signal: AbortSignal) => Promise<PublishedLaunch | null>;
+
+/** The successful transaction the server prepared with the draft's verified ticket. */
+export async function readPublishedLaunch(client: ClientWithCoreApi, saved: LaunchStepPlan, signal: AbortSignal): Promise<PublishedLaunch | null> {
+  try {
+    const result = await client.core.getTransaction({ digest: saved.digest, include: { effects: true, objectTypes: true }, signal });
+    if (result.$kind !== "Transaction" || result.Transaction.digest !== saved.digest) return null;
+    const { launch, memeType } = readLaunchCreation(result.Transaction, saved.plan.launchpad_original_package_id);
+    return { launchId: launch.objectId, memeType };
+  } catch (error) {
+    if (error instanceof TransactionError && error.reason === "notFound") return null;
+    throw error;
+  }
+}
 
 /** Only an effect proving consumption of the exact reference can invalidate a retained plan. */
 function consumed(effects: SuiClientTypes.TransactionEffects, reference: Readonly<{ objectId: string; version: string | number; digest: string }>): boolean {

@@ -6,9 +6,16 @@ import type { ExpectedDeployment } from "@blast/core/modules/launchpad-contract/
 import type { CoinPageRead } from "./contracts.ts";
 import { decodeCoinWire } from "./wire.ts";
 
+const creatorFeeAssignment = z.strictObject({
+  provider: z.literal("x"),
+  handleAtAssignment: z.string().regex(/^[A-Za-z0-9_]{1,15}$/),
+});
+
 export type LaunchPageDetails = Readonly<{
   tagline: string;
   iconUrl?: string;
+  /** The original assignment, including after claim or reassignment. The handle is historical. */
+  creatorFeeAssignment?: Readonly<z.infer<typeof creatorFeeAssignment>>;
   cover: Readonly<{ url: string; width: number; height: number }> | null;
   links: readonly Readonly<{ label: string; url: string }>[];
 }>;
@@ -37,6 +44,9 @@ export function parseLaunchDetails(raw: unknown): LaunchPageDetails | null {
   if (typeof details.tagline !== "string" || !Array.isArray(details.links)) throw new Error("Invalid launch details");
   if (details.iconUrl !== undefined && (typeof details.iconUrl !== "string" || !/^https:\/\//.test(details.iconUrl))) {
     throw new Error("Invalid launch logo");
+  }
+  if (details.creatorFeeAssignment !== undefined && !creatorFeeAssignment.safeParse(details.creatorFeeAssignment).success) {
+    throw new Error("Invalid creator fee assignment");
   }
   for (const link of details.links) {
     const entry = record(link);

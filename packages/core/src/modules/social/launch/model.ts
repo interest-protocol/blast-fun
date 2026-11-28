@@ -19,8 +19,7 @@ import { bareTelegram, bareXHandle, normalizeSaleLink, normalizeSaleTagline, nor
  * details (cover, tagline, links) the coin page shows.
  *
  * What the contract fixes is not here: the 1B supply, Blast's allocation
- * (`LaunchConfig.protocol_allocation`), its trade and pool fee shares, and
- * the creator recipient, which is always the signed-in account's commitment.
+ * (`LaunchConfig.protocol_allocation`) and its trade and pool fee shares.
  *
  * The creator chooses curve and pool shares independently. Blast's fixed
  * share is reserved, optional recipients use the remainder, and any unused
@@ -53,6 +52,8 @@ export type LaunchDraft = Readonly<{
   /** The pool fee in millionths; the tick spacing follows from the venue's tier. */
   pool_fee: number;
   creator_fee_bps: number;
+  /** Blank or omitted sends creator fees to the publishing Blast account. */
+  creator_x_handle?: string;
   holders_fee_bps: number;
   auto_lp_fee_bps: number;
   burn_fee_bps: number;
@@ -258,6 +259,9 @@ function validateLaunchVenue(draft: LaunchDraft, rules: LaunchRules, add: AddLau
 }
 
 function validateLaunchFees(draft: LaunchDraft, rules: LaunchRules, add: AddLaunchIssue): void {
+  if (draft.creator_x_handle && !normalizeXHandle(draft.creator_x_handle).ok) {
+    add("fees", "creator_x_handle", "Enter a valid X handle");
+  }
   const feeTotal = draft.creator_fee_bps + draft.holders_fee_bps + draft.auto_lp_fee_bps + draft.burn_fee_bps + sumBps(draft.fee_recipients);
   if (feeTotal !== BPS) add("fees", "fee_total", `Pool fee shares add up to ${pct(feeTotal)}; make them 100%`);
   if (draft.fee_recipients.length > LAUNCH_MAX_RECIPIENTS) add("fees", "fee_recipients", `At most ${LAUNCH_MAX_RECIPIENTS} fee recipients`);
@@ -350,8 +354,11 @@ function recipients(value: unknown, name: string): LaunchRecipient[] {
  */
 export function parseLaunchDraft(value: unknown): LaunchDraft {
   const raw = field(z.record(z.string(), z.unknown()), value, "draft");
-  const keys = Object.keys(raw);
+  const keys = Object.keys(raw).filter((key) => key !== "creator_x_handle");
   if (keys.length !== KEYS.length || !KEYS.every((key) => Object.hasOwn(raw, key))) throw new LaunchDraftShapeError("draft");
+  const creatorXHandle = Object.hasOwn(raw, "creator_x_handle")
+    ? bareXHandle(text(raw.creator_x_handle, LAUNCH_HANDLE_MAX, "creator_x_handle"))
+    : "";
   const symbol = text(raw.symbol, LAUNCH_SYMBOL_MAX, "symbol");
   field(z.string().regex(/^[A-Z0-9_]*$/), symbol, "symbol");
   return {
@@ -370,6 +377,7 @@ export function parseLaunchDraft(value: unknown): LaunchDraft {
     venue: field(z.enum(MIGRATOR_VENUES), raw.venue, "venue"),
     pool_fee: field(z.number().int().min(1).max(1_000_000), raw.pool_fee, "pool_fee"),
     creator_fee_bps: bps(raw.creator_fee_bps, "creator_fee_bps"),
+    ...(creatorXHandle ? { creator_x_handle: creatorXHandle } : {}),
     holders_fee_bps: bps(raw.holders_fee_bps, "holders_fee_bps"),
     auto_lp_fee_bps: bps(raw.auto_lp_fee_bps, "auto_lp_fee_bps"),
     burn_fee_bps: bps(raw.burn_fee_bps, "burn_fee_bps"),
