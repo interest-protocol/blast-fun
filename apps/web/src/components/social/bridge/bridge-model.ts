@@ -197,7 +197,6 @@ export const QUOTE_FAILED_TEXT = "Couldn’t get a price. Code: bridge_quote_fai
 export const BALANCE_FAILED_TEXT = "Couldn’t load the balance. Code: bridge_balance_failed.";
 export const TOKENS_FAILED_TEXT = "Couldn’t load tokens. Code: bridge_tokens_failed.";
 export const LOAD_FAILED_TEXT = "Bridge to Sui couldn’t load. Code: bridge_load_failed.";
-/** A send that threw may still have reached the chain (Solana confirms after sending), so it never says nothing left. */
 export const SEND_FAILED_TEXT = "The bridge didn’t start. Check your wallet before you try again. Code: bridge_send_failed.";
 
 /** Mayan answers 9999 when it stops this SDK version; the card pauses and we upgrade. */
@@ -209,7 +208,7 @@ export function isPausedError(error: unknown): boolean {
 /** What the main button says and does, in the order the checks run. */
 export type BridgeAction =
   | Readonly<{ kind: "paused" | "wait" | "enter" | "balance" | "short" | "quoting" | "busy" }>
-  | Readonly<{ kind: "signIn" | "connect" | "switch" | "retry" | "approve" | "requote" | "bridge" }>;
+  | Readonly<{ kind: "signIn" | "connect" | "switch" | "retry" | "approve" | "requote" | "checkSolana" | "bridge" }>;
 
 export type ActionInput = Readonly<{
   paused: boolean;
@@ -225,6 +224,7 @@ export type ActionInput = Readonly<{
   quoteFailed: boolean;
   hasQuote: boolean;
   busy: boolean;
+  solanaPending?: boolean;
   needsApproval: boolean;
   rateChanged: boolean;
 }>;
@@ -235,8 +235,9 @@ export function bridgeAction(input: ActionInput): BridgeAction {
   if (!input.blastAddress) return { kind: "wait" };
   if (!input.sourceConnected) return { kind: "connect" };
   if (input.wrongChain) return { kind: "switch" };
-  if (input.atoms === null) return { kind: "enter" };
   if (input.busy) return { kind: "busy" };
+  if (input.solanaPending) return { kind: "checkSolana" };
+  if (input.atoms === null) return { kind: "enter" };
   if (!input.balanceReady) return { kind: "balance" };
   if (input.insufficient) return { kind: "short" };
   if (input.quoteFailed && !input.quoting) return { kind: "retry" };
@@ -259,6 +260,8 @@ export function actionLabel(action: BridgeAction, chain: ChainInfo, token: Sourc
       return `Approve ${token.symbol}`;
     case "retry":
       return "Try again";
+    case "checkSolana":
+      return "Check Solana transfer";
     case "requote":
       return "Bridge at new rate";
     default:
@@ -277,6 +280,8 @@ export function actionReason(action: BridgeAction, token: SourceToken): string |
       return "Checking your balance.";
     case "short":
       return `Not enough ${token.symbol} for this amount.`;
+    case "checkSolana":
+      return "Check the last Solana transfer before sending again.";
     default:
       return null;
   }

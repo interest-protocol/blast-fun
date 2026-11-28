@@ -6,7 +6,8 @@ import type { Quote } from "@mayanfinance/swap-sdk";
 
 import { installTestDom, setInputValue, testEvent, waitFor } from "../../../../test/fixtures/social/test-dom.ts";
 
-import type { BridgeRow, BridgeSdk, EvmWallet, QuoteInput } from "./bridge-sdk.ts";
+import type { BridgeRow, BridgeSdk, EvmWallet, QuoteInput, SourceWallet } from "./bridge-sdk.ts";
+import { rememberSolanaSubmission, settleSolanaSubmission } from "./solana-submission.ts";
 
 const dom = installTestDom();
 const { act } = await import("react");
@@ -15,7 +16,7 @@ const { createTestQueryClient, withQueryClient } = await import("#web/lib/query/
 const { BridgeForm } = await import("./BridgeForm.tsx");
 
 // Live Mayan quotes captured 2026-11-26 with placeholder addresses (the guard tests use the same file).
-const QUOTES = JSON.parse(readFileSync(new URL("../../../../test/fixtures/social/bridge/blink-quotes.json", import.meta.url), "utf8")) as Record<"baseUsdcToSui", Quote>;
+const QUOTES = JSON.parse(readFileSync(new URL("../../../../test/fixtures/social/bridge/blink-quotes.json", import.meta.url), "utf8")) as Record<"baseUsdcToSui" | "solToSuiUsdc", Quote>;
 const QUOTE = QUOTES.baseUsdcToSui;
 const BLAST = `0x${"ab".repeat(32)}`;
 const SOURCE = `0x${"11".repeat(20)}`;
@@ -41,6 +42,7 @@ function fakeSdk(calls: Calls, answers: ReadonlyArray<Quote | Error>, overrides:
       onSigned("0xhash");
       return "0xhash";
     },
+    checkSolanaSubmission: async () => null,
     history: async () => [],
     status: async () => ({ state: "done", toAmount: "29.81" }),
     ...overrides,
@@ -53,13 +55,13 @@ function evm(address = SOURCE): EvmWallet {
 
 const coded = (code: unknown) => Object.assign(new Error("refused"), { code });
 
-async function mount(sdk: BridgeSdk, calls: Calls, wallet: EvmWallet | null = evm(), queries: Record<string, unknown> = {}) {
+async function mount(sdk: BridgeSdk, calls: Calls, wallet: SourceWallet | null = evm(), queries: Record<string, unknown> = {}) {
   const container = dom.document.createElement("div");
   container.setAttribute("data-blast-ui", "");
   dom.document.body.appendChild(container);
   const root = createRoot(container);
   const client = createTestQueryClient({ queries });
-  const render = (next: EvmWallet | null, key = "first") => act(async () => root.render(withQueryClient(client,
+  const render = (next: SourceWallet | null, key = "first") => act(async () => root.render(withQueryClient(client,
     <BridgeForm
       key={key}
       blastAddress={BLAST}
@@ -68,7 +70,7 @@ async function mount(sdk: BridgeSdk, calls: Calls, wallet: EvmWallet | null = ev
       onSignIn={() => undefined}
       sdk={sdk}
       signedIn
-      wallets={{ evm: next, solana: null, connect: () => undefined }}
+      wallets={{ evm: next?.kind === "evm" ? next : null, solana: next?.kind === "solana" ? next : null, connect: () => undefined }}
     />,
   )));
   await render(wallet);
@@ -109,6 +111,70 @@ async function mount(sdk: BridgeSdk, calls: Calls, wallet: EvmWallet | null = ev
 }
 
 const newCalls = (): Calls => ({ quotes: [], sends: 0, approves: 0, arrived: 0 });
+
+test("a lost Solana send response stays blocked after reopening until Solana proves it expired", async () => {
+  const calls = newCalls();
+  const address = "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM";
+  let finalizedHeight = 150;
+  let statusSlot = 179;
+  let rpcFails = true;
+  const sdk = fakeSdk(calls, [QUOTES.solToSuiUsdc], {
+    async send(_quote, _request, _wallet, onSigned) {
+      calls.sends += 1;
+      rememberSolanaSubmission(address, { signature: "sol-hash", lastValidBlockHeight: 150, slot: 20 });
+      onSigned("sol-hash");
+      throw new Error("RPC disconnected after broadcasting");
+    },
+    checkSolanaSubmission: (source) => settleSolanaSubmission({
+      async getEpochInfo() {
+        if (rpcFails) throw new Error("RPC unavailable");
+        return { absoluteSlot: 180, blockHeight: finalizedHeight, epoch: 0, slotIndex: 180, slotsInEpoch: 200 };
+      },
+      async getSignatureStatuses() { return { context: { slot: statusSlot }, value: [null] }; },
+      async getFirstAvailableBlock() { return 1; },
+    }, source),
+    status: async () => ({ state: "pending", toAmount: null }),
+  });
+  const form = await mount(sdk, calls, { kind: "solana", address, signTransaction: async (bytes) => bytes });
+  const pickSolana = async () => {
+    await act(async () => form.container.querySelector<HTMLButtonElement>("[aria-label='From Base. Change chain']")!.click());
+    const item = await waitFor(() => [...dom.document.querySelectorAll<HTMLElement>("[role='menuitemradio']")].find((option) => option.textContent === "Solana"), "Solana in the source chain menu");
+    await act(async () => item.click());
+    await act(async () => [...form.container.querySelectorAll<HTMLButtonElement>("[aria-label='Coin to receive'] button")].find((option) => option.textContent === "USDC")!.click());
+  };
+  const check = async (copy: RegExp) => {
+    assert.equal(form.button().textContent, "Check Solana transfer");
+    await act(async () => form.button().click());
+    await waitFor(() => copy.test(form.text()), "the source status result");
+    assert.equal(calls.sends, 1, "a check never signs or sends again");
+  };
+
+  try {
+    await pickSolana();
+    await form.type("0.1");
+    await form.press();
+    assert.equal(calls.sends, 1);
+    assert.doesNotMatch(form.text(), /bridge didn’t start/);
+    await form.remount();
+    await pickSolana();
+    await check(/Couldn’t check the Solana transfer/);
+    rpcFails = false;
+    await check(/still confirming/);
+    finalizedHeight += 1;
+    await check(/still confirming/);
+    statusSlot = 180;
+    await check(/didn’t go through/);
+    assert.equal(form.button().textContent, "Bridge");
+    assert.equal(form.button().disabled, true, "a new send requires re-entering the amount");
+    await form.type("0.1");
+    await form.press();
+    assert.equal(calls.sends, 2, "a deliberate new send is allowed after expiry");
+  } finally {
+    await form.unmount();
+    dom.window.localStorage.removeItem(`blast:solana-bridge-submission:${address}`);
+    dom.window.sessionStorage.removeItem(`blast:bridge-submissions:${BLAST}`);
+  }
+});
 
 test("a search picks a catalog token by its contract and quotes its own decimals", async () => {
   const calls = newCalls();

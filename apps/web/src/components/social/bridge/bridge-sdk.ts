@@ -3,6 +3,7 @@ import type { Quote } from "@mayanfinance/swap-sdk";
 import type { BridgeChain } from "./bridge-config.ts";
 import type { BridgeRequest } from "./bridge-guard.ts";
 import { transferState, type DestinationToken, type SourceToken, type TransferState } from "./bridge-model.ts";
+import type { SolanaSubmissionState } from "./solana-submission.ts";
 
 /** An EIP-1193 provider, as Privy's `getEthereumProvider()` returns it. */
 export type Eip1193 = Readonly<{ request(args: { method: string; params?: unknown[] | object }): Promise<unknown> }>;
@@ -79,6 +80,7 @@ export type BridgeSdk = Readonly<{
    * `signal` aborts before the wallet is asked, if it has not been asked yet.
    */
   send(quote: Quote, request: BridgeRequest, wallet: SourceWallet, onSigned: (hash: string) => void, signal: AbortSignal): Promise<string>;
+  checkSolanaSubmission(address: string): Promise<Readonly<{ signature: string; state: SolanaSubmissionState }> | null>;
   history(blastAddress: string): Promise<BridgeRow[]>;
   /** Mayan's state for a source transaction, and what arrived once it has. */
   status(hash: string): Promise<TransferStatus>;
