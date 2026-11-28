@@ -155,15 +155,25 @@ export function foldTrades(history: readonly Bar[], interval: CandleInterval, tr
 }
 
 /**
- * Pane heights in px: the price pane, and under it the volume pane with its 1 px separator.
+ * Pane heights in px. A desktop chart has the price pane and under it the volume pane with its
+ * 1 px separator. A phone has no volume pane (`pane: 0`): volume is faint bars on the price pane's
+ * floor (`FLOOR_VOLUME_SHARE`), so the price pane takes the whole plot over the time axis.
  */
-export const PANE_LAYOUT = { phone: { price: 200, pane: 64 }, desktop: { price: 290, pane: 100 } } as const;
+export const PANE_LAYOUT = { phone: { price: 403, pane: 0 }, desktop: { price: 290, pane: 100 } } as const;
 const TIME_AXIS = 25;
+/** The share of a phone's price pane, from its floor, that the volume bars may reach. */
+export const FLOOR_VOLUME_SHARE = .15;
 
-/** The plot's height in px: price pane, volume pane with its separator, time axis. */
+/** A floor volume bar's px: its share of the tallest bar in view, of `band`; at least 1 px when it traded, none when not. */
+export function floorBarHeight(volume: number | undefined, tallest: number, band: number): number {
+  if (!volume || !(tallest > 0)) return 0;
+  return Math.max(1, band * Math.min(volume, tallest) / tallest);
+}
+
+/** The plot's height in px: price pane, volume pane with its separator (none on a phone), time axis. */
 export function plotHeightFor(phone: boolean): number {
   const layout = phone ? PANE_LAYOUT.phone : PANE_LAYOUT.desktop;
-  return layout.price + layout.pane + 1 + TIME_AXIS;
+  return layout.price + (layout.pane ? layout.pane + 1 : 0) + TIME_AXIS;
 }
 
 /**
@@ -215,11 +225,13 @@ export function ticksInside<T extends { coord: number; text: string | number }>(
 }
 
 /**
- * The y-axis `gap.top` that keeps `px` free above the highest value in a `height` px pane.
- * KLineCharts adds the gap as a share of the value range, not of the pane, and `bottom`
- * (a share too) widens the range as well, so `px / height` alone leaves less room.
- * Capped under 1, since KLineCharts reads a gap of 1 or more as pixels.
+ * The y-axis gaps that keep `top` px free above the highest value and `bottom` px free under the
+ * lowest in a `height` px pane. KLineCharts adds each gap as a share of the value range, not of
+ * the pane, so each is its px over the px left for the range. Capped under 1, since KLineCharts
+ * reads a gap of 1 or more as pixels.
  */
-export function topGap(px: number, height: number, bottom: number): number {
-  return px < height ? Math.min(.99, px * (1 + bottom) / (height - px)) : .99;
+export function paneGaps(top: number, bottom: number, height: number): Readonly<{ top: number; bottom: number }> {
+  const range = height - top - bottom;
+  if (range <= 0) return { top: .99, bottom: .99 };
+  return { top: Math.min(.99, top / range), bottom: Math.min(.99, bottom / range) };
 }
