@@ -21,7 +21,7 @@ import { CoinCard } from "./CoinCard";
 import styles from "./CoinHome.module.css";
 import { coinsByIdsQuery, discoverQuery, followingCoinsQuery } from "./home-client";
 import { resultsAnnouncement, SORT_LABELS, type HeaderSort } from "./home-state";
-import { addPops, biggestTrade, homeCoinKey, popsOn, tradeCueOf, type HomeCueTrade, type HomePop } from "./home-model";
+import { addPops, biggestTrade, homeCoinKey, tradeCueOf, type HomeCueTrade, type HomePop } from "./home-model";
 import { TableFooter } from "./TableFooter";
 import { countWords } from "@blast/core/web/format.ts";
 import type { MarketTradeCue } from "@blast/core/modules/launchpad-contract/market-stream.ts";
@@ -248,7 +248,7 @@ function useHomePops(query: HomeQuery, settled: boolean, showTrades: boolean | u
   const queueTrade = useHomeLive(query, settled, freshness, trades => {
     if (!showTrades) return;
     const listed = new Map(coins.map(coin => [homeCoinKey(coin), coin.symbol]));
-    const popping = trades.filter(trade => listed.has(trade.coin_key) && popsOn(trade));
+    const popping = trades.filter(trade => listed.has(trade.coin_key));
     if (!popping.length) return;
     setPops(current => {
       const showing = addPops(current.view === view ? current.showing : NO_POPS, popping);

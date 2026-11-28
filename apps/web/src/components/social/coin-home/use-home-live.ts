@@ -9,7 +9,7 @@ import { HOME_RECENT_BUY_MS, type HomeQuery } from "@blast/core/web/contracts/ho
 import { liveFreshness, recordHintPainted } from "../home/activity-hints";
 import { browserGapTimers, hintedGap, NEW_POSTS_MIN_GAP_MS, NEW_POSTS_POLL_MS, type FeedFreshnessSource, type FreshnessHint } from "../home/feed-freshness";
 import { discoverQuery } from "./home-client";
-import { hintTrade, homeHintReads, type HomeCueTrade } from "./home-model";
+import { hintTrade, homeHintReads, popsOn, type HomeCueTrade } from "./home-model";
 
 /** Priced trade hints are collected this long, then their pops land together (one render per batch). */
 export const HOME_HINT_CUE_COLLECT_MS = 250;
@@ -25,10 +25,9 @@ export function homeFreshness(): FeedFreshnessSource {
 /**
  * Visible Home reads share query keys, cached answers and in-flight requests with manual refresh.
  *
- * `onTrades` gets new trades for the pops from two paths that share one `seen` set of activity ids:
- * a priced buy or sell hint, collected for `HOME_HINT_CUE_COLLECT_MS` (no read), and any other hint's
- * rate-limited re-read (its `recent_buys`). A trade reported once, shown or dropped, is never
- * reported again by either path.
+ * `onTrades` gets trades eligible for pops from two paths that share one `seen` set of activity ids:
+ * a live cue collected for `HOME_HINT_CUE_COLLECT_MS` (no read), and the rate-limited re-read's
+ * `recent_buys`. Only eligible trades claim an id, so a later priced update can still pop.
  */
 export function useHomeLive(
   query: HomeQuery,
@@ -54,8 +53,10 @@ export function useHomeLive(
     // session, not by time: a hint's time is the browser's clock and a read's is the server's, so no clock
     // skew or cached read can repeat a cue. Bounded, oldest first.
     const seen = new Set<string>();
-    const remember = (id: string): boolean => {
+    const remember = (trade: Pick<HomeCueTrade, "activity_id" | "usd">): boolean => {
+      const id = trade.activity_id;
       if (seen.has(id)) return false;
+      if (!popsOn(trade)) return false;
       seen.add(id);
       if (seen.size > HOME_SEEN_TRADES) seen.delete(seen.values().next().value as string);
       return true;
@@ -70,7 +71,7 @@ export function useHomeLive(
       if (trackTrades) void read.then(page => {
         if (disposed || document.visibilityState !== "visible") return;
         const floor = Math.max(visibleSince, Date.now() - HOME_RECENT_BUY_MS);
-        const buys = page?.recent_buys?.filter(buy => buy.occurred_at_ms > floor && remember(buy.activity_id));
+        const buys = page?.recent_buys?.filter(buy => buy.occurred_at_ms > floor && remember(buy));
         if (buys?.length) reportTrades(buys.map(buy => ({ ...buy, side: "buy" as const })));
       });
       let related: Promise<unknown> | undefined;
@@ -89,7 +90,7 @@ export function useHomeLive(
     let collected: HomeCueTrade[] = [];
     let flush: number | undefined;
     const queue = (trade: HomeCueTrade) => {
-      if (disposed || document.visibilityState !== "visible" || !remember(trade.activity_id)) return;
+      if (disposed || document.visibilityState !== "visible" || !remember(trade)) return;
       collected.push(trade);
       if (flush === undefined) flush = window.setTimeout(() => {
         flush = undefined;
