@@ -83,7 +83,7 @@ test("the page's sides read starts while its activity read is still running", as
     return result as never;
   } };
   await readHomeTraders(db, "24h", { nowMs: 1000, hiddenKinds: [], terms: null, portfolios: { db, wallets: f.wallets } });
-  assert.ok(events.indexOf("sides start") < events.indexOf("activity end"), events.join(", "));
+  assert.deepEqual(events.slice(0, 2), ["activity start", "sides start"]);
 });
 
 test("private candidates never load wallets and an empty public leaderboard skips all activity details", async () => {

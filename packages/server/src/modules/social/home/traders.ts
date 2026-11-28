@@ -279,7 +279,8 @@ export async function readHomeTraders(db: ReadableDatabase, window: HomeWindow, 
     if (rows) rows.push(side);
     else sidesByWho.set(side.who, [side]);
   }
-  const saleIds = [...new Set(sideRows.map((row) => row.sale))];
+  // Only a counted side lists a coin (`traderCoinsOf`), so tiny-only sales need no lookup.
+  const saleIds = [...new Set(sideRows.filter((row) => Number(row.n) > 0).map((row) => row.sale))];
   const coins = saleIds.length === 0 ? [] : (await step("coins", () => db.read<CoinRow>(
     `SELECT p.presale_id, p.sale_token AS coin_type, p.sale_symbol AS symbol, p.sale_icon_url AS icon_url, p.sale_decimals::int AS decimals FROM ${SHOWN_PRESALES} p WHERE p.presale_id = ANY($1::text[])`,
     [saleIds],
