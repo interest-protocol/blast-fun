@@ -24,6 +24,7 @@ import { homeAnalytics } from "./home-analytics";
 import { rememberHomeFilters, restoreHomeFilters } from "./home-filter-preferences";
 import { parseHomeSections, serializeHomeSections, type HomeSectionKey, type HomeSectionPrefs } from "./home-sections";
 import { HOME_DEFAULT_FEED, activeFilterCount, discoverQueryOf, stageDefaultSort, tabOf, viewSearchOf, viewStateOf, withView, type HomeViewState } from "./home-state";
+import { useTabPrefetch } from "./use-sort-prefetch";
 import { setHomeRows, useHomeRows } from "./use-home-rows";
 import { FollowedTape } from "./FollowedTape";
 import { CoinsListControls, CoinTabs, HomeSearch, HomeSettingsMenu, SourceTabs } from "./HomeControls";
@@ -221,7 +222,7 @@ export function CoinHome({ initial, initialState, pinned, traders, posts = null,
           {HOME_SOURCES.map((source) => (
             <section aria-labelledby={`${panelId(source)}-tab`} hidden={state.source !== source} id={panelId(source)} key={source} role="tabpanel">
               {state.source === source ? (
-                source === "discover" ? <DiscoverTabs onChange={change} panelId={`${panelId(source)}-coins`} state={state}>
+                source === "discover" ? <DiscoverTabs onChange={change} panelId={`${panelId(source)}-coins`} query={query} state={state}>
                   <DiscoverSource read={matchesInitial ? initial : null} props={list} query={query} />
                 </DiscoverTabs>
                   : source === "following" ? <FollowingList onDiscover={() => change({ ...state, source: "discover" })} props={list} />
@@ -275,10 +276,11 @@ type DiscoverProps = Readonly<{
 }>;
 
 /** Discover's tabs over the one list they control, labelled by the tab in force. */
-function DiscoverTabs({ state, onChange, panelId, children }: Readonly<{ state: HomeViewState; onChange: (next: HomeViewState) => void; panelId: string; children: ReactNode }>) {
+function DiscoverTabs({ state, query, onChange, panelId, children }: Readonly<{ state: HomeViewState; query: HomeQuery; onChange: (next: HomeViewState) => void; panelId: string; children: ReactNode }>) {
   const tab = tabOf(state);
+  const prefetch = useTabPrefetch(query);
   return <>
-    <CoinTabs onChange={onChange} panelId={panelId} state={state} />
+    <CoinTabs onChange={onChange} onIntent={prefetch} panelId={panelId} state={state} />
     <div aria-label={tab ? undefined : "Coins"} aria-labelledby={tab ? `${panelId}-${tab}` : undefined} id={panelId} role="tabpanel">{children}</div>
   </>;
 }

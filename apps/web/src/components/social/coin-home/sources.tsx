@@ -297,7 +297,7 @@ export function DiscoverList({ query, initial, props, freshness }: Readonly<{ qu
   const client = useAppQueryClient();
   const read = useQuery({ ...discoverQuery(query, true), initialData: initial ?? undefined }, client);
   const settled = settledHomePage(read);
-  useSortPrefetch(query, settled !== undefined);
+  useSortPrefetch(query);
   // Keep populated rows during a view change, but only show an empty message for the current view.
   const previous = read.isPlaceholderData && read.data?.coins.length ? read.data : undefined;
   const data = settled ?? previous;
