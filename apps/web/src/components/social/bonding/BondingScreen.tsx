@@ -542,16 +542,16 @@ function EmptyBondingResults({ onViewBonding, search, tab }: Readonly<{
   />;
 }
 
-/** `/bonding` while the server reads its featured curves: the header holds its place, so a click on Bonding shows at once. */
+/** `/bonding` while the server reads its featured curves: the header shows at once, and the placeholders after 300 ms, so a fast answer never flashes them. */
 export function BondingLoading() {
   return (
     <div className={styles.page} aria-busy="true" data-route-loading="bonding">
       <PageHeader title="Bonding" />
-      <div className={styles.loadingTop}>
+      <div className={styles.loadingBody}>
         <SkeletonBox className={styles.featuredSkeleton} />
         <SkeletonBox className={styles.controlsSkeleton} />
+        <CardsSkeleton />
       </div>
-      <CardsSkeleton />
     </div>
   );
 }

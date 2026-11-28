@@ -154,8 +154,9 @@
   height: 100%;
   object-fit: cover;
 }
-/* The route fallback's stand-ins, at the live heights measured 2026-11-28: carousel 282 px and controls 40 px on desktop, 102 px and 104 px on a phone, where controls come first. */
-.loadingTop { display: flex; flex-direction: column; gap: inherit; }
+/* The route fallback's stand-ins, at the live heights measured 2026-11-28: carousel 282 px and controls 40 px on desktop, 102 px and 104 px on a phone, where controls come first. A skeleton waits 300 ms (design system rule 20). */
+.loadingBody { display: flex; flex-direction: column; gap: inherit; animation: loadingWait var(--t4) step-end; }
+@keyframes loadingWait { from { opacity: 0; } }
 .featuredSkeleton { height: 17.625rem; border-radius: var(--r-md); }
 .controlsSkeleton { height: 2.5rem; border-radius: var(--r-sm); }
 /* Slides share the tallest one's height: a shorter card keeps its content at the top. */
@@ -283,11 +284,14 @@
 .sortPopup { display: grid; gap: 0.5rem; padding: 0.75rem; border-radius: var(--r-sm); background: var(--card); box-shadow: var(--sh-pop); }
 .sortPopup :is(h2, h3) { font-size: 0.875rem; margin: 0; }
 
+@media (prefers-reduced-motion: reduce) {
+  .loadingBody { animation: loadingWait var(--t4) step-end !important; }
+}
+
 @media (max-width: 760px) {
   .page { gap: 0.875rem; }
-  .loadingTop { flex-direction: column-reverse; }
   .featuredSkeleton { height: 6.375rem; }
-  .controlsSkeleton { height: 6.5rem; }
+  .controlsSkeleton { order: -1; height: 6.5rem; }
   .controls > :first-child :global([data-ui-size]) { min-height: 44px; padding-inline: 0.5rem; }
   .featured[data-has-cover] { grid-template-columns: 5rem minmax(0, 1fr); grid-template-rows: auto; align-items: center; }
   .featured .cover { aspect-ratio: 1; }
