@@ -9,12 +9,17 @@ import { unwrapApiResult } from "#web/lib/query/client.ts";
 import { queryKeys } from "#web/lib/query/keys.ts";
 import { useAppQueryClient } from "#web/lib/query/provider.tsx";
 import type { AccessTokenSource } from "../viewer-state-client";
-import { fetchNotifications } from "./notifications-client";
+import { fetchUnreadNewest } from "./notifications-client";
 import { notificationArrivals } from "./notification-arrivals";
 
 const sessions = new WeakMap<QueryClient, Map<string, ReturnType<typeof notificationArrivals>>>();
 
-/** There is no private push stream; look for delivered IDs only in a visible, active session. */
+/**
+ * There is no private push stream: a visible, active session polls the small
+ * unread read (`?newest=1`, the count and the newest unread ID) every minute,
+ * never the list, and pops once for each new newest ID. The answer also keeps
+ * the shell's count current. The Notifications page reads its own list.
+ */
 export function useNotificationArrivals(accountId: string | null, getAccessToken: AccessTokenSource | undefined, setCount: (count: number) => void): SubscribeNotificationArrivals {
   const client = useAppQueryClient();
   const { play } = useFeelSound();
@@ -49,19 +54,18 @@ export function useNotificationArrivals(accountId: string | null, getAccessToken
       const session = owner.current;
       const epoch = session?.epoch;
       const countVersion = client.getQueryState(queryKeys.me.notifications.unread())?.dataUpdateCount;
-      const page = unwrapApiResult(await fetchNotifications({ getAccessToken: getAccessToken!, signal }));
-      if (signal.aborted || !session || owner.current !== session) return page;
+      const answer = unwrapApiResult(await fetchUnreadNewest({ getAccessToken: getAccessToken!, signal }));
+      if (signal.aborted || !session || owner.current !== session) return answer;
       const active = document.visibilityState === "visible" && session.epoch === epoch;
-      // shortcut: the newest page covers live arrivals; add a delivery cursor if backfills must pulse too.
-      const arrived = session.receive(page.items, active && !session.baseline);
+      const arrived = session.receive(answer.newest_unread_id, active && !session.baseline);
       session.baseline = !active;
       // A mark-read or newer count answered while this snapshot was in flight.
-      if (client.getQueryState(queryKeys.me.notifications.unread())?.dataUpdateCount === countVersion) setCount(page.unread_count);
+      if (client.getQueryState(queryKeys.me.notifications.unread())?.dataUpdateCount === countVersion) setCount(answer.unread_count);
       if (arrived) {
         play({ kind: "notification" });
         for (const listener of listeners.current) listener();
       }
-      return page;
+      return answer;
     },
   }, client);
   return useCallback((listener: () => void) => {

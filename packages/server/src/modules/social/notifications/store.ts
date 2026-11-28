@@ -11,6 +11,7 @@ import {
   NOTIFICATION_PAGE_MAX_LIMIT,
   NOTIFICATION_UNREAD_CAP,
   type SocialNotificationPage,
+  type SocialNotificationUnreadNewest,
 } from "@blast/core/modules/social/contracts/notifications.ts";
 import { SocialRouteError } from "@blast/core/modules/social/route-kit/errors.ts";
 import { renderNotification, type NotificationRow } from "./copy.ts";
@@ -70,15 +71,20 @@ const PAGE_SQL = `
   ORDER BY n.occurred_at_ms DESC, n.notification_id DESC
   LIMIT $4`;
 
-const UNREAD_SQL = `
-  SELECT count(*)::int AS unread FROM (
-    SELECT 1 FROM social_notifications n
+/** An account's unread, shown notifications (`n`); the scan the count and the newest ID share. */
+const UNREAD_ROWS = `social_notifications n
     CROSS JOIN ${READ_THROUGH} AS through
     LEFT JOIN social_accounts actor ON actor.account_id = n.actor_account_id
     WHERE n.account_id = $1 AND n.read_at IS NULL AND n.notification_id > through.id AND ${STILL_NAMED}
-      AND EXISTS (SELECT 1 FROM ${SHOWN_PRESALES} p WHERE p.presale_id = n.presale_id)
-    LIMIT ${NOTIFICATION_UNREAD_CAP}
-  ) AS unread`;
+      AND EXISTS (SELECT 1 FROM ${SHOWN_PRESALES} p WHERE p.presale_id = n.presale_id)`;
+
+const UNREAD_SQL = `
+  SELECT count(*)::int AS unread FROM (SELECT 1 FROM ${UNREAD_ROWS} LIMIT ${NOTIFICATION_UNREAD_CAP}) AS unread`;
+
+/** The count and the highest unread ID in one statement; the ID walks `social_notifications_unread_idx` backwards. */
+const UNREAD_NEWEST_SQL = `
+  SELECT (${UNREAD_SQL}) AS unread,
+    (SELECT n.notification_id::text FROM ${UNREAD_ROWS} ORDER BY n.notification_id DESC LIMIT 1) AS newest`;
 
 const CURSOR_VERSION = 1;
 const CHECK_LENGTH = 8;
@@ -133,6 +139,13 @@ export function parseNotificationPage(searchParams: URLSearchParams): Notificati
 export async function readUnreadCount(db: ReadableDatabase, accountId: string): Promise<number> {
   const result = await db.read<{ unread: number }>(UNREAD_SQL, [accountId]);
   return result.rows[0]?.unread ?? 0;
+}
+
+/** The unread count and the newest unread notification's ID (null when none is unread). */
+export async function readUnreadNewest(db: ReadableDatabase, accountId: string): Promise<SocialNotificationUnreadNewest> {
+  const result = await db.read<{ unread: number; newest: string | null }>(UNREAD_NEWEST_SQL, [accountId]);
+  const row = result.rows[0];
+  return { unread_count: row?.unread ?? 0, newest_unread_id: row?.newest ?? null };
 }
 
 /** One page of `accountId`'s notifications (no unread count). */

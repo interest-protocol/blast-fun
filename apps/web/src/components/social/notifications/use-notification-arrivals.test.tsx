@@ -17,10 +17,12 @@ test("the foreground reader silently baselines, deduplicates, consumes returns a
   let pulses = 0;
   let count = 1;
   let mounted = true;
-  t.mock.method(globalThis, "fetch", async () => Response.json({
-    items: ids.map((id) => ({ id, kind: "claim", title: id, sub: "Ready", occurred_at_ms: 1, read: false, href: "/notifications", presale: null, actor: null })),
-    unread_count: ids.length, next_cursor: null,
-  }));
+  const urls: string[] = [];
+  t.mock.method(globalThis, "fetch", async (input: RequestInfo | URL) => {
+    urls.push(String(input instanceof Request ? input.url : input));
+    const newest = ids.reduce<string | null>((max, id) => max === null || BigInt(id) > BigInt(max) ? id : max, null);
+    return Response.json({ unread_count: ids.length, newest_unread_id: newest });
+  });
   Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
   const token = async () => "token";
   const setCount = (value: number) => { count = value; };
@@ -60,6 +62,11 @@ test("the foreground reader silently baselines, deduplicates, consumes returns a
   ids = ["6", "5", "4"];
   await refresh();
   assert.equal(pulses, 2);
+  ids = ["7", "5", "4"];
+  await refresh();
+  assert.equal(count, 3);
+  assert.equal(pulses, 3, "one alert read and another arrived: the count stays, the alert still pops");
+  assert.ok(urls.length > 0 && urls.every((url) => url.endsWith("/api/social/me/notifications/unread?newest=1")), "the poll never reads the list");
   await act(async () => root.unmount());
   mounted = false;
 });
@@ -69,7 +76,7 @@ test("a slow snapshot cannot restore unread notifications cleared while it was i
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
-  const snapshot = { items: [], unread_count: 4, next_cursor: null };
+  const snapshot = { unread_count: 4, newest_unread_id: null };
   let answer: ((response: Response) => void) | undefined;
   let hold = false;
   let count = 4;

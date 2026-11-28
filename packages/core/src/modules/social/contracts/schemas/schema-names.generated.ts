@@ -48,6 +48,7 @@ export const SOCIAL_SCHEMA_NAMES = [
   "me-presales-response",
   "me-response",
   "notification-page",
+  "notification-unread-newest-response",
   "notification-unread-response",
   "onboarding-complete-request",
   "onboarding-complete-response",

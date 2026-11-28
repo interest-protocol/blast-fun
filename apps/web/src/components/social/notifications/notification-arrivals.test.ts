@@ -2,30 +2,30 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { notificationArrivals } from "./notification-arrivals.ts";
 
-const rows = (...ids: string[]) => ids.map((id) => ({ id, read: false }));
-
-test("first snapshot, counts/read changes, duplicate delivery and batches", () => {
+test("the first answer is the starting point; a higher newest ID is one arrival", () => {
   const receive = notificationArrivals();
-  assert.equal(receive(rows("9007199254740993", "12"), true), false);
-  assert.equal(receive(rows("9007199254740993", "12"), true), false);
-  assert.equal(receive([{ id: "9007199254740993", read: true }], true), false);
-  assert.equal(receive(rows("9007199254740995", "9007199254740996"), true), true);
-  assert.equal(receive(rows("9007199254740996", "9007199254740995"), true), false);
-  assert.equal(receive(rows("9007199254740994"), true), true, "out-of-order new deliveries remain identifiable");
-  assert.equal(receive([], true), false);
-  assert.equal(receive(rows("9007199254740996"), true), false, "clearing does not forget deliveries");
-  assert.equal(receive(rows("10", "13"), true), false, "older rows exposed by filtering are not arrivals");
-  assert.equal(receive(rows("invalid", "0", "9223372036854775808"), true), false);
+  assert.equal(receive("9007199254740993", true), false, "the first answer only sets the starting point");
+  assert.equal(receive("9007199254740993", true), false);
+  assert.equal(receive("9007199254740995", true), true, "beyond 2^53 the IDs still compare exactly");
+  assert.equal(receive("9007199254740995", true), false, "the same alert never pops twice");
+  assert.equal(receive("9007199254740994", true), false, "reading the newest alert lowers the ID: no arrival");
+  assert.equal(receive(null, true), false, "clearing every alert is no arrival");
+  assert.equal(receive("9007199254740995", true), false, "clearing does not forget what was seen");
+  assert.equal(receive("9007199254740996", true), true);
+  assert.equal(receive("invalid", true), false);
+  assert.equal(receive("9223372036854775808", true), false, "an ID past the BIGINT range is ignored");
 });
 
-test("a hidden/return/remount baseline consumes stale effects without replay", () => {
+test("with nothing unread at first, the first alert still pops", () => {
   const receive = notificationArrivals();
-  receive(rows("1"), false);
-  assert.equal(receive(rows("2", "3"), false), false);
-  assert.equal(receive(rows("2", "3"), true), false);
-  assert.equal(receive([{ id: "4", read: true }], true), false);
-  assert.equal(receive(rows("4"), true), false, "read-state reversal is not delivery");
-  assert.equal(receive(rows("5", "6"), true), true);
-  receive([], false);
-  assert.equal(receive(rows("5", "6"), true), false, "a sparse return snapshot cannot forget prior deliveries");
+  assert.equal(receive(null, true), false);
+  assert.equal(receive("1", true), true);
+});
+
+test("a silent answer (hidden tab, return, remount) moves the starting point without a pop", () => {
+  const receive = notificationArrivals();
+  receive("1", false);
+  assert.equal(receive("3", false), false);
+  assert.equal(receive("3", true), false, "an alert that came while hidden does not pop on return");
+  assert.equal(receive("4", true), true);
 });
