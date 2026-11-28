@@ -29,8 +29,7 @@ function harness(options: Readonly<{ reduce?: boolean; visible?: boolean; answer
   mock.method(dom.window, "setTimeout", ((run: () => void, ms: number) => { const id = ++ids; timers.push({ at: now + ms, run, id }); return id; }) as typeof window.setTimeout);
   mock.method(dom.window, "clearTimeout", (handle: number | undefined) => { const index = timers.findIndex((timer) => timer.id === handle); if (index >= 0) timers.splice(index, 1); });
   mock.method(globalThis, "fetch", async (url: Parameters<typeof fetch>[0]) => {
-    // The test-sale lookup (lib/test-launches.ts) is not what these tests count; failing it hides nothing.
-    if (String(url).startsWith("/api/social/home/coins")) return new Response("{}", { status: 500 });
+    // Every request counts: a read is the Happening read alone, with no test-sale lookup after it.
     fetched.push(String(url));
     const answer = answers.shift() ?? 500;
     return typeof answer === "number" ? new Response("{}", { status: answer }) : Response.json(answer);

@@ -11,8 +11,7 @@ import { liveFreshness, recordHintPainted } from "../home/activity-hints";
 import { browserGapTimers, hintedGap, NEW_POSTS_MIN_GAP_MS, NEW_POSTS_POLL_MS, type FreshnessHint } from "../home/feed-freshness";
 import { arrivals, dripGapMs, TAPE_ROWS } from "./happening-model";
 import { T3 } from "#web/components/blast-ui/motion-tokens.ts";
-import { testPresaleIds, withoutTestHappening } from "#web/lib/test-launches.ts";
-import { readSaleCoins } from "../coin-home/home-client.ts";
+import { withoutTestHappening } from "#web/lib/test-launches.ts";
 
 /**
  * Home's live data in the browser: one store per tab shared by the right
@@ -61,8 +60,8 @@ export async function fetchHappening(signal?: AbortSignal): Promise<SocialHappen
   if (response.status !== 200) throw responseError(body, response, "Live activity could not load. Try again shortly.");
   const parsed = happeningReadSchema.safeParse(body);
   if (!parsed.success) throw new PublicError("Live activity returned an unreadable response. Try again.", { ...responseDiagnostic(response), code: "invalid_response" });
-  const testIds = await testPresaleIds(parsed.data, readSaleCoins);
-  return withoutTestHappening(parsed.data, testIds);
+  // The server leaves test sales out of every row (`PUBLIC_PRESALES`); this drops any row whose quote still names Test SUI, with no extra read.
+  return withoutTestHappening(parsed.data);
 }
 
 export class HappeningStore {

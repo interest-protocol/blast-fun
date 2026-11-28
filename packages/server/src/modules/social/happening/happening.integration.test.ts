@@ -6,6 +6,7 @@ import test from "node:test";
 import type { Pool } from "pg";
 
 import { isTradingVisible } from "@blast/core/lib/social-flag.ts";
+import { CREATE_TEST_SUI_QUOTE_TYPE } from "@blast/core/modules/social/contracts/create.ts";
 import { createPrivyTokenVerifier } from "@blast/core/lib/privy-adapter/token-verifier.ts";
 import { PostgresRateLimitEnforcer } from "@blast/core/modules/database/postgres-rate-limits.ts";
 import { seedChainRead, type ChainActivityRow, type ChainPresaleRow } from "../../../../../core/test/fixtures/modules/database/chain-read-rows.ts";
@@ -482,6 +483,49 @@ test("T-043 hidden sales: the last hour counts no hidden sale's wallet or dollar
     // Counting the hidden sales would give 6 wallets (Tester, and Anon2, whose shown commits are hours old) and $2,250.00.
     for (const trades of [false, true]) assert.deepEqual((await happeningOf(await happening({ trades }))).last_hour, { wallets: 4, usd: "350.00", usd_complete: false });
   }, hiddenRows));
+
+/** Test SUI sales (TSUI, the team's mainnet test coin): one open, one traded after migrating. */
+const TEST_SUI = { open: hex("f0"), migrated: hex("f1") } as const;
+const TEST_SUI_COIN = `${TEST_SUI.migrated}::coin::QAM`;
+const TEST_SUI_TEXT = new RegExp(`${TEST_SUI.open.slice(2)}|${TEST_SUI.migrated.slice(2)}|QAO|QAM|${W.tester.slice(2)}`);
+
+/** The newest rows of the log: a commit, a claim and the migrated coin's trades (unstamped and stamped). */
+function testSuiRows(now: number): ChainActivityRow[] {
+  const tsui = { quote_type: CREATE_TEST_SUI_QUOTE_TYPE };
+  return [
+    activity("presale_commit", W.tester, TEST_SUI.open, now - 40_000, { ...tsui, quote_amount: "5000000000", usd_value: "5.00" }),
+    activity("presale_claim", W.tester, TEST_SUI.migrated, now - 30_000, { ...tsui, coin_amount: "1000000000", quote_refund: "0" }),
+    activity("trade_buy", W.tester, null, now - 20_000, { ...tsui, coin_type: TEST_SUI_COIN, quote_amount: "6000000000", usd_value: "6.00" }),
+    activity("trade_sell", W.tester, TEST_SUI.migrated, now - 10_000, { ...tsui, coin_type: TEST_SUI_COIN, quote_amount: "4000000000", usd_value: "4.00" }),
+  ];
+}
+
+test("Test SUI sales never reach Home's live activity: tape, lists, pins or top coins, so the browser needs no lookup", { skip }, () =>
+  withFixture(async ({ admin, now, happening }) => {
+    const tsui = { quote_type: CREATE_TEST_SUI_QUOTE_TYPE, quote_symbol: "TSUI", quote_decimals: 9 };
+    await seedChainRead(admin, {
+      presales: [
+        presale(TEST_SUI.open, "QAO", "open", { ...tsui, start_ms: now - DAY, end_ms: now + HOUR, total_commitments: "90000000000", participants: 90 }),
+        presale(TEST_SUI.migrated, "QAM", "migrated", { ...tsui, sale_token: TEST_SUI_COIN, start_ms: now - 9 * DAY, end_ms: now - 6 * DAY }),
+      ],
+      presale_lifecycle: [{ presale_id: TEST_SUI.migrated, state: "migrated", digest: "LcQam".padEnd(44, "2"), timestamp_ms: now - 2 * DAY, checkpoint: 40_003 }],
+      prices: [{ coin_type: TEST_SUI_COIN, usd_price: "0.5", as_of_ms: now, source: "pool" }],
+    });
+    await admin.query("INSERT INTO social_presale_pins (presale_id) VALUES ($1), ($2), ($3)", [TEST_SUI.open, TEST_SUI.migrated, P.openLater]);
+    for (const trades of [false, true]) {
+      const body = await happeningOf(await happening({ trades, recent: true }));
+      const text = JSON.stringify(body);
+      assert.doesNotMatch(text, TEST_SUI_TEXT);
+      // Real sales stay: the open lists, the pin, and (trading visible) the real coin's trade and top coin.
+      assert.deepEqual(ids(body.fastest), [P.openLater, P.openSoon]);
+      assert.deepEqual(ids(body.today), [P.openLater]);
+      assert.equal(body.tape.length, HAPPENING_TAPE_MAX);
+      if (trades) {
+        assert.deepEqual(shape(body)[0], ["trade_buy", "TNW", "757.00"]);
+        assert.ok(body.top_coins?.trending.some((coin) => coin.presale_id === P.tradingNew));
+      }
+    }
+  }, testSuiRows));
 
 test("UI-05 no readable watermark is 503 service_unavailable", { skip }, () =>
   withFixture(async ({ admin, happening }) => {
