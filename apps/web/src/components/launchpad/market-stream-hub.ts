@@ -6,6 +6,7 @@ import { parseDiscoveryResponse, type DiscoveryResponse } from "@blast/core/modu
 import { parsePoolTradesPage } from "@blast/core/modules/launchpad-contract/venue-history.ts";
 import { POOL_KEY } from "@blast/core/modules/launchpad-contract/venues.ts";
 import { SUI_OBJECT_ID_PATTERN } from "@blast/core/lib/sui/ids.ts";
+import { CREATE_QUOTE_TYPES } from "@blast/core/web/contracts/create.ts";
 import { normalizeStructTag } from "@mysten/sui/utils";
 
 import { parseChartFrame, type ChartFrame } from "./chart/chart-live-model.ts";
@@ -148,7 +149,7 @@ type Socket = "connecting" | "open" | "reconnecting" | "paused" | "refused";
 /** A stream with no hello by then is given up on (its socket counts as failed if it never spoke). */
 export const HELLO_DEADLINE_MS = 10_000;
 const LEGACY_HEARTBEAT_TIMEOUT_MS = 45_000;
-/** A hidden tab keeps its stream this long, so a quick tab flip costs no reconnect or history read. */
+/** A hidden tab keeps a stream that watches pools or prices this long, so a quick tab flip costs no reconnect or history read. */
 export const HIDDEN_GRACE_MS = 15_000;
 /**
  * With nothing wanted, the socket stays open this long, so the next page's screens reuse it with one `set`.
@@ -443,11 +444,15 @@ export class MarketStreamHub {
     const priceCoins = new Set<string>();
     const presale = this.subscribers.find(({ request }) => request.presale !== undefined)?.request.presale;
     const expected = this.subscribers.find(({ request }) => request.pools.length > 0 || request.expected !== null)?.request.expected ?? null;
+    const coins: string[] = [];
     for (const { request } of this.subscribers) {
       if (!fitsExpected(request, expected)) continue;
       for (const pool of request.pools) if (pools.size < MARKET_STREAM_BUDGET.maxPoolsPerClient) pools.add(pool);
-      for (const coin of request.priceCoins ?? []) if (priceCoins.size < MARKET_STREAM_BUDGET.maxPriceCoinsPerClient) priceCoins.add(coin);
+      coins.push(...request.priceCoins ?? []);
     }
+    // Create's quote coins first: a page's dollar rate rides one, so a long price list never pushes it out.
+    const quotes = coins.filter((coin) => CREATE_QUOTE_TYPES.has(coin));
+    for (const coin of [...quotes, ...coins]) if (priceCoins.size < MARKET_STREAM_BUDGET.maxPriceCoinsPerClient) priceCoins.add(coin);
     const discovery = this.subscribers.some(({ request }) => request.discovery && fitsExpected(request, expected));
     const tradeCues = this.subscribers.some(({ request }) => request.priceCoins?.length && request.listener.tradeCue && fitsExpected(request, expected));
     return { pools: [...pools], priceCoins, presale, discovery, tradeCues, expected };
@@ -828,7 +833,8 @@ export class MarketStreamHub {
         this.connect();
       }
     } else if (this.connection?.source && !this.cancelHidden) {
-      if (!this.connection.pools.size) return this.pause();
+      // A socket that watches no pool or price (hints only) has nothing to keep for a quick return.
+      if (!this.connection.pools.size && !this.connection.priceCoins.size) return this.pause();
       this.cancelHidden = this.deps.schedule(() => {
         this.cancelHidden = null;
         this.pause();

@@ -135,7 +135,7 @@ function useChartStreamTarget(coinType: string, history: StreamedChart | null, e
 }
 
 function useStreamedPrice(trade: StreamedTrade | null, live: boolean): StreamedPrice | null {
-  const quoteUsd = useQuoteUsd(trade && !trade.quote?.quoteUsd ? (trade.quote?.quote ?? null) : null);
+  const quoteUsd = useQuoteUsd(trade && !trade.quote?.quoteUsd ? (trade.quote?.quote ?? null) : null, { live: true });
   return useMemo((): StreamedPrice | null => {
     if (!trade?.quote) return null;
     const { memeDecimals, quoteDecimals } = trade.quote;

@@ -40,6 +40,16 @@ export const HIDDEN_TOTAL = "$••••••";
  */
 export type PortfolioFigures = Readonly<{ total: number | null; coins: number | null; committed: number | null; claimable: number | null }>;
 
+export function combinePortfolioFigures(first: PortfolioFigures, second: PortfolioFigures): PortfolioFigures {
+  const add = (a: number | null, b: number | null) => a === null || b === null ? null : a + b;
+  return {
+    total: add(first.total, second.total),
+    coins: add(first.coins, second.coins),
+    committed: add(first.committed, second.committed),
+    claimable: add(first.claimable, second.claimable),
+  };
+}
+
 /** The same readiness rule for the Portfolio page, header and Blast mode. */
 export function valuationHoldingsReady(portfolio: SocialPortfolio | null): portfolio is SocialPortfolio & {
   balances: NonNullable<SocialPortfolio["balances"]>;
@@ -84,6 +94,25 @@ export function pricedFigures(portfolio: SocialPortfolio | null): Readonly<{ tot
   const hasPricedSui = balances.sui.atoms !== "0" && balances.sui.usd !== null;
   const hasPrices = total > 0 || hasPricedCoins || hasPricedSui || portfolio.commitments.has_priced_holdings;
   return hasPrices ? { total, coins, committed, claimable } : null;
+}
+
+export function combinedPricedFigures(first: SocialPortfolio | null, second: SocialPortfolio | null): ReturnType<typeof pricedFigures> {
+  if (!valuationHoldingsReady(first) || !valuationHoldingsReady(second)) return null;
+  const a = portfolioFigures(first);
+  const b = portfolioFigures(second);
+  if (a.total !== null && b.total !== null) return null;
+  const pricedA = pricedFigures(first);
+  const pricedB = pricedFigures(second);
+  if (!pricedA && !pricedB && (a.total ?? 0) === 0 && (b.total ?? 0) === 0) return null;
+  const zero = { total: 0, coins: 0, committed: 0, claimable: 0 };
+  const knownA = pricedA ?? (a.total === null ? zero : a);
+  const knownB = pricedB ?? (b.total === null ? zero : b);
+  return {
+    total: (knownA.total ?? 0) + (knownB.total ?? 0),
+    coins: (knownA.coins ?? 0) + (knownB.coins ?? 0),
+    committed: (knownA.committed ?? 0) + (knownB.committed ?? 0),
+    claimable: (knownA.claimable ?? 0) + (knownB.claimable ?? 0),
+  };
 }
 
 /** A priced subtotal is useful only after all holdings are read; it is never the complete total. */

@@ -104,13 +104,13 @@ const buy = (amountIn: bigint | null, extra: Partial<TradeQuoteInput> = {}): Tra
 async function run(
   input: TradeQuoteInput,
   caller: TradeQuoteCaller,
-  options: { chain?: OfflineChainOptions; router?: TradeRouter; db?: ReturnType<typeof chainReads>; feePayer?: () => Promise<"blast" | "wallet"> } = {},
+  options: { chain?: OfflineChainOptions; router?: TradeRouter; db?: ReturnType<typeof chainReads> } = {},
 ) {
   const replay = replayRouter();
   const chain = offlineTradeChain(options.chain);
   const db = options.db ?? chainReads();
   const quote = await quoteTrade(
-    { database: () => db, router: () => options.router ?? replay.router, chain: () => chain, quoteKey: () => KEY, now: () => NOW, feePayer: options.feePayer },
+    { database: () => db, router: () => options.router ?? replay.router, chain: () => chain, quoteKey: () => KEY, now: () => NOW },
     input,
     caller,
   );
@@ -237,32 +237,11 @@ test("the fullnode simulates with its mocked gas, never selecting gas from the w
   assert.deepEqual(asked[0]!.include, { effects: true, balanceChanges: true });
 });
 
-test("a wallet session is sponsored; past the cap it pays its own fee, so it must hold the SUI for it as well as the trade", async () => {
-  // Outside wallets are sponsored like embedded wallets (owner ruling 2026-11-20).
-  const sponsored = await run(buy(100_000_000n), session, { chain: funded(100_000_000n) });
-  assert.equal(sponsored.quote.network_fee?.payer, "blast");
-  assert.equal(sponsored.quote.balance_failure, undefined);
-
-  const capSpent = { feePayer: async () => "wallet" as const };
-  const gas = 2_000_000n;
-  const short = await run(buy(100_000_000n), session, { ...capSpent, chain: { ...funded(100_000_000n), simulation: replayDryRuns() } });
-  assert.equal(short.quote.offer_refused, "insufficient_balance");
-  assert.equal(short.quote.dry_run, "passed");
-  assert.equal(short.quote.quote_id, null);
-  assert.deepEqual(short.quote.balance_failure, { reason: "gas", coin_type: SUI, required_atoms: "103078164", available_atoms: "100000000" });
-  assert.deepEqual(short.quote.network_fee, { payer: "wallet", label: "Paid from your SUI", estimate_mist: "2565136" });
-  assert.equal(short.quote.price_impact_bps, 8_233, "its dry runs ran, so it is shown the impact they measured");
-
-  const belowBudget = await run(buy(100_000_000n), session, { ...capSpent, chain: funded(100_000_000n + gas - 1n) });
-  assert.equal(belowBudget.quote.offer_refused, "insufficient_balance", "the estimated fee alone does not fund the transaction budget");
-  assert.deepEqual(belowBudget.quote.balance_failure, { reason: "gas", coin_type: SUI, required_atoms: "102000000", available_atoms: "101999999" });
-  const enough = await run(buy(100_000_000n), session, { ...capSpent, chain: funded(100_000_000n + gas) });
-  // The in-memory fullnode's default dry run shows no balance change, so there is no fill to measure: null, and why.
-  assert.equal(enough.quote.price_impact_bps, null);
-  assert.equal(enough.quote.price_impact_unavailable, "reference_failed");
-  assert.equal(enough.quote.offer_refused, null);
-  assert.equal(enough.quote.network_fee?.label, "Paid from your SUI");
-  assert.ok(enough.quote.quote_id);
+test("a Slush wallet can quote a swap of its full SUI balance with gas paid by Blast", async () => {
+  const { quote } = await run(buy(100_000_000n), session, { chain: funded(100_000_000n) });
+  assert.deepEqual(quote.network_fee, { payer: "blast", label: "Paid by Blast", estimate_mist: "1500000" });
+  assert.equal(quote.balance_failure, undefined);
+  assert.ok(quote.quote_id);
 });
 
 test("a wallet short of the input is shown the price and told so, and nothing is simulated", async () => {
@@ -386,9 +365,9 @@ test("a caller without an account or a Blast wallet is priced, not offered", asy
   assert.equal(noWallet.price_impact_unavailable, "no_dry_run");
 });
 
-test("an embedded wallet past the day's sponsored trades is quoted as paying its own fee (R3-31's cap)", async () => {
-  const { quote } = await run(buy(100_000_000n), embedded, { chain: funded(100_000_000n + 2_000_000n), feePayer: async () => "wallet" });
-  assert.deepEqual(quote.network_fee, { payer: "wallet", label: "Paid from your SUI", estimate_mist: "1500000" });
+test("an X wallet can quote a swap of its full SUI balance with gas paid by Blast", async () => {
+  const { quote } = await run(buy(100_000_000n), embedded, { chain: funded(100_000_000n) });
+  assert.deepEqual(quote.network_fee, { payer: "blast", label: "Paid by Blast", estimate_mist: "1500000" });
   assert.ok(quote.quote_id);
 });
 

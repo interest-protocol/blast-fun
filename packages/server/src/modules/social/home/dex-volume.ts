@@ -7,14 +7,20 @@ import type { HomeBounds } from "./sql.ts";
 
 const TRACKED_POOL_TYPES = new Set<string>(INDEXED_POOL_COINS.map((coin) => coin.coinType));
 
+/**
+ * One coin's volume in the window, as every page shows it: its curve's tape trades (a graduated
+ * launch's trades before graduation) plus gross Cetus and Bluefin swaps, from the window's first whole
+ * minute (`$2`) to the chain clock (`$3`). A sum is complete only when the DEX coverage
+ * reaches the window start and no row in it is unpriced.
+ */
 function volumeSql(includeTracked: boolean): string {
   return `SELECT c.coin_type,
-  trim_scale(sum(s.usd_value))::text AS usd,
-  trim_scale(sum(s.usd_value) FILTER (WHERE s.venue = 'cetus'))::text AS cetus_usd,
-  trim_scale(sum(s.usd_value) FILTER (WHERE s.venue = 'bluefin'))::text AS bluefin_usd,
-  c.window_complete AND count(s.venue) FILTER (WHERE s.usd_value IS NULL) = 0 AS complete,
-  c.window_complete AND count(s.venue) FILTER (WHERE s.usd_value IS NULL AND s.venue = 'cetus') = 0 AS cetus_complete,
-  c.window_complete AND count(s.venue) FILTER (WHERE s.usd_value IS NULL AND s.venue = 'bluefin') = 0 AS bluefin_complete
+  trim_scale(CASE WHEN d.usd IS NULL AND t.usd IS NULL THEN NULL ELSE coalesce(d.usd, 0) + coalesce(t.usd, 0) END)::text AS usd,
+  trim_scale(d.cetus_usd)::text AS cetus_usd,
+  trim_scale(d.bluefin_usd)::text AS bluefin_usd,
+  c.window_complete AND d.unpriced = 0 AND t.unpriced = 0 AS complete,
+  c.window_complete AND d.cetus_unpriced = 0 AS cetus_complete,
+  c.window_complete AND d.bluefin_unpriced = 0 AS bluefin_complete
 FROM (
   SELECT coin_type, bool_or(window_complete) AS window_complete
   FROM (
@@ -30,10 +36,23 @@ FROM (
   ) eligible
   GROUP BY coin_type
 ) c
-LEFT JOIN chain_read_v1.dex_swap_volume s ON s.coin_type = c.coin_type
-  AND s.timestamp_ms > $2::bigint AND s.timestamp_ms <= $3::bigint AND s.checkpoint <= $4::bigint
-  AND s.venue IN ('cetus', 'bluefin')
-GROUP BY c.coin_type, c.window_complete`;
+CROSS JOIN LATERAL (
+  SELECT sum(s.usd_value) AS usd,
+    sum(s.usd_value) FILTER (WHERE s.venue = 'cetus') AS cetus_usd,
+    sum(s.usd_value) FILTER (WHERE s.venue = 'bluefin') AS bluefin_usd,
+    count(*) FILTER (WHERE s.usd_value IS NULL) AS unpriced,
+    count(*) FILTER (WHERE s.usd_value IS NULL AND s.venue = 'cetus') AS cetus_unpriced,
+    count(*) FILTER (WHERE s.usd_value IS NULL AND s.venue = 'bluefin') AS bluefin_unpriced
+  FROM chain_read_v1.dex_swap_volume s
+  WHERE s.coin_type = c.coin_type AND s.timestamp_ms >= $2::bigint AND s.timestamp_ms <= $3::bigint
+    AND s.checkpoint <= $4::bigint AND s.venue IN ('cetus', 'bluefin')
+) d
+CROSS JOIN LATERAL (
+  SELECT sum(a.usd_value) AS usd, count(*) FILTER (WHERE a.usd_value IS NULL) AS unpriced
+  FROM chain_read_v1.activity a
+  WHERE a.coin_type = c.coin_type AND a.venue = 'blast_curve' AND a.kind IN ('trade_buy', 'trade_sell')
+    AND a.timestamp_ms >= $2::bigint AND a.timestamp_ms <= $3::bigint AND a.checkpoint <= $4::bigint
+) t`;
 }
 
 const VOLUME_SQL = volumeSql(false);
@@ -55,6 +74,15 @@ function pricedVolume(usd: string | null, complete: boolean): HomeDexVolume["ven
   return { usd: complete ? usd ?? "0" : usd, usd_complete: complete };
 }
 
+/**
+ * The window's first whole minute by the chain clock: the first minute that starts at or after `window`
+ * before `toMs`, as blast-infra's minute windows count (`Minutes::since`), so a `coin_stats` frame's
+ * `volume_24h` and this read sum the same minutes.
+ */
+export function volumeWindowStartMs(toMs: number, window: HomeWindow): number {
+  return Math.ceil((toMs - HOME_WINDOW_MS[window]) / 60_000) * 60_000;
+}
+
 /** Tracked coins can show priced swaps while their coverage fills the requested window. */
 export async function readDexVolumes(
   db: ReadableDatabase,
@@ -73,7 +101,7 @@ export async function readDexVolumes(
     ? coins.filter((coin) => TRACKED_POOL_TYPES.has(coin.coin_type)).map((coin) => coin.coin_type)
     : [];
   if (native.length === 0 && tracked.length === 0) return new Map();
-  const values = [native, Math.max(toMs - HOME_WINDOW_MS[window], minFromMs), toMs, bounds.marketCheckpoint];
+  const values = [native, Math.max(volumeWindowStartMs(toMs, window), minFromMs), toMs, bounds.marketCheckpoint];
   const { rows } = tracked.length > 0
     ? await db.read<VolumeRow>(TRACKED_VOLUME_SQL, [...values, tracked])
     : await db.read<VolumeRow>(VOLUME_SQL, values);

@@ -6,6 +6,7 @@
  */
 /* Above sheets (80), so a menu opens inside one; below toasts (90). */
 .positioner { z-index: 85; }
+.submenuPositioner { z-index: 86; }
 
 /*
  * The menu grows from its trigger: base-ui's `--transform-origin`, the trigger's
@@ -17,6 +18,19 @@
 .popup { transform-origin: var(--transform-origin, var(--menu-ox, 0px) 0%); }
 .popup[data-side="top"] { transform-origin: var(--transform-origin, var(--menu-ox, 0px) 100%); }
 .popup[data-side="right"] { transform-origin: var(--transform-origin, 0px 1.5rem); }
+
+.submenuTrigger > svg { width: 1.125rem; height: 1.125rem; color: var(--muted); flex: none; transform: scaleX(-1); }
+@media (max-width: 760px) {
+  .submenuTrigger > svg { transform: rotate(-90deg); }
+}
+.submenuPopup {
+  transition: opacity var(--t1) var(--ease-std), transform var(--t1) var(--ease-std);
+}
+.submenuPopup:is([data-starting-style], [data-ending-style]) { opacity: 0; transform: scale(.97); }
+.submenuPopup[data-instant] { transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  .submenuPopup:is([data-starting-style], [data-ending-style]) { transform: none; }
+}
 
 /*
  * Phones: an action sheet docked to the bottom edge, 8px in from the sides

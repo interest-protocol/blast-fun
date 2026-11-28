@@ -37,6 +37,7 @@ import { tokenAmountAtoms, selectedSellPreset, sellPresetAmount, typedAmount, ty
 import { decimalText, dropDecimal, pasteDecimal } from "#web/lib/decimal-input.ts";
 import { useAppQueryClient } from "#web/lib/query/provider.tsx";
 import { refreshWalletCoinBalance, useWalletCoinBalance } from "./use-wallet-coin-balance";
+import { useSwapWalletFunding, WalletFundingSwitch } from "./WalletFundingSwitch";
 
 /** What the sheet asks its host to trade: the quote the button showed, pinned (R3-31). */
 export type TradeAsk = Readonly<{
@@ -118,6 +119,42 @@ function activeQuoteRequest(active: boolean, inCoin: WalletCoinView, outCoin: Wa
 
 /** A failure kept for its amount. A retryable failure allows a fresh press. */
 type Failure = Readonly<{ key: string | null; message: string; retry?: boolean }>;
+function useSheetSwapFunding({ trading, inCoin, outCoin, atoms, enabled, locked, waiting, surface }: Readonly<{
+  trading: CoinSheetTrading;
+  inCoin: WalletCoinView;
+  outCoin: WalletCoinView;
+  atoms: bigint | null;
+  enabled: boolean;
+  locked: boolean;
+  waiting: boolean;
+  surface?: string;
+}>) {
+  const shortage = atoms !== null && atoms > inCoin.atoms;
+  const check = enabled && !locked && !waiting && !!surface && trading.signedIn
+    && !trading.sessionPending && shortage && canTrade(inCoin) && canTrade(outCoin);
+  return useSwapWalletFunding(trading.walletAddress, inCoin.coinType, atoms, check);
+}
+
+function sheetWalletSwitch(surface: string | undefined, inCoin: WalletCoinView, outCoin: WalletCoinView, atoms: bigint | null,
+  focus: string | null, detail: boolean, slippageBps: number | undefined, check: ReturnType<typeof useSheetSwapFunding>) {
+  if (!surface) return null;
+  return {
+    funding: check.funding, qualifies: check.qualifies, surface,
+    draft: atoms === null ? null : {
+      screen: { kind: "trade" as const, key: inCoin.key, out: outCoin.key, ...(focus ? { focus } : {}) },
+      coins: [inCoin, outCoin],
+      amount: groupDigits(exactText({ n: atoms, scale: inCoin.decimals })),
+      detail, slippageBps,
+    },
+  };
+}
+
+function swapFundingCost(coin: WalletCoinView, cost: string | null, hidden: boolean, check: ReturnType<typeof useSheetSwapFunding>) {
+  const { funding, canSwitch } = check;
+  if (!funding.funds || hidden || canSwitch) return cost;
+  const amount = groupDigits(exactText({ n: funding.funds.atoms, scale: coin.decimals }));
+  return `${cost ?? "The active wallet cannot cover this swap."} ${funding.name} has ${amount} ${coin.symbol}.`;
+}
 
 function useSuccessFocus(successful: boolean, active: boolean, scope: RefObject<HTMLDivElement | null>, inputRef: RefObject<HTMLInputElement | null>) {
   const wasSuccessful = useRef(false);
@@ -158,21 +195,23 @@ function swapDisplay({ inLine, outLine, inCoin, outCoin, snapshot, hidden, key, 
   const summary = txSummary({ inCoin, outCoin, quote, shown: quote === null && snapshot.loading ? snapshot.shown : null, walletFee: effectiveWalletFee });
   const rows = txRows({ outCoin, quote, walletFee: effectiveWalletFee });
   const rateState: "failed" | "asking" | "live" = quoteError !== null ? "failed" : quote === null && snapshot.loading ? "asking" : "live";
-  // When Blast can't sponsor today the money sentence names the fee the wallet pays (the quote carries it); the button keeps its verb.
+  // If sponsorship is unavailable the money sentence names the fee the wallet pays (the quote carries it); the button keeps its verb.
   const money = costSentence({ inCoin, outCoin, quote, focus, atoms });
   return { panels, quote, quoteError, shownFailure, summary, rows, rateState, money };
 }
 
 /** Hold the estimate while a press requests its sealed quote for the same amount. */
-function useSwapQuotes({ active, inCoin, outCoin, atoms, locked, trading }: Readonly<{
+function useSwapQuotes({ active, inCoin, outCoin, atoms, locked, trading, slippageBps }: Readonly<{
   active: boolean;
   inCoin: WalletCoinView;
   outCoin: WalletCoinView;
   atoms: bigint | null;
   locked: boolean;
   trading: CoinSheetTrading;
+  slippageBps?: number;
 }>) {
-  const request = activeQuoteRequest(active, inCoin, outCoin, atoms);
+  const asked = activeQuoteRequest(active, inCoin, outCoin, atoms);
+  const request = asked && slippageBps !== undefined ? { ...asked, slippage_bps: slippageBps } : asked;
   const key = tradeRequestKey(request);
   const [pressed, setPressed] = useState<Seal | null>(null);
   const serverQuote = tradeQuoteReader(trading.requestQuote);
@@ -284,6 +323,8 @@ function useSwapFormControls({
   hidden,
   focusAmount = true,
   persistent = false,
+  draftSurface,
+  slippageBps,
 }: Readonly<{
   active: boolean;
   persistent?: boolean;
@@ -302,6 +343,8 @@ function useSwapFormControls({
   walletFee: SocialTransferFee;
   hidden: boolean;
   focusAmount?: boolean;
+  draftSurface?: string;
+  slippageBps?: number;
 }>) {
   const id = useId();
   const [busy, setBusy] = useState(false);
@@ -316,7 +359,7 @@ function useSwapFormControls({
   const inPrice = useSwapSidePrice(inCoin, active);
   const outPrice = useSwapSidePrice(outCoin, active);
   const [fee, setFee] = useState<Readonly<{ key: string | null; mist: string }> | null>(null);
-  const { key, estimate, sealed, seal, live, setPressed } = useSwapQuotes({ active, inCoin, outCoin, atoms, locked, trading });
+  const { key, estimate, sealed, seal, live, setPressed } = useSwapQuotes({ active, inCoin, outCoin, atoms, locked, trading, slippageBps });
   const { nowMs } = live;
   const snapshot = confirmedQuote === null ? live : { ...live, quote: confirmedQuote, loading: false, error: null };
   const keys = useRef(new Map<string, string>());
@@ -378,6 +421,9 @@ function useSwapFormControls({
   const title = tradeTitle(inCoin, outCoin, focus);
   const { action, cost } = swapButtonView(cta, title, balancePending, review !== null, pending, money);
   const verb = progressVerb(title);
+  const funding = useSheetSwapFunding({
+    trading, inCoin, outCoin, atoms, enabled: balanceKnown && active, locked, waiting, surface: draftSurface,
+  });
 
   const flip = () => {
     const out = quote !== null && quote.out_coin === outCoin.coinType && quote.amount_out !== null ? BigInt(quote.amount_out) : null;
@@ -486,12 +532,13 @@ function useSwapFormControls({
     onField(next);
   };
 
+  const walletSwitch = sheetWalletSwitch(draftSurface, inCoin, outCoin, atoms, focus, detail, slippageBps, funding);
   const outReading = usesExactBalance && !outLine.known && (trading.sessionPending === true || outRead.status === "loading");
-  return { inCoin, outCoin, field, onField: changeField, detail, onDetail, onPick, id, locked, successful, pending, inputRef, scope, panels, summary, rows, rateState, hasQuote: quote?.amount_out != null, cost, warning, review, cta: action, verb, quoteError: shownFailure?.message ?? quoteError, flip, press, waiting, balanceKnown, balancePending, inBalanceShown: balance.line.known, outReading, retryBalance, usesExactBalance };
+  return { inCoin, outCoin, field, onField: changeField, detail, onDetail, onPick, id, locked, successful, pending, inputRef, scope, panels, summary, rows, rateState, hasQuote: quote?.amount_out != null, cost: swapFundingCost(inCoin, cost, hidden, funding), warning, review, cta: action, verb, quoteError: funding.canSwitch ? null : shownFailure?.message ?? quoteError, flip, press, waiting, balanceKnown, balancePending, inBalanceShown: balance.line.known, outReading, retryBalance, usesExactBalance, walletSwitch };
 }
 
 export function SwapForm(props: Parameters<typeof useSwapFormControls>[0]) {
-  const { inCoin, outCoin, field, onField, detail, onDetail, onPick, id, locked, successful, pending, inputRef, scope, panels, summary, rows, rateState, hasQuote, cost, warning, review, cta, verb, quoteError, flip, press, waiting, balanceKnown, balancePending, inBalanceShown, outReading, retryBalance, usesExactBalance } = useSwapFormControls(props);
+  const { inCoin, outCoin, field, onField, detail, onDetail, onPick, id, locked, successful, pending, inputRef, scope, panels, summary, rows, rateState, hasQuote, cost, warning, review, cta, verb, quoteError, flip, press, waiting, balanceKnown, balancePending, inBalanceShown, outReading, retryBalance, usesExactBalance, walletSwitch } = useSwapFormControls(props);
   const describedBy = swapDescription({ id, balancePending, warning, review, quoteError, cost });
   const pickPreset = (value: string) => {
     const preset = sellPresetAmount(value, inCoin);
@@ -499,13 +546,14 @@ export function SwapForm(props: Parameters<typeof useSwapFormControls>[0]) {
     onField({ ...preset, typed: groupDigits(exactText({ n: inCoin.atoms, scale: inCoin.decimals })), fixedAtoms: inCoin.atoms });
   };
   const payLabel = !props.persistent ? "Pay" : tradeAction(inCoin, outCoin, props.focus ?? null) === "buy" ? "You pay" : "You sell";
+  const swapAction = <SwapAction describedBy={describedBy} waiting={waiting} sessionPending={props.trading.sessionPending && !balancePending} cta={pending ? { ...cta, enabled: false, busy: false, label: `${verb}…` } : cta} pending={pending} successful={successful} onPress={press} />;
   return (
     <div className={styles.tradeBody} ref={scope}>
       <SwapPair balancePending={balancePending} inBalanceShown={inBalanceShown} outReading={outReading} payLabel={payLabel} receiveLabel={props.persistent ? "You get" : "Receive"} field={field} flip={flip} id={id} inCoin={inCoin} inputRef={inputRef} locked={locked} onField={onField} onPick={onPick} outCoin={outCoin} panels={panels}
         presets={<AmountPresets selected={selectedSellPreset(field, inCoin)} disabled={locked || !balanceKnown} onPick={pickPreset} />} />
       <TradeLine cost={cost} costId={`${id}-cost`} message={quoteError} noticeId={`${id}-notice`} review={review} symbols={[inCoin.symbol, outCoin.symbol]} warning={warning} />
       {retryBalance ? <Button onClick={retryBalance} size="sm" variant="secondary">Retry balance</Button> : null}
-      <SwapAction describedBy={describedBy} waiting={waiting} sessionPending={props.trading.sessionPending && !balancePending} cta={pending ? { ...cta, enabled: false, busy: false, label: `${verb}…` } : cta} pending={pending} successful={successful} onPress={press} />
+      {walletSwitch ? <WalletFundingSwitch {...walletSwitch} fallback={swapAction} /> : swapAction}
       {hasQuote ? <SwapDetails id={`${id}-detail`} open={detail} onDetail={onDetail} rows={rows} rate={summary.price} rateState={rateState} showRate={showSwapRate(field, inCoin, outCoin)} /> : props.walletFee === "wallet" ? <dl className={styles.terms}><div><dt>Network fee</dt><dd>Paid from your SUI</dd></div></dl> : null}
     </div>
   );

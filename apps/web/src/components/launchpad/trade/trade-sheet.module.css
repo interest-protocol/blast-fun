@@ -1,0 +1,4 @@
+/* The curve rail's tokens in the page's colours, and room for the close button beside the title. */
+.sheet { --lp-ink: var(--ink); --lp-muted: var(--muted); --lp-line: var(--hair); --lp-surface: var(--raised); --lp-canvas: var(--card); --lp-up: var(--up); --lp-down: var(--down); --lp-accent-text: var(--ink); --lp-accent: var(--ink); --lp-font-mono: var(--mono); }
+.sheet > :first-child { padding-inline-end: 2.75rem; overflow-wrap: anywhere; }
+.sheet:has([data-compact-sell][data-sell-dock]) > :last-child { margin-block-end: 0; }

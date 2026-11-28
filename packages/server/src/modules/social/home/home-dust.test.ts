@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { HOME_ALMOST_GRADUATED_BPS, HOME_DEFAULT_QUERY } from "@blast/core/modules/social/contracts/home.ts";
+import { HOME_DEFAULT_QUERY } from "@blast/core/modules/social/contracts/home.ts";
 import { curveOf, isBlastDust, raiseUsdOf } from "@blast/server/modules/social/home/coins.ts";
 import { encodeCursor } from "@blast/server/modules/social/home/codec.ts";
 import { decodeHomeCursor, encodeHomeCursor, HOME_DUST_USD, homeOrder, pageOf, passesFilters, type Rankable } from "@blast/server/modules/social/home/rank.ts";
@@ -103,6 +103,19 @@ test("progress, market cap and last trade: highest first, unknown last, ties by 
   assert.deepEqual(walk(rows, "last_trade"), lastTrade);
 });
 
+test("Closest to graduating: curves traded in the last 24 hours lead by progress, so a dormant curve never tops a live one; paging crosses the groups", () => {
+  const rows = [
+    rankable("dormant-ready", { progressBps: 10_000 }),
+    rankable("dormant-high", { progressBps: 9_000 }),
+    rankable("live-low", { progressBps: 500, recentlyTraded: true }),
+    rankable("live-top", { progressBps: 2_829, recentlyTraded: true }),
+    rankable("dormant-low", { progressBps: 100 }),
+  ];
+  const closest = ["live-top", "live-low", "dormant-ready", "dormant-high", "dormant-low"];
+  assert.deepEqual([...rows].sort(homeOrder("progress")).map((row) => row.coinType), closest);
+  assert.deepEqual(walk(rows, "progress"), closest);
+});
+
 test("a cursor carries progress, market cap and last trade, and the idle bit (version 6) only where inputs do not imply it; versions 5 and 4 still read", () => {
   const position = { sort: "progress" as const, coinType: "x::x::X", score: 0, breadth: 0, activity: 0, recency: 0, volume: 0, latestMs: null, launchedMs: 4, holders: null, fdvUsd: 12.5, progressBps: 6_000, marketCapUsd: 99.5, lastTradeMs: 77 };
   // A sale opening soon: active with no participants, so the bit travels.
@@ -111,16 +124,19 @@ test("a cursor carries progress, market cap and last trade, and the idle bit (ve
   assert.deepEqual(decodeHomeCursor(encodeHomeCursor({ ...position, idle: true }), "progress"), position);
   assert.throws(() => decodeHomeCursor(encodeCursor("discover", [5, "progress", "x", 0, 0, 0, 0, 0, null, null, null, null, 10_001, null, null]), "progress"), "progress is at most 100%");
   const v4 = encodeCursor("discover", [4, "relevant", "dust", 903, 0, 0, 0, 0, null, null, 8, 3.2]);
+  // A recently traded curve (Closest to graduating's first group): version 7 carries the bit.
+  assert.deepEqual(decodeHomeCursor(encodeHomeCursor({ ...position, idle: true, recentlyTraded: true }), "progress"), { ...position, idle: true, recentlyTraded: true });
+  assert.throws(() => decodeHomeCursor(encodeCursor("discover", [7, "progress", "x", 0, 0, 0, 0, 0, null, null, null, null, 10, null, null, true, false]), "progress"), "version 7 is only written for a recently traded curve");
   assert.deepEqual(decodeHomeCursor(v4, "relevant"), { sort: "relevant", coinType: "dust", score: 903, breadth: 0, activity: 0, recency: 0, volume: 0, latestMs: null, launchedMs: null, holders: 8, fdvUsd: 3.2 });
 });
 
-test("stages: almost needs a known progress of 60% or more; graduated needs a DEX listing", () => {
+test("stages: almost needs a known progress, however low; graduated needs a DEX listing", () => {
   const candidate = { participants: 0, launchedMs: null, tradable: false, knownDeployer: false, listed: false, progressBps: null as number | null, nowMs: 0 };
   const almost = { ...HOME_DEFAULT_QUERY, stage: "almost" as const };
   const graduated = { ...HOME_DEFAULT_QUERY, stage: "graduated" as const };
-  assert.equal(passesFilters(almost, { ...candidate, progressBps: HOME_ALMOST_GRADUATED_BPS }), true);
-  assert.equal(passesFilters(almost, { ...candidate, progressBps: HOME_ALMOST_GRADUATED_BPS - 1 }), false);
-  assert.equal(passesFilters(almost, candidate), false, "a curve with an unknown target is not almost graduated");
+  assert.equal(passesFilters(almost, { ...candidate, progressBps: 2_829 }), true, "no fixed line: a curve at 28% lists");
+  assert.equal(passesFilters(almost, { ...candidate, progressBps: 0 }), true);
+  assert.equal(passesFilters(almost, candidate), false, "a curve with an unknown target is not on Closest to graduating");
   assert.equal(passesFilters(almost, { ...candidate, listed: true }), false);
   assert.equal(passesFilters(graduated, { ...candidate, listed: true }), true);
   assert.equal(passesFilters(graduated, { ...candidate, progressBps: 9_000 }), false, "a curve still filling is not graduated");

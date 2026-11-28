@@ -31,8 +31,8 @@ export type TradeWindow = Readonly<{
   trades: number;
 }>;
 
-/** Activity totals blast-infra keeps for a pool or a coin. */
-export type PoolStats = Readonly<{ day: TradeWindow; all: TradeWindow; holders: number }>;
+/** Activity totals blast-infra keeps for a pool or a coin; `holders` is null when the coin's holder snapshot is incomplete. */
+export type PoolStats = Readonly<{ day: TradeWindow; all: TradeWindow; holders: number | null }>;
 
 /** `GET /v1/coins/{coin_type}`: the coin across its pools; market values are its current pool's. */
 export type CoinSummary = Readonly<{
@@ -79,7 +79,7 @@ export function parsePoolStats(summary: Record<string, unknown>, field: string):
   return {
     day: parseWindow(windows["24h"], `${field}.windows.24h`),
     all: parseWindow(windows.all, `${field}.windows.all`),
-    holders: parseCount(summary.holders, `${field}.holders`),
+    holders: summary.holders === null ? null : parseCount(summary.holders, `${field}.holders`),
   };
 }
 

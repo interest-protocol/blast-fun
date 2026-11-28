@@ -11,7 +11,7 @@ import type { SocialTradeQuote } from "@blast/core/modules/social/contracts/trad
 import { priceText, type WalletCoinView } from "./coin-model";
 
 import { FIXTURE_COINS, FIXTURE_MORE_COINS } from "../../../../test/fixtures/social/coins/coins-fixture-model.ts";
-import { canTrade, ECOSYSTEM_COIN_VIEWS, costSentence, decodeTradeAction, encodeTradeAction, FINDING_PRICE, flippedField, fullName, impactUnavailableText, noMatchText, pairFor, pickedPair, pickerFigures, pickerGroups, pxRatio, quoteWithUsd, ratioText, salePair, swapCta, swapPanels, swapPayoutWarning, swapQuoteRequest, tradableCoinView, tradeAction, tradeLabel, tradeOpening, tradeTitle, txRows, txSummary, usdText } from "./swap-model";
+import { canTrade, curveBuyOf, ECOSYSTEM_COIN_VIEWS, costSentence, decodeTradeAction, encodeTradeAction, FINDING_PRICE, flippedField, fullName, impactUnavailableText, noMatchText, pairFor, pickedPair, pickerFigures, pickerGroups, pxRatio, quoteWithUsd, ratioText, salePair, swapCta, swapPanels, swapPayoutWarning, swapQuoteRequest, tradableCoinView, tradeAction, tradeLabel, tradeOpening, tradeTitle, txRows, txSummary, usdText } from "./swap-model";
 import { SUI_COIN_TYPE, USDC_COIN_TYPE } from "@blast/core/lib/sui/coin-types.ts";
 
 /**
@@ -257,7 +257,7 @@ test("price impact: the quote's, with the gate's amber above 3% and red above 10
   assert.equal(impactUnavailableText(null), "—");
 });
 
-test("R3-33-AC-7: the network fee tells the truth — Paid by Blast while sponsored; a wallet the server answers wallet-pays (a session past the daily cap) pays from its SUI", () => {
+test("R3-33-AC-7: the network fee tells the truth — Paid by Blast while sponsored; a wallet the server answers wallet-pays pays from its SUI", () => {
   const session = quoteOf({ network_fee: { payer: "wallet", label: "Paid from your SUI", estimate_mist: "2565136" } });
   assert.equal(txRows({ outCoin: USDC, quote: session, walletFee: "wallet" })[2]!.value, "Paid from your SUI");
   assert.equal(txSummary({ inCoin: SUI, outCoin: USDC, quote: session, walletFee: "wallet" }).gas, "≈ 0.00257\u00a0SUI", "never `Free`");
@@ -504,4 +504,15 @@ test("amounts stay on one line while coin tickers can wrap", () => {
   assert.doesNotMatch(css.match(/^\.tokSymbol \{[^}]*\}/m)![0], /ellipsis|nowrap|overflow: hidden/, "a chip's ticker wraps, never cut");
   // The rate stays readable while it is asked again.
   assert.match(css, /\.txSum \.pending \{ color: var\(--muted\); \}/);
+});
+
+test("a Home curve Buy keeps its launch through the shell action and opens the curve sheet; a Sell or a plain coin does not", () => {
+  const coin = { coin_type: "0x1::c::C", symbol: "C", name: "C", decimals: 9, icon_url: null, usd_price: null, presale_id: null, launch_id: "0xlaunch" };
+  const action = decodeTradeAction(encodeTradeAction({ side: "buy", coin }));
+  assert.deepEqual(curveBuyOf(action), { launchId: "0xlaunch", coin });
+  assert.equal(curveBuyOf(decodeTradeAction(encodeTradeAction({ side: "sell", coin }))), null);
+  assert.equal(curveBuyOf(decodeTradeAction(encodeTradeAction({ side: "buy", coin: { ...coin, launch_id: undefined } }))), null);
+  for (const bad of [{ launch_id: 7 }, { in_presale: "yes" }, { quote_symbol: null }]) {
+    assert.equal(decodeTradeAction(JSON.stringify({ side: "buy", coin: { ...coin, ...bad } })), null);
+  }
 });

@@ -38,7 +38,7 @@ await admin.query(`
   INSERT INTO blast_infra_fixture.coin_metadata VALUES ('${SUI}', 'Sui', 'SUI', '', NULL, 9) ON CONFLICT DO NOTHING;
   INSERT INTO blast_infra_fixture.prices VALUES ('${SUI}', 3, ${now}, 'pyth') ON CONFLICT DO NOTHING;
   -- Live curves and migrated curves with a DEX pool and a launch vault. Live reserves spread evenly from 0 to 99%
-  -- of target, so about 40% of the curves land on Almost graduated: a pessimistic bound on that read.
+  -- of target; Closest to graduating reads every live curve and keeps the top HOME_CLOSEST_CURVES.
   CREATE TEMP TABLE bench_coins AS
     SELECT i, (${hex("'c'", "i")}) || '::coin::C' || i AS coin_type, i <= ${LIVE} AS live FROM generate_series(1, ${LIVE + MIGRATED}) i;
   INSERT INTO blast_infra_fixture.coin_metadata SELECT coin_type, 'Coin ' || i, 'C' || i, '', NULL, 6 FROM bench_coins;

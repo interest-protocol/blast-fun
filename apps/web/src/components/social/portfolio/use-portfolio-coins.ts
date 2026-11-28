@@ -12,18 +12,20 @@ import { useShellPrefs, setShellPref } from "#web/components/blast-ui/use-shell-
 import { pageCoins } from "./portfolio-model";
 import { usePortfolioState } from "./use-portfolio-state";
 
-export function usePortfolioCoins(getAccessToken: AccessTokenSource, enabled: boolean) {
+export function usePortfolioCoins(getAccessToken: AccessTokenSource, enabled: boolean, wallet?: string, sharedSearch?: string) {
   const { hideSmallBalances } = useShellPrefs();
   const client = useAppQueryClient();
-  const [controls, setControls] = usePortfolioState("coins", { search: "", page: 1 });
-  const { search, page } = controls;
-  const setPage = (page: number) => setControls(current => ({ ...current, page }));
+  const [controls, setControls] = usePortfolioState(wallet ? `coins:${wallet}` : "coins", { search: "", page: 1 });
+  const search = sharedSearch ?? controls.search;
+  const page = search === controls.search ? controls.page : 1;
+  const setPage = (page: number) => setControls({ search, page });
   const term = useDebouncedValue(search, 200).trim();
   const read = useQuery({
-    ...portfolioCoinsQuery(getAccessToken, page, term, hideSmallBalances),
+    ...portfolioCoinsQuery(getAccessToken, page, term, hideSmallBalances, undefined, wallet),
     enabled: enabled && search.trim() === term,
     refetchInterval: (query) => pollInterval(60_000, query),
-    placeholderData: (previous, previousQuery) => previousQuery && isPortfolioCoinsFilter(previousQuery.queryKey, term, hideSmallBalances) ? previous : undefined,
+    placeholderData: (previous, previousQuery) => previousQuery && isPortfolioCoinsFilter(previousQuery.queryKey, term, hideSmallBalances)
+      && previousQuery.queryKey[8] === wallet ? previous : undefined,
   }, client);
   const waiting = search.trim() !== term || read.isPending || read.isPlaceholderData;
   return {

@@ -115,12 +115,13 @@ test("withdraw: the design's button and address lines in order; OA-13 own-addres
   assert.equal(check({ amountText: "1,000", touched: true }).label, "More than you have");
   assert.equal(check({ amountText: "100", touched: true }).label, "Enter an address");
   const bad = check({ amountText: "100", to: "0x12", touched: true });
-  assert.deepEqual([bad.label, bad.message, bad.bad], ["Check the address", WITHDRAW_BAD_ADDRESS, true]);
+  assert.deepEqual([bad.label, bad.message, bad.bad, bad.recipientValid], ["Check the address", WITHDRAW_BAD_ADDRESS, true, false]);
   const ok = check({ amountText: "100", to: A3, touched: true });
   assert.deepEqual([ok.label, ok.message, ok.bad, ok.ready, ok.atoms], ["Withdraw 100\u00a0USDC", WITHDRAW_HINT, false, true, 100_000_000n]);
   assert.equal(check({ amountText: "100", to: ` ${A3.toUpperCase().replace("0X", "0x")} `, touched: true }).ready, true, "either case, trimmed");
   const own = check({ amountText: "100", to: FIXTURE_WALLET_ADDRESS, touched: true });
-  assert.deepEqual([own.label, own.message, own.ready], ["Check the address", WITHDRAW_OWN_ADDRESS, false]);
+  assert.deepEqual([own.label, own.message, own.ready, own.recipientValid], ["Check the address", WITHDRAW_OWN_ADDRESS, false, true]);
+  assert.equal(check({ amountText: "100", to: FIXTURE_WALLET_ADDRESS, own: A3, suiAtoms: 0n }).ready, true);
   // A sale coin shows its dollar value and its symbol.
   const kstl = check({ coin: KSTL, amountText: "1,000", to: A3, touched: true });
   assert.deepEqual([kstl.value, kstl.label], ["≈ $2.10", "Withdraw 1,000\u00a0KSTL"]);

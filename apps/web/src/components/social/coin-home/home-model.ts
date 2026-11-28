@@ -2,6 +2,7 @@ import { coinPagePath } from "@blast/core/modules/launchpad-coin/page-key.ts";
 import { ago, bxSigned, fillPercent, qs, qsRaised, qm, raisedShort, short, shortAddress, signPct, timeUntil, usd0 } from "@blast/core/web/format.ts";
 import { amtExact, atLeastPow10, bxUsdExact, compareExact, exactAtoms, exactDecimal, groupedExact, numShortExact, shortQtyExact, unitsAt } from "@blast/core/web/exact-amount.ts";
 import type { FeedItemActor } from "@blast/core/web/contracts/items.ts";
+import type { SocialTradeCoin } from "@blast/core/web/contracts/trades.ts";
 import { HOME_RECENT_BUY_MIN_USD, type HomeTapeEvent, type HomeActivity, type HomeAmount, type HomeCoin, type HomeEvent, type HomeKind, type HomeParticipant, type HomeRecentBuy, type HomeSide, type HomeWindow } from "@blast/core/web/contracts/home.ts";
 import type { DiscoveryResponse, DiscoveryRow } from "@blast/core/modules/launchpad-discovery/rows.ts";
 import { HOME_BONDING_ROWS } from "@blast/core/modules/launchpad-discovery/bonding.ts";
@@ -404,16 +405,36 @@ export function volumeLabel(window: HomeWindow, text: string | null, scope?: Hom
   return `${window} volume: ${partial ? text.slice(0, -1) : text}${detail ? ` (${detail})` : ""}`;
 }
 
-/** Use the venue total when present. Label the narrower fallback from tracked trades. */
-export function marketVolume(coin: Pick<HomeCoin, "activity" | "dex_volume">) {
+/** The one 24h volume (`dex_volume`, or a `coin_stats` frame's `volume_24h`) as a tight figure: `$1.2K`, `$370+` on a partial sum. */
+export function usdVolumeText(volume: Readonly<{ usd: string; usd_complete: boolean }>): string {
+  return `${compactUsdText(volume.usd)}${volume.usd_complete ? "" : "+"}`;
+}
+
+/**
+ * Use the coin's one volume when present (curve trades plus DEX swaps); every page shows it this way.
+ * Label the narrower fallback from tracked trades.
+ */
+export function marketVolume(coin: Pick<HomeCoin, "activity"> & Readonly<{ dex_volume?: Readonly<{ usd: string | null; usd_complete: boolean }> | null }>) {
   const { activity, dex_volume: volume } = coin;
   if (volume) {
-    const text = volume.usd === null ? null : `${compactUsdText(volume.usd)}${volume.usd_complete ? "" : "+"}`;
+    const text = volume.usd === null ? null : usdVolumeText({ usd: volume.usd, usd_complete: volume.usd_complete });
     return { text, label: volumeLabel(activity.window, text) };
   }
   const hasAmounts = activity.bought.length + activity.sold.length + activity.committed.length > 0;
   const text = hasAmounts ? volumeText(activity) : null;
   return { text, label: volumeLabel(activity.window, text, activity.scope) };
+}
+
+/**
+ * A coin page's 24h volume by Home's rule: a newer `coin_stats` frame's `volume_24h` once the stream sends one,
+ * else Home's read of the coin (`marketVolume`). Null when neither has a figure.
+ */
+export function dayVolumeText(
+  coin: Parameters<typeof marketVolume>[0] | null,
+  live: Readonly<{ volumeUsd: string | null; volumeComplete: boolean }> | null,
+): string | null {
+  if (live?.volumeUsd != null) return usdVolumeText({ usd: live.volumeUsd, usd_complete: live.volumeComplete });
+  return coin ? marketVolume(coin).text : null;
 }
 
 /** A portfolio's value for a tight row: `$1.2K`; null when it is not shown. */
@@ -692,4 +713,32 @@ function saleStatus(coin: HomeCoin, sale: NonNullable<HomeCoin["sale"]>, nowMs: 
   if (lifecycle === "funded") return { text: "Funded", fill: 100 };
   if (lifecycle === "cancelled") return { text: "Cancelled" };
   return { text: lifecycle.charAt(0).toUpperCase() + lifecycle.slice(1) };
+}
+
+/** How a Home row's Buy trades: on the curve, in the swap, or by joining the open sale; null draws no Buy. */
+export type HomeBuyRoute = "curve" | "swap" | "join";
+
+/**
+ * The route a row's Buy opens. A curve coin buys on its live curve, a listed coin the
+ * swap can trade buys in the swap (the server's `tradable`), and an open sale is joined
+ * before it ends. Anything else (an opening round, a curve ready to migrate, an upcoming,
+ * ended, funded or cancelled sale) has nothing to buy right now, so it shows no Buy.
+ */
+export function homeBuyRoute(coin: HomeCoin, nowMs: number): HomeBuyRoute | null {
+  if (coin.curve?.lifecycle === "live" && coin.launch_id !== null) return "curve";
+  if (coin.lifecycle === "migrated") return coin.tradable ? "swap" : null;
+  const sale = coin.sale;
+  if (!sale || coin.presale_id === null) return null;
+  return saleLifecycleAt(coin.lifecycle, sale.start_ms, nowMs) === "open" && sale.end_ms > nowMs ? "join" : null;
+}
+
+/**
+ * The row's coin as the trade sheet names it. A curve buy carries its launch, so the sheet
+ * mounts the coin page's curve rail; an open sale carries its quote, so the sheet joins it.
+ */
+export function tradeCoinOf(coin: HomeCoin, route: HomeBuyRoute): SocialTradeCoin {
+  const base = { coin_type: coin.coin_type, symbol: coin.symbol, name: coin.name, decimals: coin.decimals, icon_url: coin.icon_url, usd_price: coin.price_usd, presale_id: coin.presale_id };
+  if (route === "curve" && coin.launch_id !== null) return { ...base, launch_id: coin.launch_id };
+  if (route === "join") return { ...base, in_presale: true, quote_symbol: coin.quote.symbol, quote_type: coin.quote.type };
+  return base;
 }

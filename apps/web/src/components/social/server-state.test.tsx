@@ -613,7 +613,7 @@ test("vesting reads refresh at the cliff and stop polling after the schedule is 
   const options = mePresalesQuery(async () => null);
   const query = client.getQueryCache().build<SocialMePresales, Error, SocialMePresales, ReturnType<typeof queryKeys.me.presales>>(client, options);
   const sale = fixtureDetail("kstl").presale;
-  const vesting = { schedule_id: "v", presale: { ...sale, status: "trading" as const, fill_pct: 100, launched_ms: now, first_unlock_ms: now }, total: "100", claimed: "0", claimable: "0", claimable_usd: null, vested_pct: 0, start_ms: now - 1_000, cliff_end_ms: now + 2_000, end_ms: now + 60_000 };
+  const vesting = { schedule_id: "v", presale: { ...sale, status: "trading" as const, fill_pct: 100, launched_ms: now, first_unlock_ms: now }, symbol: sale.symbol, total: "100", claimed: "0", claimable: "0", claimable_usd: null, vested_pct: 0, start_ms: now - 1_000, cliff_end_ms: now + 2_000, end_ms: now + 60_000 };
   const empty = { created: [], positions: [], coins: [], watchlist: [], vestings: [] };
   assert.equal(typeof options.refetchInterval, "function");
   if (typeof options.refetchInterval !== "function") return;

@@ -70,7 +70,7 @@ function homeReadCaches() {
     // (57014 at the 2 s statement timeout) does not reach readers while that
     // page is under 30 s old.
     discover: createReadCache<HomeCoinsPage>(HOME_PAGE_READ_TTL_MS, 64, Date.now, { ms: HOME_DISCOVER_STALE_MS, label: "social.home.discover" }),
-    // Each holds a whole window's rows: two windows times the few flag sets clients send, and a small Almost graduated set beside each.
+    // Each holds a whole window's rows: two windows times the few flag sets clients send, and a Closest to graduating set (at most HOME_CLOSEST_CURVES) beside each.
     discoverBase: createReadCache<HomeDiscoverBase>(HOME_PAGE_READ_TTL_MS, 12),
     coins: createReadCache<HomeCoinsByIds>(HOME_PAGE_READ_TTL_MS, 64),
     portfolios: createReadCache<ReadonlyMap<string, TraderPortfolioRead>>(HOME_PAGE_READ_TTL_MS, 64),

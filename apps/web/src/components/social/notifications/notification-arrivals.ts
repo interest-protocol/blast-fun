@@ -1,24 +1,19 @@
-import { isNotificationId, type SocialNotification } from "@blast/core/web/contracts/notifications.ts";
+import { isNotificationId } from "@blast/core/web/contracts/notifications.ts";
 
-/** Session delivery identities, independent of counts and read-state changes. */
+/**
+ * Spots new alerts from the newest unread ID alone. The first answer, and any
+ * answer while not announcing, only moves the starting point. An ID above
+ * every ID seen so far is an arrival, even when the unread count stays the
+ * same (one alert read while another arrives). Reading the newest alert lowers
+ * the ID, which is never an arrival. Nor is an alert stored with an ID below
+ * one already seen (it shows in the count and the list, without a pop).
+ */
 export function notificationArrivals() {
-  let baseline: bigint | null = null;
-  let highest = 0n;
-  const seen = new Set<string>();
-  return (items: readonly Pick<SocialNotification, "id" | "read">[], announce: boolean): boolean => {
-    const valid = items.filter((item) => isNotificationId(item.id));
-    highest = valid.reduce((max, item) => BigInt(item.id) > max ? BigInt(item.id) : max, highest);
-    if (baseline === null || !announce) {
-      baseline = highest;
-      seen.clear();
-      return false;
-    }
-    let arrived = false;
-    for (const item of valid) {
-      if (BigInt(item.id) <= baseline || seen.has(item.id)) continue;
-      seen.add(item.id);
-      if (!item.read) arrived = true;
-    }
+  let highest: bigint | null = null;
+  return (newestUnreadId: string | null, announce: boolean): boolean => {
+    const newest = newestUnreadId !== null && isNotificationId(newestUnreadId) ? BigInt(newestUnreadId) : null;
+    const arrived = announce && highest !== null && newest !== null && newest > highest;
+    if (highest === null || (newest !== null && newest > highest)) highest = newest ?? 0n;
     return arrived;
   };
 }

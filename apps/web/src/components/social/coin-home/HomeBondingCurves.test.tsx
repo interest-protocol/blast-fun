@@ -296,3 +296,15 @@ test("Home shows Known deployer beside marked curve and V1 coins", () => {
     "$C01", "$C0b", "$C0d", "$MANIFEST", "$Wheels", "$BLAST", "$HELMET",
   ]);
 });
+
+test("with no curve at 60%, Almost graduated leaves the card: no empty column, no switch option", () => {
+  const client = new QueryClient();
+  client.setQueryData(bondingCatalogQuery("bonding", "newest", "", null).queryKey, page([curve("01", 2_800)]));
+  client.setQueryData(bondingCatalogQuery("bonding", "progress", "", null).queryKey, page([curve("01", 2_800)]));
+  client.setQueryData(graduatedMarketCapQuery().queryKey, page([]));
+  const html = renderToStaticMarkup(<QueryProvider client={client}><HomeBondingCurves nowMs={NOW} /></QueryProvider>);
+  const words = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+  assert.deepEqual(Array.from(JSDOM.fragment(html).querySelectorAll("h3"), (heading) => heading.textContent), ["New", "Graduated"]);
+  assert.doesNotMatch(words, /Almost graduated|60% yet/);
+  assert.match(words, /\$C01 launched 2m ago 28% to graduation/, "the 28% curve stays in New");
+});

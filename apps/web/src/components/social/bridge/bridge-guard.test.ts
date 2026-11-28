@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import type { Quote } from "@mayanfinance/swap-sdk";
+import { addresses, type Quote } from "@mayanfinance/swap-sdk";
 
-import { guardQuote, quoteFacts, type BridgeRequest } from "./bridge-guard.ts";
+import { assertSendTarget, checkQuote, guardQuote, pickRoute, quoteFacts, type BridgeRequest } from "./bridge-guard.ts";
 import { CHAINS, DESTINATIONS, quoteRows } from "./bridge-model.ts";
 
 // Live Mayan quotes captured 2026-11-26 with placeholder addresses.
@@ -49,7 +49,7 @@ test("a matching Blink quote passes for an EVM token and for native SOL", () => 
 
 test("the guard refuses every quote that is not exactly what was asked", () => {
   const base = QUOTES.baseUsdcToSui;
-  assert.equal(reason({ ...base, type: "SWIFT" }, BASE_USDC), "not a Blink quote");
+  assert.equal(reason({ ...base, type: "SWIFT" }, BASE_USDC), "unsupported route");
   assert.equal(reason({ ...base, blinkQuote: undefined }, BASE_USDC), "no Blink order");
   assert.equal(reason(withOrder(base, (_, crossChain) => delete crossChain.quoteHash), BASE_USDC), "no Blink order");
   assert.equal(reason({ ...base, gasless: true }, BASE_USDC), "gasless order");
@@ -84,6 +84,8 @@ test("a bound quote must protect the minimum shown and expire in the future", ()
   assert.equal(reason(subAtom, SOLANA_SOL), "wrong minimum output");
   assert.equal(reason(withOrder(base, (_params, order) => { order.expiresAt = "unknown"; }), BASE_USDC), "unreadable Blink order");
   assert.equal(reason(base, BASE_USDC, BEFORE_EXPIRY + 24 * 60 * 60 * 1000), "expired");
+  assert.equal(reason(base, BASE_USDC, Date.parse("2026-11-26T08:40:42.863Z")), "expired", "no time left to sign");
+  assert.equal(reason(base, BASE_USDC, Date.parse("2026-11-26T08:40:42Z")), null);
 });
 
 test("quote facts feed the rows: amount out, floor, fee, time", () => {
@@ -94,4 +96,114 @@ test("quote facts feed the rows: amount out, floor, fee, time", () => {
     fee: "$0.03",
     eta: "About 10\u00a0s",
   });
+});
+
+/** Live Mayan answers captured 2026-11-28 with the same placeholders: Fast MCTP, then MCTP. */
+const live = (pair: string) => JSON.parse(readFileSync(new URL(`../../../../test/fixtures/social/bridge/all-routes-${pair}.json`, import.meta.url), "utf8")) as [Quote, Quote];
+const LIVE_NOW = Date.parse("2026-11-28T11:10:00Z");
+
+test("Fast MCTP is picked first, then MCTP, then Blink, and each works alone", () => {
+  const [fast, mctp] = live("base-usdc-sui");
+  const blink = QUOTES.baseUsdcToSui;
+  assert.equal(pickRoute([blink, mctp, fast], BASE_USDC, LIVE_NOW)?.type, "FAST_MCTP");
+  assert.equal(pickRoute([blink, mctp], BASE_USDC, LIVE_NOW)?.type, "MCTP");
+  assert.equal(pickRoute([blink], BASE_USDC, LIVE_NOW)?.type, "BLINK");
+  assert.equal(pickRoute([{ ...fast, type: "SWIFT" }], BASE_USDC, LIVE_NOW), undefined);
+  // A route that fails a check gives way to the next one.
+  assert.equal(pickRoute([{ ...fast, effectiveAmountIn64: "1" }, mctp], BASE_USDC, LIVE_NOW)?.type, "MCTP");
+});
+
+test("the same checks pass two chains and two coins with no per-coin code", () => {
+  const ethAsk: BridgeRequest = { ...BASE_USDC, token: CHAINS.base.tokens[0], amountIn64: "10000000000000000" };
+  for (const [pair, ask] of [["base-eth-sui", ethAsk], ["solana-sol-usdc", SOLANA_SOL]] as const) {
+    for (const quote of live(pair)) assert.equal(reason(quote, ask, LIVE_NOW), null, `${pair} ${quote.type}`);
+  }
+});
+
+test("an MCTP quote is refused when it is not what was asked", () => {
+  const [fast] = live("base-usdc-sui");
+  const refusal = (change: Partial<Quote>, ask = BASE_USDC) => reason({ ...fast, ...change }, ask, LIVE_NOW);
+  assert.equal(refusal({ toChain: "base" }), "wrong chains");
+  assert.equal(refusal({}, { ...BASE_USDC, token: CHAINS.base.tokens[0] }), "wrong source token");
+  assert.equal(refusal({}, { ...BASE_USDC, amountIn64: "20000001" }), "wrong amount");
+  assert.equal(refusal({}, { ...BASE_USDC, to: DESTINATIONS[1]! }), "wrong destination coin");
+  assert.equal(refusal({ referrerBps: 5 }), "unexpected referrer");
+  assert.equal(refusal({ gasDrop: 1 }), "unexpected gas drop");
+  assert.equal(refusal({ gasless: true }), "gasless order");
+  assert.equal(refusal({ bridgeFee: 0.001 }), "unexpected bridge fee");
+  assert.equal(refusal({ minReceived: 0 }), "wrong minimum output");
+  assert.equal(refusal({ minReceived: fast.expectedAmountOut + 1 }), "wrong minimum output");
+  assert.equal(refusal({ slippageBps: 501 }), "wrong slippage");
+  assert.equal(refusal({ deadline64: String(LIVE_NOW / 1000) }), "expired");
+  assert.equal(refusal({ deadline64: String(LIVE_NOW / 1000 + 60) }), "expired", "no time left to sign");
+  assert.equal(refusal({ deadline64: String(LIVE_NOW / 1000 + 61) }), null);
+  for (const blastAddress of ["", "0x0", "not an address"]) assert.equal(refusal({}, { ...BASE_USDC, blastAddress }), "wrong recipient", blastAddress);
+  // The card prices a quote before there is a Blast address.
+  assert.deepEqual(checkQuote(fast, BASE_USDC, LIVE_NOW), { ok: true });
+});
+
+test("an auction order must sign the chosen coin's own id", () => {
+  const other = `0x${"22".repeat(32)}`;
+  const [fast, mctp] = live("base-usdc-sui");
+  for (const [quote, signed] of [[fast, "currencyId"], [mctp, "verifiedAddress"]] as const) {
+    assert.equal(quote.hasAuction, true);
+    for (const id of [other, undefined]) {
+      assert.equal(reason({ ...quote, toToken: { ...quote.toToken, [signed]: id } } as Quote, BASE_USDC, LIVE_NOW), "wrong destination coin", `${quote.type} ${id}`);
+    }
+  }
+});
+
+test("the fee adds Mayan's three parts, and a missing part shows no figure", () => {
+  const usdc = CHAINS.base.tokens[1];
+  const [direct] = live("base-usdc-usdc");
+  // A direct USDC bridge loses only the fee: what is sent less what is expected.
+  assert.ok(Math.abs(quoteFacts(direct, usdc).fee! - (20 - direct.expectedAmountOut)) <= 0.000002);
+  const [swap] = live("base-eth-sui");
+  assert.ok(Math.abs(quoteFacts(swap, CHAINS.base.tokens[0]).fee! - 0.039379) < 0.000001);
+  for (const missing of ["clientRelayerFeeSuccess", "protocolFeeUsd", "circleMaxFee64"]) {
+    assert.equal(quoteFacts({ ...direct, [missing]: undefined } as Quote, usdc).fee, null, missing);
+  }
+  assert.equal(quoteRows(quoteFacts(direct, usdc), usdc, DESTINATIONS[1]!).fee, "$0.02");
+});
+
+test("what the SDK signs must cover the minimum the card shows", () => {
+  const unsigned = "unsigned minimum output";
+  // An auction order signs its own minimum.
+  const [auction] = live("base-eth-sui");
+  const ethAsk: BridgeRequest = { ...BASE_USDC, token: CHAINS.base.tokens[0], amountIn64: "10000000000000000" };
+  assert.equal(reason({ ...auction, minAmountOut: auction.minReceived - 0.000001 }, ethAsk, LIVE_NOW), unsigned);
+  // The SDK signs eight places, so a ninth the card shows is not covered.
+  const tiny = (amount: number) => reason({ ...auction, minAmountOut: amount, minReceived: amount }, ethAsk, LIVE_NOW);
+  assert.equal(tiny(0.000123456), unsigned);
+  assert.equal(tiny(0.00012345), null);
+  assert.equal(tiny(12.345678912), null, "a ninth place the card does not show");
+  assert.equal(reason({ ...auction, toToken: { ...auction.toToken, decimals: 6 } }, ethAsk, LIVE_NOW), unsigned);
+  // Without an auction, only USDC arrives: what is bridged less the signed fees.
+  assert.equal(reason({ ...auction, hasAuction: false }, ethAsk, LIVE_NOW), unsigned);
+  const [direct] = live("base-usdc-usdc");
+  const ask: BridgeRequest = { ...BASE_USDC, to: DESTINATIONS[1]! };
+  assert.equal(direct.hasAuction, false);
+  assert.equal(reason(direct, ask, LIVE_NOW), null);
+  for (const change of [{ redeemRelayerFee: 1 }, { redeemRelayerFee64: "1000000" }, { circleMaxFee64: "1000000" }]) {
+    assert.equal(reason({ ...direct, ...change }, ask, LIVE_NOW), unsigned, Object.keys(change)[0]);
+  }
+  // A swap into the route's input coin counts only the swap's signed floor.
+  const swapped = { ...direct, fastMctpInputContract: `0x${"22".repeat(20)}` };
+  assert.equal(reason({ ...swapped, minMiddleAmount: undefined }, ask, LIVE_NOW), unsigned);
+  assert.equal(reason({ ...swapped, minMiddleAmount: direct.minReceived }, ask, LIVE_NOW), unsigned);
+  assert.equal(reason({ ...swapped, minMiddleAmount: 20 }, ask, LIVE_NOW), null);
+  // The SDK cuts the swap floor to whole atoms, so a part of one never counts.
+  const floor = (minMiddleAmount: number) => reason({ ...swapped, minMiddleAmount, minReceived: 0.010001, redeemRelayerFee: 0.01, redeemRelayerFee64: "10000", circleMaxFee64: "0" }, ask, LIVE_NOW);
+  assert.equal(floor(0.0200009), unsigned);
+  assert.equal(floor(0.020001), null);
+});
+
+test("an EVM send of an MCTP route goes only to Mayan's Forwarder", () => {
+  const other = `0x${"22".repeat(20)}`;
+  for (const quote of live("base-usdc-sui")) {
+    assertSendTarget(quote, addresses.MAYAN_FORWARDER_CONTRACT);
+    assert.throws(() => assertSendTarget(quote, other), /Unexpected (FAST_)?MCTP contract/);
+    assert.throws(() => assertSendTarget(quote, null), /Unexpected (FAST_)?MCTP contract/);
+  }
+  assertSendTarget(QUOTES.baseUsdcToSui, other);
 });

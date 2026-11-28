@@ -466,7 +466,7 @@ test("trade rows lead with a short age that ticks and keeps the exact time", asy
   const container = document.createElement("div");
   container.innerHTML = html;
   document.body.append(container);
-  t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: new Date(2026, 0, 1, 23, 59, 59) });
+  t.mock.timers.enable({ apis: ["Date", "setTimeout", "setInterval"], now: new Date(2026, 0, 1, 23, 59, 59) });
   const errors: unknown[] = [];
   const root = await act(async () => hydrateRoot(container, element, { onRecoverableError: (error) => errors.push(error) }));
   t.after(async () => {
@@ -487,8 +487,14 @@ test("trade rows lead with a short age that ticks and keeps the exact time", asy
 
   await act(async () => { t.mock.timers.tick(1_000); });
   assert.deepEqual(labels(), ["7s", "1m", "6h"]);
+  // Away from the tab for two days, then back: the ages are right at once.
+  let visibility = "hidden";
+  Object.defineProperty(document, "visibilityState", { get: () => visibility, configurable: true });
+  t.after(() => { delete (document as { visibilityState?: string }).visibilityState; });
+  await act(async () => { document.dispatchEvent(new window.Event("visibilitychange")); });
   await act(async () => {
     t.mock.timers.setTime(new Date(2026, 0, 3, 12).getTime());
+    visibility = "visible";
     document.dispatchEvent(new window.Event("visibilitychange"));
   });
   assert.deepEqual(labels(), ["2d", "2d", "2d"]);

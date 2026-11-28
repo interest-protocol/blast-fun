@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 
 import { FeelProvider } from "#web/components/blast-feel/index.ts";
 import { BlastUiRoot } from "#web/components/blast-ui/BlastUiRoot.tsx";
+import { serverTradeAvailability, type CurveTradeSetup } from "#web/components/launchpad/trade/server-availability.ts";
 import { PresaleProviders } from "#web/components/presale/providers/PresaleProviders.tsx";
 import { selectedAccountSession } from "#web/components/social/account-selection.ts";
 import { BridgeProvider } from "#web/components/social/bridge/bridge-context.tsx";
@@ -21,12 +22,12 @@ export default async function AppLayout({
   rail,
   banner,
 }: Readonly<{ children: ReactNode; rail: ReactNode; banner: ReactNode }>) {
-  const { social } = await requestLaunchFlags();
+  const { social, trading } = await requestLaunchFlags();
   if (!social) {
     return children;
   }
 
-  const { presale: config, presaleDeployment, bridge, bridgeFastMctp } = webConfig();
+  const { presale: config, presaleDeployment, bridge } = webConfig();
   const requestHeaders = await headers();
   const nonce = requestHeaders.get("x-nonce");
   const initialSession = await readHeaderSession(
@@ -34,10 +35,16 @@ export default async function AppLayout({
     backendPrivateServerRead,
     config.privyAppId.status === "available",
   );
+  // Request-local, no I/O: a Home row's Buy mounts the coin page's curve rail with it.
+  const curveTrade: CurveTradeSetup = {
+    availability: serverTradeAvailability(webConfig(), trading),
+    connection: { privyAppId: webConfig().privyAppId, nonce: nonce ?? "" },
+  };
 
   const shell = (
     <SocialShell
       banner={banner}
+      curveTrade={curveTrade}
       initialSession={initialSession}
       presaleDeployed={mainnetIdentity(presaleDeployment) !== null}
       rail={rail}
@@ -51,7 +58,7 @@ export default async function AppLayout({
       <FeelProvider>
         <PresaleProviders config={config} nonce={nonce} privySession={hasPrivySessionCookie(requestHeaders)}>
           <SocialSession initialSelection={selectedAccountSession(requestHeaders.get("cookie") ?? "")}>
-            <BridgeProvider enabled={bridge} fastMctp={bridgeFastMctp}>
+            <BridgeProvider enabled={bridge}>
               {shell}
             </BridgeProvider>
           </SocialSession>

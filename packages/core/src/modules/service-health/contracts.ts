@@ -2,6 +2,8 @@ import { z } from "zod";
 
 export const HEALTH_POLL_MS = 15_000;
 export const HEALTH_STALE_MS = 45_000;
+/** How long one health answer is shared: by each server process and, for what is left of it, by the CDN. */
+export const HEALTH_SHARED_MS = 5_000;
 
 export const serviceHealthSchema = z.object({
   checkedAt: z.number().int().nonnegative(),

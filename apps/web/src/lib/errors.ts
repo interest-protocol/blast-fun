@@ -5,7 +5,10 @@ import { PRESALE_ERROR_MESSAGES } from "@blast/core/modules/presale/contracts/er
 export type ErrorDiagnostic = Readonly<{ code?: string | null; requestId?: string; httpStatus?: number | null; retryAfterSeconds?: number | null; reason?: unknown }>;
 
 const LOCAL_MESSAGES: Readonly<Record<string, string>> = {
+  account_switch_failed: "Could not switch accounts. Try again.",
+  withdrawal_switch_blocked: "Finish your withdrawal before switching accounts.",
   wallet_missing: "Your Blast wallet isn’t ready yet.",
+  trade_coin_mismatch: "This coin can’t be bought here. Open its page to trade.",
   "invalid-manifest": "The launch configuration is invalid. Contact support.",
   "environment-mismatch": "The launch configuration does not match this environment.",
   "fixture-identity-in-production": "The launch configuration could not be verified.",

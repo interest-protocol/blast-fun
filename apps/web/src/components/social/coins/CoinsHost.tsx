@@ -40,6 +40,7 @@ import { encodeTradeAction, tradableCoinView, tradeOpening, type TradeAction } f
 import { clearWithdrawReceipt, readWithdrawReceipt, saveWithdrawReceipt } from "./withdraw-attempt";
 import { runWithdraw } from "./withdraw-flow";
 import { refreshWalletCoinBalance } from "./use-wallet-coin-balance";
+import { useWalletActionDraft, type WalletActionDraft } from "./wallet-action-draft";
 
 /** How often an open deposit screen reads the wallet again, and for how long at most. */
 export const DEPOSIT_POLL_MS = 5_000;
@@ -92,10 +93,12 @@ function useCoinSheetState(initial: ReturnType<typeof initialCoinState>, active:
   const [first, setFirst] = useState<CoinScreen>(initial.first);
   const [screen, setScreen] = useState<CoinScreen | null>(null);
   const [extraCoins, setExtraCoins] = useState<readonly WalletCoinView[]>(initial.coins);
+  const [walletDraft, setWalletDraft] = useState<WalletActionDraft>();
   const [lastOpening, setLastOpening] = useState<CoinOpening>();
 
-  const show = useCallback((next: CoinScreen, coins?: readonly WalletCoinView[]) => {
+  const show = useCallback((next: CoinScreen, coins?: readonly WalletCoinView[], draft?: WalletActionDraft) => {
     if (coins) setExtraCoins(coins);
+    setWalletDraft(draft);
     setFirst(next);
     setScreen(next);
     setSession((value) => value + 1);
@@ -105,10 +108,10 @@ function useCoinSheetState(initial: ReturnType<typeof initialCoinState>, active:
 
   if (opening && opening !== lastOpening) {
     setLastOpening(opening);
-    show(opening.screen, opening.coins);
+    show(opening.screen, opening.coins, opening.walletDraft);
   }
 
-  return { open, setOpen, walletRead, setRead, session, first, screen, setScreen, extraCoins, show };
+  return { open, setOpen, walletRead, setRead, session, first, screen, setScreen, extraCoins, show, walletDraft };
 }
 
 function walletReadFor(walletRead: ReturnType<typeof useCoinWalletRead>[0], owner: string | null) {
@@ -145,6 +148,15 @@ function useCoinNavigationDraft(
  * session alike (owner ruling 2026-11-20, reversing OA-17), and a wallet
  * session pays its own only for a trade past the day's cap.
  */
+function useCoinActionHandoff(initial: ReturnType<typeof initialCoinState>, viewer: ReturnType<typeof useSocialViewer>, open: boolean, show: ReturnType<typeof useCoinSheetState>["show"]) {
+  const { inline, draftOwner } = initial;
+  const surface = inline && draftOwner ? `inline:${draftOwner}` : "overlay";
+  useWalletActionDraft(surface, viewer.sessionIdentity === "wallet" ? "wallet" : "privy", restored => {
+    show(restored.screen, restored.coins, restored.walletDraft);
+  }, inline && open && viewer.signedIn && !viewer.sessionPending);
+  return surface;
+}
+
 export function CoinsHost({ inlineSale, inlineTrade, opening, active = true }: Readonly<{ inlineSale?: SocialPresaleDetail["presale"]; inlineTrade?: TradeAction; opening?: CoinOpening; active?: boolean }>) {
   const { hideSmallBalances } = useShellPrefs();
   const pinnedKeys = JSON.stringify(useCoinPins());
@@ -165,7 +177,8 @@ export function CoinsHost({ inlineSale, inlineTrade, opening, active = true }: R
   const client = useRef<SuiGrpcClient | null>(null);
   const initial = initialCoinState(inlineSale, inlineTrade);
   const { inline, draftOwner } = initial;
-  const { open, setOpen, walletRead, setRead, session, first, screen, setScreen, extraCoins, show } = useCoinSheetState(initial, active, opening);
+  const { open, setOpen, walletRead, setRead, session, first, screen, setScreen, extraCoins, show, walletDraft } = useCoinSheetState(initial, active, opening);
+  const walletDraftSurface = useCoinActionHandoff(initial, viewer, open, show);
   const read = walletReadFor(walletRead, accountId);
   /** The withdrawal in flight per request: its id and digest survive a retry of the same ask. */
   const attempt = useRef<{ key: string; requestId: string; digest: string | null } | null>(null);
@@ -424,6 +437,8 @@ export function CoinsHost({ inlineSale, inlineTrade, opening, active = true }: R
         session={session}
         trading={trading}
         wallet={sheetWallet}
+        walletDraft={walletDraft}
+        walletDraftSurface={walletDraftSurface}
       />
     </>
   );

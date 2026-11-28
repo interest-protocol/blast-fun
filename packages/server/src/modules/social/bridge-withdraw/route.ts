@@ -333,7 +333,6 @@ export function createSocialBridgeWithdrawRoutes(dependencies: SocialBridgeWithd
    */
   async function sponsoredBurn(kind: Uint8Array, sender: string, caller: SocialCaller, ip: string, signal: AbortSignal, reservationId: string): Promise<Built | Refusal> {
     try {
-      // The sponsor counts this client IP, the account's daily share and the platform's cap after its dry run.
       const sponsored = await dependencies.sponsor().sponsor({ caller, presaleId: null, sender, kindBytes: kind, intent: "bridge_withdraw", ip, signal, reservationId });
       recordMetric("social.bridge_withdraw", { step: "sponsor", outcome: "reserved" });
       return { payer: "blast", bytes: fromBase64(sponsored.transaction_bytes), reservationId: sponsored.reservation_id, expiresAtMs: sponsored.expires_at_ms };

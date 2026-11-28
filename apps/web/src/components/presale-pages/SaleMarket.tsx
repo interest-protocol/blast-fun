@@ -16,7 +16,7 @@ import { poolPrices } from "#web/components/charts/candle-data.ts";
 import { fetchCoinMarket } from "#web/components/social/blast-mode/workspace/panels/coin-market-reads.ts";
 import { coinsByIdsQuery } from "#web/components/social/coin-home/home-client.ts";
 import { shortTicker } from "#web/components/social/coins/coin-display.ts";
-import { actorName, amountShort, volumeText } from "#web/components/social/coin-home/home-model.ts";
+import { actorName, amountShort, dayVolumeText, volumeText } from "#web/components/social/coin-home/home-model.ts";
 import { Avatar } from "#web/components/social/post/PostMedia.tsx";
 import { readableUsd, subscriptZeros } from "#web/lib/market-format.ts";
 import { PUBLIC_STALE_MS } from "#web/lib/query/client.ts";
@@ -38,7 +38,7 @@ import type {
 import type { PriceWindow } from "@blast/core/web/contracts/prices.ts";
 
 import { SalePriceChart, type MarketExtras } from "./SalePriceChart";
-import { formatMove, presaleHolderShare, priceDirection, type PriceMove } from "./sale-market-format";
+import { formatMove, liveDayMove, presaleHolderShare, priceDirection, type PriceMove } from "./sale-market-format";
 import { useChartPrice } from "#web/components/launchpad/chart/chart-live-price.ts";
 import { PoolChart } from "#web/components/social/coins/PoolChart.tsx";
 import { PresaleHolderSummary } from "./PresaleHolderSummary";
@@ -193,10 +193,21 @@ function HolderTable({ coin }: Readonly<{ coin: HomeCoin }>) {
   );
 }
 
-function volumeFigure(coin: HomeCoin | null, volume: readonly HomeAmount[] | null, loading: boolean): ReactNode {
-  if (!coin || !volume) return !coin && loading ? <SkeletonText>0000</SkeletonText> : null;
+function partial(text: string): ReactNode {
+  return <>{text}{text.endsWith("+") && <span className="sr-only"> partial total</span>}</>;
+}
+
+/**
+ * The day's volume by Home's rule (`dayVolumeText`): the stream's `volume_24h` once it sends one, else the read's
+ * curve trades plus DEX swaps. A read without that sum falls back to the pool's own volume.
+ */
+function volumeFigure(coin: HomeCoin | null, live: LiveCoinStats | null, volume: readonly HomeAmount[] | null, loading: boolean): ReactNode {
+  const shared = dayVolumeText(coin, live);
+  if (shared !== null) return partial(shared);
+  if (!coin) return loading ? <SkeletonText>0000</SkeletonText> : null;
+  if (!volume) return null;
   const dollars = volumeText({ bought: volume, sold: [], committed: [] });
-  if (dollars !== null) return <>{dollars}{dollars.endsWith("+") && <span className="sr-only"> partial total</span>}</>;
+  if (dollars !== null) return partial(dollars);
   const named = volume.filter((amount) => amount.quote_symbol !== null && amount.quote_decimals !== null);
   return named.length ? named.map((amount) => (
     <i className={cx("sale-volume-amount")} key={amount.quote_type}>{amountShort(amount)}</i>
@@ -303,9 +314,9 @@ export function SaleMarketView({
     fdvFigure={fdv != null
       ? <InspectValue value={`$${fdv}`} label="FDV in USD">{readableUsd(fdv)}</InspectValue>
       : marketLoading ? <SkeletonText>0000</SkeletonText> : null}
-    holders={live?.holders ?? coin?.holders}
+    holders={live ? live.holders : coin?.holders}
     holdersFigure={loading ? <SkeletonText>0000</SkeletonText> : null}
-    volumeFigure={live?.volumeUsd != null ? readableUsd(live.volumeUsd) : volumeFigure(coin, volume, loading)}
+    volumeFigure={volumeFigure(coin, live, volume, loading)}
     venue={venue ?? market?.pool?.venue}
     tradeId={tradeId}
   />;
@@ -399,7 +410,8 @@ export function SaleMarket({
   const refetchInterval = marketPoll(listening);
   const query = useQuery(
     {
-      ...coinsByIdsQuery([sale.presale_id], "24h", HOME_MAX_HOLDERS),
+      // Market details carry the day's volume by Home's rule, the same read Home's watchlist makes.
+      ...coinsByIdsQuery([sale.presale_id], "24h", HOME_MAX_HOLDERS, true),
       refetchInterval,
     },
     client,
@@ -512,13 +524,17 @@ function usePresalePoolPrice(pool: HomeCoinMarket["pool"]) {
   return pool && confirmedAt != null && confirmedAt > pool.as_of_ms ? price : null;
 }
 
-/** The headline's price: the pool's live price once confirmed, else the last one shown, in the chosen currency. */
-function usePresaleHeadline(market: HomeCoinMarket) {
+/**
+ * The headline's price: the pool's live price once confirmed, else the last one shown, in the chosen currency. Its
+ * 24h move is that dollar price against the read's price 24 hours back, so the move follows each trade and quote tick.
+ */
+function usePresaleHeadline(market: HomeCoinMarket, move: PriceMove | null | undefined) {
   const currency = useCoinPriceCurrency();
   const live = usePresalePoolPrice(market.pool);
   const last = useLastPrice(live?.price);
   const prices = poolPrices(market.decimals, market.quote.decimals, currency?.quoteUsd);
-  return { currency, live, last, prices };
+  const dayMove = (last != null && prices.usd ? liveDayMove(prices.price(last), market.windows["24h"].open_usd) : null) ?? move;
+  return { currency, live, last, prices, change: presaleChange(dayMove, last, prices.usd) };
 }
 
 function presaleChange(move: PriceMove | null | undefined, last: string | null, usd: boolean): PriceMoveLabel | null {
@@ -526,19 +542,18 @@ function presaleChange(move: PriceMove | null | undefined, last: string | null, 
 }
 
 function PresaleMarketPrice({ market, move, activity }: Readonly<{ market: HomeCoinMarket; move?: PriceMove | null; activity: ReactNode }>) {
-  const { currency, live, last, prices } = usePresaleHeadline(market);
+  const { currency, live, last, prices, change } = usePresaleHeadline(market, move);
   const quoteSymbol = prices.usd ? undefined : market.quote.symbol;
   return <MarketPriceRow showCurrency={currency?.rate != null} priceNamesUnit={live != null}
     activity={activity}
     price={live ? <CoinPriceFigure price={prices.price(live.price)} quoteSymbol={quoteSymbol} tradeId={live.cursor} /> : NO_VALUE}
     reserve={!live && last != null ? <CoinPriceFigure price={prices.price(last)} quoteSymbol={quoteSymbol} tradeId={null} /> : null}
-    change={presaleChange(move, last, prices.usd)} />;
+    change={change} />;
 }
 
 /** The 24h move under a phone's chart, so the price row above it stays one line. */
 function PresaleMarketMove({ market, move }: Readonly<{ market: HomeCoinMarket; move?: PriceMove | null }>) {
-  const { live, last, prices } = usePresaleHeadline(market);
-  const change = presaleChange(move, last, prices.usd);
+  const { live, change } = usePresaleHeadline(market, move);
   // While an older price holds, the line keeps its space unseen, so the content below does not move.
   return change && <PriceChange change={change} held={live ? undefined : true} />;
 }

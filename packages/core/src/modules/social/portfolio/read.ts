@@ -1,4 +1,5 @@
-import { DISPLAY_PRICES } from "@blast/core/modules/social/prices/test-sui.ts";
+import { chainPriceOf } from "@blast/core/modules/social/prices/keyed.ts";
+import { displayPriceOf, displayPricesIn } from "@blast/core/modules/social/prices/test-sui.ts";
 
 import type { ReadableDatabase } from "@blast/core/modules/database/transaction.ts";
 import {
@@ -29,7 +30,7 @@ type PriceRow = { coin_type: string; usd_price: string; as_of_ms: string };
 export async function readPortfolioPrices(db: ReadableDatabase): Promise<Partial<Record<PortfolioBalanceCoin, PortfolioPrice>>> {
   const types = Object.values(PORTFOLIO_COIN_TYPES);
   const { rows } = await db.read<PriceRow>(
-    `SELECT coin_type, usd_price::text AS usd_price, as_of_ms::text AS as_of_ms FROM ${DISPLAY_PRICES} WHERE coin_type = ANY($1::text[])`,
+    `SELECT coin_type, usd_price::text AS usd_price, as_of_ms::text AS as_of_ms FROM ${displayPricesIn("$1::text[]")} dp`,
     [types],
   );
   const prices: Partial<Record<PortfolioBalanceCoin, PortfolioPrice>> = {};
@@ -154,8 +155,8 @@ const POSITIONS_SQL = `
   FROM chain_read_v1.presale_positions pp
   CROSS JOIN LATERAL (SELECT to_jsonb(pp) AS value OFFSET 0) claim
   JOIN LATERAL (SELECT * FROM ${SHOWN_PRESALES} WHERE presale_id = pp.presale_id OFFSET 0) p ON TRUE
-  LEFT JOIN ${DISPLAY_PRICES} pr ON pr.coin_type = p.sale_token
-  LEFT JOIN chain_read_v1.prices qr ON qr.coin_type = p.quote_type
+  LEFT JOIN ${displayPriceOf("p.sale_token")} pr ON TRUE
+  LEFT JOIN ${chainPriceOf("p.quote_type")} qr ON TRUE
   WHERE pp.wallet = ANY((SELECT $1::text[])::text[])
   GROUP BY pp.presale_id, p.sale_symbol, p.lifecycle, p.start_ms, p.end_ms, p.quote_symbol, p.quote_type, p.quote_decimals, p.sale_decimals,
     pr.usd_price, pr.as_of_ms, qr.usd_price, qr.as_of_ms

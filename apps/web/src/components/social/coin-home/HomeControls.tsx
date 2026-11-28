@@ -32,10 +32,11 @@ const TAB_OPTIONS = HOME_TAB_KEYS.map((key) => [key, HOME_TABS[key].label] as co
  * Discover's five tabs (plan decision 1), each a stage and an order, on one row that scrolls sideways when narrow.
  * A header sort the tabs do not name leaves no tab selected; every tab controls the one list.
  */
-export function CoinTabs({ state, onChange, panelId }: ViewProps & Readonly<{ panelId: string }>) {
+export function CoinTabs({ state, onChange, onIntent, panelId }: ViewProps & Readonly<{ panelId: string; onIntent?: (tab: HomeTab) => void }>) {
   return <Segmented<HomeTab | "">
     label="Coins"
     onChange={(key) => { if (key) onChange({ ...state, stage: HOME_TABS[key].stage, sort: HOME_TABS[key].sort }); }}
+    onIntent={onIntent && ((key) => { if (key) onIntent(key); })}
     options={TAB_OPTIONS}
     panelId={() => panelId}
     size="touch"

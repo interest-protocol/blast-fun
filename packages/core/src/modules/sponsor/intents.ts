@@ -37,7 +37,7 @@ type SponsorIntentRule = Readonly<
      * `trusted` kinds were built by the server itself and skip the net-storage cap.
      */
     policy: PresaleSponsorPolicy | Readonly<{ kind: "withdraw" | "bridge_withdraw" | "trusted" }>;
-    /** Counted against `presale_sponsor_exec`: checked when sponsored, consumed when executed. */
+    /** Whether the intent uses the daily reservation and execution limits. */
     dailyLimit: boolean;
     /** What execute records once the chain confirms success. */
     afterSuccess?: "record_commit";
@@ -116,13 +116,12 @@ export const SPONSOR_INTENTS = {
     dailyLimit: true,
     blastContracts: true,
   },
-  withdraw: { builder: "browser", policy: { kind: "withdraw" }, dailyLimit: true, blastContracts: false },
-  // Social R3-31: the social path's own daily cap counts trades, never the presale budget.
+  withdraw: { builder: "browser", policy: { kind: "withdraw" }, dailyLimit: false, blastContracts: false },
   trade: { builder: "server", policy: { kind: "trusted" }, dailyLimit: false, blastContracts: true },
   bridge_withdraw: {
     builder: "server",
     policy: { kind: "bridge_withdraw" },
-    dailyLimit: true,
+    dailyLimit: false,
     blastContracts: false,
     recovery: "keyed",
     replaceable: true,
@@ -189,8 +188,8 @@ export function capsNetStorage(intent: SponsorIntent): boolean {
   return sponsorPolicyKind(intent) !== "trusted";
 }
 
-/** Whether `presale_sponsor_exec` counts the intent. */
-export function countsDailyExecution(intent: SponsorIntent): boolean {
+/** Whether the sponsor applies daily quotas during reservation and execution. */
+export function hasDailySponsorshipLimit(intent: SponsorIntent): boolean {
   return rule(intent).dailyLimit;
 }
 

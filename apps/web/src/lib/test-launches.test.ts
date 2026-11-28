@@ -5,7 +5,7 @@ import type { DiscoveryResponse } from "@blast/core/modules/launchpad-discovery/
 import type { HomeCoinsPage } from "@blast/core/modules/social/contracts/home.ts";
 import type { SocialHappeningResponse } from "@blast/core/modules/social/contracts/happening.ts";
 import type { SocialPresaleListPage } from "@blast/core/modules/social/contracts/presales.ts";
-import { isTestQuoteType, readVisiblePage, testPresaleIds, withoutTestSearchPresales, withoutTestTradeCoins, withoutTestCoins, withoutTestHappening, withoutTestLaunches, withoutTestPosts, withoutTestPresalePage } from "./test-launches.ts";
+import { isTestQuoteType, readVisiblePage, withoutTestSearchPresales, withoutTestTradeCoins, withoutTestCoins, withoutTestHappening, withoutTestLaunches, withoutTestPosts, withoutTestPresalePage } from "./test-launches.ts";
 
 const id = (n: number) => `0x${String(n).padStart(64, "0")}`;
 
@@ -70,29 +70,6 @@ test("a page of only test launches reads on to the next page instead of showing 
   );
   assert.deepEqual(reads, [null, "b"]);
   assert.deepEqual(page, { rows: ["real"], next: "c" });
-});
-
-test("trade rows of a migrated test sale are found by a cached by-id lookup", async () => {
-  const read = {
-    fastest: [], opening_soon: [], today: [],
-    tape: [{ presale_id: id(7), quote_symbol: null }, { presale_id: id(8), quote_symbol: null }],
-    top_coins: { trending: [{ presale_id: id(7), coin_type: null }], gainers: [] },
-  } as unknown as SocialHappeningResponse;
-  const asked: string[][] = [];
-  const readCoins = async (ids: readonly string[]) => {
-    asked.push([...ids]);
-    return [{ presale_id: id(7), quote: { type: CREATE_TEST_SUI_QUOTE_TYPE } }, { presale_id: id(8), quote: { type: CREATE_SUI_QUOTE_TYPE } }];
-  };
-  const testIds = await testPresaleIds(read, readCoins);
-  assert.deepEqual([...testIds], [id(7)]);
-  const shown = withoutTestHappening(read, testIds);
-  assert.deepEqual(shown.tape.map((event) => event.presale_id), [id(8)]);
-  assert.deepEqual(shown.top_coins?.trending, []);
-  await testPresaleIds(read, readCoins);
-  assert.equal(asked.length, 1);
-  // A failed lookup hides nothing and is retried next time.
-  const fresh = { ...read, tape: [{ presale_id: id(9), quote_symbol: null }], top_coins: null } as unknown as SocialHappeningResponse;
-  assert.equal((await testPresaleIds(fresh, async () => null)).size, 0);
 });
 
 test("coin pickers and search drop test sales, open ones by quote and migrated ones by a lookup", async () => {

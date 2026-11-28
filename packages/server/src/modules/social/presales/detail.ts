@@ -1,4 +1,4 @@
-import { DISPLAY_PRICES } from "@blast/core/modules/social/prices/test-sui.ts";
+import { displayPriceOf } from "@blast/core/modules/social/prices/test-sui.ts";
 import type { ReadableDatabase } from "@blast/core/modules/database/transaction.ts";
 import type { PresaleTerms } from "@blast/core/modules/presale/terms/index.ts";
 import type { SocialConfig } from "@blast/core/modules/social/contracts/config.ts";
@@ -34,6 +34,7 @@ import { ratioBps, readSummaries, summaryOf, type SummaryRow } from "@blast/serv
 import { vestingMsSql } from "@blast/core/modules/social/contracts/vesting.ts";
 import { SHOWN_PRESALES } from "@blast/core/modules/social/read-model/chain-presales.ts";
 import { quotePerToken } from "@blast/server/modules/social/presales/quote-price.ts";
+import { readSteps } from "@blast/server/modules/social/read-steps.ts";
 
 /** How a commit row's quote atoms become USD in SQL: face value for USDC, else the row's event-time `usd_value`. */
 function commitUsdSql(alias: string, stable: string, decimals: string): string {
@@ -395,40 +396,41 @@ export async function readPresaleDetail(
   presaleId: string,
   options: Readonly<{ asOf: AsOf; nowMs: number; config: SocialConfig; terms: PresaleTermsSource }>,
 ): Promise<SocialPresaleDetail | null> {
-  const [row] = await readSummaries(db, [presaleId]);
+  const step = readSteps("presale");
+  const [row] = await step("summary", () => readSummaries(db, [presaleId]));
   if (!row) return null;
   const { asOf, nowMs, config } = options;
   const endOfRaise = Math.min(asOf.timestamp_ms, nowMs, Number(row.end_ms));
   // Commitments open at the later of the share (`opened`) and the sale's start: a scheduled sale is shared before it.
   const startMs = Math.max(Number(row.opened_ms ?? 0), Number(row.start_ms));
   const [creator, quotePrice, momentum, backers, theses, activity, vesting, terms, buyerVesting] = await Promise.all([
-    db.read<PersonColumns & { wallet: string }>(
+    step("creator", () => db.read<PersonColumns & { wallet: string }>(
       `SELECT p.creator AS wallet, ${PERSON_COLUMNS}
        FROM ${SHOWN_PRESALES} p
        ${identityJoinSql(namedPositionSql("p.creator", "p.created_at_ms"))}
        WHERE p.presale_id = $1 AND p.creator IS NOT NULL`,
       [presaleId],
-    ),
+    )),
     row.stable
       ? Promise.resolve(null)
-      : db.read<QuotePriceRow>(
-        `SELECT q.usd_price::text AS usd_price, q.as_of_ms::text AS as_of_ms FROM ${DISPLAY_PRICES} q
-         JOIN ${SHOWN_PRESALES} p ON p.quote_type = q.coin_type WHERE p.presale_id = $1`,
+      : step("quote_price", () => db.read<QuotePriceRow>(
+        `SELECT q.usd_price::text AS usd_price, q.as_of_ms::text AS as_of_ms FROM ${SHOWN_PRESALES} p
+         CROSS JOIN ${displayPriceOf("p.quote_type")} q WHERE p.presale_id = $1`,
         [presaleId],
-      ),
-    readMomentum(db, presaleId, row, Math.min(asOf.timestamp_ms, nowMs)),
-    readTopBackers(db, presaleId),
-    readTheses(db, presaleId, row),
-    readActivity(db, presaleId, config, nowMs),
-    db.read<VestingRow>(
+      )),
+    step("momentum", () => readMomentum(db, presaleId, row, Math.min(asOf.timestamp_ms, nowMs))),
+    step("backers", () => readTopBackers(db, presaleId)),
+    step("theses", () => readTheses(db, presaleId, row)),
+    step("activity", () => readActivity(db, presaleId, config, nowMs)),
+    step("vesting", () => db.read<VestingRow>(
       `SELECT v.share, v.asset, v.beneficiary, v.start_ms::text AS start_ms, ${vestingMsSql("v.start_ms + v.cliff_ms")} AS cliff_end_ms,
          ${vestingMsSql("v.end_ms")} AS end_ms
        FROM chain_read_v1.vesting_schedules v WHERE v.presale_id = $1 AND v.share <> 'participant'
        ORDER BY v.start_ms, v.schedule_id LIMIT 200`,
       [presaleId],
-    ),
-    options.terms(presaleId),
-    db.read<NonNullable<SocialPresaleDetail["buyer_vesting"]> & { span: SocialPresaleVesting | null }>(
+    )),
+    step("terms", () => options.terms(presaleId)),
+    step("buyer_vesting", () => db.read<NonNullable<SocialPresaleDetail["buyer_vesting"]> & { span: SocialPresaleVesting | null }>(
       `SELECT count(*) FILTER (WHERE share = 'participant' AND asset = 'sale_token')::int AS schedules,
          COALESCE(sum(total) FILTER (WHERE share = 'participant' AND asset = 'sale_token'), 0)::text AS total,
          COALESCE(sum(claimed) FILTER (WHERE share = 'participant' AND asset = 'sale_token'), 0)::text AS claimed,
@@ -439,14 +441,14 @@ export async function readPresaleDetail(
            'end_ms', (${vestingMsSql("max(end_ms)")})::numeric) END AS span
        FROM chain_read_v1.vesting_schedules WHERE presale_id = $1`,
       [presaleId],
-    ),
+    )),
   ]);
   const quoteUsd = row.stable ? 1 : quotePrice?.rows[0]?.usd_price ? Number(quotePrice.rows[0].usd_price) : null;
   // A commit worth marking as big belongs to a wallet holding at least that much; the largest wallets are read.
   const bigWallets = backers
     .filter((backer) => Number(atomsUsd(backer.commitment, row, quoteUsd) ?? 0) >= PRESALE_BIG_COMMIT_USD)
     .map((backer) => backer.wallet);
-  const raise = await readRaise(db, presaleId, row, startMs, endOfRaise, quoteUsd, bigWallets, theses);
+  const raise = await step("raise", () => readRaise(db, presaleId, row, startMs, endOfRaise, quoteUsd, bigWallets, theses));
   const schedules = vesting.rows;
   const saleTerms = terms ? termsOf(terms, row, schedules) : null;
   const summary = summaryOf(

@@ -2,7 +2,7 @@ import { USDC_COIN_TYPE } from "@blast/core/lib/sui/coin-types.ts";
 import { groupedExact } from "@blast/core/web/exact-amount.ts";
 import { NO_VALUE } from "@blast/core/web/format.ts";
 
-import { parseAtoms, sellPresetAtoms, type SellPreset } from "../trade/trade-ticket.ts";
+import { atomsToField, parseAtoms, sellPresetAtoms, type SellPreset } from "../trade/trade-ticket.ts";
 
 import type { BridgeChain } from "./bridge-config.ts";
 
@@ -70,11 +70,33 @@ export function sourceAddressKey(chain: BridgeChain, address: string): string {
   return chain === "solana" ? address : address.toLowerCase();
 }
 
-export type DestinationToken = Readonly<{ symbol: "SUI" | "USDC"; decimals: number; coinType: string; logo: string }>;
+export type DestinationToken = Readonly<{
+  symbol: "SUI" | "USDC";
+  decimals: number;
+  coinType: string;
+  /** The coin's two metadata objects on Sui mainnet (read 2026-11-28). An auction order signs one of them as the coin to deliver. */
+  metadataId: string;
+  currencyId: string;
+  logo: string;
+}>;
 
 export const DESTINATIONS: readonly DestinationToken[] = [
-  { symbol: "SUI", decimals: 9, coinType: "0x2::sui::SUI", logo: LOGO.sui },
-  { symbol: "USDC", decimals: 6, coinType: USDC_COIN_TYPE, logo: LOGO.usdc },
+  {
+    symbol: "SUI",
+    decimals: 9,
+    coinType: "0x2::sui::SUI",
+    metadataId: "0x9258181f5ceac8dbffb7030890243caed69a9599d2886d957a9cb7656af3bdb3",
+    currencyId: "0xf256d3fb6a50eaa748d94335b34f2982fbc3b63ceec78cafaa29ebc9ebaf2bbc",
+    logo: LOGO.sui,
+  },
+  {
+    symbol: "USDC",
+    decimals: 6,
+    coinType: USDC_COIN_TYPE,
+    metadataId: "0x69b7a7c3c200439c1b5f3b19d7d495d5966d5f08de66c69276152f8db3992ec6",
+    currencyId: "0x75cfbbf8c962d542e99a1d15731e6069f60a00db895407785b15d14f606f2b4a",
+    logo: LOGO.usdc,
+  },
 ];
 
 /** Typed text as atoms; null when empty, unreadable or zero. */
@@ -86,6 +108,12 @@ export function amountAtoms(text: string, token: SourceToken): bigint | null {
 /** The full source precision, including token balances smaller than one millionth. */
 export function bridgeAmountField(atoms: bigint, decimals: number): string {
   return groupedExact({ n: atoms, scale: decimals }, decimals);
+}
+
+/** The balance line: six places, never rounded up. A balance too small for that shows in full. */
+export function bridgeBalanceText(atoms: bigint, decimals: number): string {
+  const short = atomsToField(atoms, decimals);
+  return atoms === 0n || /[1-9]/.test(short) ? short : bridgeAmountField(atoms, decimals);
 }
 
 /** Apply the preset to the balance available after the native fee reserve. */
@@ -104,7 +132,8 @@ export function exceedsBalance(atoms: bigint, balance: bigint, token: SourceToke
 export type QuoteFacts = Readonly<{
   expectedAmountOut: number;
   minReceived: number;
-  clientRelayerFeeSuccess?: number | null;
+  /** Mayan's fee in dollars; null or absent when the quote does not say. */
+  fee?: number | null;
   etaSeconds?: number;
   /** The amount sent, in tokens, and its USD value from the Blink quote, to show the fee in the source token too. */
   amountIn?: number;
@@ -115,11 +144,14 @@ export type QuoteRows = Readonly<{ amount: string; minimum: string; fee: string;
 
 const usdFormat = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+/** The significant digits an amount shows. */
+export const SHOWN_DIGITS = 6;
+
 /**
  * Drops digits instead of rounding, so a minimum never shows more than Mayan guarantees.
  * Cut here too because Firefox before 116 ignores `roundingMode` and rounds up.
  */
-export function amountText(value: number, decimals: number, digits = 6): string {
+export function amountText(value: number, decimals: number, digits = SHOWN_DIGITS): string {
   return new Intl.NumberFormat("en-US", { maximumSignificantDigits: digits, maximumFractionDigits: Math.min(decimals, 8), roundingMode: "trunc" }).format(cutDigits(value, digits));
 }
 
@@ -136,7 +168,7 @@ export function cutDigits(value: number, digits: number): number {
 }
 
 function feeText(quote: QuoteFacts, from: SourceToken): string {
-  const fee = quote.clientRelayerFeeSuccess;
+  const { fee } = quote;
   // A quote without a fee says nothing about it: never show that as $0.00.
   if (fee === null || fee === undefined) return NO_VALUE;
   const usd = fee > 0 && fee < 0.01 ? "< $0.01" : usdFormat.format(fee);
@@ -152,14 +184,18 @@ export function displayAmount(value: number | string, symbol: string): string {
   return Number.isFinite(number) ? `${amountText(number, 9)}\u00a0${symbol}` : `${value}\u00a0${symbol}`;
 }
 
+function etaText(seconds: number): string {
+  return seconds < 60 ? `About ${Math.max(seconds, 1)}\u00a0s` : `About ${Math.round(seconds / 60)}\u00a0min`;
+}
+
 /** Rows under the amount: what arrives, the floor (slippage included), Mayan's fee and time. */
 export function quoteRows(quote: QuoteFacts, from: SourceToken, to: DestinationToken): QuoteRows {
-  const seconds = quote.etaSeconds ?? 0;
+  const seconds = quote.etaSeconds;
   return {
     amount: amountText(quote.expectedAmountOut, to.decimals),
     minimum: `${amountText(quote.minReceived, to.decimals)}\u00a0${to.symbol}`,
     fee: feeText(quote, from),
-    eta: seconds < 60 ? `About ${Math.max(seconds, 1)}\u00a0s` : `About ${Math.round(seconds / 60)}\u00a0min`,
+    eta: typeof seconds === "number" ? etaText(seconds) : NO_VALUE,
   };
 }
 
@@ -181,15 +217,29 @@ export function transferState(clientStatus: string | null | undefined): Transfer
   return "pending";
 }
 
-type QuoteFailure = Readonly<{ code?: unknown; data?: { minAmountIn?: unknown; maxAmountIn?: unknown } | null }>;
+type QuoteFailure = Readonly<{ code?: unknown; message?: unknown; data?: { minAmountIn?: unknown; maxAmountIn?: unknown } | null }>;
+
+/** USDC is the coin most likely to have a price, so offer it unless it is the coin that failed. */
+function noRouteText(chain: ChainInfo, token: SourceToken): string {
+  const isUsdc = token.mayan.toLowerCase() === chain.tokens[1].mayan.toLowerCase();
+  return `No price for ${token.symbol}. ${isUsdc ? "Try another chain" : "Bridge USDC"}. Code: bridge_no_route.`;
+}
+
+/** Mayan names its current limit only in the message, in the source coin. Cut, so the figure still fits. */
+function overLimitText(message: unknown, token: SourceToken): string {
+  const stated = typeof message === "string" ? /Max per swap: (\d+(?:\.\d+)?)/.exec(message)?.[1] : undefined;
+  const limit = stated === undefined ? null : `Largest right now: ${amountText(Number(stated), token.decimals, 4)}\u00a0${token.symbol}.`;
+  return `${limit ?? "Try a smaller amount."} Code: bridge_amount_too_large.`;
+}
 
 /** A short sentence for a failed quote, in Mayan's limits where it gives them. */
 export function quoteErrorText(error: unknown, chain: ChainInfo, token: SourceToken): string {
-  const { code, data } = (error ?? {}) as QuoteFailure;
+  const { code, data, message } = (error ?? {}) as QuoteFailure;
   if (isPausedError(error)) return PAUSED_TEXT;
+  if (code === "ROUTE_NOT_FOUND") return noRouteText(chain, token);
+  if (code === "BRIDGE_LIMIT_EXCEEDED" || code === "ALLOWANCE_TOO_LOW") return overLimitText(message, token);
   if (code === "AMOUNT_TOO_SMALL" && typeof data?.minAmountIn === "number") return `The smallest amount is ${data.minAmountIn}\u00a0${token.symbol}. Code: bridge_amount_too_small.`;
   if (code === "AMOUNT_TOO_LARGE" && typeof data?.maxAmountIn === "number") return `The largest amount is ${data.maxAmountIn}\u00a0${token.symbol}. Code: bridge_amount_too_large.`;
-  if (code === "ROUTE_NOT_FOUND") return `No route from ${chain.label} ${token.symbol} to Sui right now. Code: bridge_no_route.`;
   return QUOTE_FAILED_TEXT;
 }
 
@@ -200,10 +250,13 @@ export const TOKENS_FAILED_TEXT = "Couldn’t load tokens. Code: bridge_tokens_f
 export const LOAD_FAILED_TEXT = "Bridge to Sui couldn’t load. Code: bridge_load_failed.";
 export const SEND_FAILED_TEXT = "The bridge didn’t start. Check your wallet before you try again. Code: bridge_send_failed.";
 
-/** Mayan answers 9999 when it stops this SDK version; the card pauses and we upgrade. */
+/**
+ * This SDK version is too old for Mayan: their SDK throws 9999 and their price API
+ * answers `SDK_VERSION_TOO_OLD`. The card pauses and we upgrade.
+ */
 export function isPausedError(error: unknown): boolean {
   const code = (error as { code?: unknown } | null)?.code;
-  return code === 9999 || code === "9999";
+  return code === 9999 || code === "9999" || code === "SDK_VERSION_TOO_OLD";
 }
 
 /** What the main button says and does, in the order the checks run. */

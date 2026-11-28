@@ -20,13 +20,23 @@ draw Home's passing trade pop on the coin's row without a Home list read. The po
 is never a balance, a price or an input to a trade; a priced trade's rank, volume
 and counts wait for the thirty-second poll, and prices keep moving rows through
 the price stream. Every other hint still triggers a read. Hidden tabs own
-no hint connection or retry timer. A process fans out one upstream subscription;
+no hint connection or retry timer. A hidden tab keeps a socket that watches
+pools or prices (a coin chart, Home) for fifteen seconds, so a quick return
+costs no ticket or reconnect; screens still run their catch-up read, since
+hints are not delivered while hidden. A hints-only socket closes at once. A process fans out one upstream subscription;
 its clients share one heartbeat timer. Each client retains its own deadline,
 backpressure limit and cancellation ownership.
 
 Keep the five-second minimum between freshness reads and the thirty-second
 visible polling fallback. Public discovery permits ten seconds of edge freshness
 and twenty seconds of stale revalidation; private answers retain no-store.
+The service health answer is shared for at most five seconds since it was
+checked: by the process, then by the edge for what is left less one second for
+the trip (no stale revalidation, nothing kept in the browser). Its
+fifteen-second visible poll from 10,000 tabs is about 667 browser requests/s.
+Function and backend requests fall from the same 667/s to short bursts per edge
+region every few seconds (unmeasured; an answer more than three seconds old is
+not shared); the infra probe stays at one per process every five seconds at most.
 This policy deliberately does **not** promise three-second fresh discovery.
 Lifecycle query invalidation already spreads requests over up to one second.
 Changing these limits needs an explicit freshness/cost decision and matching

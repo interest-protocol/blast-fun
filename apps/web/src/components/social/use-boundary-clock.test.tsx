@@ -82,3 +82,40 @@ test("a time further ahead than one timeout holds waits again and passes on time
   await tick(t, at - NOW - 2_147_483_647);
   assert.deepEqual(renders, [NOW, at]);
 });
+
+test("a function of the clock names each next turn, one timeout at a time", async (t) => {
+  t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: NOW });
+  const renders: number[] = [];
+  function Probe() {
+    const clock = useBoundaryClock((at) => (at < NOW + 30_000 ? at + 10_000 : null), NOW);
+    renders.push(clock);
+    return null;
+  }
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  t.after(async () => { await act(async () => root.unmount()); });
+  await act(async () => root.render(<Probe />));
+  await tick(t, 9_999);
+  assert.deepEqual(renders, [NOW]);
+  await tick(t, 1);
+  await tick(t, 10_000);
+  await tick(t, 10_000);
+  await tick(t, 60_000);
+  assert.deepEqual(renders, [NOW, NOW + 10_000, NOW + 20_000, NOW + 30_000], "the last turn names none");
+});
+
+test("a return to the tab catches up at once after the device slept past the time", async (t) => {
+  t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: NOW });
+  const listen = t.mock.method(document, "addEventListener");
+  const unlisten = t.mock.method(document, "removeEventListener");
+  const { renders, unmount } = await probe(t, NOW + 5_000);
+  // Asleep for a minute: the clock moved on, the timer did not fire.
+  t.mock.timers.setTime(NOW + 60_000);
+  assert.deepEqual(renders, [NOW]);
+  await act(async () => { document.dispatchEvent(new Event("visibilitychange")); });
+  assert.deepEqual(renders, [NOW, NOW + 60_000]);
+  await unmount();
+  const added = listen.mock.calls.filter((call) => call.arguments[0] === "visibilitychange").length;
+  const removed = unlisten.mock.calls.filter((call) => call.arguments[0] === "visibilitychange").length;
+  assert.ok(added > 0 && removed === added, "every listener it adds is removed");
+});

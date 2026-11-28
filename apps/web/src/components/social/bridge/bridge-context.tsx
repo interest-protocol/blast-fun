@@ -4,12 +4,11 @@ import { createContext, useContext, type ReactNode } from "react";
 
 import { usePrivySessionMounted } from "#web/components/presale/providers/PrivySessionProvider.tsx";
 
-const BridgeContext = createContext<"off" | "blink" | "fast-fallback">("off");
+const BridgeContext = createContext(false);
 
-/** Whether the server turned Bridge to Sui on and enabled the fallback. */
-export function BridgeProvider({ enabled, fastMctp, children }: Readonly<{ enabled: boolean; fastMctp: boolean; children: ReactNode }>) {
-  const configured = fastMctp ? "fast-fallback" : "blink";
-  return <BridgeContext value={enabled ? configured : "off"}>{children}</BridgeContext>;
+/** Whether the server turned Bridge to Sui on. */
+export function BridgeProvider({ enabled, children }: Readonly<{ enabled: boolean; children: ReactNode }>) {
+  return <BridgeContext value={enabled}>{children}</BridgeContext>;
 }
 
 /**
@@ -17,11 +16,7 @@ export function BridgeProvider({ enabled, fastMctp, children }: Readonly<{ enabl
  * wallets connect through Privy). False hides every Bridge button.
  */
 export function useBridge(): boolean {
-  const enabled = useContext(BridgeContext) !== "off";
+  const enabled = useContext(BridgeContext);
   const privy = usePrivySessionMounted();
   return enabled && privy;
-}
-
-export function useBridgeFastMctp(): boolean {
-  return useContext(BridgeContext) === "fast-fallback";
 }

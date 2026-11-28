@@ -49,7 +49,7 @@ import {
 } from "@blast/core/modules/sponsor/policy.ts";
 import {
   capsNetStorage,
-  countsDailyExecution,
+  hasDailySponsorshipLimit,
   namesPresale,
   recoversByKey,
   sponsorPolicyKind,
@@ -416,7 +416,7 @@ export type PresaleSponsorService = Readonly<{
   recoverBridgeWithdrawal(request: RecoverBridgeWithdrawal): Promise<SponsorResponse | null>;
   /**
    * Steps 3 to 12 of the route below; throws its `PresaleRouteError`s. Every
-   * caller pays the per-IP, per-account daily and platform-wide budgets
+   * caller uses the IP request rate and any daily limits for its intent
    * (step 9b), counted only once the kind passed the policy and the dry run.
    */
   sponsor(request: SponsorKindRequest): Promise<SponsorResponse>;
@@ -438,8 +438,8 @@ export type PresaleSponsorService = Readonly<{
 /**
  * Step 9b (review H1, M1): counts one reservation in the sponsor's shared
  * budgets: the client IP (unless the HTTP route's kit already counted it
- * before the body), the account's daily share, then the platform's daily
- * cap. It runs after the policy and the dry run, so a request refused for
+ * before the body), then the account and platform daily limits for intents
+ * governed by them. It runs after the policy and the dry run, so a request refused for
  * its body, its target or its simulation never spends the platform's budget,
  * and before the slot is claimed. A full budget
  * is `rate_limited` with its `Retry-After`; a limiter that cannot answer
@@ -447,11 +447,15 @@ export type PresaleSponsorService = Readonly<{
  */
 async function countSponsorBudgets(
   limits: Pick<RateLimitPort, "consume">,
-  request: Readonly<{ caller: SponsorCaller; ip: string }>,
+  request: Pick<SponsorKindRequest, "caller" | "ip" | "intent">,
   ipCounted: boolean,
 ): Promise<void> {
-  if (!ipCounted)
+  if (!ipCounted) {
     await countSponsorBudget(limits, "presale_sponsor_ip", { ip: request.ip });
+  }
+  if (!hasDailySponsorshipLimit(request.intent)) {
+    return;
+  }
   await countSponsorBudget(limits, "presale_sponsor_account_daily", {
     accountId: sponsorAccountKey(request.caller),
   });
@@ -486,10 +490,8 @@ class DefiniteSponsorBudgetRefusal extends PresaleRouteError<"rate_limited"> {
  * for the HTTP route and for the social swap path (social feed R3-31), which
  * calls it in-process with the `trade` intent and a kind it built itself from
  * the quote it pinned. Server-built trades accept any contract; the public
- * sponsor route never accepts the trade intent. A trade names no presale and is
- * counted against the social path's own daily cap (`social_config`
- * `trade_sponsor_daily_cap`, OA-25 Q12) instead of `presale_sponsor_exec`,
- * so trading never spends a member's presale sponsorship budget.
+ * sponsor route never accepts the trade intent. Trades and withdrawals use
+ * the request rate and open-reservation limits without a daily limit.
  */
 export function createSponsorService(
   dependencies: PresaleSponsorServiceDependencies,
@@ -793,7 +795,7 @@ function sponsorKind(dependencies: PresaleSponsorServiceDependencies) {
     if (open.count >= MAX_OPEN_SPONSOR_RESERVATIONS)
       throw openCapExceeded(open.nextExpiry, checkedAt);
 
-    if (countsDailyExecution(body.intent)) await requireDailyExecution(dependencies, did, checkedAt);
+    if (hasDailySponsorshipLimit(body.intent)) await requireDailyExecution(dependencies, did, checkedAt);
 
     const cap = config.maxGasMist;
     const { price, epoch } = await dependencies.chain.gasContext({ signal });
@@ -885,12 +887,12 @@ function sponsorKind(dependencies: PresaleSponsorServiceDependencies) {
  *    a `withdraw` (no presale) passes the withdraw policy instead, which reads none;
  * 6. at most two open reservations (`budget_exceeded`), rechecked when the
  *    slot is claimed;
- * 7. fewer than 100 executions today (`budget_exceeded` until UTC midnight);
+ * 7. fewer than 100 executions today for capped intents (`budget_exceeded` until UTC midnight);
  * 8. simulation with the sponsor's gas (`dry_run_failed`);
  * 9. the budget within the cap (`gas_cap_exceeded`);
  * 9b. the shared budgets, counted only now (`rate_limited`): the client IP's
- *    (counted by the kit in step 1 for this route), the account's daily
- *    share, then the platform's daily cap (`countSponsorBudgets`);
+ *    (counted by the kit in step 1 for this route), then the daily limits
+ *    for capped intents (`countSponsorBudgets`);
  * 10. a `reserving` row claims the slot under the account's lock;
  * 11. the transaction bytes (`ValidDuring` this epoch or the next);
  * 12. the row completed to `reserved`.

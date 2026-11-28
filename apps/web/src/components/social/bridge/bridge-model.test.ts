@@ -9,6 +9,7 @@ import {
   amountAtoms,
   amountText,
   bridgeAction,
+  bridgeBalanceText,
   CHAINS,
   cutDigits,
   DESTINATIONS,
@@ -45,11 +46,12 @@ test("typed amounts become atoms; presets and the balance check keep gas back fo
 });
 
 test("quote rows: tiny fees, missing USD and time", () => {
-  const rows = quoteRows({ expectedAmountOut: 7.071843, minReceived: 7.00474, clientRelayerFeeSuccess: 0.004, etaSeconds: 0 }, CHAINS.solana.tokens[0], DESTINATIONS[1]!);
+  const rows = quoteRows({ expectedAmountOut: 7.071843, minReceived: 7.00474, fee: 0.004, etaSeconds: 0 }, CHAINS.solana.tokens[0], DESTINATIONS[1]!);
   assert.deepEqual(rows, { amount: "7.07184", minimum: "7.00474\u00a0USDC", fee: "< $0.01", eta: "About 1\u00a0s" });
-  const unknownFee = quoteRows({ expectedAmountOut: 1, minReceived: 1, clientRelayerFeeSuccess: null, etaSeconds: 150 }, ETH, DESTINATIONS[0]!);
+  const unknownFee = quoteRows({ expectedAmountOut: 1, minReceived: 1, fee: null, etaSeconds: 150 }, ETH, DESTINATIONS[0]!);
   assert.deepEqual([unknownFee.eta, unknownFee.fee], ["About 3\u00a0min", "\u2014"]);
-  assert.equal(quoteRows({ expectedAmountOut: 1, minReceived: 1, clientRelayerFeeSuccess: 0, etaSeconds: 1 }, USDC, DESTINATIONS[1]!).fee, "$0.00");
+  assert.equal(quoteRows({ expectedAmountOut: 1, minReceived: 1, fee: 0, etaSeconds: 1 }, USDC, DESTINATIONS[1]!).fee, "$0.00");
+  assert.equal(quoteRows({ expectedAmountOut: 1, minReceived: 1 }, USDC, DESTINATIONS[1]!).eta, "—", "no time given, no time shown");
 });
 
 test("amounts drop digits instead of rounding up, even where the browser ignores roundingMode", () => {
@@ -67,14 +69,21 @@ test("Mayan's explorer status maps to the row state", () => {
   assert.equal(transferState(undefined), "pending");
 });
 
-test("quote errors read as plain sentences with Mayan's limits", () => {
+test("quote errors read as plain sentences with Mayan's limits, each saying what to do", () => {
   const base = CHAINS.base;
-  assert.equal(quoteErrorText({ code: 9999, message: "Swap SDK is outdated!" }, base, USDC), "Bridging is paused. You can still deposit on Sui. Code: bridge_paused.");
-  assert.equal(quoteErrorText({ code: "AMOUNT_TOO_SMALL", data: { minAmountIn: 0.05 } }, base, USDC), "The smallest amount is 0.05\u00a0USDC. Code: bridge_amount_too_small.");
-  assert.equal(quoteErrorText({ code: "AMOUNT_TOO_LARGE", data: { maxAmountIn: 300 } }, base, USDC), "The largest amount is 300\u00a0USDC. Code: bridge_amount_too_large.");
-  assert.equal(quoteErrorText({ code: "ROUTE_NOT_FOUND" }, base, ETH), "No route from Base ETH to Sui right now. Code: bridge_no_route.");
-  assert.equal(quoteErrorText(new TypeError("Failed to fetch"), base, ETH), "Couldn’t get a price. Code: bridge_quote_failed.");
-  assert.equal(quoteErrorText(null, base, ETH), "Couldn’t get a price. Code: bridge_quote_failed.");
+  const read = (error: unknown, token = ETH) => quoteErrorText(error, base, token);
+  assert.equal(read({ code: 9999, message: "Swap SDK is outdated!" }, USDC), "Bridging is paused. You can still deposit on Sui. Code: bridge_paused.");
+  assert.equal(read({ code: "AMOUNT_TOO_SMALL", data: { minAmountIn: 0.05 } }, USDC), "The smallest amount is 0.05\u00a0USDC. Code: bridge_amount_too_small.");
+  assert.equal(read({ code: "AMOUNT_TOO_LARGE", data: { maxAmountIn: 300 } }, USDC), "The largest amount is 300\u00a0USDC. Code: bridge_amount_too_large.");
+  assert.equal(read({ code: "AMOUNT_TOO_SMALL", message: "Amount too small (min ~0.00043 ETH)", data: { minAmountIn: 0.00043 } }), "The smallest amount is 0.00043\u00a0ETH. Code: bridge_amount_too_small.");
+  assert.equal(read({ code: "BRIDGE_LIMIT_EXCEEDED", message: "CCTP does not have enough capacity for this amount. Max per swap: 75.94588242742242" }), "Largest right now: 75.94\u00a0ETH. Code: bridge_amount_too_large.");
+  assert.equal(read({ code: "BRIDGE_LIMIT_EXCEEDED", message: "Over capacity." }), "Try a smaller amount. Code: bridge_amount_too_large.");
+  assert.equal(read({ code: "ALLOWANCE_TOO_LOW", message: "Over the fast limit." }), "Try a smaller amount. Code: bridge_amount_too_large.");
+  assert.equal(read({ code: "SDK_VERSION_TOO_OLD", message: "Upgrade sdk" }), "Bridging is paused. You can still deposit on Sui. Code: bridge_paused.");
+  assert.equal(read({ code: "ROUTE_NOT_FOUND" }), "No price for ETH. Bridge USDC. Code: bridge_no_route.");
+  assert.equal(read({ code: "ROUTE_NOT_FOUND" }, USDC), "No price for USDC. Try another chain. Code: bridge_no_route.");
+  assert.equal(read(new TypeError("Failed to fetch")), "Couldn’t get a price. Code: bridge_quote_failed.");
+  assert.equal(read(null), "Couldn’t get a price. Code: bridge_quote_failed.");
 });
 
 const READY: ActionInput = {
@@ -128,4 +137,11 @@ test("every chain and coin logo is a file the app serves", () => {
 
 test("the analytics band is coarse and marks amounts near the BLINK cap", () => {
   assert.deepEqual([undefined, 2, 20, 120, 299].map(usdBand), ["unknown", "<10", "10-100", "100-250", "250+"]);
+});
+
+test("the balance line cuts to six places, never rounds up, and never shows a held coin as zero", () => {
+  assert.equal(bridgeBalanceText(4_612_654_423_117_055_599n, 18), "4.612654");
+  assert.equal(bridgeBalanceText(25_416_101_600_513_364_934_679n, 18), "25,416.1016");
+  assert.equal(bridgeBalanceText(500_000_000n, 18), "0.0000000005");
+  assert.equal(bridgeBalanceText(0n, 18), "0");
 });

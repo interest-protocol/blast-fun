@@ -26,7 +26,6 @@ import { createPresaleDeploymentGate } from "@blast/core/modules/presale/deploym
 import { CAP, fixtureChain, identity, memoryReservations, SPONSOR } from "../../../../../../packages/server/test/fixtures/modules/sponsor/route-fixtures.ts";
 import { createSponsorService } from "@blast/server/modules/sponsor/service.ts";
 import { PostgresSocialAccounts } from "@blast/server/modules/social/accounts/repository.ts";
-import { createSocialConfigReader } from "@blast/core/modules/social/config/reader.ts";
 import { SOCIAL_TRADES_PATH, socialTradeSettlePath, type SocialTrade } from "@blast/core/modules/social/contracts/trades.ts";
 import { SOCIAL_WALLET_SESSION_COOKIE } from "@blast/core/modules/social/contracts/wallet-sign-in.ts";
 import { createSocialValidator } from "@blast/core/modules/social/contracts/validate.ts";
@@ -50,7 +49,7 @@ import {
 import { sealTradeQuote, tradeQuoteKey } from "@blast/server/modules/social/trades/quote-token.ts";
 import { routeByVenue } from "@blast/server/modules/social/trades/aftermath.ts";
 import { recordedAftermathRouter, YUM, YUM_BINDING, YUM_POOL, YUM_WRAPPER } from "../../../../../../packages/server/test/fixtures/modules/social/trades/aftermath-fixtures.ts";
-import { createSocialSwapRoutes, sponsoredToday, type ExecutedTrade, type TradeSponsor } from "@blast/server/modules/social/trades/swap.ts";
+import { createSocialSwapRoutes, type ExecutedTrade, type TradeSponsor } from "@blast/server/modules/social/trades/swap.ts";
 
 /**
  * Social feed R3-31 (AC-1 to AC-6, AC-8, AC-9; AC-126, AC-130): the swap
@@ -149,7 +148,7 @@ type Fixture = Readonly<{
   setNow(ms: number | null): void;
 }>;
 
-async function withFixture(run: (fixture: Fixture) => Promise<void>, options: { chain?: OfflineChainOptions; cap?: number; fee?: BlastTradeFee } = {}): Promise<void> {
+async function withFixture(run: (fixture: Fixture) => Promise<void>, options: { chain?: OfflineChainOptions; sponsorUnavailable?: boolean; fee?: BlastTradeFee } = {}): Promise<void> {
   const database = await freshTestDatabase();
   const { url } = database;
   const admin = createPool(url, { max: 4 });
@@ -165,9 +164,6 @@ async function withFixture(run: (fixture: Fixture) => Promise<void>, options: { 
     [ACCOUNT, DID],
   );
   await admin.query(`INSERT INTO social_accounts (account_id, sui_address, callsign) VALUES ($1, $2, 'session')`, [SESSION_ACCOUNT, SESSION_WALLET]);
-  if (options.cap !== undefined) {
-    await admin.query("INSERT INTO social_config (key, value, updated_by) VALUES ('trade_sponsor_daily_cap', $1::jsonb, 'fixture')", [JSON.stringify(options.cap)]);
-  }
 
   const webPool = createRuntimePool(urlAs(url, "blast_web"), POOL, "social-swap-web");
   let clock: number | null = null;
@@ -207,17 +203,17 @@ async function withFixture(run: (fixture: Fixture) => Promise<void>, options: { 
       reservations: memoryReservations().store,
       executions: { async today() { return { allowed: true }; } },
       config: () => ({ sponsorAddress: SPONSOR, maxGasMist: CAP, swapTargets: [], tradeFee: () => options.fee ?? null }),
-      // The sponsor's per-IP, per-account daily and platform budgets, in the shared table (review M1).
+      // The sponsor's short-window rate limit uses the shared table.
       limits: new PostgresRateLimitEnforcer({ pool: webPool, subjectPepper: PEPPER }),
     });
     const sponsor: TradeSponsor = {
       async sponsor(request) {
         sponsorCalls.push(request.intent);
+        if (options.sponsorUnavailable) throw new Error("Fixture sponsor unavailable");
         return real.sponsor(request);
       },
     };
     const executed = new Map<string, ExecutedTrade | "lookup_fails">();
-    const config = createSocialConfigReader(autocommitReader(webPool, "social"), { now: () => 0 });
     const routes = createSocialSwapRoutes({
       kit,
       database: () => autocommitReader(webPool, "social"),
@@ -225,7 +221,6 @@ async function withFixture(run: (fixture: Fixture) => Promise<void>, options: { 
       chain: () => chain,
       quoteKey: () => KEY,
       sponsor: () => sponsor,
-      config: config.getSocialConfig,
       transactions: () => ({
         async executed(digest) {
           const found = executed.get(digest);
@@ -408,7 +403,7 @@ test("a two-hop trade uses exactly the quoted legs in order; a wallet session is
     assert.equal(built.status, "built");
     assert.deepEqual(built.network_fee, { payer: "blast", label: "Paid by Blast" });
     assert.notEqual(built.reservation_id, null);
-    assert.deepEqual(sponsorCalls, ["trade"], "a wallet session is sponsored under the same daily cap (owner ruling 2026-11-20, reversing OA-17)");
+    assert.deepEqual(sponsorCalls, ["trade"], "a wallet session is sponsored");
     const data = bcs.TransactionData.parse(fromBase64(built.transaction_bytes!)).V1!;
     assert.equal(normalizeSuiAddress(data.sender), SESSION_WALLET);
     assert.equal(normalizeSuiAddress(data.gasData.owner!), SPONSOR, "Blast's gas pool pays");
@@ -513,26 +508,43 @@ test("a replayed key returns the first outcome and never builds again; another q
   });
 });
 
-test("past the daily cap an embedded wallet is told the fee, and may still trade paying it (R3-31-AC-6)", { skip }, async () => {
+test("X and Slush swaps stay sponsored after the old daily limit", { skip }, async () => {
   await withFixture(async ({ admin, sponsorCalls, create }) => {
-    const first = await offer({ account: ACCOUNT, sender: EMBEDDED });
-    assert.equal((await tradeOf(await create(requestFor(first.quoteId, first.quote)), 201)).network_fee?.payer, "blast");
+    await admin.query("INSERT INTO social_config (key, value, updated_by) VALUES ('trade_sponsor_daily_cap', '1'::jsonb, 'legacy')");
+    for (const wallet of [
+      { account: ACCOUNT, sender: EMBEDDED, as: "embedded" },
+      { account: SESSION_ACCOUNT, sender: SESSION_WALLET, as: "session" },
+    ] as const) {
+      const first = await offer(wallet);
+      const firstTrade = await tradeOf(await create(requestFor(first.quoteId, first.quote), wallet.as), 201);
+      assert.equal(firstTrade.network_fee?.payer, "blast");
 
-    const second = await offer({ account: ACCOUNT, sender: EMBEDDED });
-    const body = requestFor(second.quoteId, second.quote);
+      const second = await offer(wallet);
+      const secondTrade = await tradeOf(await create(requestFor(second.quoteId, second.quote), wallet.as), 201);
+      assert.equal(secondTrade.network_fee?.payer, "blast");
+      const data = bcs.TransactionData.parse(fromBase64(secondTrade.transaction_bytes!)).V1!;
+      assert.equal(normalizeSuiAddress(data.gasData.owner!), SPONSOR);
+    }
+    assert.deepEqual(sponsorCalls, ["trade", "trade", "trade", "trade"]);
+  });
+});
+
+test("the wallet can explicitly cover a fee when the sponsor is unavailable", { skip }, async () => {
+  await withFixture(async ({ admin, create }) => {
+    const { quoteId, quote } = await offer({ account: ACCOUNT, sender: EMBEDDED });
+    const body = requestFor(quoteId, quote);
     const prompt = await create(body);
     assert.equal(prompt.status, 409);
     const answer = (await prompt.json()) as { error: { code: string; fee_mist: string } };
     assert.equal(answer.error.code, "sponsorship_unavailable");
-    assert.equal(answer.error.fee_mist, "1500000", "the fee the wallet would pay, from the dry run");
-    assert.equal((await logRows(admin)).length, 1, "a prompt records nothing");
+    assert.equal(answer.error.fee_mist, "1500000");
+    assert.equal((await logRows(admin)).length, 0, "a prompt records nothing");
 
     const paid = await tradeOf(await create({ ...body, accept_fee: true }), 201);
     assert.deepEqual([paid.status, paid.network_fee?.payer, paid.reservation_id], ["built", "wallet", null]);
     const data = bcs.TransactionData.parse(fromBase64(paid.transaction_bytes!)).V1!;
-    assert.equal(normalizeSuiAddress(data.gasData.owner!), EMBEDDED, "the embedded wallet's own SUI pays");
-    assert.deepEqual(sponsorCalls, ["trade"], "the cap held");
-  }, { cap: 1 });
+    assert.equal(normalizeSuiAddress(data.gasData.owner!), EMBEDDED);
+  }, { sponsorUnavailable: true });
 });
 
 test("every failure path is a failed trade with a published code, and no raw chain error reaches a response or a log (R3-31-AC-8)", { skip }, async () => {
@@ -570,9 +582,6 @@ test("every failure path is a failed trade with a published code, and no raw cha
       const lapsed = await tradeOf(await body(await settle(pending.trade_id)), 200);
       assert.deepEqual([lapsed.status, lapsed.failure_code], ["failed", "expired"]);
       setNow(null);
-      // Review L2: the trade that failed on chain cost Blast its gas, so the daily cap counts it; the lapsed
-      // one never landed and does not.
-      assert.equal(await sponsoredToday(autocommitReader(admin, "social"), ACCOUNT, Date.now(), 20), 1);
 
       const states = (await logRows(admin)).map((row) => [row.tx_id === built.trade_id ? "sent" : "unsent", row.state, row.failure_code]);
       assert.deepEqual(states.sort(), [["sent", "failed", "execution_failed"], ["unsent", "failed", "expired"]]);
@@ -653,7 +662,7 @@ test("sponsor unavailable, zero native SUI: failed gas requirement is persisted 
     assert.deepEqual(replay, failed);
     assert.equal((await logRows(admin)).length, 1);
     assert.equal(chain.log.filter((call) => call.kind === "execute").length, 0);
-  }, { cap: 0, chain: { balances } });
+  }, { sponsorUnavailable: true, chain: { balances } });
 });
 
 test("an embedded wallet with zero SUI is sponsored without any contract allowlist", { skip }, async () => {
@@ -788,54 +797,5 @@ test("tracking recovers abandoned swaps after checkpointing, excludes wrong-send
     } finally {
       await runtime.end();
     }
-  });
-});
-
-test("curve sponsor reservations share the swap cap, expire when abandoned, and are not double counted", { skip }, async () => {
-  await withFixture(async ({ admin, create }) => {
-    const db = autocommitReader(admin, "social");
-    const insert = async (state: string, expires: number, submitted = false, id: string = randomUUID()) => {
-      await admin.query(`INSERT INTO presale_sponsor_reservations
-        (id, privy_did, sender, presale_id, intent, gas_budget, pool_deadline, expires_at, state, tx_bytes, digest, submitted_at)
-        VALUES ($1, $2, $3, NULL, 'trade', 2000000, now(), to_timestamp($4::double precision / 1000), $5, $6, $7, CASE WHEN $8 THEN now() ELSE NULL END)`,
-        [id, DID, EMBEDDED, expires, state, Buffer.from([1]), "1".repeat(32), submitted]);
-      return id;
-    };
-    const now = Date.now();
-    await insert("reserved", now - 1000);
-    assert.equal(await sponsoredToday(db, ACCOUNT, now, 20), 0, "abandoned expired reviews release the cap");
-    await insert("reserved", now + 60_000);
-    assert.equal(await sponsoredToday(db, ACCOUNT, now, 20), 1);
-    await insert("unconfirmed", now - 1000, true);
-    assert.equal(await sponsoredToday(db, ACCOUNT, now, 20), 2, "possibly submitted gas remains counted");
-    const offered = await offer({ account: ACCOUNT, sender: EMBEDDED });
-    const built = await tradeOf(await create(requestFor(offered.quoteId, offered.quote)), 201);
-    assert.ok(built.reservation_id);
-    assert.equal(await sponsoredToday(db, ACCOUNT, now, 20), 3);
-    await insert("reserved", now + 60_000, false, built.reservation_id);
-    assert.equal(await sponsoredToday(db, ACCOUNT, now, 20), 3, "a reservation linked to a swap counts once");
-  });
-});
-
-test("0162: a wallet session's curve reservation, keyed sui:<its address>, counts toward its account's swap cap", { skip }, async () => {
-  await withFixture(async ({ admin }) => {
-    const db = autocommitReader(admin, "social");
-    const other = normalizeSuiAddress("0x07e4");
-    // A curve trade's reservation: no social_swap_intents row names it.
-    const insert = async (sender: string, submitted: boolean) => {
-      await admin.query(`INSERT INTO presale_sponsor_reservations
-        (id, privy_did, sender, presale_id, intent, gas_budget, pool_deadline, expires_at, state, tx_bytes, digest, submitted_at)
-        VALUES ($1, 'sui:' || $2::text, $2, NULL, 'trade', 2000000, now(), now() + interval '1 minute', $3, $4, $5, CASE WHEN $6 THEN now() ELSE NULL END)`,
-        [randomUUID(), sender, submitted ? "submitted" : "reserved", Buffer.from([1]), "1".repeat(32), submitted]);
-    };
-    const now = Date.now();
-    assert.equal(await sponsoredToday(db, SESSION_ACCOUNT, now, 20), 0);
-    await insert(SESSION_WALLET, false);
-    assert.equal(await sponsoredToday(db, SESSION_ACCOUNT, now, 20), 1, "an open review holds a slot");
-    await insert(SESSION_WALLET, true);
-    assert.equal(await sponsoredToday(db, SESSION_ACCOUNT, now, 20), 2, "a submitted one counts");
-    await insert(other, true);
-    assert.equal(await sponsoredToday(db, SESSION_ACCOUNT, now, 20), 2, "another wallet's reservation is not this account's");
-    assert.equal(await sponsoredToday(db, ACCOUNT, now, 20), 0, "nor the Privy account's");
   });
 });

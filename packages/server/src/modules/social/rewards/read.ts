@@ -16,6 +16,7 @@ import {
 } from "@blast/core/modules/social/contracts/rewards.ts";
 import { SocialRouteError } from "@blast/core/modules/social/route-kit/errors.ts";
 import { SUI_OBJECT_ID_PATTERN } from "@blast/core/lib/sui/ids.ts";
+import { readSteps } from "@blast/server/modules/social/read-steps.ts";
 
 /** Holder payouts and publication counts come from canonical native views; unpaid positive allocations come from the daily relay reader. */
 
@@ -353,18 +354,20 @@ export async function readRewardsPage(
   assertChainReadThroughViews(REWARD_COINS_SQL);
   const { limit, cursor, presaleId } = query;
   const withCoins = cursor === null && presaleId === null && !query.vaultId;
+  const step = readSteps("rewards");
   const summary = async () => {
-    const waiting = await readWaiting(
+    // The relay's waiting shares, then the paid leaves among them (`readWaiting`).
+    const waiting = await step("waiting", () => readWaiting(
       database,
       context.network === null ? null : context.waiting,
       wallets,
       context.nowMs,
-    );
-    const { rows } = await database.read<CoinRow>(REWARD_COINS_SQL, [
+    ));
+    const { rows } = await step("coins", () => database.read<CoinRow>(REWARD_COINS_SQL, [
       [...wallets],
       [...(waiting?.keys() ?? [])],
       context.network,
-    ]);
+    ]));
     return rows.map((row) =>
       rewardCoinOf(
         row,
@@ -373,7 +376,7 @@ export async function readRewardsPage(
     );
   };
   const [payouts, coins] = await Promise.all([
-    database.read<PayoutRow>(REWARD_PAYOUTS_SQL, [
+    step("payouts", () => database.read<PayoutRow>(REWARD_PAYOUTS_SQL, [
       [...wallets],
       presaleId,
       cursor?.checkpoint ?? null,
@@ -381,8 +384,8 @@ export async function readRewardsPage(
       cursor?.eventSlot ?? null,
       limit + 1,
       query.vaultId ?? null,
-    ]),
-    withCoins ? summary() : null,
+    ])),
+    withCoins ? step("summary", summary) : null,
   ]);
   const own = new Set(wallets);
   const page = payouts.rows.slice(0, limit);

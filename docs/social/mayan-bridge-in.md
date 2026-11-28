@@ -3,6 +3,11 @@
 Status: approved by Jose 2026-11-26 (`mayan-bridge-in-proposal.md`). The
 bridge and token picker are both behind the bridge flag in PR #116.
 
+Update 2026-11-28: the card prices and sends Fast MCTP, MCTP and Blink routes
+from these chains to Sui, the same wherever Bridge is on. Jose approved this
+"Mayan's way". Production keeps Bridge off. See [Routes](#routes). The 2026-11-26
+findings below were made with Blink only.
+
 ## Goal
 
 A person on Base, Ethereum, Arbitrum, Optimism, Polygon or Solana holds ETH,
@@ -15,7 +20,7 @@ address and cannot be typed.
 
 Success: a $2 Base ETH → SUI and a $2 Solana SOL → SUI bridge arrive in a Blast
 wallet from the deployed site, the balance updates without a reload, and the
-card scores 5/5 on the Japanese design principles in every state.
+card passes the trader-arcade check in every state.
 
 ## What was proven (2026-11-26, scratch scripts, no wallets, no funds)
 
@@ -38,7 +43,7 @@ SDK `@mayanfinance/swap-sdk@16.1.0` (published 2026-11-24, `getSdkVersion()`
 
 - **BSC is out of v1.** BSC works as a source toward Base and Solana (SWIFT)
   but no route reaches Sui today, although `/v3/chains` lists BSC as active.
-- **BLINK only.** The SDK's defaults also allow WH, SWIFT, MCTP and Shuttle.
+- **BLINK alone** (every other route off). The SDK's defaults also allow WH, SWIFT, MCTP and Shuttle.
   Quotes with `{ blink: true }` and every other route `false` worked for Base
   USDC, Arbitrum ETH, Ethereum ETH and Solana BONK. `decodeBlinkQuote(quote.blinkQuote)`
   exposes `orderParams.recipient` (the Sui address) and `orderParams.refundAddress`
@@ -100,13 +105,13 @@ Jose, 2026-11-26: its own **Bridge** button, beside Deposit and Withdraw.
 Each chain starts with its native coin and canonical USDC. The picker loads
 Mayan's verified ERC-20, SPL or Token-2022 catalog for the selected chain and
 searches by name, symbol or address. It opens over the bridge as a centered
-desktop dialog and a bottom sheet on phones. Selecting a token still requires a Blink
-route for the amount and destination. These routes may swap on the source
-chain and use a different approval spender, which `getEvmSwapApproval` chooses.
+desktop dialog and a bottom sheet on phones. Selecting a token still requires a
+route for the amount and destination. A route may swap on the source chain; the
+SDK chooses the approval spender.
 
 ## Card layout and states
 
-From the top, Aftermath's order minus what a deposit does not need:
+From the top, only what a deposit needs:
 
 1. **From**: a chain menu, then the chain-specific Connect or Switch action
    when needed. The send field holds the token picker and amount. A loaded
@@ -114,10 +119,10 @@ From the top, Aftermath's order minus what a deposit does not need:
    keep gas back for native tokens.
 2. **To**: SUI or USDC, "Your Blast wallet" with the shortened address through
    `CopyAddress`. Never an input.
-3. **Quote rows** (once a quote exists): one sentence ("Send 20 USDC from
-   Base. You get at least 29.39 SUI."), then Fee (source token and USD; USD
-   only for USDC) and Arrives (Mayan's `etaSeconds`, "about 10 s"). Slippage
-   is Mayan's auto value, folded into "at least", not a row. "Powered by
+3. **Quote rows** (once a quote exists): Fee in dollars and Arrives (Mayan's
+   `etaSeconds`, "About 35 s"). Slippage is Mayan's auto value, folded into "at
+   least", not a row. One sentence directly above the button carries the money
+   ("Send 20 USDC from Base. You get at least 19.98 USDC."). "Powered by
    Mayan" footer.
 4. **One primary button**. Connect and Switch sit under the source chain.
    Sign in, Approve, and Bridge sit below the transfer details.
@@ -133,9 +138,9 @@ One direction only: other chains → Sui. No flip, no Sui → other chain, no sw
 | No source wallet | Unbound preview quote; "Connect {chain} wallet" under From |
 | Wrong network (EVM) | "Switch to {chain}" under From (`switchChain`) |
 | Quoting | Skeleton rows; previous numbers dimmed, never blank |
-| Quote error | `ROUTE_NOT_FOUND` → "No route from {chain} {token} to Sui right now"; limits → Mayan's min/max in plain words; network or 429 → "Couldn't get a price" after backoff, and the button becomes "Try again" |
-| Above the BLINK cap | `AMOUNT_TOO_LARGE` → "The largest amount is 300 USDC" (Mayan's `maxAmountIn`); the button stays disabled. Larger amounts wait for FAST_MCTP (below) |
-| SDK outdated | `fetchQuote` code 9999 "Swap SDK is outdated!" → card says "Bridging is paused. You can still deposit on Sui"; the inputs lock; logs an error so we upgrade |
+| Quote error | `ROUTE_NOT_FOUND` → "No price for ARB. Bridge USDC." (for USDC, "Try another chain."); limits → Mayan's min/max in plain words; network or server errors → "Couldn't get a price" after backoff; a 429 → the same line at once; the button becomes "Try again" |
+| Too large | `AMOUNT_TOO_LARGE` → "The largest amount is 300 USDC" (Mayan's `maxAmountIn`); `BRIDGE_LIMIT_EXCEEDED` or `ALLOWANCE_TOO_LOW` → "Largest right now: 75.94 ETH" when Mayan's message gives a number, else "Try a smaller amount"; the button stays disabled |
+| SDK outdated | `fetchQuote` code 9999 "Swap SDK is outdated!" or `SDK_VERSION_TOO_OLD` → card says "Bridging is paused. You can still deposit on Sui"; the inputs lock; logs an error so we upgrade |
 | Insufficient balance | "Not enough {symbol}" (native includes source gas) |
 | Approval needed | "Approve {symbol}" (approve tx), then "Bridge" |
 | Signing | `LoadingIndicator` "Confirm in your wallet" |
@@ -144,7 +149,7 @@ One direction only: other chains → Sui. No flip, no Sui → other chain, no sw
 | Blast session changed | Sign-out or account switch: close the card's quote and pending state, return to Deposit |
 | On the way | Pending row: amounts, Mayan's ETA, "View on Mayan" |
 | Arrived | Row turns "Arrived · 25.2 SUI"; balances refresh; one quiet toast |
-| Refunded | "Refunded to your {chain} wallet" with the explorer link |
+| Refunded | MCTP and Fast MCTP: "Refunded in USDC to your Blast wallet on Sui". Blink: "Refunded to your {chain} wallet". Both with the explorer link |
 | Wallet rejected | Back to the Bridge button, no error banner |
 
 ## Wallet flow (Privy)
@@ -199,17 +204,14 @@ calls it while open so WalletConnect QR and Coinbase show.
   `isEvmSwapAllowanceEnough` on the fresh quote before the deposit (slow
   Ethereum approvals can outlive the price).
 - **Solana:** `swapFromSolana(quote, swapper, dest, null, sign, connection,
-  ..., { onTransactionSigned })`. Always pass our `Connection` (on Mayan's
+  ...)`. Always pass our `Connection` (on Mayan's
   Solana RPC); without it the SDK falls back to `rpc.ankr.com`. `sign` serializes the SDK's web3.js
   transaction, has Privy sign the bytes, and deserializes it.
-  `onTransactionSigned` records the signature at once so the pending row
+  Our signer callback records the signature at once so the pending row
   exists even if sending is slow.
-- **Quotes are BLINK only:** `fetchQuote(params, { blink: true, swift: false,
-  mctp: false, fastMctp: false, wormhole: false, shuttle: false, monoChain:
-  false, gasless: false })`. Refuse any quote with `type !== "BLINK"` or
-  without a Blink order (`hasBlinkQuoteHash`).
-- **Recipient and refund guard:** one synchronous check before any wallet
-  call: `decodeBlinkQuote(quote.blinkQuote).orderParams.recipient` equals the
+- **Recipient and refund guard** (Blink; see [Routes](#routes) for the MCTP
+  routes): one synchronous check before any wallet
+  call. A quote without a Blink order (`hasBlinkQuoteHash`) is refused, and `decodeBlinkQuote(quote.blinkQuote).orderParams.recipient` equals the
   Blast address and `refundAddress` equals the connected source wallet
   (`sameBlinkAddress`). The SDK's own `resolveBlinkOrder` checks the order
   against the quote; ours checks it against the Blast session, which the SDK
@@ -232,7 +234,7 @@ calls it while open so WalletConnect QR and Coinbase show.
 - Supply chain: 16.1.0 was published two days before this plan and handles
   user funds. Before the flag goes on, read the diff from the previous minor
   (`npm diff`), and keep the lockfile integrity hashes. Upgrades are explicit
-  PRs; a 9999 "outdated" error is the signal to make one.
+  PRs; an "outdated" refusal (9999 or `SDK_VERSION_TOO_OLD`) is the signal to make one.
 - The `bridge` screen body is a `React.lazy` boundary; nothing from these
   packages enters any route's first-load JS. Compare the build route table
   before and after.
@@ -242,13 +244,17 @@ calls it while open so WalletConnect QR and Coinbase show.
 Read on the server (`lib/web-config.ts`) and passed to the client as a
 boolean:
 
-- `NEXT_PUBLIC_MAYAN_BRIDGE_ENABLED=1` shows the Bridge buttons (ship dark).
+- `NEXT_PUBLIC_MAYAN_BRIDGE_ENABLED=1` shows the Bridge buttons off production
+  (ship dark). Production keeps them off ([Routes](#routes)).
 - RPCs: Mayan's own, `https://front-rpc.mayan.finance/<chain>`, the one its
   widget uses (open CORS, no key). Jose's ruling 2026-11-26: no custom RPCs and
-  no RPC variables, so every chain is always shown.
+  no RPC variables, so every chain is always shown. Mayan's docs differ: they
+  ask for `options.evmProvider` on your own RPC and never mention this one
+  ([Where we differ](#where-we-differ-from-mayans-docs)).
 - Chains: Base, Ethereum, Arbitrum, Optimism, Polygon and Solana. Each has a
-  BLINK route to Sui (checked against live quotes 2026-11-26). Unichain, Linea,
-  Avalanche and Monad quote only FAST_MCTP; BSC has no route.
+  route to Sui (checked against live quotes 2026-11-26). On that day Unichain,
+  Linea, Avalanche and Monad quoted only FAST_MCTP; they are not listed. BSC has
+  no route.
 - Referrer fee: **0%, Jose's ruling 2026-11-26.** v1 sends no referrer and has
   no fee setting. If a fee is wanted later, Mayan's `ChainReferrers` needs an
   `evm` address (Base, Ethereum, Arbitrum, Optimism, Polygon sources) and a `solana` address,
@@ -281,13 +287,14 @@ Test both builders, flag on and off, in `web-security.test.ts`.
   bound quote creates an order at Mayan. Re-quote when the input changes, when
   the screen becomes visible again after 60 s, and once at click.
 - `fetchQuote` takes no `AbortSignal` and is a POST: stale responses are
-  ignored by key, not cancelled, and count in the RPS figures. Retry 429 and
-  5xx with exponential backoff (1 s, 2 s, 4 s, then stop).
-- At click: fresh bound quote; refuse if `isBlinkQuoteExpired`; compare with
-  the shown minimum; then sign.
+  ignored by key, not cancelled, and count in the RPS figures. Network and
+  server errors retry with backoff; a 429 is never retried (see
+  [Routes](#routes)).
+- At click: fresh bound quote; run the guard, which refuses an expired quote;
+  compare with the shown minimum; then sign.
 - Source balance: one RPC read per (wallet, chain, token) change and after a
   submit. Not polled.
-- Status: poll `swap/trx/{hash}` every 5 s while pending and visible; stop on
+- Status: poll `swap/trx/{hash}` every 2 s (Mayan's docs) while pending and visible; stop on
   `COMPLETED` or `REFUNDED`; after 30 min stop and show "Still on the way —
   check on Mayan".
 - On `COMPLETED`: `useBalancesContext().changed()` (`coins/balances.tsx`),
@@ -301,16 +308,17 @@ PR line (to be filled with measured values):
 | --- | --- | --- | --- |
 | Blast origin | 0; 4 reads per completed bridge | ~0 rps | ~0 rps |
 | price-api.mayan.finance | ≤ 2.5 rps while typing (debounced), 0 at rest | ≤ 250 rps bursts, ~0 at rest | unmeasured |
-| explorer-api (status and history) | 0.2 rps per pending bridge, plus 0.2 rps while this tab waits for a recently submitted hash to be indexed | bridges in flight × 0.2, plus 0.2 per tab waiting for the index | ≤ 2,000 rps per poll type if all 10,000 tabs qualify |
+| explorer-api (status and history) | 0.5 rps per pending bridge, plus 0.2 rps while this tab waits for a recently submitted hash to be indexed (calculated) | bridges in flight × 0.5, plus 0.2 per tab waiting for the index | one pending bridge per tab: ≤ 5,000 rps of status and 2,000 rps of history, from the users' own IPs |
 | Source RPC (Mayan's `front-rpc`) | balance reads per input change; Solana send + SDK retries (`submitTransactionWithRetry`) per bridge | per committed action | — |
 
-Mayan's rate limits are unknown: mark unmeasured and ask Mayan for an API key
-(`QuoteOptions.apiKey`) and limits before turning the flag on for everyone.
+Mayan's rate limits are per IP and their size is unmeasured. Their docs
+recommend starting without an API key and asking for one on rate limits, so we
+send none.
 
 ## Pending state across reloads
 
 The explorer is the record. In memory, the card keeps the just-signed source
-hash (from `onTransactionSigned` or the EVM send) until `/v3/swaps?trader=`
+hash (from our Solana signer callback or the EVM send) until `/v3/swaps?trader=`
 lists it, so the pending row shows at once. For a reload before indexing, the
 tab keeps only submitted hashes and timestamps in account-scoped session
 storage. While the tab is visible it checks history every five seconds until
@@ -336,34 +344,148 @@ is not ready to come back. The server-side CCTP code stays untouched and
 unlinked. When From is USDC, To defaults to USDC (the person can still pick
 SUI). Large USDC amounts reach Circle CCTP V2 through Mayan's FAST_MCTP.
 
-## FAST_MCTP fallback on dev
+## Routes
 
-The `dev` Vercel environment can ask for a direct Base USDC → Sui USDC
-transfer alongside BLINK in the same quote request. BLINK wins when available.
-The fallback uses Mayan's verified Base forwarder and Fast MCTP contract, with
-no swap, gas drop, referrer, permit or payload. The card checks the exact Base
-approval and the transfer calldata before opening the wallet. The Sui address
-in that calldata must be the person's Blast wallet. Mayan pays any destination
-refund to that wallet. The card shows an estimate for the direct transfer.
+Jose, 2026-11-28: "Yes, follow the Mayan way, please." The card works the same
+wherever Bridge is on.
 
-### Broader FAST_MCTP support
+- **One request.** `fetchQuote` with `blink`, `fastMctp`, `mctp` and
+  `fullList`; every other route is `false`.
+- **Three routes (our limit, not Mayan's).** Mayan's SDK asks every route unless
+  told not to. We ask Fast MCTP, MCTP and Blink. Reason: these are the routes
+  whose quote fields the card checks. For MCTP and Fast MCTP the spender, the
+  recipient and the refund wallet follow one rule each; a Blink order is read in
+  full. SWIFT, Wormhole, Shuttle and mono-chain are off. In
+  the 2026-11-28 checks of why pairs had no route, none of 8 inputs was offered
+  SWIFT, Wormhole or Shuttle.
+- **Our order, not Mayan's.** The card takes the first quote that passes its
+  check: Fast MCTP, then MCTP, then Blink. Mayan's docs say its default answer
+  lists the quickest first and then the best return, and the README quickstart
+  takes the first. Our choice can differ from that. In the four recorded answers,
+  our pick was the first quote. Why this order:
+  - Fast MCTP before MCTP: in live quotes on 2026-11-28 ($1 and $5 of Base USDC,
+    0.01 Base ETH) it gave more, and said about 35 s against 20 minutes from
+    Base. MCTP said 15 minutes from Ethereum and 60 s from Solana. At $100,000
+    of USDC, MCTP gave about 0.01% more, which we judge not worth the wait.
+  - Blink last: it quoted on 2026-11-26 but gave no quote in the 2026-11-28
+    runs (172 coins, then 72 quotes), so this card's Blink send has no live
+    test. On an EVM swap the card also cannot check what the deposit locks (see
+    below).
+- **What we check (ours).** The quote that comes back matches what we asked:
+  chains, source coin and amount, coin on Sui, no referrer, no gas drop, not
+  gasless, a minimum no higher than the estimate, and slippage of at most 500 bps
+  (the most Mayan's price API documents for `slippageBps`). For MCTP and Fast
+  MCTP, also:
+  - the quote's `bridgeFee` is 0. On EVM the SDK can take it in the source
+    chain's own coin, and the Fee row leaves it out;
+  - for an auction order, the coin ID the SDK signs is the chosen coin's: MCTP
+    signs `toToken.verifiedAddress` (the coin's metadata object on Sui), Fast
+    MCTP signs `toToken.currencyId`. Neither is `toToken.contract`, so the card
+    pins both IDs for SUI and USDC (read from Sui mainnet, 2026-11-28). SDK
+    16.1.0;
+  - at least 60 seconds are left before the quote's deadline (a Blink order:
+    before its `expiresAt`);
+  - what the SDK signs covers the quote's minimum and the minimum on screen,
+    counted in whole atoms and cut as the SDK cuts them. An auction order signs
+    `minAmountOut` to at most eight places, so a SUI minimum loses its ninth.
+    The quote's decimals for the coin must be the coin's own. Without an auction
+    no minimum is signed, so the coin on Sui must be USDC, and the amount bridged
+    (or the signed floor of the source-chain swap) less the signed fees must
+    cover it. That is an upper bound: the contract also takes Mayan's protocol fee, which is not signed.
+    This follows SDK 16.1.0's code; check it again on each upgrade;
+  - on EVM, the SDK's transaction goes to Mayan's Forwarder contract.
 
-BLINK stops near $300 per bridge. FAST_MCTP (Circle CCTP V2 with Mayan's
-relayer, about 35 s, about 4.5 bps) takes larger amounts. PR 1 is BLINK only
-and shows Mayan's max. FAST_MCTP lands in its own PR, only with all of:
+  The check runs on a fresh quote at each press, and again after the allowance
+  and price reads, right before the send. Before an approval or a send, the card
+  also stops if it has closed or another wallet is now connected.
 
-- **Recipient check before signing.** FAST_MCTP has no Blink order to read.
-  The guard decodes the built EVM calldata (`MayanForwarder.forwardERC20` /
-  `forwardEth` wrapping `MayanFastMctp.bridge` or `createOrder`) and the
-  Solana ledger instruction, and refuses unless the destination is the Blast
-  address on Sui, any destination refund goes to that same wallet, and no referrer is set.
-  **Kill rule:** if any path cannot be checked, that path stays capped at
-  BLINK.
-- The ETA from the chosen route (BLINK 1–10 s, FAST_MCTP about 35 s), and
-  its approval spender from `getEvmSwapApproveTxs`.
-- CSP hosts captured from a browser run of the FAST_MCTP paths.
-- If the fresh quote at click lands on another route (BLINK → FAST_MCTP near
-  the cap), the card shows the new fee and route and waits for a second tap.
+  Known limit: this refuses the MCTP backup for a native coin into USDC on the
+  five EVM chains. In two samples its shown minimum was about 0.001 USDC above
+  the signed one: the gap equals 0.5% of the redeem fee. In 72 live quotes on
+  2026-11-28 (about $0.90, $20 and $5,000 on all 24 pairs), Fast MCTP was
+  offered, passed and was picked every time, and every EVM transaction went to
+  the Forwarder.
+
+  The destination we give the SDK is the signed-in Blast Sui address.
+- **How we send: Mayan's way.** The SDK builds the transaction
+  (`getEvmSwapApproveTxs`, `getSwapFromEvmTxPayload`, `swapFromSolana`).
+  Approvals are signed as the SDK returns them, one receipt at a time: an old
+  Ethereum USDT allowance takes two. No permits.
+- **What the card reads of that transaction.** Very little:
+  - MCTP and Fast MCTP: the card checks quote fields and the recipient, then
+    sends the SDK's transaction unread, with one exception. On EVM it must go to
+    Mayan's Forwarder.
+  - Blink: the card reads the whole order, but not the transaction the SDK builds
+    from it, and does not check where that transaction goes. On an EVM swap, the
+    swap data, the coin locked and the least amount locked come from a second
+    Mayan reply. The SDK checks the swap router against Mayan's contract list;
+    the card checks none of these (SDK 16.1.0).
+  - Solana, every route: the card reads only the blockhash and the signature, to
+    track a pending send.
+- **Refunds.** Blink refunds the source wallet. An auction order pays a USDC
+  refund to the Blast wallet on Sui, minus a refund fee. A transfer without an
+  auction has no order to refund, so the sentence promises none. Recent bridges
+  names the right wallet for each.
+- **The card.** One sentence above the button says what leaves, the least that
+  arrives and, when there is one, where a refund goes. Fee adds Mayan's relayer
+  fee, protocol fee and Circle fee, and shows "—" if one is missing (a Blink
+  order states one fee). There is no Route row.
+  A quote with no ETA shows "—". A history reply with no list is an error with
+  Retry; only an empty list means no bridges.
+- **Errors.** No route: "No price for ARB. Bridge USDC." (for USDC, "Try
+  another chain."). Too large (`ALLOWANCE_TOO_LOW` too): "Largest right now:
+  75.94 ETH." when Mayan's message gives a number, else "Try a smaller amount."
+- **Retries.** Only network and server errors, never a 429. The SDK drops the
+  HTTP status, so this reads its error shapes in 16.1.0: every refusal has a
+  `data` key and Mayan's own 5xx answer has none. Check it again on each SDK
+  upgrade; the card tests run the real SDK against a local price API.
+- **Loss check (Jose, 2026-11-28).** At the send press the card compares the
+  dollars sent with the minimum received, in Blast's own prices. Up to 3%: one
+  press. Above 3%: a pop-up names the loss and a second press sends. Nothing is
+  blocked. When only the fixed fee puts it above 3%, it says "Send more". A
+  price that is missing or more than 120 seconds old also opens the pop-up
+  ("Loss unknown"). Blast has no price for POL or most tokens, so those always
+  ask. So does a price read with no answer after 5 seconds (our limit, so a
+  press never hangs). Known limit: ETH and SOL are priced from their wrapped
+  coins on Sui, so a wrapped coin trading away from the real one skews the
+  figure.
+- **Requests.** Mayan: one POST per settled amount, at most 2.5 per second for
+  a card being typed in; at 10,000 visible tabs with 1% typing, 250 per second
+  (calculated). Each POST asks three routes; how Mayan counts that is
+  unmeasured. Blast: at most one batched price read per send press, reused for
+  10 seconds, with no polling. Per send, only the SDK's chain reads
+  (unmeasured). Status polling follows Mayan's docs: every 2 s per pending
+  bridge, so 0.5 rps (calculated). We send no API key: Mayan recommends
+  starting without one and asking when rate limits are hit.
+- **Production is off (our hold).** `lib/web-config.ts` keeps Bridge off when
+  the deployment is production, even with the flag set. Before it goes on: one
+  small real bridge per call shape, signed by Jose, then a code change that
+  lifts the hold.
+
+### Where we differ from Mayan's docs
+
+Checked against all of `docs.mayan.finance/llms-full.txt` on 2026-11-28. Each
+item here is our choice, not Mayan's rule.
+
+- **RPC.** Their docs ask for your own RPC for `options.evmProvider` and do not
+  mention `front-rpc.mayan.finance`, so it has no documented limit or promise.
+  We use it under Jose's 2026-11-26 ruling. Settle this before production: our
+  own RPC per chain, or Mayan's written OK.
+- **Blink.** Their docs never mention it. What this page says about Blink comes
+  from SDK 16.1.0's code and from live quotes.
+- **Gas for Max.** Max keeps a fixed amount of the native coin per chain,
+  because it runs before there is a transaction to estimate. Their docs offer
+  `estimateQuoteRequiredGasAprox2`, which needs the quote and the built payload.
+- **Chains.** The six chains are a fixed list. Their docs say to skip a chain
+  that `/v3/chains` marks inactive; we do not read it, so such a chain would
+  fail at the quote. All six and Sui were active on 2026-11-28.
+- **Explorer link.** "View on Mayan" opens Mayan's page for the swap, built from
+  the source hash. Their docs say to use `txs[].scannerUrl`, which links each
+  transaction on its chain's explorer.
+- **Refunds.** The sentence names the refund fee but not its amount. The quote
+  carries it (`clientRelayerFeeRefund`). A refunded row names USDC, not the
+  amount: their docs do not say which explorer field holds it.
+- **Watching.** We stop polling a swap after 30 minutes and point to Mayan.
 
 ## Tests
 
@@ -371,11 +493,13 @@ Node test runner (`npm test -w apps/web`), as the coin sheet tests do:
 
 - `bridge-model.test.ts` (pure): amount → `amountIn64`; Max keeps each native coin's gas reserve; quote → rows; `clientStatus` → row state; button label for
   every state above.
-- Guard: refuse a non-BLINK quote, a quote without a Blink order, a recipient
-  other than the Blast address, a refund address other than the source wallet,
-  an expired quote; each before any wallet call.
+- Guard: refuse a route outside the three, a quote that is not what was asked,
+  a minimum the signed amounts do not cover, a recipient other than the Blast
+  address, an expired quote and, for Blink, a missing order or a refund address
+  other than the source wallet; each before any wallet call.
 - `BridgeForm.dom.test.tsx` with a fake SDK module and fake wallets: every
-  state in the table; 9999 error; wallet rejection; rate changed; allowance
+  state in the table; paused on 9999 (the model tests also cover
+  `SDK_VERSION_TOO_OLD`); wallet rejection; rate changed; allowance
   re-check after approval on a fresh quote; wallet/chain change drops the bound
   quote; arrival calls `changed()` once.
 - `coin-model.test.ts`: `bridge` parses and restores.
@@ -385,7 +509,8 @@ Node test runner (`npm test -w apps/web`), as the coin sheet tests do:
   JS; only the Bridge buttons and the lazy-screen entry (about 1.4 KB gzip on
   social routes). The lazy chunk exists.
 - Browser (local, `next dev -H 127.0.0.1`): screenshots of every state, light
-  and dark, phone and desktop, via the Blast UI skill; Japanese principles 5/5.
+  and dark, phone and desktop, via the Blast UI skill and the trader-arcade
+  check.
 - Live (after deploy, flag on for the team): $2 Base ETH → SUI and $2 Solana
   SOL → SUI into a team Blast wallet, then $2 Base USDC → SUI for the approval
   path. A team wallet funds these.

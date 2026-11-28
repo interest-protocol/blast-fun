@@ -27,7 +27,7 @@ import {
  */
 export type HomeViewState = Readonly<{
   source: HomeSource;
-  /** Which coins Discover lists: every coin, curves at 60% or more, or coins on a DEX. */
+  /** Which coins Discover lists: every coin, the curves closest to graduating, or coins on a DEX. */
   stage: HomeStage;
   sort: HomeSort;
   window: HomeWindow;
@@ -52,8 +52,12 @@ export const HOME_DEFAULT_VIEW: HomeViewState = Object.freeze({
   page: 1,
 });
 
-/** Home opens on Trending (sort key `relevant`): the blended score of traders, net inflow, volume, new holders, recency and holders (`home/rank.ts`). */
-export const HOME_DEFAULT_FEED: HomeViewState = Object.freeze({ ...HOME_DEFAULT_VIEW, sort: "relevant" });
+/**
+ * Home opens on Closest to graduating (Jose, 2026-11-28): the live curves
+ * nearest their target, the ones traded in the last 24 hours first
+ * (`home/rank.ts`). A link that names a tab opens that tab.
+ */
+export const HOME_DEFAULT_FEED: HomeViewState = Object.freeze({ ...HOME_DEFAULT_VIEW, stage: "almost", sort: "progress" });
 
 /** The minimum-participants choices the filter offers. */
 export const MIN_PARTICIPANT_CHOICES = [0, 2, 5, 10] as const;
@@ -75,7 +79,6 @@ function pageOf(raw: string | null): number {
 export function viewStateOf(params: URLSearchParams): HomeViewState {
   const source = params.get(KEYS.source);
   const rawStage = params.get(KEYS.stage);
-  const stage = isHomeStage(rawStage) ? rawStage : "all";
   const sort = params.get(KEYS.sort);
   const window = params.get(KEYS.window);
   const age = params.get(KEYS.age);
@@ -89,10 +92,12 @@ export function viewStateOf(params: URLSearchParams): HomeViewState {
     knownDeployer: params.get(KEYS.knownDeployer) === "1",
   };
   const page = pageOf(params.get(KEYS.page));
+  const ranked = hasRankedQueryFields({ ...filters, page });
+  const stage = isHomeStage(rawStage) ? rawStage : impliedStage(isHomeSort(sort), ranked);
   return {
     source: isHomeSource(source) ? source : HOME_DEFAULT_VIEW.source,
     stage,
-    sort: isHomeSort(sort) ? sort : impliedSort(stage, hasRankedQueryFields({ ...filters, page })),
+    sort: isHomeSort(sort) ? sort : impliedSort(stage, ranked),
     ...filters,
     page,
   };
@@ -107,12 +112,24 @@ function impliedSort(stage: HomeStage, ranked: boolean): HomeSort {
   return stage === "all" && ranked ? HOME_DEFAULT_VIEW.sort : stageDefaultSort(stage);
 }
 
+/**
+ * The stage a link without `stage` means: a bare link is Home's opening tab
+ * (`HOME_DEFAULT_FEED`); a link with a sort, a filter, a window or a page
+ * predates that and means every coin, as it always did.
+ */
+function impliedStage(sorted: boolean, ranked: boolean): HomeStage {
+  return sorted || ranked ? "all" : HOME_DEFAULT_FEED.stage;
+}
+
 /** The query string of a view state, `""` for the default view. */
 export function viewSearchOf(state: HomeViewState): string {
   const params = new URLSearchParams();
+  const ranked = hasRankedQueryFields(state);
+  // Trending's bare link would now open Home's opening tab, so every coin keeps its sort.
+  const sorted = state.sort !== impliedSort(state.stage, ranked) || (state.stage === "all" && !ranked);
   if (state.source !== HOME_DEFAULT_VIEW.source) params.set(KEYS.source, state.source);
-  if (state.stage !== "all") params.set(KEYS.stage, state.stage);
-  if (state.sort !== impliedSort(state.stage, hasRankedQueryFields(state))) params.set(KEYS.sort, state.sort);
+  if (state.stage !== impliedStage(sorted, ranked)) params.set(KEYS.stage, state.stage);
+  if (sorted) params.set(KEYS.sort, state.sort);
   if (state.window !== HOME_DEFAULT_VIEW.window) params.set(KEYS.window, state.window);
   if (state.minParticipants !== 0) params.set(KEYS.minParticipants, String(state.minParticipants));
   if (state.age !== "all") params.set(KEYS.age, state.age);
@@ -167,12 +184,13 @@ export const SORT_LABELS: Readonly<Record<HomeSort, string>> = { relevant: "Tren
 export const BLAST_MODE_SORT_LABELS: Readonly<Record<HomeSort, string>> = { ...SORT_LABELS, relevant: "Relevant" };
 /**
  * Home's five coin tabs (plan decision 1): each is a stage and the order it
- * opens on. Trending is the blended score (URL key `relevant`).
+ * opens on. Closest to graduating leads and is where Home opens (Jose,
+ * 2026-11-28). Trending is the blended score (URL key `relevant`).
  */
 export const HOME_TABS = {
+  almost: { label: "Closest to graduating", stage: "almost", sort: "progress" },
   trending: { label: "Trending", stage: "all", sort: "relevant" },
   new: { label: "New", stage: "all", sort: "newest" },
-  almost: { label: "Almost graduated", stage: "almost", sort: "progress" },
   graduated: { label: "Graduated", stage: "graduated", sort: "market_cap" },
   last: { label: "Last trade", stage: "all", sort: "last_trade" },
 } as const satisfies Record<string, Readonly<{ label: string; stage: HomeStage; sort: HomeSort }>>;
@@ -183,7 +201,7 @@ export const HOME_TAB_KEYS = Object.keys(HOME_TABS) as HomeTab[];
 export function stageDefaultSort(stage: HomeStage): HomeSort {
   if (stage === "almost") return "progress";
   if (stage === "graduated") return "market_cap";
-  return HOME_DEFAULT_FEED.sort;
+  return HOME_TABS.trending.sort;
 }
 
 /** The selected tab: a narrowed stage is its tab whatever the column order; on every coin, the tab whose order is shown, or none when a column header reorders the list. */
@@ -198,7 +216,7 @@ export const WINDOW_LABELS: Readonly<Record<HomeWindow, string>> = { "1h": "1h",
 export const AGE_LABELS: Readonly<Record<HomeAge, string>> = { "24h": "Last 24h", "7d": "Last 7 days", "30d": "Last 30 days", all: "Any time" };
 export const SOURCE_LABELS: Readonly<Record<HomeSource, string>> = { discover: "Discover", following: "Following", watchlist: "Watchlist" };
 
-/** The spoken summary after a change: `Discover · Almost graduated · 12 coins · page 2 of 3 · sorted by Progress · last 24 hours`. */
+/** The spoken summary after a change: `Discover · Closest to graduating · 12 coins · page 2 of 3 · sorted by Progress · last 24 hours`. */
 export function resultsAnnouncement(state: Pick<HomeViewState, "source" | "stage" | "page" | "sort" | "window">, count: number | null, pages = 1): string {
   const parts = [SOURCE_LABELS[state.source]];
   if (controlsApply(state.source) && state.stage !== "all") parts.push(HOME_TABS[state.stage].label);

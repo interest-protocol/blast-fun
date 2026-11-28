@@ -207,7 +207,7 @@ export function CoinOverview(props: Readonly<{ page: CoinPage; fees?: ReactNode 
                   {coin.stats.all.volumeUsd === null ? "" : ` · ${formatUsd(coin.stats.all.volumeUsd)}`}
                 </Fact>
                 <Fact term="Trades, 24h">{coin.stats.day.trades.toLocaleString("en-US")}</Fact>
-                <Fact term="Indexed holders">{coin.stats.holders.toLocaleString("en-US")}</Fact>
+                {coin.stats.holders === null ? null : <Fact term="Indexed holders">{coin.stats.holders.toLocaleString("en-US")}</Fact>}
               </Facts>
             );
           }}

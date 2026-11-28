@@ -8,7 +8,7 @@ const { act } = await import("react");
 const { createRoot } = await import("react-dom/client");
 
 import { NO_COST_BASIS, type SocialPortfolio } from "@blast/core/modules/social/contracts/portfolio.ts";
-import { portfolioCoverage, portfolioFigures, pricedFigures } from "./portfolio-model.ts";
+import { combinedPricedFigures, portfolioCoverage, portfolioFigures, pricedFigures } from "./portfolio-model.ts";
 import type { SocialMePresales } from "@blast/core/modules/social/contracts/profile-page.ts";
 
 import type { ClaimPath } from "../claim/claims";
@@ -247,6 +247,24 @@ test("under a priced subtotal the bar draws the known split, and one note explai
   assert.equal(document.querySelectorAll("#pfHero i[data-k]").length, 0, "masked amounts draw no shares");
 });
 
+test("a funded account still contributes to the subtotal when none of the other account's assets are priced", () => {
+  const known: SocialPortfolio = {
+    balances: { sui: { atoms: "0", usd: "0.00" }, usdc: { atoms: "100000000", usd: "100.00" } },
+    positions: [], vesting: null, totals: null, trend: null, prices_as_of_ms: null, unavailable: [],
+    commitments: { committed_usd: "0.00", claimable_usd: "0.00" },
+    coins: [],
+  };
+  const unpriced: SocialPortfolio = {
+    ...known,
+    balances: { ...known.balances!, usdc: { atoms: "0", usd: "0.00" } },
+    coins: [{ coin_type: "0x1::unpriced::COIN", symbol: "COIN", balance: "1", value_usd: null, ...NO_COST_BASIS }],
+  };
+  const expected = { total: 100, coins: 100, committed: 0, claimable: 0 };
+  assert.deepEqual(combinedPricedFigures(known, unpriced), expected);
+  assert.deepEqual(combinedPricedFigures(unpriced, known), expected);
+  assert.equal(combinedPricedFigures(known, { ...unpriced, coins: null }), null);
+});
+
 test("R3-74-AC-4: coin rows — no price history leaves the sparkline slot empty and no move; USDC omits redundant Cash category", async () => {
   const html = await render();
   assert.equal([...html.matchAll(/data-slot="portfolio-coin-sparkline"><\/span>/g)].length, 2);
@@ -310,7 +328,7 @@ test("an old Launches link opens Claims", async () => {
 test("A-03, A-04, P-13: with a claim path a Presales or Claims row claims in place; without one its Claim links to the sale", async () => {
   const presale = { presale_id: "0xh", symbol: "HLCN", name: "Halcyon", icon_url: "", status: "cancelled", venue: "cetus", start_ms: 0, end_ms: 0, fill_pct: 40, quote_symbol: "USDC", quote_decimals: 6, launched_ms: 1, first_unlock_ms: null } as const;
   const position = { presale, committed_usd: "250.00", committed_atoms: "250000000", status: "claimable", claimed_tokens: "0", refunded_usd: null, refunded_atoms: null, value_usd: "0.00", multiple: null, ...NO_COST_BASIS } as const;
-  const vesting = { schedule_id: `0x${"70".repeat(32)}`, presale: { ...presale, status: "trading" as const }, total: "400000", claimed: "25000", claimable: "1000", claimable_usd: null, start_ms: -10, cliff_end_ms: -10, end_ms: 1_000_000, vested_pct: 1 };
+  const vesting = { schedule_id: `0x${"70".repeat(32)}`, presale: { ...presale, status: "trading" as const }, symbol: presale.symbol, total: "400000", claimed: "25000", claimable: "1000", claimable_usd: null, start_ms: -10, cliff_end_ms: -10, end_ms: 1_000_000, vested_pct: 1 };
   const holdings = { ...HOLDINGS, positions: [position], vestings: [vesting] };
   const path = Object.assign(async () => ({ status: "failed", code: "x" }) as const, { kinds: ["claim_refund", "claim_tokens", "claim_vesting"] as const }) satisfies ClaimPath;
   const inPlace = async (tab: "presales" | "claims") => await render({ holdings }, tab, path);
@@ -344,7 +362,7 @@ test("a confirmed presale claim removes its button before indexed holdings refre
 
 test("vesting waits for its claimed total, then enables the next claim and rejects older snapshots", async () => {
   const presale = { presale_id: "0xh", symbol: "HLCN", name: "Halcyon", icon_url: "", status: "trading", venue: "cetus", start_ms: 0, end_ms: 0, fill_pct: 100, quote_symbol: "USDC", quote_decimals: 6, launched_ms: 1, first_unlock_ms: null } as const;
-  const vesting = { schedule_id: `0x${"71".repeat(32)}`, presale, total: "10000000000000000", claimed: "9007199254740993.000000001", claimable: "1.000000009", claimable_usd: null, start_ms: -10, cliff_end_ms: -10, end_ms: 1_000_000, vested_pct: 1 };
+  const vesting = { schedule_id: `0x${"71".repeat(32)}`, presale, symbol: presale.symbol, total: "10000000000000000", claimed: "9007199254740993.000000001", claimable: "1.000000009", claimable_usd: null, start_ms: -10, cliff_end_ms: -10, end_ms: 1_000_000, vested_pct: 1 };
   let calls = 0;
   const path: ClaimPath = async () => ({ status: "confirmed", digest: `digest-${++calls}` });
   await render({ holdings: { ...HOLDINGS, vestings: [vesting] } }, "claims", path);

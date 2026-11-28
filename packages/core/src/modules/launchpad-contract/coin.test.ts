@@ -55,3 +55,10 @@ test("the coin summary keeps its public launch wallet when creator rights are un
     assert.equal(readLauncher(launcher), null);
   }
 });
+
+test("the coin summary reads null holders as unknown, never zero, and still refuses a negative count", () => {
+  const body = coinBody("live", 1_800_000_000_000);
+  assert.equal(parseCoinSummary({ ...body, holders: null }, COIN_FIXTURE.coinType).stats.holders, null);
+  assert.equal(parseCoinSummary({ ...body, holders: 0 }, COIN_FIXTURE.coinType).stats.holders, 0);
+  assert.throws(() => parseCoinSummary({ ...body, holders: -1 }, COIN_FIXTURE.coinType), /coin\.holders/);
+});

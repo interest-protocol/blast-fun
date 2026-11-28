@@ -6,7 +6,6 @@ import { SocialRouteError } from "@blast/core/modules/social/route-kit/errors.ts
 
 import {
   HOME_AGE_MS,
-  HOME_ALMOST_GRADUATED_BPS,
   HOME_DEFAULT_QUERY,
   HOME_PAGE_LAST,
   HOME_PAGE_MAX,
@@ -30,8 +29,10 @@ import { decodeCursor, encodeCursor, invalidCursor } from "@blast/server/modules
  *
  * **Candidate universe.** Shown migrated presales, standalone launch vault
  * coins and the tracked pool catalog (`HOME_DISCOVER_COIN_SOURCES`); on
- * `stage=almost`, only the live bonding curves at 60% or more and those
- * ready to migrate (`HOME_ALMOST_CURVE_SOURCES`). Both less the
+ * `stage=almost` (Closest to graduating), only the live bonding curves and
+ * those ready to migrate, the ones traded in the last 24 hours first, then
+ * nearest their target, at most `HOME_CLOSEST_CURVES`
+ * (`homeClosestCurveSources`). Both less the
  * Blast dust (`HOME_DUST_USD`): a Blast coin whose raise (a presale's, or a
  * curve's graduation target) or market cap is under $1,000. Catalog coins
  * are never dust. Trending with `presales=1` also ranks presales not trading
@@ -83,13 +84,15 @@ import { decodeCursor, encodeCursor, invalidCursor } from "@blast/server/modules
  * then (for idle coins, which tie on all of those) FDV and holders, same
  * ties. `newest`: launch time (newest first), then coin type.
  * `progress`: curves still filling by progress (basis points, highest
- * first), every other coin after them by market cap. `market_cap`: market
+ * first), every other coin after them by market cap. On Closest to
+ * graduating the curves traded in the last 24 hours lead (`recentlyTraded`),
+ * so a dormant curve never tops a live one. `market_cap`: market
  * cap, highest first, a coin without one last. `last_trade`: the window's
  * newest buy or sell first, coins without one after by launch time. Each
  * breaks ties by coin type.
  *
- * **Stages.** `almost` keeps curves still filling at 60% or more
- * (`HOME_ALMOST_GRADUATED_BPS`) and curves ready to migrate; `graduated`
+ * **Stages.** `almost` keeps curves still filling with a known progress,
+ * however far along, and curves ready to migrate; `graduated`
  * keeps coins that trade on a DEX (no sale and no curve still filling); `all`
  * keeps every candidate, which has no curve still filling except Trending's
  * traded ones.
@@ -309,6 +312,8 @@ export type Rankable = Readonly<{
   marketCapUsd?: number | null;
   /** The window's newest buy or sell; null without one. */
   lastTradeMs?: number | null;
+  /** A Closest to graduating curve with a buy or sell in the last 24 hours, whatever the window; unset on every other coin. */
+  recentlyTraded?: boolean;
   /** Set for a presale not trading yet (`saleIsIdle`); a coin's idleness follows from its inputs. */
   idle?: boolean;
 }>;
@@ -344,7 +349,8 @@ export function homeOrder(sort: HomeSort): (a: Rankable, b: Rankable) => number 
         || newestFirst(a.launchedMs, b.launchedMs) || text(a.coinType, b.coinType);
     case "progress":
       // A percent, never atoms: a SUI curve and a USDC curve compare fairly.
-      return (a, b) => mostFirst(a.progressBps, b.progressBps) || mostFirst(a.marketCapUsd, b.marketCapUsd) || text(a.coinType, b.coinType);
+      return (a, b) => Number(Boolean(b.recentlyTraded)) - Number(Boolean(a.recentlyTraded))
+        || mostFirst(a.progressBps, b.progressBps) || mostFirst(a.marketCapUsd, b.marketCapUsd) || text(a.coinType, b.coinType);
     case "market_cap":
       return (a, b) => mostFirst(a.marketCapUsd, b.marketCapUsd) || text(a.coinType, b.coinType);
     case "last_trade":
@@ -384,15 +390,19 @@ export type HomeCursor = Readonly<{
   holders?: number | null; fdvUsd?: number | null; progressBps?: number | null; marketCapUsd?: number | null; lastTradeMs?: number | null;
   /** Whether the position is idle (version 6); older cursors derive it from breadth and volume. */
   idle?: boolean;
+  /** Whether the position is a curve traded in the last 24 hours (version 7); older cursors read false. */
+  recentlyTraded?: boolean;
 }>;
 
 /**
- * Version 6 adds the idle bit (a presale opening soon can be active with no
+ * Version 7 adds the recently traded bit (Closest to graduating's first
+ * group). Version 6 adds the idle bit (a presale opening soon can be active with no
  * participants); version 5 added progress, market cap and the last trade (their orders);
  * version 4 added the FDV (idle coins' order); version 3 the holder count
  * (`held`). Older cursors read with the missing fields null.
  */
-const VERSION = 6;
+const VERSION = 7;
+const VERSION_WITHOUT_RECENT = 6;
 const VERSION_WITHOUT_IDLE = 5;
 const VERSION_WITHOUT_PROGRESS = 4;
 const VERSION_WITHOUT_FDV = 3;
@@ -401,15 +411,18 @@ const VERSION_WITHOUT_HOLDERS = 2;
 /**
  * Version 5 when the idle bit is what its inputs imply (every coin), so a pod
  * still on version 5 reads it during a rollout or after a rollback; version 6
- * only for a sale whose idleness differs.
+ * only for a sale whose idleness differs; version 7 only for a recently
+ * traded curve.
  */
 export function encodeHomeCursor(position: HomeCursor): string {
   const fields = [position.sort, position.coinType, position.score, position.breadth, position.activity, position.recency, position.volume, position.latestMs, position.launchedMs, position.holders ?? null, position.fdvUsd ?? null,
     position.progressBps ?? null, position.marketCapUsd ?? null, position.lastTradeMs ?? null];
   const derived = position.breadth === 0 && position.volume === 0;
-  return position.idle === undefined || position.idle === derived
+  const idle = position.idle ?? derived;
+  if (position.recentlyTraded) return encodeCursor("discover", [VERSION, ...fields, idle, true]);
+  return idle === derived
     ? encodeCursor("discover", [VERSION_WITHOUT_IDLE, ...fields])
-    : encodeCursor("discover", [VERSION, ...fields, position.idle]);
+    : encodeCursor("discover", [VERSION_WITHOUT_RECENT, ...fields, idle]);
 }
 
 /** The position a cursor names; `invalid_parameter` (`cursor`) for anything `encodeHomeCursor` did not produce, or for another sort. */
@@ -422,9 +435,14 @@ export function decodeHomeCursor(cursor: string, sort: HomeSort): HomeCursor {
   const decoded = decodeCursor("discover", cursor);
   const money = z.number().nonnegative().nullable();
   const withProgress = [...common, socialCountSchema.nullable(), money, socialCountSchema.max(10_000).nullable(), money, socialCountSchema.nullable()] as const;
-  const current = z.tuple([z.literal(VERSION), ...withProgress, z.boolean()]).safeParse(decoded);
+  const current = z.tuple([z.literal(VERSION), ...withProgress, z.boolean(), z.literal(true)]).safeParse(decoded);
   if (current.success) {
-    const [, , coinType, score, breadth, activity, recency, volume, latestMs, launchedMs, holders, fdvUsd, progressBps, marketCapUsd, lastTradeMs, idle] = current.data;
+    const [, , coinType, score, breadth, activity, recency, volume, latestMs, launchedMs, holders, fdvUsd, progressBps, marketCapUsd, lastTradeMs, idle, recentlyTraded] = current.data;
+    return { sort, coinType, score, breadth, activity, recency, volume, latestMs, launchedMs, holders, fdvUsd, progressBps, marketCapUsd, lastTradeMs, idle, recentlyTraded };
+  }
+  const withoutRecent = z.tuple([z.literal(VERSION_WITHOUT_RECENT), ...withProgress, z.boolean()]).safeParse(decoded);
+  if (withoutRecent.success) {
+    const [, , coinType, score, breadth, activity, recency, volume, latestMs, launchedMs, holders, fdvUsd, progressBps, marketCapUsd, lastTradeMs, idle] = withoutRecent.data;
     return { sort, coinType, score, breadth, activity, recency, volume, latestMs, launchedMs, holders, fdvUsd, progressBps, marketCapUsd, lastTradeMs, idle };
   }
   const withoutIdle = z.tuple([z.literal(VERSION_WITHOUT_IDLE), ...withProgress]).safeParse(decoded);
@@ -452,12 +470,13 @@ export function decodeHomeCursor(cursor: string, sort: HomeSort): HomeCursor {
 export function rankableOfCursor(cursor: HomeCursor): Rankable {
   return { coinType: cursor.coinType, score: cursor.score, inputs: { breadth: cursor.breadth, activity: cursor.activity, recency: cursor.recency, volume: cursor.volume }, latestMs: cursor.latestMs, launchedMs: cursor.launchedMs, holders: cursor.holders ?? null, fdvUsd: cursor.fdvUsd ?? null,
     progressBps: cursor.progressBps ?? null, marketCapUsd: cursor.marketCapUsd ?? null, lastTradeMs: cursor.lastTradeMs ?? null,
-    ...(cursor.idle !== undefined && { idle: cursor.idle }) };
+    ...(cursor.idle !== undefined && { idle: cursor.idle }), ...(cursor.recentlyTraded && { recentlyTraded: true }) };
 }
 
 export function cursorOf(sort: HomeSort, last: Rankable): string {
   return encodeHomeCursor({ sort, coinType: last.coinType, score: last.score, breadth: last.inputs.breadth, activity: last.inputs.activity, recency: last.inputs.recency, volume: last.inputs.volume, latestMs: last.latestMs, launchedMs: last.launchedMs, holders: last.holders ?? null, fdvUsd: last.fdvUsd ?? null,
-    progressBps: last.progressBps ?? null, marketCapUsd: last.marketCapUsd ?? null, lastTradeMs: last.lastTradeMs ?? null, idle: isIdle(last) });
+    progressBps: last.progressBps ?? null, marketCapUsd: last.marketCapUsd ?? null, lastTradeMs: last.lastTradeMs ?? null, idle: isIdle(last),
+    ...(last.recentlyTraded && { recentlyTraded: true }) });
 }
 
 /**
@@ -494,14 +513,14 @@ export function pageOf<Candidate extends Rankable>(
 /**
  * Whether a candidate passes the query's filters and stage. Unknown is never
  * a pass: a coin with no launch time fails an age filter, a curve with no
- * known progress is not almost graduated.
+ * known progress is not on Closest to graduating.
  */
 export function passesFilters(
   query: Pick<HomeQuery, "minParticipants" | "age" | "tradable" | "knownDeployer" | "stage">,
   candidate: Readonly<{ participants: number; launchedMs: number | null; tradable: boolean; knownDeployer: boolean; listed: boolean; progressBps: number | null; nowMs: number }>,
 ): boolean {
-  // Only a curve still filling has a progress; one with an unknown target is never "almost".
-  if (query.stage === "almost" && (candidate.progressBps ?? -1) < HOME_ALMOST_GRADUATED_BPS) return false;
+  // Only a curve still filling has a progress; one with an unknown target is never on Closest to graduating.
+  if (query.stage === "almost" && candidate.progressBps == null) return false;
   if (query.stage === "graduated" && !candidate.listed) return false;
   if (candidate.participants < query.minParticipants) return false;
   if (query.tradable && !candidate.tradable) return false;

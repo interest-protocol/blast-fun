@@ -12,6 +12,9 @@ import { vestedAtoms, vestingMsSql, vestingSteps, vestingStepsSql } from "@blast
 import { SHOWN_PRESALES } from "@blast/core/modules/social/read-model/chain-presales.ts";
 import { wholeUnits } from "@blast/server/modules/social/happening/read.ts";
 import type { CreatorChain } from "@blast/server/modules/social/creator-earnings/chain.ts";
+import { readSteps } from "@blast/server/modules/social/read-steps.ts";
+
+const step = readSteps("creator_earnings");
 
 export const CREATOR_EARNINGS_SQL = `SELECT v.vault_id, p.presale_id, coalesce(p.sale_name,'') AS name, coalesce(p.sale_symbol,'') AS symbol,
     coalesce(p.sale_icon_url,'') AS icon_url, p.sale_decimals::int AS decimals, p.quote_symbol, p.quote_decimals::int AS quote_decimals
@@ -90,10 +93,10 @@ async function earning(
   sender: string,
   signal?: AbortSignal,
 ): Promise<CreatorEarning | null> {
-  const [collectionResult, residualResult] = await settledAll([
+  const [collectionResult, residualResult] = await step("transactions", () => settledAll([
     chain.transaction(row.vault_id, sender, "collect_fees", signal),
     chain.transaction(row.vault_id, sender, "claim_residuals", signal),
-  ]);
+  ]));
   const collection = collectionResult?.presaleId === row.presale_id ? collectionResult : null;
   const residual = residualResult?.presaleId === row.presale_id ? residualResult : null;
   if (!collection && !residual) return null;
@@ -106,7 +109,7 @@ async function earning(
     meme: wholeUnits(meme, row.decimals),
     quote: wholeUnits(quote, row.quote_decimals),
   });
-  const preview = collection ? await chain.preview(collection.kindBytes, sender, signal) : null;
+  const preview = collection ? await step("preview", () => chain.preview(collection.kindBytes, sender, signal)) : null;
   const event = preview?.find(
     (entry) => entry.kind === "collect_fees" && entry.vaultId === row.vault_id,
   );
@@ -114,7 +117,7 @@ async function earning(
     quote = event?.routeQuoteAmounts[index] ?? "0";
   const payable = BigInt(meme) > 0n || BigInt(quote) > 0n;
   const received = (
-    await db.read<{ meme: string; quote: string }>(CREATOR_RECEIVED_SQL, [row.vault_id, sender])
+    await step("received", () => db.read<{ meme: string; quote: string }>(CREATOR_RECEIVED_SQL, [row.vault_id, sender]))
   ).rows[0] ?? { meme: "0", quote: "0" };
   return {
     presale_id: row.presale_id,
@@ -153,22 +156,24 @@ export async function readCreatorEarnings(
 ): Promise<CreatorEarnings> {
   assertChainReadThroughViews(CREATOR_RECEIVED_SQL);
   const owner = normalizeSuiAddress(sender);
-  const presales = await chain.ownedPresales(owner, signal);
+  const presales = await step("owned_presales", () => chain.ownedPresales(owner, signal));
   const [sources, schedules] = await settledAll([
-    db.read<EarningRow>(CREATOR_EARNINGS_SQL, [owner, presales, cursor]),
+    step("sources", () => db.read<EarningRow>(CREATOR_EARNINGS_SQL, [owner, presales, cursor])),
     cursor === null
-      ? db.read<VestingRow>(CREATOR_VESTINGS_SQL, [owner])
+      ? step("vestings", () => db.read<VestingRow>(CREATOR_VESTINGS_SQL, [owner]))
       : Promise.resolve({ rows: [] as VestingRow[] }),
   ]);
   const rows = sources.rows.slice(0, 10);
   const earnings: CreatorEarning[] = [];
   // Two sources at a time bounds fullnode reads and simulations on a portfolio visit.
-  for (let at = 0; at < rows.length; at += 2) {
-    const batch = await settledAll(
-      rows.slice(at, at + 2).map((row) => earning(db, chain, row, owner, signal)),
-    );
-    for (const row of batch) if (row) earnings.push(row);
-  }
+  await step("earnings", async () => {
+    for (let at = 0; at < rows.length; at += 2) {
+      const batch = await settledAll(
+        rows.slice(at, at + 2).map((row) => earning(db, chain, row, owner, signal)),
+      );
+      for (const row of batch) if (row) earnings.push(row);
+    }
+  });
   return {
     earnings,
     vestings: schedules.rows.map((row) => vesting(row, nowMs)),

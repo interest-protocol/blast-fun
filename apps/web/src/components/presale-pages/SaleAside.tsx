@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState, type MouseEvent, type ReactNode } from "react";
+import { useCallback, useState, type MouseEvent, type ReactNode } from "react";
 
 import { opensAt, qty, quoteOf, readsInCoin, usd0 } from "@blast/core/web/format.ts";
 import { bpsMultiple } from "@blast/core/lib/bps.ts";
@@ -18,6 +18,7 @@ import type { CommitKit } from "#web/components/social/commit/commit-kit.ts";
 import { InlineCommit } from "#web/components/social/commit/InlineCommit.tsx";
 import { useCommitKit, useSaleCommit, useShellClaimPath } from "#web/components/social/feed-ui/shell-bridge.tsx";
 import { useSignInGate } from "#web/components/social/SignInGate.tsx";
+import { useBoundaryClock } from "#web/components/social/use-boundary-clock.ts";
 import { useViewerFollow, useViewerStateStore } from "#web/components/social/ViewerState.tsx";
 import type { SocialPresaleDetail, SocialPresaleViewerEntry } from "@blast/core/web/contracts/presales.ts";
 
@@ -389,11 +390,8 @@ export function SaleAside({
 }>) {
   // The main column's read (one shared query): a commit or the sale's close moves the box too.
   const detail = useSaleDetail(served, nowMs);
-  const [now, setNow] = useState(nowMs);
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
-    return () => window.clearInterval(timer);
-  }, []);
+  // The box changes with the clock only when an open sale ends; opening waits for the server's read.
+  const now = useBoundaryClock(detail.presale.phase === "open" ? detail.presale.end_ms : null, nowMs);
   // A claim's answer, confirmed or refused, reads the viewer's position again (`reads`).
   const [reads, setReads] = useState(0);
   const viewer = useViewerPresalesRead([detail.presale.presale_id], reads);
@@ -424,7 +422,7 @@ export function SaleAside({
       {compact ? null : trading ? (
         // The Coin board's column: the ticket, then the tokenomics.
         detail.terms ? <TokenomicsCard sale={detail.presale} terms={detail.terms} /> : null
-      ) : <FriendsCard detail={detail} entry={entry} now={now} onSeeAll={() => window.dispatchEvent(new Event(SHOW_FOLLOWING_EVENT))} />}
+      ) : <FriendsCard detail={detail} entry={entry} onSeeAll={() => window.dispatchEvent(new Event(SHOW_FOLLOWING_EVENT))} />}
     </>
   );
 }
