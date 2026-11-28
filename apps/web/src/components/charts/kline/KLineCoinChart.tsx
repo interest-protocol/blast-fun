@@ -216,6 +216,8 @@ export default function KLineCoinChart({ sources, interval, memeDecimals, quoteD
     }
     if (!symbolChanged && !periodChanged) current.resetData();
     fitBars(current, host.current, bars.length);
+    // KLineCharts lays out in a microtask (ChartImp.layout), so the new price labels' axis width is known only then: fit again after it.
+    queueMicrotask(() => { if (chart.current === current) fitBars(current, host.current, bars.length); });
     view.away.set(null);
   }, [bars, precision, interval, view]);
 

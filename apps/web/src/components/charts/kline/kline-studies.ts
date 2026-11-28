@@ -35,8 +35,9 @@ export function registerStudies() {
     createTooltipDataSource: () => ({ name: "", calcParamsText: "", features: [], legends: [] }),
     draw: ({ ctx, chart, indicator, bounding, xAxis }) => {
       const bars = chart.getDataList();
-      const { from, to } = chart.getVisibleRange();
-      const first = Math.max(0, from), last = Math.min(bars.length, to);
+      // realFrom/realTo are the bars on screen; `from` can start a few bars earlier when the newest bar sits off the right edge.
+      const { realFrom, realTo } = chart.getVisibleRange();
+      const first = Math.max(0, realFrom), last = Math.min(bars.length, realTo);
       let tallest = 0;
       for (let index = first; index < last; index++) tallest = Math.max(tallest, bars[index]?.volume ?? 0);
       if (!(tallest > 0)) return true;
