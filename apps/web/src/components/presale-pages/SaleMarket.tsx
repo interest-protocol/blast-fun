@@ -544,10 +544,11 @@ function presaleChange(move: PriceMove | null | undefined, last: string | null, 
 function PresaleMarketPrice({ market, move, activity }: Readonly<{ market: HomeCoinMarket; move?: PriceMove | null; activity: ReactNode }>) {
   const { currency, live, last, prices, change } = usePresaleHeadline(market, move);
   const quoteSymbol = prices.usd ? undefined : market.quote.symbol;
-  return <MarketPriceRow showCurrency={currency?.rate != null} priceNamesUnit={live != null}
+  const shown = currency?.pending ? null : live;
+  return <MarketPriceRow showCurrency={currency?.rate != null || currency?.pending === true} priceNamesUnit={shown != null}
     activity={activity}
-    price={live ? <CoinPriceFigure price={prices.price(live.price)} quoteSymbol={quoteSymbol} tradeId={live.cursor} /> : NO_VALUE}
-    reserve={!live && last != null ? <CoinPriceFigure price={prices.price(last)} quoteSymbol={quoteSymbol} tradeId={null} /> : null}
+    price={shown ? <CoinPriceFigure price={prices.price(shown.price)} quoteSymbol={quoteSymbol} tradeId={shown.cursor} /> : NO_VALUE}
+    reserve={!shown && !currency?.pending && last != null ? <CoinPriceFigure price={prices.price(last)} quoteSymbol={quoteSymbol} tradeId={null} /> : null}
     change={change} />;
 }
 

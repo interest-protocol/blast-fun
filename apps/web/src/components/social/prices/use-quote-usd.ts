@@ -108,8 +108,9 @@ function chooseRate(atPar: boolean, liveUsdc: boolean, streamed: StreamedRate, r
   return currentRate(streamed) ?? read ?? streamed.usd ?? (liveUsdc ? "1" : null);
 }
 
-function useFallbackRead(type: string | null, enabled: boolean): string | null {
-  const { data, isStale } = useQuery({
+/** The read's fresh price, and whether its first answer is still on the way (no price, no failure yet). */
+function useFallbackRead(type: string | null, enabled: boolean): Readonly<{ price: string | null; pending: boolean }> {
+  const { data, isStale, isPending } = useQuery({
     ...priceQuery({ kind: "coin", id: type ?? "", window: "1h" }),
     enabled: !!type && enabled,
     staleTime: ({ state }) => {
@@ -117,11 +118,14 @@ function useFallbackRead(type: string | null, enabled: boolean): string | null {
       if (asOf == null || asOf > state.dataUpdatedAt) return 0;
       return Math.max(0, asOf + PORTFOLIO_PRICE_MAX_AGE_MS - state.dataUpdatedAt);
     },
-    notifyOnChangeProps: ["data", "isStale"],
+    notifyOnChangeProps: ["data", "isStale", "status"],
     refetchInterval: (query) => pollInterval(PORTFOLIO_PRICE_MAX_AGE_MS / 2, query),
   }, useAppQueryClient());
-  return freshRead(data?.price_usd, isStale);
+  return { price: freshRead(data?.price_usd, isStale), pending: !!type && enabled && isPending };
 }
+
+/** A quote coin's dollar rate, and whether it is still being read: a page can hold its dollar view instead of showing the quote coin first. */
+export type QuoteUsdState = Readonly<{ rate: string | null; pending: boolean }>;
 
 /**
  * Current FX. Display values use USDC at par by default. `live` (a coin page, whose numbers move with
@@ -130,11 +134,20 @@ function useFallbackRead(type: string | null, enabled: boolean): string | null {
  * subscription each per tab. The 60 s read runs whenever the stream has no fresh rate; while it has no
  * price either, the last streamed rate stands in, and USDC falls back to par only when neither exists.
  */
-export function useQuoteUsd(quoteType: string | null, { marketRate = false, live = false } = {}): string | null {
+export function useQuoteUsd(quoteType: string | null, options: Readonly<{ marketRate?: boolean; live?: boolean }> = {}): string | null {
+  return useQuoteUsdState(quoteType, options).rate;
+}
+
+/**
+ * The rate with its pending state. `pending` holds only until the first read answers: a failed, empty or stale
+ * read ends it with no rate, so the page falls back to the quote coin.
+ */
+export function useQuoteUsdState(quoteType: string | null, { marketRate = false, live = false }: Readonly<{ marketRate?: boolean; live?: boolean }> = {}): QuoteUsdState {
   const type = quoteType ? quotePriceType(quoteType) : null;
   const par = type === CREATE_QUOTE_TYPE;
   const atPar = par && !marketRate && !live;
   const streamed = useStreamedRate(live && type && createQuoteOf(type) ? coinKey(type) : null);
   const read = useFallbackRead(type, !atPar && !currentRate(streamed));
-  return chooseRate(atPar, live && par, streamed, read);
+  const rate = chooseRate(atPar, live && par, streamed, read.price);
+  return { rate, pending: rate === null && read.pending };
 }

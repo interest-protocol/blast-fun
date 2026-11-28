@@ -148,6 +148,7 @@ function PriceValue({ units, price: rawPrice, tradeId }: Readonly<{ units: Price
   const { memeDecimals, quoteDecimals, quoteMark, quoteSymbol } = units;
   const currency = useCoinPriceCurrency();
   const prices = poolPrices(memeDecimals, quoteDecimals, currency?.quoteUsd);
+  if (currency?.pending) return NO_VALUE;
   return <CoinPriceFigure price={prices.price(rawPrice)} tradeId={tradeId} quoteSymbol={prices.usd ? undefined : quoteSymbol} quoteMark={quoteMark} />;
 }
 

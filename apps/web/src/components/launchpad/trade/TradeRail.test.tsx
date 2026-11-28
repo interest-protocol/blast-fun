@@ -79,7 +79,11 @@ test("routed payment balance never falls back to the curve's own quote balance",
 });
 
 test("loading and failed reads show their recovery states and disable review", () => {
-  assert.match(render(editing, { reading: true }).html, /Reading trading route/);
+  // The read draws nothing above the form, so the form does not move when it lands.
+  const reading = render(editing, { reading: true });
+  assert.match(reading.html, /<span aria-busy="true" aria-label="Reading trading route" class="sr-only" role="status">/);
+  assert.doesNotMatch(reading.html, /<div aria-busy="true" aria-label="Reading trading route"/);
+  assert.match(reading.html, /<button[^>]*disabled=""[^>]*>Buy TOAD/);
   const failed = render(editing, { problem: "The node did not answer." });
   assert.match(failed.text, /Trading couldn't load The node did not answer\. Try again/);
   assert.match(failed.html, /<button[^>]*disabled=""[^>]*>Buy TOAD/);
