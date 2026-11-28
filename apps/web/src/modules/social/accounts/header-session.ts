@@ -9,15 +9,16 @@ import type { HeaderSession } from "#web/components/social/use-header-session.ts
 
 const SIGNED_OUT: HeaderSession = { signedIn: false, viewer: null, viewerLoading: false, viewerError: false };
 const HEADER_SESSION_TIMEOUT_MS = 1_000;
-/** One in ten signed-in reads logs its time; a refused, failed or timed-out one always does. */
+/** One in ten expected answers logs its time; a timeout, failure or server error always does. */
 const HEADER_SESSION_SAMPLE_RATE = 0.1;
+const EXPECTED_OUTCOMES: ReadonlySet<string> = new Set(["signed_in", "no_account", "aborted", "status_401"]);
 
 /** How long the page waited on the account read before it could render the header (`social.header_session`). */
 function recordWait(startedMs: number, outcome: string): void {
   observeMetric(
     "social.header_session",
     { outcome, durationMs: Math.round(performance.now() - startedMs) },
-    { sampleRate: outcome === "signed_in" ? HEADER_SESSION_SAMPLE_RATE : 1 },
+    { sampleRate: EXPECTED_OUTCOMES.has(outcome) ? HEADER_SESSION_SAMPLE_RATE : 1 },
   );
 }
 
@@ -69,9 +70,15 @@ async function readAccount(
     // First-time account creation remains in the existing client sign-in flow.
     return account ? { signedIn: true, viewer: shellViewerOf(account), viewerLoading: false, viewerError: false } : null;
   } catch (error) {
-    recordWait(startedMs, error instanceof DOMException && error.name === "TimeoutError" ? "timeout" : "failed");
+    recordWait(startedMs, waitFailure(request, error));
     return null;
   }
+}
+
+/** Why the read ended early: the 1 s wait ran out, the visitor left, or it failed. */
+function waitFailure(request: Request, error: unknown): string {
+  if (error instanceof DOMException && error.name === "TimeoutError") return "timeout";
+  return request.signal.aborted ? "aborted" : "failed";
 }
 
 /** A refreshable or malformed cookie leaves the browser to resolve Privy's session. */

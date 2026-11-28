@@ -42,7 +42,7 @@ import { latestWindowPriceSql, rollingPriceAtSql } from "@blast/server/modules/s
 import { PRICE_TIER_SPAN_MS, type PricePoint } from "@blast/core/modules/social/contracts/prices.ts";
 import type { readTrackedPoolLaunches, readTrackedPoolMarket, TrackedPoolMarket } from "@blast/server/modules/launchpad-market/legacy-fdv.ts";
 import { optionalSource } from "@blast/server/modules/social/optional-source.ts";
-import { readStep, readSteps } from "@blast/server/modules/social/read-steps.ts";
+import { readStep, readSteps, type ReadSteps } from "@blast/server/modules/social/read-steps.ts";
 import { curveProgressBps } from "@blast/core/modules/launchpad-contract/discovery.ts";
 import { LAUNCH_LIFECYCLES, quoteRemaining, type LaunchLifecycle } from "@blast/core/modules/launchpad-contract/discovery-views.ts";
 import {
@@ -995,11 +995,11 @@ function recentPageBuys(sides: readonly SideRow[], coins: readonly HomeCoin[], w
  * shared tracked pool snapshot (one process-cached read for every catalog
  * coin), with the same fallbacks as the item (`withTrackedPoolMarket`).
  */
-async function withTrackedMarket(candidates: readonly Candidate[], context: HomeReadContext): Promise<{ candidates: readonly Candidate[]; markets?: TrackedMarkets }> {
+async function withTrackedMarket(candidates: readonly Candidate[], context: HomeReadContext, step: ReadSteps): Promise<{ candidates: readonly Candidate[]; markets?: TrackedMarkets }> {
   const lacks = (candidate: Candidate) => candidate.facts.tracked_pool_only && (candidate.fdvUsd === null || candidate.marketCapUsd === null);
   if (!candidates.some(lacks) || !context.trackedPoolMarket) return { candidates };
   const trackedPoolMarket = context.trackedPoolMarket;
-  const markets = await readStep("home_discover", "tracked_market", () => optionalSource("tracked_pool_market", trackedPoolMarket, {}));
+  const markets = await step("base_tracked_market", () => optionalSource("tracked_pool_market", trackedPoolMarket, {}));
   return { markets, candidates: candidates.map((candidate) => {
     const market = lacks(candidate) ? markets[candidate.coinType] : undefined;
     if (!market) return candidate;
@@ -1076,8 +1076,8 @@ export async function readHomeDiscoverBase(db: ReadableDatabase, window: HomeWin
     })
     .filter((candidate) => !isBlastDust(candidate.facts, candidate.marketCapUsd));
   const [{ candidates, markets: trackedMarkets }, dexVolumes] = await Promise.all([
-    withTrackedMarket(live, context),
-    context.includeDexVolume ? step("dex_volumes", () => readDexVolumes(db, onDex(live.map(({ facts }) => facts).filter((row) => !isPresaleNotTrading(row))), span.window, bounds, kinds)) : undefined,
+    withTrackedMarket(live, context, step),
+    context.includeDexVolume ? step("base_dex_volumes", () => readDexVolumes(db, onDex(live.map(({ facts }) => facts).filter((row) => !isPresaleNotTrading(row))), span.window, bounds, kinds)) : undefined,
   ]);
   // Volume (and Relevant, which weighs it) ranks by the same aggregate the cell shows.
   const scored = candidates.map((candidate) => {

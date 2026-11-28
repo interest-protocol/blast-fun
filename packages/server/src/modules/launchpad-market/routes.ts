@@ -471,7 +471,7 @@ function metric(route: MarketRouteName, outcome: string, fields: Record<string, 
   recordMetric("launchpad.market_route", { route, outcome, ...fields });
 }
 
-/** One in ten answered upstream reads logs its time; a failed one always logs as `launchpad.market_route`. */
+/** One in ten answered market reads logs its time; a failed one always logs as `launchpad.market_route`. */
 const MARKET_READ_SAMPLE_RATE = 0.1;
 
 export function createMarketRelay(dependencies: Pick<MarketRoutesDependencies, "upstream" | "timeoutMs">) {
@@ -508,7 +508,8 @@ export function createMarketRelay(dependencies: Pick<MarketRoutesDependencies, "
       metric(route, "unreachable");
       return refusal(502, "unreachable", "Market data could not be read.");
     }
-    // How long blast-infra took to answer, per route (launch and holder rewards among them).
+    // How long the market answer took, per route (launch and holder rewards among them); a
+    // cached upstream's shared hits and joined reads count, so this is the reader's wait.
     observeMetric("launchpad.market_read", { route, status, durationMs: Math.round(performance.now() - startedMs) }, { sampleRate: MARKET_READ_SAMPLE_RATE });
     if (status === 401 || status === 403) {
       // blast-infra refused this server's key: an operator's problem, never the reader's.
