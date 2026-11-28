@@ -11,8 +11,11 @@ import { coinKey, tabMarketStream, type MarketStreamSubscription } from "#web/co
 import { useAppQueryClient } from "#web/lib/query/provider.tsx";
 import { priceQuery } from "./price-client.ts";
 
-/** A quote coin's rate on the tab's stream: its latest fresh dollar price, and whether the stream is live. */
-type StreamedRate = Readonly<{ usd: string | null; live: boolean }>;
+/**
+ * A quote coin's rate on the tab's stream: its latest dollar price, whether that price is still inside the
+ * freshness limit, and whether the stream is live.
+ */
+type StreamedRate = Readonly<{ usd: string | null; fresh: boolean; live: boolean }>;
 
 type Entry = {
   readers: number;
@@ -22,49 +25,58 @@ type Entry = {
   expiry: ReturnType<typeof setTimeout> | null;
 };
 
-const NONE: StreamedRate = { usd: null, live: false };
+const NONE: StreamedRate = { usd: null, fresh: false, live: false };
 const entries = new Map<string, Entry>();
 
 function publish(entry: Entry, rate: StreamedRate): void {
-  if (rate.usd === entry.rate.usd && rate.live === entry.rate.live) return;
+  if (rate.usd === entry.rate.usd && rate.fresh === entry.rate.fresh && rate.live === entry.rate.live) return;
   entry.rate = rate;
   for (const notify of entry.notify) notify();
 }
 
+/** How long a streamed price stays a rate: the poll's freshness rule, so an old price is no rate. */
+function freshFor(asOfMs: number): number {
+  return Math.min(PORTFOLIO_PRICE_MAX_AGE_MS, asOfMs + PORTFOLIO_PRICE_MAX_AGE_MS - Date.now());
+}
+
+/** Takes the coin's price from a frame; it ages out unless a newer one comes. USDC keeps its last price as a stand-in. */
+function takePrice(entry: Entry, coin: string, { prices }: DisplayPriceFrame): void {
+  const price = prices.find((each) => each.coin_type === coin);
+  if (!price || !(Number(price.usd_price) > 0)) return;
+  const left = freshFor(price.as_of_ms);
+  if (left <= 0) return;
+  if (entry.expiry) clearTimeout(entry.expiry);
+  const keep = coin === CREATE_QUOTE_TYPE;
+  entry.expiry = setTimeout(() => publish(entry, { ...entry.rate, fresh: false, usd: keep ? entry.rate.usd : null }), left);
+  publish(entry, { ...entry.rate, usd: price.usd_price, fresh: true });
+}
+
+function open(coin: string): Entry {
+  const entry: Entry = { readers: 0, rate: NONE, notify: new Set(), subscription: undefined, expiry: null };
+  entry.subscription = tabMarketStream()?.subscribe({
+    pools: [],
+    priceCoins: [coin],
+    expected: null,
+    listener: {
+      state: (state) => publish(entry, { ...entry.rate, live: state === "live" }),
+      prices: (frame) => takePrice(entry, coin, frame),
+    },
+  });
+  entries.set(coin, entry);
+  return entry;
+}
+
 /** One hub subscription per quote coin for the whole tab, however many screens read its rate. */
 function join(coin: string, notify: () => void): () => void {
-  let entry = entries.get(coin);
-  if (!entry) {
-    const created: Entry = { readers: 0, rate: NONE, notify: new Set(), subscription: undefined, expiry: null };
-    const par = coin === CREATE_QUOTE_TYPE;
-    const prices = ({ prices: observed }: DisplayPriceFrame) => {
-      const price = observed.find((each) => each.coin_type === coin);
-      if (!price || !(Number(price.usd_price) > 0)) return;
-      // The poll's freshness rule: a price older than the portfolio's limit is no rate.
-      const left = Math.min(PORTFOLIO_PRICE_MAX_AGE_MS, price.as_of_ms + PORTFOLIO_PRICE_MAX_AGE_MS - Date.now());
-      if (left <= 0) return;
-      // A fresh price ages out unless a newer one comes; USDC keeps its last rate, so it never flips back to par.
-      if (created.expiry) clearTimeout(created.expiry);
-      created.expiry = par ? null : setTimeout(() => publish(created, { ...created.rate, usd: null }), left);
-      publish(created, { ...created.rate, usd: price.usd_price });
-    };
-    created.subscription = tabMarketStream()?.subscribe({
-      pools: [],
-      priceCoins: [coin],
-      expected: null,
-      listener: { state: (state) => publish(created, { ...created.rate, live: state === "live" }), prices },
-    });
-    entries.set(coin, (entry = created));
-  }
-  const joined = entry;
-  joined.readers += 1;
-  joined.notify.add(notify);
+  const entry = entries.get(coin) ?? open(coin);
+  entry.readers += 1;
+  entry.notify.add(notify);
   return () => {
-    joined.notify.delete(notify);
-    joined.readers -= 1;
-    if (joined.readers > 0) return;
-    if (joined.expiry) clearTimeout(joined.expiry);
-    joined.subscription?.stop();
+    entry.notify.delete(notify);
+    entry.readers -= 1;
+    if (entry.readers > 0) return;
+    if (entry.expiry) clearTimeout(entry.expiry);
+    entry.subscription?.stop();
     entries.delete(coin);
   };
 }
@@ -78,23 +90,29 @@ function useStreamedRate(coin: string | null): StreamedRate {
   );
 }
 
+/** The stream's price while it is live and fresh; the read rests only then. */
+function currentRate(rate: StreamedRate): string | null {
+  return rate.live && rate.fresh ? rate.usd : null;
+}
+
+/** The read's price while it is inside the freshness limit. */
+function freshRead(price: string | null | undefined, isStale: boolean): string | null {
+  return !isStale && price && Number(price) > 0 ? price : null;
+}
+
 /**
- * Current FX. Display values use USDC at par by default. `live` (a coin page, whose numbers move with
- * its stream) follows the quote coin's `prices` entry on the tab's stream instead: SUI, and USDC from
- * Pyth, so a pool price times the rate moves on each tick. Only Create's quote coins stream, one
- * subscription each per tab; the 60 s read stands in while the stream has no fresh rate. USDC keeps par
- * until its first streamed rate and then keeps its last one, so a page never flips between the two.
+ * One rule for a live page: the stream's fresh rate, else the read, else the last streamed rate, else par for
+ * USDC. A page off the stream uses par for USDC and the read for SUI.
  */
-export function useQuoteUsd(quoteType: string | null, { marketRate = false, live = false } = {}): string | null {
-  const type = quoteType ? quotePriceType(quoteType) : null;
-  const par = type === CREATE_QUOTE_TYPE;
-  const atPar = par && !marketRate && !live;
-  const streamed = useStreamedRate(live && type && createQuoteOf(type) ? coinKey(type) : null);
-  const client = useAppQueryClient();
+function chooseRate(atPar: boolean, liveUsdc: boolean, streamed: StreamedRate, read: string | null): string | null {
+  if (atPar) return "1";
+  return currentRate(streamed) ?? read ?? streamed.usd ?? (liveUsdc ? "1" : null);
+}
+
+function useFallbackRead(type: string | null, enabled: boolean): string | null {
   const { data, isStale } = useQuery({
     ...priceQuery({ kind: "coin", id: type ?? "", window: "1h" }),
-    // USDC on a live page reads no fallback: it holds par while the stream is away.
-    enabled: !!type && !atPar && !(live && par) && !(streamed.live && streamed.usd),
+    enabled: !!type && enabled,
     staleTime: ({ state }) => {
       const asOf = state.data?.price_as_of_ms;
       if (asOf == null || asOf > state.dataUpdatedAt) return 0;
@@ -102,10 +120,22 @@ export function useQuoteUsd(quoteType: string | null, { marketRate = false, live
     },
     notifyOnChangeProps: ["data", "isStale"],
     refetchInterval: (query) => pollInterval(PORTFOLIO_PRICE_MAX_AGE_MS / 2, query),
-  }, client);
-  if (atPar) return "1";
-  if (streamed.usd) return streamed.usd;
-  if (live && par) return "1";
-  const price = data?.price_usd;
-  return !isStale && price && Number(price) > 0 ? price : null;
+  }, useAppQueryClient());
+  return freshRead(data?.price_usd, isStale);
+}
+
+/**
+ * Current FX. Display values use USDC at par by default. `live` (a coin page, whose numbers move with
+ * its stream) follows the quote coin's `prices` entry on the tab's stream instead: SUI, and USDC from
+ * Pyth, so a pool price times the rate moves on each tick. Only Create's quote coins stream, one
+ * subscription each per tab. The 60 s read runs whenever the stream has no fresh rate; while it has no
+ * price either, the last streamed rate stands in, and USDC falls back to par only when neither exists.
+ */
+export function useQuoteUsd(quoteType: string | null, { marketRate = false, live = false } = {}): string | null {
+  const type = quoteType ? quotePriceType(quoteType) : null;
+  const par = type === CREATE_QUOTE_TYPE;
+  const atPar = par && !marketRate && !live;
+  const streamed = useStreamedRate(live && type && createQuoteOf(type) ? coinKey(type) : null);
+  const read = useFallbackRead(type, !atPar && !currentRate(streamed));
+  return chooseRate(atPar, live && par, streamed, read);
 }

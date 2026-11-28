@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { MarketStreamListener } from "#web/components/launchpad/market-stream-hub.ts";
 import { installTestDom, waitFor } from "../../../../test/fixtures/social/test-dom.ts";
-import { CREATE_SUI_QUOTE_TYPE } from "@blast/core/web/contracts/create.ts";
+import { CREATE_QUOTE_TYPE, CREATE_SUI_QUOTE_TYPE } from "@blast/core/web/contracts/create.ts";
+import { PORTFOLIO_PRICE_MAX_AGE_MS } from "@blast/core/web/contracts/portfolio.ts";
 import type { SocialPriceHistory } from "@blast/core/web/contracts/prices.ts";
 
 installTestDom();
@@ -14,13 +15,19 @@ const { createTestQueryClient } = await import("#web/lib/query/test-client.ts");
 const { priceQuery } = await import("./price-client.ts");
 const { useQuoteUsd } = await import("./use-quote-usd.ts");
 
-function Rate({ id }: Readonly<{ id: string }>) {
-  return <output id={id}>{useQuoteUsd(CREATE_SUI_QUOTE_TYPE, { live: true }) ?? "none"}</output>;
+function Rate({ id, coin = CREATE_SUI_QUOTE_TYPE }: Readonly<{ id: string; coin?: string }>) {
+  return <output id={id}>{useQuoteUsd(coin, { live: true }) ?? "none"}</output>;
 }
 
-// This fails if each reader opens its own stream subscription, a reader leaving stops the others' rate, or the
-// 60 s read keeps polling while the stream has a fresh rate.
-test("two readers share one stream subscription, the last one out stops it, and the read rests on a streamed rate", async (t) => {
+type Harness = Readonly<{
+  listeners: MarketStreamListener[];
+  stops: () => number;
+  client: ReturnType<typeof createTestQueryClient>;
+  container: HTMLElement;
+  root: ReturnType<typeof createRoot>;
+}>;
+
+function harness(t: test.TestContext): Harness {
   const original = Object.getOwnPropertyDescriptor(globalThis, "WebSocket");
   Object.defineProperty(globalThis, "WebSocket", { value: class {}, configurable: true, writable: true });
   const listeners: MarketStreamListener[] = [];
@@ -30,12 +37,6 @@ test("two readers share one stream subscription, the last one out stops it, and 
     return { state: () => "live", ready: () => true, stop: () => { stops += 1; } };
   });
   const client = createTestQueryClient({ queries: { gcTime: Infinity } });
-  const { queryKey } = priceQuery({ kind: "coin", id: CREATE_SUI_QUOTE_TYPE, window: "1h" });
-  client.setQueryData<SocialPriceHistory | null>(queryKey, () => ({
-    presale_id: null, coin_type: CREATE_SUI_QUOTE_TYPE, tier: "5m", from_ms: 0, points: [],
-    price_usd: "2", price_as_of_ms: Date.now(), price_24h_usd: null,
-    change_24h_bps: null, day_open_usd: null, day_open_ms: null,
-  }));
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -46,11 +47,28 @@ test("two readers share one stream subscription, the last one out stops it, and 
     else Reflect.deleteProperty(globalThis, "WebSocket");
     client.clear();
   });
+  return { listeners, stops: () => stops, client, container, root };
+}
+
+function seedRead(client: Harness["client"], coin: string, usd: string) {
+  const { queryKey } = priceQuery({ kind: "coin", id: coin, window: "1h" });
+  client.setQueryData<SocialPriceHistory | null>(queryKey, () => ({
+    presale_id: null, coin_type: coin, tier: "5m", from_ms: 0, points: [],
+    price_usd: usd, price_as_of_ms: Date.now(), price_24h_usd: null,
+    change_24h_bps: null, day_open_usd: null, day_open_ms: null,
+  }));
+  return () => client.getQueryCache().find({ queryKey })!;
+}
+
+// This fails if each reader opens its own stream subscription, a reader leaving stops the others' rate, or the
+// 60 s read keeps polling while the stream has a fresh rate.
+test("two readers share one stream subscription, the last one out stops it, and the read rests on a streamed rate", async (t) => {
+  const { listeners, stops, client, container, root } = harness(t);
+  const query = seedRead(client, CREATE_SUI_QUOTE_TYPE, "2");
   const view = (ids: readonly string[]) => act(async () => root.render(
     <QueryProvider client={client}>{ids.map((id) => <Rate key={id} id={id} />)}</QueryProvider>,
   ));
   const rates = () => [...container.querySelectorAll("output")].map((each) => each.textContent);
-  const query = () => client.getQueryCache().find({ queryKey })!;
 
   await view(["a", "b"]);
   assert.equal(listeners.length, 1, "one subscription for both readers");
@@ -65,7 +83,26 @@ test("two readers share one stream subscription, the last one out stops it, and 
   assert.equal(query().isDisabled(), true, "the read rests while the stream has a rate");
 
   await view(["a"]);
-  assert.equal(stops, 0, "a reader leaving keeps the other's subscription");
+  assert.equal(stops(), 0, "a reader leaving keeps the other's subscription");
   await view([]);
-  assert.equal(stops, 1, "the last reader leaving stops it");
+  assert.equal(stops(), 1, "the last reader leaving stops it");
+});
+
+// This fails if an expired streamed USDC rate drops to par while the read has a price, or the read stays off.
+test("USDC on a live page reads before the stream, follows the stream, and returns to the read when the rate ages out", async (t) => {
+  const { listeners, client, container, root } = harness(t);
+  const query = seedRead(client, CREATE_QUOTE_TYPE, "0.999");
+  const rate = () => container.querySelector("output")?.textContent;
+  await act(async () => root.render(<QueryProvider client={client}><Rate id="usdc" coin={CREATE_QUOTE_TYPE} /></QueryProvider>));
+  assert.equal(rate(), "0.999", "the read stands in before the stream's first price");
+
+  await act(async () => {
+    listeners[0]!.state("live");
+    listeners[0]!.prices?.({ checkpoint: 1, prices: [{ coin_type: CREATE_QUOTE_TYPE, usd_price: "1.0002", as_of_ms: Date.now() - PORTFOLIO_PRICE_MAX_AGE_MS + 100 }] });
+  });
+  await waitFor(() => rate() === "1.0002", "the streamed rate", 5_000);
+  assert.equal(query().isDisabled(), true, "the read rests while the stream has a fresh rate");
+
+  await waitFor(() => rate() === "0.999", "the read after the streamed rate ages out", 5_000);
+  assert.equal(query().isDisabled(), false, "the read runs once the stream has no fresh rate");
 });
