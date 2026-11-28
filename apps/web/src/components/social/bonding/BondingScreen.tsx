@@ -542,6 +542,20 @@ function EmptyBondingResults({ onViewBonding, search, tab }: Readonly<{
   />;
 }
 
+/** `/bonding` while the server reads its featured curves: the header holds its place, so a click on Bonding shows at once. */
+export function BondingLoading() {
+  return (
+    <div className={styles.page} aria-busy="true" data-route-loading="bonding">
+      <PageHeader title="Bonding" />
+      <div className={styles.loadingTop}>
+        <SkeletonBox className={styles.featuredSkeleton} />
+        <SkeletonBox className={styles.controlsSkeleton} />
+      </div>
+      <CardsSkeleton />
+    </div>
+  );
+}
+
 function CardsSkeleton() {
   return (
     <SkeletonRows

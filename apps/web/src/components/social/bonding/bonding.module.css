@@ -154,6 +154,10 @@
   height: 100%;
   object-fit: cover;
 }
+/* The route fallback's stand-ins, at the live heights measured 2026-11-28: carousel 282 px and controls 40 px on desktop, 102 px and 104 px on a phone, where controls come first. */
+.loadingTop { display: flex; flex-direction: column; gap: inherit; }
+.featuredSkeleton { height: 17.625rem; border-radius: var(--r-md); }
+.controlsSkeleton { height: 2.5rem; border-radius: var(--r-sm); }
 /* Slides share the tallest one's height: a shorter card keeps its content at the top. */
 .featured:not([data-has-cover]) { grid-template-columns: minmax(0, 1fr); align-items: start; }
 .featuredBody {
@@ -281,6 +285,9 @@
 
 @media (max-width: 760px) {
   .page { gap: 0.875rem; }
+  .loadingTop { flex-direction: column-reverse; }
+  .featuredSkeleton { height: 6.375rem; }
+  .controlsSkeleton { height: 6.5rem; }
   .controls > :first-child :global([data-ui-size]) { min-height: 44px; padding-inline: 0.5rem; }
   .featured[data-has-cover] { grid-template-columns: 5rem minmax(0, 1fr); grid-template-rows: auto; align-items: center; }
   .featured .cover { aspect-ratio: 1; }
