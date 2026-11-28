@@ -22,7 +22,7 @@ test("the real screen keeps shared holdings and the balance header across Claims
   const holdings: SocialMePresales = {
     created: [], positions: [], watchlist: [], coins: [],
     vestings: [{
-      schedule_id: "0x" + "01".repeat(32), total: "1000", claimed: "0", claimable: "0", claimable_usd: null,
+      schedule_id: "0x" + "01".repeat(32), symbol: "TEST", total: "1000", claimed: "0", claimable: "0", claimable_usd: null,
       start_ms: 0, cliff_end_ms: 60_000, end_ms: 120_000, vested_pct: 0,
       presale: { presale_id: "0xabc", symbol: "TEST", name: "Test", icon_url: "", status: "open", venue: "cetus", start_ms: 0, end_ms: 120_000, fill_pct: 70, quote_symbol: "USDC", quote_decimals: 6, launched_ms: null, first_unlock_ms: null },
     }],

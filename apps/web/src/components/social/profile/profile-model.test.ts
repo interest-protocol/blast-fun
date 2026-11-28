@@ -194,10 +194,15 @@ test("UI-06 (live design: your holdings): positions, sale coins and vesting rows
   assert.deepEqual([goldFigures({ ...base, coins: null }).tokens, goldFigures({ ...base, coins: null }).total], [null, null]);
 
   const DAY = 86_400_000;
-  const vesting = { schedule_id: "v", presale: presale("lumn", "trading"), total: "400000", claimed: "10000", claimable: "21111", claimable_usd: null, start_ms: NOW - 14 * 24 * HOUR, cliff_end_ms: NOW - 14 * 24 * HOUR, end_ms: NOW + 166 * 24 * HOUR, vested_pct: 7 };
+  const vesting = { schedule_id: "v", presale: presale("lumn", "trading"), symbol: "LUMN", total: "400000", claimed: "10000", claimable: "21111", claimable_usd: null, start_ms: NOW - 14 * 24 * HOUR, cliff_end_ms: NOW - 14 * 24 * HOUR, end_ms: NOW + 166 * 24 * HOUR, vested_pct: 7 };
   const v = vestingView(vesting, false, NOW);
   assert.deepEqual([v.title, v.sub, v.progress, v.right.kind === "claim" ? v.right.label : ""], ["lumn · Vesting", "400,000 LUMN · linear over 6 mo", "7% unlocked · fully vested", "Claim 21,111 LUMN"]);
   assert.equal(v.fullyVestAtMs, vesting.end_ms);
+  // #173: a creator's raise vests in the quote coin and says so.
+  const raise = vestingView({ ...vesting, symbol: "TSUI", total: "690", claimable: "69" }, false, NOW);
+  assert.deepEqual([raise.sub, raise.right.kind === "claim" ? raise.right.label : ""], ["690 TSUI · linear over 6 mo", "Claim 69 TSUI"]);
+  // A backend from before #173 sends no symbol: the sale coin's, as before.
+  assert.equal(vestingView({ ...vesting, symbol: undefined }, false, NOW).sub, "400,000 LUMN · linear over 6 mo");
   // OA-18: a 3-month cliff from launch (the design's "linear over 12 mo, 3-mo cliff"): until it ends, "Cliff / ends <day>".
   const start = Date.UTC(2026, 9, 1);
   const cliff = vestingView({ ...vesting, start_ms: start, cliff_end_ms: start + 90 * DAY, end_ms: start + 360 * DAY, claimable: "0", claimed: "0", vested_pct: 0 }, false, start + 10 * DAY);
@@ -216,7 +221,7 @@ test("A-03, A-04, P-13: a holding's Claim carries what it claims in place, with 
   });
   const kstl = presale("kstl", "trading");
   assert.deepEqual(target({ presale: kstl, committed_usd: "300.00", status: "claimable", ...extra })?.key, `tokens:${kstl.presale_id}`);
-  const vesting = { schedule_id: `0x${"70".repeat(32)}`, presale: presale("lumn", "trading"), total: "400000", claimed: "10000", claimable: "21111", claimable_usd: null, start_ms: NOW - 14 * 24 * HOUR, cliff_end_ms: NOW - 14 * 24 * HOUR, end_ms: NOW + 166 * 24 * HOUR, vested_pct: 7 };
+  const vesting = { schedule_id: `0x${"70".repeat(32)}`, presale: presale("lumn", "trading"), symbol: "LUMN", total: "400000", claimed: "10000", claimable: "21111", claimable_usd: null, start_ms: NOW - 14 * 24 * HOUR, cliff_end_ms: NOW - 14 * 24 * HOUR, end_ms: NOW + 166 * 24 * HOUR, vested_pct: 7 };
   const right = vestingView(vesting, true, NOW).right;
   assert.deepEqual(right.kind === "claim" && [right.label, right.target], [
     "Claim •••• LUMN",
@@ -248,7 +253,7 @@ test("R3-40-AC-1: a profile reads a SUI sale's calls and positions in dollars, a
 });
 
 test("vesting claims show the exact unlocked amount and explain what is still locked", () => {
-  const vesting = { schedule_id: "v", presale: presale("lumn", "trading"), total: "440000000", claimed: "10000.000000001", claimable: "21111.123456789", claimable_usd: null, start_ms: NOW - 14 * 24 * HOUR, cliff_end_ms: NOW - 14 * 24 * HOUR, end_ms: NOW + 166 * 24 * HOUR, vested_pct: 7 };
+  const vesting = { schedule_id: "v", presale: presale("lumn", "trading"), symbol: "LUMN", total: "440000000", claimed: "10000.000000001", claimable: "21111.123456789", claimable_usd: null, start_ms: NOW - 14 * 24 * HOUR, cliff_end_ms: NOW - 14 * 24 * HOUR, end_ms: NOW + 166 * 24 * HOUR, vested_pct: 7 };
   const view = vestingView(vesting, false, NOW);
   assert.equal(view.right.kind === "claim" ? view.right.label : "", "Claim 21,111.123456789 LUMN");
   assert.equal(view.balances.available, "21,111.123456789");
@@ -258,7 +263,7 @@ test("vesting claims show the exact unlocked amount and explain what is still lo
 });
 
 test("vesting remaining balances preserve precision, include unlocked funds, and hide with other amounts", () => {
-  const schedule = { schedule_id: "v", presale: presale("lumn", "trading"), total: "9007199254740993.000000009", claimed: "0.000000008", claimable: "1", claimable_usd: null, start_ms: NOW - HOUR, cliff_end_ms: NOW - HOUR, end_ms: NOW + HOUR, vested_pct: 50 };
+  const schedule = { schedule_id: "v", presale: presale("lumn", "trading"), symbol: "LUMN", total: "9007199254740993.000000009", claimed: "0.000000008", claimable: "1", claimable_usd: null, start_ms: NOW - HOUR, cliff_end_ms: NOW - HOUR, end_ms: NOW + HOUR, vested_pct: 50 };
   assert.equal(vestingView(schedule, false, NOW).balances.remaining, "9,007,199,254,740,993.000000001");
   assert.equal(vestingView({ ...schedule, claimed: schedule.total, claimable: "0" }, false, NOW).balances.remaining, "0");
   assert.equal(vestingView({ ...schedule, total: "1", claimed: "2" }, false, NOW).balances.remaining, "—");
