@@ -603,6 +603,43 @@ test("a lower fresh quote waits for a new press at the new rate", async () => {
   }
 });
 
+test("an accepted new rate drops its note even when the wallet then says no", async () => {
+  const calls = newCalls();
+  const lower = { ...QUOTE, minReceived: QUOTE.minReceived - 1, expectedAmountOut: QUOTE.expectedAmountOut - 1 };
+  const form = await mount(fakeSdk(calls, [QUOTE, lower], { send: async () => { calls.sends += 1; throw coded(4001); } }), calls);
+  try {
+    await form.pickUsdc();
+    await form.type("20");
+    await form.press();
+    assert.match(form.text(), /The quote changed/);
+    await form.press();
+    assert.equal(calls.sends, 1);
+    assert.doesNotMatch(form.text(), /The quote changed/);
+    assert.equal(form.button().textContent, "Bridge");
+  } finally {
+    await form.unmount();
+  }
+});
+
+test("a busy Bridge button stays focusable, so focus has somewhere to come back to", async () => {
+  const calls = newCalls();
+  const form = await mount(fakeSdk(calls, [QUOTE], { send: () => { calls.sends += 1; return new Promise<string>(() => undefined); } }), calls);
+  try {
+    await form.pickUsdc();
+    await form.type("20");
+    await act(async () => form.button().click());
+    await waitFor(() => calls.sends === 1, "the wallet is asked");
+    assert.equal(form.button().getAttribute("aria-busy"), "true");
+    // Chrome drops focus to the page when a focused button turns natively disabled.
+    assert.equal(form.button().hasAttribute("disabled"), false);
+    const quotes = calls.quotes.length;
+    await act(async () => form.button().click());
+    assert.equal(calls.quotes.length, quotes, "a second press while busy does nothing");
+  } finally {
+    await form.unmount();
+  }
+});
+
 test("the allowance is checked again on the fresh quote", async () => {
   const calls = newCalls();
   let checks = 0;

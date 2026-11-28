@@ -393,6 +393,8 @@ function useBridgeSend({ sdk, selection, keys, shown, allRoutes, now, onPaused, 
       setRateChangedFor(inputs);
       return;
     }
+    // This press accepted the new numbers, so the note goes even if the wallet then says no.
+    setRateChangedFor(null);
     if (source.kind === "evm" && !token.native && !(await sdk.allowanceEnough(fresh, source, chain))) {
       queryClient.setQueryData(keys.allowanceKey, false);
       return;
@@ -414,7 +416,6 @@ function useBridgeSend({ sdk, selection, keys, shown, allRoutes, now, onPaused, 
     }
     routeEvent(fresh, chain, token);
     if (source.kind !== "solana" || activeSolana.current === source.address) onSent();
-    setRateChangedFor(null);
     // The send spent the allowance; the same amount again must check it afresh.
     queryClient.removeQueries({ queryKey: ["bridge", "allowance"] });
   };
@@ -625,7 +626,7 @@ export function BridgeForm({ sdk, wallets, blastAddress, signedIn, onSignIn, onA
       aria-describedby={actionDescription}
       className={styles.action}
       disabled={disableAction}
-      focusableDisabled={sourceAction}
+      focusableDisabled={sourceAction || actionBusy}
       loading={actionBusy}
       loadingLabel={send.busyText}
       onClick={press}
