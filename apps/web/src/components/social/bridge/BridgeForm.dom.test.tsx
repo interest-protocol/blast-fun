@@ -12,6 +12,7 @@ import { rememberSolanaSubmission, settleSolanaSubmission } from "./solana-submi
 const dom = installTestDom();
 const { act } = await import("react");
 const { createRoot } = await import("react-dom/client");
+const { GC_MS } = await import("#web/lib/query/client.ts");
 const { createTestQueryClient, withQueryClient } = await import("#web/lib/query/test-client.ts");
 const { BridgeForm } = await import("./BridgeForm.tsx");
 
@@ -62,6 +63,8 @@ async function mount(sdk: BridgeSdk, calls: Calls, wallet: SourceWallet | null =
   dom.document.body.appendChild(container);
   const root = createRoot(container);
   const client = createTestQueryClient({ queries });
+  // Arrival deduplication is shared across the status read and view for the app's cache lifetime.
+  client.setQueryDefaults(["bridge", "arrival"], { gcTime: GC_MS });
   const render = (next: SourceWallet | null, key = "first") => act(async () => root.render(withQueryClient(client,
     <BridgeForm
       key={key}
@@ -108,6 +111,7 @@ async function mount(sdk: BridgeSdk, calls: Calls, wallet: SourceWallet | null =
     },
     async unmount() {
       await act(async () => root.unmount());
+      client.clear();
       container.remove();
     },
   };
@@ -351,8 +355,7 @@ test("a failed history read offers a retry and a successful empty read clears it
     await act(async () => retry.click());
     await waitFor(() => reads === 3, "the manual history retry starts");
     await act(async () => answer.resolve([]));
-    await waitFor(() => form.client.getQueryState(["bridge", "history", BLAST])?.status === "success", "the retry settles successfully");
-    assert.doesNotMatch(form.text(), /Recent bridges/);
+    await waitFor(() => !form.text().includes("Recent bridges"), "the empty history removes the retry action");
   } finally {
     answer.resolve([]);
     await form.unmount();

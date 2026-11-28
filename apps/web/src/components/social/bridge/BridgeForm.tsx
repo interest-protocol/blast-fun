@@ -230,6 +230,14 @@ function useBridgeHistory(sdk: BridgeSdk, blastAddress: string | null) {
 
 type SendKeys = Readonly<{ quoteKey: readonly unknown[]; allowanceKey: readonly unknown[] }>;
 
+function quoteNeedsReview(fresh: Quote, shown: Quote | undefined) {
+  if (!shown) return false;
+  if (fresh.type !== shown.type) return true;
+  return fresh.type === "FAST_MCTP"
+    ? fresh.expectedAmountOut < shown.expectedAmountOut
+    : fresh.minReceived < shown.minReceived;
+}
+
 /** Approve, switch and bridge: each re-asks Mayan for a bound quote and checks it before any wallet call. */
 function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent, solanaAddress }: Readonly<{
   sdk: BridgeSdk;
@@ -338,10 +346,7 @@ function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent, sol
     const fresh = await freshQuote(ask);
     if (!fresh) return;
     queryClient.setQueryData(keys.quoteKey, fresh);
-    const worseQuote = fresh.type === "FAST_MCTP"
-      ? shown && fresh.expectedAmountOut < shown.expectedAmountOut
-      : shown && fresh.minReceived < shown.minReceived;
-    if (shown && (fresh.type !== shown.type || worseQuote)) {
+    if (quoteNeedsReview(fresh, shown)) {
       setRateChangedFor(inputs);
       return;
     }
@@ -493,8 +498,7 @@ function formAction({ reads, send, selection, wallet, atoms, id, paused, signedI
   return { action, actionBusy, actionDescription, balance, balanceFailed, disableAction, message, noteId, reason, sourceAction };
 }
 
-export function BridgeForm({ sdk, wallets, blastAddress, signedIn, onSignIn, onArrived, now = Date.now }: BridgeFormProps) {
-  const id = useId();
+function useSourceActionFocus() {
   const chainTrigger = useRef<HTMLButtonElement>(null);
   const sourceActionRef = useCallback((button: HTMLButtonElement | null) => {
     if (!button) return;
@@ -507,6 +511,12 @@ export function BridgeForm({ sdk, wallets, blastAddress, signedIn, onSignIn, onA
       });
     };
   }, []);
+  return { chainTrigger, sourceActionRef };
+}
+
+export function BridgeForm({ sdk, wallets, blastAddress, signedIn, onSignIn, onArrived, now = Date.now }: BridgeFormProps) {
+  const id = useId();
+  const { chainTrigger, sourceActionRef } = useSourceActionFocus();
   const { selection, toIndex, setToIndex, amount, setAmount, chooseChain, chooseToken } = useBridgeInputs();
   const { chain, info, token } = selection;
   const [paused, setPaused] = useState(false);
