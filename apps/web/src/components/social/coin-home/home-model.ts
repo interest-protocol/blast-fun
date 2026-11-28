@@ -424,6 +424,18 @@ export function marketVolume(coin: Pick<HomeCoin, "activity"> & Readonly<{ dex_v
   return { text, label: volumeLabel(activity.window, text, activity.scope) };
 }
 
+/**
+ * A coin page's 24h volume by Home's rule: a newer `coin_stats` frame's `volume_24h` once the stream sends one,
+ * else Home's read of the coin (`marketVolume`). Null when neither has a figure.
+ */
+export function dayVolumeText(
+  coin: Parameters<typeof marketVolume>[0] | null,
+  live: Readonly<{ volumeUsd: string | null; volumeComplete: boolean }> | null,
+): string | null {
+  if (live?.volumeUsd != null) return usdVolumeText({ usd: live.volumeUsd, usd_complete: live.volumeComplete });
+  return coin ? marketVolume(coin).text : null;
+}
+
 /** A portfolio's value for a tight row: `$1.2K`; null when it is not shown. */
 export function portfolioText(value: string | null): string | null {
   return value === null ? null : dollars(Number(value));

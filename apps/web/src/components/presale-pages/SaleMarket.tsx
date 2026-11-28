@@ -16,7 +16,7 @@ import { poolPrices } from "#web/components/charts/candle-data.ts";
 import { fetchCoinMarket } from "#web/components/social/blast-mode/workspace/panels/coin-market-reads.ts";
 import { coinsByIdsQuery } from "#web/components/social/coin-home/home-client.ts";
 import { shortTicker } from "#web/components/social/coins/coin-display.ts";
-import { actorName, amountShort, marketVolume, volumeText } from "#web/components/social/coin-home/home-model.ts";
+import { actorName, amountShort, dayVolumeText, volumeText } from "#web/components/social/coin-home/home-model.ts";
 import { Avatar } from "#web/components/social/post/PostMedia.tsx";
 import { readableUsd, subscriptZeros } from "#web/lib/market-format.ts";
 import { PUBLIC_STALE_MS } from "#web/lib/query/client.ts";
@@ -198,14 +198,12 @@ function partial(text: string): ReactNode {
 }
 
 /**
- * The day's volume by Home's rule (`marketVolume`): the stream's `volume_24h` once it sends one, else the read's
+ * The day's volume by Home's rule (`dayVolumeText`): the stream's `volume_24h` once it sends one, else the read's
  * curve trades plus DEX swaps. A read without that sum falls back to the pool's own volume.
  */
 function volumeFigure(coin: HomeCoin | null, live: LiveCoinStats | null, volume: readonly HomeAmount[] | null, loading: boolean): ReactNode {
   if (!coin) return loading ? <SkeletonText>0000</SkeletonText> : null;
-  const shared = marketVolume(live?.volumeUsd != null
-    ? { activity: coin.activity, dex_volume: { usd: live.volumeUsd, usd_complete: live.volumeComplete } }
-    : coin).text;
+  const shared = dayVolumeText(coin, live);
   if (shared !== null) return partial(shared);
   if (!volume) return null;
   const dollars = volumeText({ bought: volume, sold: [], committed: [] });

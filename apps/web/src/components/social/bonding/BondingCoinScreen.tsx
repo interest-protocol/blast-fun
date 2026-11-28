@@ -52,7 +52,11 @@ import { pollInterval } from "#web/lib/query/polling.ts";
 import { legacyCoinMarketQuery } from "./bonding-client.ts";
 import { useLiveListening, useLiveScreen, useReportListening } from "#web/components/launchpad/coin/LiveScreen.tsx";
 import { statsAfterRead, useLiveCoin, type LiveCoin, type LiveCoinStats } from "#web/components/launchpad/coin/live-coin.ts";
-import { usdVolumeText } from "#web/components/social/coin-home/home-model.ts";
+import { dayVolumeText } from "#web/components/social/coin-home/home-model.ts";
+import { coinsByIdsQuery } from "#web/components/social/coin-home/home-client.ts";
+import { coinKey } from "#web/components/launchpad/market-stream-hub.ts";
+import { SkeletonText } from "#web/components/blast-ui/Skeleton.tsx";
+import { marketPoll } from "#web/components/presale-pages/sale-market-poll.ts";
 import type { ExpectedDeployment } from "@blast/core/modules/launchpad-contract/provenance.ts";
 import styles from "./bonding-coin.module.css";
 import { ChartCard, CoinCover, CoinIdentityHeader, CoinPriceFigure, CoinTradingActivity, Fact, MarketOverview, MarketPriceRow, useLastPrice } from "./CoinPageParts.tsx";
@@ -455,12 +459,27 @@ function coinTradeSource(view: View, poolKey: string | null, trade: ReturnType<t
   };
 }
 
+/**
+ * The 24h volume Home shows for this coin (curve trades plus DEX swaps), from Home's read of it, so a page read
+ * never swaps it for the current pool's own tape; `stats` (newer than the page read) wins once it sends `volume_24h`.
+ */
+function useHomeDayVolume(coinType: string | null, stats: LiveCoinStats | null): ReactNode {
+  const { data, isLoading } = useQuery({
+    ...coinsByIdsQuery(coinType ? [coinType] : [], "24h", undefined, true),
+    refetchInterval: marketPoll(useLiveListening()),
+  }, useAppQueryClient());
+  const key = coinKey(coinType);
+  const coin = data?.coins.find((item) => coinKey(item.coin_type) === key) ?? null;
+  return dayVolumeText(coin, stats) ?? (isLoading ? <SkeletonText>0000</SkeletonText> : undefined);
+}
+
 function GraduatedMarketOverview({ view, tick, tradeId, stats }: Readonly<{
   view: View; tick: ReturnType<typeof useCoinTrade>["tick"]; tradeId: string | null; stats: LiveCoinStats | null;
 }>) {
+  // Without the venue's read (an outage) the page shows no market figures, the day's volume among them.
+  const volume = useHomeDayVolume(view.pool ? view.identity.coinType : null, stats);
   return <MarketOverview fdv={stats?.fdvUsd ?? (tick ? tick.trade.fdvUsd : view.pool?.fdvUsd)} holders={stats?.holders ?? view.coin?.stats.holders}
-    volume={view.pool?.stats.day.volumeUsd} volumeFigure={stats?.volumeUsd == null ? undefined : usdVolumeText({ usd: stats.volumeUsd, usd_complete: stats.volumeComplete })}
-    venue={view.venue} tradeId={tradeId} />;
+    volumeFigure={volume} venue={view.venue} tradeId={tradeId} />;
 }
 
 function coinPageMarket(page: CoinPage, view: View) {
@@ -574,7 +593,7 @@ export function LegacyCoinScreen({ coinType, name, symbol, logoUrl, chart, decim
           <ChartCard head={<MarketPrice units={units} price={price?.price} tradeId={price?.cursor} showCurrency={!major} />}
             foot={<span className={styles.byline}><CoinTypeTag coinType={coinType} /></span>}><SectionBoundary subject="chart">{chart}</SectionBoundary></ChartCard>
           <MarketOverview fdv={major ? null : fdvUsd} holders={live.stats?.holders}
-            volumeFigure={live.stats?.volumeUsd == null ? undefined : usdVolumeText({ usd: live.stats.volumeUsd, usd_complete: live.stats.volumeComplete })} venue={major ? null : poolKey.split(":")[0]} />
+            volumeFigure={dayVolumeText(null, live.stats) ?? undefined} venue={major ? null : poolKey.split(":")[0]} />
           <Card title="Trades">
             <SectionBoundary subject="trades" key={poolKeys.join()}>
               <IndexedPoolTrades poolKeys={poolKeys} units={units} />

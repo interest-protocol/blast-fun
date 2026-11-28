@@ -7,9 +7,14 @@ import { JSDOM } from "jsdom";
 import { BondingCoinScreen } from "./BondingCoinScreen.tsx";
 import { CoinExecution } from "#web/components/launchpad/coin/CoinExecution.tsx";
 import type { CoinPage } from "@blast/core/modules/launchpad-coin/contracts.ts";
+import type { HomeCoin } from "@blast/core/web/contracts/home.ts";
 import { coinScreenFixture } from "../../../../test/fixtures/social/bonding/coin-screen-fixtures.ts";
 import { CREATE_TEST_SUI_QUOTE_TYPE } from "@blast/core/modules/social/contracts/create.ts";
 import { installTestDom } from "../../../../test/fixtures/social/test-dom.ts";
+import { fixtureMarket } from "../../../../test/fixtures/presale-pages/market-fixtures.ts";
+import { coinsByIdsQuery } from "#web/components/social/coin-home/home-client.ts";
+import { marketVolume } from "#web/components/social/coin-home/home-model.ts";
+import { createTestQueryClient, withQueryClient } from "#web/lib/query/test-client.ts";
 
 function coinScreen(page: CoinPage, verified = false) {
   return <BondingCoinScreen page={page} verified={verified} details={{ tagline: "A permanent coin", iconUrl: "https://example.com/launch.webp", cover: null, links: [] }} slots={{
@@ -23,11 +28,11 @@ function render(page: CoinPage, verified = false) {
   return new JSDOM(renderToStaticMarkup(coinScreen(page, verified))).window.document;
 }
 
-test("graduated page leads with venue economics and pool volume instead of the emptied curve", () => {
+test("graduated page leads with venue economics instead of the emptied curve", () => {
   const page = coinScreenFixture();
   const doc = render(page);
   const overview = doc.querySelector('[aria-label="Market overview"]')!;
-  assert.match(doc.body.textContent!, /Current pool price—.*Chart fixture.*FDV.*\$53\.9K.*Holders.*Volume 24h.*\$310\.69.*DEX/);
+  assert.match(doc.body.textContent!, /Current pool price—.*Chart fixture.*FDV.*\$53\.9K.*Holders.*Volume 24h.*DEX/);
   assert.match(overview.textContent!, /FDV.*Holders.*Volume 24h.*DEX/);
   assert.ok(page.coin.state === "available");
   const tag = doc.querySelector("[data-page-head] [data-coin-type-tag]");
@@ -144,7 +149,7 @@ test("venue facts remain visible when curve history cannot be read", () => {
 test("venue economics retain their own units when both coin and curve reads fail", () => {
   const page = coinScreenFixture();
   const doc = render({ ...page, curve: { state: "unavailable", reason: "down" }, coin: { state: "unavailable", reason: "down" } });
-  assert.match(doc.body.textContent!, /Current pool price—.*Chart fixture.*FDV.*\$53\.9K.*Volume 24h.*\$310\.69/);
+  assert.match(doc.body.textContent!, /Current pool price—.*Chart fixture.*FDV.*\$53\.9K.*Volume 24h/);
 });
 
 test("venue outage retains graduation and recovery without curve-price fallback or active trade controls", () => {
@@ -186,14 +191,12 @@ test("last-good data during a market outage keeps launch facts and only one dela
   assert.doesNotMatch(doc.body.textContent!, /Market data is delayed|index is catching up|Complete migration|Chart fixture|Recent trades fixture/);
 });
 
-test("missing optional price/FDV are omitted; confirmed zero pool volume remains visible", () => {
+test("missing optional price/FDV are omitted", () => {
   const page = coinScreenFixture();
   assert.ok(page.venue?.state === "available");
   const pool = page.venue.data;
-  const doc = render({ ...page, venue: { ...page.venue, data: { ...pool, fdvUsd: null, economics: { ...pool.economics, price: null, marketCap: null }, stats: { ...pool.stats, day: { ...pool.stats.day, volumeQuote: 0n, volumeUsd: "0" } } } } });
-  const overview = doc.querySelector('[aria-label="Market overview"]')!;
+  const doc = render({ ...page, venue: { ...page.venue, data: { ...pool, fdvUsd: null, economics: { ...pool.economics, price: null, marketCap: null } } } });
   assert.doesNotMatch(doc.body.textContent!, /pool price[^a-z]*[\d.].*SUI|FDV/);
-  assert.match(overview.textContent!, /Volume 24h\$0/);
 });
 
 test("missing USD conversion omits FDV without relabeling quote amounts as dollars", () => {
@@ -202,7 +205,7 @@ test("missing USD conversion omits FDV without relabeling quote amounts as dolla
   const doc = render({ ...page, venue: { ...page.venue, data: { ...page.venue.data, fdvUsd: null } } });
   const overview = doc.querySelector('[aria-label="Market overview"]')!;
   assert.doesNotMatch(overview.textContent!, /FDV/);
-  assert.match(doc.body.textContent!, /Current pool price.*SUI.*Chart fixture.*Volume 24h\$310\.69/);
+  assert.match(doc.body.textContent!, /Current pool price.*SUI.*Chart fixture.*Volume 24h/);
 });
 
 test("stale venue data is marked delayed without losing the graduated view", () => {
@@ -219,7 +222,7 @@ test("test quote amounts use the same TSUI display alias after graduation", () =
   const curve = page.curve.data;
   const doc = render({ ...page, curve: { ...page.curve, data: { ...curve, launch: { ...curve.launch, quoteType: CREATE_TEST_SUI_QUOTE_TYPE } } } });
   const overview = doc.querySelector('[aria-label="Market overview"]')!;
-  assert.match(doc.body.textContent!, /Current pool price.*TSUI.*Chart fixture.*Volume 24h\$310\.69/);
+  assert.match(doc.body.textContent!, /Current pool price.*TSUI.*Chart fixture.*Volume 24h/);
   assert.match(overview.textContent!, /FDV\$53\.9K/);
 });
 
@@ -233,12 +236,24 @@ test("bonding keeps progress while migration-ready shows target reached and keep
   assert.equal(pending.querySelectorAll('[aria-label="Trade"] button:not([disabled])').length, 0);
 });
 
- test("unknown USD volume omits the figure and label", () => {
+// This fails if a graduated page's read shows its current pool's own tape instead of Home's 24h volume for the coin.
+test("a graduated page's 24h volume is Home's figure for the coin, and an unpriced sum shows no figure", () => {
   const page = coinScreenFixture("migrated");
-  if (!page.venue || !("data" in page.venue)) throw new Error("fixture");
-  const pool = page.venue.data;
-  const doc = render({ ...page, venue: { ...page.venue, data: { ...pool, stats: { ...pool.stats, day: { ...pool.stats.day, volumeUsd: null } } } } });
-  assert.doesNotMatch(doc.querySelector('[aria-label="Market overview"]')!.textContent!, /Volume 24h/);
+  assert.ok(page.curve.state === "available");
+  const coinType = page.curve.data.launch.coinType;
+  const client = createTestQueryClient();
+  const coin: HomeCoin = { ...fixtureMarket(), presale_id: null, coin_type: coinType, dex_volume: { usd: "52340.5", usd_complete: false, venues: { cetus: { usd: null, usd_complete: false }, bluefin: { usd: "52340.5", usd_complete: true } } } };
+  const seed = (each: HomeCoin) => client.setQueryData(
+    coinsByIdsQuery([coinType], "24h", undefined, true).queryKey,
+    { coins: [each], missing: [], clock_ms: 0, window: "24h", as_of: { checkpoint: 1, timestamp_ms: 0, lag_ms: 0 }, pool_volumes: {} },
+  );
+  const overview = () => new JSDOM(renderToStaticMarkup(withQueryClient(client, coinScreen(page)))).window.document
+    .querySelector('[aria-label="Market overview"]')!.textContent!;
+  seed(coin);
+  assert.equal(marketVolume(coin).text, "$52.3K+");
+  assert.ok(overview().includes(`Volume 24h${marketVolume(coin).text}`), overview());
+  seed({ ...coin, dex_volume: { ...coin.dex_volume!, usd: null } });
+  assert.doesNotMatch(overview(), /Volume 24h/);
 });
 
 
