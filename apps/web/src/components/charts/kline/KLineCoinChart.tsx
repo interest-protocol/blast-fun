@@ -109,39 +109,44 @@ export default function KLineCoinChart({ sources, interval, memeDecimals, quoteD
     });
     // The action carries only the pointer's x; the bar under it (none past the newest) is the readout's.
     // A finger drags to pan and holds to scrub (the library's long tap): the crosshair then follows the finger, and goes when it lifts.
-    // An up-and-down swipe is the page's scroll, so the readout stays away while one runs.
     // Setting the crosshair this way tells no subscriber, so the readout is cleared with it. (Its type has no null.)
     const clear = () => {
       created.executeAction("onCrosshairChange", null as unknown as Crosshair);
       view.hovered.set(null);
     };
     let swipe: { x: number; y: number; vertical: boolean | null } | null = null;
+    // Whether this touch is scrubbing: a hold, or a drag from where the last tap left the crosshair.
+    let held = false;
     created.subscribeAction("onCrosshairChange", (data) => {
       const x = (data as Crosshair | undefined)?.x;
-      // The library's long-tap timer still runs under a page scroll it never saw.
-      if (x !== undefined && swipe?.vertical) return clear();
+      if (x !== undefined && swipe) held = true;
       view.hovered.set(x === undefined ? null : barAt(created, x));
     });
     // KLineCharts reports no action when the mouse leaves.
     const leave = (event: PointerEvent) => { if (event.pointerType === "mouse") view.hovered.set(null); };
     element.addEventListener("pointerleave", leave);
     let lifted = 0;
+    // A finger landing near the last tap gets the library's crosshair back at once; a new touch starts clear.
     const touch = (event: TouchEvent) => {
       const finger = event.touches[0];
       window.clearTimeout(lifted);
+      held = false;
       swipe = finger && event.touches.length === 1 ? { x: finger.clientX, y: finger.clientY, vertical: null } : null;
+      clear();
     };
-    // The library cancels every drag past 5 px on the document, vertical ones too; this runs first and keeps an
-    // up-and-down swipe from it (its own rule: vertical when the rise is at least half the run), unless a hold is scrubbing.
+    // The library claims every drag past 5 px, vertical ones too, and on lift a quick one flings the chart or taps it.
+    // An up-and-down swipe that is not scrubbing (its rule: the rise is at least half the run) is the page's scroll, so
+    // the library gets the touchcancel a browser sends when it takes a gesture over, and drops the touch whole.
     const move = (event: TouchEvent) => {
       const finger = event.touches[0];
-      if (!swipe || !finger || event.touches.length > 1) return;
-      if (swipe.vertical === null) {
-        const dx = Math.abs(finger.clientX - swipe.x), dy = Math.abs(finger.clientY - swipe.y);
-        if (dx + dy < 5) return;
-        swipe.vertical = view.hovered.get() === null && dy >= dx / 2;
+      if (!swipe || swipe.vertical !== null || !finger || event.touches.length > 1) return;
+      const dx = Math.abs(finger.clientX - swipe.x), dy = Math.abs(finger.clientY - swipe.y);
+      if (dx + dy < 5) return;
+      swipe.vertical = !held && dy >= dx / 2;
+      if (swipe.vertical) {
+        // A plain event: not every browser can construct a TouchEvent, and the library reads only changedTouches.
+        document.documentElement.dispatchEvent(Object.defineProperty(new Event("touchcancel"), "changedTouches", { value: [finger] }));
       }
-      if (swipe.vertical) event.stopPropagation();
     };
     // A tap leaves the library's crosshair up; it goes with the finger, after the library's own tap handling.
     const lift = (event: TouchEvent) => {
