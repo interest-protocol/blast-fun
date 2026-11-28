@@ -5,11 +5,12 @@ import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useState,
 import { useHydrated } from "#web/components/ui-libraries/use-hydrated.tsx";
 import {
   PrivySessionContext,
+  PrivySourceWalletsContext,
   privySessionValue,
   type PrivyLoginListener,
 } from "#web/components/auth/privy-session.ts";
 import type { PrivySessionRuntimeProps } from "./PrivySessionRuntime.tsx";
-import { PrivyStart } from "./privy-start.ts";
+import { PrivySourceWalletsStore, PrivyStart } from "./privy-start.ts";
 
 /** Marks the start failed: the SDK's code did not load, so the page stays signed out. */
 function RuntimeUnavailable({ start }: Pick<PrivySessionRuntimeProps, "start">) {
@@ -78,7 +79,9 @@ function browserPrivySession(): boolean {
  * Privy's hooks need its provider above them, and `next/dynamic` cannot keep
  * the page mounted while that provider loads above it; swapping it in would
  * remount the whole shell. So the provider renders beside the page and
- * publishes its session through `PrivySessionContext` (`usePrivySession`).
+ * publishes its session through `PrivySessionContext` (`usePrivySession`)
+ * and the connected source wallets through `PrivySourceWalletsContext`
+ * (`usePrivySourceWallets`). Page code never calls Privy's hooks.
  * Delete this wrapper when Privy's provider can mount late without
  * remounting its children (or Privy ships a hook-free session client): mount
  * `PrivyProvider` lazily around the shell, sign in from a signed-out page and
@@ -98,6 +101,7 @@ export function PrivySessionProvider({
   const [Runtime, setRuntimeComponent] = useState<{ component: RuntimeComponent }>(() => ({ component: latestRuntime }));
   const [listeners] = useState(() => new Set<PrivyLoginListener>());
   const [start] = useState(() => new PrivyStart());
+  const [wallets] = useState(() => new PrivySourceWalletsStore());
   const { runtime, failed, attempt } = useSyncExternalStore(start.subscribe, start.state, start.state);
   // A layout effect, so a Strict Mode remount reopens the start before any child's effect calls `load`.
   useLayoutEffect(() => start.mount(), [start]);
@@ -122,14 +126,16 @@ export function PrivySessionProvider({
   // Each retry mounts a fresh SDK (`attempt`), never the one that failed.
   const sdk = useMemo(
     () => active
-      ? <Runtime.component key={attempt} appId={appId} emit={emit} nonce={nonce} start={start} />
+      ? <Runtime.component key={attempt} appId={appId} emit={emit} nonce={nonce} start={start} wallets={wallets} />
       : null,
-    [Runtime, active, appId, attempt, emit, nonce, start],
+    [Runtime, active, appId, attempt, emit, nonce, start, wallets],
   );
   return (
     <PrivySessionContext value={value}>
-      {children}
-      {sdk}
+      <PrivySourceWalletsContext value={wallets}>
+        {children}
+        {sdk}
+      </PrivySourceWalletsContext>
     </PrivySessionContext>
   );
 }

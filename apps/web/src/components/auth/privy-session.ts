@@ -1,8 +1,9 @@
 "use client";
 
-import type { User, useLogin, useLoginWithOAuth } from "@privy-io/react-auth";
+import type { User, useConnectWallet, useLogin, useLoginWithOAuth, useWallets } from "@privy-io/react-auth";
 import type { useCreateWallet, useSignRawHash } from "@privy-io/react-auth/extended-chains";
-import { createContext, useContext, useEffect, useRef } from "react";
+import type { useSignTransaction, useWallets as useSolanaWallets } from "@privy-io/react-auth/solana";
+import { createContext, useContext, useEffect, useRef, useSyncExternalStore } from "react";
 
 import type { WalletMode } from "./privy-wallet-picker.ts";
 
@@ -115,4 +116,31 @@ export function usePrivyLoginEvents(listener: PrivyLoginListener): void {
     latest.current = listener;
   });
   useEffect(() => subscribe((event) => latest.current(event)), [subscribe]);
+}
+
+/**
+ * The wallets a person connects to fund Blast (Bridge to Sui), read inside
+ * Privy's provider by the lazily loaded runtime and published to the page,
+ * which renders outside that provider. Null until Privy is ready.
+ */
+export type PrivySourceWallets = Readonly<{
+  evm: ReturnType<typeof useWallets>["wallets"];
+  solana: ReturnType<typeof useSolanaWallets>["wallets"];
+  connectWallet: ReturnType<typeof useConnectWallet>["connectWallet"];
+  signSolanaTransaction: ReturnType<typeof useSignTransaction>["signTransaction"];
+}>;
+
+export type PrivySourceWalletsFeed = Readonly<{
+  subscribe: (listener: () => void) => () => void;
+  get: () => PrivySourceWallets | null;
+}>;
+
+export const PrivySourceWalletsContext = createContext<PrivySourceWalletsFeed | null>(null);
+
+const NO_SOURCE_WALLETS: PrivySourceWalletsFeed = { subscribe: () => noop, get: () => null };
+
+/** Privy's connected source wallets, or null until the runtime is ready (and always without Privy). */
+export function usePrivySourceWallets(): PrivySourceWallets | null {
+  const feed = useContext(PrivySourceWalletsContext) ?? NO_SOURCE_WALLETS;
+  return useSyncExternalStore(feed.subscribe, feed.get, feed.get);
 }

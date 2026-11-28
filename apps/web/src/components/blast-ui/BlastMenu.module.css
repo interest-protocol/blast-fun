@@ -4,7 +4,8 @@
  * `left`); the popup inside it is the menu's box (`AppShell.module.css`'s
  * `.menu`, `PostMenu.module.css`'s `.menu`).
  */
-.positioner { z-index: 70; }
+/* Above sheets (80), so a menu opens inside one; below toasts (90). */
+.positioner { z-index: 85; }
 
 /*
  * The menu grows from its trigger: base-ui's `--transform-origin`, the trigger's
