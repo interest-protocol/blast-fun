@@ -393,7 +393,9 @@ export function SaleMarket({
 }>) {
   const client = useAppQueryClient();
   const listening = useLiveListening();
-  const refetchInterval = marketPoll(listening);
+  // Whether the stream has sent this coin's stats; it is joined from the reads below, so it is kept here.
+  const [statsHeard, setStatsHeard] = useState(false);
+  const refetchInterval = marketPoll(listening && statsHeard);
   const query = useQuery(
     {
       ...coinsByIdsQuery([sale.presale_id], "24h", HOME_MAX_HOLDERS),
@@ -418,6 +420,7 @@ export function SaleMarket({
   const streamed = poolKey !== null && MIGRATOR_POOL_KEY.test(poolKey);
   const live = useLiveCoin({ coin: sale.sale_token, pools: streamed ? [poolKey] : [], expected: null, enabled: liveScreen && streamed });
   useReportListening(live.live);
+  if ((live.stats !== null) !== statsHeard) setStatsHeard(live.stats !== null);
   const coin =
     query.data?.coins.find(
       (item) =>

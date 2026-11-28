@@ -4,7 +4,8 @@ import { BLAST_V1_COINS, indexedPoolCoin } from "@blast/core/modules/social/port
 import { DEFAULT_CHART_CONTROLS } from "#web/components/launchpad/chart/chart-model.ts";
 import { shouldRetry } from "#web/lib/query/client.ts";
 import { createTestQueryClient, settleQueries, withQueryClient } from "#web/lib/query/test-client.ts";
-import { installTestDom } from "../../../../test/fixtures/social/test-dom.ts";
+import { installLiveSocket, LIVE_TICKET_PATH, liveTicket } from "../../../../test/fixtures/lib/live-socket.testing.ts";
+import { installTestDom, waitFor } from "../../../../test/fixtures/social/test-dom.ts";
 import { legacyCoinMarketQuery } from "./bonding-client.ts";
 
 test("V1 discovery reads refresh FDV and details while the price waits for its stream", async (t) => {
@@ -62,6 +63,56 @@ test("V1 discovery reads refresh FDV and details while the price waits for its s
   fdv = "34000.00";
   await refresh();
   assert.match(container.textContent ?? "", /Current pool price—.*FDV\$34K/);
+});
+
+test("on the live screen, a legacy coin's FDV read keeps polling until the stream sends the coin's stats", async (t) => {
+  const { window } = installTestDom();
+  const { act } = await import("react");
+  const { createRoot } = await import("react-dom/client");
+  const { LegacyCoinScreen } = await import("./BondingCoinScreen.tsx");
+  const { LiveScreen, useLiveListening } = await import("#web/components/launchpad/coin/LiveScreen.tsx");
+  // Shows when the screen reports its stream listening, so a step waits for it instead of a fixed sleep.
+  function Listening() { return useLiveListening() ? <i data-listening="" /> : null; }
+  const live = installLiveSocket();
+  const coin = BLAST_V1_COINS[2];
+  t.mock.method(globalThis, "fetch", async (input: RequestInfo | URL) => {
+    if (String(input) === LIVE_TICKET_PATH) return liveTicket();
+    const url = new URL(String(input), window.location.origin);
+    if (url.pathname !== "/api/launchpad/discovery") return Response.json({}, { status: 404 });
+    return Response.json({
+      view: "graduated",
+      section: { state: "available", data: { rows: [], nextCursor: null }, provenance: { source: "blast-infra", network: null, deployment: null, checkpoint: null, timestampMs: null, observedAt: Date.now(), lagMs: null } },
+      legacyMarket: { [coin.coinType]: { price: "0.000012" } },
+      legacyFdvUsd: { [coin.coinType]: "24000.00" },
+    });
+  });
+  const client = createTestQueryClient();
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  t.after(async () => { await act(async () => root.unmount()); client.clear(); live.restore(); });
+  const polls = () => {
+    const query = client.getQueryCache().find({ queryKey: legacyCoinMarketQuery().queryKey, exact: true })!;
+    const interval = query.observers[0]!.options.refetchInterval;
+    return typeof interval === "function" ? interval(query as never) : interval;
+  };
+  await act(async () => root.render(withQueryClient(client,
+    <LiveScreen enabled><Listening /><LegacyCoinScreen {...coin} chart={<div>Coin chart</div>} trade={null} /></LiveScreen>,
+  )));
+  await waitFor(() => live.sockets.some((socket) => socket.query.getAll("pool").includes(coin.poolKey)), "the stream joins the coin's pool", 5_000);
+  const socket = live.sockets.find((each) => each.query.getAll("pool").includes(coin.poolKey))!;
+  const provenance = (checkpoint: number) => ({ network: "mainnet", deployment_fingerprint: null, checkpoint, timestamp_ms: Date.now(), observed_ms: Date.now(), lag_ms: 0 });
+  await act(async () => {
+    socket.emit("status", { state: "live", pool_key: coin.poolKey, checkpoint: 10, cursor: "10:0:0:0", provenance: provenance(10) });
+    socket.emit("hint", { type: "hello", provenance: provenance(1) });
+  });
+  await waitFor(() => container.querySelector("[data-listening]"), "the screen listens", 5_000);
+  assert.equal(typeof polls(), "number", "live without the coin's stats: the read keeps polling, so the FDV never freezes");
+  await act(async () => socket.emit("stats", {
+    type: "coin_stats", coin: coin.coinType, pool_key: coin.poolKey, checkpoint: 11, timestamp_ms: Date.now(), cursor: "11:0:0:0",
+    provenance: provenance(11), holders: 1_204, market: { fdv_usd: "1250000.5" }, window_24h: { volume_usd: "8400.25" },
+  }));
+  await waitFor(() => /FDV\$1\.25M/.test(container.textContent ?? ""), "the live FDV", 5_000);
+  assert.equal(polls(), false, "the stream carries the FDV: the read rests");
 });
 
 test("JustOneSui shows its on-chain description and project links with the shared market header", async (t) => {

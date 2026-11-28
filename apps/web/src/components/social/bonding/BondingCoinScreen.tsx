@@ -525,7 +525,7 @@ function LegacyMarketDetails({ market, decimals, symbol }: Readonly<{ market?: L
   </div>;
 }
 
-/** A legacy coin's market read; it rests while the live screen's stream carries the coin's numbers. */
+/** A legacy coin's market read; it rests only while the live screen's stream carries the coin's FDV. */
 function useLegacyMarket(coinType: string, enabled: boolean, listening: boolean) {
   const { data, isRefetchError } = useQuery({
     ...legacyCoinMarketQuery(),
@@ -551,7 +551,8 @@ export function LegacyCoinScreen({ coinType, name, symbol, logoUrl, chart, decim
   // Both pools of the Trades list (at most a stream's two), so neither waits on a poll while the other streams.
   const live = useLiveCoin({ coin: coinType, pools: poolKeys.length <= 2 && poolKeys.includes(poolKey) ? poolKeys : [poolKey], pool: poolKey, expected: null, enabled: liveScreen });
   useReportListening(live.live);
-  const { market, fdvUsd: readFdvUsd } = useLegacyMarket(coinType, !major, useLiveListening());
+  // A live stream that never sends this coin's stats keeps the read polling, so the FDV never freezes.
+  const { market, fdvUsd: readFdvUsd } = useLegacyMarket(coinType, !major, useLiveListening() && live.stats?.fdvUsd != null);
   const fdvUsd = live.stats?.fdvUsd ?? readFdvUsd;
   const mark = <>{verified || verifiedCommunity ? <CoinVerifiedMark community={verifiedCommunity} /> : null}{legacy ? <CoinLegacyMark /> : null}</>;
   return <div className={styles.page} data-legacy-coin="">

@@ -478,7 +478,9 @@ test("a graduated pool's price names its move as the last 24 hours", async (t) =
 });
 
 test("on the live screen, a graduated sale's market reads slow down once the stream carries the coin's stats, and speed up when it drops", async (t) => {
-  const { LiveScreen } = await import("#web/components/launchpad/coin/LiveScreen.tsx");
+  const { LiveScreen, useLiveListening } = await import("#web/components/launchpad/coin/LiveScreen.tsx");
+  // Shows when the screen reports its stream listening, so a step waits for it instead of a fixed sleep.
+  function Listening() { return useLiveListening() ? <i data-listening="" /> : null; }
   const live = installLiveSocket();
   const client = createTestQueryClient();
   const detail = fixtureDetail("kstl");
@@ -514,7 +516,7 @@ test("on the live screen, a graduated sale's market reads slow down once the str
     const ms = typeof interval === "function" ? interval(query as never) : interval;
     return [15_000, 60_000].find((base) => ms === pollInterval(base, query)) ?? ms;
   });
-  await act(async () => root.render(withQueryClient(client, <LiveScreen enabled><SaleMarket nowMs={FIXTURE_NOW} sale={detail.presale} terms={detail.terms} /></LiveScreen>)));
+  await act(async () => root.render(withQueryClient(client, <LiveScreen enabled><Listening /><SaleMarket nowMs={FIXTURE_NOW} sale={detail.presale} terms={detail.terms} /></LiveScreen>)));
   await waitFor(() => live.sockets.some((socket) => socket.query.getAll("pool").includes(poolKey)), "the stream joins the chart's pool", 5_000);
   assert.deepEqual(timers(), [15_000, 15_000], "connecting: the reads keep their timer");
   const socket = live.sockets.find((each) => each.query.getAll("pool").includes(poolKey))!;
@@ -522,6 +524,10 @@ test("on the live screen, a graduated sale's market reads slow down once the str
   await act(async () => {
     socket.emit("status", { state: "live", pool_key: poolKey, checkpoint: 10, cursor: "10:0:0:0", provenance: provenance(10) });
     socket.emit("hint", { type: "hello", provenance: provenance(1) });
+  });
+  await waitFor(() => container.querySelector("[data-listening]"), "the screen listens", 5_000);
+  assert.deepEqual(timers(), [15_000, 15_000], "live without the coin's stats: the reads keep their timer, so the numbers never freeze");
+  await act(async () => {
     socket.emit("stats", {
       type: "coin_stats", coin: detail.presale.sale_token, pool_key: poolKey, checkpoint: 11, timestamp_ms: FIXTURE_NOW + 11, cursor: "11:0:0:0",
       provenance: provenance(11), holders: 1_204, market: { fdv_usd: "1250000.5" }, window_24h: { volume_usd: "8400.25" },
