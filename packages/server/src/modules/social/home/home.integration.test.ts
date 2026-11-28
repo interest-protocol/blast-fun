@@ -488,7 +488,9 @@ test("Home volume and Trending share a committed, full-window Cetus and Bluefin 
       ($1,'bluefin',$4,$7,NULL), ($2,'bluefin',$5,$7,'0.773101637'),
       ($3,'cetus',$4,$7,'0.004'), ($3,'bluefin',$4,$7,'0.007'),
       ($1,'cetus',$4,$8,'99999'), ($1,'cetus',$6,$7,'99999')`,
-    [joey, bcat, coinOf(P.orbit, "ORBIT"), now, now - 2 * HOUR, now - DAY, marketCheckpoint, marketCheckpoint + 1]);
+    // The window counts whole minutes, from the first minute start at or after the clock less 24 h. This row opens the window
+    // of a clock one minute back (the market-lag case below), so it sits one minute before the window of a clock at `now`.
+    [joey, bcat, coinOf(P.orbit, "ORBIT"), now, now - 2 * HOUR, Math.ceil((now - MINUTE - DAY) / MINUTE) * MINUTE, marketCheckpoint, marketCheckpoint + 1]);
 
     const pending = await ok<HomeCoinsPage>(await discover(dailyTrending), "home-coins-page");
     assert.deepEqual(pending.coins, withoutView.coins);
@@ -520,6 +522,17 @@ test("Home volume and Trending share a committed, full-window Cetus and Bluefin 
 
     const watchlist = await ok<HomeCoinsByIds>(await coins(`?presale=${encodeURIComponent(joey)}&dex_volume=1`), "home-coins-page");
     assert.deepEqual(watchlist.coins[0]?.dex_volume, joeyVolume);
+    // Its curve's trades in the window count with its swaps (the volume does not drop at graduation); a DEX trade's tape row
+    // is that swap's, never counted twice, and a curve trade before the window's first minute is out.
+    await admin.query(`INSERT INTO blast_infra_fixture.activity
+      (checkpoint,tx_slot,event_slot,part,timestamp_ms,digest,kind,product,actor,tx_sender,coin_type,quote_type,quote_amount,coin_amount,usd_value,venue)
+      VALUES ($1,9001,4294967295,0,$2,'curve','trade_buy','market',$4,$4,$3,$5,1,1,'1.5','blast_curve'),
+        ($1,9002,4294967295,0,$2,'swap','trade_sell','market',$4,$4,$3,$5,1,1,'7','cetus'),
+        ($1,9003,4294967295,0,$6,'old','trade_buy','market',$4,$4,$3,$5,1,1,'7','blast_curve')`,
+    [marketCheckpoint, now, joey, hex("a11"), SUI, now - DAY - MINUTE]);
+    const withCurve = await ok<HomeCoinsByIds>(await coins(`?presale=${encodeURIComponent(joey)}&dex_volume=1`), "home-coins-page");
+    assert.deepEqual(withCurve.coins[0]?.dex_volume, { ...joeyVolume, usd: "1.543878733" });
+    await admin.query("DELETE FROM blast_infra_fixture.activity WHERE checkpoint = $1 AND tx_slot IN (9001, 9002, 9003)", [marketCheckpoint]);
     const followed = await ok<HomeFollowingResponse>(await following("ben", { mode: "coins", window: "24h" }, "?dex_volume=1"), "home-following-response", "private, no-store");
     assert.equal(followed.mode, "coins");
     assert.equal(followed.coins.find((coin) => coin.symbol === "ORBIT")?.dex_volume?.usd, "0.011");
