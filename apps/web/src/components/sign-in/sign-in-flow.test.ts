@@ -7,9 +7,6 @@ import {
   PRIVY_OAUTH_PROVIDERS,
   PRIVY_WALLET_LOGIN,
   SIGN_IN_IDLE,
-  SIGN_IN_METHOD_LABELS,
-  SIGN_IN_METHOD_NAMES,
-  SIGN_IN_METHODS,
   signInMessage,
   storedAttempt,
   waitingMethod,
@@ -19,26 +16,7 @@ import {
 
 /** Social UI-08 (FEATURE-MAP §8.2): the sign-in sheet's decisions. */
 
-test("UI-08 (OA-12): the login methods are X, Google, Slush, Nightly, Scallop, Mahalo and Other wallets (EVM and Solana through Privy's wallet list)", () => {
-  assert.deepEqual(SIGN_IN_METHODS, ["x", "google", "slush", "nightly", "scallop", "mahalo", "wallet"]);
-  assert.deepEqual(SIGN_IN_METHODS.map((method) => SIGN_IN_METHOD_LABELS[method]), [
-    "Continue with X",
-    "Continue with Google",
-    "Connect Slush wallet",
-    "Connect Nightly wallet",
-    "Connect Scallop wallet",
-    "Connect Mahalo wallet",
-    "Other wallets",
-  ]);
-  assert.deepEqual(SIGN_IN_METHODS.map((method) => `Waiting for ${SIGN_IN_METHOD_NAMES[method]}`), [
-    "Waiting for X",
-    "Waiting for Google",
-    "Waiting for Slush",
-    "Waiting for Nightly",
-    "Waiting for Scallop",
-    "Waiting for Mahalo",
-    "Waiting for your wallet",
-  ]);
+test("X and Google use OAuth and the Ethereum and Solana wallet button uses the existing Privy picker", () => {
   assert.deepEqual(PRIVY_OAUTH_PROVIDERS, { x: "twitter", google: "google" });
   assert.deepEqual(PRIVY_WALLET_LOGIN, { loginMethods: ["wallet"], walletChainType: "ethereum-and-solana" });
   assert.deepEqual(walletLoginErrorState("exited_auth_flow"), { status: "cancelled", method: "wallet" });
@@ -46,13 +24,13 @@ test("UI-08 (OA-12): the login methods are X, Google, Slush, Nightly, Scallop, M
 });
 
 test("UI-08: pressing a method disables all methods and marks the one waiting; other states keep them usable", () => {
-  for (const method of SIGN_IN_METHODS) {
+  for (const method of ["x", "google", "wallet"] as const) {
     const waiting: SignInState = { status: "waiting", method };
     assert.equal(methodsDisabled(waiting), true);
     assert.equal(waitingMethod(waiting), method);
     assert.equal(signInMessage(waiting), null);
   }
-  for (const state of [SIGN_IN_IDLE, { status: "cancelled", method: "x" }, { status: "failed", method: "slush" }, { status: "stalled" }] as SignInState[]) {
+  for (const state of [SIGN_IN_IDLE, { status: "cancelled", method: "x" }, { status: "failed", method: "wallet" }, { status: "stalled" }] as SignInState[]) {
     assert.equal(methodsDisabled(state), false, state.status);
     assert.equal(waitingMethod(state), null);
   }
@@ -68,7 +46,7 @@ test("UI-08: an attempt that did not sign in says so: a cancel politely, a failu
     text: "Sign-in did not finish. You are still signed out. Try again. Code: authentication_unavailable.",
     alert: true,
   });
-  assert.equal(signInMessage({ status: "rate-limited", method: "slush" })?.alert, true);
+  assert.equal(signInMessage({ status: "rate-limited", method: "wallet" })?.alert, true);
   assert.match(signInMessage({ status: "stalled" })!.text, /could not start/);
 });
 

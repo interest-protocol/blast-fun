@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { SocialMeResponse } from "@blast/core/modules/social/contracts/me.ts";
 import { readWalletSessionToken } from "@blast/core/modules/social/wallet-sign-in/sessions.ts";
 
+import { selectedAccountSession } from "#web/components/social/account-selection.ts";
 import { shellViewerOf } from "#web/components/blast-ui/shell-viewer.ts";
 import type { HeaderSession } from "#web/components/social/use-header-session.ts";
 
@@ -19,13 +20,12 @@ export async function readHeaderSession(
   readMe: (request: Request) => Promise<Response>,
   privyEnabled: boolean,
 ): Promise<HeaderSession | null> {
-  const cookies = (request.headers.get("cookie") ?? "").split(";").map((part) => part.trim());
-  const tokens = cookies.filter((part) => part.startsWith("privy-token=")).map((part) => part.slice("privy-token=".length));
-  const privyToken = privyEnabled ? tokens[0] : undefined;
-  if (privyEnabled && tokens.length > 0 && !z.tuple([z.string().max(8192).regex(/^[\w-]+\.[\w-]+\.[\w-]+$/)]).safeParse(tokens).success) return null;
-  // An expired access cookie can disappear while Privy's refresh session still exists.
-  if (privyEnabled && !privyToken && cookies.some((part) => part.startsWith("privy-session="))) return null;
-  if (!privyToken && !readWalletSessionToken(request)) {
+  const cookieHeader = request.headers.get("cookie") ?? "";
+  const selection = selectedAccountSession(cookieHeader);
+  const usePrivy = privyEnabled && selection !== "wallet";
+  const privyToken = usePrivy ? readPrivyAccessCookie(cookieHeader) : null;
+  if (privyToken === undefined) return null;
+  if (!privyToken && (selection === "privy" || !readWalletSessionToken(request))) {
     // Existing Privy sessions may live only in local storage; absence is not proof of sign-out.
     return privyEnabled ? null : SIGNED_OUT;
   }
@@ -45,4 +45,14 @@ export async function readHeaderSession(
   } catch {
     return null;
   }
+}
+
+/** A refreshable or malformed cookie leaves the browser to resolve Privy's session. */
+function readPrivyAccessCookie(cookieHeader: string): string | null | undefined {
+  const cookies = cookieHeader.split(";").map((part) => part.trim());
+  const tokens = cookies.filter((part) => part.startsWith("privy-token=")).map((part) => part.slice("privy-token=".length));
+  if (tokens.length === 0) {
+    return cookies.some((part) => part.startsWith("privy-session=")) ? undefined : null;
+  }
+  return z.tuple([z.string().max(8192).regex(/^[\w-]+\.[\w-]+\.[\w-]+$/)]).safeParse(tokens).data?.[0];
 }

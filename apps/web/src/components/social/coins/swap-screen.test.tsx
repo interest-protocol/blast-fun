@@ -100,7 +100,11 @@ test("visitors can find ecosystem coins by ticker, and Swap shows no market pane
     assert.equal(container.querySelector('[aria-label="Swap market data"]'), null);
     assert.doesNotMatch(container.textContent ?? "", new RegExp(`${symbol} market`));
   }
-  assert.equal(fetch.mock.calls.filter((call) => typeof call.arguments[0] === "string" && call.arguments[0].startsWith(`${SOCIAL_PRICES_PATH}?`)).length, 0, "no market price reads");
+  // The dollar value of an estimate needs the chosen coin's price: one coin per read, never a picker row.
+  const pricedSymbols = fetch.mock.calls.map((call) => new URL(String(call.arguments[0]), "https://blast.test"))
+    .filter((url) => url.pathname === SOCIAL_PRICES_PATH)
+    .map((url) => url.searchParams.getAll("coin").map((coin) => coin.split("::").at(-1)).join(","));
+  assert.deepEqual(pricedSymbols, ["SUI", "CETUS", "DEEP"], "a price for each chosen coin without one, and no other read");
 });
 
 test("Swap's More coins reaches every curated coin and every server page, and a press never moves a row already shown", async (t) => {

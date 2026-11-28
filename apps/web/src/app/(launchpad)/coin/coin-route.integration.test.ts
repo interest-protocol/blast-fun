@@ -328,7 +328,8 @@ test("a tag URL resolves a migrated Blast launch, a migrated presale, and Sui", 
 
   const sui = await get("/coin/0x2%3A%3Asui%3A%3ASUI");
   assert.equal(sui.status, 200);
-  assert.equal(JSDOM.fragment(sui.html).querySelector("h1")?.textContent, "Sui");
+  // SUI is a pool page. Its name matches its ticker, so the header shows the ticker alone.
+  assert.equal(JSDOM.fragment(sui.html).querySelector("h1")?.textContent, "$SUI");
 });
 
 test("in a total outage an unconfirmed ID answers 200 noindex with no source label", async () => {

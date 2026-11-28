@@ -51,7 +51,8 @@ export function CoinTradeSignerProvider(props: Props) {
 
 function PrivyTradeSignerProvider({ network, children }: Props) {
   const privy = usePrivySession();
-  const runtime = privy.runtime;
+  const walletSession = useSocialViewer().sessionIdentity === "wallet";
+  const runtime = walletSession ? null : privy.runtime;
   let embedded: LaunchpadSigner | null = null;
   if (runtime?.authenticated) {
     try {
@@ -66,7 +67,7 @@ function PrivyTradeSignerProvider({ network, children }: Props) {
   return (
     <SharedTradeSignerProvider
       embedded={embedded}
-      embeddedPending={!privy.ready}
+      embeddedPending={!walletSession && !privy.ready}
       network={network}
     >
       {children}

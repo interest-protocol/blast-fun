@@ -38,7 +38,7 @@ test("the viewer's own wallets are marked whatever the address case", () => {
 // Bars 10 px apart on a 1,000 px plot; y grows down, so a bar's pixel y is (40 - price) × 10.
 const px = (price: number) => (40 - price) * 10;
 const place = (person: Person) => ({ x: (person.bar - T0) / MINUTE * 10, top: px(person.high), bottom: px(person.low) });
-const person = (address: string, minute: number, extra: Partial<Person> = {}): Person =>
+const person = (address: string, minute: number, extra: Partial<Extract<Person, { address: string }>> = {}): Person =>
   ({ address, bar: T0 + minute * MINUTE, side: "buy", high: 20, low: 10, close: 15, bought: 1, sold: null, buys: 1, sells: 0, labels: [], own: false, lastMs: T0 + minute * MINUTE, trades: [], ...extra });
 const SIZE = 24;
 /** Empty px between a bubble (ring included) and the price at y `price` under it, or over it for `under`. */

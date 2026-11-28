@@ -1,39 +1,40 @@
 "use client";
 
-import { createDAppKit } from "@mysten/dapp-kit-react";
+import { createDAppKit, getWalletUniqueIdentifier, type UiWallet } from "@mysten/dapp-kit-react";
 import { SuiGrpcClient } from "@mysten/sui/grpc";
 import { SLUSH_WALLET_NAME } from "@mysten/slush-wallet";
 import { normalizeSuiAddress } from "@mysten/sui/utils";
 
 import { SUI_MAINNET_GRPC_URL } from "@blast/core/lib/sui-mainnet.ts";
 
-import { isWalletRejection, type WalletSigner } from "./wallet-sign-in-client.ts";
-import { SIGN_IN_METHOD_NAMES, type SuiSignInMethod } from "./sign-in-flow";
+import { isWalletRejection, rememberedWalletName, SLUSH_WEB_WALLET_ID, WALLET_SIGN_IN_STORAGE_KEY as STORAGE_KEY, type WalletSigner } from "./wallet-sign-in-client.ts";
+import type { SuiSignInMethod } from "./sign-in-flow";
 
 /** The Slush web wallet's metadata, served by this app (`/api/social/sign-in/slush-metadata`). */
 export const SLUSH_METADATA_PATH = "/api/social/sign-in/slush-metadata";
 
-/** Where the social sign-in's dApp Kit keeps its state, apart from Mission Control's and the launchpad's. */
-const STORAGE_KEY = "blast:social:sign-in:v1";
-
 let dAppKit: SocialKit | null = null;
-const walletNames = new Map<string, string>();
+const walletIds = new Map<string, string>();
 
-function rememberWallet(address: string, name: string): void {
+function rememberWallet(address: string, wallet: UiWallet): void {
   const canonical = normalizeSuiAddress(address);
-  walletNames.set(canonical, name);
+  const id = getWalletUniqueIdentifier(wallet);
+  walletIds.set(canonical, id);
   try {
-    localStorage.setItem(`${STORAGE_KEY}:wallet:${canonical}`, name);
+    localStorage.setItem(`${STORAGE_KEY}:wallet-id:${canonical}`, id);
+    localStorage.setItem(`${STORAGE_KEY}:wallet:${canonical}`, wallet.name);
   } catch {
     // Blocked storage keeps the wallet choice for this page only.
   }
 }
 
-function rememberedWallet(address: string): string | null {
+function rememberedWalletId(address: string): string | null {
+  const id = walletIds.get(address);
+  if (id) return id;
   try {
-    return walletNames.get(address) ?? localStorage.getItem(`${STORAGE_KEY}:wallet:${address}`) ?? null;
+    return localStorage.getItem(`${STORAGE_KEY}:wallet-id:${address}`);
   } catch {
-    return walletNames.get(address) ?? null;
+    return null;
   }
 }
 
@@ -61,7 +62,31 @@ export function socialDAppKit(): SocialKit {
 }
 
 type SocialKit = ReturnType<typeof createSocialDAppKit>;
-type KitWallet = Parameters<SocialKit["connectWallet"]>[0]["wallet"];
+
+export function subscribeSuiSignInWallets(onWallets: (wallets: readonly SuiSignInMethod[]) => void): () => void {
+  return socialDAppKit().stores.$wallets.subscribe((wallets) => {
+    const installed: SuiSignInMethod[] = [];
+    let slushWeb: SuiSignInMethod | undefined;
+
+    for (const wallet of wallets) {
+      if (!wallet.features.includes("sui:signPersonalMessage")) {
+        continue;
+      }
+
+      const id = getWalletUniqueIdentifier(wallet);
+      if (id === SLUSH_WEB_WALLET_ID) {
+        slushWeb = { id, wallet, slush: true };
+      } else {
+        installed.push({ id, wallet, slush: wallet.name === SLUSH_WALLET_NAME });
+      }
+    }
+
+    if (slushWeb) {
+      installed.push(slushWeb);
+    }
+    onWallets(installed);
+  });
+}
 
 /**
  * Reconnects, with no popup, to accounts the wallet already authorized (Slush
@@ -71,7 +96,7 @@ type KitWallet = Parameters<SocialKit["connectWallet"]>[0]["wallet"];
  * it is passed through to the wallet as is. A refusal is rethrown, so a wallet
  * that prompts anyway is not asked twice.
  */
-async function silentConnect(kit: SocialKit, wallet: KitWallet) {
+async function silentConnect(kit: SocialKit, wallet: UiWallet) {
   const input = { wallet, silent: true } as Parameters<SocialKit["connectWallet"]>[0];
   return kit.connectWallet(input).catch((error: unknown) => {
     if (isWalletRejection(error)) throw error;
@@ -99,14 +124,16 @@ export async function suiSigningAccount(address: string) {
   const expected = normalizeSuiAddress(address);
   const matches = (account: { address: string }) => normalizeSuiAddress(account.address) === expected;
   const connection = kit.stores.$connection.get();
-  const name = rememberedWallet(expected) ?? SLUSH_WALLET_NAME;
-  const authorized = connection.wallet?.name === name
+  const id = rememberedWalletId(expected);
+  const legacyName = id === null ? (rememberedWalletName(expected) ?? SLUSH_WALLET_NAME) : null;
+  const matchesWallet = (wallet: UiWallet) => id === null ? wallet.name === legacyName : getWalletUniqueIdentifier(wallet) === id;
+  const authorized = connection.wallet && matchesWallet(connection.wallet)
     ? connection.wallet.accounts.find(matches)
     : undefined;
   if (connection.isConnected && authorized) return authorized;
 
-  const wallet = kit.stores.$wallets.get().find((candidate) => candidate.name === name);
-  if (!wallet) throw new Error(`${name} is not available in this browser. Install it, then try again.`);
+  const wallet = kit.stores.$wallets.get().find(matchesWallet);
+  if (!wallet) throw new Error(`${legacyName ?? "Your Sui wallet"} is not available in this browser. Install it, then try again.`);
   // After a reload nothing is connected: a wallet that already authorized this
   // address reconnects without a popup. A connected kit skips this: a silent
   // answer with no accounts would clear its selected account.
@@ -115,34 +142,29 @@ export async function suiSigningAccount(address: string) {
   if (restored) return restored;
   const { accounts } = await kit.connectWallet({ wallet });
   const account = accounts.find(matches);
-  if (!account) throw new Error(`${name} has not authorized this wallet address. Connect the address shown in Blast, then try again.`);
+  if (!account) throw new Error(`${wallet.name} has not authorized this wallet address. Connect the address shown in Blast, then try again.`);
   return account;
 }
 
 /**
- * Sui wallets through Mysten's dApp Kit, mainnet only. Slush can fall back to
- * its web wallet; Nightly, Scallop, and Mahalo need an installed extension.
- * It connects and signs the challenge as a personal message. The wallet
+ * The selected mainnet wallet connects and signs the challenge as a personal message. The wallet
  * session, not the connection, keeps the user signed in; the connection
  * stays so trades sign without reconnecting, and sign-out drops it
  * (`forgetWalletConnection`).
  */
-export function suiWalletSigner(method: SuiSignInMethod): WalletSigner {
+export function suiWalletSigner(wallet: UiWallet): WalletSigner {
   const kit = socialDAppKit();
-  const name = SIGN_IN_METHOD_NAMES[method];
   let account: Awaited<ReturnType<typeof kit.connectWallet>>["accounts"][number] | null = null;
   return {
     async connect() {
-      const wallet = kit.stores.$wallets.get().find((candidate) => candidate.name.toLowerCase().startsWith(name.toLowerCase()));
-      if (!wallet) throw new Error(`${name} is not available in this browser. Install it, then try again.`);
       const { accounts } = await kit.connectWallet({ wallet });
       account = accounts[0] ?? null;
-      if (!account) throw new Error(`${name} did not share an account.`);
-      rememberWallet(account.address, wallet.name);
+      if (!account) throw new Error(`${wallet.name} did not share an account.`);
+      rememberWallet(account.address, wallet);
       return account.address;
     },
     async signPersonalMessage(message) {
-      if (!account) throw new Error(`${name} is not connected.`);
+      if (!account) throw new Error(`${wallet.name} is not connected.`);
       const signed = await kit.signPersonalMessage({ account, message: new TextEncoder().encode(message) });
       return signed.signature;
     },

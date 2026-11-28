@@ -9,6 +9,7 @@ import { atomsValue, HIDDEN_AMOUNT, NO_VALUE } from "@blast/core/web/format.ts";
 import { bpsPercent } from "@blast/core/lib/bps.ts";
 import type { SocialTransferFee } from "@blast/core/web/contracts/coins.ts";
 import { SUI_COIN_TYPE } from "@blast/core/lib/sui/coin-types.ts";
+import { atomsUsd, type RouteQuoteCoin } from "@blast/core/modules/social/trades/route-quote.ts";
 import { TEST_SUI_COIN_TYPES } from "@blast/core/web/contracts/create.ts";
 import { normalizeTradeCoinQuery, SOCIAL_TRADE_DEFAULT_SLIPPAGE_BPS, type SocialTradeCoin, type SocialTradeQuote, type SocialTradeQuoteRequest } from "@blast/core/web/contracts/trades.ts";
 
@@ -192,6 +193,24 @@ export function swapPanels(input: Readonly<{ inCoin: WalletCoinView; outCoin: Wa
     outUsd: dollarCoin(outCoin.coinType) ? null : approx(quote !== null && sameOut ? usdText(quote.amount_out_usd) : NO_VALUE),
     inBalance: panelBalance(inCoin, hidden, input.balanceKnown),
     outBalance: panelBalance(outCoin, hidden, input.outBalanceKnown ?? input.balanceKnown),
+  };
+}
+
+/** A side's coin and the screen's dollar price for it, null while it has none. */
+type PricedSide = Omit<RouteQuoteCoin, "symbol">;
+
+/**
+ * `quote` with the dollar values it came without, from the screen's prices. For display: a value the
+ * quote carries is never replaced, and a side without a price stays unknown.
+ */
+export function quoteWithUsd(quote: SocialTradeQuote | null, inSide: PricedSide, outSide: PricedSide): SocialTradeQuote | null {
+  if (quote === null) return null;
+  const fill = (served: string | null, coinType: string, atoms: string | null, side: PricedSide) =>
+    served ?? (coinType === side.coinType && atoms !== null ? atomsUsd(BigInt(atoms), side) : null);
+  return {
+    ...quote,
+    amount_in_usd: fill(quote.amount_in_usd, quote.in_coin, quote.amount_in, inSide),
+    amount_out_usd: fill(quote.amount_out_usd, quote.out_coin, quote.amount_out, outSide),
   };
 }
 

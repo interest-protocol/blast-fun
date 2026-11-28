@@ -13,6 +13,7 @@ import { PORTFOLIO_LOADING } from "#web/components/blast-ui/portfolio.ts";
 import { SignInSheet } from "#web/components/sign-in/SignIn.tsx";
 
 import { AccountAvatar } from "./AccountAvatar";
+import { AccountSwitchItems } from "./AccountSwitchItems";
 import type { RenderAvatar } from "#web/components/blast-ui/shell-avatar-renderer.ts";
 import { useClaimHost } from "./claim/ClaimHost";
 import { useCommitHost } from "./commit/CommitHost";
@@ -117,6 +118,7 @@ function SocialShellContent({
     <WatchlistProvider getAccessToken={viewer.getAccessToken} signedIn={viewer.signedIn && viewer.callsign !== null} viewerKey={viewer.callsign ?? ""}>
     <FeedOverlaysProvider value={overlays}>
     <AppShell
+      accountMenuItems={(closeMenu) => <AccountSwitchItems closeMenu={closeMenu} />}
       renderAvatar={renderAccountAvatar}
       aside={isHomePath(pathname) ? null : rail}
       asideMini={<TrendingCoinStrip />}

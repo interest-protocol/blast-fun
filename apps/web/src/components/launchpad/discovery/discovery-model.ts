@@ -23,7 +23,7 @@ export type ViewList = DiscoveryPageData;
 export const RAIL_PAGE_SIZE = 10;
 
 /** The least progress a curve needs to be listed as almost graduated: 60%. */
-export const ALMOST_GRADUATED_BPS = 6_000;
+export { ALMOST_GRADUATED_BPS } from "@blast/core/modules/launchpad-discovery/rows.ts";
 
 /**
  * The discovery resource's URL for a page of `view` after `cursor` (null: the first page).

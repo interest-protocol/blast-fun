@@ -48,11 +48,13 @@ export function createTradeTape(feed: Pick<ActivityFeed, "state" | "subscribe">,
   return createRecentTradeTape({
     subscribe: feed.subscribe,
     state() {
-      const activity = shownActivity(feed.state());
+      const state = feed.state();
+      const activity = shownActivity(state);
       const display = listDisplay(activity);
-      return display.kind === "rows"
-        ? { rows: display.view.rows.filter(isActivityTrade), quiet: Boolean(display.stale || activity.newer) }
-        : null;
+      if (display.kind === "rows") {
+        return { rows: display.view.rows.filter(isActivityTrade), quiet: Boolean(display.stale || activity.newer) };
+      }
+      return state.live.length ? { rows: state.live.filter(isActivityTrade), quiet: false } : null;
     },
   }, RECENT_TRADES_LIMIT, ports, seedRows);
 }

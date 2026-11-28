@@ -17,6 +17,8 @@ import { shortAddress, usd } from "@blast/core/web/format.ts";
 import { Button } from "#web/components/blast-ui/Button.tsx";
 import { EmptyState } from "#web/components/blast-ui/EmptyState.tsx";
 import { useDevicePrefs } from "#web/components/blast-ui/device-prefs.ts";
+import { ChartPeopleTrades } from "#web/components/charts/kline/chart-people-trades.ts";
+import type { PersonTrade } from "#web/components/charts/kline/people-bubbles.ts";
 import { ActivityAmount, CompactTradeList, CompactTradeRow, TradeListSkeleton, useTradeInspector, useTradeVisibility, type TradeRowState } from "#web/components/launchpad/activity/CompactTradeList.tsx";
 import { WalletAddress } from "#web/components/launchpad/activity/WalletAddress.tsx";
 import { createRecentTradeTape } from "#web/components/launchpad/activity/trade-tape.ts";
@@ -249,6 +251,20 @@ export function SaleTradeFeed({ sale, children }: Readonly<{ sale: SocialPresale
   const feed = useSaleTradeFeed(sale, hideSmallTrades);
   const read = useMemo(() => ({ ...feed, filter: [hideSmallTrades, setHideSmallTrades] as const }), [feed, hideSmallTrades]);
   const { data } = read;
+  const people = useMemo(() => data?.rows.flatMap(({ actor, event, position }): PersonTrade[] => {
+    if (isHomeTradeUnderDollar(event.quote, tradeFloor(hideSmallTrades))) return [];
+    const identity = actor.type === "account"
+      ? { address: null, profile: { callsign: actor.callsign, avatarUrl: actor.avatar_url } }
+      : { address: actor.address };
+    return [{
+      ...identity,
+      id: position,
+      timestampMs: event.occurred_at_ms,
+      side: event.kind === "trade_buy" ? "buy" : "sell",
+      usd: event.quote?.usd == null ? null : Number(event.quote.usd),
+      labels: [],
+    }];
+  }) ?? [], [data?.rows, hideSmallTrades]);
   const chart = useMemo(() => {
     // The Last-trade pill skips dust, as the trades list does.
     const event = data?.rows.find((row) => !isHomeTradeUnderDollar(row.event.quote))?.event;
@@ -275,7 +291,7 @@ export function SaleTradeFeed({ sale, children }: Readonly<{ sale: SocialPresale
     };
   }, [data, sale.quote_decimals, sale.quote_symbol, sale.quote_type]);
   return <SaleTradeRead value={read}>
-    <ChartTradeContext value={chart}>{children}</ChartTradeContext>
+    <ChartTradeContext value={chart}><ChartPeopleTrades value={people}>{children}</ChartPeopleTrades></ChartTradeContext>
   </SaleTradeRead>;
 }
 

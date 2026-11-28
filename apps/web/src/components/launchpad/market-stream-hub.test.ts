@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { MARKET_STREAM_BUDGET } from "@blast/core/modules/launchpad-contract/market-stream.ts";
+import { INDEXED_POOL_COINS } from "@blast/core/modules/social/portfolio/core-coins.ts";
 import { ActivityHints } from "#web/components/social/home/activity-hints.ts";
 import { ACTIVITY_ONLY_GRACE_MS, marketHintTransport, setHintDemand } from "#web/lib/live-stream/market-hints.ts";
+import { liveCoinStats } from "./coin/live-coin.ts";
 import { HIDDEN_GRACE_MS, LINGER_MS, MarketStreamHub, RECONNECT_MIN_MS, SET_ANSWER_MS, STABLE_MS, type MarketEventSource, type MarketStreamState, type MarketTrade } from "./market-stream-hub.ts";
 
 const CURVE = `blast_curve:0x${"11".repeat(32)}`;
@@ -141,6 +143,58 @@ test("two subscribers to the same pool share one source, and it closes after the
   assert.equal(s.source().closed, true);
   assert.equal(s.timers.length, 0);
   assert.equal(s.listening(), false);
+});
+
+test("changing and reconnecting a Discover page only accepts cues from its acknowledged coins", async () => {
+  const s = setup();
+  const deep = INDEXED_POOL_COINS.find((coin) => coin.symbol === "DEEP")!.coinType;
+  const wal = INDEXED_POOL_COINS.find((coin) => coin.symbol === "WAL")!.coinType;
+  const received: string[] = [];
+  const watch = (coin: string) => s.hub.subscribe({
+    pools: [], priceCoins: [coin], expected: null,
+    listener: { state: () => {}, tradeCue: (cue) => received.push(cue.cursor) },
+  });
+  const hello = (source: Source) => source.emit("hint", {
+    type: "hello", provenance: wireProvenance(1), set: true, trade_cues: true,
+  });
+  const answer = (source: Source, coin: string) => {
+    const { seq } = source.sets().at(-1)!;
+    assert.deepEqual(source.sets().at(-1), {
+      op: "set", seq, pools: [], price_coins: [coin], presale: null, trade_cues: true,
+    });
+    source.emit("set", { seq, ok: true, held: { pools: [], price_coins: [coin], presale: null, trade_cues: true } });
+  };
+  const cue = (source: Source, coin_type: string, cp: number) => source.emit("trade_cue", {
+    coin_type, cursor: `${cp}:1:1:0`, side: "sell", timestamp_ms: NOW + cp, quote_atoms: "50", usd: "12",
+  });
+
+  const pageTwo = watch(wal);
+  await settle();
+  const first = s.source();
+  hello(first);
+  answer(first, wal);
+  cue(first, wal, 10);
+  pageTwo.stop();
+  const pageThree = watch(deep);
+  await settle();
+  cue(first, wal, 11);
+  cue(first, deep, 12);
+  answer(first, deep);
+  cue(first, deep, 13);
+  first.emit("error");
+  s.fire(RECONNECT_MIN_MS);
+  const second = s.source();
+  assert.notEqual(second, first);
+  assert.deepEqual(new URL(second.url, "https://blast.test").searchParams.getAll("price_coin"), [deep]);
+  hello(second);
+  answer(second, deep);
+  cue(first, deep, 14);
+  cue(second, wal, 15);
+  cue(second, deep, 16);
+  assert.deepEqual(received, ["10:1:1:0", "13:1:1:0", "16:1:1:0"]);
+  pageThree.stop();
+  await settle();
+  assert.deepEqual(s.source().sets().at(-1), { op: "set", seq: 4, pools: [], price_coins: [], presale: null, trade_cues: false });
 });
 
 test("a legacy relay keeps its original heartbeat deadline and requires a new fence after loss", async () => {
@@ -964,6 +1018,28 @@ test("coin stats reach only the fenced pool's subscribers from the expected depl
   assert.deepEqual(other, []);
 });
 
+// This fails if the browser rejects a value shaped as blast-infra's `ws_coin_stats` schema sends it: the whole frame is lost.
+test("coin stats with a 24h change, as blast-infra sends them, reach the screen's header numbers", async () => {
+  const s = setup();
+  const seen: unknown[] = [];
+  s.hub.subscribe({ pools: [CURVE], expected, listener: { state: () => {}, stats: (frame) => seen.push(liveCoinStats(frame)) } });
+  await settle();
+  s.source().fence(10);
+  s.source().hello();
+  s.source().emit("stats", {
+    type: "coin_stats", coin: `0x${"44".repeat(32)}::meme::MEME`, pool_key: CURVE, checkpoint: 20, timestamp_ms: NOW + 20,
+    cursor: "20:0:4294967295:0", provenance: wireProvenance(20), lifecycle: "live", price: "0.000088098231292", market_cap: "88098231292",
+    market: {
+      market_cap_usd: "4120.5", fdv_usd: "5230.75", change_24h_bps: "-2124", interval_end_ms: NOW + 20,
+      baseline_timestamp_ms: NOW - 86_400_000, baseline_pool: CURVE, current_pool: CURVE, basis: "usd_price", baseline_resolution_ms: 300_000,
+    },
+    quote_usd: { price: "342000000", expo: -8, publish_time: 1_790_000_000, age_ms: 20 }, quote_decimals: "9",
+    window_24h: { volume_quote: "2456000000000", volume_usd: "8400.25", buys: 12, sells: 5, trades: 17 },
+    holders: 412, progress_bps: 7250, liquidity_quote: "310000000000",
+  });
+  assert.deepEqual(seen, [{ poolKey: CURVE, checkpoint: 20, lifecycle: "live", holders: 412, fdvUsd: "5230.75", volumeUsd: "8400.25" }]);
+});
+
 // This fails if a migrated coin's frozen curve stats replace its venue stats, or a late screen waits for the next change.
 test("a coin's newest stats win across its two pools, and a late subscriber gets them at once", async () => {
   const s = setup();
@@ -1342,4 +1418,173 @@ test("a hello without set: true redials for a changed set (an older relay)", asy
   assert.equal(s.sources[0].sent.length, 0);
   assert.equal(s.sources.length, 2);
   assert.deepEqual(s.source().pools(), [OTHER]);
+});
+
+test("a reconnect sends the last applied trade and delivers snapshot recovery in order without repeating it", async () => {
+  const s = setup();
+  const watched = watcher();
+  const resumes: (true | undefined)[] = [];
+  const sub = s.hub.subscribe({ ...watched, expected, listener: {
+    ...watched.listener,
+    fence: (_pool, _checkpoint, detail) => resumes.push(detail.tapeResumed),
+  } });
+  await settle();
+  s.source().fence(10);
+  s.source().hello();
+  s.source().emit("market", trade(11));
+  s.source().emit("error");
+  s.advance(RECONNECT_MIN_MS);
+  assert.equal(new URL(s.source().url, "https://blast.test").searchParams.get("resume"), `${CURVE}~11:1:0:2`);
+  s.source().hello();
+  s.source().emit("tape", { pool_key: CURVE, provenance: wireProvenance(13), trades: [trade(13).trade, trade(12).trade] });
+  s.source().emit("status", { state: "live", pool_key: CURVE, checkpoint: 13, cursor: "13:1:0:2", provenance: wireProvenance(13), tape_resumed: true });
+  s.source().emit("market", trade(13));
+  s.source().emit("market", trade(14));
+  assert.deepEqual(watched.trades.map((fill) => fill.checkpoint), [11, 12, 13, 14]);
+  assert.deepEqual(resumes, [undefined, true]);
+  s.source().emit("error");
+  s.advance(RECONNECT_MIN_MS * 2);
+  s.source().fence(20);
+  assert.equal(resumes.at(-1), undefined, "an unavailable replay uses the history fence");
+  sub.stop();
+});
+
+test("Discover shares the existing socket, rejects old pages, and waits for a fresh pair after an upstream loss", async () => {
+  const s = setup();
+  const chart = watcher();
+  s.hub.subscribe({ pools: chart.pools, expected, listener: chart.listener });
+  await settle();
+  const source = s.source();
+  source.emit("hint", { type: "hello", provenance: wireProvenance(1), set: true, discovery: true });
+  assert.deepEqual(source.sets(), []);
+  const states: MarketStreamState[] = [];
+  const received: number[] = [];
+  s.hub.subscribe({ pools: [], expected: null, discovery: true, listener: {
+    state: (state) => states.push(state),
+    discovery: ({ section }) => received.push(section.provenance!.checkpoint!),
+  } });
+  await settle();
+  assert.equal(s.sources.length, 1);
+  const sent = source.sets().at(-1)!;
+  assert.deepEqual(sent, { op: "set", seq: 1, pools: [CURVE], price_coins: [], presale: null, discovery: true });
+  source.emit("set", { seq: sent.seq, ok: true, held: { pools: [CURVE], price_coins: [], presale: null, discovery: true } });
+  const page = (view: string, checkpoint: number, state = "empty") => {
+    const provenance = wireProvenance(checkpoint);
+    source.emit("discovery", {
+      revision: String(checkpoint), provenance,
+      page: { view, section: { state, ...(state === "unavailable" && { reason: "frame-too-large" }), provenance: { source: "blast-infra", network: "mainnet", deployment: DEPLOYMENT, checkpoint, timestampMs: provenance.timestamp_ms, observedAt: provenance.observed_ms, lagMs: 20 } } },
+    });
+  };
+  page("new", 20);
+  assert.equal(states.at(-1), "recovering");
+  page("new", 19);
+  page("near_graduation", 20);
+  assert.deepEqual(received, [20, 20]);
+  assert.equal(states.at(-1), "live");
+  source.emit("status", { state: "recovering" });
+  source.emit("status", { state: "fresh" });
+  assert.equal(states.at(-1), "recovering");
+  page("near_graduation", 21);
+  page("new", 21);
+  assert.equal(states.at(-1), "live");
+  page("new", 22, "unavailable");
+  assert.equal(received.at(-1), 22);
+  assert.equal(states.at(-1), "recovering");
+  page("new", 21);
+  assert.equal(states.at(-1), "recovering");
+  page("new", 23);
+  assert.equal(states.at(-1), "live");
+});
+
+test("a new Discover deployment cannot replay cached pages from the previous deployment", async () => {
+  const s = setup();
+  const received: number[] = [];
+  s.hub.subscribe({ pools: [], expected: null, discovery: true, listener: { state: () => {} } });
+  await settle();
+  const source = s.source();
+  const provenance = wireProvenance(20);
+  source.emit("hint", { type: "hello", provenance, set: true, discovery: true });
+  const sent = source.sets().at(-1)!;
+  source.emit("set", { seq: sent.seq, ok: true, held: { pools: [], price_coins: [], presale: null, discovery: true } });
+  source.emit("discovery", { revision: "20", provenance, page: {
+    view: "new",
+    section: { state: "empty", provenance: { source: "blast-infra", network: "mainnet", deployment: DEPLOYMENT, checkpoint: 20, timestampMs: provenance.timestamp_ms, observedAt: provenance.observed_ms, lagMs: 20 } },
+  } });
+  const listener: Parameters<typeof s.hub.subscribe>[0]["listener"] = {
+    state: () => {},
+    discovery: ({ section }) => { received.push(section.provenance!.checkpoint!); },
+  };
+  const matching = s.hub.subscribe({ pools: [], expected, discovery: true, listener });
+  await settle();
+  assert.deepEqual(received, [20]);
+  assert.equal(s.sources.length, 1);
+  matching.stop();
+  s.hub.subscribe({ pools: [], expected: { ...expected, deployment: "cd".repeat(32) }, discovery: true, listener });
+  await settle();
+  assert.deepEqual(received, [20]);
+  assert.equal(s.sources.length, 2);
+});
+
+test("Discover waits for a fresh pair when tightening the deployment rules for mixed cached pages", async () => {
+  const s = setup();
+  const unpinned = watcher([]);
+  s.hub.subscribe({ pools: [], expected: null, discovery: true, listener: unpinned.listener });
+  await settle();
+
+  const provenance = wireProvenance(20);
+  function openDiscover(source: Source) {
+    source.emit("hint", { type: "hello", provenance, set: true, discovery: true });
+    const { seq } = source.sets().at(-1)!;
+    source.emit("set", { seq, ok: true, held: { pools: [], price_coins: [], presale: null, discovery: true } });
+  }
+  function page(source: Source, view: string, deployment: string) {
+    source.emit("discovery", {
+      revision: "20",
+      provenance: { ...provenance, deployment_fingerprint: deployment },
+      page: { view, section: { state: "empty", provenance: {
+        source: "blast-infra", network: "mainnet", deployment, checkpoint: 20,
+        timestampMs: provenance.timestamp_ms, observedAt: provenance.observed_ms, lagMs: 20,
+      } } },
+    });
+  }
+
+  const source = s.source();
+  openDiscover(source);
+  page(source, "new", DEPLOYMENT);
+  page(source, "near_graduation", "cd".repeat(32));
+  assert.equal(unpinned.states.at(-1), "live");
+
+  const pinned = watcher([]);
+  const received: string[] = [];
+  s.hub.subscribe({ pools: [], expected, discovery: true, listener: {
+    ...pinned.listener,
+    discovery: ({ view }) => received.push(view),
+  } });
+  await settle();
+  assert.deepEqual(received, []);
+  assert.equal(pinned.states.at(-1), "connecting");
+
+  const replacement = s.source();
+  openDiscover(replacement);
+  page(replacement, "new", DEPLOYMENT);
+  assert.equal(pinned.states.at(-1), "recovering");
+  page(replacement, "near_graduation", DEPLOYMENT);
+  assert.deepEqual(received, ["new", "near_graduation"]);
+  assert.equal(pinned.states.at(-1), "live");
+});
+
+test("Discover leaves the existing socket usable when the gateway is older", async () => {
+  const s = setup();
+  const chart = watcher();
+  const states: MarketStreamState[] = [];
+  s.hub.subscribe({ pools: chart.pools, expected, listener: chart.listener });
+  s.hub.subscribe({ pools: [], expected: null, discovery: true, listener: { state: (state) => states.push(state) } });
+  await settle();
+  const source = s.source();
+  source.emit("hint", { type: "hello", provenance: wireProvenance(1), set: true });
+  source.emit("status", { state: "live", pool_key: CURVE, checkpoint: 1, cursor: "1:0:0:0", provenance: wireProvenance(1) });
+  assert.equal(s.sources.length, 1);
+  assert.deepEqual(source.sets(), []);
+  assert.equal(states.at(-1), "unavailable");
+  assert.equal(chart.states.at(-1), "live");
 });

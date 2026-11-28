@@ -246,7 +246,8 @@ test("an inline sale form keeps the global sheet actions and does not steal focu
   await act(async () => { await new Promise((resolve) => setTimeout(resolve, 100)); });
   // The Coin board's ticket: the card around the form shows "Buy {name}", so the form's own title is for assistive technology only, and it pays.
   assert.equal(panel.querySelector("h2")?.closest(".sr-only") !== null, true, "the form's title is not shown twice");
-  assert.match(panel.textContent!, /You payBalance [\d,.]+\u00a0USDC.*You getBalance —/);
+  // Both balances are read for the sheet itself: the wallet holds none of the coin on sale.
+  assert.match(panel.textContent!, new RegExp(`You payBalance [\\d,.]+\u00a0USDC.*You getBalance 0\u00a0${sale.symbol}`));
   assert.match(panel.querySelector('[data-coin-pick="in"]')?.textContent ?? "", /USDC/);
   assert.match(panel.querySelector('[data-coin-pick="out"]')?.textContent ?? "", new RegExp(sale.symbol));
   assert.equal(panel.querySelector('[role="dialog"], dialog'), null);

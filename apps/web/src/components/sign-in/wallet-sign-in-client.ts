@@ -29,6 +29,22 @@ export type WalletSignInResult = "signed-in" | "cancelled" | "failed" | "rate-li
 
 type Fetch = typeof globalThis.fetch;
 
+/** Browser storage for the social sign-in kit and the wallet names it has connected. */
+export const WALLET_SIGN_IN_STORAGE_KEY = "blast:social:sign-in:v1";
+export const SLUSH_WEB_WALLET_ID = "com.mystenlabs.suiwallet.web";
+
+const SLUSH_IDS = new Set(["com.mystenlabs.suiwallet", SLUSH_WEB_WALLET_ID, "Slush"]);
+
+export function rememberedWalletName(address: string): string | null {
+  try {
+    const name = localStorage.getItem(`${WALLET_SIGN_IN_STORAGE_KEY}:wallet:${address}`);
+    const id = localStorage.getItem(`${WALLET_SIGN_IN_STORAGE_KEY}:wallet-id:${address}`);
+    return name ?? (id && SLUSH_IDS.has(id) ? "Slush" : null);
+  } catch {
+    return null;
+  }
+}
+
 /** Whether this browser holds the wallet session hint (a session may be live). */
 export function hasWalletSessionHint(cookie: string): boolean {
   return cookie.split(";").some((part) => part.trim() === `${SOCIAL_WALLET_HINT_COOKIE}=1`);

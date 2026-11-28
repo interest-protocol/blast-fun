@@ -64,6 +64,7 @@ export type AppShellProps = Readonly<{
   /** The signed-in account; null for a visitor or while it loads. */
   viewer: ShellViewer | null;
   renderAvatar?: RenderAvatar;
+  accountMenuItems?: (closeMenu: () => void) => ReactNode;
   /** The session or account is still being read: reserve its controls without offering Sign in. */
   viewerLoading?: boolean;
   viewerError?: boolean;
@@ -163,6 +164,7 @@ function PageAside({ hidden, ...props }: Parameters<typeof ShellAside>[0] & Read
 }
 
 function ShellFrame({
+  accountMenuItems,
   signedIn,
   viewer,
   viewerLoading = false,
@@ -351,7 +353,9 @@ function ShellFrame({
         onInvites={() => router.push(INVITES_PATH)}
         theme={prefs.theme}
         viewer={account}
-      />
+      >
+        {accountMenuItems?.(() => accountMenu.close())}
+      </AccountMenu>
       <CreateMenu handle={createMenu} />
       <FeedbackSheet open={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
       {overlays}

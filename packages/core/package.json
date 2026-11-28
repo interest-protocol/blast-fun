@@ -44,7 +44,7 @@
     "@interest-protocol/blast-util-sdk": "0.2.0",
     "@mysten/sui": "^3.0.1",
     "@noble/hashes": "^2.4.0",
-    "@redis/client": "^6.3.0",
+    "@redis/client": "^6.4.0",
     "@solana-program/token": "^0.17.0",
     "@solana/kit": "^8.4.0",
     "@vercel/functions": "^3.9.11",

@@ -1,6 +1,8 @@
 import { z } from "zod";
+import { compareExact, exactDecimal } from "../../lib/exact-amount.ts";
 import { COIN_TYPE_WITH_GENERICS, SUI_OBJECT_ID_PATTERN } from "../../lib/sui/ids.ts";
 import { EVENT_CURSOR } from "./cursor.ts";
+import { signedAtomicSchema } from "./decimal.ts";
 import { POOL_KEY } from "./venues.ts";
 
 /** One browser stream covers the chart's curve and optional recorded venue pool. */
@@ -18,6 +20,19 @@ export const MARKET_STREAM_BUDGET = Object.freeze({
 export const MARKET_STREAM_PATH = "/api/launchpad/market/stream";
 
 export const displayPriceCoinSchema = z.string().max(320).regex(/^[\w:<>,]+$/).regex(COIN_TYPE_WITH_GENERICS);
+export const marketTradeCueSchema = z.object({
+  coin_type: displayPriceCoinSchema,
+  cursor: z.string().regex(EVENT_CURSOR),
+  side: z.enum(["buy", "sell"]),
+  timestamp_ms: z.number().int().positive(),
+  quote_atoms: z.string().max(128).regex(/^[1-9][0-9]*$/),
+  usd: z.string().max(128).refine((value) => {
+    const amount = exactDecimal(value);
+    return amount !== null && compareExact(amount, { n: 1n, scale: 0 }) > 0;
+  }),
+});
+export type MarketTradeCue = Readonly<z.infer<typeof marketTradeCueSchema>>;
+
 export const displayPriceSchema = z.object({
   coin_type: displayPriceCoinSchema,
   usd_price: z.string().max(128).regex(/^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/),
@@ -46,7 +61,7 @@ export const coinStatsFrameSchema = z.object({
   lifecycle: z.string().max(32).nullable(),
   price: decimal,
   market_cap: decimal,
-  market: z.object({ market_cap_usd: decimal, fdv_usd: decimal, change_24h_bps: z.number().int().nullable() }).partial().nullable(),
+  market: z.object({ market_cap_usd: decimal, fdv_usd: decimal, change_24h_bps: signedAtomicSchema.max(80).nullable() }).partial().nullable(),
   quote_usd: z.record(z.string().max(64), z.unknown()).nullable(),
   window_24h: z.object({ volume_quote: decimal, volume_usd: decimal, buys: count, sells: count, trades: count }).partial().nullable(),
   holders: count,
@@ -77,6 +92,15 @@ export function marketStreamActivity(request: Request): boolean {
   return values.length === 1;
 }
 
+/** A tab can follow both first-page Bonding views without opening a second socket. */
+export function marketStreamDiscovery(request: Request): boolean {
+  const values = new URL(request.url).searchParams.getAll("discovery");
+  if (values.length > 1 || (values.length === 1 && values[0] !== "true")) {
+    throw new Error("Invalid discovery subscription.");
+  }
+  return values.length === 1;
+}
+
 /** A tab may stream one presale alongside its regular market subscriptions. */
 export function marketStreamPresale(request: Request): string | null {
   const values = new URL(request.url).searchParams.getAll("presale");
@@ -86,22 +110,23 @@ export function marketStreamPresale(request: Request): string | null {
   return values[0] ?? null;
 }
 
-/** Browser reconnects use REST recovery, rather than sharing one subscriber's resume cursor. */
+/** The shared market query. The browser WebSocket transport parses per-pool resume cursors separately. */
 export function marketStreamPools(request: Request): readonly string[] {
   const params = new URL(request.url).searchParams;
   if (
     [...params.keys()].some(
-      (key) => key !== "pool" && key !== "cursor" && key !== "activity" && key !== "price_coin" && key !== "presale",
+      (key) => key !== "pool" && key !== "cursor" && key !== "activity" && key !== "price_coin" && key !== "presale" && key !== "discovery",
     )
   )
     throw new Error("Invalid market stream query.");
   marketStreamActivity(request);
+  const discovery = marketStreamDiscovery(request);
   const pools = params.getAll("pool");
   const presale = marketStreamPresale(request);
   const cursor = params.getAll("cursor");
   const lastId = request.headers.get("last-event-id");
   if (
-    (!pools.length && !presale && !marketStreamActivity(request)) ||
+    (!pools.length && !presale && !marketStreamActivity(request) && !discovery) ||
     pools.length > MARKET_STREAM_BUDGET.maxPoolsPerClient ||
     new Set(pools).size !== pools.length ||
     pools.some((pool) => !POOL_KEY.test(pool)) ||

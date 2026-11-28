@@ -6,6 +6,7 @@ import type { BaseUIEvent } from "@base-ui/react/types";
 import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState, type ComponentProps, type MouseEvent, type PointerEvent, type ReactNode, type RefObject } from "react";
 import { profilePagePath } from "@blast/core/modules/social/contracts/profiles.ts";
 import type { TraderProfile } from "@blast/core/modules/social/contracts/trader-profiles.ts";
+import type { CandleInterval } from "@blast/core/modules/launchpad-contract/venue-history.ts";
 import { Avatar } from "#web/components/blast-ui/Avatar.tsx";
 import { UserIcon } from "#web/components/blast-ui/Icons.tsx";
 import { Popover, PopoverSurface } from "#web/components/blast-ui/Popover.tsx";
@@ -19,7 +20,7 @@ import { SocialAccountContext } from "#web/components/social/use-social-account.
 import { useAppQueryClient } from "#web/lib/query/provider.tsx";
 import { readableUsd } from "#web/lib/market-format.ts";
 import type { Bar } from "./kline-model.ts";
-import { barPeople, layoutBubbles, moreWidth, mousePress, personIdentity, personTrades, profileAt, rememberProfiles, type BarSpan, type Bubble, type Person, type PersonTrade, type SeenProfile } from "./people-bubbles.ts";
+import { barPeople, layoutBubbles, moreWidth, mousePress, personIdentity, personTrades, profileAt, rememberProfiles, traderKey, type BarSpan, type Bubble, type Person, type PersonTrade, type SeenProfile } from "./people-bubbles.ts";
 import styles from "./PeopleBubbles.module.css";
 
 /** Bubble size in px: a face you can tell apart, still narrow enough for neighbouring bars; a little smaller on phones. */
@@ -56,9 +57,11 @@ export function BubbleStage({ children }: Readonly<{ children: ReactNode }>) {
  * own account. It makes no requests of its own, so the viewer's own trades show
  * when the account is loaded and the trade is among the activity rows.
  */
-export function PeopleBubbles({ chart, bars, quoteDecimals, quoteUsd, topInset = 0, line = false }: Readonly<{
+export function PeopleBubbles({ chart, bars, interval, coinTrades, quoteDecimals, quoteUsd, topInset = 0, line = false }: Readonly<{
   chart: RefObject<Chart | null>;
   bars: readonly Bar[];
+  interval: CandleInterval;
+  coinTrades: readonly PersonTrade[] | null;
   quoteDecimals: number | null;
   quoteUsd: string | null;
   /** Px at the top of the price pane kept clear for the study legends. */
@@ -68,21 +71,26 @@ export function PeopleBubbles({ chart, bars, quoteDecimals, quoteUsd, topInset =
 }>) {
   const activity = useWalletTrades();
   const deployer = useLaunchWallet();
+  const allVenues = coinTrades !== null;
   const account = useContext(SocialAccountContext)?.account ?? null;
-  const seen = useSeenTraderProfiles();
+  const seen = useSeenTraderProfiles(!allVenues);
   const walletKey = account?.wallets.map((wallet) => wallet.address.toLowerCase()).join(",") ?? "";
   const own = useMemo(() => new Set(walletKey ? walletKey.split(",") : []), [walletKey]);
-  const people = useMemo(() => barPeople(personTrades(activity, deployer, quoteDecimals, quoteUsd), bars, own), [activity, deployer, quoteDecimals, quoteUsd, bars, own]);
   const callsign = account?.callsign, avatarUrl = account?.avatar_url;
+  const people = useMemo(() => barPeople(coinTrades ?? personTrades(activity, deployer, quoteDecimals, quoteUsd), bars, own, callsign, coinTrades ? interval : undefined), [coinTrades, activity, deployer, quoteDecimals, quoteUsd, bars, own, callsign, interval]);
   const ownProfile = useMemo(() => callsign === undefined ? null : { callsign, avatarUrl: avatarUrl ?? null }, [callsign, avatarUrl]);
   const layer = useRef<HTMLDivElement>(null);
   const { bubbles, size } = useBubbleLayout(chart, layer, people, topInset, line);
 
-  const profile = useCallback((person: Person) => person.own ? ownProfile : profileAt(seen, person.address, person.lastMs), [ownProfile, seen]);
+  const profile = useCallback((person: Person) => {
+    if (person.address === null) return person.profile;
+    if (allVenues) return null;
+    return person.own ? ownProfile : profileAt(seen, person.address, person.lastMs);
+  }, [allVenues, ownProfile, seen]);
   return <div ref={layer} className={styles.layer}>
     {bubbles.map((bubble) => bubble.kind === "person"
-      ? <PersonBubble key={bubble.key} person={bubble.person} x={bubble.x} y={bubble.y} size={size} profile={profile(bubble.person)} />
-      : <MoreBubble key={bubble.key} bubble={bubble} size={size} profile={profile} />)}
+      ? <PersonBubble key={bubble.key} person={bubble.person} x={bubble.x} y={bubble.y} size={size} profile={profile(bubble.person)} allVenues={allVenues} />
+      : <MoreBubble key={bubble.key} bubble={bubble} size={size} profile={profile} allVenues={allVenues} />)}
   </div>;
 }
 
@@ -90,17 +98,18 @@ export function PeopleBubbles({ chart, bars, quoteDecimals, quoteUsd, topInset =
  * Every trader profile the trade list's lookup has answered this visit, per wallet.
  * The list asks only about its newest trades, so profiles build up as trades arrive.
  */
-function useSeenTraderProfiles(): ReadonlyMap<string, SeenProfile> {
+function useSeenTraderProfiles(enabled: boolean): ReadonlyMap<string, SeenProfile> {
   const client = useAppQueryClient();
   const [seen, setSeen] = useState(NO_PROFILES);
   useEffect(() => {
+    if (!enabled) return;
     const cache = client.getQueryCache();
     const read = () => setSeen((held) => rememberProfiles(held, cache.findAll({ queryKey: [TRADER_PROFILES_QUERY] }).map((query) => query.state.data)));
     read();
     return cache.subscribe((event) => {
       if (event.type === "updated" && event.query.queryKey[0] === TRADER_PROFILES_QUERY) read();
     });
-  }, [client]);
+  }, [client, enabled]);
   return seen;
 }
 
@@ -197,7 +206,7 @@ function visibleSpans(chart: Chart, line: boolean): BarSpan[] {
   return barSpans(chart, chart.getDataList().slice(Math.max(0, realFrom - 1), Math.max(0, realTo + 1)), line).filter((span) => span !== null);
 }
 
-const PersonBubble = memo(function PersonBubble({ person, x, y, size, profile }: Readonly<{ person: Person; x: number; y: number; size: number; profile: TraderProfile | null }>) {
+const PersonBubble = memo(function PersonBubble({ person, x, y, size, profile, allVenues }: Readonly<{ person: Person; x: number; y: number; size: number; profile: TraderProfile | null; allVenues: boolean }>) {
   const who = personIdentity(person.address, profile);
   const explorer = useWalletExplorer(who.anonymous ? person.address : null);
   const badge = person.labels[0];
@@ -226,6 +235,7 @@ const PersonBubble = memo(function PersonBubble({ person, x, y, size, profile }:
     </Popover.Trigger>
     <PopoverSurface positioner={positioner} popup={{ className: styles.card }}>
       <PersonCard person={person} who={who} />
+      {allVenues && <TradeScope />}
     </PopoverSurface>
   </Popover.Root>;
 });
@@ -237,7 +247,7 @@ function PersonCard({ person, who }: Readonly<{ person: Person; who: ReturnType<
       {who.anonymous ? <span className={person.own ? "sr-only" : undefined}>{who.name}</span> : <Link href={profilePagePath(who.callsign)}>{who.name}</Link>}
       {person.own && <span className={styles.you}>You</span>}
     </Popover.Title>
-    <TraderWallet address={person.address} />
+    {person.address !== null && <TraderWallet address={person.address} />}
     <dl className={styles.cardFigures}>
       {person.buys > 0 && <div><dt>{person.buys === 1 ? "Bought" : `${person.buys} buys`}</dt><dd data-side="buy">{usd(person.bought)}</dd></div>}
       {person.sells > 0 && <div><dt>{person.sells === 1 ? "Sold" : `${person.sells} sells`}</dt><dd data-side="sell">{usd(person.sold)}</dd></div>}
@@ -283,7 +293,7 @@ function TradeList({ trades }: Readonly<{ trades: readonly PersonTrade[] }>) {
 }
 
 /** The people one column has no room for, as a "+N" that lists them on hover or tap. */
-function MoreBubble({ bubble: { people, x, y }, size, profile }: Readonly<{ bubble: Extract<Bubble, { kind: "more" }>; size: number; profile: (person: Person) => TraderProfile | null }>) {
+function MoreBubble({ bubble: { people, x, y }, size, profile, allVenues }: Readonly<{ bubble: Extract<Bubble, { kind: "more" }>; size: number; profile: (person: Person) => TraderProfile | null; allVenues: boolean }>) {
   const text = `${people.length} more ${people.length === 1 ? "trader" : "traders"}`;
   const shown = people.length > 99 ? "99" : String(people.length);
   const { positioner, onOpenChange } = useCardPosition();
@@ -301,15 +311,20 @@ function MoreBubble({ bubble: { people, x, y }, size, profile }: Readonly<{ bubb
         {people.map((person) => {
           const count = person.buys + person.sells;
           const spent = person.side === "buy" ? person.bought : person.sold;
-          return <li key={`${person.bar}:${person.address}`}>
+          return <li key={`${person.bar}:${traderKey(person)}`}>
             <span>{personIdentity(person.address, profile(person)).name}</span>
             <span data-side={person.side}>{person.side === "buy" ? "Bought" : "Sold"}{count > 1 ? ` · ${tradeCount(count)}` : ""}</span>
             <span>{usd(spent)}</span>
           </li>;
         })}
       </ul>
+      {allVenues && <TradeScope />}
     </PopoverSurface>
   </Popover.Root>;
+}
+
+function TradeScope() {
+  return <Popover.Description className={styles.scope}>Coin trades across all venues.</Popover.Description>;
 }
 
 /** A list past about eight lines scrolls, so the keyboard can reach it; a short one needs no stop. */

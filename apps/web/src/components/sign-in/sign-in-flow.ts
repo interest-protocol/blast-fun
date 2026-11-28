@@ -1,3 +1,5 @@
+import type { UiWallet } from "@mysten/dapp-kit-react";
+
 import { diagnosticMessage } from "#web/lib/errors.ts";
 /**
  * Sign-in (FEATURE-MAP §8.2, OA-2, OA-11) as pure decisions: which method the
@@ -10,47 +12,27 @@ import { diagnosticMessage } from "#web/lib/errors.ts";
  * Sui wallets prove an address directly; `wallet` (OA-12) offers EVM and
  * Solana wallets through Privy's own wallet list.
  */
-export const SUI_SIGN_IN_METHODS = ["slush", "nightly", "scallop", "mahalo"] as const;
-export type SuiSignInMethod = (typeof SUI_SIGN_IN_METHODS)[number];
-export type SignInMethod = "x" | "google" | SuiSignInMethod | "wallet";
-
-export const SUI_WALLET_INSTALL_URLS = {
-  nightly: "https://nightly.app/download",
-  scallop: "https://chromewebstore.google.com/detail/scallop-wallet/cofjeilfnmicgcolcdjljnnmonmknfbb",
-  mahalo: "https://chromewebstore.google.com/detail/mahalo/glahhddncffoeohapgmkadbiabknoieb",
-} as const;
-
-export function isSuiSignInMethod(method: SignInMethod): method is SuiSignInMethod {
-  return method === "slush" || method === "nightly" || method === "scallop" || method === "mahalo";
-}
-
-/** The order the sheet offers them in. */
-export const SIGN_IN_METHODS: readonly SignInMethod[] = ["x", "google", ...SUI_SIGN_IN_METHODS, "wallet"];
+export const SOCIAL_SIGN_IN_METHODS = ["x", "google"] as const;
+type SocialSignInMethod = (typeof SOCIAL_SIGN_IN_METHODS)[number];
+export type PrivySignInMethod = SocialSignInMethod | "wallet";
+export type SuiSignInMethod = Readonly<{ id: string; wallet: UiWallet; slush?: boolean }>;
+export type SignInMethod = PrivySignInMethod | SuiSignInMethod;
 
 /** The name in "Waiting for …". */
-export const SIGN_IN_METHOD_NAMES: Readonly<Record<SignInMethod, string>> = {
+export const SIGN_IN_METHOD_NAMES: Readonly<Record<PrivySignInMethod, string>> = {
   x: "X",
   google: "Google",
-  slush: "Slush",
-  nightly: "Nightly",
-  scallop: "Scallop",
-  mahalo: "Mahalo",
   wallet: "your wallet",
 };
 
-/** The design's button labels (and OA-12's "Other wallets"). */
-export const SIGN_IN_METHOD_LABELS: Readonly<Record<SignInMethod, string>> = {
+export const SIGN_IN_METHOD_LABELS: Readonly<Record<PrivySignInMethod, string>> = {
   x: "Continue with X",
   google: "Continue with Google",
-  slush: "Connect Slush wallet",
-  nightly: "Connect Nightly wallet",
-  scallop: "Connect Scallop wallet",
-  mahalo: "Connect Mahalo wallet",
-  wallet: "Other wallets",
+  wallet: "Ethereum & Solana wallets",
 };
 
 /**
- * Privy's wallet login for "Other wallets": its modal with the EVM and Solana
+ * Privy's wallet login: its modal with the EVM and Solana
  * wallets the shared Privy app enables (OA-12). X and Google stay headless
  * OAuth, and Sui wallets use the web app's own sign-in.
  */
@@ -71,6 +53,7 @@ export type SignInState =
   | Readonly<{ status: "cancelled"; method: SignInMethod }>
   | Readonly<{ status: "failed"; method: SignInMethod }>
   | Readonly<{ status: "rate-limited"; method: SignInMethod }>
+  | Readonly<{ status: "switch-failed" }>
   /** Privy did not become ready in time. */
   | Readonly<{ status: "stalled" }>;
 
@@ -87,12 +70,14 @@ export function waitingMethod(state: SignInState): SignInMethod | null {
 }
 
 /** The line under the methods after an attempt that did not sign in (no line otherwise). */
-export function signInMessage(state: SignInState): Readonly<{ text: string; alert: boolean }> | null {
+export function signInMessage(state: SignInState, addingAccount = false): Readonly<{ text: string; alert: boolean }> | null {
   switch (state.status) {
     case "cancelled":
-      return { text: diagnosticMessage("Sign-in was cancelled. You are still signed out.", { code: "request_cancelled" }), alert: false };
+      return { text: diagnosticMessage(addingAccount ? "Sign-in was cancelled." : "Sign-in was cancelled. You are still signed out.", { code: "request_cancelled" }), alert: false };
     case "failed":
-      return { text: diagnosticMessage("Sign-in did not finish. You are still signed out. Try again.", { code: "authentication_unavailable" }), alert: true };
+      return { text: diagnosticMessage(addingAccount ? "Sign-in did not finish. Try again." : "Sign-in did not finish. You are still signed out. Try again.", { code: "authentication_unavailable" }), alert: true };
+    case "switch-failed":
+      return { text: diagnosticMessage("Could not switch accounts. Try again.", { code: "account_switch_failed" }), alert: true };
     case "rate-limited":
       return { text: diagnosticMessage("Too many sign-in attempts. Wait a few minutes, then try again.", { code: "rate_limited" }), alert: true };
     case "stalled":
@@ -106,12 +91,12 @@ export function signInMessage(state: SignInState): Readonly<{ text: string; aler
 const PRIVY_CANCEL_CODES = new Set(["exited_auth_flow", "oauth_user_denied", "exited_link_flow"]);
 
 /** The end of an OAuth attempt Privy reported as an error: backing out is a cancel, anything else a failure. */
-export function oauthErrorState(method: SignInMethod, code: string): SignInState {
+export function oauthErrorState(method: SocialSignInMethod, code: string): SignInState {
   return PRIVY_CANCEL_CODES.has(code) ? { status: "cancelled", method } : { status: "failed", method };
 }
 
 /** The method an OAuth return belongs to, from session storage (anything else is not ours). */
-export function storedAttempt(value: string | null): SignInMethod | null {
+export function storedAttempt(value: string | null): SocialSignInMethod | null {
   return value === "x" || value === "google" ? value : null;
 }
 

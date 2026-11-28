@@ -13,6 +13,7 @@ import { ListsLate } from "#web/components/blast-ui/ServiceStatus.tsx";
 import { useListsLate } from "#web/components/blast-ui/service-status.ts";
 import { useAppQueryClient } from "#web/lib/query/provider.tsx";
 import { queryKeys } from "#web/lib/query/keys.ts";
+import { useLiveDiscovery, liveDiscoveryPage } from "./discovery-live.ts";
 import { readRailPage } from "./discovery-client";
 import { shortCoinType } from "#web/components/social/coins/coin-display.ts";
 import { bpsPercent } from "@blast/core/lib/bps.ts";
@@ -49,6 +50,8 @@ export function BondingCurves({ view: saved, onViewChange, now, onOpen }: Readon
   const current = paging.view === view ? paging : { view, cursors: [null], page: 1 };
   const cursor = current.cursors[current.page - 1] ?? null;
   const client = useAppQueryClient();
+  const live = useLiveDiscovery(current.page === 1);
+  const [fallbackInterval] = useState(() => 25_000 + Math.round(Math.random() * 10_000));
   const read = useQuery(
     {
       queryKey: [...queryKeys.workspace.bonding, view, cursor],
@@ -62,6 +65,7 @@ export function BondingCurves({ view: saved, onViewChange, now, onOpen }: Readon
       retry: false,
       staleTime: 0,
       refetchOnMount: "always",
+      refetchInterval: current.page === 1 && !live.live ? fallbackInterval : false,
     },
     client,
   );
@@ -70,11 +74,16 @@ export function BondingCurves({ view: saved, onViewChange, now, onOpen }: Readon
     setPaging({ view: next, cursors: [null], page: 1 });
     onViewChange(next);
   };
-  const nextCursor = pageOf(read.data)?.nextCursor ?? null;
+  const answer = current.page === 1 && !read.isPlaceholderData
+    ? liveDiscoveryPage(live.pages[view], read.data)
+    : read.data;
+  const nextCursor = pageOf(answer)?.nextCursor ?? null;
   const selectPage = (next: number) => {
     if (next > current.page && (read.isPlaceholderData || !nextCursor)) return;
     const cursors = [...current.cursors];
-    if (next === current.page + 1 && !cursors[next - 1]) cursors[next - 1] = nextCursor;
+    if (next === current.page + 1 && cursors[next - 1] !== nextCursor) {
+      cursors.splice(next - 1, cursors.length, nextCursor);
+    }
     setPaging({ view, cursors, page: next });
   };
   return (
@@ -90,14 +99,14 @@ export function BondingCurves({ view: saved, onViewChange, now, onOpen }: Readon
       <BondingResult
         view={view}
         now={now}
-        answer={read.data}
-        failed={read.isError}
+        answer={answer}
+        failed={read.isError && !live.live}
         pending={read.isPlaceholderData}
         busy={read.isFetching}
         onRetry={() => void read.refetch()}
         onOpen={onOpen}
       />
-      {read.data && (nextCursor !== null || current.page > 1) && (
+      {answer && (nextCursor !== null || current.page > 1) && (
         <div className={styles.footer}>
           {/* Cursor pages: the total is unknown, so the pager reads "Page N" with the next page while one exists. */}
           <Pager what="bonding curves" page={current.page} hasMore={nextCursor !== null} pending={read.isPlaceholderData} onPage={selectPage} />

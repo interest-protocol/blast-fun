@@ -11,8 +11,10 @@ import { TransactionDataBuilder, Transaction } from "@mysten/sui/transactions";
 import { fromBase64, toBase64 } from "@mysten/sui/utils";
 
 import { SUI_COIN_TYPE, USDC_COIN_TYPE } from "@blast/core/lib/sui/coin-types.ts";
+import { selectedAccountSession, switchAccountSession } from "../account-selection.ts";
 import type { TransactionSigner } from "#web/components/social/sponsored-transaction.ts";
 import { readSponsoredBytes, sponsoredWalletSigner } from "#web/lib/sui-signing.ts";
+import { clearWithdrawReceipt, saveWithdrawReceipt } from "./withdraw-attempt.ts";
 import { refusalMessage, runWithdraw, withdrawTransaction, type WithdrawSigner } from "./withdraw-flow";
 
 /**
@@ -188,6 +190,76 @@ test("gasless USDC builds from coins or address balances, signs and executes dir
     assert.equal(signed.length, 1);
     assert.ok(calls.every((call) => call.method === "PUT"), "no gas pool request");
   }
+});
+
+test("switching during a gasless withdrawal preserves its digest so the original account can retry without sending twice", async (t) => {
+  const key = "privy-withdrawal";
+  const stored = new Map<string, string>();
+  let storageReady = false;
+  let reloads = 0;
+  const previousWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const browser = {
+    document: { cookie: "blast_active_account=privy" },
+    location: { protocol: "https:", reload: () => { reloads += 1; } },
+    sessionStorage: {
+      getItem: (name: string) => stored.get(name) ?? null,
+      setItem: (name: string, value: string) => {
+        if (!storageReady) throw new Error("Storage unavailable");
+        stored.set(name, value);
+      },
+      removeItem: (name: string) => { stored.delete(name); },
+    },
+  };
+  Object.defineProperty(globalThis, "window", { configurable: true, value: browser });
+  t.after(() => {
+    clearWithdrawReceipt(key);
+    if (previousWindow) Object.defineProperty(globalThis, "window", previousWindow);
+    else Reflect.deleteProperty(globalThis, "window");
+  });
+  const previousDocument = Object.getOwnPropertyDescriptor(globalThis, "document");
+  Object.defineProperty(globalThis, "document", { configurable: true, value: browser.document });
+  t.after(() => {
+    if (previousDocument) Object.defineProperty(globalThis, "document", previousDocument);
+    else Reflect.deleteProperty(globalThis, "document");
+  });
+
+  const broadcasting = Promise.withResolvers<boolean>();
+  const finishBroadcast = Promise.withResolvers<void>();
+  const signed: Uint8Array[] = [];
+  const mockNode = walletClient(async () => {
+    broadcasting.resolve(switchAccountSession("wallet"));
+    await finishBroadcast.promise;
+    throw new Error("Connection lost after submission");
+  });
+  const confirmed = (body: Record<string, unknown>) => transfer("confirmed", String(body.digest))(body);
+  const { fetch, calls } = routes({
+    "PUT /api/social/me/transfers/{id}": [transfer("pending", null), () => [503, {}], confirmed, confirmed],
+  });
+  const usdc = { ...request, coinType: USDC_COIN_TYPE };
+  const deps = { api: { getAccessToken: async () => "t", fetch }, client: mockNode, signer: sponsoredSigner(signed) };
+  const withdrawal = runWithdraw({
+    ...deps, onDigest: (digest) => saveWithdrawReceipt(key, { requestId: REQUEST, digest }),
+  }, usdc);
+  const switchedWhileBroadcasting = await broadcasting.promise;
+  finishBroadcast.resolve();
+  assert.equal(switchedWhileBroadcasting, false);
+  assert.equal(selectedAccountSession(browser.document.cookie), "privy");
+  const pending = await withdrawal;
+  assert.equal(pending.status, "pending");
+  assert.equal(switchAccountSession("wallet"), false, "an unsaved digest blocks the reload");
+  storageReady = true;
+  saveWithdrawReceipt(key, { requestId: REQUEST, digest: pending.digest });
+  assert.equal(switchAccountSession("wallet"), true);
+  assert.equal(reloads, 1);
+
+  const reloaded: typeof import("./withdraw-attempt.ts") = await import(new URL("./withdraw-attempt.ts?reloaded", import.meta.url).href);
+  const receipt = reloaded.readWithdrawReceipt(key);
+  assert.ok(receipt);
+  assert.deepEqual(receipt, { requestId: REQUEST, digest: pending.digest });
+  const retried = await runWithdraw({ ...deps, knownDigest: receipt.digest }, { ...usdc, requestId: receipt.requestId });
+  assert.equal(retried.status, "sent");
+  assert.equal(signed.length, 1);
+  assert.equal(calls.at(-1)?.body?.digest, pending.digest);
 });
 
 test("USDC wallet sessions receive a zero-gas transaction; sub-minimum requests never sign", async () => {

@@ -74,6 +74,7 @@ export type ActivityViewProps = Readonly<{
   onRefresh: () => void;
   onMoreActivity: () => void;
   onShowNewerActivity: () => void;
+  onHistoryOpen?: (open: boolean) => void;
   onWindow: (window: WindowName) => void;
   /** The "Hide trades under $1" switch, when the feed behind the list acts on it; else the list keeps its own. */
   smallTradeFilter?: SmallTradeFilter;
@@ -426,18 +427,21 @@ export function ActivityView(props: ActivityViewProps): ReactNode {
 /** Trades use the same paged feed; lifecycle records remain in the detailed ledger. */
 function CompactTrades({ props }: Readonly<{ props: ActivityViewProps }>) {
   const display = listDisplay(props.activity);
-  if (display.kind === "loading") return <SkeletonText>Reading trades</SkeletonText>;
-  if (display.kind === "unavailable") return <EmptyState title="Trades couldn’t load" role="alert" action={<Button size="sm" onClick={props.onRefresh}>Try again</Button>} />;
   const tape = props.tape;
-  const rows = tape?.recent.rows ?? recentTrades(display.view.rows);
+  const page = display.kind === "rows" ? display : null;
+  if (!tape?.recent.rows.length) {
+    if (display.kind === "loading") return <SkeletonText>Reading trades</SkeletonText>;
+    if (display.kind === "unavailable") return <EmptyState title="Trades couldn’t load" role="alert" action={<Button size="sm" onClick={props.onRefresh}>Try again</Button>} />;
+  }
+  const rows = tape?.recent.rows ?? recentTrades(page?.view.rows ?? []);
   const profileSource = props.confirmedActivity ? { launchId: props.launchId, activity: props.confirmedActivity } : undefined;
   return <>
-    {display.stale ? <p className={styles.note} role="status">Trade updates delayed.</p> : null}
+    {page?.stale ? <p className={styles.note} role="status">Trade updates delayed.</p> : null}
     {props.activity.newer ? <Newer subject="trades" onShow={props.onShowNewerActivity} /> : null}
-    <TradeList key={props.launchId} rows={rows} availableRows={display.view.rows.filter(isActivityTrade)}
-      units={props.units} explorer={props.explorer} profileSource={profileSource} next={display.view.next}
+    <TradeList key={props.launchId} rows={rows} availableRows={page?.view.rows.filter(isActivityTrade)}
+      units={props.units} explorer={props.explorer} profileSource={profileSource} next={page?.view.next ?? null}
       entering={tape?.recent.entering} leaving={tape?.recent.leaving} slide={tape?.recent.slide} hold={tape?.hold} filter={props.smallTradeFilter} />
-    <Disclosure title="Launch activity"><ActivityView {...props} compact={false} /></Disclosure>
+    <Disclosure title="Launch activity" onOpenChange={props.onHistoryOpen}><ActivityView {...props} compact={false} /></Disclosure>
   </>;
 }
 
