@@ -128,7 +128,7 @@ export function CurveTradeProvider({
   const balanceKey = `${walletIdentity}:${refreshes}`;
   const balances = balanceRead?.identity === balanceKey ? balanceRead.value : null;
   const balancesPending = Boolean(wallet?.identity && balanceRead?.identity !== balanceKey);
-  usePublishHeldBalance(balances?.meme ?? null);
+  usePublishHeldBalance(curve.status === "ok" ? curve.curve.launch.memeType : null, balances?.meme ?? null);
   const [direction, setDirection] = useState<TradeDirection>("buy");
   const [completed, setCompleted] = useState<CurveTradeSession["completed"]>({});
   const refresh = useCallback(() => setRefreshes((count) => count + 1), []);

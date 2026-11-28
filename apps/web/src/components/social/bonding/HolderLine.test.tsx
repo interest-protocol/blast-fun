@@ -32,8 +32,9 @@ world.portfolio = {
   coins: [{ coin_type: COIN, balance: "10", basis_usd: "1", basis_complete: true, pnl_usd: null, pnl_multiple: null }],
 };
 
+// A rail elsewhere on the page (a sale's sits in the shell's aside), reporting the coin in another spelling.
 function Rail({ atoms }: Readonly<{ atoms: bigint | null }>) {
-  usePublishHeldBalance(atoms);
+  usePublishHeldBalance("0x0000000000000000000000000000000000000000000000000000000000000002::nogas::NOGAS", atoms);
   return null;
 }
 
@@ -60,6 +61,11 @@ test("a signed-in holder reads the portfolio once per open, and once more after 
   await render(10n);
   assert.equal(world.reads, 1);
   await act(async () => invalidateAfter(client, { kind: "trade" }));
+  assert.equal(world.reads, 2);
+
+  // A sell of all of it: the rail reads nothing held, and the line goes even though the portfolio still lists the coin.
+  await render(0n);
+  assert.equal(container.textContent, "");
   assert.equal(world.reads, 2);
 });
 

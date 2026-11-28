@@ -44,7 +44,6 @@ import { CoinMark } from "#web/components/blast-ui/CoinMark.tsx";
 import { CoinLegacyMark, CoinVerifiedMark, PreviousIcon, TelegramIcon } from "#web/components/blast-ui/Icons.tsx";
 import { useCoinTrade } from "./use-coin-trade.ts";
 import { HolderLine } from "./HolderLine.tsx";
-import { HeldBalanceProvider } from "#web/components/launchpad/trade/held-balance.tsx";
 import { ChartPriceLaunch, useChartPrice } from "#web/components/launchpad/chart/chart-live-price.ts";
 import { ChartLastTrade } from "#web/components/launchpad/chart/ChartLastTrade.tsx";
 import { ChartMarketCapSupply, useMarketCapRate, type MarketCapSupply } from "#web/components/launchpad/chart/chart-market-cap.ts";
@@ -161,6 +160,9 @@ function capChange(changeBps: number | null | undefined): PriceMoveLabel | null 
   return changeBps == null ? null : { value: <>{formatChange(changeBps)} <span>24h</span></>, direction: priceDirection(changeBps) };
 }
 
+/** The width a 24h move takes, kept unseen until the first one arrives. */
+const HELD_CHANGE: PriceMoveLabel = { value: <>{formatChange(0)} <span>24h</span></> };
+
 /**
  * The market cap leads once the page has a supply and a rate; the price stays small under it in the
  * chosen currency. Without either, the price leads, as on a coin with no supply.
@@ -193,8 +195,9 @@ function MarketPrice({ units, price, tradeId = null, activity, showCurrency, cha
 /** The 24h move and the holder's line under a phone's chart, so the figure line above it stays one line. */
 function MarketCapFoot({ units, price, changeBps, coinType }: Readonly<{ units: PriceUnits | null; price?: string | null; changeBps: number | null | undefined; coinType: string | null }>) {
   const { cap, capUsd } = useCapFigure(units, price, null, null);
-  const change = cap ? capChange(changeBps) : null;
-  return cap && <>{change && <PriceChange change={change} />}<HolderLine coinType={coinType} capUsd={capUsd} /></>;
+  const change = capChange(changeBps);
+  // Until the first stats frame, the move keeps its space unseen, so the byline beside it does not move.
+  return cap && <><PriceChange change={change ?? HELD_CHANGE} held={change ? undefined : true} /><HolderLine coinType={coinType} capUsd={capUsd} /></>;
 }
 
 function ProgressCard({ view, tradeId, children }: Readonly<{ view: View; tradeId: string | null; children?: ReactNode }>) {
@@ -639,7 +642,7 @@ export function BondingCoinScreen({ page, details, verified = false, slots, expe
   const charted = showMarket && !marketOffline && slots.chart != null;
   return <div className={styles.page} data-bonding-coin="">
     <CoinPageHeader page={page} view={view} details={details} verified={verified} marketCatchingUp={marketCatchingUp} compact={charted} />
-    <WalletTradesProvider key={page.launchId} deployer={view.coin?.launcher ?? null}><HeldBalanceProvider>
+    <WalletTradesProvider key={page.launchId} deployer={view.coin?.launcher ?? null}>
       <div className={styles.layout} data-graduated={graduated || undefined} data-market-offline={marketOffline || undefined} data-no-market={!showMarket || undefined}>
         {showMarket ? (
           <CoinPriceCurrencyProvider key={page.launchId} quoteType={view.identity.quoteType} quoteSymbol={view.identity.quoteSymbol}>
@@ -659,6 +662,6 @@ export function BondingCoinScreen({ page, details, verified = false, slots, expe
           <Disclosure title="Theses">{slot("theses")}</Disclosure>
         </div>
       </div>
-    </HeldBalanceProvider></WalletTradesProvider>
+    </WalletTradesProvider>
   </div>;
 }

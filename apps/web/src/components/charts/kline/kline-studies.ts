@@ -1,6 +1,10 @@
-import { registerOverlay, type Chart } from "klinecharts";
+import { registerOverlay, registerYAxis, type Chart } from "klinecharts";
+import { readableUsd } from "#web/lib/market-format.ts";
+import { capText } from "./kline-model.ts";
 
 export const BLAST_GRADUATION = "blastGraduation";
+/** The price axis in USD market cap: the last-price mark and the crosshair read like the headline ($84.2K). */
+export const BLAST_MARKET_CAP_AXIS = "blastMarketCap";
 /** "Graduated" at 11 px with its 4 px side padding, a little over its measured 60 px. */
 const GRADUATED_CHIP_WIDTH = 64;
 
@@ -40,4 +44,13 @@ export function registerGraduation() {
       return [{ type: "text", attrs: { x: at, y: 4, text: "Graduated", align: "center", baseline: "top" }, styles: { ...plainText(chart), color: styles.overlay.text.color, backgroundColor: styles.yAxis.tickText.color, paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 2 }, ignoreEvent: true }];
     },
   });
+}
+
+let capAxis = false;
+
+/** Registers the market-cap axis once per page. Its ticks get their own two places (createTicks), so close ones stay apart. */
+export function registerMarketCapAxis() {
+  if (capAxis) return;
+  capAxis = true;
+  registerYAxis({ name: BLAST_MARKET_CAP_AXIS, displayValueToText: (value) => (value > 0 ? readableUsd(String(value)) : capText(value)) });
 }

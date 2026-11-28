@@ -37,6 +37,7 @@ import { tokenAmountAtoms, selectedSellPreset, sellPresetAmount, typedAmount, ty
 import { decimalText, dropDecimal, pasteDecimal } from "#web/lib/decimal-input.ts";
 import { useAppQueryClient } from "#web/lib/query/provider.tsx";
 import { refreshWalletCoinBalance, useWalletCoinBalance } from "./use-wallet-coin-balance";
+import { usePublishHeldBalance } from "#web/components/launchpad/trade/held-balance.tsx";
 import { useSwapWalletFunding, WalletFundingSwitch } from "./WalletFundingSwitch";
 
 /** What the sheet asks its host to trade: the quote the button showed, pinned (R3-31). */
@@ -264,6 +265,7 @@ function shownAtoms(read: ReturnType<typeof useWalletCoinBalance>): bigint | und
 function useSwapSideBalance(trading: CoinSheetTrading, coin: WalletCoinView, active: boolean) {
   const read = useWalletCoinBalance(trading.walletAddress, coin.coinType, active && trading.signedIn && !trading.sessionPending);
   const held = shownAtoms(read);
+  usePublishHeldBalance(trading.walletAddress ? coin.coinType : null, held ?? null);
   let line: ShownBalance = { coin, known: false };
   if (trading.walletAddress === undefined) line = { coin, known: trading.balanceKnown ?? trading.signedIn };
   else if (held !== undefined) line = { coin: { ...coin, atoms: held }, known: true };

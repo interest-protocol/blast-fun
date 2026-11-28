@@ -15,7 +15,7 @@ import {
   barChanges, capText, chartDate, fillGaps, foldTrades, klineBars, PANE_LAYOUT, plotHeightFor, priceParts, pricePrecision, ticksInside, topGap, volumeText,
   type Bar,
 } from "./kline-model.ts";
-import { BLAST_GRADUATION, registerGraduation } from "./kline-studies.ts";
+import { BLAST_GRADUATION, BLAST_MARKET_CAP_AXIS, registerGraduation, registerMarketCapAxis } from "./kline-studies.ts";
 import { subscriptZeros } from "#web/lib/market-format.ts";
 import { BUBBLE_SIZE, BubbleStage, PeopleBubbles } from "./PeopleBubbles.tsx";
 import { ChartPeopleTrades } from "./chart-people-trades.ts";
@@ -93,6 +93,7 @@ export default function KLineCoinChart({ sources, interval, memeDecimals, quoteD
     const element = host.current;
     if (!element) return;
     registerGraduation();
+    registerMarketCapAxis();
     const created = init(element, { decimalFold: { threshold: 4, format: foldZeros }, styles: themeStyles(palette(element)) });
     if (!created) return;
     const container = element.firstElementChild instanceof HTMLElement ? element.firstElementChild : null;
@@ -243,6 +244,7 @@ export default function KLineCoinChart({ sources, interval, memeDecimals, quoteD
     const room = traders ? bubbleHeadroom(BUBBLE_SIZE) : 0;
     chart.current?.overrideYAxis({
       paneId: "candle_pane",
+      name: marketCap ? BLAST_MARKET_CAP_AXIS : "normal",
       gap: { top: topGap(12 + room, priceHeight, .06), bottom: .06 },
       createTicks: ({ defaultTicks }) => marketCap ? defaultTicks.map((tick) => ({ ...tick, text: capText(Number(tick.value), 2) })) : defaultTicks,
     });

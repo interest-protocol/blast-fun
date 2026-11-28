@@ -146,7 +146,7 @@ export function MarketPriceRow({ price, reserve, priceLabel = "Price", change, a
   </div>;
 }
 
-/** The headline figure (the market cap, or the price without one), its move, the small price and the holder's line. */
+/** The headline figure (the market cap, or the price without one), its move, and the small price with the holder's line in its kept row. */
 function MarketFigures({ price, reserve, priceLabel, change, cap, holder }: Readonly<{
   price: ReactNode; reserve?: ReactNode; priceLabel: string; change?: PriceMoveLabel | null; cap?: CapFigure | null; holder?: ReactNode;
 }>) {
@@ -156,9 +156,8 @@ function MarketFigures({ price, reserve, priceLabel, change, cap, holder }: Read
     <span>{cap ? "Market cap" : priceLabel}</span><PriceSlot price={lead} reserve={leadReserve} />
     {change && <PriceChange change={change} held={leadReserve == null ? undefined : true} />}
     {cap !== undefined && <span className={styles.capPrice} data-cap-price="" aria-hidden={cap ? undefined : true}>
-      {cap && <><span className="sr-only">Price </span><PriceSlot price={price} reserve={reserve} /></>}
+      {cap && <><span className="sr-only">Price </span><PriceSlot price={price} reserve={reserve} />{holder}</>}
     </span>}
-    {cap && holder}
   </>;
 }
 

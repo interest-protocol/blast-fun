@@ -30,6 +30,7 @@ import { useSocialViewer } from "./SignInGate";
 import { useSocialAccount } from "./use-social-account";
 import { useHeaderSession, type HeaderSession } from "./use-header-session";
 import { BalancesProvider, useBalances } from "./coins/balances";
+import { HeldBalanceProvider } from "#web/components/launchpad/trade/held-balance.tsx";
 import { CoinsOverlay } from "./coins/CoinsOverlay";
 import { UnreadNotificationsProvider, useUnreadNotificationsState } from "./notifications/use-unread-notifications";
 import { useNotificationArrivals } from "./notifications/use-notification-arrivals";
@@ -117,6 +118,7 @@ function SocialShellContent({
     <UnreadNotificationsProvider value={unread}>
     <WatchlistProvider getAccessToken={viewer.getAccessToken} signedIn={viewer.signedIn && viewer.callsign !== null} viewerKey={viewer.callsign ?? ""}>
     <FeedOverlaysProvider value={overlays}>
+    <HeldBalanceProvider>
     <AppShell
       accountMenuItems={(closeMenu) => <AccountSwitchItems closeMenu={closeMenu} />}
       renderAvatar={renderAccountAvatar}
@@ -148,6 +150,7 @@ function SocialShellContent({
     >
       {children}
     </AppShell>
+    </HeldBalanceProvider>
     </FeedOverlaysProvider>
     </WatchlistProvider>
     </UnreadNotificationsProvider>
