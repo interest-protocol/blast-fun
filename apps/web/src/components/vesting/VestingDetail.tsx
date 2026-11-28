@@ -14,7 +14,8 @@ import { LoadingIndicator } from "#web/components/blast-ui/LoadingIndicator.tsx"
 import { SkeletonLine } from "#web/components/blast-ui/Skeleton.tsx";
 import { usePhoneLayout } from "#web/components/blast-ui/use-shell-prefs.ts";
 import { useQuery } from "@tanstack/react-query";
-import { useNow } from "#web/components/presale-pages/presales-client.ts";
+import { useCommitClock } from "#web/components/social/commit/commit-clock.ts";
+import { useBoundaryClock } from "#web/components/social/use-boundary-clock.ts";
 import { GatedAction } from "#web/components/social/SignInGate.tsx";
 import { CoinMark } from "#web/components/blast-ui/CoinMark.tsx";
 import {
@@ -29,6 +30,7 @@ import {
   formatVestingAmount,
   vestingAmounts,
   type VestingAttempt,
+  type PublicVesting,
   type VestingDetail as Detail,
   type VestingIntent,
 } from "@blast/core/modules/vesting/model.ts";
@@ -47,8 +49,26 @@ import { DetailChart } from "./DetailChart";
 import { reportVestingAction } from "./feedback";
 import styles from "./Vesting.module.css";
 
+/** The chart's "now" dot moves on at least this often. */
+const VIEW_STEP_MS = 60_000;
+
+/**
+ * When the page's figures next change: the schedule's next release, at most
+ * a minute away; never once it has ended. A continuous schedule turns at its
+ * first unlock and at its end; in between only its amounts move, and they
+ * tick by themselves (`useLiveAmounts`).
+ */
+function nextChange(schedule: PublicVesting, nowMs: number): number | null {
+  if (schedule.status !== "active") return null;
+  const now = BigInt(nowMs);
+  const next = releaseAfter(schedule, now);
+  if (!next) return null;
+  const bounds = scheduleBounds(schedule.terms);
+  const vesting = isContinuousSchedule(schedule) && bounds !== null && (vestingAmounts(schedule, now)?.vested ?? BigInt(0)) > BigInt(0);
+  return Math.min(Number(vesting ? bounds[1] : next.time), nowMs + VIEW_STEP_MS);
+}
+
 function useDetailView({ initial }: Readonly<{ initial: Detail }>) {
-  const clock = useNow(initial.now_ms);
   const wallet = useVestingWallet(),
     toast = useToast();
   const owner = vestingAccountKey(wallet.viewer, wallet.wallet);
@@ -103,8 +123,10 @@ function useDetailView({ initial }: Readonly<{ initial: Detail }>) {
     refetchInterval: (query) => query.state.error instanceof VestingCapabilityUnavailable ? false : pollInterval(15_000, query),
     refetchOnWindowFocus: (query) => !(query.state.error instanceof VestingCapabilityUnavailable),
   });
-  const schedule = read.data.schedule,
-    now = BigInt(clock),
+  const schedule = read.data.schedule;
+  // Never older than the latest read: its `released` may already count what vested since the page's last turn.
+  const clock = useBoundaryClock((at) => nextChange(schedule, at), read.data.now_ms);
+  const now = BigInt(clock),
     amounts = vestingAmounts(schedule, now),
     bounds = scheduleBounds(schedule.terms);
   const symbol =
@@ -199,6 +221,29 @@ function useDetailView({ initial }: Readonly<{ initial: Detail }>) {
   return { ...view, initial };
 }
 type DetailView = ReturnType<typeof useDetailView>;
+
+/**
+ * The amounts to the second while a continuous schedule vests (money: as
+ * fresh as the page-wide second clock left them), read where they show;
+ * otherwise the page's, which turns at each release.
+ */
+function useLiveAmounts({ schedule, amounts, now }: DetailView): DetailView["amounts"] {
+  const live = schedule.status === "active" && isContinuousSchedule(schedule) && amounts !== null && amounts.vested > BigInt(0) && amounts.unvested > BigInt(0);
+  const tick = useCommitClock(live);
+  return live && BigInt(tick) > now ? vestingAmounts(schedule, BigInt(tick)) : amounts;
+}
+
+/** One of the schedule's amounts, redrawn by itself while it vests continuously. */
+function LiveAmount({ view, part, label, compact }: Readonly<{
+  view: DetailView;
+  part: "releasable" | "unvested";
+  label: string;
+  compact?: boolean;
+}>) {
+  const amounts = useLiveAmounts(view);
+  return amounts ? <DisplayAmount view={view} value={amounts[part]} label={label} compact={compact} /> : null;
+}
+
 export function VestingDetail(props: Readonly<{ initial: Detail }>) {
   const view = useDetailView(props);
   const { schedule, symbol, wallet } = view;
@@ -358,11 +403,7 @@ function ScheduleOverview({ view }: Readonly<{ view: DetailView }>) {
               <div>
                 <dt>Locked</dt>
                 <dd>
-                  <DisplayAmount
-                    view={view}
-                    value={amounts.unvested}
-                    label="locked amount"
-                  />
+                  <LiveAmount view={view} part="unvested" label="locked amount" />
                 </dd>
               </div>
             ) : null}
@@ -517,7 +558,9 @@ function walletClaimMessage({ wallet, schedule }: DetailView): ReactNode {
   return "";
 }
 
-function VestingActions({ phone, view }: Readonly<{ phone: boolean; view: DetailView }>) {
+/** The claim box: its amount, button and note follow the live amounts. */
+function VestingActions({ phone, view: page }: Readonly<{ phone: boolean; view: DetailView }>) {
+  const view = { ...page, amounts: useLiveAmounts(page) };
   const { amounts, wallet, read, error, attempt } = view;
   const explanation = claimExplanation(view);
   return (
@@ -696,12 +739,7 @@ function ActionReview({ view }: Readonly<{ view: DetailView }>) {
               <dt>Available to beneficiary</dt>
               <dd>
                 {amounts ? (
-                  <DisplayAmount
-                    view={view}
-                    value={amounts.releasable}
-                    label="beneficiary payout"
-                    compact={false}
-                  />
+                  <LiveAmount view={view} part="releasable" label="beneficiary payout" compact={false} />
                 ) : (
                   "—"
                 )}
@@ -714,12 +752,7 @@ function ActionReview({ view }: Readonly<{ view: DetailView }>) {
                 <dt>Unvested refund</dt>
                 <dd>
                   {amounts ? (
-                    <DisplayAmount
-                      view={view}
-                      value={amounts.unvested}
-                      label="unvested refund"
-                      compact={false}
-                    />
+                    <LiveAmount view={view} part="unvested" label="unvested refund" compact={false} />
                   ) : (
                     "—"
                   )}
