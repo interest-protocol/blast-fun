@@ -40,7 +40,8 @@ export function coinSummaryQuery(asset: CoinAsset) {
 export type CoinSummaryFacts = Readonly<{
   /** The current pool's price × the coin's total supply, in USD; null without a USD price. */
   fdvUsd: string | null;
-  holders: number;
+  /** Null while the indexer's holder snapshot is incomplete: unknown, never 0. */
+  holders: number | null;
   /** Buys and sells across the coin's pools over 24 h in USD; trades without a USD price are left out. */
   volume24hUsd: string | null;
   checkedAt: number;
