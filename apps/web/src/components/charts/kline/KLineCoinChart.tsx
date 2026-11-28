@@ -1,7 +1,7 @@
 "use client";
 
 import { dispose, init, type Chart, type Crosshair, type DeepPartial, type IndicatorCreate, type KLineData, type Period, type Styles, type VisibleRange } from "klinecharts";
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
+import { useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { candleBucketStart, candleIntervalMs, type CandleInterval } from "@blast/core/modules/launchpad-contract/venue-history.ts";
 import { Button } from "#web/components/blast-ui/Button.tsx";
 import { Checkbox, Switch } from "#web/components/blast-ui/Checkbox.tsx";
@@ -21,6 +21,7 @@ import {
 import { BLAST_FIB, BLAST_GRADUATION, BLAST_RSI, registerStudies } from "./kline-studies.ts";
 import { subscriptZeros } from "#web/lib/market-format.ts";
 import { BUBBLE_SIZE, BubbleStage, PeopleBubbles } from "./PeopleBubbles.tsx";
+import { ChartPeopleTrades } from "./chart-people-trades.ts";
 import { bubbleHeadroom } from "./people-bubbles.ts";
 import styles from "./KLineCoinChart.module.css";
 
@@ -76,6 +77,7 @@ export default function KLineCoinChart({ sources, interval, memeDecimals, quoteD
   const walletPreference = useChartPreference("wallet-tags");
   const [walletChoice, setWalletChoice] = useState<boolean>();
   const showWalletTags = walletChoice ?? walletPreference !== "hidden";
+  const coinTrades = useContext(ChartPeopleTrades);
   const bars = useLiveBars(sources, interval, memeDecimals, quoteDecimals, quoteUsd, trade);
   const precision = pricePrecision(bars);
   const drawn = style === "line" || forcesLine(bars) ? "line" : "candles";
@@ -222,7 +224,7 @@ export default function KLineCoinChart({ sources, interval, memeDecimals, quoteD
         <IndicatorMenu settings={settings} onToggle={(name) => update(toggleIndicator(settings, name))} />
         <DrawMenu drawing={drawing} />
         <label className={styles.walletToggle}>
-          Traders
+          {coinTrades === null ? "Traders" : "Traders (all venues)"}
           <Switch checked={showWalletTags} onCheckedChange={(visible) => { setWalletChoice(visible); saveChartPreference("wallet-tags", visible ? "shown" : "hidden"); }} />
         </label>
       </div>
@@ -233,7 +235,7 @@ export default function KLineCoinChart({ sources, interval, memeDecimals, quoteD
       <BubbleStage>
         <div ref={host} className={styles.plot} role="group" aria-label={`${label}. Arrow keys step through the bars.`} tabIndex={0} data-kline-plot=""
           onKeyDown={step} onBlur={() => { setStepping(false); view.hovered.set(null); }} {...dyn({ "--kline-base": `${plotHeight}px` } as CSSProperties)} />
-        {showWalletTags && <PeopleBubbles chart={chart} bars={bars} quoteDecimals={quoteDecimals} quoteUsd={quoteUsd} topInset={8 + LEGEND_ROW * legendRows} line={drawn === "line"} />}
+        {showWalletTags && <PeopleBubbles chart={chart} bars={bars} interval={interval} coinTrades={coinTrades} quoteDecimals={quoteDecimals} quoteUsd={quoteUsd} topInset={8 + LEGEND_ROW * legendRows} line={drawn === "line"} />}
         <LatestButton away={view.away} onLatest={() => {
           const current = chart.current;
           if (!current) return;

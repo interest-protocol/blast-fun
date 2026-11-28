@@ -1,16 +1,18 @@
 import { shortAddress } from "@blast/core/lib/format.ts";
 import { isActivityTrade, type ActivityRow } from "@blast/core/modules/launchpad-contract/activity.ts";
+import { candleBucketStart, type CandleInterval } from "@blast/core/modules/launchpad-contract/venue-history.ts";
 import { traderProfilesSchema, type TraderProfile } from "@blast/core/modules/social/contracts/trader-profiles.ts";
 import { tradeWalletLabels, WALLET_LABELS, type WalletLabel } from "#web/components/launchpad/activity/wallet-labels.ts";
 import { shiftDecimal } from "#web/components/launchpad/coin/coin-format.ts";
 import type { Bar } from "./kline-model.ts";
 
-/** One trade by one wallet: when, which way, its USD size when known, and its wallet tags. `id` is the activity row's position, unique per event. */
-export type PersonTrade = Readonly<{ id: string; address: string; timestampMs: number; side: "buy" | "sell"; usd: number | null; labels: readonly WalletLabel[] }>;
+type TraderIdentity = Readonly<{ address: string; profile?: never } | { address: null; profile: TraderProfile }>;
 
-/** One wallet on one bar: everything it bought and sold there. `bought`/`sold` are USD, null when a trade's size is unknown. */
-export type Person = Readonly<{
-  address: string;
+/** One trade by a wallet or public profile. `id` is the activity row's position, unique per event. */
+export type PersonTrade = TraderIdentity & Readonly<{ id: string; timestampMs: number; side: "buy" | "sell"; usd: number | null; labels: readonly WalletLabel[] }>;
+
+/** One trader on one bar. `bought`/`sold` are USD, null when a trade's size is unknown. */
+export type Person = TraderIdentity & Readonly<{
   bar: number;
   /** Net side, the ring's colour: a wallet that bought at least as much as it sold is a buyer. */
   side: "buy" | "sell";
@@ -65,15 +67,22 @@ function netSide({ bought, sold, buys, sells }: Readonly<{ bought: number | null
 
 const addUsd = (total: number | null, usd: number | null) => total === null || usd === null ? null : total + usd;
 
-/** One person per wallet per bar. `own` holds the viewer's wallets, lowercased. */
-export function barPeople(trades: readonly PersonTrade[], bars: readonly Bar[], own: ReadonlySet<string>): Person[] {
-  type Held = { address: string; index: number; bought: number | null; sold: number | null; buys: number; sells: number; labels: Set<WalletLabel>; lastMs: number; trades: PersonTrade[] };
+export function traderKey(trader: TraderIdentity) {
+  return trader.address ?? trader.profile.callsign;
+}
+
+/** One person per trader per bar. Coin-wide trades land only on the bar for their own time bucket. */
+export function barPeople(trades: readonly PersonTrade[], bars: readonly Bar[], own: ReadonlySet<string>, callsign?: string, interval?: CandleInterval): Person[] {
+  type Held = { identity: TraderIdentity; index: number; bought: number | null; sold: number | null; buys: number; sells: number; labels: Set<WalletLabel>; lastMs: number; trades: PersonTrade[] };
   const held = new Map<string, Held>();
   for (const trade of trades) {
     const index = barIndex(bars, trade.timestampMs);
-    if (index === null) continue;
-    const key = `${index}:${trade.address}`;
-    const person = held.get(key) ?? { address: trade.address, index, bought: 0, sold: 0, buys: 0, sells: 0, labels: new Set(), lastMs: trade.timestampMs, trades: [] };
+    if (index === null || (interval && bars[index]!.timestamp !== candleBucketStart(interval, trade.timestampMs))) continue;
+    const key = `${index}:${traderKey(trade)}`;
+    const person: Held = held.get(key) ?? {
+      identity: trade.address === null ? { address: null, profile: trade.profile } : { address: trade.address },
+      index, bought: 0, sold: 0, buys: 0, sells: 0, labels: new Set(), lastMs: trade.timestampMs, trades: [],
+    };
     if (trade.side === "buy") { person.buys++; person.bought = addUsd(person.bought, trade.usd); } else { person.sells++; person.sold = addUsd(person.sold, trade.usd); }
     person.trades.push(trade);
     for (const label of trade.labels) person.labels.add(label);
@@ -84,9 +93,11 @@ export function barPeople(trades: readonly PersonTrade[], bars: readonly Bar[], 
     const bar = bars[person.index]!;
     const side = netSide(person);
     return {
-      address: person.address, bar: bar.timestamp, side, high: bar.high, low: bar.low, close: bar.close,
+      ...person.identity, bar: bar.timestamp, side, high: bar.high, low: bar.low, close: bar.close,
       bought: person.buys ? person.bought : null, sold: person.sells ? person.sold : null, buys: person.buys, sells: person.sells,
-      labels: LABEL_ORDER.filter((label) => person.labels.has(label)), own: own.has(person.address.toLowerCase()), lastMs: person.lastMs,
+      labels: LABEL_ORDER.filter((label) => person.labels.has(label)),
+      own: person.identity.address === null ? person.identity.profile.callsign === callsign : own.has(person.identity.address.toLowerCase()),
+      lastMs: person.lastMs,
       trades: [...person.trades].sort((a, b) => b.timestampMs - a.timestampMs),
     };
   }).sort((a, b) => b.lastMs - a.lastMs);
@@ -224,7 +235,7 @@ function stackColumn(placed: readonly Placed[], height: number, size: number, le
   let at = (slot: number) => clamp(top + stack - slot * step, top, bottom);
   if (above - stack >= top) at = (slot) => above - slot * step;
   else if (below + stack <= bottom) at = (slot) => below + slot * step;
-  const bubbles: Bubble[] = shown.map(({ person }, slot) => ({ kind: "person", key: `${person.bar}:${person.address}`, person, x, y: at(slot) }));
+  const bubbles: Bubble[] = shown.map(({ person }, slot) => ({ kind: "person", key: `${person.bar}:${traderKey(person)}`, person, x, y: at(slot) }));
   if (folded.length) bubbles.push({ kind: "more", key: `more:${placed[0]!.person.bar}`, people: folded, x, y: at(shown.length) });
   return bubbles;
 }
@@ -252,10 +263,10 @@ function drawnUnder(spans: readonly BarSpan[], x: number, reach: number, halfBar
 }
 
 /** Who a wallet is on the chart: its Blast profile, or an anonymous circle and short address. */
-export function personIdentity(address: string, profile: TraderProfile | null | undefined) {
+export function personIdentity(address: string | null, profile: TraderProfile | null | undefined) {
   return profile
     ? { anonymous: false as const, name: `@${profile.callsign}`, callsign: profile.callsign, avatarUrl: profile.avatarUrl }
-    : { anonymous: true as const, name: shortAddress(address), callsign: null, avatarUrl: null };
+    : { anonymous: true as const, name: shortAddress(address ?? ""), callsign: null, avatarUrl: null };
 }
 
 /**
