@@ -3,12 +3,11 @@ import {
   getAssociatedTokenAddress,
   getEvmSwapApproveTxs,
   getSwapFromEvmTxPayload,
-  getTransactionFirstSignature,
   isEvmSwapAllowanceEnough,
   swapFromSolana,
   type QuoteOptions,
 } from "@mayanfinance/swap-sdk";
-import { Connection, PublicKey, Transaction, VersionedTransaction, type Commitment, type GetLatestBlockhashConfig } from "@solana/web3.js";
+import { Connection, PublicKey, Transaction, VersionedTransaction } from "@solana/web3.js";
 import { BrowserProvider, Contract, JsonRpcProvider, type TransactionRequest } from "ethers";
 
 import { fetchSourceTokens } from "./bridge-catalog.ts";
@@ -97,18 +96,13 @@ export function mayanSdk(): BridgeSdk {
         return hash;
       }
       if (readSolanaSubmission(wallet.address)) throw new Error("Another Solana transfer is awaiting confirmation");
-      signal.throwIfAborted();
-      const connection = new BridgeSolanaConnection(mayanRpc("solana"), "confirmed");
-      const sign = solanaSigner(wallet, signal, (transaction) => {
-        const expiry = connection.lastBlockhash;
-        const blockhash = transaction instanceof VersionedTransaction ? transaction.message.recentBlockhash : transaction.recentBlockhash;
-        if (!expiry || expiry.value.blockhash !== blockhash) throw new Error("Unknown Solana transaction expiry");
-        const signature = getTransactionFirstSignature(transaction);
-        // Persist before returning the signed bytes to Mayan, which can now broadcast them.
-        rememberSolanaSubmission(wallet.address, { signature, lastValidBlockHeight: expiry.value.lastValidBlockHeight, slot: expiry.context.slot });
+      const sign = solanaSigner(wallet, signal);
+      const onTransactionSigned = (signature: string) => {
+        // Mayan invokes this synchronously before it broadcasts the signed transaction.
+        rememberSolanaSubmission(wallet.address, signature);
         onSigned(signature);
-      });
-      const { signature } = await swapFromSolana(quote, wallet.address, request.blastAddress, null, sign, connection, []);
+      };
+      const { signature } = await swapFromSolana(quote, wallet.address, request.blastAddress, null, sign, solanaConnection(), [], undefined, undefined, undefined, { onTransactionSigned });
       return signature;
     },
     checkSolanaSubmission: (address) => withSolanaSubmissionLock(address, () => settleSolanaSubmission(solanaConnection(), address)),
@@ -128,27 +122,15 @@ export function mayanSdk(): BridgeSdk {
   };
 }
 
-/** Mayan chooses the blockhash. Keep its matching expiry and context without another read. */
-class BridgeSolanaConnection extends Connection {
-  lastBlockhash?: Awaited<ReturnType<Connection["getLatestBlockhashAndContext"]>>;
-
-  override async getLatestBlockhash(config?: Commitment | GetLatestBlockhashConfig) {
-    this.lastBlockhash = await this.getLatestBlockhashAndContext(config);
-    return this.lastBlockhash.value;
-  }
-}
-
 /** Privy signs bytes; the SDK hands over web3.js transactions. */
-function solanaSigner(wallet: SolanaWallet, signal: AbortSignal, onSigned: (transaction: Transaction | VersionedTransaction) => void) {
+function solanaSigner(wallet: SolanaWallet, signal: AbortSignal) {
   async function sign(transaction: Transaction): Promise<Transaction>;
   async function sign(transaction: VersionedTransaction): Promise<VersionedTransaction>;
   async function sign(transaction: Transaction | VersionedTransaction): Promise<Transaction | VersionedTransaction> {
     signal.throwIfAborted();
-    const signed = transaction instanceof VersionedTransaction
-      ? VersionedTransaction.deserialize(await wallet.signTransaction(transaction.serialize()))
-      : Transaction.from(await wallet.signTransaction(transaction.serialize({ requireAllSignatures: false, verifySignatures: false })));
-    onSigned(signed);
-    return signed;
+    if (transaction instanceof VersionedTransaction) return VersionedTransaction.deserialize(await wallet.signTransaction(transaction.serialize()));
+    const bytes = transaction.serialize({ requireAllSignatures: false, verifySignatures: false });
+    return Transaction.from(await wallet.signTransaction(bytes));
   }
   return sign;
 }

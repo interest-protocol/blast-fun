@@ -364,10 +364,13 @@ function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent, sol
 
   const checkSolana = (source: SolanaWallet, blastAddress: string) => run(async () => {
     const result = await sdk.checkSolanaSubmission(source.address);
-    if (!result || signal().aborted || activeSolana.current !== source.address) return;
+    if (!result) return;
     if (result.state === "failed") {
       forgetSubmission(blastAddress, result.signature);
       setSent((rows) => rows.filter((row) => row.hash !== result.signature));
+    }
+    if (signal().aborted || activeSolana.current !== source.address) return;
+    if (result.state === "failed") {
       setSolanaNotice({ address: source.address, text: "The Solana transfer didn’t go through. You can bridge again. Code: bridge_solana_not_sent.", error: true });
     } else if (result.state === "confirmed") {
       onSent();
@@ -375,7 +378,7 @@ function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent, sol
       void queryClient.invalidateQueries({ queryKey: ["bridge", "history", blastAddress] });
       void queryClient.invalidateQueries({ queryKey: ["bridge", "balance", "solana"] });
     } else {
-      setSolanaNotice({ address: source.address, text: "Solana is still confirming your transfer. Check again in a moment.", error: false });
+      setSolanaNotice({ address: source.address, text: "Solana hasn’t confirmed this transfer.", error: false });
     }
   }, source.address);
 
@@ -485,12 +488,7 @@ export function BridgeForm({ sdk, wallets, blastAddress, signedIn, onSignIn, onA
   }, []);
 
   const wallet: SourceWallet | null = info.kind === "evm" ? wallets.evm : wallets.solana;
-  const solanaAddress = wallet?.kind === "solana" ? wallet.address : null;
-  const solanaPending = useSyncExternalStore(
-    solanaAddress ? subscribeSolanaSubmission : noSubscription,
-    () => solanaAddress ? readSolanaSubmission(solanaAddress) !== null : false,
-    () => false,
-  );
+  const { solanaAddress, signature, solanaPending } = usePendingSolanaSubmission(wallet);
   const atoms = amountAtoms(amount, token);
   const reads = useBridgeReads({ sdk, selection, wallet, blastAddress, atoms: solanaPending ? null : atoms, paused, onPaused });
   const send = useBridgeSend({ sdk, selection, keys: reads, shown: reads.shown, now, onPaused, onSent: () => setAmount(""), solanaAddress });
@@ -554,7 +552,7 @@ export function BridgeForm({ sdk, wallets, blastAddress, signedIn, onSignIn, onA
         refreshing={refreshing}
         token={token}
       />
-      {solanaAddress && send.solanaNotice ? <p className={clsx(coinStyles.status, styles.note)} role="status">{send.solanaNotice}</p> : null}
+      <SolanaStatus notice={send.solanaNotice} signature={signature} />
       <Button
         aria-describedby={actionDescription}
         className={styles.action}
@@ -574,6 +572,26 @@ export function BridgeForm({ sdk, wallets, blastAddress, signedIn, onSignIn, onA
 }
 
 const noSubscription = () => () => undefined;
+
+function usePendingSolanaSubmission(wallet: SourceWallet | null) {
+  const solanaAddress = wallet?.kind === "solana" ? wallet.address : null;
+  const signature = useSyncExternalStore(
+    solanaAddress ? subscribeSolanaSubmission : noSubscription,
+    () => solanaAddress ? readSolanaSubmission(solanaAddress) : null,
+    () => null,
+  );
+  return { solanaAddress, signature, solanaPending: signature !== null };
+}
+
+function SolanaStatus({ notice, signature }: Readonly<{ notice?: string | null; signature: string | null }>) {
+  if (!notice && !signature) return null;
+  return (
+    <div className={styles.amtFoot}>
+      {notice ? <p className={clsx(coinStyles.status, styles.note)} role="status">{notice}</p> : null}
+      {signature ? <TransactionLink href={`https://explorer.solana.com/tx/${encodeURIComponent(signature)}`} label="View on Solana Explorer" /> : null}
+    </div>
+  );
+}
 
 type PressHandlers = Readonly<{ signIn(): void; connect(): void; switch(): void; retry(): void; approve(): void; checkSolana(): void; bridge(): void }>;
 

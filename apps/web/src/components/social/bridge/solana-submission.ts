@@ -33,41 +33,26 @@ export function withSolanaSubmissionLock<T>(address: string, work: () => Promise
   });
 }
 
-type SignedSubmission = Readonly<{ signature: string; lastValidBlockHeight: number; slot: number }>;
-
-export function rememberSolanaSubmission(address: string, submission: SignedSubmission) {
-  const { signature, lastValidBlockHeight, slot } = submission;
-  if (!writeBrowserStorage("local", keyFor(address), `${signature}:${lastValidBlockHeight}:${slot}`)) throw unavailable();
+export function rememberSolanaSubmission(address: string, signature: string) {
+  if (!writeBrowserStorage("local", keyFor(address), signature)) throw unavailable();
   window.dispatchEvent(new Event(CHANGE));
 }
 
 export type SolanaSubmissionState = "pending" | "confirmed" | "failed";
 
-/** The RPC must be past expiry and able to look back to signing before absence permits another send. */
+/** A missing signature can mean the RPC lost its history. Only a finalized result releases the wallet. */
 export async function settleSolanaSubmission(
-  connection: Pick<Connection, "getEpochInfo" | "getSignatureStatuses" | "getMinimumLedgerSlot">,
+  connection: Pick<Connection, "getSignatureStatuses">,
   address: string,
 ): Promise<Readonly<{ signature: string; state: SolanaSubmissionState }> | null> {
-  const saved = readSolanaSubmission(address);
-  if (!saved) return null;
-  const [signature, expiry, signedSlot] = saved.split(":");
-  if (!signature || !expiry || !signedSlot || !Number.isSafeInteger(Number(expiry)) || !Number.isSafeInteger(Number(signedSlot))) throw unavailable();
+  const signature = readSolanaSubmission(address);
+  if (!signature) return null;
+  const { value: [status] } = await connection.getSignatureStatuses([signature], { searchTransactionHistory: true });
+  if (status?.confirmationStatus !== "finalized") return { signature, state: "pending" };
 
-  const finalized = await connection.getEpochInfo("finalized");
-  const { context, value: [status] } = await connection.getSignatureStatuses([signature], { searchTransactionHistory: true });
-  let state: SolanaSubmissionState = "pending";
-  if (status?.confirmationStatus === "finalized") {
-    state = status.err ? "failed" : "confirmed";
-  } else if (status === null && context.slot >= finalized.absoluteSlot && (finalized.blockHeight ?? 0) > Number(expiry)
-    // An archive lookup can return null after an internal error. Only trust absence while the node still has these slots.
-    && await connection.getMinimumLedgerSlot() <= Number(signedSlot)) {
-    state = "failed";
-  }
-  if (state !== "pending") {
-    const storage = browserStorage("local");
-    if (!storage) throw unavailable();
-    storage.removeItem(keyFor(address));
-    window.dispatchEvent(new Event(CHANGE));
-  }
-  return { signature, state };
+  const storage = browserStorage("local");
+  if (!storage) throw unavailable();
+  storage.removeItem(keyFor(address));
+  window.dispatchEvent(new Event(CHANGE));
+  return { signature, state: status.err ? "failed" : "confirmed" };
 }

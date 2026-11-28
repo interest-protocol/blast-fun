@@ -112,27 +112,23 @@ async function mount(sdk: BridgeSdk, calls: Calls, wallet: SourceWallet | null =
 
 const newCalls = (): Calls => ({ quotes: [], sends: 0, approves: 0, arrived: 0 });
 
-test("a lost Solana send response stays blocked after reopening until Solana proves it expired", async () => {
+test("a lost Solana send response stays blocked after reopening until Solana confirms a failure", async () => {
   const calls = newCalls();
   const address = "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM";
-  let finalizedHeight = 150;
-  let statusSlot = 179;
-  let minimumSlot = 21;
+  let finalized = false;
   let rpcFails = true;
   const sdk = fakeSdk(calls, [QUOTES.solToSuiUsdc], {
     async send(_quote, _request, _wallet, onSigned) {
       calls.sends += 1;
-      rememberSolanaSubmission(address, { signature: "sol-hash", lastValidBlockHeight: 150, slot: 20 });
+      rememberSolanaSubmission(address, "sol-hash");
       onSigned("sol-hash");
       throw new Error("RPC disconnected after broadcasting");
     },
     checkSolanaSubmission: (source) => settleSolanaSubmission({
-      async getEpochInfo() {
+      async getSignatureStatuses() {
         if (rpcFails) throw new Error("RPC unavailable");
-        return { absoluteSlot: 180, blockHeight: finalizedHeight, epoch: 0, slotIndex: 180, slotsInEpoch: 200 };
+        return { context: { slot: 180 }, value: [finalized ? { confirmationStatus: "finalized", confirmations: null, slot: 170, err: { InstructionError: [0, "Custom"] } } : null] };
       },
-      async getSignatureStatuses() { return { context: { slot: statusSlot }, value: [null] }; },
-      async getMinimumLedgerSlot() { return minimumSlot; },
     }, source),
     status: async () => ({ state: "pending", toAmount: null }),
   });
@@ -163,18 +159,15 @@ test("a lost Solana send response stays blocked after reopening until Solana pro
     await pickSolana();
     await check(/Couldn’t check the Solana transfer/);
     rpcFails = false;
-    await check(/still confirming/);
-    finalizedHeight += 1;
-    await check(/still confirming/);
-    statusSlot = 180;
-    await check(/still confirming/);
-    minimumSlot = 20;
+    await check(/hasn’t confirmed/);
+    assert.ok(form.container.querySelector("a[href='https://explorer.solana.com/tx/sol-hash']"), "the saved signature remains available after reopening");
+    finalized = true;
     await check(/didn’t go through/);
     assert.equal(form.button().textContent, "Bridge");
     assert.equal(form.button().disabled, true, "a new send requires re-entering the amount");
     await form.type("0.1");
     await form.press();
-    assert.equal(calls.sends, 2, "a deliberate new send is allowed after expiry");
+    assert.equal(calls.sends, 2, "a deliberate new send is allowed after finalized failure");
   } finally {
     await form.unmount();
     Reflect.deleteProperty(navigator, "locks");
