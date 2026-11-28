@@ -36,14 +36,17 @@ function join(coin: string, notify: () => void): () => void {
   let entry = entries.get(coin);
   if (!entry) {
     const created: Entry = { readers: 0, rate: NONE, notify: new Set(), subscription: undefined, expiry: null };
+    const par = coin === CREATE_QUOTE_TYPE;
     const prices = ({ prices: observed }: DisplayPriceFrame) => {
       const price = observed.find((each) => each.coin_type === coin);
       if (!price || !(Number(price.usd_price) > 0)) return;
-      if (created.expiry) clearTimeout(created.expiry);
       // The poll's freshness rule: a price older than the portfolio's limit is no rate.
       const left = Math.min(PORTFOLIO_PRICE_MAX_AGE_MS, price.as_of_ms + PORTFOLIO_PRICE_MAX_AGE_MS - Date.now());
-      created.expiry = left > 0 ? setTimeout(() => publish(created, { ...created.rate, usd: null }), left) : null;
-      if (left > 0) publish(created, { ...created.rate, usd: price.usd_price });
+      if (left <= 0) return;
+      // A fresh price ages out unless a newer one comes; USDC keeps its last rate, so it never flips back to par.
+      if (created.expiry) clearTimeout(created.expiry);
+      created.expiry = par ? null : setTimeout(() => publish(created, { ...created.rate, usd: null }), left);
+      publish(created, { ...created.rate, usd: price.usd_price });
     };
     created.subscription = tabMarketStream()?.subscribe({
       pools: [],
@@ -80,7 +83,7 @@ function useStreamedRate(coin: string | null): StreamedRate {
  * its stream) follows the quote coin's `prices` entry on the tab's stream instead: SUI, and USDC from
  * Pyth, so a pool price times the rate moves on each tick. Only Create's quote coins stream, one
  * subscription each per tab; the 60 s read stands in while the stream has no fresh rate. USDC keeps par
- * until its first streamed rate, so a page never flips between dollars and USDC.
+ * until its first streamed rate and then keeps its last one, so a page never flips between the two.
  */
 export function useQuoteUsd(quoteType: string | null, { marketRate = false, live = false } = {}): string | null {
   const type = quoteType ? quotePriceType(quoteType) : null;
