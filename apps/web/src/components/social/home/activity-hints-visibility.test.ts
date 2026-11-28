@@ -32,6 +32,7 @@ function world(initiallyVisible = true, metric: () => void = () => undefined) {
   const delays = new Map<number, number>();
   const cancelled: (() => void)[] = [];
   const looks: FreshnessHint[] = [];
+  let wantsHints = false;
   const clock = {
     now: () => now,
     setTimeout: (run: () => void, ms: number) => {
@@ -51,10 +52,12 @@ function world(initiallyVisible = true, metric: () => void = () => undefined) {
     url: "/api/launchpad/market/stream?activity=true", createSocket: () => { const socket = new Socket(); sockets.push(socket); return socket; },
     ...clock, random: () => 0.5, visible: () => visible,
     onVisibilityChange: (listener) => { visibility.add(listener); return () => visibility.delete(listener); },
+    setDemand: (needed) => { wantsHints = needed; },
     metric,
   });
   return {
     hints, sockets, visibility, timers, delays, cancelled, looks, clock,
+    wantsHints: () => wantsHints,
     subscribe: (name = "happening") => hints.subscribe(name, (hint) => { if (hint) looks.push(hint); }),
     show(value: boolean) { visible = value; for (const listener of visibility) listener(); },
     live() { const socket = sockets.at(-1)!; socket.receive(HELLO); socket.receive({ type: "pong" }); return socket; },
@@ -69,6 +72,7 @@ test("hidden subscriptions own no connection or retry; resume shares one handsha
   assert.equal(w.sockets.length, 0);
   assert.equal(w.visibility.size, 1);
   assert.equal(w.hints.active(), false);
+  assert.equal(w.wantsHints(), true, "hidden surfaces still need hints on return");
   w.show(true);
   w.show(true);
   assert.equal(w.sockets.length, 1);
@@ -90,6 +94,7 @@ test("hidden subscriptions own no connection or retry; resume shares one handsha
   assert.equal(w.timers.size, 0, "visibility suspension preserves repeat suppression");
   first();
   assert.equal(resumed.closed, false);
+  assert.equal(w.wantsHints(), true, "one surface still needs hints");
   second();
   second();
   assert.equal(resumed.closed, true);
@@ -135,6 +140,7 @@ test("refusal survives visibility transitions and the last unsubscribe owns clea
   const socket = w.sockets[0]!;
   socket.receive({ type: "hello", provenance: {} });
   assert.equal(socket.closed, true);
+  assert.equal(w.wantsHints(), false, "a refused client uses polls without retaining a carrier");
   w.show(false);
   w.show(true);
   assert.equal(w.sockets.length, 1);
@@ -146,6 +152,7 @@ test("refusal survives visibility transitions and the last unsubscribe owns clea
   assert.equal(w.timers.size, 0);
   const again = w.subscribe();
   assert.equal(w.sockets.length, 2, "a new subscription may try after refusal, as before");
+  assert.equal(w.wantsHints(), true);
   again();
 });
 
