@@ -9,6 +9,7 @@ import {
   amountAtoms,
   amountText,
   bridgeAction,
+  bridgeBalanceText,
   CHAINS,
   cutDigits,
   DESTINATIONS,
@@ -138,4 +139,11 @@ test("every chain and coin logo is a file the app serves", () => {
 
 test("the analytics band is coarse and marks amounts near the BLINK cap", () => {
   assert.deepEqual([undefined, 2, 20, 120, 299].map(usdBand), ["unknown", "<10", "10-100", "100-250", "250+"]);
+});
+
+test("the balance line cuts to six places, never rounds up, and never shows a held coin as zero", () => {
+  assert.equal(bridgeBalanceText(4_612_654_423_117_055_599n, 18), "4.612654");
+  assert.equal(bridgeBalanceText(25_416_101_600_513_364_934_679n, 18), "25,416.1016");
+  assert.equal(bridgeBalanceText(500_000_000n, 18), "0.0000000005");
+  assert.equal(bridgeBalanceText(0n, 18), "0");
 });

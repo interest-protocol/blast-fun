@@ -39,7 +39,7 @@ import {
   amountAtoms,
   BALANCE_FAILED_TEXT,
   bridgeAction,
-  bridgeAmountField,
+  bridgeBalanceText,
   type BridgeAction,
   CHAINS,
   DESTINATIONS,
@@ -785,7 +785,7 @@ function SendPanel({ id, amount, onAmount, balance, balanceFailed, onRetryBalanc
 }>) {
   const balanceText = balance === undefined
     ? <SkeletonText>Balance 0.0000 {token.symbol}</SkeletonText>
-    : `Balance ${bridgeAmountField(balance, token.decimals)} ${token.symbol}`;
+    : `Balance ${bridgeBalanceText(balance, token.decimals)} ${token.symbol}`;
   return (
     <div className={coinStyles.amt}>
       <div className={coinStyles.amtTop}>
@@ -900,7 +900,8 @@ function QuoteNotes({ facts, sentence, route, refreshing, message, noteId, rateC
     <>
       {facts ? <QuoteSummary facts={facts} refreshing={refreshing} route={rateChanged ? route : null} sentence={sentence} /> : null}
       {message ? <p className={clsx(coinStyles.status, styles.note)} id={noteId} role="alert"><DiagnosticText message={message} /></p> : null}
-      {rateChanged ? <p className={clsx(coinStyles.status, styles.note)} role="status">The quote changed. Review it before continuing.</p> : null}
+      {/* The button's "Bridge at new rate" says it on screen; a visible line would push the button away. */}
+      {rateChanged ? <p className="sr-only" role="status">The quote changed. Review it before continuing.</p> : null}
       {reason && !message ? <p className={clsx(coinStyles.status, styles.note)} id={noteId}>{reason}</p> : null}
       {busyText ? <p aria-hidden="true" className={clsx(coinStyles.status, styles.note)}>{busyText}</p> : null}
     </>

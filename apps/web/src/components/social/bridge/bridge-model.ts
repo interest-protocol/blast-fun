@@ -2,7 +2,7 @@ import { USDC_COIN_TYPE } from "@blast/core/lib/sui/coin-types.ts";
 import { groupedExact } from "@blast/core/web/exact-amount.ts";
 import { NO_VALUE } from "@blast/core/web/format.ts";
 
-import { parseAtoms, sellPresetAtoms, type SellPreset } from "../trade/trade-ticket.ts";
+import { atomsToField, parseAtoms, sellPresetAtoms, type SellPreset } from "../trade/trade-ticket.ts";
 
 import type { BridgeChain } from "./bridge-config.ts";
 
@@ -86,6 +86,12 @@ export function amountAtoms(text: string, token: SourceToken): bigint | null {
 /** The full source precision, including token balances smaller than one millionth. */
 export function bridgeAmountField(atoms: bigint, decimals: number): string {
   return groupedExact({ n: atoms, scale: decimals }, decimals);
+}
+
+/** The balance line: six places, never rounded up. A balance too small for that shows in full. */
+export function bridgeBalanceText(atoms: bigint, decimals: number): string {
+  const short = atomsToField(atoms, decimals);
+  return atoms === 0n || /[1-9]/.test(short) ? short : bridgeAmountField(atoms, decimals);
 }
 
 /** Apply the preset to the balance available after the native fee reserve. */
