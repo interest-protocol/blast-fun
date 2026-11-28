@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { skipToken, useQuery } from "@tanstack/react-query";
 import { useId, useState } from "react";
 import { shortAddress } from "@blast/core/web/format.ts";
 
@@ -15,7 +15,9 @@ import { findEmbeddedSuiWallet } from "#web/components/mission-control/privy-emb
 import { usePrivySessionMounted } from "#web/components/presale/providers/PrivySessionProvider.tsx";
 import { rememberedWalletName } from "#web/components/sign-in/wallet-sign-in-client.ts";
 import { diagnosticMessage, PublicError } from "#web/lib/errors.ts";
+import { queryKeys } from "#web/lib/query/keys.ts";
 import { useAppQueryClient } from "#web/lib/query/provider.tsx";
+import { resolveDefaultSuiName } from "#web/lib/sui-address-input.ts";
 
 import { switchAccountSession, type AccountSession } from "./account-selection";
 import { fetchWalletIdentity } from "./coins/coins-client";
@@ -26,6 +28,7 @@ import { useWalletSession } from "./WalletSession";
 
 const walletCookie = async () => null;
 const SWITCH_FAILED = diagnosticMessage("Could not switch accounts. Try again.", { code: "account_switch_failed" });
+const SUI_NAME_FRESH_MS = 5 * 60_000;
 
 export function AccountSwitchItems({ closeMenu }: Readonly<{ closeMenu: () => void }>) {
   const viewer = useSocialViewer();
@@ -127,6 +130,17 @@ function AccountRow({ session, name, address, pending, onSelect }: Readonly<{
   pending: boolean;
   onSelect: (session: AccountSession) => void;
 }>) {
+  const client = useAppQueryClient();
+  const { data: suiName } = useQuery({
+    queryKey: queryKeys.suiName(address ?? null),
+    queryFn: address ? () => resolveDefaultSuiName(address) : skipToken,
+    staleTime: SUI_NAME_FRESH_MS,
+    gcTime: SUI_NAME_FRESH_MS,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: false,
+  }, client);
+
   return (
     <BlastMenuRadioItem
       className={styles.mitem}
@@ -135,7 +149,15 @@ function AccountRow({ session, name, address, pending, onSelect }: Readonly<{
       onClick={() => onSelect(session)}
       value={session}
     >
-      <span className={styles.mtext}><b><span className="nm">{name}</span></b>{address && <span>{shortAddress(address)}</span>}</span>
+      <span className={styles.mtext}>
+        <b><span className="nm">{suiName ?? name}</span></b>
+        {address && (
+          <span className={styles.accountMenuDetails}>
+            {suiName && <span className="nm">{name} ·</span>}
+            <span>{shortAddress(address)}</span>
+          </span>
+        )}
+      </span>
       <BlastMenuRadioItemIndicator className={styles.accountMenuCheck} aria-hidden="true"><CheckIcon /></BlastMenuRadioItemIndicator>
     </BlastMenuRadioItem>
   );

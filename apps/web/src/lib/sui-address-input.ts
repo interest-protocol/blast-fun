@@ -54,6 +54,18 @@ export async function resolveSuiName(value: string): Promise<string | null> {
   }
 }
 
+/** The default SuiNS name the wallet owner chose to display. */
+export async function resolveDefaultSuiName(address: string): Promise<string | null> {
+  if (!isWholeSuiAddressInput(address)) return null;
+  try {
+    const node = await nameClient();
+    const { data: { name } } = await node.core.defaultNameServiceName({ address, signal: AbortSignal.timeout(5_000) });
+    return name ? suiName(name) : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Safari can leave focus on a text field when a step button is clicked. */
 export function blurAllocationAddress(): void {
   const input = document.activeElement;

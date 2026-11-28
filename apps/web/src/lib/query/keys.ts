@@ -14,6 +14,8 @@ export const queryKeys = {
   /* ---- Public reads (no credentials; CDN s-maxage=10) ---- */
   public: [ROOT, "public"] as const,
 
+  suiName: (address: string | null) => [ROOT, "public", "sui-name", address] as const,
+
   competitions: {
     swap: () => [ROOT, "public", "competitions", "swap"] as const,
     board: (slug: string | null, page: number, period: string) => [ROOT, "public", "competitions", slug, page, period] as const,

@@ -361,6 +361,7 @@
   animation: accountMenuPending var(--t4) step-end !important;
 }
 @keyframes accountMenuPending { from { visibility: hidden; } }
+.accountMenuDetails { display: flex; gap: 0.25rem; white-space: nowrap; }
 .accountMenuCheck { display: flex; flex: none; }
 .accountMenuCheck svg { width: 1rem; height: 1rem; }
 .acctMe .mtext > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
