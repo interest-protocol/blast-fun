@@ -99,6 +99,8 @@ function quoteWithWalletFee(quote: SocialTradeQuote | null, mist: string | null)
 
 /** A sent trade still confirming: the line beside the off button (DS rule 18). */
 const PENDING_LINE = "Waiting for your wallet. Check it before you trade again.";
+/** The line beside the button while a balance it needs is read. */
+const BALANCE_CHECK_LINE = "Checking your balance…";
 const offeredNow = (quote: SocialTradeQuote) => isOffered(quote, Date.now());
 
 const PRICE_CHANGED_LINE = "The price changed before sending. Nothing was sent.";
@@ -198,7 +200,7 @@ function swapReview(seal: Seal | null, quote: SocialTradeQuote | null, cta: Retu
   return warning !== null && warning !== seal.warning ? "Review the payout before confirming." : null;
 }
 
-/** What a side's balance line shows: the coin with its number, if there is one to show. */
+/** What a side's balance line shows: the coin with its number, if there is one to show. Display only; spending reads `useSwapInputBalance`. */
 type ShownBalance = Readonly<{ coin: WalletCoinView; known: boolean }>;
 
 /** The number on screen: the fresh one, else the last one while it is read again. */
@@ -250,7 +252,7 @@ function swapBalanceAction(trading: CoinSheetTrading, active: boolean, balance: 
 }
 
 function swapButtonView(cta: ReturnType<typeof swapCta>, title: string, balancePending: boolean, confirming: boolean, pending: boolean, money: string | null) {
-  if (balancePending) return { action: { ...cta, label: title, enabled: false }, cost: pending ? PENDING_LINE : null };
+  if (balancePending) return { action: { ...cta, label: title, enabled: false }, cost: pending ? PENDING_LINE : BALANCE_CHECK_LINE };
   return { action: confirming ? { ...cta, label: "Confirm swap" } : cta, cost: pending ? PENDING_LINE : cta.reason ?? money };
 }
 
@@ -472,7 +474,7 @@ function useSwapFormControls({
     onField(next);
   };
 
-  const outReading = usesExactBalance && !outLine.known && outRead.status === "loading";
+  const outReading = usesExactBalance && !outLine.known && (trading.sessionPending === true || outRead.status === "loading");
   return { inCoin, outCoin, field, onField: changeField, detail, onDetail, onPick, id, locked, successful, pending, inputRef, scope, panels, summary, rows, rateState, hasQuote: quote?.amount_out != null, cost, warning, review, cta: action, verb, quoteError: shownFailure?.message ?? quoteError, flip, press, waiting, balanceKnown, balancePending, inBalanceShown: balance.line.known, outReading, retryBalance, usesExactBalance };
 }
 
@@ -515,7 +517,7 @@ function SwapPair({ balancePending, inBalanceShown, outReading, payLabel, receiv
         <div className={styles.amt} data-panel="">
           <div className={styles.amtTop}>
             <label htmlFor={`${id}-amount`}>{payLabel}</label>
-            <BalanceLine id={`${id}-balance`} checking={balancePending} pending={balancePending && !inBalanceShown} symbol={inCoin.symbol} text={panels.inBalance} />
+            <BalanceLine id={`${id}-balance`} pending={balancePending && !inBalanceShown} symbol={inCoin.symbol} text={panels.inBalance} />
           </div>
           <div className={styles.amtRow}>
             <AmountFit value={field.typed}>
@@ -646,15 +648,13 @@ function SwapAction({ cta, successful, pending, onPress, sessionPending, waiting
 }
 
 /** A balance line: the figure stays on one line, a no-break space keeps the ticker with it, and a long ticker breaks inside itself (the shared ticker class). */
-function BalanceLine({ id, pending, checking, text, symbol }: Readonly<{ id?: string; pending?: boolean; checking?: boolean; text: string; symbol: string }>) {
+function BalanceLine({ id, pending, text, symbol }: Readonly<{ id?: string; pending?: boolean; text: string; symbol: string }>) {
   if (pending) return <span id={id}>Balance <SkeletonLine label="Checking balance" /></span>;
   const figure = text.endsWith(`\u00a0${symbol}`) ? text.slice(0, -symbol.length - 1) : text;
   return (
     <span id={id}>
       <span className={styles.balFigure}>{figure}</span>
       {figure === text ? null : <>{"\u00a0"}<span className="ticker">{symbol}</span></>}
-      {/* The number stays up while it is read again; the waiting button still says what it waits for. */}
-      {checking ? <span className="sr">, checking balance</span> : null}
     </span>
   );
 }

@@ -138,10 +138,12 @@ for (const coin of [SUI, PIP]) {
 
 test("Swap reads neither balance until it is the screen in use of a signed-in viewer", async (t) => {
   const api = server(t, { balances: {}, prices: {} });
-  const screen = await openSwap(t, [USDC, SUI], routes(() => 4_000_000_000n), { ...READY, signedIn: false });
+  const screen = await openSwap(t, [USDC, SUI], routes(() => 4_000_000_000n), { ...READY, active: false });
+  assert.deepEqual([api.balanceReads, api.priceReads], [[], []], "a screen not in use asks for no balance and no price");
+  await screen.view({ ...READY, signedIn: false });
   await screen.view({ ...READY, sessionPending: true });
-  await screen.view({ ...READY, active: false });
   assert.deepEqual(api.balanceReads, []);
+  for (const panel of screen.panels()) assert.match(panel, /Checking balance/, "both sides wait alike while the session is restored");
 
   await screen.view(READY);
 
@@ -200,7 +202,7 @@ test("after a trade both balances are read again; the last numbers stay up while
   assert.equal(screen.max().disabled, true);
   assert.equal(screen.swap().disabled, true);
   const described = screen.swap().getAttribute("aria-describedby")!.split(" ").map((id) => screen.container.querySelector(`[id="${id}"]`)?.textContent ?? "").join(" ");
-  assert.match(described, /checking/i, "the waiting button still says what it waits for");
+  assert.match(described, /Checking your balance…/, "the line beside the waiting button says what it waits for");
 
   await act(async () => { api.state.held!.splice(0).forEach((release) => release()); });
   api.state.held = null;
@@ -211,6 +213,18 @@ test("after a trade both balances are read again; the last numbers stay up while
   assert.equal(screen.max().disabled, false);
   assert.equal(screen.swap().disabled, false);
   assert.equal(api.balanceReads.length, 4, "two reads on opening, two after the trade");
+});
+
+test("a balance read that fails after a good one shows a dash, never the old number", async (t) => {
+  const api = server(t, { balances: { [USDC.coinType]: "50000000", [SUI.coinType]: "7000000000" }, prices: { [SUI.coinType]: "2" } });
+  const screen = await openSwap(t, [USDC, SUI], routes(() => 4_900_000_000n));
+  await screen.type("10");
+
+  api.state.failing.add(USDC.coinType).add(SUI.coinType);
+  await act(async () => { void invalidateAfter(screen.client, { kind: "trade" }); });
+  await waitFor(() => screen.panels().every((panel) => panel.includes("Balance —")), "both failed reads to show as a dash");
+
+  assert.equal(screen.max().disabled, true);
 });
 
 test("a failed balance read of the coin you receive and an old price both show a dash and leave Swap usable", async (t) => {
