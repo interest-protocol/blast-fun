@@ -32,8 +32,9 @@ test("only the full linked finalized block window can prove expiry without a sen
         assert.equal(params[1].commitment, "finalized");
         const slot = params[0];
         const index = slots.indexOf(slot);
-        if (params[1].transactionDetails === "full") {
+        if (params[1].transactionDetails === "accounts") {
           assert.equal(index, spec.landed, "read the receipt from the matching block only");
+          assert.equal(params[1].maxSupportedTransactionVersion, 1, "a v1 transaction elsewhere in the block must not hide the receipt");
           return { jsonrpc: "2.0", id, result: {
             blockhash: `block-${slot}`,
             transactions: [{ transaction: { signatures: [signature] }, meta: { err: spec.err } }],

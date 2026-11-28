@@ -9,7 +9,8 @@ const BLOCKS_TO_CHECK = BLOCKHASH_VALID_AGE + 1;
 // Mayan's public RPC rejects larger requests. Keep one request in flight.
 const BLOCKS_PER_REQUEST = 5;
 const FINALIZED = { commitment: "finalized" } as const;
-const SIGNATURES = { ...FINALIZED, transactionDetails: "signatures", rewards: false, maxSupportedTransactionVersion: 0 } as const;
+const SIGNATURES = { ...FINALIZED, transactionDetails: "signatures", rewards: false } as const;
+const ACCOUNTS = { ...FINALIZED, transactionDetails: "accounts", rewards: false, maxSupportedTransactionVersion: 1 } as const;
 
 type RpcCall = Readonly<{ method: string; params: readonly unknown[] }>;
 type FinalizedBlock = Readonly<{
@@ -42,7 +43,7 @@ export async function verifySolanaExpiry(expiry: SolanaExpiry, signature: string
 }
 
 async function findFinalizedReceipt(request: typeof fetch, slot: number, blockhash: string, signature: string, signal: AbortSignal): Promise<SolanaSubmissionState> {
-  const [value] = await rpcBatch(request, [{ method: "getBlock", params: [slot, { ...SIGNATURES, transactionDetails: "full", encoding: "json" }] }], signal);
+  const [value] = await rpcBatch(request, [{ method: "getBlock", params: [slot, ACCOUNTS] }], signal);
   const block = value as { blockhash?: unknown; transactions?: Array<{ transaction?: { signatures?: unknown[] }; meta?: object }> } | null;
   if (block?.blockhash !== blockhash || !Array.isArray(block.transactions)) return "pending";
   const meta = block.transactions.find(({ transaction }) => transaction?.signatures?.[0] === signature)?.meta;
