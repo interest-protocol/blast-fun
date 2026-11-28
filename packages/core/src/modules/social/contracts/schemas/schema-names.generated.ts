@@ -94,6 +94,8 @@ export const SOCIAL_SCHEMA_NAMES = [
   "wallet-sign-in-challenge-request",
   "wallet-sign-in-challenge-response",
   "wallet-sign-out-response",
+  "wallet-unlink-request",
+  "wallet-unlink-response",
   "watchlist-ids-response",
   "watchlist-keys-response",
   "watchlist-page",

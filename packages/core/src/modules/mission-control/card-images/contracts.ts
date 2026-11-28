@@ -12,6 +12,9 @@ export type { CardImageFormat };
 
 export const CARD_IMAGE_FORMATS = ["card", "share"] as const satisfies readonly CardImageFormat[];
 
+/** Version the public URL separately from the rendered bytes when caching changes. */
+export const PUBLIC_CARD_IMAGE_URL_VERSION = `${CARD_RENDERER_VERSION}-2`;
+
 /**
  * The URL the app emits for a card's public image. The route reads `format`;
  * `v` makes the CDN and crawlers treat each renderer version as a new image.
@@ -26,7 +29,7 @@ export function publicCardImagePath(
     ...(format === "share" && recruitTotal !== undefined
       ? { recruits: String(recruitTotal) }
       : {}),
-    v: CARD_RENDERER_VERSION,
+    v: PUBLIC_CARD_IMAGE_URL_VERSION,
   })}`;
 }
 

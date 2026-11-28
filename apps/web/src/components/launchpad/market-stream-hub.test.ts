@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { MARKET_STREAM_BUDGET } from "@blast/core/modules/launchpad-contract/market-stream.ts";
-import { marketHintTransport } from "#web/lib/live-stream/market-hints.ts";
-import { HIDDEN_GRACE_MS, LINGER_MS, MarketStreamHub, SET_ANSWER_MS, STABLE_MS, type MarketEventSource, type MarketStreamState, type MarketTrade } from "./market-stream-hub.ts";
+import { ActivityHints } from "#web/components/social/home/activity-hints.ts";
+import { ACTIVITY_ONLY_GRACE_MS, marketHintTransport, setHintDemand } from "#web/lib/live-stream/market-hints.ts";
+import { HIDDEN_GRACE_MS, LINGER_MS, MarketStreamHub, RECONNECT_MIN_MS, SET_ANSWER_MS, STABLE_MS, type MarketEventSource, type MarketStreamState, type MarketTrade } from "./market-stream-hub.ts";
 
 const CURVE = `blast_curve:0x${"11".repeat(32)}`;
 const VENUE = `cetus:0x${"22".repeat(32)}`;
@@ -49,13 +50,17 @@ function setup() {
   const timers: { run: () => void; ms: number; at: number }[] = [];
   let now = 0;
   let visible = true;
-  let onVisibility: (() => void) | null = null;
+  const visibility = new Set<() => void>();
+  const onVisibilityChange = (listener: () => void) => {
+    visibility.add(listener);
+    return () => { visibility.delete(listener); };
+  };
   const schedule = (run: () => void, ms: number) => { const timer = { run, ms, at: now + ms }; timers.push(timer); return () => { const index = timers.indexOf(timer); if (index >= 0) timers.splice(index, 1); }; };
   const hub = new MarketStreamHub({
     createSource: (url) => { const source = new Source(url); sources.push(source); return source; },
     schedule,
     defer: queueMicrotask, random: () => 0, visible: () => visible,
-    onVisibilityChange: (listener) => { onVisibility = listener; return () => { onVisibility = null; }; },
+    onVisibilityChange,
   });
   const fire = (ms: number) => { const timer = timers.find((entry) => entry.ms === ms)!; assert.ok(timer, `a ${ms} ms timer is pending`); timers.splice(timers.indexOf(timer), 1); timer.run(); };
   /** Moves the fake clock on, running each timer that falls due, in order. */
@@ -70,8 +75,11 @@ function setup() {
     }
     now = end;
   };
-  const setVisible = (value: boolean) => { visible = value; onVisibility?.(); };
-  return { hub, sources, timers, fire, advance, setVisible, source: () => sources.at(-1)!, listening: () => onVisibility !== null };
+  const setVisible = (value: boolean) => {
+    visible = value;
+    for (const listener of [...visibility]) listener();
+  };
+  return { hub, sources, timers, fire, advance, setVisible, onVisibilityChange, schedule, visible: () => visible, now: () => now, source: () => sources.at(-1)!, listening: () => visibility.size > 0 };
 }
 
 function watcher(pools: string[] = [CURVE]) {
@@ -641,6 +649,23 @@ function legacy() {
   return { create, opened: () => opened };
 }
 
+function activityClient(s: ReturnType<typeof setup>) {
+  const fallback = legacy();
+  const hints = new ActivityHints({
+    url: "/hints",
+    createSocket: (url) => marketHintTransport(url, fallback.create, (run) => { s.schedule(run, ACTIVITY_ONLY_GRACE_MS); }),
+    now: s.now,
+    setTimeout: s.schedule,
+    clearTimeout: (cancel) => { if (typeof cancel === "function") cancel(); },
+    random: () => 0.99,
+    visible: s.visible,
+    onVisibilityChange: s.onVisibilityChange,
+    setDemand: setHintDemand,
+    metric: () => {},
+  });
+  return { hints, fallback };
+}
+
 test("hint clients wait for the market hello across a pool change and a long hide, without the legacy stream", async () => {
   const s = setup();
   const fallback = legacy();
@@ -669,6 +694,200 @@ test("hint clients wait for the market hello across a pool change and a long hid
   s.source().hello();
   assert.equal(fallback.opened(), 0, "a tab shown again waits for the new hello");
   returning.close();
+});
+
+/** Home: prices only, then left for a page that wants no topics but has a hint client (an open sale page). */
+async function homeToSale(s: ReturnType<typeof setup>) {
+  const { hints, fallback } = activityClient(s);
+  const home = s.hub.subscribe({ pools: [], priceCoins: [SUI], expected: null, listener: watcher([]).listener });
+  s.source().hello();
+  const leave = hints.subscribe("sale", () => {});
+  await settle();
+  home.stop();
+  await settle();
+  s.advance(LINGER_MS);
+  return { fallback, hints, leave };
+}
+
+const topicsOf = ({ pools, price_coins, presale }: SetFrame) => ({ pools, price_coins, presale });
+
+test("with hint clients and nothing wanted, the socket stays and sends one empty set; a coin page then reuses it", async (t) => {
+  const s = setup();
+  const { fallback, hints, leave } = await homeToSale(s);
+  t.after(leave);
+  const arrivals: string[] = [];
+  t.after(hints.subscribeHints(({ cause }) => arrivals.push(cause)));
+  assert.equal(s.source().closed, false, "hint clients still read the socket");
+  assert.deepEqual(s.source().sets().map(topicsOf), [{ pools: [], price_coins: [], presale: null }]);
+  s.source().answer();
+  s.advance(LINGER_MS * 10);
+  assert.equal(s.source().closed, false);
+  assert.equal(s.source().sent.length, 1, "one empty set, nothing more");
+  assert.equal(fallback.opened(), 0, "hint clients never open their own socket");
+  s.source().emit("hint", { type: "pong" });
+  s.source().emit("hint", { type: "activity" });
+  assert.deepEqual(arrivals, ["hint"], "hints keep arriving after the empty set");
+  const coin = watcher();
+  s.hub.subscribe({ pools: coin.pools, expected, listener: coin.listener });
+  await settle();
+  assert.equal(s.sources.length, 1, "the coin page reuses the socket");
+  assert.deepEqual(s.source().sets().map(topicsOf).at(-1), { pools: [CURVE], price_coins: [], presale: null });
+  s.source().answer();
+  s.source().fence(10);
+  assert.equal(coin.states.at(-1), "live");
+  assert.equal(fallback.opened(), 0);
+  leave();
+  assert.equal(s.source().closed, false, "a socket with topics outlives its hint clients");
+  assert.ok(s.timers.every(({ ms }) => ms !== LINGER_MS), "market topics do not start an idle timer");
+});
+
+test("a socket kept for hint clients closes LINGER_MS after the last one leaves", async (t) => {
+  const s = setup();
+  const { fallback, hints, leave } = await homeToSale(s);
+  t.after(leave);
+  s.source().answer();
+  leave();
+  const next = hints.subscribe("another sale", () => {});
+  t.after(next);
+  s.advance(LINGER_MS - 100);
+  next();
+  s.advance(100);
+  assert.equal(s.source().closed, false, "the linger counts from the last client's leave");
+  s.advance(LINGER_MS - 101);
+  assert.equal(s.source().closed, false);
+  s.advance(1);
+  assert.equal(s.source().closed, true);
+  assert.equal(s.sources.length, 1);
+  assert.equal(s.timers.length, 0);
+  assert.equal(s.listening(), false);
+  assert.equal(fallback.opened(), 0);
+});
+
+test("an open sale reconnects with only hints, then stops when the last subscriber leaves while hidden", async (t) => {
+  const s = setup();
+  const { fallback, hints, leave } = await homeToSale(s);
+  t.after(leave);
+  s.source().answer();
+  s.source().emit("error");
+  assert.equal(hints.connected(), false);
+  s.advance(RECONNECT_MIN_MS);
+  assert.equal(s.sources.length, 2);
+  assert.equal(new URL(s.source().url, "https://blast.test").search, "?activity=true");
+  s.source().hello();
+  s.source().emit("hint", { type: "pong" });
+  s.advance(LINGER_MS);
+  await settle();
+  assert.equal(hints.connected(), true);
+  assert.equal(s.source().closed, false);
+  assert.equal(s.source().sent.length, 0, "the new socket already streams no topics");
+  s.setVisible(false);
+  assert.equal(s.source().closed, true, "a hidden tab pauses the socket");
+  leave();
+  s.advance(LINGER_MS);
+  s.setVisible(true);
+  assert.equal(s.sources.length, 2, "a tab without a subscriber has no reason to reconnect");
+  assert.equal(s.listening(), false);
+  assert.equal(s.timers.length, 0);
+  assert.equal(fallback.opened(), 0);
+});
+
+test("a coin page's socket hidden during the linger stays for its hint clients", async (t) => {
+  const s = setup();
+  const { hints, fallback } = activityClient(s);
+  const coin = s.hub.subscribe({ pools: [CURVE], expected, listener: watcher().listener });
+  s.source().hello();
+  s.source().fence(10);
+  t.after(hints.subscribe("sale", () => {}));
+  await settle();
+  coin.stop();
+  await settle();
+  s.setVisible(false);
+  s.advance(LINGER_MS);
+  assert.deepEqual(s.source().sets().map(topicsOf), [{ pools: [], price_coins: [], presale: null }], "the hidden grace still runs: topics drop by set");
+  s.source().answer();
+  s.advance(HIDDEN_GRACE_MS - LINGER_MS);
+  assert.equal(s.source().closed, true);
+  s.setVisible(true);
+  assert.equal(s.sources.length, 2);
+  assert.equal(new URL(s.source().url, "https://blast.test").search, "?activity=true");
+  s.source().hello();
+  s.advance(LINGER_MS);
+  assert.equal(s.source().closed, false);
+  assert.equal(fallback.opened(), 0);
+});
+
+test("after the last hint subscriber leaves, a short tab hide cannot keep an unused pool socket open", async (t) => {
+  const s = setup();
+  const { hints } = activityClient(s);
+  const coin = s.hub.subscribe({ pools: [CURVE], expected, listener: watcher().listener });
+  s.source().hello();
+  const leave = hints.subscribe("coin", () => {});
+  t.after(leave);
+  await settle();
+  coin.stop();
+  await settle();
+  leave();
+
+  s.setVisible(false);
+  s.advance(LINGER_MS);
+  s.setVisible(true);
+
+  assert.equal(s.source().closed, true, "the tab has neither market topics nor hint subscribers");
+  assert.equal(s.sources.length, 1, "showing the tab opens no socket");
+});
+
+for (const hiddenFor of [1_000, LINGER_MS]) {
+  test(`a sale that subscribes late in the linger resumes on the hub after a ${hiddenFor} ms tab hide`, async (t) => {
+    const s = setup();
+    const { hints, fallback } = activityClient(s);
+    const home = s.hub.subscribe({ pools: [], priceCoins: [SUI], expected: null, listener: watcher([]).listener });
+    s.source().hello();
+    home.stop();
+    await settle();
+    t.after(hints.subscribe("sale", () => {}));
+    await settle();
+
+    s.setVisible(false);
+    s.advance(hiddenFor);
+    s.setVisible(true);
+    s.advance(ACTIVITY_ONLY_GRACE_MS);
+
+    assert.equal(fallback.opened(), 0, "the sale waits for the hub");
+    assert.equal(s.sources.length, 2);
+    assert.equal(new URL(s.source().url, "https://blast.test").search, "?activity=true");
+    s.source().hello();
+    s.source().emit("hint", { type: "pong" });
+    assert.equal(hints.connected(), true);
+  });
+}
+
+test("an open sale uses the hub after repeated drops even when its hint retry takes longer than the linger", async (t) => {
+  const s = setup();
+  const { hints, fallback } = activityClient(s);
+  const home = s.hub.subscribe({ pools: [], priceCoins: [SUI], expected: null, listener: watcher([]).listener });
+  s.source().hello();
+  t.after(hints.subscribe("sale", () => {}));
+  await settle();
+  home.stop();
+  await settle();
+  s.advance(LINGER_MS);
+  s.source().answer();
+
+  for (const retry of [990, 1_980, 3_960, 7_920]) {
+    s.source().emit("error");
+    s.advance(retry);
+    s.source().hello();
+    s.source().emit("hint", { type: "pong" });
+  }
+  s.source().emit("error");
+  s.advance(17_000);
+
+  assert.equal(fallback.opened(), 0, "the hub is still responsible for reconnecting");
+  assert.equal(s.sources.length, 6);
+  assert.equal(new URL(s.source().url, "https://blast.test").search, "?activity=true");
+  s.source().hello();
+  s.source().emit("hint", { type: "pong" });
+  assert.equal(hints.connected(), true);
 });
 
 test("a coin observer follows the stream's trades without opening or widening it", async () => {

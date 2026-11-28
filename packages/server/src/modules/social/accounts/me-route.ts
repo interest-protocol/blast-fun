@@ -10,7 +10,7 @@ export interface SocialAccountWalletLister {
 /** Reads the verified caller's account and wallets from one account snapshot. */
 export interface SocialMeAccountReader {
   resolveWithWallets(did: string): Promise<SocialMeAccount | null>;
-  resolveWalletWithWallets(address: string): Promise<SocialMeAccount | null>;
+  resolveWalletWithWallets(address: string, sessionId?: string): Promise<SocialMeAccount | null>;
 }
 
 /**
@@ -29,7 +29,7 @@ export function createSocialMeRoute(dependencies: Readonly<{ kit: SocialRouteKit
           account: context.caller?.kind === "privy"
             ? await accounts.resolveWithWallets(context.caller.did)
             : context.caller?.kind === "wallet"
-              ? await accounts.resolveWalletWithWallets(context.caller.address)
+              ? await accounts.resolveWalletWithWallets(context.caller.address, context.caller.sessionId)
               : null,
         };
         return context.json(body);

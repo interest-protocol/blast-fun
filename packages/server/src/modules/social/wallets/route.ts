@@ -1,4 +1,5 @@
 import { holders, linkProvenWallet } from "./store.ts";
+import { unlinkSlushWallet } from "./unlink.ts";
 import { recordMetric, timed } from "@blast/core/lib/metrics.ts";
 import type { WalletRateSubject } from "@blast/core/lib/web-security/rate-limits.ts";
 import {
@@ -12,8 +13,10 @@ import {
 import {
   SOCIAL_WALLET_CHALLENGE_ROUTE,
   SOCIAL_WALLET_LINK_ROUTE,
+  SOCIAL_WALLET_UNLINK_ROUTE,
   socialWalletChallengeRequestSchema,
   socialWalletLinkRequestSchema,
+  socialWalletUnlinkRequestSchema,
   type SocialWalletChallenge,
   type SocialWalletLinked,
 } from "@blast/core/modules/social/contracts/wallets.ts";
@@ -110,6 +113,21 @@ export function createSocialWalletRoutes(dependencies: SocialWalletRoutesDepende
         return context.json(answer, 201);
       }),
     }),
+    unlink: Object.freeze({
+      DELETE: kit.route(spec(SOCIAL_WALLET_UNLINK_ROUTE), async (context) => {
+        const body = await readSocialJsonWithSchema(context.request, socialWalletUnlinkRequestSchema);
+        if (body.account_id !== context.account!.account_id) {
+          throw new SocialRouteError("wallet_unlink_changed");
+        }
+        const address = addressOf(body.address);
+        const result = await context.transaction(
+          (_social, transaction) =>
+            unlinkSlushWallet(transaction, context.account!.account_id, context.caller!, address, body.confirm_account_deletion),
+          { label: "social.wallet_unlink" },
+        );
+        return context.json(result);
+      }),
+    }),
     link: Object.freeze({
       POST: kit.route(spec(SOCIAL_WALLET_LINK_ROUTE), async (context) => {
         const body = await readSocialJsonWithSchema(context.request, socialWalletLinkRequestSchema);
@@ -132,7 +150,7 @@ export function createSocialWalletRoutes(dependencies: SocialWalletRoutesDepende
           }
           const linked = await context.transaction(
             async (social) => {
-              return linkProvenWallet(social, address, accountId, kind, before.held);
+              return linkProvenWallet(social, address, accountId, kind, context.caller!);
             },
             { label: "social.wallet_link" },
           );

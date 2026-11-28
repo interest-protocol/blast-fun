@@ -57,7 +57,7 @@ import { DEPLOYMENT_NETWORKS } from "@blast/core/web/launchpad-read.ts";
 import { MARKET_STREAM_BUDGET, MARKET_STREAM_PATH } from "@blast/core/modules/launchpad-contract/market-stream.ts";
 import { HELLO_DEADLINE_MS, type MarketEventSource } from "#web/components/launchpad/market-stream-hub.ts";
 import { browserLiveSource } from "#web/lib/live-stream/live-socket-source.ts";
-import { ACTIVITY_ONLY_GRACE_MS, marketHintTransport } from "#web/lib/live-stream/market-hints.ts";
+import { ACTIVITY_ONLY_GRACE_MS, marketHintTransport, setHintDemand } from "#web/lib/live-stream/market-hints.ts";
 import { hintOf, type Hint } from "@blast/core/modules/live/hint-frames.ts";
 
 import { anyFreshness, NEW_POSTS_POLL_MS, pollingFreshness, type FeedFreshnessSource, type FreshnessHint, type FreshnessSignal } from "./feed-freshness";
@@ -102,6 +102,8 @@ export type ActivityHintsDependencies = Readonly<{
   visible: () => boolean;
   /** Installed while subscribed; the browser's visibility owns connection lifetime. */
   onVisibilityChange?: (listener: () => void) => () => void;
+  /** Reports whether surfaces still need hints, including while the transport is suspended or retrying. */
+  setDemand?: (needed: boolean) => void;
   metric: (name: string, fields: MetricFields) => void;
 }>;
 
@@ -213,6 +215,7 @@ export class ActivityHints {
     this.#surfaces.add(surface);
     if (this.#surfaces.size === 1) {
       this.#refused = false;
+      this.#deps.setDemand?.(true);
       this.#catchUp = this.#deps.onVisibilityChange !== undefined && !this.#deps.visible();
       this.#offVisibility = this.#deps.onVisibilityChange?.(() => this.#visibilityChanged()) ?? null;
       this.#connect();
@@ -393,6 +396,7 @@ export class ActivityHints {
   /** The engine or the browser refused: close, and stay on the poll until the surfaces start over. */
   #refuse(reason: "socket" | "hello" | "network" | "subscribe"): void {
     this.#refused = true;
+    this.#deps.setDemand?.(false);
     this.#metric({ event: "unavailable", reason });
     const socket = this.#socket;
     this.#socket = null;
@@ -434,6 +438,7 @@ export class ActivityHints {
 
   /** The last surface left: no socket, no timer, nothing remembered. */
   #shut(): void {
+    this.#deps.setDemand?.(false);
     this.#offVisibility?.();
     this.#offVisibility = null;
     this.#suspend();
@@ -502,6 +507,7 @@ function tabClient(createSocket: ActivityHintsDependencies["createSocket"]): Act
     clearTimeout: (handle) => window.clearTimeout(handle as number),
     random: Math.random,
     spreadMs: HINT_SPREAD_MS,
+    setDemand: setHintDemand,
     visible: () => document.visibilityState !== "hidden",
     onVisibilityChange: (listener) => {
       document.addEventListener("visibilitychange", listener);

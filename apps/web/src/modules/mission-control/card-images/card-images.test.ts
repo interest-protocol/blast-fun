@@ -16,6 +16,7 @@ import { upgradeCardAvatar } from "@blast/server/modules/mission-control/card-im
 import { CARD_RENDERER_VERSION, createApprovedXAvatarSnapshot, createSeasonZeroCardRecord, renderSeasonZeroCardPng, type SeasonZeroCardRecord } from "@blast/server/modules/mission-control/card-renderer/index.ts";
 import { makeSeasonZeroCardFixtures } from "../../../../../../packages/server/test/fixtures/modules/mission-control/card-renderer/fixtures.ts";
 import { decideMissionControlRoute } from "@blast/core/lib/mission-control/route-policy.ts";
+import { PUBLIC_CARD_IMAGE_URL_VERSION } from "@blast/core/modules/mission-control/card-images/contracts.ts";
 import { classifyBlobError, ByteLruCache, canonicalJson, CardImageBusyError, cardImageBody, cardImageIdentity, cardImagePathname, cardImageSettingsFromEnvironment, cardImageStore, CardImageService, FilesystemCardImageStore, PUBLIC_CARD_IMAGE_CACHE_CONTROL, canonicalCardImageRedirect, cardImageQuery, publicCardImagePath, publicCardImageResponse, renderCardImageWithSharp, VercelBlobCardImageStore, warmPublicCardImage, WARM_PUBLIC_CARD_IMAGE_BUDGET_MS, type BlobGet, type BlobPut, type CardImageCatalog, type CardImageFormat, type CardImageKey, type CardImageLocation, type CardImageRenderer, type CardImageStore } from "@blast/server/modules/mission-control/card-images/index.ts";
 
 const [fixture] = await makeSeasonZeroCardFixtures();
@@ -765,6 +766,7 @@ test("the public image route hides unpublished cards and lets the CDN keep publi
   const dependencies = {
     images: service,
     published: new LRUCache<string, string>({ max: 10 }),
+    isPublished: async (cardId: string) => published.has(cardId),
     publishedCard: async (cardId: string) => published.get(cardId) ?? null,
   };
 
@@ -778,7 +780,7 @@ test("the public image route hides unpublished cards and lets the CDN keep publi
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("content-type"), "image/png");
   assert.equal(response.headers.get("cache-control"), PUBLIC_CARD_IMAGE_CACHE_CONTROL);
-  assert.equal(PUBLIC_CARD_IMAGE_CACHE_CONTROL, "public, max-age=86400, s-maxage=31536000, immutable");
+  assert.equal(PUBLIC_CARD_IMAGE_CACHE_CONTROL, "public, max-age=0, s-maxage=60, must-revalidate");
   const body = Buffer.from(await response.arrayBuffer());
   assert.equal(body.toString(), `png:${RECORD.cardId}:share`);
   assert.equal(response.headers.get("content-length"), String(body.byteLength));
@@ -975,15 +977,20 @@ function sourcesOf(images: readonly { source: string }[]): string[] {
   return [...new Set(images.map((image) => image.source))].sort();
 }
 
-test("the public route serves a remembered full card from memory without the database", async (t) => {
+test("the public route checks publication before serving a remembered full card from memory", async (t) => {
   captureMetrics(t);
   const renderer = countingRenderer(0);
   const { catalog, service } = persistedService(renderer.render);
   const publishedCards = new Map([[RECORD.cardId, publishedSnapshot(RECORD)]]);
   const lookups: string[] = [];
+  const publicationChecks: string[] = [];
   const dependencies = {
     images: service,
     published: new LRUCache<string, string>({ max: 10 }),
+    isPublished: async (cardId: string) => {
+      publicationChecks.push(cardId);
+      return publishedCards.has(cardId);
+    },
     publishedCard: async (cardId: string) => {
       lookups.push(cardId);
       return publishedCards.get(cardId) ?? null;
@@ -1001,7 +1008,8 @@ test("the public route serves a remembered full card from memory without the dat
     assert.equal(again.headers.get("cache-control"), PUBLIC_CARD_IMAGE_CACHE_CONTROL);
     assert.equal(Buffer.from(await again.arrayBuffer()).toString(), `png:${RECORD.cardId}:card`);
   }
-  assert.deepEqual([lookups.length, catalog.finds, renderer.calls.length], [1, 1, 1], "no database, store or render");
+  assert.deepEqual(publicationChecks, [RECORD.cardId, RECORD.cardId]);
+  assert.deepEqual([lookups.length, catalog.finds, renderer.calls.length], [1, 1, 1], "no full record, catalog or render");
 
   // Unpublished (or unknown) cards are looked up on every request, never remembered.
   const later = cardRecord("fixture-crew-later");
@@ -1035,6 +1043,7 @@ test("a shed or misconfigured render answers 503 that no cache keeps", async () 
   const busy = await publicCardImageResponse(RECORD.cardId, {
     images: { cached: () => null, image: async () => { throw new CardImageBusyError("queue_full"); } },
     published,
+    isPublished: async () => true,
     publishedCard: async () => publishedSnapshot(RECORD),
   }, "share", 0);
   assert.equal(busy.status, 503);
@@ -1050,6 +1059,7 @@ test("a shed or misconfigured render answers 503 that no cache keeps", async () 
       image: async () => { throw new Error("unreachable"); },
     },
     published,
+    isPublished: async () => true,
     publishedCard: async () => publishedSnapshot(RECORD),
   }, "card");
   assert.equal(misconfigured.status, 503);
@@ -1067,6 +1077,7 @@ test("warming a published card stores its share image and waits out busy renders
   const base = {
     now: () => clock,
     published: new LRUCache<string, string>({ max: 10 }),
+    isPublished: async (cardId: string) => records.has(cardId),
     publishedCard: async (cardId: string) => records.get(cardId) ?? null,
     sleep: async (delayMs: number) => { slept.push(delayMs); clock += delayMs; },
   };
@@ -1106,20 +1117,20 @@ test("warming a published card stores its share image and waits out busy renders
   assert.deepEqual(slept, [], "only busy renders are waited out");
 });
 
-test("the public image URL carries the renderer version and still passes the route policy", () => {
+test("the public image URL carries its cache version and still passes the route policy", () => {
   const path = publicCardImagePath(RECORD.cardId);
   assert.equal(
     path,
-    `/card/${RECORD.cardId}/image?v=${encodeURIComponent(CARD_RENDERER_VERSION)}`,
+    `/card/${RECORD.cardId}/image?v=${encodeURIComponent(PUBLIC_CARD_IMAGE_URL_VERSION)}`,
   );
   const url = new URL(path, "https://www.blast.fun");
-  assert.equal(url.searchParams.get("v"), CARD_RENDERER_VERSION);
+  assert.equal(url.searchParams.get("v"), PUBLIC_CARD_IMAGE_URL_VERSION);
   assert.equal(url.searchParams.get("format"), null);
   const counted = new URL(publicCardImagePath(RECORD.cardId, "share", 5), url);
   assert.equal(counted.searchParams.get("recruits"), "5");
   const fullCard = new URL(publicCardImagePath(RECORD.cardId, "card"), url);
   assert.equal(fullCard.searchParams.get("format"), "card");
-  assert.equal(fullCard.searchParams.get("v"), CARD_RENDERER_VERSION);
+  assert.equal(fullCard.searchParams.get("v"), PUBLIC_CARD_IMAGE_URL_VERSION);
   const uuid = "4cd44a35-f169-4a44-8ed7-255de22102bb";
   const imagePath = new URL(publicCardImagePath(uuid), url).pathname;
   assert.equal(decideMissionControlRoute(imagePath, true), "allow");
@@ -1150,7 +1161,7 @@ test("review M3: only the canonical image URL is served; any other query or an u
     assert.equal(canonicalCardImageRedirect(at(path), id), null, path);
   }
   const share = publicCardImagePath(id, "share", 3);
-  const v = new URLSearchParams({ v: CARD_RENDERER_VERSION }).toString();
+  const v = new URLSearchParams({ v: PUBLIC_CARD_IMAGE_URL_VERSION }).toString();
   for (const [path, location] of [
     [`${share}&z=123`, share],
     [`/card/${id}/image?z=1&recruits=3&${v}`, share],

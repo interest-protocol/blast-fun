@@ -60,6 +60,9 @@ export const TOASTS = {
   logOutFailed: "Sign-out did not finish. You are still signed in. Try again.",
 } as const;
 
+export const LINK_WALLET_BUTTON_ID = "settings-link-wallet";
+export const UNLINK_FAILED = "Couldn’t finish unlinking Slush. Check your wallets and try again.";
+
 /** What a wallet is called in the list: "Blast wallet", "Slush", or an external wallet. */
 export function walletName(kind: SocialWalletKind): string {
   if (kind === "embedded") return "Blast wallet";

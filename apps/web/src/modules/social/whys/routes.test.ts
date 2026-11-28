@@ -15,24 +15,17 @@ import {
 } from "@blast/core/modules/social/contracts/whys.ts";
 import { SocialRouteError } from "@blast/core/modules/social/route-kit/errors.ts";
 import { whyEntryParameter, whyIdParameter } from "@blast/server/modules/social/whys/route.ts";
+import { dynamic, runtime } from "#web/app/api/[...path]/route.ts";
+import { assertApiAllow } from "#web/test/fixtures/api-routes.ts";
 
-/** Social feed T-022: the why routes as Next's file routes publish them, their path parsing and a report's reason. */
-
-const APP = new URL("../../../app/api/social/", import.meta.url);
 const WHY_ID = "3f1c2d4e-5a6b-47c8-9d0e-1f2a3b4c5d6e";
 
-test("T-022: why routes define the expected handlers and run dynamically on Node", async () => {
-  for (const [path, method] of [
-    ["whys/[why_id]/route.ts", "DELETE"],
-    ["whys/[why_id]/reports/route.ts", "POST"],
-    ["items/[entry_id]/why/route.ts", "POST"],
-  ]) {
-    const route = await import(new URL(path, APP).href);
-    const methods = Object.entries(route).filter(([, value]) => typeof value === "function").map(([name]) => name);
-    assert.deepEqual(methods, [method], path);
-    assert.equal(route.runtime, "nodejs");
-    assert.equal(route.dynamic, "force-dynamic");
-  }
+test("T-022: why routes allow only their declared writes and run dynamically on Node", async () => {
+  await assertApiAllow(`/api/social/whys/${WHY_ID}`, "DELETE, OPTIONS");
+  await assertApiAllow(`/api/social/whys/${WHY_ID}/reports`, "OPTIONS, POST");
+  await assertApiAllow("/api/social/items/a%3A12%3A0%3A0%3A0/why", "OPTIONS, POST");
+  assert.equal(runtime, "nodejs");
+  assert.equal(dynamic, "force-dynamic");
 });
 
 test("T-022: the paths are the contract's, and a why id is one canonical lowercase UUID segment", () => {

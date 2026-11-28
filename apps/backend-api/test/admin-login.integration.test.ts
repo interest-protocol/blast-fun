@@ -47,6 +47,7 @@ test(
         presales: operator,
         "bonding-feature": operator,
         "verified-mark": operator,
+        feedback: operator,
         "reward-coins": operator,
         "reward-blacklist": operator,
         "gas-pool-health": operator,

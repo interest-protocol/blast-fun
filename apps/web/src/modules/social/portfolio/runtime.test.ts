@@ -2,14 +2,14 @@ import { testClient } from "../../../../../../packages/core/test/fixtures/lib/we
 import assert from "node:assert/strict";
 import { primaryPool, replicaPool } from "@blast/core/modules/database/pool.ts";
 import { existsSync } from "node:fs";
-import { readdir, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { registerHooks } from "node:module";
-import { fileURLToPath } from "node:url";
 import test, { type TestContext } from "node:test";
 
 import { endProcessPools } from "../../../../../../packages/core/test/fixtures/modules/database/testing.ts";
 import { installRuntimeConfig } from "../../../../../../packages/server/test/fixtures/config/runtime-config.ts";
 import { SOCIAL_PORTFOLIO_PATH, SOCIAL_PORTFOLIO_ROUTE, SOCIAL_PUBLIC_PORTFOLIO_ROUTE } from "@blast/core/modules/social/contracts/portfolio.ts";
+import { apiRoutePaths, assertApiAllow } from "#web/test/fixtures/api-routes.ts";
 
 /** A file of this module, by its `./name`: here in the web app, or in core. */
 const moduleFile = (file: string) => {
@@ -38,21 +38,10 @@ registerHooks({
 
 const PRIMARY = "postgresql://app:app-secret@127.0.0.1:9/never_connected";
 const REPLICA = "postgresql://reader:reader-secret@127.0.0.1:9/never_connected?application_name=replica";
-const API_ROOT = new URL("../../../app/api/", import.meta.url);
 
 function withEnvironment(t: TestContext, values: Record<string, string | undefined>): void {
   installRuntimeConfig(values);
   t.after(endProcessPools);
-}
-
-async function routeFiles(directory: URL, prefix = ""): Promise<string[]> {
-  const found: string[] = [];
-  for (const entry of await readdir(directory, { withFileTypes: true })) {
-    const path = `${prefix}${entry.name}`;
-    if (entry.isDirectory()) found.push(...(await routeFiles(new URL(`${entry.name}/`, directory), `${path}/`)));
-    else if (/^route\.(ts|tsx|js)$/.test(entry.name)) found.push(path);
-  }
-  return found;
 }
 
 test("T-019-AC-2 (AC-165): every portfolio read takes the primary pool, never the replica", async (t) => {
@@ -88,25 +77,18 @@ test("T-019-AC-1 (AC-110, amended by OA-10): portfolio and PnL routes are owner-
   assert.equal(SOCIAL_PORTFOLIO_ROUTE, "GET /api/social/me/portfolio");
   assert.equal(SOCIAL_PORTFOLIO_PATH, "/api/social/me/portfolio");
   assert.equal(SOCIAL_PUBLIC_PORTFOLIO_ROUTE, "GET /api/social/profiles/{callsign}/portfolio");
-  const files = await routeFiles(API_ROOT);
-  assert.ok(files.length > 20);
-  const portfolio: string[] = [];
-  for (const file of files) {
-    if (/portfolio/i.test(file) || /\/pnl\/route\.ts$/.test(file)) portfolio.push(file);
-  }
+  const portfolio = [...apiRoutePaths()].filter((path) => /portfolio/i.test(path) || path.endsWith("/pnl"));
   assert.deepEqual(portfolio.sort(), [
-    "social/me/pnl/route.ts",
-    "social/me/portfolio/coins/route.ts",
-    "social/me/portfolio/history/route.ts",
-    "social/me/portfolio/route.ts",
-    "social/profiles/[callsign]/pnl/route.ts",
-    "social/profiles/[callsign]/portfolio/history/route.ts",
-    "social/profiles/[callsign]/portfolio/route.ts",
+    "/api/social/me/pnl",
+    "/api/social/me/portfolio",
+    "/api/social/me/portfolio/coins",
+    "/api/social/me/portfolio/history",
+    "/api/social/profiles/:callsign/pnl",
+    "/api/social/profiles/:callsign/portfolio",
+    "/api/social/profiles/:callsign/portfolio/history",
   ]);
 
-  const route = await readFile(new URL("social/me/portfolio/route.ts", API_ROOT), "utf8");
-  assert.match(route, /export const GET = backendPrivateRequest/);
-  assert.doesNotMatch(route, /export (async )?function (POST|PUT|PATCH|DELETE)|params|searchParams/);
+  await assertApiAllow("/api/social/me/portfolio", "GET, HEAD, OPTIONS");
   // Query parameters may shape the response, but cannot select its account or wallets.
   const handler = await readFile(new URL(import.meta.resolve("@blast/server/modules/social/portfolio/route.ts")), "utf8");
   const ownHandler = handler.slice(handler.indexOf("export function createSocialPortfolioRoute"));
@@ -116,9 +98,7 @@ test("T-019-AC-1 (AC-110, amended by OA-10): portfolio and PnL routes are owner-
   assert.match(ownHandler, /wallets\.wallets\(account\.account_id\)/);
   // OA-10: the public read is GET only, names an account by callsign alone (never a wallet or an
   // account id), never reads the caller, and refuses unless the owner opted in and is public.
-  const publicRoute = await readFile(new URL("social/profiles/[callsign]/portfolio/route.ts", API_ROOT), "utf8");
-  assert.match(publicRoute, /export const GET = backendPrivateRequest/);
-  assert.doesNotMatch(publicRoute, /export (async )?function (POST|PUT|PATCH|DELETE)/);
+  await assertApiAllow("/api/social/profiles/kai_9/portfolio", "GET, HEAD, OPTIONS");
   const publicHandler = await readFile(new URL(import.meta.resolve("@blast/server/modules/social/portfolio/public-route.ts")), "utf8");
   // OA-30: shared at the edge 10 s, never stale (amending R3-32-AC-7).
   assert.match(publicHandler, /auth: "none", bucket: "social_read_portfolio", cache: "public-fresh"/);
@@ -126,8 +106,6 @@ test("T-019-AC-1 (AC-110, amended by OA-10): portfolio and PnL routes are owner-
   assert.doesNotMatch(publicHandler, /context\.caller|context\.account/);
   // The one query read is the history's range (#534); none can select the account or its wallets.
   assert.equal(publicHandler.replace("portfolioHistoryRange(new URL(context.request.url).searchParams)", "").includes("searchParams"), false);
-  assert.ok(files.every((file) => !/portfolio/i.test(file) || !/\[/.test(file) || file === "social/profiles/[callsign]/portfolio/route.ts" || file === "social/profiles/[callsign]/portfolio/history/route.ts"));
-  assert.equal(fileURLToPath(new URL("social/me/portfolio/route.ts", API_ROOT)).includes("["), false);
 });
 
 test("T-019-AC-2 (AC-111, AC-124): the production route without a token is 401, private and no-store, with no portfolio field", async (t) => {
