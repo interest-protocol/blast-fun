@@ -19,7 +19,8 @@ const NETWORK = "mainnet";
 type Read = Readonly<{ atoms: bigint; asOfMs: number }>;
 
 export type WalletCoinBalance =
-  | Readonly<{ status: "loading" }>
+  /** `lastAtoms`: the number being read again, which a screen may keep up but never spend from. */
+  | Readonly<{ status: "loading"; lastAtoms?: bigint }>
   /** `retry` reads again; null when there is nothing to read (no wallet or session). */
   | Readonly<{ status: "unavailable"; retry: (() => void) | null }>
   | Readonly<{ status: "ready"; atoms: bigint }>;
@@ -103,5 +104,5 @@ export function useWalletCoinBalance(address: string | null | undefined, coinTyp
   if (query.isError) return { status: "unavailable", retry: () => void query.refetch() };
   // While a read of an invalidated or out-of-date entry is on its way, the old number is not a fact either.
   const stale = client.getQueryState(queryKey)?.isInvalidated || (query.isFetching && query.isStale);
-  return query.data && !stale ? { status: "ready", atoms: query.data.atoms } : { status: "loading" };
+  return query.data && !stale ? { status: "ready", atoms: query.data.atoms } : { status: "loading", lastAtoms: query.data?.atoms };
 }

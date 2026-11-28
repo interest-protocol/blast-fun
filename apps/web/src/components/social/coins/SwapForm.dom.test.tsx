@@ -251,12 +251,14 @@ test("the pay balance keeps one slot through session restore, signer resolution 
   const client = createTestQueryClient();
   const originalFetch = globalThis.fetch;
   const address = "0x" + "c".repeat(64);
-  let answer: ((atoms: string) => void) | undefined;
+  // One held balance read for each coin asked: the coin paid and the coin received.
+  const answers = new Map<string, (atoms: string) => void>();
   globalThis.fetch = async (input) => {
     const url = new URL(String(input), "https://blast.test");
     assert.equal(url.pathname, "/api/social/me/wallet");
+    const coin = url.searchParams.get("balance_coin")!;
     return new Promise<Response>((resolve) => {
-      answer = (atoms) => resolve(Response.json({ address, coin_type: url.searchParams.get("balance_coin"), atoms, as_of_ms: Date.now() }));
+      answers.set(coin, (atoms) => resolve(Response.json({ address, coin_type: coin, atoms, as_of_ms: Date.now() })));
     });
   };
   const render = (signedIn: boolean, sessionPending: boolean, walletAddress: string | null, inCoin = FIXTURE_COINS[1]!) =>
@@ -279,14 +281,15 @@ test("the pay balance keeps one slot through session restore, signer resolution 
     assert.ok(first.querySelector('[aria-label="Checking balance"]'));
     await render(true, true, null);
     assert.equal(slot(), first);
-    assert.equal(answer, undefined, "no private read before the signer resolves");
+    assert.equal(answers.size, 0, "no private read before the signer resolves");
     await render(true, false, address);
-    assert.ok(answer);
+    assert.equal(answers.size, 2);
+    assert.equal(host.querySelectorAll('[aria-label="Checking balance"]').length, 2, "each side says it is reading");
     assert.equal(action.textContent, "Swap", "the action stays in place while the private read finishes");
     assert.equal(action.disabled, true);
     assert.equal(slot(), first);
     assert.ok(first.querySelector('[aria-label="Checking balance"]'));
-    await act(async () => { answer!("42000000000"); await settleQueries(client); });
+    await act(async () => { for (const answer of answers.values()) answer("42000000000"); await settleQueries(client); });
     assert.equal(slot(), first);
     assert.match(first.textContent ?? "", /42.*SUI/);
     await render(true, false, address, FIXTURE_COINS[0]!);
