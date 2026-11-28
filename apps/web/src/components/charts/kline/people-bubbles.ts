@@ -16,10 +16,9 @@ export type Person = TraderIdentity & Readonly<{
   bar: number;
   /** Net side, the ring's colour: a wallet that bought at least as much as it sold is a buyer. */
   side: "buy" | "sell";
-  /** The bar's high, low and close (shown unit): the bubble sits clear of what the chart draws, the candle or the line. */
+  /** The bar's high and low (shown unit): the bubble sits clear of the candle. */
   high: number;
   low: number;
-  close: number;
   bought: number | null;
   sold: number | null;
   buys: number;
@@ -93,7 +92,7 @@ export function barPeople(trades: readonly PersonTrade[], bars: readonly Bar[], 
     const bar = bars[person.index]!;
     const side = netSide(person);
     return {
-      ...person.identity, bar: bar.timestamp, side, high: bar.high, low: bar.low, close: bar.close,
+      ...person.identity, bar: bar.timestamp, side, high: bar.high, low: bar.low,
       bought: person.buys ? person.bought : null, sold: person.sells ? person.sold : null, buys: person.buys, sells: person.sells,
       labels: LABEL_ORDER.filter((label) => person.labels.has(label)),
       own: person.identity.address === null ? person.identity.profile.callsign === callsign : own.has(person.identity.address.toLowerCase()),
@@ -129,16 +128,14 @@ const clearance = (size: number) => size * GAP + RING + size / 2;
 /** Px above the highest price the chart keeps free, so one bubble and its gap fit over the top bar. */
 export const bubbleHeadroom = (size: number) => Math.ceil(clearance(size) + size / 2) + 4;
 
-/** What the chart draws under the bubbles: candles (each bar's high to low), or the line through the closes. */
+/** What the chart draws under the bubbles: candles, each bar's high to low. */
 export type DrawnPrice = Readonly<{
   /** Px at the top of the price pane kept clear for the study legends. */
   topInset?: number;
-  /** The bars on screen, in px: candles' high and low, or the line's points (top and bottom both the close). */
+  /** The bars on screen, in px: candles' high and low. */
   spans?: readonly BarSpan[];
   /** Half a drawn candle's width in px, so a wide candle beside a column counts as under it. */
   halfBar?: number;
-  /** The spans are points on one line: the line between them counts too, not only the points. */
-  line?: boolean;
 }>;
 
 /**
@@ -150,8 +147,7 @@ export type DrawnPrice = Readonly<{
  * outgrow a short plot). Each column sits over its own traders. A column shows up to `STACK_LIMIT` people, the
  * viewer's own first and always, then tagged wallets, then the newest, and folds the
  * rest into one "+N". Every column floats one bubble height (`GAP`) over the highest
- * price drawn under it, its own bars' and any of `drawn.spans` within reach (on a line,
- * the line itself), and stacks up from there; a column with no room above goes the
+ * price drawn under it, its own bars' and any of `drawn.spans` within reach, and stacks up from there; a column with no room above goes the
  * same gap under the lowest price instead. Nothing goes above `drawn.topInset` px,
  * where the study legends sit.
  */
@@ -208,7 +204,7 @@ const rightEdge = (stack: readonly Bubble[], size: number) =>
  * whole stack has no room over or under the price, more of it folds into the "+N" until
  * it fits with its gap; the viewer's own bubbles always show.
  */
-function stackColumn(placed: readonly Placed[], height: number, size: number, least: number, { topInset = 0, spans = [], halfBar = 0, line = false }: DrawnPrice): Bubble[] {
+function stackColumn(placed: readonly Placed[], height: number, size: number, least: number, { topInset = 0, spans = [], halfBar = 0 }: DrawnPrice): Bubble[] {
   const ranked = [...placed].sort((a, b) => Number(b.person.own) - Number(a.person.own) || b.person.labels.length - a.person.labels.length || b.person.lastMs - a.person.lastMs);
   const own = ranked.filter((entry) => entry.person.own).length;
   const roomFor = (limit: number) => Math.max(own, ranked.length > limit ? limit - 1 : limit);
@@ -216,7 +212,7 @@ function stackColumn(placed: readonly Placed[], height: number, size: number, le
   const centred = ranked.slice(0, roomFor(STACK_LIMIT));
   const x = Math.max(centred.reduce((sum, entry) => sum + entry.point.x, 0) / centred.length, least);
   // Every price the bubbles could cover: the column's own bars, and whatever is drawn under the bubble or its ring.
-  const under = [...placed.map((entry) => entry.point), ...drawnUnder(spans, x, size / 2 + RING, halfBar, line)];
+  const under = [...placed.map((entry) => entry.point), ...drawnUnder(spans, x, size / 2 + RING, halfBar)];
   const ceiling = Math.min(...under.map((span) => span.top));
   const floor = Math.max(...under.map((span) => span.bottom));
   const step = bubblePitch(size);
@@ -242,24 +238,10 @@ function stackColumn(placed: readonly Placed[], height: number, size: number, le
 
 const clamp = (value: number, low: number, high: number) => Math.min(high, Math.max(low, value));
 
-/**
- * What is drawn within `reach` px either side of `x`. Candles count when their body
- * (`halfBar` px either side of the bar) reaches in. A line counts its points in reach
- * and where it crosses either edge, so a steep segment from a bar just outside still
- * counts: a straight segment is highest and lowest at its ends. `spans` run left to right.
- */
-function drawnUnder(spans: readonly BarSpan[], x: number, reach: number, halfBar: number, line: boolean): BarSpan[] {
-  const body = line ? 0 : halfBar, from = x - reach - body, to = x + reach + body;
-  const inside = spans.filter((span) => span.x >= from && span.x <= to);
-  if (!line) return inside;
-  const crossings = spans.slice(1).flatMap((next, index) => {
-    const last = spans[index]!;
-    return [from, to].filter((edge) => last.x < edge && edge < next.x).map((edge) => {
-      const share = (edge - last.x) / (next.x - last.x);
-      return { x: edge, top: last.top + (next.top - last.top) * share, bottom: last.bottom + (next.bottom - last.bottom) * share };
-    });
-  });
-  return [...inside, ...crossings];
+/** The candles within `reach` px either side of `x`, counting each body (`halfBar` px either side of the bar). */
+function drawnUnder(spans: readonly BarSpan[], x: number, reach: number, halfBar: number): BarSpan[] {
+  const from = x - reach - halfBar, to = x + reach + halfBar;
+  return spans.filter((span) => span.x >= from && span.x <= to);
 }
 
 /** Who a wallet is on the chart: its Blast profile, or an anonymous circle and short address. */

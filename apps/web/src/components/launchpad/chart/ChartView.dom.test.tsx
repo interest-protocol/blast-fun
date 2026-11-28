@@ -177,11 +177,9 @@ test("compact style controls keep one chart and the trade cue above it", async (
     assert.equal(container.querySelector("[data-trade-cue]"), cue, "showing the plot retains the original cue");
     assert.ok(container.querySelector("[data-chart-last-trade]")?.nextElementSibling?.querySelector("[data-kline-plot]"), "the readout sits immediately above the real chart figure");
     assert.equal(container.querySelectorAll("[data-kline-plot]").length, 1);
-    assert.equal(container.querySelector('[aria-label="Chart style"]'), null, "a handful of trades is drawn as a line, so no style picker offers candles");
-    assert.equal(container.querySelector("[data-compact-chart]")?.getAttribute("data-chart-style"), "line");
+    assert.equal(container.querySelector('[aria-label="Chart style"]'), null, "a handful of trades still draws candles, so there is no style picker");
     await render([], buy, poolKey, "2", 10);
     const plot = () => container.querySelector("[data-kline-plot]")!;
-    const button = (name: string) => [...container.querySelectorAll("button")].find(b => b.textContent === name)!;
     const toggle = container.querySelector<HTMLButtonElement>('button[role="switch"]')!;
     const originalPlot = plot();
     assert.equal(toggle.getAttribute("aria-checked"), "true");
@@ -191,12 +189,8 @@ test("compact style controls keep one chart and the trade cue above it", async (
     assert.equal(plot(), originalPlot, "hiding wallet tags keeps the chart");
     await act(async () => toggle.click());
     assert.equal(toggle.getAttribute("aria-checked"), "true");
-    assert.equal(button("Candles & volume").getAttribute("aria-pressed"), "true");
-    assert.equal(button("Candles & volume").nextElementSibling, button("Line chart"));
-    await act(async () => button("Line chart").click());
-    assert.equal(button("Line chart").getAttribute("aria-pressed"), "true");
-    assert.equal(plot(), originalPlot, "switching style keeps the chart and its zoom");
-    assert.equal(container.querySelectorAll('[aria-label="Chart style"]').length, 1, "one style picker");
+    assert.equal(toggle.closest("[data-compact-chart] > :first-child") !== null, true, "Traders sits in the chart's one control row");
+    assert.equal(container.querySelector('[aria-label="Chart style"]'), null, "no style picker");
     assert.equal(container.querySelector('[aria-label="Bluefin pool candles"]'), null);
     assert.equal(container.querySelector('button[aria-label="Source details"]'), null);
     assert.doesNotMatch(container.textContent ?? "", new RegExp(venuePoolKey));
@@ -290,18 +284,6 @@ test("Live is a line chart on desktop and mobile and keeps the newest trade cue"
   const start = 1_800_000_000_000;
   const now = start;
   t.mock.method(Date, "now", () => now);
-  const media = "(max-width: 760px), (pointer: coarse)";
-  const layout = Object.assign(new dom.window.EventTarget(), {
-    matches: false, media, onchange: null, addListener() {}, removeListener() {},
-  });
-  const matchMedia = dom.window.matchMedia.bind(dom.window);
-  t.mock.method(dom.window, "matchMedia", (query: string) => query === media ? layout : matchMedia(query));
-  async function setMobile(matches: boolean) {
-    await act(async () => {
-      layout.matches = matches;
-      layout.dispatchEvent(new dom.window.Event("change"));
-    });
-  }
   const poolKey = "blast_curve:0x1";
   const candle = (bucketStart: number, close: string) => ({
     bucketStart, open: close, high: close, low: close, close, volumeQuote: 20n, volumeMeme: 10n, volumeUsd: null, buys: 1, sells: 0, trades: 1,
@@ -351,10 +333,7 @@ test("Live is a line chart on desktop and mobile and keeps the newest trade cue"
   await render(null);
   assert.ok(container.querySelector("[data-kline-plot]"));
   assert.ok(container.querySelector('button[aria-label="Chart range: Live, last 5 minutes"]'));
-  assert.equal(container.querySelector("[data-compact-chart]")?.getAttribute("data-chart-style"), "line", "Live is a line");
-  await setMobile(true);
-  assert.equal(container.querySelector("[data-compact-chart]")?.getAttribute("data-chart-style"), "line");
-  await setMobile(false);
+  assert.equal(container.querySelector('[aria-label="Chart style"]'), null, "Live draws candles too, on every screen");
 
   await render("Trade updates delayed.");
   // A refused or dropped socket says so in the chart's head, beside the title, not under the plot.

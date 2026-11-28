@@ -1,54 +1,49 @@
 /* Sized by its column, never by the canvas inside it, so a narrower window narrows the chart. */
 .chart { display: grid; grid-template-columns: minmax(0, 1fr); gap: .5rem; min-inline-size: 0; container-type: inline-size; }
 
-.toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: .25rem .5rem;
-  min-block-size: 2.75rem;
-}
-
 /*
- * The plot's height comes from the studies on it (price pane plus each study pane); this is
- * the fallback before the chart measures. The loading block holds toolbar, readout and plot,
- * so the chart arrives without a jump.
+ * `--kline-base` is the plot's height in px, set by the chart (price, volume, time axis); `--kline-grow`
+ * (the coin chart's card, Chart.module.css) is the window's spare height the price pane takes on a
+ * large screen. The loading and empty blocks take the same height, so the chart arrives without a jump.
  */
-.chart { --kline-plot-height: 26rem; --kline-readout-height: 1.5rem; }
+.chart { --kline-plot-height: 26rem; }
 /*
- * `--kline-base` is the studies' height in px, set by the chart; `--kline-grow` (the coin chart's
- * card, Chart.module.css) is the window's spare height the price pane takes on a large screen.
+ * The vertical swipe stays the page's, so a finger on the chart still scrolls; a sideways drag moves the readout.
+ * The library's own container is set the same way when the chart starts.
  */
-.plot { position: relative; inline-size: 100%; block-size: calc(var(--kline-base, var(--kline-plot-height)) + var(--kline-grow, 0rem)); overflow: hidden; }
+.plot { position: relative; inline-size: 100%; block-size: calc(var(--kline-base, var(--kline-plot-height)) + var(--kline-grow, 0rem)); overflow: hidden; touch-action: pan-y; }
 .loading, .sized {
-  /* The default plot, as the chart sizes it in px: price 290 + volume 100 + 1 + axis 25 = 416, which 26rem matches at the default text size (phone 200 + 80 + 1 + 25). */
+  /* The plot, as the chart sizes it in px: price 290 + volume 100 + 1 + axis 25 = 416, which 26rem matches at the default text size (phone 200 + 64 + 1 + 25). */
   --kline-plot-height: 26rem;
-  --kline-readout-height: 1.5rem;
-  block-size: calc(2.75rem + var(--kline-readout-height) + 1rem + var(--kline-plot-height) + var(--kline-grow, 0rem));
+  block-size: calc(var(--kline-plot-height) + var(--kline-grow, 0rem));
 }
 /* A state in the chart's place (empty, error) keeps its height, and grows only for its own content. */
-.sized { block-size: auto; min-block-size: calc(2.75rem + var(--kline-readout-height) + 1rem + var(--kline-plot-height) + var(--kline-grow, 0rem)); }
+.sized { block-size: auto; min-block-size: calc(var(--kline-plot-height) + var(--kline-grow, 0rem)); }
 @media (max-width: 760px), (pointer: coarse) {
-  .chart, .loading, .sized { --kline-plot-height: 306px; }
+  .chart, .loading, .sized { --kline-plot-height: 290px; }
 }
-/* Sized by its column like the chart, so the readout it reserves matches the one that arrives. */
-.loadingFrame { display: block; container-type: inline-size; }
+.loadingFrame { display: block; }
 .loadingFrame > .loading { display: block; }
-@container (max-width: 560px) { .loading, .sized { --kline-readout-height: 2.5rem; } }
-@container (max-width: 340px) { .loading, .sized { --kline-readout-height: 3.75rem; } }
 
 /*
- * The bar under the pointer, else the newest: one row on a wide card, two on a narrow one,
- * always the same height so moving across the chart never moves the page.
+ * The bar under the pointer or finger, on a card over the top of the plot while one is on it:
+ * one row on a wide chart, two on a narrow one. It floats, so it never moves the page, and it
+ * takes no touches, so the finger keeps scrubbing under it.
  */
+.readoutRegion { position: absolute; inset-block-start: .5rem; inset-inline: .5rem; z-index: 4; pointer-events: none; }
 .readout {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0 .75rem;
-  block-size: var(--kline-readout-height);
+  inline-size: fit-content;
+  max-inline-size: 100%;
   margin: 0;
+  padding: .25rem .5rem;
   overflow: hidden;
+  border-radius: var(--r-inner);
+  background: var(--card);
+  box-shadow: var(--sh-pop);
   color: var(--ink-2);
   font-size: .8125rem;
   font-variant-numeric: tabular-nums;
@@ -62,7 +57,7 @@
   border-radius: var(--r-inner);
   background: var(--raised);
   color: var(--muted);
-  font-size: .6875rem;
+  font-size: .75rem;
   font-weight: 600;
   line-height: 1.125rem;
 }
@@ -71,41 +66,18 @@
 .readoutPrices[data-side="down"] .price { color: var(--coin-chart-down); }
 .readoutPrices [data-side="up"] { color: var(--coin-chart-up); }
 .readoutPrices [data-side="down"] { color: var(--coin-chart-down); }
-/* Time and volume share a line on a narrow card; a wide one sets them as one row with the prices between. */
+/* Time and volume share a line on a narrow chart; a wide one sets them as one row with the prices between. */
 .readoutLine { display: contents; }
-.readoutVolume { order: 1; margin-inline-start: auto; }
+.readoutVolume { order: 1; }
 .price sub { font-size: .75em; line-height: 0; }
 
-/* Narrow cards: time and volume on the first line, prices under them; the narrowest wrap the prices once more. */
+/* Narrow charts: time and volume on the first line, prices under them; the narrowest wrap the prices once more. */
 @container (max-width: 560px) {
-  .readout { --kline-readout-height: 2.5rem; gap: 0 .5rem; font-size: .75rem; line-height: 1.25rem; }
+  .readout { gap: 0 .5rem; font-size: .75rem; line-height: 1.25rem; }
   .readoutPrices { order: 3; flex-basis: 100%; flex-wrap: wrap; gap: 0 .5rem; }
-  /*
-   * The first line holds one line: a volume too wide to sit beside the time wraps out of sight whole, never cut,
-   * so the close stays in sight below; "No trades" already says a zero.
-   */
-  .readoutLine { display: flex; flex: 1 1 0; flex-wrap: wrap; align-items: center; gap: 0 .5rem; min-width: 0; block-size: 1.25rem; overflow: hidden; }
+  .readoutLine { display: flex; flex: 1 1 0; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0 .5rem; min-width: 0; }
   .readout[data-no-trades] .readoutVolume { display: none; }
 }
-/* While a drawing is selected on all but wide cards, Remove takes the volume's place so the row never grows. */
-@container (max-width: 900px) {
-  .readout[data-removing] .readoutVolume { display: none; }
-  .readoutRemove { margin-inline-start: auto; }
-}
-@container (max-width: 340px) {
-  .readout { --kline-readout-height: 3.75rem; }
-  .readout[data-removing] [data-tag="latest"] { display: none; }
-  /* Indicators, Draw and Traders keep one row on a 320 px phone. */
-  .toolbar { column-gap: .25rem; }
-}
-
-/* The hint's button is taller than the row; it may spill into the gaps around it rather than be cut. */
-.hintRow { overflow: visible; }
-.hint { overflow: hidden; color: var(--ink-2); text-overflow: ellipsis; }
-.hint strong { color: var(--ink); }
-.hintCancel { margin-inline-start: auto; }
-/* Remove for the selected drawing ends the readout's first line, after the volume. */
-.readoutRemove { order: 2; margin-block: -.25rem; }
 
 /* Back to the newest bar, floating over the plot's newest corner above the time axis. */
 .latest {
@@ -115,43 +87,3 @@
 }
 .latest > * { box-shadow: var(--sh-pop); }
 .latest svg { inline-size: 1rem; block-size: 1rem; }
-
-.walletToggle {
-  display: inline-flex;
-  align-items: center;
-  gap: .375rem;
-  margin-inline-start: auto;
-  min-block-size: 2.75rem;
-  color: var(--ink-2);
-  font-size: .8125rem;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.layer { z-index: 30; }
-
-.menu {
-  display: grid;
-  gap: .125rem;
-  min-inline-size: 12rem;
-  padding: .375rem;
-  border-radius: var(--r-sm);
-  background: var(--card);
-  box-shadow: var(--sh-pop);
-}
-
-.menuItem {
-  display: flex;
-  align-items: center;
-  gap: .5rem;
-  min-block-size: 2.75rem;
-  padding-inline: .5rem;
-  border-radius: var(--r-inner);
-  color: var(--ink);
-  font-size: .875rem;
-  cursor: pointer;
-}
-@media (hover: hover) and (pointer: fine) { .menuItem:hover { background: var(--raised); } }
-
-.menuButton { justify-content: flex-start; inline-size: 100%; }
-.menuRule { margin: .25rem .5rem; border: 0; border-block-start: 1px solid var(--hair); }

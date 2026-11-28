@@ -49,6 +49,7 @@ import { CoinPriceCurrencyProvider, useCoinPriceCurrency } from "#web/components
 import { useLiveListening, useLiveScreen, useReportListening } from "#web/components/launchpad/coin/LiveScreen.tsx";
 import { statsAfterRead, useLiveCoin, type LiveCoinStats } from "#web/components/launchpad/coin/live-coin.ts";
 import { cx } from "./cx";
+import { usePhoneLayout } from "#web/components/blast-ui/use-shell-prefs.ts";
 import { marketPoll } from "./sale-market-poll";
 import { createQuoteOf } from "@blast/core/web/contracts/create.ts";
 import { atomsText, NO_VALUE } from "@blast/core/web/format.ts";
@@ -381,6 +382,7 @@ export function SaleMarket({
   nowMs,
   windows,
   activity,
+  afterChart,
   children,
 }: Readonly<{
   sale: SocialPresaleDetail["presale"];
@@ -389,6 +391,8 @@ export function SaleMarket({
   /** The range switch's windows, as the page names them. */
   windows?: readonly (readonly [PriceWindow, string])[];
   activity?: (holders: ReactNode) => ReactNode;
+  /** Right under the chart (a phone's claim card), before the tiles and Activity. */
+  afterChart?: ReactNode;
   children?: ReactNode;
 }>) {
   const client = useAppQueryClient();
@@ -412,6 +416,9 @@ export function SaleMarket({
     client,
   );
   const liveScreen = useLiveScreen();
+  // A phone reads the last trade under the chart, so the candles sit right under the price.
+  const phone = usePhoneLayout();
+  const lastTrade = <ChartLastTrade placement="headline" playSound />;
   const market = marketQuery.data?.coin_type === sale.sale_token ? marketQuery.data : null;
   const poolKey = market?.pool ? `${market.pool.venue}:${market.pool.id}` : null;
   // The chart's own pool, so the tab's stream does not widen; a pool the stream cannot key is never joined.
@@ -452,14 +459,14 @@ export function SaleMarket({
       activity={activity}
       live={statsAfterRead(live.stats, query.data?.as_of.checkpoint ?? null)}
       listening={listening}
-      chart={(extras) => market?.pool ? (
+      chart={(extras) => <>{market?.pool ? (
         <CoinPriceCurrencyProvider quoteType={market.quote.type} quoteSymbol={market.quote.symbol}>
           <div className={coinStyles.market} data-sale-market="">
-            <ChartCard head={<PresaleMarketPrice market={market} move={extras.move} />}><SalePoolChart sale={sale} market={market} pool={market.pool} /></ChartCard>
+            <ChartCard head={<PresaleMarketPrice market={market} move={extras.move} activity={phone ? null : lastTrade} />} foot={phone ? lastTrade : null}><SalePoolChart sale={sale} market={market} pool={market.pool} /></ChartCard>
           </div>
           {extras.note}
         </CoinPriceCurrencyProvider>
-      ) : <SalePriceChart sale={sale} trade={null} enabled={!marketQuery.isPending} windows={windows} note={extras.note} />}
+      ) : <SalePriceChart sale={sale} trade={null} enabled={!marketQuery.isPending} windows={windows} note={extras.note} />}{afterChart}</>}
     >
       {children}
     </SaleMarketView>
@@ -506,14 +513,14 @@ function usePresalePoolPrice(pool: HomeCoinMarket["pool"]) {
   return pool && confirmedAt != null && confirmedAt > pool.as_of_ms ? price : null;
 }
 
-function PresaleMarketPrice({ market, move }: Readonly<{ market: HomeCoinMarket; move?: PriceMove | null }>) {
+function PresaleMarketPrice({ market, move, activity }: Readonly<{ market: HomeCoinMarket; move?: PriceMove | null; activity: ReactNode }>) {
   const currency = useCoinPriceCurrency();
   const live = usePresalePoolPrice(market.pool);
   const last = useLastPrice(live?.price);
   const prices = poolPrices(market.decimals, market.quote.decimals, currency?.quoteUsd);
   const quoteSymbol = prices.usd ? undefined : market.quote.symbol;
   return <MarketPriceRow showCurrency={currency?.rate != null} priceNamesUnit={live != null}
-    activity={<ChartLastTrade placement="headline" playSound />}
+    activity={activity}
     price={live ? <CoinPriceFigure price={prices.price(live.price)} quoteSymbol={quoteSymbol} tradeId={live.cursor} /> : NO_VALUE}
     reserve={!live && last != null ? <CoinPriceFigure price={prices.price(last)} quoteSymbol={quoteSymbol} tradeId={null} /> : null}
     change={move && last != null && prices.usd ? { value: <>{formatMove(move)} <span>24h</span></>, direction: priceDirection(move.bps) } : null} />;

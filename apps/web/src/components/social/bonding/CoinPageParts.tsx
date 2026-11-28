@@ -150,9 +150,16 @@ export function MarketOverview({
   </section>;
 }
 
-/** The price chart's card; `head` is the price row, so the price and the candles read as one block. */
-export function ChartCard({ head, children }: Readonly<{ head?: ReactNode; children: ReactNode }>) {
-  return <section className={`${styles.card} ${styles.marketChart}`} aria-label="Price chart">{head}{children}</section>;
+/**
+ * The price chart's card; `head` is the price row, so the price and the candles read as one block.
+ * `foot` is a phone's line under the chart (the creator, the coin's address, the last trade), so only
+ * the name, the price and the controls sit above the candles; a wider screen does not show it.
+ */
+export function ChartCard({ head, foot, children }: Readonly<{ head?: ReactNode; foot?: ReactNode; children: ReactNode }>) {
+  return <section className={`${styles.card} ${styles.marketChart}`} aria-label="Price chart">
+    {head}{children}
+    {foot ? <div className={styles.chartFoot} data-chart-foot="">{foot}</div> : null}
+  </section>;
 }
 
 type ActivityTab = "trades" | "holders" | "posts";

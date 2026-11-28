@@ -9,16 +9,14 @@ import { Button, DisclosureButton } from "#web/components/blast-ui/Button.tsx";
 import { DiagnosticCode } from "#web/components/blast-ui/DiagnosticText.tsx";
 import { EmptyState } from "#web/components/blast-ui/EmptyState.tsx";
 import { DexIdentity } from "#web/components/blast-ui/DexIdentity.tsx";
-import { Checkbox } from "#web/components/blast-ui/Checkbox.tsx";
+import { Checkbox, Switch } from "#web/components/blast-ui/Checkbox.tsx";
 import { Segmented } from "#web/components/blast-ui/Segmented.tsx";
-import { ChartCandlesIcon, ChartLineIcon } from "#web/components/blast-ui/Icons.tsx";
 import { Popover, PopoverSurface } from "#web/components/blast-ui/Popover.tsx";
 import { useLaunchWallet, useWalletTrades } from "../activity/wallet-trades";
 import { tradeWalletLabels } from "../activity/wallet-labels";
 import { walletMarkerKey, type WalletChartTrade, type WalletRipple } from "#web/components/charts/wallet-markers.ts";
-import { useMemo, useRef, useState } from "react";
+import { useContext, useMemo, useRef, useState } from "react";
 import { useShellPrefs } from "#web/components/blast-ui/use-shell-prefs.ts";
-import { useMobileChartLayout } from "#web/components/charts/use-mobile-chart-layout.ts";
 import { saveChartPreference, useChartPreference } from "./chart-preferences";
 
 import { candleBucketStart, comparePrices } from "@blast/core/modules/launchpad-contract/venue-history.ts";
@@ -38,7 +36,7 @@ import { chartGeometry, type DrawnSeries } from "./chart-geometry";
 import { CHART_RANGES, LIVE_CHART_CONTROLS, fitControls, rangeIntervals, LIVE_CHART_SPAN_MS, candleGaps, chartLatestTimestamp, chartOpening, chartSources, pageTruncated, type ChartCandlePage, type ChartControls, type ChartRange, type ChartRequest, type ChartState, type CandleGap, type SourceState } from "./chart-model";
 import { useChartClock } from "./use-chart-clock.ts";
 import styles from "./Chart.module.css";
-import { forcesLine, klineBars } from "#web/components/charts/kline/kline-model.ts";
+import { ChartPeopleTrades } from "#web/components/charts/kline/chart-people-trades.ts";
 import klineStyles from "#web/components/charts/kline/KLineCoinChart.module.css";
 import { HIDDEN_AMOUNT, NO_VALUE, venueName } from "@blast/core/lib/format.ts";
 
@@ -318,13 +316,13 @@ export function ChartView(props: Parameters<typeof useChartViewControls>[0] & Re
       ) : null}
 
       {geometry ? (
-        <ChartFigure key={`${controls.range}:${controls.interval}`} presentation={controls.range === "live" ? "line" : undefined} quoteUsd={quoteUsd} drawn={drawn} migrationAt={migration?.timestampMs} venuePoolKey={venuePoolKey} geometry={geometry} latest={latest} latestAvailable={latestAvailable} source={source} controls={controls} />
+        <ChartFigure key={`${controls.range}:${controls.interval}`} quoteUsd={quoteUsd} drawn={drawn} migrationAt={migration?.timestampMs} venuePoolKey={venuePoolKey} geometry={geometry} latest={latest} latestAvailable={latestAvailable} source={source} controls={controls} />
       ) : null}
 
       {geometry && exactDecimal(quoteUsd) ? <p className={styles.note}>USD prices use the current {source.quoteSymbol} rate.</p> : null}
       {missingPriceUnits ? <p className={styles.note}>Price units couldn’t load.</p> : null}
-      {/* The status line keeps its height when empty, so the note coming and going never moves the page. */}
-      <p className={`${styles.note} ${styles.status}`} role="status">{updates}</p>
+      {/* The status region stays, empty and with no height, so a screen reader hears the note when it comes. */}
+      <p className={styles.note} role="status">{updates}</p>
 
       <ChartSourcePages view={view} />
     </div>
@@ -368,11 +366,6 @@ function ChartControlsPanel({ view }: Readonly<{ view: ReturnType<typeof useChar
     </div>
   );
 }
-
-const CHART_STYLES = [
-  ["candles", <><ChartCandlesIcon /><span className={primitives.srOnly}>Candles &amp; volume</span></>],
-  ["line", <><ChartLineIcon /><span className={primitives.srOnly}>Line chart</span></>],
-] as const;
 
 function ChartFilters({ view }: Readonly<{ view: ReturnType<typeof useChartViewControls> }>) {
   const { range, interval } = view.controls;
@@ -441,7 +434,7 @@ function SourceCandles({ name, section, label, source, quoteUsd, request, range,
   );
 }
 
-function ChartFigure({ drawn, migrationAt, venuePoolKey, geometry, latest, latestAvailable, source, controls, compact = false, presentation, quoteUsd, candleTrade }: Readonly<{
+function ChartFigure({ drawn, migrationAt, venuePoolKey, geometry, latest, latestAvailable, source, controls, compact = false, traders = true, quoteUsd, candleTrade }: Readonly<{
   drawn: readonly DrawnSeries[];
   migrationAt?: number;
   venuePoolKey: string | null;
@@ -451,7 +444,8 @@ function ChartFigure({ drawn, migrationAt, venuePoolKey, geometry, latest, lates
   source: ChartViewSource;
   controls: ChartControls;
   compact?: boolean;
-  presentation?: "line" | "candles";
+  /** The compact chart's Traders switch: bubbles on the bars. */
+  traders?: boolean;
   candleTrade?: ReturnType<typeof useCandleTrade>;
   quoteUsd?: string | null;
 }>) {
@@ -459,10 +453,9 @@ function ChartFigure({ drawn, migrationAt, venuePoolKey, geometry, latest, lates
   const activity = useWalletTrades();
   const liveTrade = useCandleTrade();
   const walletTrades = useMemo(() => chartWalletTrades(activity, deployer, source.curvePoolKey), [activity, deployer, source.curvePoolKey]);
-  const line = presentation === "line";
   const venue = venuePoolKey?.split(":")[0];
   const graduation = venue ? `Graduated to ${venueName(venue)}` : "Graduated";
-  const label = figureLabel(source, controls, geometry, { line, compact, quoteUsd, graduation, migrationAt });
+  const label = figureLabel(source, controls, geometry, { compact, quoteUsd, graduation, migrationAt });
   return (
     <figure className={styles.figure}>
       {compact ? null : <p className={styles.axis} aria-hidden="true">
@@ -470,8 +463,8 @@ function ChartFigure({ drawn, migrationAt, venuePoolKey, geometry, latest, lates
       </p>}
       <div className={compact ? styles.compactCanvas : styles.canvas}>
         {compact
-          ? <KLineCoinChart sources={drawn} interval={controls.interval} memeDecimals={source.memeDecimals} quoteDecimals={source.quoteDecimals} quoteUsd={quoteUsd ?? null} quoteSymbol={source.quoteSymbol} latestAvailable={latestAvailable} label={label} style={line ? "line" : "candles"} trade={candleTrade} migrationAt={migrationAt} />
-          : <PoolCandleChart latestAvailable={latestAvailable} walletTrades={walletTrades} ripple={walletRipple(walletTrades, liveTrade, controls.interval)} trade={candleTrade} label={label} compact={compact} rollingWindow={controls.range === "live"} presentation={presentation} memeDecimals={source.memeDecimals} quoteDecimals={source.quoteDecimals} quoteUsd={quoteUsd} sources={drawn} migrationAt={migrationAt} migrationLabel={venue ? <>Graduated to <DexIdentity venue={venue} /></> : graduation} quoteSymbol={source.quoteSymbol} from={geometry.start} to={geometry.end} />}
+          ? <KLineCoinChart sources={drawn} interval={controls.interval} memeDecimals={source.memeDecimals} quoteDecimals={source.quoteDecimals} quoteUsd={quoteUsd ?? null} quoteSymbol={source.quoteSymbol} latestAvailable={latestAvailable} label={label} traders={traders} trade={candleTrade} migrationAt={migrationAt} />
+          : <PoolCandleChart latestAvailable={latestAvailable} walletTrades={walletTrades} ripple={walletRipple(walletTrades, liveTrade, controls.interval)} trade={candleTrade} label={label} compact={compact} rollingWindow={controls.range === "live"} memeDecimals={source.memeDecimals} quoteDecimals={source.quoteDecimals} quoteUsd={quoteUsd} sources={drawn} migrationAt={migrationAt} migrationLabel={venue ? <>Graduated to <DexIdentity venue={venue} /></> : graduation} quoteSymbol={source.quoteSymbol} from={geometry.start} to={geometry.end} />}
       </div>
     </figure>
   );
@@ -497,9 +490,9 @@ function chartWalletTrades(activity: ReturnType<typeof useWalletTrades>, deploye
 }
 
 /** The figure's accessible name: what is plotted, over which range, and the graduation when it is in view. */
-function figureLabel(source: ChartViewSource, controls: ChartControls, geometry: NonNullable<ReturnType<typeof chartGeometry>>, { line, compact, quoteUsd, graduation, migrationAt }: Readonly<{ line: boolean; compact: boolean; quoteUsd?: string | null; graduation: string; migrationAt?: number }>): string {
+function figureLabel(source: ChartViewSource, controls: ChartControls, geometry: NonNullable<ReturnType<typeof chartGeometry>>, { compact, quoteUsd, graduation, migrationAt }: Readonly<{ compact: boolean; quoteUsd?: string | null; graduation: string; migrationAt?: number }>): string {
   const unit = exactDecimal(quoteUsd) ? "USD" : source.quoteSymbol;
-  const metric = line || !compact ? `price in ${unit}` : `price in ${unit} and volume in ${source.quoteSymbol}`;
+  const metric = !compact ? `price in ${unit}` : `price in ${unit} and volume in ${source.quoteSymbol}`;
   const markerVisible = migrationAt !== undefined && migrationAt >= geometry.start && migrationAt <= geometry.end;
   const event = markerVisible ? ` ${graduation} on ${clock(migrationAt)}.` : "";
   return `${source.symbol} ${metric}. ${RANGE_WORDS[controls.range]}, ${controls.interval} intervals.${event}`;
@@ -541,52 +534,44 @@ function ChartLegend({ view, inFilters = false }: Readonly<{ view: ReturnType<ty
 }
 
 type ChartViewControls = ReturnType<typeof useChartViewControls>;
-type ChartStyle = "line" | "candles";
-
-function useChartStyle(fallback: ChartStyle) {
-  const saved = useChartPreference("style");
-  const [selected, setStyle] = useState<ChartStyle | null>(null);
-  const preferred = saved === "line" || saved === "candles" ? saved : fallback;
-  return [selected ?? preferred, (next: ChartStyle) => {
-    saveChartPreference("style", next);
-    setStyle(next);
+/** The Traders switch: each trader's bubble on their bar, saved for the next chart. */
+function useTradersShown() {
+  const saved = useChartPreference("wallet-tags");
+  const [chosen, setChosen] = useState<boolean>();
+  return [chosen ?? saved !== "hidden", (shown: boolean) => {
+    setChosen(shown);
+    saveChartPreference("wallet-tags", shown ? "shown" : "hidden");
   }] as const;
 }
 
 /**
- * The style the compact chart draws, and why candles are off when they are: Live and a
- * handful of trades always draw a line. The picker stays in place on every screen; a
- * phone starts on the line until the viewer picks candles.
+ * The coin page's chart: one row of controls (intervals, range, Traders) over the plot. A delayed
+ * source's notice floats over the plot, so it never moves the page.
  */
-function useCompactStyle(view: ChartViewControls) {
-  const mobile = useMobileChartLayout();
-  const [preferredStyle, setStyle] = useChartStyle(mobile ? "line" : "candles");
-  const { source, quoteUsd, geometry, drawn } = view;
-  const live = view.controls.range === "live";
-  const fewTrades = drawn.length > 0 && forcesLine(klineBars(drawn, source.memeDecimals, source.quoteDecimals, quoteUsd ?? null));
-  const lineOnly = live ? "Live draws a line" : fewTrades ? "Candles need 10 or more trades in range" : null;
-  return { style: lineOnly ? "line" as const : preferredStyle, choosable: Boolean(geometry), lineOnly, setStyle };
-}
-
 function CompactChart({ view }: Readonly<{ view: ChartViewControls }>) {
-  const { style, choosable, lineOnly, setStyle } = useCompactStyle(view);
+  const [traders, setTraders] = useTradersShown();
+  const allVenues = useContext(ChartPeopleTrades) !== null;
   const { source, quoteUsd, geometry } = view;
   const unit = geometry && (exactDecimal(quoteUsd) ? "USD" : source.quoteSymbol);
-  return <div className={styles.chart} data-compact-chart="" data-chart-style={style}>
+  return <div className={styles.chart} data-compact-chart="">
     <div className={styles.compactHead}>
       <h2>Price{unit ? <span> · {unit}</span> : null}</h2>
       <StreamNotice view={view} />
       <div className={styles.compactTools}>
-        {choosable && <span className={styles.stylePicker} title={lineOnly ?? undefined}>
-          <Segmented label={lineOnly ? `Chart style. ${lineOnly}.` : "Chart style"} size="touch" variant="outline" options={CHART_STYLES} value={style} onChange={setStyle} optionDisabled={(key) => key === "candles" && lineOnly !== null} />
-        </span>}
         {view.controls.range !== "live" && <IntervalButtons view={view} />}
         <ChartFilters view={view} />
+        {/* Held while the bars load, so the row never shifts when they arrive. */}
+        {(geometry || loadingBars(view)) && <label className={styles.tradersToggle}>
+          {allVenues ? "Traders (all venues)" : "Traders"}
+          <Switch checked={traders} onCheckedChange={setTraders} />
+        </label>}
       </div>
     </div>
     <ChartLastTrade />
-    <CompactChartBody view={view} style={style} />
-    <CompactStatus view={view} />
+    <div className={styles.plotFrame}>
+      <CompactChartBody view={view} traders={traders} />
+      <CompactStatus view={view} />
+    </div>
   </div>;
 }
 
@@ -611,19 +596,25 @@ function StreamNotice({ view }: Readonly<{ view: ChartViewControls }>) {
   return <p className={`${styles.note} ${styles.headNotice}`} role="status" data-stream-notice="">{streamNotice(view)}</p>;
 }
 
-/** One slot, as tall as its Try again button, holds a source's delayed notice (and on a narrow chart the stream's), so it never moves the page. */
+/**
+ * A source's delayed notice with its Try again (and on a narrow chart the stream's), on a card
+ * over the plot's foot. The status region stays while the card comes and goes.
+ */
 function CompactStatus({ view }: Readonly<{ view: ChartViewControls }>) {
-  return <div className={`${styles.note} ${styles.status} ${styles.alertSlot}`} role="status">
-    {(view.geometry ? compactSourceAlert(view) : null) ?? <span className={styles.slotNotice}>{streamNotice(view)}</span>}
+  const alert = view.geometry ? compactSourceAlert(view) : null;
+  const notice = streamNotice(view);
+  return <div className={styles.alertSlot} role="status">
+    {alert ? <p className={`${styles.note} ${styles.alertCard}`}>{alert}</p>
+      : notice ? <p className={`${styles.note} ${styles.alertCard} ${styles.slotNotice}`}>{notice}</p> : null}
   </div>;
 }
 
-function CompactChartBody({ view, style }: Readonly<{ view: ChartViewControls; style: ChartStyle }>) {
+function CompactChartBody({ view, traders }: Readonly<{ view: ChartViewControls; traders: boolean }>) {
   const { source, quoteUsd, controls, migration, venuePoolKey, drawn, geometry, latest, latestAvailable } = view;
   const candleTrade = useCandleTrade();
   if (!geometry) return <CompactEmptyChart view={view} />;
   return <>
-    <ChartFigure compact candleTrade={candleTrade} presentation={style} quoteUsd={quoteUsd} drawn={drawn} migrationAt={migration?.timestampMs} venuePoolKey={venuePoolKey} geometry={geometry} latest={latest} latestAvailable={latestAvailable} source={source} controls={controls} />
+    <ChartFigure compact candleTrade={candleTrade} traders={traders} quoteUsd={quoteUsd} drawn={drawn} migrationAt={migration?.timestampMs} venuePoolKey={venuePoolKey} geometry={geometry} latest={latest} latestAvailable={latestAvailable} source={source} controls={controls} />
     <CompactSourceNotices view={view} />
   </>;
 }
@@ -636,7 +627,7 @@ function CompactEmptyChart({ view }: Readonly<{ view: ReturnType<typeof useChart
   if (opening) return <EmptyState className={state} title={`Opening price ${amountsHidden ? HIDDEN_AMOUNT : tokenPrice(opening, view.source, view.quoteUsd)}`}>The chart starts with the first trade.</EmptyState>;
   if (view.missingPriceUnits) return <EmptyState className={state} role="alert" title="Price units couldn’t load.">Reload the page to try again.</EmptyState>;
   if (!visible.length) return <EmptyState className={state} title="No chart series selected.">Open chart filters to show a series.</EmptyState>;
-  if (visible.some(({ section }) => section?.state === "loading")) return (
+  if (loadingBars(view)) return (
     <SkeletonRegion label="Loading price history">
       <SkeletonBox className={`${klineStyles.loading} ${styles.chartSkeleton}`} />
     </SkeletonRegion>
@@ -657,6 +648,8 @@ function CompactEmptyChart({ view }: Readonly<{ view: ReturnType<typeof useChart
     ? <EmptyState className={state} title="No price history yet" />
     : <EmptyState className={state} title="No trades in this range">Choose a wider range to see more trades.</EmptyState>;
 }
+
+const loadingBars = (view: ChartViewControls) => view.sources.some(({ name, section }) => view.shown(name) && section?.state === "loading");
 
 function compactOpeningPrice({ migration, hasPriceUnits, source, controls, shown, sources }: ReturnType<typeof useChartViewControls>) {
   if (migration || !hasPriceUnits || controls.range !== "all" || !shown("curve") || sources[0]?.section?.state !== "empty") return null;
@@ -685,10 +678,10 @@ function compactSourceAlert(view: ReturnType<typeof useChartViewControls>) {
 const noTrades = (page: ChartCandlePage) => page.candles.every((candle) => candle.volumeQuote === 0n);
 
 function CompactSourceNotices({ view }: Readonly<{ view: ReturnType<typeof useChartViewControls> }>) {
-  // A quiet Live window draws the last price carried in from before it: say so, so a flat line never reads as trades.
+  // A quiet Live window draws the last price carried in from before it: say so, so flat bars never read as trades.
   // A delayed source cannot say there were no trades, so its own alert speaks instead.
   const quiet = view.controls.range === "live" && !view.sources.some(({ section }) => isBehind(section)) && view.drawn.every(({ page }) => noTrades(page));
-  if (quiet) return <p className={styles.note}>No trades in the last 5 min. The line holds the last traded price.</p>;
+  if (quiet) return <p className={styles.note}>No trades in the last 5 min. The bars hold the last traded price.</p>;
   return <>{view.sources.map(({ name, section }) => {
     if (!hasData(section)) return null;
     const note = limitedNote(section.data, view.request, view.controls.range);
