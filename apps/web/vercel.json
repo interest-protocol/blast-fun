@@ -20,12 +20,6 @@
       "schedule": "17 * * * *"
     }
   ],
-  "rewrites": [
-    {
-      "source": "/api/og",
-      "destination": "/social-card.png"
-    }
-  ],
   "headers": [
     {
       "source": "/api/og",

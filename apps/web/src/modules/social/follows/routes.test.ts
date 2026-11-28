@@ -1,8 +1,5 @@
 import assert from "node:assert/strict";
-import { readdirSync } from "node:fs";
-import { join, relative } from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 
 import { SOCIAL_CALLSIGN_PATTERN } from "@blast/core/modules/social/contracts/accounts.ts";
 import {
@@ -13,42 +10,23 @@ import { createSocialValidator } from "@blast/core/modules/social/contracts/vali
 import { SocialRouteError } from "@blast/core/modules/social/route-kit/errors.ts";
 import { followPathParameter } from "@blast/server/modules/social/follows/route.ts";
 import { SUI_OBJECT_ID_PATTERN } from "@blast/core/lib/sui/ids.ts";
-
-/** Social-feed T-009-AC-2 (AC-034): the follow routes, as Next's file routes publish them. */
-
-const SOCIAL_API = fileURLToPath(new URL("../../../app/api/social/", import.meta.url));
-
-/** Every `route.ts` under `src/app/api/social`, as its path segments. */
-function socialRoutes(directory = SOCIAL_API): string[][] {
-  const routes: string[][] = [];
-  for (const entry of readdirSync(directory, { withFileTypes: true })) {
-    const path = join(directory, entry.name);
-    if (entry.isDirectory()) routes.push(...socialRoutes(path));
-    else if (entry.name === "route.ts") routes.push(relative(SOCIAL_API, directory).split("/"));
-  }
-  return routes;
-}
+import { apiRoutePaths, assertApiAllow } from "#web/test/fixtures/api-routes.ts";
 
 test("T-009-AC-2 (AC-034): the follow routes take a callsign or a presale id, never an address", async () => {
-  const routes = socialRoutes();
-  const follows = routes.filter((segments) => segments[0] === "follows").map((segments) => segments.join("/")).sort();
-  assert.deepEqual(follows, ["follows/account/[callsign]", "follows/presale/[presale_id]"]);
+  const socialPrefix = "/api/social/";
+  const routes = [...apiRoutePaths()].filter((path) => path.startsWith(socialPrefix)).map((path) => path.slice(socialPrefix.length));
+  const follows = routes.filter((path) => path === "follows" || path.startsWith("follows/")).sort();
+  assert.deepEqual(follows, ["follows/account/:callsign", "follows/presale/:presale_id"]);
   // No social route at all has an address-like path parameter or segment. The exceptions are
   // T-017's static `me/wallets` (linking the caller's own wallet; the address travels in the body)
   // and UI-14's static `me/wallet` (the caller's own Blast wallet; it names no address), and the
   // static `me/following/wallets` (the named wallets of the caller's follows; it takes no address).
-  for (const segments of routes) {
-    const path = segments.join("/");
+  for (const path of routes) {
     if (path === "me/wallets" || path === "me/wallets/challenge" || path === "me/wallet" || path === "me/following/wallets") continue;
-    for (const segment of segments) {
-      assert.doesNotMatch(segment, /address|wallet/i, path);
-    }
+    assert.doesNotMatch(path, /address|wallet/i, path);
   }
-  for (const route of follows) {
-    const handlers = await import(join(SOCIAL_API, route, "route.ts"));
-    const methods = Object.entries(handlers).filter(([, value]) => typeof value === "function").map(([name]) => name);
-    assert.deepEqual(methods, ["DELETE", "PUT"], route);
-  }
+  await assertApiAllow("/api/social/follows/account/kai_9", "DELETE, OPTIONS, PUT");
+  await assertApiAllow(`/api/social/follows/presale/0x${"ab".repeat(32)}`, "DELETE, OPTIONS, PUT");
 });
 
 test("T-009-AC-2: an address is never a callsign; path parameters are one decoded, well-formed segment", () => {
