@@ -34,8 +34,17 @@
 .controls:empty { display: none; }
 .arrows { display: flex; align-items: center; gap: 0.25rem; }
 .arrows[hidden] { display: none; }
-/* Touch screens swipe the track (a touch stops auto-play); the arrow keys still move it. */
-@media (hover: none) and (pointer: coarse) { .arrows { display: none; } }
+/* Touch screens swipe the track (a touch stops auto-play); the arrow keys still move it.
+   With the buttons gone, the slide bars ride inside the card's bottom edge instead of taking a row under it. */
+@media (hover: none) and (pointer: coarse) {
+  .arrows { display: none; }
+  .carousel { position: relative; }
+  .carousel > .controls { position: absolute; inset-inline: 0.75rem; bottom: 0.25rem; margin: 0; pointer-events: none; }
+  .carousel > .controls .segments { flex: 1 1 0; justify-content: center; gap: 0.25rem; height: auto; padding-inline: 0; }
+  /* On the card every bar is muted grey (over 3:1 on the card in both themes); the current one is twice as wide and fills in ink. */
+  .carousel > .controls .segment { flex: 0 1 1rem; max-width: 1rem; height: 0.1875rem; background: var(--muted); }
+  .carousel > .controls .segment[data-current] { flex-basis: 2rem; max-width: 2rem; }
+}
 .arrows button svg { width: 1rem; height: 1rem; }
 .previous svg { transform: rotate(-90deg); }
 .next svg { transform: rotate(90deg); }

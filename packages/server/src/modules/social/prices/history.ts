@@ -1,3 +1,4 @@
+import { chainPriceOf } from "@blast/core/modules/social/prices/keyed.ts";
 import type { ReadableDatabase } from "@blast/core/modules/database/transaction.ts";
 import {
   PRICE_MAX_POINTS,
@@ -56,7 +57,7 @@ function priceFiguresSql(native: boolean): string {
     open_24h.bucket_ms || ' ' || trim_scale(open_24h.usd_price) AS at_24h,
     (SELECT bucket_ms || ' ' || trim_scale(usd_price) FROM (${recentPriceAtSql("k.coin_type", "$3::bigint")}) open) AS at_day_open
   FROM unnest($1::text[]) WITH ORDINALITY AS k(coin_type, ord)
-  LEFT JOIN chain_read_v1.prices p ON p.coin_type = k.coin_type
+  LEFT JOIN ${chainPriceOf("k.coin_type")} p ON TRUE
   LEFT JOIN LATERAL (${priceAtCutoff("k.coin_type", "$2::bigint")}) open_24h ON TRUE
   ORDER BY k.ord`;
 }

@@ -4,6 +4,7 @@ import Link, { useLinkStatus } from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition, type ComponentProps, type ReactNode } from "react";
 
+/** With a label, marks the text it wraps; without one, marks its link for the shared pressed style in `globals.css`. */
 export function NavPending({ label, children }: Readonly<{ label?: string; children?: ReactNode }> = {}) {
   const { pending } = useLinkStatus();
   if (label) return (
@@ -12,7 +13,7 @@ export function NavPending({ label, children }: Readonly<{ label?: string; child
       <span className="sr-only" aria-atomic="true" aria-live="polite">{pending ? label : ""}</span>
     </>
   );
-  return pending ? <i data-pending="" hidden /> : null;
+  return pending ? <i data-pending="link" hidden /> : null;
 }
 
 /** Cached pages can still need rendering time; acknowledge their transition too. */

@@ -335,7 +335,10 @@ test("a signed-in viewer keeps the hero's followed backers when the live list la
 test("a touch screen swipes the carousel with no buttons; the arrow keys still move it", async (t) => {
   const { readFileSync } = await import("#web/test/css-design-px.ts");
   const css = readFileSync(new URL("./FeaturedPresales.module.css", import.meta.url), "utf8");
-  assert.match(css, /@media \(hover: none\) and \(pointer: coarse\) \{ \.arrows \{ display: none; \} \}/);
+  const touch = /@media \(hover: none\) and \(pointer: coarse\) \{([^}]*\}[^}]*?)*?\n\}/.exec(css)?.[0] ?? "";
+  assert.match(touch, /\.arrows \{ display: none; \}/);
+  // The slide bars sit on the card's bottom edge, so the carousel takes no row under the card.
+  assert.match(touch, /\.carousel > \.controls \{ position: absolute;/);
   const container = document.createElement("div"); document.body.append(container);
   const root = createRoot(container);
   t.after(async () => { await act(async () => root.unmount()); container.remove(); });

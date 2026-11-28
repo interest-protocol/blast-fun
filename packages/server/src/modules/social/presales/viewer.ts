@@ -1,4 +1,4 @@
-import { DISPLAY_PRICES } from "@blast/core/modules/social/prices/test-sui.ts";
+import { displayPriceOf } from "@blast/core/modules/social/prices/test-sui.ts";
 import type { ReadableDatabase } from "@blast/core/modules/database/transaction.ts";
 import {
   PRESALE_VIEWER_MAX_IDS,
@@ -85,7 +85,7 @@ function followedSql(params: Params, viewer: string, scope: string): string {
       JOIN social_accounts account ON account.account_id = o.account_id
       JOIN chain_read_v1.presale_positions pp ON pp.wallet = o.address
       JOIN ${SHOWN_PRESALES} p ON p.presale_id = pp.presale_id
-      LEFT JOIN ${DISPLAY_PRICES} qp ON qp.coin_type = p.quote_type
+      LEFT JOIN ${displayPriceOf("p.quote_type")} qp ON TRUE
       WHERE ${scope} AND account.privacy = 'public' AND account.sharing_since IS NOT NULL AND o.linked_at IS NOT NULL
         AND extract(epoch FROM greatest(account.sharing_since, o.linked_at)) * 1000 <= ${firstCommitSql("pp.wallet", "pp.presale_id")}`;
   return `
@@ -124,7 +124,7 @@ function mineSql(params: Params, addresses: string, presales: string, claimWalle
     JOIN ${SHOWN_PRESALES} p ON p.presale_id = pp.presale_id
     LEFT JOIN chain_read_v1.vesting_schedules v ON v.schedule_id = pp.claim_vesting_id
       AND v.presale_id = pp.presale_id AND v.beneficiary = pp.wallet AND v.share = 'participant' AND v.asset = 'sale_token'
-    LEFT JOIN ${DISPLAY_PRICES} qp ON qp.coin_type = p.quote_type
+    LEFT JOIN ${displayPriceOf("p.quote_type")} qp ON TRUE
     WHERE pp.wallet = ANY(${addresses}::text[]) AND pp.presale_id = ANY(${presales}::text[])
     GROUP BY pp.presale_id, p.quote_decimals, p.quote_type, qp.usd_price`;
 }
