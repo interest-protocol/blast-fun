@@ -15,14 +15,13 @@ import { CoinVerifiedMark, CloseIcon } from "#web/components/blast-ui/Icons.tsx"
 import { useShellActions } from "#web/components/blast-ui/shell-actions.tsx";
 import { bxAgo, NO_VALUE, signPct, utc } from "@blast/core/web/format.ts";
 import type { HomeCoin, HomeWindow } from "@blast/core/web/contracts/home.ts";
-import type { SocialTradeCoin } from "@blast/core/web/contracts/trades.ts";
 
 import { encodeTradeAction } from "../coins/swap-model";
 import { useWatchStar } from "../watchlist/Watchlist";
 import { PresaleMark } from "../post/PostMedia";
 import styles from "./CoinHome.module.css";
 import { homeAnalytics } from "./home-analytics";
-import { homeCoinHref, homeCoinKey, homeStatus, marketVolume, shareText, type HomePop, type HomeStatus } from "./home-model";
+import { homeBuyRoute, homeCoinHref, homeCoinKey, homeStatus, marketVolume, shareText, tradeCoinOf, type HomeBuyRoute, type HomePop, type HomeStatus } from "./home-model";
 import { readableUsd } from "#web/lib/market-format.ts";
 import type { HomeTrade } from "./use-home-prices";
 import type { DisplayPrice } from "@blast/core/modules/launchpad-contract/market-stream.ts";
@@ -53,7 +52,7 @@ export function CoinCard({ coin, window, nowMs, trading, watchlist = false, mark
   const marketCoin = useMemo(() => coinAtPrice(coin, livePrice), [coin, livePrice]);
   const valuationAt = livePrice && !coin.live_inputs ? coin.price_as_of_ms : marketCoin.price_as_of_ms;
   const id = useId();
-  const canBuy = coin.lifecycle === "migrated" && coin.tradable && trading;
+  const route = trading ? homeBuyRoute(coin, nowMs) : null;
   const status = homeStatus(coin, nowMs);
   // The Status cell already says where the coin trades while it names a venue or a curve still filling.
   const filling = coin.curve != null && coin.curve.lifecycle !== "migrated";
@@ -71,7 +70,7 @@ export function CoinCard({ coin, window, nowMs, trading, watchlist = false, mark
         <HoldersCell coin={coin} />
         <StatusCell status={status} />
         <span className={styles.rowActions} role="cell">
-          {canBuy ? <RowBuy coin={coin} /> : null}
+          {route ? <RowBuy coin={coin} route={route} /> : null}
           {watchlist ? <RemoveSavedCoin coin={coin} /> : null}
         </span>
       </div>
@@ -85,18 +84,18 @@ function Missing({ what }: Readonly<{ what: string }>) {
 }
 
 /** Buying a coin opens the shell's transaction dialog with the coin chosen (nothing executes); with the page as a fallback. */
-function useStartBuy(coin: HomeCoin): () => void {
+function useStartBuy(coin: HomeCoin, route: HomeBuyRoute): () => void {
   const run = useShellActions();
   return () => {
     homeAnalytics.trade(homeCoinKey(coin), "buy");
-    if (!run("openTrade", encodeTradeAction({ side: "buy", coin: tradeCoinOf(coin) }))) {
+    if (!run("openTrade", encodeTradeAction({ side: "buy", coin: tradeCoinOf(coin, route) }))) {
       window.location.assign(homeCoinHref(coin) ?? coinPagePath(coin.coin_type));
     }
   };
 }
 
-function RowBuy({ coin }: Readonly<{ coin: HomeCoin }>) {
-  const startBuy = useStartBuy(coin);
+function RowBuy({ coin, route }: Readonly<{ coin: HomeCoin; route: HomeBuyRoute }>) {
+  const startBuy = useStartBuy(coin, route);
   return <Button aria-haspopup="dialog" aria-label={`Buy ${coin.symbol}`} onClick={startBuy} size="sm" variant="primary">Buy</Button>;
 }
 
@@ -109,11 +108,6 @@ function RemoveSavedCoin({ coin }: Readonly<{ coin: HomeCoin }>) {
       star.toggle();
     }} size="touch" title={label}><CloseIcon /></IconButton>
   );
-}
-
-/** The sale's coin as the swap names it, from the item. */
-function tradeCoinOf(coin: HomeCoin): SocialTradeCoin {
-  return { coin_type: coin.coin_type, symbol: coin.symbol, name: coin.name, decimals: coin.decimals, icon_url: coin.icon_url, usd_price: coin.price_usd, presale_id: coin.presale_id };
 }
 
 /**

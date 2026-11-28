@@ -301,7 +301,8 @@ function useCurveRail(
  * mode's coin panel), signing with the shell's session. While `live` is false
  * (the launch left its curve) `fallback` shows, except while a trade is still
  * unresolved: the rail stays until it settles, so its recovery is never lost.
- * `onMigrated` fires once the rail's own curve read sees the launch migrated.
+ * `onMigrated` fires once the rail's own curve read sees the launch migrated
+ * and nothing is held; `onHeldChange` reports whether a trade is unresolved.
  */
 export function StandaloneCurveTrade({
   config,
@@ -311,6 +312,7 @@ export function StandaloneCurveTrade({
   live,
   onInvalidate,
   onMigrated,
+  onHeldChange,
   fallback,
 }: Readonly<{
   config: SigningChainConfig;
@@ -321,6 +323,7 @@ export function StandaloneCurveTrade({
   live: boolean;
   onInvalidate: () => void;
   onMigrated: () => void;
+  onHeldChange?: (held: boolean) => void;
   fallback: ReactNode;
 }>) {
   const chain = useLaunchpadChain(config);
@@ -331,7 +334,7 @@ export function StandaloneCurveTrade({
       network={config.network}
     >
       <CurveTradeProvider chain={chain} launchId={launchId} onInvalidate={onInvalidate}>
-        <StandaloneCurveSession coinType={coinType} live={live} onMigrated={onMigrated} fallback={fallback} />
+        <StandaloneCurveSession coinType={coinType} live={live} onMigrated={onMigrated} onHeldChange={onHeldChange} fallback={fallback} />
       </CurveTradeProvider>
     </CoinTradeSignerProvider>
   );
@@ -341,8 +344,9 @@ function StandaloneCurveSession({
   coinType,
   live: listed,
   onMigrated,
+  onHeldChange,
   fallback,
-}: Readonly<{ coinType: string; live: boolean; onMigrated: () => void; fallback: ReactNode }>) {
+}: Readonly<{ coinType: string; live: boolean; onMigrated: () => void; onHeldChange?: (held: boolean) => void; fallback: ReactNode }>) {
   const session = useCurveTrade();
   const mismatched = session.curve.status === "ok" && !sameCoinType(session.curve.curve.launch.memeType, coinType);
   const live = listed && !mismatched;
@@ -356,12 +360,19 @@ function StandaloneCurveSession({
   });
   const migrated = session.curve.status === "ok" && session.curve.curve.launch.lifecycle === "Migrated";
   const migratedRef = useRef(onMigrated);
+  const heldRef = useRef(onHeldChange);
   useEffect(() => {
     migratedRef.current = onMigrated;
-  }, [onMigrated]);
+    heldRef.current = onHeldChange;
+  }, [onMigrated, onHeldChange]);
   useEffect(() => {
-    if (migrated) migratedRef.current();
-  }, [migrated]);
+    // react-doctor-disable-next-line react-doctor/no-pass-data-to-parent -- Home's Buy sheet keeps a rail mounted while its trade is unresolved; only the session knows when that is.
+    heldRef.current?.(held);
+  }, [held]);
+  // A trade still settling keeps its rail: the move to the pool waits until it resolves.
+  useEffect(() => {
+    if (migrated && !held) migratedRef.current();
+  }, [migrated, held]);
   return live || (held && !mismatched) ? rail : fallback;
 }
 

@@ -18,7 +18,7 @@ import { useShellAction } from "#web/components/blast-ui/shell-actions.tsx";
 import type { SocialAccountState } from "../social-account-client";
 import type { SocialAccountSessionStatus } from "../use-social-account-session";
 import { BlastActionProvider } from "./workspace/BlastActionProvider";
-import { CurveTradeSetupContext } from "./workspace/curve-trade-context";
+import { CurveTradeSetupContext } from "#web/components/launchpad/trade/curve-trade-context.ts";
 import type { CurveTradeSetup } from "#web/components/launchpad/trade/server-availability.ts";
 import { WorkspaceFrame } from "./WorkspaceFrame";
 import { workspaceSession } from "./workspace/session";
