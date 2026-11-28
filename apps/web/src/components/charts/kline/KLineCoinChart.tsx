@@ -12,10 +12,10 @@ import { useMobileChartLayout } from "../use-mobile-chart-layout.ts";
 import { poolPrices } from "../candle-data.ts";
 import type { CandleTrade } from "../candle-trade.ts";
 import {
-  barChanges, chartDate, fillGaps, foldTrades, klineBars, PANE_LAYOUT, plotHeightFor, priceParts, pricePrecision, ticksInside, topGap, volumeText,
+  barChanges, chartDate, fillGaps, FLOOR_VOLUME_SHARE, foldTrades, klineBars, PANE_LAYOUT, paneGaps, plotHeightFor, priceParts, pricePrecision, ticksInside, volumeText,
   type Bar,
 } from "./kline-model.ts";
-import { BLAST_GRADUATION, registerGraduation } from "./kline-studies.ts";
+import { BLAST_FLOOR_VOLUME, BLAST_GRADUATION, registerStudies, type FloorVolumeColors } from "./kline-studies.ts";
 import { subscriptZeros } from "#web/lib/market-format.ts";
 import { BUBBLE_SIZE, BubbleStage, PeopleBubbles } from "./PeopleBubbles.tsx";
 import { ChartPeopleTrades } from "./chart-people-trades.ts";
@@ -33,6 +33,10 @@ const MAX_PENDING_TRADES = 500;
 
 /** The volume pane's id, as KLineCharts names an indicator's own pane. */
 const VOLUME_PANE = "pane_VOL";
+/** A phone's volume bars, on the price pane's floor. */
+const FLOOR_VOLUME = "FLOOR_VOLUME";
+/** Px between the tallest floor volume bar and the lowest candle. */
+const FLOOR_CLEARANCE = 8;
 
 export type KLineCoinChartProps = Readonly<{
   sources: readonly DrawnSeries[];
@@ -88,7 +92,7 @@ export default function KLineCoinChart({ sources, interval, memeDecimals, quoteD
   useEffect(() => {
     const element = host.current;
     if (!element) return;
-    registerGraduation();
+    registerStudies();
     const created = init(element, { decimalFold: { threshold: 4, format: foldZeros }, styles: themeStyles(palette(element)) });
     if (!created) return;
     const container = element.firstElementChild instanceof HTMLElement ? element.firstElementChild : null;
@@ -212,6 +216,8 @@ export default function KLineCoinChart({ sources, interval, memeDecimals, quoteD
     }
     if (!symbolChanged && !periodChanged) current.resetData();
     fitBars(current, host.current, bars.length);
+    // KLineCharts lays out in a microtask (ChartImp.layout), so the new price labels' axis width is known only then: fit again after it.
+    queueMicrotask(() => { if (chart.current === current) fitBars(current, host.current, bars.length); });
     view.away.set(null);
   }, [bars, precision, interval, view]);
 
@@ -219,7 +225,7 @@ export default function KLineCoinChart({ sources, interval, memeDecimals, quoteD
     chart.current?.setStyles({ candle: { priceMark: { last: { show: latestAvailable } } } });
   }, [latestAvailable, theme]);
 
-  // Volume in its own pane under the price, rebuilt with the theme for its colours.
+  // Volume, rebuilt with the theme for its colours: its own pane under the price, or on a phone faint bars on the price pane's floor.
   useEffect(() => {
     const current = chart.current;
     const element = host.current;
@@ -227,18 +233,25 @@ export default function KLineCoinChart({ sources, interval, memeDecimals, quoteD
     const colors = palette(element);
     current.setStyles(themeStyles(colors));
     current.removeIndicator({ id: "VOL" });
-    current.createIndicator(volumeCreate(colors), true);
+    current.removeIndicator({ id: FLOOR_VOLUME });
     current.setPaneOptions({ id: "candle_pane", minHeight: layout.price });
-    current.setPaneOptions({ id: VOLUME_PANE, height: layout.pane, minHeight: Math.round(layout.pane * .6) });
-    current.overrideYAxis({ paneId: VOLUME_PANE, gap: { top: .1, bottom: .05 } });
+    if (layout.pane) {
+      current.createIndicator(volumeCreate(colors), true);
+      current.setPaneOptions({ id: VOLUME_PANE, height: layout.pane, minHeight: Math.round(layout.pane * .6) });
+      current.overrideYAxis({ paneId: VOLUME_PANE, gap: { top: .1, bottom: .05 } });
+    } else {
+      current.createIndicator(floorVolumeCreate(colors), true);
+    }
     current.resize();
   }, [theme, layout]);
 
-  // Headroom above the highest price for a trader's bubble and its gap over the top bar, so it never sits on the price.
+  // Headroom above the highest price for a trader's bubble and its gap over the top bar, so it never sits on the price;
+  // on a phone, room under the lowest price for the floor volume bars, so they never sit on a candle.
+  const floor = layout.pane ? 16 : Math.ceil(priceHeight * FLOOR_VOLUME_SHARE) + FLOOR_CLEARANCE;
   useEffect(() => {
     const room = traders ? bubbleHeadroom(BUBBLE_SIZE) : 0;
-    chart.current?.overrideYAxis({ paneId: "candle_pane", gap: { top: topGap(12 + room, priceHeight, .06), bottom: .06 } });
-  }, [priceHeight, traders]);
+    chart.current?.overrideYAxis({ paneId: "candle_pane", gap: paneGaps(12 + room, floor, priceHeight) });
+  }, [priceHeight, traders, floor]);
 
   const graduationAt = migrationAt === undefined ? undefined : bars.findLast((bar) => bar.timestamp <= migrationAt)?.timestamp;
   useEffect(() => {
@@ -402,10 +415,10 @@ function useBucketStart(interval: CandleInterval): number {
   return candleBucketStart(interval, now);
 }
 
-/** The chosen range fills the plot; a range too long for 2 px a bar scrolls from its newest bar. */
+/** The chosen range fills the plot (the chart less its price axis); a range too long for 2 px a bar scrolls from its newest bar. */
 function fitBars(chart: Chart, element: HTMLElement | null, count: number) {
   if (!element || count === 0) return;
-  const plot = element.clientWidth - 72;
+  const plot = element.clientWidth - (chart.getSize("candle_pane", "yAxis")?.width ?? 72);
   chart.setOffsetRightDistance(12);
   chart.setBarSpace(Math.min(12, Math.max(2, (plot - 12) / count)));
 }
@@ -435,6 +448,11 @@ function faded(color: string, opacity: number): string {
 /** Volume bars under the price, in the candle colours, faded; the readout carries their value, so the pane has no legend. */
 function volumeCreate(colors: Palette): IndicatorCreate {
   return { name: "VOL", id: "VOL", paneId: VOLUME_PANE, calcParams: [], precision: 2, createTooltipDataSource: () => ({ name: "", calcParamsText: "", features: [], legends: [] }), styles: { bars: [{ upColor: faded(colors.up, .5), downColor: faded(colors.down, .5), noChangeColor: faded(colors.muted, .5) }] } };
+}
+
+/** A phone's volume: faint bars on the price pane's floor, in the candle colours (kline-studies `BLAST_FLOOR_VOLUME`). */
+function floorVolumeCreate(colors: Palette): IndicatorCreate<unknown, unknown, FloorVolumeColors> {
+  return { name: BLAST_FLOOR_VOLUME, id: FLOOR_VOLUME, paneId: "candle_pane", extendData: { up: faded(colors.up, .3), down: faded(colors.down, .3), flat: faded(colors.muted, .3) } };
 }
 
 function themeStyles(colors: Palette): DeepPartial<Styles> {

@@ -176,6 +176,13 @@
   .pair { grid-template-columns: minmax(0, 1fr); }
   .card { padding: 1rem; }
   .marketChart { padding: .5rem; --coin-chart-heading-inset: .5rem; }
+  /* A coin's candle chart runs edge to edge: no card padding or corners, its rows keep the page's gutter. */
+  .marketChart:has([data-compact-chart]) {
+    --coin-chart-heading-inset: max(var(--page-gutter), env(safe-area-inset-left, 0px));
+    margin-inline: calc(-1 * var(--coin-chart-heading-inset)) calc(-1 * max(var(--page-gutter), env(safe-area-inset-right, 0px)));
+    padding: .5rem 0;
+    border-radius: 0;
+  }
   .page:has(.tradeDock) { padding-bottom: 6rem; }
   .tradeDock {
     position: fixed;
