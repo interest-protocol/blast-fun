@@ -98,20 +98,9 @@ function recordingWallet(sent: Sent[]): EvmWallet {
 
 const flags = (body: Record<string, unknown>) => Object.fromEntries(["blink", "fastMctp", "mctp", "swift", "wormhole", "shuttle", "monoChain", "gasless", "fullList"].map((key) => [key, body[key]]));
 
-test("with the switch off the request is Blink only, and no other route is taken", async (t) => {
-  const bodies = await fakeMayan(t, [fresh(FAST), fresh(MCTP), BLINK]);
-  const quote = await mayanSdk().quote(SIGNED_OUT);
-  assert.equal(quote.type, "BLINK");
-  assert.equal(bodies.length, 1);
-  assert.deepEqual(flags(bodies[0]!), { blink: true, fastMctp: false, mctp: false, swift: false, wormhole: false, shuttle: false, monoChain: false, gasless: false, fullList: false });
-  const sent: Sent[] = [];
-  await assert.rejects(mayanSdk().send(fresh(MCTP), REQUEST, recordingWallet(sent), () => undefined, new AbortController().signal), /The MCTP route is off/);
-  assert.equal(sent.length, 0);
-});
-
-test("with it on, one request asks every route and Fast MCTP wins over MCTP and Blink", async (t) => {
+test("one request asks the routes we check, and Fast MCTP wins over MCTP and Blink", async (t) => {
   const bodies = await fakeMayan(t, [BLINK, fresh(MCTP), fresh(FAST)]);
-  assert.equal((await mayanSdk(true).quote(SIGNED_OUT)).type, "FAST_MCTP");
+  assert.equal((await mayanSdk().quote(SIGNED_OUT)).type, "FAST_MCTP");
   assert.equal(bodies.length, 1);
   assert.deepEqual(flags(bodies[0]!), { blink: true, fastMctp: true, mctp: true, swift: false, wormhole: false, shuttle: false, monoChain: false, gasless: false, fullList: true });
   assert.equal("swapperAddress" in bodies[0]!, false);
@@ -121,7 +110,7 @@ test("with it on, one request asks every route and Fast MCTP wins over MCTP and 
 for (const only of [FAST, MCTP]) {
   test(`a ${only.type} answer alone is built by the SDK for the Blast address and sent once`, async (t) => {
     await fakeMayan(t, [fresh(only)]);
-    const sdk = mayanSdk(true);
+    const sdk = mayanSdk();
     const quote = await sdk.quote({ ...SIGNED_OUT, swapper: SOURCE, destination: BLAST });
     assert.equal(quote.type, only.type);
     const sent: Sent[] = [];
@@ -139,7 +128,7 @@ test("an old Ethereum USDT allowance is set to zero before the new one", async (
     const usdt: SourceToken = { symbol: "USDT", decimals: 6, mayan: "0xdAC17F958D2ee523a2206206994597C13D831ec7", native: false, reserve: 0n, logo: null };
     const quote = { ...fresh(MCTP), fromChain: "ethereum", fromToken: { ...MCTP.fromToken, chainId: 1, wChainId: 2, contract: usdt.mayan, symbol: "USDT" } } as Quote;
     const sent: Sent[] = [];
-    await mayanSdk(true).approve(quote, { ...REQUEST, chain: "ethereum", token: usdt }, recordingWallet(sent), new AbortController().signal);
+    await mayanSdk().approve(quote, { ...REQUEST, chain: "ethereum", token: usdt }, recordingWallet(sent), new AbortController().signal);
     const erc20 = new Interface(["function approve(address spender, uint256 value)"]);
     const approvals = sent.map(({ to, data }) => [to.toLowerCase(), erc20.decodeFunctionData("approve", data)[1] as bigint]);
     assert.deepEqual(approvals, [[usdt.mayan.toLowerCase(), 0n], [usdt.mayan.toLowerCase(), 20_000_000n]]);

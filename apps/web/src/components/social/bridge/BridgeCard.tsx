@@ -8,7 +8,6 @@ import { useToast } from "#web/components/blast-ui/Toasts.tsx";
 
 import { useBalancesContext } from "../coins/balances.tsx";
 
-import { useBridgeFastMctp } from "./bridge-context.tsx";
 import { displayAmount } from "./bridge-model.ts";
 import { explorerLink, type BridgeRow, type EvmWallet, type SolanaWallet } from "./bridge-sdk.ts";
 import { BridgeForm, type BridgeWallets } from "./BridgeForm.tsx";
@@ -58,8 +57,7 @@ function BridgeReady({ blastAddress, signedIn, onSignIn, source }: BridgeCardPro
   const { evm: evmWallets, solana: solanaWallets, connectWallet, signSolanaTransaction: signTransaction } = source;
   const toast = useToast();
   const balances = useBalancesContext();
-  const fastMctp = useBridgeFastMctp();
-  const sdk = useMemo(() => mayanSdk(fastMctp), [fastMctp]);
+  const sdk = useMemo(() => mayanSdk(), []);
 
   // The person's own wallet, never a Privy embedded one: that is not where their coins are. The newest EVM one is the one just connected.
   const evmSource = evmWallets.filter((wallet) => wallet.walletClientType !== "privy").sort((a, b) => b.connectedAt - a.connectedAt)[0] ?? null;
@@ -96,7 +94,6 @@ function BridgeReady({ blastAddress, signedIn, onSignIn, source }: BridgeCardPro
 
   return (
     <BridgeForm
-      allRoutes={fastMctp}
       blastAddress={blastAddress}
       onArrived={onArrived}
       onSignIn={onSignIn}

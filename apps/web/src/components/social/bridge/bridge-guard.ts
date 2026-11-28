@@ -1,5 +1,5 @@
 import { compareExact, exactAtoms, exactNumber } from "@blast/core/web/exact-amount.ts";
-import { decodeBlinkQuote, getWormholeChainIdByName, hasBlinkQuoteHash, isNativeBlinkEvmToken, isNativeBlinkSvmToken, type BlinkQuote, type Quote } from "@mayanfinance/swap-sdk";
+import { addresses, decodeBlinkQuote, getWormholeChainIdByName, hasBlinkQuoteHash, isNativeBlinkEvmToken, isNativeBlinkSvmToken, type BlinkQuote, type Quote } from "@mayanfinance/swap-sdk";
 import { isValidSuiAddress, normalizeStructTag, normalizeSuiAddress } from "@mysten/sui/utils";
 
 import type { BridgeChain } from "./bridge-config.ts";
@@ -68,6 +68,27 @@ function sourceRefusal(quote: Quote, { chain, token }: QuoteAsk): string | null 
 const ROUTE_ORDER = ["FAST_MCTP", "MCTP", "BLINK"] as const;
 /** Our limit, not Mayan's rule: 500 bps is the most its price API documents for `slippageBps`. */
 const MAX_SLIPPAGE_BPS = 500;
+/** Our margin, not Mayan's rule: time left for the wallet prompt and the source chain. */
+const DEADLINE_HEADROOM_MS = 60_000;
+
+const usdcAtoms = (value: number) => Math.round(value * 1e6);
+
+/**
+ * Our check that what the SDK signs covers the minimum the card shows. An
+ * auction order signs `minAmountOut` (SUI is cut to eight decimals). Without an
+ * auction no minimum is signed: Circle moves USDC, less the signed fees.
+ */
+function coversShownMinimum(quote: Quote, to: DestinationToken): boolean {
+  if (quote.hasAuction) return quote.minAmountOut >= quote.minReceived;
+  if (to.symbol !== "USDC") return false;
+  // The SDK swaps to USDC first unless the source coin is the route's own input coin.
+  const input = quote.type === "MCTP" ? quote.mctpInputContract : quote.fastMctpInputContract;
+  const bridged = quote.fromToken.contract === input ? Number(quote.effectiveAmountIn64) : usdcAtoms(quote.minMiddleAmount ?? Number.NaN);
+  // The EVM builder signs `redeemRelayerFee`, the Solana one `redeemRelayerFee64`.
+  const redeem = Math.max(usdcAtoms(quote.redeemRelayerFee), Number(quote.redeemRelayerFee64 ?? 0));
+  const circle = Number(quote.circleMaxFee64 ?? 0);
+  return bridged - redeem - circle >= usdcAtoms(quote.minReceived);
+}
 
 /**
  * Whether the quote that came back is for what we asked, so the card may show it:
@@ -87,8 +108,19 @@ export function checkQuote(quote: Quote, ask: QuoteAsk, now: number): GuardResul
   if (quote.gasless) return refused("gasless order");
   if (!(quote.minReceived > 0 && quote.minReceived <= quote.expectedAmountOut)) return refused("wrong minimum output");
   if (!(quote.slippageBps >= 0 && quote.slippageBps <= MAX_SLIPPAGE_BPS)) return refused("wrong slippage");
-  if (quote.type !== "BLINK" && !(Number(quote.deadline64) * 1000 > now)) return refused("expired");
-  return PASSED;
+  if (quote.type === "BLINK") return PASSED;
+  if (!(Number(quote.deadline64) * 1000 > now + DEADLINE_HEADROOM_MS)) return refused("expired");
+  return coversShownMinimum(quote, ask.to) ? PASSED : refused("unsigned minimum output");
+}
+
+/**
+ * Our check before an EVM send: Mayan's SDK sends the MCTP routes to its
+ * Forwarder contract. A Blink order has its own contracts.
+ */
+export function assertSendTarget(quote: Quote, to: unknown): void {
+  if (quote.type !== "BLINK" && to !== addresses.MAYAN_FORWARDER_CONTRACT) {
+    throw new Error(`Unexpected ${quote.type} contract ${to}`);
+  }
 }
 
 /** The first route in our order whose quote passes `checkQuote`. */
@@ -182,13 +214,14 @@ function totalFee(quote: Quote): number | null {
 }
 
 /** The numbers the card shows, read from a quote (bound or not). */
-export function quoteFacts(quote: Quote, token: SourceToken, allRoutes = false): QuoteFacts {
+export function quoteFacts(quote: Quote, token: SourceToken): QuoteFacts {
   const embedded = quote.blinkQuote?.crossChain;
   const usdMicros = Number(embedded?.amountInUsdMicros ?? 0);
   return {
     expectedAmountOut: quote.expectedAmountOut,
     minReceived: quote.minReceived,
-    fee: allRoutes ? totalFee(quote) : quote.clientRelayerFeeSuccess,
+    // A Blink order states one fee; the MCTP routes add Mayan's and Circle's.
+    fee: quote.type === "BLINK" ? quote.clientRelayerFeeSuccess : totalFee(quote),
     etaSeconds: quote.etaSeconds,
     amountIn: Number(quote.effectiveAmountIn64) / 10 ** token.decimals,
     amountInUsd: usdMicros > 0 ? usdMicros / 1e6 : undefined,

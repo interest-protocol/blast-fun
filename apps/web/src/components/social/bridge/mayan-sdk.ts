@@ -14,21 +14,22 @@ import { BrowserProvider, Contract, JsonRpcProvider, type TransactionRequest } f
 
 import { fetchSourceTokens } from "./bridge-catalog.ts";
 import { mayanRpc, type BridgeChain } from "./bridge-config.ts";
-import { pickRoute, type BridgeRequest } from "./bridge-guard.ts";
+import { assertSendTarget, pickRoute, type BridgeRequest } from "./bridge-guard.ts";
 import { CHAINS, transferState, type SourceToken } from "./bridge-model.ts";
 import { abortableProvider, explorerRows, MAYAN_EXPLORER, type BridgeSdk, type EvmWallet, type SolanaWallet } from "./bridge-sdk.ts";
 import { verifySolanaExpiry, type SolanaExpiry } from "./solana-expiry.ts";
 import { readSolanaSubmission, rememberSolanaSubmission, settleSolanaSubmission, withSolanaSubmissionLock } from "./solana-submission.ts";
 
-/** Blink only: Mayan's one route that refunds on the source chain and needs no relayer on Sui. */
-const BLINK_ONLY: QuoteOptions = { blink: true, swift: false, mctp: false, fastMctp: false, wormhole: false, shuttle: false, monoChain: false, gasless: false };
-/** Every route Mayan prices from these chains to Sui, asked in one request. */
-const ALL_ROUTES: QuoteOptions = { ...BLINK_ONLY, fastMctp: true, mctp: true, fullList: true };
+/**
+ * Our limit, not Mayan's: the routes whose quote fields `bridge-guard.ts`
+ * checks, asked in one request. Mayan's SDK asks every route unless told not to.
+ */
+const ROUTES: QuoteOptions = { fastMctp: true, mctp: true, blink: true, swift: false, wormhole: false, shuttle: false, monoChain: false, gasless: false, fullList: true };
 const ERC20 = ["function balanceOf(address) view returns (uint256)"];
 const TOKEN_2022_PROGRAM = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
 
 /** The Mayan SDK, ethers and web3.js behind the card's `BridgeSdk`, on Mayan's RPCs. */
-export function mayanSdk(allRoutes = false): BridgeSdk {
+export function mayanSdk(): BridgeSdk {
   const evmProviders = new Map<BridgeChain, JsonRpcProvider>();
   const evm = (chain: BridgeChain): JsonRpcProvider => {
     let provider = evmProviders.get(chain);
@@ -40,11 +41,6 @@ export function mayanSdk(allRoutes = false): BridgeSdk {
   };
   let solana: Connection | null = null;
   const solanaConnection = () => (solana ??= new Connection(mayanRpc("solana"), "confirmed"));
-
-  // With every route off, only Blink quotes may reach a wallet.
-  const assertRouteOn = (quote: Quote) => {
-    if (!allRoutes && quote.type !== "BLINK") throw new Error(`The ${quote.type} route is off`);
-  };
 
   const evmPayload = (quote: Quote, { chain, blastAddress }: BridgeRequest, wallet: EvmWallet) =>
     getSwapFromEvmTxPayload(quote, wallet.address, blastAddress, null, wallet.address, CHAINS[chain].chainId!, null, null, { evmProvider: evm(chain) });
@@ -80,9 +76,9 @@ export function mayanSdk(allRoutes = false): BridgeSdk {
       const { chain, token, to, amountIn64, swapper, destination } = input;
       const quotes = await fetchQuote(
         { amountIn64, fromToken: token.mayan, fromChain: chain, toToken: to.coinType, toChain: "sui", slippageBps: "auto", swapperAddress: swapper, destinationAddress: destination },
-        allRoutes ? ALL_ROUTES : BLINK_ONLY,
+        ROUTES,
       );
-      const quote = allRoutes ? pickRoute(quotes, input, Date.now()) : quotes.find(({ type }) => type === "BLINK");
+      const quote = pickRoute(quotes, input, Date.now());
       if (quote) return quote;
       if (quotes.length > 0) console.warn("Mayan sent no usable route", quotes.map(({ type }) => type));
       throw Object.assign(new Error("No supported bridge route"), { code: "ROUTE_NOT_FOUND" });
@@ -97,7 +93,6 @@ export function mayanSdk(allRoutes = false): BridgeSdk {
     async approve(quote, request, wallet, signal) {
       const { chain } = request;
       signal.throwIfAborted();
-      assertRouteOn(quote);
       const provider = evm(chain);
       const transactions = await getEvmSwapApproveTxs(quote, wallet.address, provider);
       for (const transaction of transactions) {
@@ -110,9 +105,9 @@ export function mayanSdk(allRoutes = false): BridgeSdk {
     },
     async send(quote, request, wallet, onSigned, signal) {
       signal.throwIfAborted();
-      assertRouteOn(quote);
       if (wallet.kind === "evm") {
         const payload = await evmPayload(quote, request, wallet);
+        assertSendTarget(quote, payload.to);
         const hash = await sendEvm(wallet, request.chain, { to: payload.to, data: payload.data, value: payload.value }, signal);
         onSigned(hash);
         return hash;

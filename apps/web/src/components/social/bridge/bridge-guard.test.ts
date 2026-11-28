@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import type { Quote } from "@mayanfinance/swap-sdk";
+import { addresses, type Quote } from "@mayanfinance/swap-sdk";
 
-import { checkQuote, guardQuote, pickRoute, quoteFacts, type BridgeRequest } from "./bridge-guard.ts";
+import { assertSendTarget, checkQuote, guardQuote, pickRoute, quoteFacts, type BridgeRequest } from "./bridge-guard.ts";
 import { CHAINS, DESTINATIONS, quoteRows } from "./bridge-model.ts";
 
 // Live Mayan quotes captured 2026-11-26 with placeholder addresses.
@@ -132,6 +132,8 @@ test("an MCTP quote is refused when it is not what was asked", () => {
   assert.equal(refusal({ minReceived: fast.expectedAmountOut + 1 }), "wrong minimum output");
   assert.equal(refusal({ slippageBps: 501 }), "wrong slippage");
   assert.equal(refusal({ deadline64: String(LIVE_NOW / 1000) }), "expired");
+  assert.equal(refusal({ deadline64: String(LIVE_NOW / 1000 + 60) }), "expired", "no time left to sign");
+  assert.equal(refusal({ deadline64: String(LIVE_NOW / 1000 + 61) }), null);
   for (const blastAddress of ["", "0x0", "not an address"]) assert.equal(refusal({}, { ...BASE_USDC, blastAddress }), "wrong recipient", blastAddress);
   // The card prices a quote before there is a Blast address.
   assert.deepEqual(checkQuote(fast, BASE_USDC, LIVE_NOW), { ok: true });
@@ -141,11 +143,43 @@ test("the fee adds Mayan's three parts, and a missing part shows no figure", () 
   const usdc = CHAINS.base.tokens[1];
   const [direct] = live("base-usdc-usdc");
   // A direct USDC bridge loses only the fee: what is sent less what is expected.
-  assert.ok(Math.abs(quoteFacts(direct, usdc, true).fee! - (20 - direct.expectedAmountOut)) <= 0.000002);
+  assert.ok(Math.abs(quoteFacts(direct, usdc).fee! - (20 - direct.expectedAmountOut)) <= 0.000002);
   const [swap] = live("base-eth-sui");
-  assert.ok(Math.abs(quoteFacts(swap, CHAINS.base.tokens[0], true).fee! - 0.039379) < 0.000001);
+  assert.ok(Math.abs(quoteFacts(swap, CHAINS.base.tokens[0]).fee! - 0.039379) < 0.000001);
   for (const missing of ["clientRelayerFeeSuccess", "protocolFeeUsd", "circleMaxFee64"]) {
-    assert.equal(quoteFacts({ ...direct, [missing]: undefined } as Quote, usdc, true).fee, null, missing);
+    assert.equal(quoteFacts({ ...direct, [missing]: undefined } as Quote, usdc).fee, null, missing);
   }
-  assert.equal(quoteRows(quoteFacts(direct, usdc, true), usdc, DESTINATIONS[1]!).fee, "$0.02");
+  assert.equal(quoteRows(quoteFacts(direct, usdc), usdc, DESTINATIONS[1]!).fee, "$0.02");
+});
+
+test("what the SDK signs must cover the minimum the card shows", () => {
+  const unsigned = "unsigned minimum output";
+  // An auction order signs its own minimum.
+  const [auction] = live("base-eth-sui");
+  const ethAsk: BridgeRequest = { ...BASE_USDC, token: CHAINS.base.tokens[0], amountIn64: "10000000000000000" };
+  assert.equal(reason({ ...auction, minAmountOut: auction.minReceived - 0.000001 }, ethAsk, LIVE_NOW), unsigned);
+  // Without an auction, only USDC arrives: what is bridged less the signed fees.
+  assert.equal(reason({ ...auction, hasAuction: false }, ethAsk, LIVE_NOW), unsigned);
+  const [direct] = live("base-usdc-usdc");
+  const ask: BridgeRequest = { ...BASE_USDC, to: DESTINATIONS[1]! };
+  assert.equal(direct.hasAuction, false);
+  assert.equal(reason(direct, ask, LIVE_NOW), null);
+  for (const change of [{ redeemRelayerFee: 1 }, { redeemRelayerFee64: "1000000" }, { circleMaxFee64: "1000000" }]) {
+    assert.equal(reason({ ...direct, ...change }, ask, LIVE_NOW), unsigned, Object.keys(change)[0]);
+  }
+  // A swap into the route's input coin counts only the swap's signed floor.
+  const swapped = { ...direct, fastMctpInputContract: `0x${"22".repeat(20)}` };
+  assert.equal(reason({ ...swapped, minMiddleAmount: undefined }, ask, LIVE_NOW), unsigned);
+  assert.equal(reason({ ...swapped, minMiddleAmount: direct.minReceived }, ask, LIVE_NOW), unsigned);
+  assert.equal(reason({ ...swapped, minMiddleAmount: 20 }, ask, LIVE_NOW), null);
+});
+
+test("an EVM send of an MCTP route goes only to Mayan's Forwarder", () => {
+  const other = `0x${"22".repeat(20)}`;
+  for (const quote of live("base-usdc-sui")) {
+    assertSendTarget(quote, addresses.MAYAN_FORWARDER_CONTRACT);
+    assert.throws(() => assertSendTarget(quote, other), /Unexpected (FAST_)?MCTP contract/);
+    assert.throws(() => assertSendTarget(quote, null), /Unexpected (FAST_)?MCTP contract/);
+  }
+  assertSendTarget(QUOTES.baseUsdcToSui, other);
 });

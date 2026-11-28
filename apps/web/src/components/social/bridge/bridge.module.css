@@ -29,15 +29,15 @@
  * next one loads, and come back to ink. Nothing blanks, nothing moves.
  */
 .summary { display: flex; flex-direction: column; gap: 0.5rem; transition: color var(--t2) var(--ease-std); }
-/* The sentence carries the money; the facts are quieter (500, not the terms' 600).
-   They share a line, so the sentence and the button fit a phone. */
+/* The sentence above the button carries the money; the facts are quieter (500, not
+   the terms' 600). They share a line, so the sentence and the button fit a phone. */
 .summary dl { flex-flow: row wrap; justify-content: space-between; column-gap: 1rem; }
 .summary dl div { gap: 0.375rem; }
 .summary dl dt { flex-basis: auto; }
 .summary dl dd { font-weight: 500; transition: color var(--t2) var(--ease-std); }
 .summary.refreshing, .summary.refreshing dd { color: var(--muted); }
 .sentence { margin: 0; padding: 0 0.125rem; font-size: 1rem; line-height: 1.4; color: var(--ink); text-wrap: pretty; }
-.summary.refreshing .sentence, .sentence.pendingSentence { color: var(--muted); }
+.sentence.pendingSentence { color: var(--muted); }
 /* The loss pop-up takes the warning colour above 3% and the stronger one above 10%. */
 .lossWarn h2 { color: var(--warn); }
 .lossDown h2 { color: var(--down); }

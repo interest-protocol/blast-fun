@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import test, { type TestContext } from "node:test";
+import test, { beforeEach, type TestContext } from "node:test";
 
 import { addresses, type Quote } from "@mayanfinance/swap-sdk";
 
@@ -64,9 +64,9 @@ function evm(address = SOURCE): EvmWallet {
 
 const coded = (code: unknown) => Object.assign(new Error("refused"), { code });
 
-type MountOptions = Readonly<{ allRoutes?: boolean; signedIn?: boolean; at?: number }>;
+type MountOptions = Readonly<{ signedIn?: boolean; at?: number }>;
 
-async function mount(sdk: BridgeSdk, calls: Calls, wallet: SourceWallet | null = evm(), queries: Record<string, unknown> = {}, { allRoutes, signedIn = true, at = BEFORE_EXPIRY }: MountOptions = {}) {
+async function mount(sdk: BridgeSdk, calls: Calls, wallet: SourceWallet | null = evm(), queries: Record<string, unknown> = {}, { signedIn = true, at = BEFORE_EXPIRY }: MountOptions = {}) {
   const container = dom.document.createElement("div");
   container.setAttribute("data-blast-ui", "");
   dom.document.body.appendChild(container);
@@ -77,7 +77,6 @@ async function mount(sdk: BridgeSdk, calls: Calls, wallet: SourceWallet | null =
   const render = (next: SourceWallet | null, key = "first") => act(async () => root.render(withQueryClient(client,
     <BridgeForm
       key={key}
-      allRoutes={allRoutes}
       blastAddress={signedIn ? BLAST : null}
       now={() => at}
       onArrived={() => { calls.arrived += 1; }}
@@ -128,6 +127,9 @@ async function mount(sdk: BridgeSdk, calls: Calls, wallet: SourceWallet | null =
 }
 
 const newCalls = (): Calls => ({ quotes: [], sends: 0, approves: 0, arrived: 0 });
+
+// At this SUI price the recorded Blink quotes lose under 3%, so a press sends. A test of the loss check sets its own prices.
+beforeEach((t) => { stubPrices(t as TestContext, { SUI: { usd: "0.67" } }); });
 
 test("switching the source network keeps keyboard focus in the send flow", async () => {
   const calls = newCalls();
@@ -264,7 +266,7 @@ test("a search picks a catalog token by its contract and quotes its own decimals
     await waitFor(() => requests.length > 0, "the catalog token is quoted");
     assert.equal(requests[0]!.token.mayan, token.mayan);
     assert.equal(requests[0]!.amountIn64, "20000");
-    await waitFor(() => /No route/i.test(form.text()), "the no-route message");
+    await waitFor(() => /Code: bridge_no_route\./.test(form.text()), "the no-route message");
     assert.equal(form.button().disabled, true);
     assert.equal(calls.sends, 0);
     assert.equal(calls.approves, 0);
@@ -283,7 +285,7 @@ test("a checked quote bridges on one press, lists the row and reports the arriva
     await act(async () => half.click());
     assert.equal(form.container.querySelector<HTMLInputElement>("[inputmode=decimal]")?.value, "500");
     await form.type("20");
-    await waitFor(() => /You get at least 29\.3968 SUI/.test(form.text()), "the money sentence");
+    await waitFor(() => /you get at least 29\.3968 SUI/i.test(form.text()), "the money sentence");
     assert.equal(form.button().textContent, "Bridge");
     assert.equal(calls.quotes.at(-1), SOURCE, "the shown quote is bound to the source wallet");
     await form.press();
@@ -418,7 +420,7 @@ test("changing the receive coin never relabels an old quote", async () => {
     await form.type("20");
     const receiveUsdc = [...form.container.querySelectorAll<HTMLButtonElement>("[aria-label='Coin to receive'] button")].find((button) => button.textContent === "USDC")!;
     await act(async () => receiveUsdc.click());
-    assert.doesNotMatch(form.text(), /You get at least 29\.3968\s+USDC/);
+    assert.doesNotMatch(form.text(), /you get at least 29\.3968\s+USDC/i);
     assert.equal(form.button().disabled, true);
   } finally {
     await form.unmount();
@@ -587,7 +589,7 @@ test("the guard refuses a quote for another recipient before any wallet call", a
 
 test("a lower fresh quote waits for a new press at the new rate", async () => {
   const calls = newCalls();
-  const lower = { ...QUOTE, minReceived: QUOTE.minReceived - 1, expectedAmountOut: QUOTE.expectedAmountOut - 1 };
+  const lower = { ...QUOTE, minReceived: QUOTE.minReceived - 0.1, expectedAmountOut: QUOTE.expectedAmountOut - 0.1 };
   const form = await mount(fakeSdk(calls, [QUOTE, lower]), calls);
   try {
     await form.pickUsdc();
@@ -605,7 +607,7 @@ test("a lower fresh quote waits for a new press at the new rate", async () => {
 
 test("an accepted new rate drops its note even when the wallet then says no", async () => {
   const calls = newCalls();
-  const lower = { ...QUOTE, minReceived: QUOTE.minReceived - 1, expectedAmountOut: QUOTE.expectedAmountOut - 1 };
+  const lower = { ...QUOTE, minReceived: QUOTE.minReceived - 0.1, expectedAmountOut: QUOTE.expectedAmountOut - 0.1 };
   const form = await mount(fakeSdk(calls, [QUOTE, lower], { send: async () => { calls.sends += 1; throw coded(4001); } }), calls);
   try {
     await form.pickUsdc();
@@ -694,7 +696,7 @@ test("a failed price offers Try again, which asks Mayan once more", async () => 
     assert.match(form.text(), /\u2014SUIUSDC/, "a failed price shows a dash, not a zero");
     assert.equal(form.button().disabled, false);
     await form.press();
-    await waitFor(() => /You get at least/.test(form.text()), "the new price");
+    await waitFor(() => /you get at least/i.test(form.text()), "the new price");
     assert.equal(form.button().textContent, "Bridge");
   } finally {
     await form.unmount();
@@ -715,7 +717,7 @@ test("a different source wallet asks for a quote bound to it", async () => {
   }
 });
 
-// Every route on (the dev switch): Mayan's quotes, one sentence above the button, and the loss check.
+// Mayan's live quotes: one sentence above the button, and the loss check.
 
 /** Mayan's price API on this machine: the real SDK talks to it, so errors and request bodies are the SDK's own. */
 async function fakeMayan(t: TestContext, reply: (asked: number) => Readonly<{ status: number; body: string }>) {
@@ -747,7 +749,7 @@ function funded(calls: Calls, answers: ReadonlyArray<Quote | Error>, overrides: 
 
 /** The card's fake, with its quotes read by the real Mayan adapter. */
 function realQuotes(calls: Calls): BridgeSdk {
-  const real = mayanSdk(true);
+  const real = mayanSdk();
   return funded(calls, [], { quote: (input) => { calls.quotes.push(input.swapper); return real.quote(input); } });
 }
 
@@ -759,8 +761,11 @@ type Priced = Readonly<{ usd: string; ageMs?: number }>;
 /** Blast's price route: each coin asked answers with its price here, or has no entry. */
 function stubPrices(t: TestContext, prices: Readonly<{ ETH?: Priced; SUI?: Priced }>, status = 200) {
   const asked: string[][] = [];
-  t.mock.method(globalThis, "fetch", async (input: string | URL | Request) => {
+  const real = globalThis.fetch;
+  t.mock.method(globalThis, "fetch", async (input: string | URL | Request, init?: RequestInit) => {
     const coins = new URL(String(input), "http://127.0.0.1").searchParams.getAll("coin");
+    // Anything else is the real SDK talking to the fake Mayan.
+    if (coins.length === 0) return real(input, init);
     asked.push(coins);
     const listed = coins.flatMap((coin) => {
       const price = prices[coin.endsWith("::eth::ETH") ? "ETH" : "SUI"];
@@ -771,7 +776,8 @@ function stubPrices(t: TestContext, prices: Readonly<{ ETH?: Priced; SUI?: Price
   return asked;
 }
 
-const allRoutesCard = (sdk: BridgeSdk, calls: Calls) => mount(sdk, calls, evm(), {}, { allRoutes: true, at: LIVE_NOW });
+/** A card on the clock of the 2026-11-28 quotes. */
+const liveCard = (sdk: BridgeSdk, calls: Calls) => mount(sdk, calls, evm(), {}, { at: LIVE_NOW });
 
 /** The loss sheet only: the token picker is a dialog too. */
 const sheet = () => [...dom.document.querySelectorAll<HTMLElement>("[role='dialog']")].find((dialog) => /Loss unknown|You might lose/.test(dialog.textContent ?? "")) ?? null;
@@ -785,12 +791,12 @@ function sheetMotion() {
 test("up to 3% sends on one press, under one sentence that alone states the minimum", async (t) => {
   const prices = stubPrices(t, {});
   const calls = newCalls();
-  const form = await allRoutesCard(fakeSdk(calls, [USDC_TO_USDC]), calls);
+  const form = await liveCard(fakeSdk(calls, [USDC_TO_USDC]), calls);
   try {
     await form.pickUsdc("USDC");
     await form.type("20");
     const sentence = form.button().previousElementSibling!.textContent!;
-    assert.equal(sentence.replaceAll(" ", " "), "Send 20 USDC from Base: you get at least 19.9803 USDC, or a USDC refund to your Blast wallet minus a refund fee.");
+    assert.equal(sentence.replaceAll(" ", " "), "Send 20 USDC from Base. You get at least 19.9803 USDC.");
     assert.ok(sentence.split(/\s+/).length <= 25);
     assert.match(form.text(), /Fee\$0\.02/);
     assert.doesNotMatch(form.text(), /Route|Mayan Blink|Fast MCTP/);
@@ -806,11 +812,12 @@ test("up to 3% sends on one press, under one sentence that alone states the mini
 test("a worst case under 3% reads both prices once and sends on one press", async (t) => {
   const prices = stubPrices(t, { ETH: { usd: "2600" }, SUI: { usd: "1.05" } });
   const calls = newCalls();
-  const form = await allRoutesCard(funded(calls, [ETH_TO_SUI]), calls);
+  const form = await liveCard(funded(calls, [ETH_TO_SUI]), calls);
   try {
     await form.type("0.01");
     assert.equal(prices.length, 0, "typing reads no price");
     assert.equal(form.text().split("24.4211").length - 1, 1, "the minimum appears once");
+    assert.match(form.text(), /or a USDC refund to your Blast wallet minus a refund fee\./, "an auction order says what comes back");
     await form.press();
     assert.equal(calls.sends, 1);
     assert.ok(!sheet(), "no loss sheet");
@@ -825,7 +832,7 @@ test("above 3% the sheet names the loss: Back sends nothing, Send sends", async 
   stubPrices(t, { ETH: { usd: "2600" }, SUI: { usd: "1" } });
   const sheetClosed = sheetMotion();
   const calls = newCalls();
-  const form = await allRoutesCard(funded(calls, [ETH_TO_SUI]), calls);
+  const form = await liveCard(funded(calls, [ETH_TO_SUI]), calls);
   try {
     await form.type("0.01");
     await form.press();
@@ -848,7 +855,7 @@ test("above 3% the sheet names the loss: Back sends nothing, Send sends", async 
 test("a loss only the fixed fee puts above 3% says to send more", async (t) => {
   stubPrices(t, { ETH: { usd: "2600" }, SUI: { usd: "1.02" } });
   const calls = newCalls();
-  const form = await allRoutesCard(funded(calls, [{ ...ETH_TO_SUI, clientRelayerFeeSuccess: 1 }]), calls);
+  const form = await liveCard(funded(calls, [{ ...ETH_TO_SUI, clientRelayerFeeSuccess: 1 }]), calls);
   try {
     await form.type("0.01");
     await form.press();
@@ -868,7 +875,7 @@ for (const [name, prices, status] of [
   test(`${name} price leaves the button and asks before sending`, async (t) => {
     stubPrices(t, prices, status);
     const calls = newCalls();
-    const form = await allRoutesCard(funded(calls, [ETH_TO_SUI]), calls);
+    const form = await liveCard(funded(calls, [ETH_TO_SUI]), calls);
     try {
       await form.type("0.01");
       assert.equal(form.button().textContent, "Bridge");
@@ -889,7 +896,7 @@ test("a lower fresh minimum asks again, also after the loss was accepted", async
   const calls = newCalls();
   // Only the minimum falls; the estimate on screen stays the same.
   const lower = { ...ETH_TO_SUI, minReceived: ETH_TO_SUI.minReceived - 0.1 };
-  const form = await allRoutesCard(funded(calls, [ETH_TO_SUI, ETH_TO_SUI, lower]), calls);
+  const form = await liveCard(funded(calls, [ETH_TO_SUI, ETH_TO_SUI, lower]), calls);
   try {
     await form.type("0.01");
     await form.press();
@@ -910,7 +917,7 @@ test("a wallet rejection after accepting the loss returns to the button without 
   stubPrices(t, {});
   const sheetClosed = sheetMotion();
   const calls = newCalls();
-  const form = await allRoutesCard(funded(calls, [ETH_TO_SUI], { send: async () => { calls.sends += 1; throw coded(4001); } }), calls);
+  const form = await liveCard(funded(calls, [ETH_TO_SUI], { send: async () => { calls.sends += 1; throw coded(4001); } }), calls);
   try {
     await form.type("0.01");
     await form.press();
@@ -924,10 +931,9 @@ test("a wallet rejection after accepting the loss returns to the button without 
   }
 });
 
-test("a Blink quote alone still sends with every route on, with its own refund wording", async (t) => {
-  stubPrices(t, { SUI: { usd: "0.67" } });
+test("a Blink quote alone sends, with its own refund wording", async () => {
   const calls = newCalls();
-  const form = await mount(fakeSdk(calls, [QUOTE]), calls, evm(), {}, { allRoutes: true });
+  const form = await mount(fakeSdk(calls, [QUOTE]), calls);
   try {
     await form.pickUsdc();
     await form.type("20");
@@ -943,7 +949,7 @@ test("a Blink quote alone still sends with every route on, with its own refund w
 test("signed out with no wallet, any pair shows price, minimum, fee and time, and Mayan gets no address", async (t) => {
   const bodies = await fakeMayan(t, () => ({ status: 200, body: answering(ETH_TO_SUI) }));
   const calls = newCalls();
-  const form = await mount(realQuotes(calls), calls, null, {}, { allRoutes: true, signedIn: false, at: LIVE_NOW });
+  const form = await mount(realQuotes(calls), calls, null, {}, { signedIn: false, at: LIVE_NOW });
   try {
     await form.type("0.01");
     const shown = form.text().replaceAll(" ", " ");
@@ -963,7 +969,7 @@ for (const [name, body] of [["a JSON", JSON.stringify({ code: "RATE_LIMITED", me
   test(`${name} 429 from Mayan is asked once, never retried`, async (t) => {
     const bodies = await fakeMayan(t, () => ({ status: 429, body }));
     const calls = newCalls();
-    const form = await allRoutesCard(realQuotes(calls), calls);
+    const form = await liveCard(realQuotes(calls), calls);
     try {
       await form.type("0.01");
       assert.match(form.text(), /Code: bridge_quote_failed\./);
@@ -978,7 +984,7 @@ for (const [name, failure] of [["Mayan's own 5xx", JSON.stringify({ code: "INTER
   test(`${name} is asked again`, async (t) => {
     const bodies = await fakeMayan(t, (asked) => asked === 1 ? { status: 502, body: failure } : { status: 200, body: answering(ETH_TO_SUI) });
     const calls = newCalls();
-    const form = await allRoutesCard(realQuotes(calls), calls);
+    const form = await liveCard(realQuotes(calls), calls);
     try {
       await form.type("0.01");
       assert.match(form.text(), /you get at least/);
@@ -991,7 +997,7 @@ for (const [name, failure] of [["Mayan's own 5xx", JSON.stringify({ code: "INTER
 
 test("a dropped connection, as the browser reports it, is asked again", async () => {
   const calls = newCalls();
-  const form = await allRoutesCard(funded(calls, [new TypeError("Network request failed"), ETH_TO_SUI]), calls);
+  const form = await liveCard(funded(calls, [new TypeError("Network request failed"), ETH_TO_SUI]), calls);
   try {
     await form.type("0.01");
     assert.match(form.text(), /you get at least/);

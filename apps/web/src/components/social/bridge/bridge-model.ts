@@ -204,14 +204,13 @@ function overLimitText(message: unknown, token: SourceToken): string {
 }
 
 /** A short sentence for a failed quote, in Mayan's limits where it gives them. */
-export function quoteErrorText(error: unknown, chain: ChainInfo, token: SourceToken, allRoutes = false): string {
+export function quoteErrorText(error: unknown, chain: ChainInfo, token: SourceToken): string {
   const { code, data, message } = (error ?? {}) as QuoteFailure;
   if (isPausedError(error)) return PAUSED_TEXT;
-  if (allRoutes && code === "ROUTE_NOT_FOUND") return noRouteText(chain, token);
-  if (allRoutes && code === "BRIDGE_LIMIT_EXCEEDED") return overLimitText(message, token);
+  if (code === "ROUTE_NOT_FOUND") return noRouteText(chain, token);
+  if (code === "BRIDGE_LIMIT_EXCEEDED") return overLimitText(message, token);
   if (code === "AMOUNT_TOO_SMALL" && typeof data?.minAmountIn === "number") return `The smallest amount is ${data.minAmountIn}\u00a0${token.symbol}. Code: bridge_amount_too_small.`;
   if (code === "AMOUNT_TOO_LARGE" && typeof data?.maxAmountIn === "number") return `The largest amount is ${data.maxAmountIn}\u00a0${token.symbol}. Code: bridge_amount_too_large.`;
-  if (code === "ROUTE_NOT_FOUND") return `No route from ${chain.label} ${token.symbol} to Sui right now. Code: bridge_no_route.`;
   return QUOTE_FAILED_TEXT;
 }
 

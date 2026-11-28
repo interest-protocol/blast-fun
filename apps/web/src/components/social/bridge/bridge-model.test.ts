@@ -68,24 +68,19 @@ test("Mayan's explorer status maps to the row state", () => {
   assert.equal(transferState(undefined), "pending");
 });
 
-test("quote errors read as plain sentences with Mayan's limits", () => {
+test("quote errors read as plain sentences with Mayan's limits, each saying what to do", () => {
   const base = CHAINS.base;
-  assert.equal(quoteErrorText({ code: 9999, message: "Swap SDK is outdated!" }, base, USDC), "Bridging is paused. You can still deposit on Sui. Code: bridge_paused.");
-  assert.equal(quoteErrorText({ code: "AMOUNT_TOO_SMALL", data: { minAmountIn: 0.05 } }, base, USDC), "The smallest amount is 0.05\u00a0USDC. Code: bridge_amount_too_small.");
-  assert.equal(quoteErrorText({ code: "AMOUNT_TOO_LARGE", data: { maxAmountIn: 300 } }, base, USDC), "The largest amount is 300\u00a0USDC. Code: bridge_amount_too_large.");
-  assert.equal(quoteErrorText({ code: "ROUTE_NOT_FOUND" }, base, ETH), "No route from Base ETH to Sui right now. Code: bridge_no_route.");
-  assert.equal(quoteErrorText(new TypeError("Failed to fetch"), base, ETH), "Couldn’t get a price. Code: bridge_quote_failed.");
-  assert.equal(quoteErrorText(null, base, ETH), "Couldn’t get a price. Code: bridge_quote_failed.");
-});
-
-test("with every route on, no route, too small and too large each say what to do", () => {
-  const base = CHAINS.base;
-  const read = (error: unknown, token = ETH) => quoteErrorText(error, base, token, true);
-  assert.equal(read({ code: "ROUTE_NOT_FOUND" }), "No price for ETH. Bridge USDC. Code: bridge_no_route.");
-  assert.equal(read({ code: "ROUTE_NOT_FOUND" }, USDC), "No price for USDC. Try another chain. Code: bridge_no_route.");
+  const read = (error: unknown, token = ETH) => quoteErrorText(error, base, token);
+  assert.equal(read({ code: 9999, message: "Swap SDK is outdated!" }, USDC), "Bridging is paused. You can still deposit on Sui. Code: bridge_paused.");
+  assert.equal(read({ code: "AMOUNT_TOO_SMALL", data: { minAmountIn: 0.05 } }, USDC), "The smallest amount is 0.05\u00a0USDC. Code: bridge_amount_too_small.");
+  assert.equal(read({ code: "AMOUNT_TOO_LARGE", data: { maxAmountIn: 300 } }, USDC), "The largest amount is 300\u00a0USDC. Code: bridge_amount_too_large.");
   assert.equal(read({ code: "AMOUNT_TOO_SMALL", message: "Amount too small (min ~0.00043 ETH)", data: { minAmountIn: 0.00043 } }), "The smallest amount is 0.00043\u00a0ETH. Code: bridge_amount_too_small.");
   assert.equal(read({ code: "BRIDGE_LIMIT_EXCEEDED", message: "CCTP does not have enough capacity for this amount. Max per swap: 75.94588242742242" }), "Largest right now: 75.94\u00a0ETH. Code: bridge_amount_too_large.");
   assert.equal(read({ code: "BRIDGE_LIMIT_EXCEEDED", message: "Over capacity." }), "Try a smaller amount. Code: bridge_amount_too_large.");
+  assert.equal(read({ code: "ROUTE_NOT_FOUND" }), "No price for ETH. Bridge USDC. Code: bridge_no_route.");
+  assert.equal(read({ code: "ROUTE_NOT_FOUND" }, USDC), "No price for USDC. Try another chain. Code: bridge_no_route.");
+  assert.equal(read(new TypeError("Failed to fetch")), "Couldn’t get a price. Code: bridge_quote_failed.");
+  assert.equal(read(null), "Couldn’t get a price. Code: bridge_quote_failed.");
 });
 
 const READY: ActionInput = {

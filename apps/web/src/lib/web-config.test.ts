@@ -91,13 +91,11 @@ test("outside production every value is optional and an unset one turns its feat
   assert.equal(parseWebConfig({ ...preview, PRIVY_APP_ID: "  " }).privyAppId, null);
 });
 
-test("the Fast MCTP fallback requires Bridge and the hosted dev environment", () => {
+test("Bridge needs its flag and stays off in production", () => {
   const enabled = { NEXT_PUBLIC_MAYAN_BRIDGE_ENABLED: "1" };
-  assert.equal(parseWebConfig({ ...preview, ...enabled }).bridgeFastMctp, false);
-  assert.equal(parseWebConfig({ ...production, ...enabled, VERCEL_TARGET_ENV: "dev" }).bridgeFastMctp, false);
-  assert.equal(parseWebConfig({ ...preview, VERCEL_TARGET_ENV: "dev" }).bridgeFastMctp, false);
-  assert.equal(parseWebConfig({ ...enabled, BLAST_DEPLOYMENT_TARGET: "dev" }).bridgeFastMctp, false);
-  assert.equal(parseWebConfig({ ...preview, ...enabled, VERCEL_TARGET_ENV: "dev" }).bridgeFastMctp, true);
+  assert.equal(parseWebConfig(preview).bridge, false);
+  assert.equal(parseWebConfig({ ...preview, ...enabled }).bridge, true);
+  assert.equal(parseWebConfig({ ...production, ...enabled }).bridge, false);
 });
 
 // This fails if the direct socket can be configured without the secret its
