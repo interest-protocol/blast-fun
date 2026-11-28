@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { DrawnSeries } from "#web/components/launchpad/chart/chart-geometry.ts";
-import { barChanges, fillGaps, foldTrade, foldTrades, MAX_FILLED_BARS, klineBars, pricePrecision, priceParts, volumeText, chartDate, ticksInside, plotHeightFor, topGap, type Bar } from "./kline-model.ts";
+import { barChanges, capText, fillGaps, foldTrade, foldTrades, MAX_FILLED_BARS, klineBars, pricePrecision, priceParts, volumeText, chartDate, ticksInside, plotHeightFor, topGap, type Bar } from "./kline-model.ts";
 
 const MINUTE = 60_000;
 const T0 = 1_795_188_300_000; // a 5-minute boundary
@@ -42,6 +42,13 @@ test("precision keeps four significant digits of the smallest price, from dollar
   assert.equal(pricePrecision([bar(0, 1, 1, 0.001234, 1)]), 6);
   assert.equal(pricePrecision([bar(0, 1, 1, 1.5e-12, 1)]), 15);
   assert.equal(pricePrecision([bar(0, 1, 1, 1e-20, 1)]), 16);
+});
+
+test("a market-cap axis reads whole dollars, short", () => {
+  assert.equal(pricePrecision([bar(0, 84_200, 90_000, 80_000, 85_000)], 0), 0);
+  assert.equal(capText(84_213), "84.2K");
+  assert.equal(capText(1_250_000, 2), "1.25M");
+  assert.equal(capText(512.7), "513");
 });
 
 test("a newer tail updates in place; changed history resets", () => {

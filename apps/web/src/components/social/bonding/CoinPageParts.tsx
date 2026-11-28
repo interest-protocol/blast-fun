@@ -73,6 +73,14 @@ export function CoinPriceFigure({ price, tradeId, quoteSymbol, quoteMark }: Read
   </span>;
 }
 
+/** A market cap in USD, short ($84.2K), cued when the shown figure moves; hidden with the trader's amounts. */
+export function CoinCapFigure({ cap, tradeId }: Readonly<{ cap: string; tradeId: string | null }>) {
+  const { amountsHidden } = useShellPrefs();
+  if (amountsHidden) return <>{HIDDEN_AMOUNT}</>;
+  const label = readableUsd(cap);
+  return <span className={styles.priceFigure}><LiveFigureCue tradeId={tradeId} value={label}>{label}</LiveFigureCue></span>;
+}
+
 /** The last confirmed price, kept while the live price waits for a newer checkpoint. */
 export function useLastPrice(price: string | null | undefined): string | null {
   const [last, setLast] = useState(price ?? null);
@@ -104,20 +112,27 @@ export function PriceChange({ change, held }: Readonly<{ change: PriceMoveLabel;
   return <span className={styles.priceChange} data-direction={change.direction} data-held={held} aria-hidden={held}>{change.value}</span>;
 }
 
-export function MarketPriceRow({ price, reserve, priceLabel = "Price", change, activity, showCurrency = true, priceNamesUnit = false }: Readonly<{
+/** The headline's market cap: its figure, and the last confirmed one held unseen while it waits. */
+export type CapFigure = Readonly<{ figure: ReactNode; reserve?: ReactNode }>;
+
+/**
+ * `cap`: the market cap leads, the price small beside it in the chosen currency. Null when the
+ * page knows the supply but not yet a rate: the price leads, and the small line keeps its space,
+ * so nothing moves when the rate arrives. Left out on a page with no supply: the price alone.
+ * `holder`: the viewer's entry and P&L, on its own line under the figures (a phone shows it under the chart).
+ */
+export function MarketPriceRow({ price, reserve, priceLabel = "Price", change, activity, showCurrency = true, priceNamesUnit = false, cap, holder }: Readonly<{
   price: ReactNode; reserve?: ReactNode; priceLabel?: string; change?: PriceMoveLabel | null;
-  activity?: ReactNode; showCurrency?: boolean; priceNamesUnit?: boolean;
+  activity?: ReactNode; showCurrency?: boolean; priceNamesUnit?: boolean; cap?: CapFigure | null; holder?: ReactNode;
 }>) {
   const { amountsHidden } = useShellPrefs();
   const displayCurrency = useCoinPriceCurrency();
   const currency = showCurrency ? displayCurrency : null;
   const hasPrice = price != null;
-  const held = reserve == null ? undefined : true;
   if (!hasPrice && !currency && !activity) return null;
-  return <div className={styles.marketPriceRow} data-unit-shown={showsUnit(currency != null, priceNamesUnit, amountsHidden)}>
+  return <div className={styles.marketPriceRow} data-unit-shown={showsUnit(currency != null, priceNamesUnit || cap != null, amountsHidden)}>
     {hasPrice || activity ? <div className={styles.marketPrice}>
-      {hasPrice && <><span>{priceLabel}</span><PriceSlot price={price} reserve={reserve} /></>}
-      {hasPrice && change && <PriceChange change={change} held={held} />}
+      {hasPrice && <MarketFigures price={price} reserve={reserve} priceLabel={priceLabel} change={change} cap={cap} holder={holder} />}
       {activity}
     </div> : null}
     {currency && <div className={styles.priceControls}>
@@ -129,6 +144,22 @@ export function MarketPriceRow({ price, reserve, priceLabel = "Price", change, a
       />
     </div>}
   </div>;
+}
+
+/** The headline figure (the market cap, or the price without one), its move, the small price and the holder's line. */
+function MarketFigures({ price, reserve, priceLabel, change, cap, holder }: Readonly<{
+  price: ReactNode; reserve?: ReactNode; priceLabel: string; change?: PriceMoveLabel | null; cap?: CapFigure | null; holder?: ReactNode;
+}>) {
+  const lead = cap ? cap.figure : price;
+  const leadReserve = cap ? cap.reserve : reserve;
+  return <>
+    <span>{cap ? "Market cap" : priceLabel}</span><PriceSlot price={lead} reserve={leadReserve} />
+    {change && <PriceChange change={change} held={leadReserve == null ? undefined : true} />}
+    {cap !== undefined && <span className={styles.capPrice} data-cap-price="" aria-hidden={cap ? undefined : true}>
+      {cap && <><span className="sr-only">Price </span><PriceSlot price={price} reserve={reserve} /></>}
+    </span>}
+    {cap && holder}
+  </>;
 }
 
 export function Fact({ label, children }: Readonly<{ label: string; children: ReactNode }>) {

@@ -93,11 +93,16 @@ function joinBars(earlier: Bar, later: Bar): Bar {
  * Decimals that keep four significant digits of the smallest price shown, from 2 (a
  * dollar coin) to 16 (a coin at 1e-12). The axis folds the leading zeros (0.0₉1234).
  */
-export function pricePrecision(bars: readonly Bar[]): number {
+export function pricePrecision(bars: readonly Bar[], floor = 2): number {
   let smallest = Infinity;
   for (const bar of bars) if (bar.low > 0 && bar.low < smallest) smallest = bar.low;
-  if (!Number.isFinite(smallest)) return 2;
-  return Math.min(16, Math.max(2, 3 - Math.floor(Math.log10(smallest))));
+  if (!Number.isFinite(smallest)) return floor;
+  return Math.min(16, Math.max(floor, 3 - Math.floor(Math.log10(smallest))));
+}
+
+/** A market cap, short: 84.2K, 1.25M; under a thousand, whole dollars. */
+export function capText(value: number, places = 1): string {
+  return new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: Math.abs(value) < 1_000 ? 0 : places }).format(value);
 }
 
 /**

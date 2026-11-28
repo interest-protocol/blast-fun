@@ -4,7 +4,7 @@ import { WalletTradesProvider } from "#web/components/launchpad/activity/wallet-
 import { exactDecimal, exactText, multiplyExact } from "@blast/core/web/exact-amount.ts";
 import { SUI_COIN_TYPE, USDC_COIN_TYPE } from "@blast/core/lib/sui/coin-types.ts";
 import { SUI_POOL_QUOTE, type PoolQuote } from "@blast/core/modules/social/portfolio/core-coins.ts";
-import { fdvInQuote } from "@blast/core/modules/social/prices/valuation.ts";
+import { fdvInQuote, liveSupplyAtoms } from "@blast/core/modules/social/prices/valuation.ts";
 import { NO_VALUE, shortAddress as shortId } from "@blast/core/web/format.ts";
 import { MEME_TOTAL_SUPPLY_WHOLE_TOKENS } from "@interest-protocol/blast-sdk/launchpad";
 import Link from "next/link";
@@ -43,8 +43,12 @@ import { CoinPageWallet } from "#web/components/blast-ui/CoinPageWallet.tsx";
 import { CoinMark } from "#web/components/blast-ui/CoinMark.tsx";
 import { CoinLegacyMark, CoinVerifiedMark, PreviousIcon, TelegramIcon } from "#web/components/blast-ui/Icons.tsx";
 import { useCoinTrade } from "./use-coin-trade.ts";
+import { HolderLine } from "./HolderLine.tsx";
+import { HeldBalanceProvider } from "#web/components/launchpad/trade/held-balance.tsx";
 import { ChartPriceLaunch, useChartPrice } from "#web/components/launchpad/chart/chart-live-price.ts";
 import { ChartLastTrade } from "#web/components/launchpad/chart/ChartLastTrade.tsx";
+import { ChartMarketCapSupply, useMarketCapRate, type MarketCapSupply } from "#web/components/launchpad/chart/chart-market-cap.ts";
+import { formatChange, priceDirection } from "#web/components/presale-pages/sale-market-format.ts";
 import { ChartTradeContext } from "#web/components/launchpad/chart/chart-trade-context.ts";
 import { LiveFigureCue } from "#web/components/blast-ui/LiveFigureCue.tsx";
 import { useAppQueryClient } from "#web/lib/query/provider.tsx";
@@ -54,7 +58,7 @@ import { useLiveListening, useLiveScreen, useReportListening } from "#web/compon
 import { statsAfterRead, useLiveCoin, type LiveCoin, type LiveCoinStats } from "#web/components/launchpad/coin/live-coin.ts";
 import type { ExpectedDeployment } from "@blast/core/modules/launchpad-contract/provenance.ts";
 import styles from "./bonding-coin.module.css";
-import { ChartCard, CoinCover, CoinIdentityHeader, CoinPriceFigure, CoinTradingActivity, Fact, MarketOverview, MarketPriceRow, useLastPrice } from "./CoinPageParts.tsx";
+import { ChartCard, CoinCapFigure, CoinCover, CoinIdentityHeader, CoinPriceFigure, CoinTradingActivity, Fact, MarketOverview, MarketPriceRow, PriceChange, useLastPrice, type CapFigure, type PriceMoveLabel } from "./CoinPageParts.tsx";
 import { bpsPercent } from "@blast/core/lib/bps.ts";
 
 const ZERO = BigInt(0);
@@ -146,13 +150,51 @@ function PriceValue({ units, price: rawPrice, tradeId }: Readonly<{ units: Price
   return <CoinPriceFigure price={prices.price(rawPrice)} tradeId={tradeId} quoteSymbol={prices.usd ? undefined : quoteSymbol} quoteMark={quoteMark} />;
 }
 
-function MarketPrice({ units, price, tradeId = null, activity, showCurrency }: Readonly<{
+/** The coin's supply in circulation (Home's curve supply), or null when the page has none. */
+function circulatingSupply(view: View): MarketCapSupply | null {
+  const atoms = liveSupplyAtoms(view.economics?.inputs);
+  return atoms === null || view.memeDecimals === null ? null : { atoms, decimals: view.memeDecimals };
+}
+
+/** The 24h move of the market cap, from the coin's live stats. */
+function capChange(changeBps: number | null | undefined): PriceMoveLabel | null {
+  return changeBps == null ? null : { value: <>{formatChange(changeBps)} <span>24h</span></>, direction: priceDirection(changeBps) };
+}
+
+/**
+ * The market cap leads once the page has a supply and a rate; the price stays small under it in the
+ * chosen currency. Without either, the price leads, as on a coin with no supply.
+ */
+function useCapFigure(units: PriceUnits | null, price: string | null | undefined, last: string | null, tradeId: string | null): Readonly<{ cap: CapFigure | null | undefined; capUsd: string | null }> {
+  const capRate = useMarketCapRate();
+  if (capRate == null || !units) return { cap: capRate === undefined ? undefined : null, capUsd: null };
+  const caps = poolPrices(units.memeDecimals, units.quoteDecimals, capRate);
+  return {
+    cap: {
+      figure: price == null ? NO_VALUE : <CoinCapFigure cap={caps.price(price)} tradeId={tradeId} />,
+      reserve: price == null && last != null ? <CoinCapFigure cap={caps.price(last)} tradeId={null} /> : null,
+    },
+    capUsd: price == null ? null : caps.price(price),
+  };
+}
+
+function MarketPrice({ units, price, tradeId = null, activity, showCurrency, changeBps, coinType = null }: Readonly<{
   units: PriceUnits | null; price?: string | null; tradeId?: string | null; activity?: ReactNode; showCurrency?: boolean;
+  changeBps?: number | null; coinType?: string | null;
 }>) {
   const last = useLastPrice(price);
+  const { cap, capUsd } = useCapFigure(units, price, last, tradeId);
   return <MarketPriceRow priceLabel="Current pool price" price={price != null && units ? <PriceValue units={units} price={price} tradeId={tradeId} /> : NO_VALUE}
     reserve={price == null && last != null && units ? <PriceValue units={units} price={last} tradeId={null} /> : null}
+    cap={cap} change={cap ? capChange(changeBps) : null} holder={<HolderLine coinType={coinType} capUsd={capUsd} />}
     activity={activity} showCurrency={showCurrency} />;
+}
+
+/** The 24h move and the holder's line under a phone's chart, so the figure line above it stays one line. */
+function MarketCapFoot({ units, price, changeBps, coinType }: Readonly<{ units: PriceUnits | null; price?: string | null; changeBps: number | null | undefined; coinType: string | null }>) {
+  const { cap, capUsd } = useCapFigure(units, price, null, null);
+  const change = cap ? capChange(changeBps) : null;
+  return cap && <>{change && <PriceChange change={change} />}<HolderLine coinType={coinType} capUsd={capUsd} /></>;
 }
 
 function ProgressCard({ view, tradeId, children }: Readonly<{ view: View; tradeId: string | null; children?: ReactNode }>) {
@@ -414,16 +456,16 @@ function CoinMarket({ snapshot, page, chart, activity, poolKey, checkpoint, expe
   const context = coinTradeSource(view, poolKey, lastTrade, receivedAt);
   // A phone reads the last trade under the chart (CSS shows one of the two), so the candles sit right under the price.
   const recent = context && <ChartLastTrade placement="headline" />;
-  return <ChartPriceLaunch value={{ poolKey, launchId: page.launchId }}><ChartTradeContext value={context}>
+  return <ChartPriceLaunch value={{ poolKey, launchId: page.launchId }}><ChartTradeContext value={context}><ChartMarketCapSupply value={circulatingSupply(view)}>
     <div className={styles.market}>
       <Reconnecting live={live} />
       {liveOn ? <LifecycleRefresh lifecycle={live.stats?.lifecycle ?? null} /> : null}
       <CoinMarketCards graduated={graduated} view={view} tick={tick} tradeId={tradeId} stats={stats} chart={chart} activity={activity}
         price={<MarketPrice units={priceUnits(view)} price={price?.price} tradeId={tradeId && price?.cursor ? tradeId : null}
-          showCurrency={view.identity.quoteType !== null} activity={recent} />}
-        foot={<><span className={styles.byline}><CreatorByline page={page} />{view.identity.coinType ? <CoinTypeTag coinType={view.identity.coinType} /> : null}</span>{recent}</>} />
+          showCurrency={view.identity.quoteType !== null} activity={recent} changeBps={live.stats?.changeBps} coinType={view.identity.coinType} />}
+        foot={<><MarketCapFoot units={priceUnits(view)} price={price?.price} changeBps={live.stats?.changeBps} coinType={view.identity.coinType} /><span className={styles.byline}><CreatorByline page={page} />{view.identity.coinType ? <CoinTypeTag coinType={view.identity.coinType} /> : null}</span>{recent}</>} />
     </div>
-  </ChartTradeContext></ChartPriceLaunch>;
+  </ChartMarketCapSupply></ChartTradeContext></ChartPriceLaunch>;
 }
 
 /** The chart comes first at every width, the price row as its head; without a chart the price row stands alone. */
@@ -597,7 +639,7 @@ export function BondingCoinScreen({ page, details, verified = false, slots, expe
   const charted = showMarket && !marketOffline && slots.chart != null;
   return <div className={styles.page} data-bonding-coin="">
     <CoinPageHeader page={page} view={view} details={details} verified={verified} marketCatchingUp={marketCatchingUp} compact={charted} />
-    <WalletTradesProvider key={page.launchId} deployer={view.coin?.launcher ?? null}>
+    <WalletTradesProvider key={page.launchId} deployer={view.coin?.launcher ?? null}><HeldBalanceProvider>
       <div className={styles.layout} data-graduated={graduated || undefined} data-market-offline={marketOffline || undefined} data-no-market={!showMarket || undefined}>
         {showMarket ? (
           <CoinPriceCurrencyProvider key={page.launchId} quoteType={view.identity.quoteType} quoteSymbol={view.identity.quoteSymbol}>
@@ -617,6 +659,6 @@ export function BondingCoinScreen({ page, details, verified = false, slots, expe
           <Disclosure title="Theses">{slot("theses")}</Disclosure>
         </div>
       </div>
-    </WalletTradesProvider>
+    </HeldBalanceProvider></WalletTradesProvider>
   </div>;
 }

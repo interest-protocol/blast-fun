@@ -8,6 +8,7 @@ import { chartFromSnapshot, chartPoolKeys, chartTailRequest, readChartPool, type
 import { afterChartSourceRead, chartKey, denseInterval, tradedBuckets, chartRequest, initialChart, type ChartCandlePage, type ChartControls } from "./chart-model";
 import type { Section } from "@blast/core/modules/launchpad-contract/section.ts";
 import { useCoinPriceCurrency } from "./CoinPriceCurrency";
+import { useChartUnits } from "./chart-market-cap";
 import { ChartStream, type ChartStreamStatus } from "./chart-stream";
 import { useChartPrice } from "./chart-live-price";
 import { useCoinChartControls } from "./chart-preferences";
@@ -32,7 +33,7 @@ export function CoinChart({
 }: Readonly<{ source: ChartSource; compact?: boolean; coinType: string; initialControls: ChartControls; initialSnapshot?: ChartSnapshot; livePreset: boolean }>) {
   const currency = useCoinPriceCurrency();
   const standaloneRate = useQuoteUsd(currency ? null : source.quoteType ?? null);
-  const quoteUsd = currency ? currency.quoteUsd : standaloneRate;
+  const { quoteUsd, tradeUsd, marketCap } = useChartUnits(standaloneRate);
   const [entry] = useState(initialSnapshot);
   const { controls, ready, commit, chosen } = useCoinChartControls(compact, initialControls, true, livePreset, entry !== undefined);
   const [state, setState] = useState(() => chartFromSnapshot(source, initialControls, initialSnapshot));
@@ -140,6 +141,8 @@ export function CoinChart({
       source={source}
       omitCurve={!plotCurve}
       quoteUsd={quoteUsd}
+      tradeUsd={tradeUsd}
+      marketCap={marketCap}
       controls={controls}
       request={chartRequest(controls, requestAt)}
       hidden={hidden}

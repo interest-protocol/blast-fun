@@ -38,11 +38,13 @@ import type {
 import type { PriceWindow } from "@blast/core/web/contracts/prices.ts";
 
 import { SalePriceChart, type MarketExtras } from "./SalePriceChart";
-import { formatMove, presaleHolderShare, priceDirection, type PriceMove } from "./sale-market-format";
+import { formatChange, formatMove, presaleHolderShare, priceDirection, type PriceMove } from "./sale-market-format";
 import { useChartPrice } from "#web/components/launchpad/chart/chart-live-price.ts";
 import { PoolChart } from "#web/components/social/coins/PoolChart.tsx";
 import { PresaleHolderSummary } from "./PresaleHolderSummary";
-import { ChartCard, CoinPriceFigure, MarketOverview, MarketPriceRow, PriceChange, useLastPrice, type PriceMoveLabel } from "#web/components/social/bonding/CoinPageParts.tsx";
+import { HolderLine } from "#web/components/social/bonding/HolderLine.tsx";
+import { ChartCard, CoinCapFigure, CoinPriceFigure, MarketOverview, MarketPriceRow, PriceChange, useLastPrice, type PriceMoveLabel } from "#web/components/social/bonding/CoinPageParts.tsx";
+import { ChartMarketCapSupply, useMarketCapRate } from "#web/components/launchpad/chart/chart-market-cap.ts";
 import coinStyles from "#web/components/social/bonding/bonding-coin.module.css";
 import { ChartLastTrade } from "#web/components/launchpad/chart/ChartLastTrade.tsx";
 import { CoinPriceCurrencyProvider, useCoinPriceCurrency } from "#web/components/launchpad/chart/CoinPriceCurrency.tsx";
@@ -459,10 +461,12 @@ export function SaleMarket({
       listening={listening}
       chart={(extras) => <>{market?.pool ? (
         <CoinPriceCurrencyProvider quoteType={market.quote.type} quoteSymbol={market.quote.symbol}>
-          <div className={coinStyles.market} data-sale-market="">
-            <ChartCard head={<PresaleMarketPrice market={market} move={extras.move} activity={lastTrade} />}
-              foot={<><PresaleMarketMove market={market} move={extras.move} /><ChartLastTrade placement="headline" /></>}><SalePoolChart sale={sale} market={market} pool={market.pool} /></ChartCard>
-          </div>
+          <ChartMarketCapSupply value={market.supply && { atoms: market.supply.circulating, decimals: market.decimals }}>
+            <div className={coinStyles.market} data-sale-market="">
+              <ChartCard head={<PresaleMarketPrice market={market} move={extras.move} activity={lastTrade} />}
+                foot={<><PresaleMarketMove market={market} move={extras.move} /><ChartLastTrade placement="headline" /></>}><SalePoolChart sale={sale} market={market} pool={market.pool} /></ChartCard>
+            </div>
+          </ChartMarketCapSupply>
           {extras.note}
         </CoinPriceCurrencyProvider>
       ) : <SalePriceChart sale={sale} trade={null} enabled={!marketQuery.isPending} windows={windows} note={extras.note} />}{afterChart}</>}
@@ -512,33 +516,49 @@ function usePresalePoolPrice(pool: HomeCoinMarket["pool"]) {
   return pool && confirmedAt != null && confirmedAt > pool.as_of_ms ? price : null;
 }
 
-/** The headline's price: the pool's live price once confirmed, else the last one shown, in the chosen currency. */
+/**
+ * The headline's price: the pool's live price once confirmed, else the last one shown, in the chosen
+ * currency. `caps` turns the same price into the market cap in USD, once the read has a circulating
+ * supply and a rate: never the sale's stream cap.
+ */
 function usePresaleHeadline(market: HomeCoinMarket) {
   const currency = useCoinPriceCurrency();
   const live = usePresalePoolPrice(market.pool);
   const last = useLastPrice(live?.price);
   const prices = poolPrices(market.decimals, market.quote.decimals, currency?.quoteUsd);
-  return { currency, live, last, prices };
+  const capRate = useMarketCapRate();
+  const caps = capRate == null ? capRate : poolPrices(market.decimals, market.quote.decimals, capRate);
+  return { currency, live, last, prices, caps };
 }
 
-function presaleChange(move: PriceMove | null | undefined, last: string | null, usd: boolean): PriceMoveLabel | null {
-  return move && last != null && usd ? { value: <>{formatMove(move)} <span>24h</span></>, direction: priceDirection(move.bps) } : null;
+/** With the market cap leading, the move is its percentage alone: the price line below names the currency. */
+function presaleChange(move: PriceMove | null | undefined, last: string | null, usd: boolean, cap: boolean): PriceMoveLabel | null {
+  if (!move || last == null || !(usd || cap)) return null;
+  return { value: <>{cap ? formatChange(move.bps) : formatMove(move)} <span>24h</span></>, direction: priceDirection(move.bps) };
 }
 
 function PresaleMarketPrice({ market, move, activity }: Readonly<{ market: HomeCoinMarket; move?: PriceMove | null; activity: ReactNode }>) {
-  const { currency, live, last, prices } = usePresaleHeadline(market);
+  const { currency, live, last, prices, caps } = usePresaleHeadline(market);
   const quoteSymbol = prices.usd ? undefined : market.quote.symbol;
+  const cap = caps && {
+    figure: live ? <CoinCapFigure cap={caps.price(live.price)} tradeId={live.cursor} /> : NO_VALUE,
+    reserve: !live && last != null ? <CoinCapFigure cap={caps.price(last)} tradeId={null} /> : null,
+  };
   return <MarketPriceRow showCurrency={currency?.rate != null} priceNamesUnit={live != null}
     activity={activity}
     price={live ? <CoinPriceFigure price={prices.price(live.price)} quoteSymbol={quoteSymbol} tradeId={live.cursor} /> : NO_VALUE}
     reserve={!live && last != null ? <CoinPriceFigure price={prices.price(last)} quoteSymbol={quoteSymbol} tradeId={null} /> : null}
-    change={presaleChange(move, last, prices.usd)} />;
+    cap={cap} change={presaleChange(move, last, prices.usd, cap != null)}
+    holder={<HolderLine coinType={market.coin_type} capUsd={caps && live ? caps.price(live.price) : null} />} />;
 }
 
-/** The 24h move under a phone's chart, so the price row above it stays one line. */
+/** The 24h move and the holder's line under a phone's chart, so the figure line above it stays one line. */
 function PresaleMarketMove({ market, move }: Readonly<{ market: HomeCoinMarket; move?: PriceMove | null }>) {
-  const { live, last, prices } = usePresaleHeadline(market);
-  const change = presaleChange(move, last, prices.usd);
+  const { live, last, prices, caps } = usePresaleHeadline(market);
+  const change = presaleChange(move, last, prices.usd, caps != null);
   // While an older price holds, the line keeps its space unseen, so the content below does not move.
-  return change && <PriceChange change={change} held={live ? undefined : true} />;
+  return <>
+    {change && <PriceChange change={change} held={live ? undefined : true} />}
+    {caps && <HolderLine coinType={market.coin_type} capUsd={live ? caps.price(live.price) : null} />}
+  </>;
 }

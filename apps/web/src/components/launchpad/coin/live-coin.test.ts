@@ -12,10 +12,10 @@ function frame(checkpoint: number, extra: Record<string, unknown> = {}) {
 test("a coin_stats frame gives the header its numbers; missing or malformed ones stay null", () => {
   assert.deepEqual(liveCoinStats(frame(7, {
     lifecycle: "migrated", holders: 1_204,
-    market: { fdv_usd: "1250000.5", market_cap_usd: "1" }, window_24h: { volume_usd: "8400.25", trades: 3 },
-  })), { poolKey: POOL, checkpoint: 7, lifecycle: "migrated", holders: 1_204, fdvUsd: "1250000.5", volumeUsd: "8400.25" });
-  assert.deepEqual(liveCoinStats(frame(7, { holders: -1, market: { fdv_usd: "1e9" }, window_24h: null })),
-    { poolKey: POOL, checkpoint: 7, lifecycle: null, holders: null, fdvUsd: null, volumeUsd: null });
+    market: { fdv_usd: "1250000.5", market_cap_usd: "1", change_24h_bps: "-2124" }, window_24h: { volume_usd: "8400.25", trades: 3 },
+  })), { poolKey: POOL, checkpoint: 7, lifecycle: "migrated", holders: 1_204, fdvUsd: "1250000.5", volumeUsd: "8400.25", changeBps: -2124 });
+  assert.deepEqual(liveCoinStats(frame(7, { holders: -1, market: { fdv_usd: "1e9", change_24h_bps: 12 }, window_24h: null })),
+    { poolKey: POOL, checkpoint: 7, lifecycle: null, holders: null, fdvUsd: null, volumeUsd: null, changeBps: null });
   assert.equal(liveCoinStats({ ...frame(7), type: "price" }), null);
   assert.equal(liveCoinStats(frame(-1)), null);
   assert.equal(liveCoinStats(null), null);

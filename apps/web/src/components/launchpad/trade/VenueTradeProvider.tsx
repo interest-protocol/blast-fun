@@ -10,6 +10,7 @@ import { invalidateAfter } from "#web/lib/query/invalidate.ts";
 import { useFeelSound } from "#web/components/blast-feel/FeelProvider.tsx";
 import { useBalancesContext } from "#web/components/social/coins/balances.tsx";
 import { useCoinTradeWallet } from "./CoinTradeSignerProvider";
+import { usePublishHeldBalance } from "./held-balance.tsx";
 import { useLaunchpadSigners } from "../transaction/LaunchpadSignerProvider";
 import type { LaunchpadChain } from "../transaction/preflight";
 import { freshTrade } from "./amount";
@@ -110,6 +111,7 @@ export function VenueTradeProvider({
   const balanceKey = `${walletIdentity}:${refreshes}`;
   const balances = balanceRead?.identity === balanceKey ? balanceRead.value : null;
   const balancesPending = Boolean(wallet?.identity && balanceRead?.identity !== balanceKey);
+  usePublishHeldBalance(balances?.meme ?? null);
   const [direction, setDirection] = useState<TradeDirection>("buy");
   const [completed, setCompleted] = useState<VenueTradeSession["completed"]>({});
   const refresh = useCallback(() => setRefreshes((count) => count + 1), []);

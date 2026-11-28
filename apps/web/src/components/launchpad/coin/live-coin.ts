@@ -15,6 +15,8 @@ export type LiveCoinStats = Readonly<{
   holders: number | null;
   fdvUsd: string | null;
   volumeUsd: string | null;
+  /** The market cap's move over 24 hours, in basis points. */
+  changeBps: number | null;
 }>;
 
 const DECIMAL = /^-?\d+(\.\d+)?$/;
@@ -25,6 +27,11 @@ function record(value: unknown): Record<string, unknown> | null {
 
 function decimal(value: unknown): string | null {
   return typeof value === "string" && value.length <= 80 && DECIMAL.test(value) ? value : null;
+}
+
+/** A whole number the frame sends as text, such as `"-2124"`. */
+function signed(value: unknown): number | null {
+  return typeof value === "string" && /^-?\d{1,12}$/.test(value) ? Number(value) : null;
 }
 
 function count(value: unknown): number | null {
@@ -43,6 +50,7 @@ export function liveCoinStats(value: unknown): LiveCoinStats | null {
     holders: count(frame.holders),
     fdvUsd: decimal(record(frame.market)?.fdv_usd),
     volumeUsd: decimal(record(frame.window_24h)?.volume_usd),
+    changeBps: signed(record(frame.market)?.change_24h_bps),
   };
 }
 

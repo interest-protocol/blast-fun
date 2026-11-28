@@ -11,7 +11,7 @@ import { chartTailRequest, readChartPool } from "#web/components/launchpad/chart
 import { afterChartSourceRead, chartKey, chartRequest, initialChart, type ChartControls } from "#web/components/launchpad/chart/chart-model.ts";
 import { useCoinChartControls } from "#web/components/launchpad/chart/chart-preferences.ts";
 import { ChartView, PRICE_HISTORY_UNAVAILABLE } from "#web/components/launchpad/chart/ChartView.tsx";
-import { useCoinPriceCurrency } from "#web/components/launchpad/chart/CoinPriceCurrency.tsx";
+import { useChartUnits } from "#web/components/launchpad/chart/chart-market-cap.ts";
 import { useLiveScreen } from "#web/components/launchpad/coin/LiveScreen.tsx";
 import { PublicError, publicErrorMessage } from "#web/lib/errors.ts";
 import { useAppQueryClient } from "#web/lib/query/provider.tsx";
@@ -48,7 +48,7 @@ export function PoolChart({ poolKey, coinType, symbol, decimals, quote = SUI_POO
   uncovered?: ReactNode;
 }>) {
   const { controls, ready, commit } = useCoinChartControls(true, initialControls, false);
-  const currency = useCoinPriceCurrency();
+  const { quoteUsd, tradeUsd, marketCap } = useChartUnits();
   const liveScreen = useLiveScreen();
   const key = chartKey(controls);
   const stream = useRef<ChartStream | null>(null);
@@ -109,7 +109,9 @@ export function PoolChart({ poolKey, coinType, symbol, decimals, quote = SUI_POO
     currentPrice={latest?.price ?? null}
     controls={controls}
     request={chartRequest(controls, query.data?.readAt ?? 0)}
-    quoteUsd={currency?.quoteUsd}
+    quoteUsd={quoteUsd}
+    tradeUsd={tradeUsd}
+    marketCap={marketCap}
     hidden={[]}
     pending={query.isFetching}
     updates={live ? STREAM_TEXT[status] ?? null : null}

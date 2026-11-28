@@ -278,3 +278,42 @@ test("curve progress advances and a delayed trade or page read cannot undo the b
   assert.equal(chartCurrency(), "SUI");
   assert.equal(price(), "—");
 });
+
+test("the market cap leads in USD whichever currency the price line shows", async (t) => {
+  const page = { ...coinScreenFixture("live"), launchId: "market-cap-launch" };
+  assert.ok(page.curve.state === "available");
+  const curve = page.curve;
+  const client = createTestQueryClient({ queries: { gcTime: Infinity } });
+  const ask = { kind: "coin", id: quotePriceType(curve.data.launch.quoteType), window: "1h" } as const;
+  const container = document.createElement("div");
+  container.setAttribute("data-blast-ui", "");
+  document.body.append(container);
+  const root = createRoot(container);
+  t.after(async () => {
+    await act(async () => root.unmount());
+    publishChartPrice(CURVE_POOL_KEY, null);
+    container.remove();
+    client.clear();
+  });
+  client.setQueryData<SocialPriceHistory | null>(priceQuery(ask).queryKey, () => ({
+    presale_id: null, coin_type: ask.id, tier: "5m", from_ms: 0, points: [],
+    price_usd: "2", price_as_of_ms: Date.now(), price_24h_usd: null,
+    change_24h_bps: null, day_open_usd: null, day_open_ms: null,
+  }));
+  const slots = { activity: null, chart: null, discovery: null, execution: null, holders: null, market: null, overview: null, theses: null };
+  await act(async () => root.render(<QueryProvider client={client}><BondingCoinScreen page={page} details={null} slots={slots} /></QueryProvider>));
+  // 1 quote atom per meme atom is 0.001 SUI a coin (6 and 9 decimals).
+  await act(async () => publishChartPrice(CURVE_POOL_KEY, { provenance: curve.provenance, poolKey: CURVE_POOL_KEY, cursor: null, price: "1" }));
+  const row = () => container.querySelector('[class*="marketPrice"]')!;
+  const label = () => row().querySelector("span")?.textContent;
+  const lead = () => row().querySelector("strong")?.textContent;
+  const small = () => row().querySelector("[data-cap-price]")?.textContent;
+  // $0.002 a coin times 999,998,000 coins live (the supply less the pending burn).
+  assert.equal(label(), "Market cap");
+  assert.equal(lead(), "$2M");
+  assert.equal(small(), "Price $0.002");
+  const sui = [...container.querySelectorAll<HTMLButtonElement>('[aria-label="Price currency"] button')].find((button) => button.textContent === "SUI")!;
+  await act(async () => sui.click());
+  assert.equal(lead(), "$2M");
+  assert.match(small()!, /^Price 0\.001\s*SUI$/);
+});

@@ -12,7 +12,7 @@ import { useMobileChartLayout } from "../use-mobile-chart-layout.ts";
 import { poolPrices } from "../candle-data.ts";
 import type { CandleTrade } from "../candle-trade.ts";
 import {
-  barChanges, chartDate, fillGaps, foldTrades, klineBars, PANE_LAYOUT, plotHeightFor, priceParts, pricePrecision, ticksInside, topGap, volumeText,
+  barChanges, capText, chartDate, fillGaps, foldTrades, klineBars, PANE_LAYOUT, plotHeightFor, priceParts, pricePrecision, ticksInside, topGap, volumeText,
   type Bar,
 } from "./kline-model.ts";
 import { BLAST_GRADUATION, registerGraduation } from "./kline-studies.ts";
@@ -39,8 +39,12 @@ export type KLineCoinChartProps = Readonly<{
   interval: CandleInterval;
   memeDecimals: number | null;
   quoteDecimals: number | null;
-  /** USD per quote coin; with it the chart is in USD. */
+  /** USD per quote coin; with it the chart is in USD. With `marketCap`, that rate times the supply in circulation. */
   quoteUsd: string | null;
+  /** USD per quote coin for each trader's dollar size; `quoteUsd` when absent. */
+  tradeUsd?: string | null;
+  /** The axis, crosshair, last-price line and readout show market cap in USD. */
+  marketCap?: boolean;
   /** The quote coin's symbol, the unit of volume. */
   quoteSymbol: string;
   latestAvailable: boolean;
@@ -53,7 +57,7 @@ export type KLineCoinChartProps = Readonly<{
 }>;
 
 /** The coin page's chart (KLineCharts): candles, volume and trader bubbles, live to the last trade. */
-export default function KLineCoinChart({ sources, interval, memeDecimals, quoteDecimals, quoteUsd, quoteSymbol, latestAvailable, label, traders, trade, migrationAt }: KLineCoinChartProps) {
+export default function KLineCoinChart({ sources, interval, memeDecimals, quoteDecimals, quoteUsd, tradeUsd = quoteUsd, marketCap = false, quoteSymbol, latestAvailable, label, traders, trade, migrationAt }: KLineCoinChartProps) {
   const host = useRef<HTMLDivElement>(null);
   const chart = useRef<Chart | null>(null);
   const shown = useRef<readonly Bar[]>([]);
@@ -63,7 +67,7 @@ export default function KLineCoinChart({ sources, interval, memeDecimals, quoteD
   const mobile = useMobileChartLayout();
   const coinTrades = useContext(ChartPeopleTrades);
   const bars = useLiveBars(sources, interval, memeDecimals, quoteDecimals, quoteUsd, trade);
-  const precision = pricePrecision(bars);
+  const precision = pricePrecision(bars, marketCap ? 0 : 2);
   const layout = mobile ? PANE_LAYOUT.phone : PANE_LAYOUT.desktop;
   const plotHeight = plotHeightFor(mobile);
   const [stepping, setStepping] = useState(false);
@@ -237,8 +241,12 @@ export default function KLineCoinChart({ sources, interval, memeDecimals, quoteD
   // Headroom above the highest price for a trader's bubble and its gap over the top bar, so it never sits on the price.
   useEffect(() => {
     const room = traders ? bubbleHeadroom(BUBBLE_SIZE) : 0;
-    chart.current?.overrideYAxis({ paneId: "candle_pane", gap: { top: topGap(12 + room, priceHeight, .06), bottom: .06 } });
-  }, [priceHeight, traders]);
+    chart.current?.overrideYAxis({
+      paneId: "candle_pane",
+      gap: { top: topGap(12 + room, priceHeight, .06), bottom: .06 },
+      createTicks: ({ defaultTicks }) => marketCap ? defaultTicks.map((tick) => ({ ...tick, text: capText(Number(tick.value), 2) })) : defaultTicks,
+    });
+  }, [priceHeight, traders, marketCap]);
 
   const graduationAt = migrationAt === undefined ? undefined : bars.findLast((bar) => bar.timestamp <= migrationAt)?.timestamp;
   useEffect(() => {
@@ -251,10 +259,10 @@ export default function KLineCoinChart({ sources, interval, memeDecimals, quoteD
   return (
     <div className={styles.chart} data-kline-chart="">
       <BubbleStage>
-        <Readout bars={bars} hovered={view.hovered} interval={interval} precision={precision} unit={quoteUsd ? "USD" : quoteSymbol} quoteSymbol={quoteSymbol} spoken={stepping} />
+        <Readout bars={bars} hovered={view.hovered} interval={interval} precision={precision} marketCap={marketCap} unit={quoteUsd ? "USD" : quoteSymbol} quoteSymbol={quoteSymbol} spoken={stepping} />
         <div ref={host} className={styles.plot} role="group" aria-label={`${label}. Arrow keys step through the bars.`} tabIndex={0} data-kline-plot=""
           onKeyDown={step} onBlur={() => { setStepping(false); view.hovered.set(null); }} {...dyn({ "--kline-base": `${plotHeight}px` } as CSSProperties)} />
-        {traders && <PeopleBubbles chart={chart} bars={bars} interval={interval} coinTrades={coinTrades} quoteDecimals={quoteDecimals} quoteUsd={quoteUsd} topInset={8} />}
+        {traders && <PeopleBubbles chart={chart} bars={bars} interval={interval} coinTrades={coinTrades} quoteDecimals={quoteDecimals} quoteUsd={tradeUsd} topInset={8} />}
         <LatestButton away={view.away} onLatest={() => {
           const current = chart.current;
           if (!current) return;
@@ -290,8 +298,8 @@ function barAt(chart: Chart, x: number): number | null {
  * the viewer's zone, open, high, low, close, the change from the bar before, and its volume.
  * It floats, so showing it never moves the page; the region stays so keyboard steps are heard.
  */
-function Readout({ bars, hovered, interval, precision, unit, quoteSymbol, spoken }: Readonly<{
-  bars: readonly Bar[]; hovered: Signal<number | null>; interval: CandleInterval; precision: number; unit: string; quoteSymbol: string;
+function Readout({ bars, hovered, interval, precision, marketCap, unit, quoteSymbol, spoken }: Readonly<{
+  bars: readonly Bar[]; hovered: Signal<number | null>; interval: CandleInterval; precision: number; marketCap: boolean; unit: string; quoteSymbol: string;
   /** Read out each change, while the keyboard steps through the bars. */
   spoken: boolean;
 }>) {
@@ -309,8 +317,8 @@ function Readout({ bars, hovered, interval, precision, unit, quoteSymbol, spoken
         </span>
         <span className={styles.readoutVolume}><abbr title="Volume">Vol</abbr> {volumeText(bar.volume)} {quoteSymbol}</span>
       </span>
-      <ReadoutPrices bar={bar} previous={bars[index - 1]?.close ?? bar.open} precision={precision} />
-      <span className="sr-only"> Prices in {unit}.</span>
+      <ReadoutPrices bar={bar} previous={bars[index - 1]?.close ?? bar.open} precision={precision} marketCap={marketCap} />
+      <span className="sr-only"> {marketCap ? "Market cap" : "Prices"} in {unit}.</span>
     </p>}
   </div>;
 }
@@ -318,13 +326,16 @@ function Readout({ bars, hovered, interval, precision, unit, quoteSymbol, spoken
 const direction = (delta: number) => delta > 0 ? "up" : delta < 0 ? "down" : undefined;
 
 /** Open, high, low and close, coloured by the bar's direction, then the change from the close before. */
-function ReadoutPrices({ bar, previous, precision }: Readonly<{ bar: Bar; previous: number; precision: number }>) {
+function ReadoutPrices({ bar, previous, precision, marketCap }: Readonly<{ bar: Bar; previous: number; precision: number; marketCap: boolean }>) {
   const change = previous > 0 ? (bar.close - previous) / previous : 0;
   return <span className={styles.readoutPrices} data-side={direction(bar.close - bar.open)}>
-    {(["O", "H", "L", "C"] as const).map((key) => <span key={key}>
-      <abbr title={{ O: "Open", H: "High", L: "Low", C: "Close" }[key]}>{key}</abbr>{" "}
-      <PriceText value={bar[({ O: "open", H: "high", L: "low", C: "close" } as const)[key]]} precision={precision} />
-    </span>)}
+    {(["O", "H", "L", "C"] as const).map((key) => {
+      const value = bar[({ O: "open", H: "high", L: "low", C: "close" } as const)[key]];
+      return <span key={key}>
+        <abbr title={{ O: "Open", H: "High", L: "Low", C: "Close" }[key]}>{key}</abbr>{" "}
+        {marketCap ? <span className={styles.price}>${capText(value)}</span> : <PriceText value={value} precision={precision} />}
+      </span>;
+    })}
     <span data-side={direction(change)}>{change > 0 ? "+" : ""}{(change * 100).toFixed(2)}%</span>
   </span>;
 }

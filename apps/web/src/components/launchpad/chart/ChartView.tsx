@@ -185,6 +185,8 @@ function useChartViewControls({
   source,
   omitCurve,
   quoteUsd,
+  tradeUsd = quoteUsd,
+  marketCap = false,
   controls,
   request: historyRequest,
   hidden,
@@ -201,7 +203,12 @@ function useChartViewControls({
   state: ChartState;
   source: ChartViewSource;
   omitCurve?: boolean;
+  /** Scales every price shown: USD per quote coin, or that times the supply in circulation with `marketCap`. */
   quoteUsd?: string | null;
+  /** USD per quote coin for a trade's dollar size; `quoteUsd` when absent. */
+  tradeUsd?: string | null;
+  /** The prices are the coin's market cap in USD (price × today's supply in circulation). */
+  marketCap?: boolean;
   controls: ChartControls;
   request: ChartRequest;
   hidden: readonly ChartSourceName[];
@@ -219,7 +226,7 @@ function useChartViewControls({
   const live = controls.range === "live";
   const now = useChartClock(1_000, live);
   const drawing = chartDrawing({ state, source, omitCurve, historyRequest, hidden, live, now, currentPrice });
-  return { source, quoteUsd, controls, pending, updates, emptyMessage, livePreset, diagnostic, onControls, onToggle, onRefresh, ...drawing };
+  return { source, quoteUsd, tradeUsd, marketCap, controls, pending, updates, emptyMessage, livePreset, diagnostic, onControls, onToggle, onRefresh, ...drawing };
 }
 
 function chartDrawing({ state, source, omitCurve, historyRequest, hidden, live, now, currentPrice }: Readonly<{
@@ -303,7 +310,7 @@ function priceSource(
 
 export function ChartView(props: Parameters<typeof useChartViewControls>[0] & Readonly<{ compact?: boolean }>) {
   const view = useChartViewControls(props);
-  const { source, venuePoolKey, quoteUsd, controls, updates, migration, selectable, drawn, shown, geometry, missingPriceUnits, latest, latestAvailable } = view;
+  const { source, venuePoolKey, quoteUsd, tradeUsd, marketCap, controls, updates, migration, selectable, drawn, shown, geometry, missingPriceUnits, latest, latestAvailable } = view;
   if (props.compact) return <CompactChart view={view} />;
   return (
     <div className={styles.chart}>
@@ -316,10 +323,10 @@ export function ChartView(props: Parameters<typeof useChartViewControls>[0] & Re
       ) : null}
 
       {geometry ? (
-        <ChartFigure key={`${controls.range}:${controls.interval}`} quoteUsd={quoteUsd} drawn={drawn} migrationAt={migration?.timestampMs} venuePoolKey={venuePoolKey} geometry={geometry} latest={latest} latestAvailable={latestAvailable} source={source} controls={controls} />
+        <ChartFigure key={`${controls.range}:${controls.interval}`} quoteUsd={quoteUsd} tradeUsd={tradeUsd} marketCap={marketCap} drawn={drawn} migrationAt={migration?.timestampMs} venuePoolKey={venuePoolKey} geometry={geometry} latest={latest} latestAvailable={latestAvailable} source={source} controls={controls} />
       ) : null}
 
-      {geometry && exactDecimal(quoteUsd) ? <p className={styles.note}>USD prices use the current {source.quoteSymbol} rate.</p> : null}
+      {geometry && !marketCap && exactDecimal(quoteUsd) ? <p className={styles.note}>USD prices use the current {source.quoteSymbol} rate.</p> : null}
       {missingPriceUnits ? <p className={styles.note}>Price units couldn’t load.</p> : null}
       {/* The status region stays, empty and with no height, so a screen reader hears the note when it comes. */}
       <p className={styles.note} role="status">{updates}</p>
@@ -434,7 +441,7 @@ function SourceCandles({ name, section, label, source, quoteUsd, request, range,
   );
 }
 
-function ChartFigure({ drawn, migrationAt, venuePoolKey, geometry, latest, latestAvailable, source, controls, compact = false, traders = true, quoteUsd, candleTrade }: Readonly<{
+function ChartFigure({ drawn, migrationAt, venuePoolKey, geometry, latest, latestAvailable, source, controls, compact = false, traders = true, quoteUsd, tradeUsd = quoteUsd, marketCap = false, candleTrade }: Readonly<{
   drawn: readonly DrawnSeries[];
   migrationAt?: number;
   venuePoolKey: string | null;
@@ -448,6 +455,8 @@ function ChartFigure({ drawn, migrationAt, venuePoolKey, geometry, latest, lates
   traders?: boolean;
   candleTrade?: ReturnType<typeof useCandleTrade>;
   quoteUsd?: string | null;
+  tradeUsd?: string | null;
+  marketCap?: boolean;
 }>) {
   const deployer = useLaunchWallet();
   const activity = useWalletTrades();
@@ -455,7 +464,7 @@ function ChartFigure({ drawn, migrationAt, venuePoolKey, geometry, latest, lates
   const walletTrades = useMemo(() => chartWalletTrades(activity, deployer, source.curvePoolKey), [activity, deployer, source.curvePoolKey]);
   const venue = venuePoolKey?.split(":")[0];
   const graduation = venue ? `Graduated to ${venueName(venue)}` : "Graduated";
-  const label = figureLabel(source, controls, geometry, { compact, quoteUsd, graduation, migrationAt });
+  const label = figureLabel(source, controls, geometry, { compact, quoteUsd, marketCap, graduation, migrationAt });
   return (
     <figure className={styles.figure}>
       {compact ? null : <p className={styles.axis} aria-hidden="true">
@@ -463,7 +472,7 @@ function ChartFigure({ drawn, migrationAt, venuePoolKey, geometry, latest, lates
       </p>}
       <div className={compact ? styles.compactCanvas : styles.canvas}>
         {compact
-          ? <KLineCoinChart sources={drawn} interval={controls.interval} memeDecimals={source.memeDecimals} quoteDecimals={source.quoteDecimals} quoteUsd={quoteUsd ?? null} quoteSymbol={source.quoteSymbol} latestAvailable={latestAvailable} label={label} traders={traders} trade={candleTrade} migrationAt={migrationAt} />
+          ? <KLineCoinChart sources={drawn} interval={controls.interval} memeDecimals={source.memeDecimals} quoteDecimals={source.quoteDecimals} quoteUsd={quoteUsd ?? null} tradeUsd={tradeUsd ?? null} marketCap={marketCap} quoteSymbol={source.quoteSymbol} latestAvailable={latestAvailable} label={label} traders={traders} trade={candleTrade} migrationAt={migrationAt} />
           : <PoolCandleChart latestAvailable={latestAvailable} walletTrades={walletTrades} ripple={walletRipple(walletTrades, liveTrade, controls.interval)} trade={candleTrade} label={label} compact={compact} rollingWindow={controls.range === "live"} memeDecimals={source.memeDecimals} quoteDecimals={source.quoteDecimals} quoteUsd={quoteUsd} sources={drawn} migrationAt={migrationAt} migrationLabel={venue ? <>Graduated to <DexIdentity venue={venue} /></> : graduation} quoteSymbol={source.quoteSymbol} from={geometry.start} to={geometry.end} />}
       </div>
     </figure>
@@ -490,9 +499,9 @@ function chartWalletTrades(activity: ReturnType<typeof useWalletTrades>, deploye
 }
 
 /** The figure's accessible name: what is plotted, over which range, and the graduation when it is in view. */
-function figureLabel(source: ChartViewSource, controls: ChartControls, geometry: NonNullable<ReturnType<typeof chartGeometry>>, { compact, quoteUsd, graduation, migrationAt }: Readonly<{ compact: boolean; quoteUsd?: string | null; graduation: string; migrationAt?: number }>): string {
-  const unit = exactDecimal(quoteUsd) ? "USD" : source.quoteSymbol;
-  const metric = !compact ? `price in ${unit}` : `price in ${unit} and volume in ${source.quoteSymbol}`;
+function figureLabel(source: ChartViewSource, controls: ChartControls, geometry: NonNullable<ReturnType<typeof chartGeometry>>, { compact, quoteUsd, marketCap, graduation, migrationAt }: Readonly<{ compact: boolean; quoteUsd?: string | null; marketCap: boolean; graduation: string; migrationAt?: number }>): string {
+  const plotted = marketCap ? "market cap in USD" : `price in ${exactDecimal(quoteUsd) ? "USD" : source.quoteSymbol}`;
+  const metric = !compact ? plotted : `${plotted} and volume in ${source.quoteSymbol}`;
   const markerVisible = migrationAt !== undefined && migrationAt >= geometry.start && migrationAt <= geometry.end;
   const event = markerVisible ? ` ${graduation} on ${clock(migrationAt)}.` : "";
   return `${source.symbol} ${metric}. ${RANGE_WORDS[controls.range]}, ${controls.interval} intervals.${event}`;
@@ -551,11 +560,11 @@ function useTradersShown() {
 function CompactChart({ view }: Readonly<{ view: ChartViewControls }>) {
   const [traders, setTraders] = useTradersShown();
   const allVenues = useContext(ChartPeopleTrades) !== null;
-  const { source, quoteUsd, geometry } = view;
+  const { source, quoteUsd, marketCap, geometry } = view;
   const unit = geometry && (exactDecimal(quoteUsd) ? "USD" : source.quoteSymbol);
   return <div className={styles.chart} data-compact-chart="">
     <div className={styles.compactHead}>
-      <h2>Price{unit ? <span> · {unit}</span> : null}</h2>
+      <h2>{marketCap ? "Market cap" : "Price"}{unit ? <span> · {unit}</span> : null}</h2>
       <StreamNotice view={view} />
       <div className={styles.compactTools}>
         {view.controls.range !== "live" && <IntervalButtons view={view} />}
@@ -613,10 +622,10 @@ function CompactStatus({ view }: Readonly<{ view: ChartViewControls }>) {
 }
 
 function CompactChartBody({ view, traders }: Readonly<{ view: ChartViewControls; traders: boolean }>) {
-  const { source, quoteUsd, controls, migration, venuePoolKey, drawn, geometry, latest, latestAvailable } = view;
+  const { source, quoteUsd, tradeUsd, marketCap, controls, migration, venuePoolKey, drawn, geometry, latest, latestAvailable } = view;
   const candleTrade = useCandleTrade();
   if (!geometry) return <CompactEmptyChart view={view} />;
-  return <ChartFigure compact candleTrade={candleTrade} traders={traders} quoteUsd={quoteUsd} drawn={drawn} migrationAt={migration?.timestampMs} venuePoolKey={venuePoolKey} geometry={geometry} latest={latest} latestAvailable={latestAvailable} source={source} controls={controls} />;
+  return <ChartFigure compact candleTrade={candleTrade} traders={traders} quoteUsd={quoteUsd} tradeUsd={tradeUsd} marketCap={marketCap} drawn={drawn} migrationAt={migration?.timestampMs} venuePoolKey={venuePoolKey} geometry={geometry} latest={latest} latestAvailable={latestAvailable} source={source} controls={controls} />;
 }
 
 function CompactEmptyChart({ view }: Readonly<{ view: ReturnType<typeof useChartViewControls> }>) {
@@ -624,7 +633,7 @@ function CompactEmptyChart({ view }: Readonly<{ view: ReturnType<typeof useChart
   const opening = compactOpeningPrice(view);
   const visible = view.sources.filter(({ name }) => view.shown(name));
   const state = `${klineStyles.sized} ${styles.chartEmpty}`;
-  if (opening) return <EmptyState className={state} title={`Opening price ${amountsHidden ? HIDDEN_AMOUNT : tokenPrice(opening, view.source, view.quoteUsd)}`}>The chart starts with the first trade.</EmptyState>;
+  if (opening) return <EmptyState className={state} title={openingTitle(view, opening, amountsHidden)}>The chart starts with the first trade.</EmptyState>;
   if (view.missingPriceUnits) return <EmptyState className={state} role="alert" title="Price units couldn’t load.">Reload the page to try again.</EmptyState>;
   if (!visible.length) return <EmptyState className={state} title="No chart series selected.">Open chart filters to show a series.</EmptyState>;
   if (loadingBars(view)) return (
@@ -647,6 +656,11 @@ function CompactEmptyChart({ view }: Readonly<{ view: ReturnType<typeof useChart
   return view.controls.range === "all"
     ? <EmptyState className={state} title="No price history yet" />
     : <EmptyState className={state} title="No trades in this range">Choose a wider range to see more trades.</EmptyState>;
+}
+
+function openingTitle(view: ChartViewControls, opening: string, amountsHidden: boolean): string {
+  const figure = amountsHidden ? HIDDEN_AMOUNT : tokenPrice(opening, view.source, view.quoteUsd);
+  return `Opening ${view.marketCap ? "market cap" : "price"} ${figure}`;
 }
 
 const loadingBars = (view: ChartViewControls) => view.sources.some(({ name, section }) => view.shown(name) && section?.state === "loading");

@@ -339,8 +339,17 @@ test("a graduated pool shows a dash until its current close is confirmed", () =>
     quote: { coin_type: market.quote.type, symbol: market.quote.symbol, price: "0.0123", as_of_ms: FIXTURE_NOW },
   });
   const html = renderToStaticMarkup(withQueryClient(client, <SaleMarket nowMs={FIXTURE_NOW} sale={sale} terms={detail.terms} />));
-  assert.match(html, /<span>Price<\/span><strong>—<\/strong>/);
+  // The circulating supply and the rate make the market cap the headline; the price waits under it.
+  assert.match(html, /<span>Market cap<\/span><strong>—<\/strong><span class="capPrice" data-cap-price=""><span class="sr-only">Price <\/span><strong>—<\/strong>/);
   assert.doesNotMatch(html, /\+\$0\.0137/);
+  // The chart's axis reads the same market cap.
+  assert.match(html, /<h2>Market cap<\/h2>/);
+  // Without a circulating supply the price leads, as before.
+  client.setQueryData([...queryKeys.home.all, "market", sale.sale_token], { ...market, supply: null });
+  const priced = renderToStaticMarkup(withQueryClient(client, <SaleMarket nowMs={FIXTURE_NOW} sale={sale} terms={detail.terms} />));
+  assert.match(priced, /<span>Price<\/span><strong>—<\/strong>/);
+  assert.doesNotMatch(priced, /data-cap-price/);
+  assert.doesNotMatch(priced, /<h2>Market cap/);
   // The currency switch names the unit, so the chart beside the row may drop its unit title.
   assert.match(html, /data-unit-shown/);
   client.clear();
@@ -436,7 +445,7 @@ test("a resting read's age is no delay while the live screen hears the coin; a f
 
 test("the live coin's FDV, holders and day's volume replace the last read's", () => {
   const coin = fixtureMarket();
-  const live = { poolKey: "cetus:0x9", checkpoint: 9, lifecycle: "migrated", holders: 1_204, fdvUsd: "1250000.5", volumeUsd: "8400.25" };
+  const live = { poolKey: "cetus:0x9", checkpoint: 9, lifecycle: "migrated", holders: 1_204, fdvUsd: "1250000.5", volumeUsd: "8400.25", changeBps: null };
   const html = renderToStaticMarkup(view(coin, { market: fixtureCoinMarket(), live, chart: () => <section>Chart fixture</section> }));
   assert.match(html, /<dt>FDV<\/dt><dd>.*\$1\.25M/);
   assert.match(html, /<dt>Holders<\/dt><dd>[^<]*1,204/);
@@ -472,8 +481,9 @@ test("a graduated pool's price names its move as the last 24 hours", async (t) =
     provenance: { source: "blast-infra", network: "mainnet", deployment: null, checkpoint: 5, timestampMs: FIXTURE_NOW + 1, observedAt: FIXTURE_NOW + 1, lagMs: 0 } as never,
   }));
   await act(async () => root.render(withQueryClient(client, <SaleMarket nowMs={FIXTURE_NOW} sale={detail.presale} terms={detail.terms} />)));
-  await waitFor(() => /\+\$0\.0137/.test(container.textContent ?? ""), "the day's move", 5_000);
-  assert.match(container.textContent!, /\+\$0\.0137 \(3\.42%\) 24h/);
+  // The market cap leads, so its move is the percentage alone; the price sits small under it.
+  await waitFor(() => /\+3\.42% 24h/.test(container.textContent ?? ""), "the day's move", 5_000);
+  assert.equal(container.querySelector("[data-cap-price]")?.textContent, "Price $400");
   assert.doesNotMatch(container.textContent!, /today/);
 });
 

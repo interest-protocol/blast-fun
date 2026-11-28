@@ -1,4 +1,4 @@
-import { exactAtoms, exactDecimal, multiplyExact, type Exact } from "@blast/core/lib/exact-amount.ts";
+import { exactAtoms, exactDecimal, exactText, multiplyExact, type Exact } from "@blast/core/lib/exact-amount.ts";
 
 const PRICE = /^(0|[1-9][0-9]*)(?:\.([0-9]+))?$/;
 
@@ -30,4 +30,24 @@ export function fdvInQuote(
   const total = exactAtoms(supply, decimals);
   const rate = exactDecimal(price);
   return total && rate ? multiplyExact(total, rate) : null;
+}
+
+/**
+ * The coins in circulation: minted, less the burns still pending and the coins held at 0x0. It is
+ * blast-infra's live supply, the one Home's market cap uses. Null when none circulate.
+ */
+export function liveSupplyAtoms(inputs: Readonly<{ currencySupply: bigint; pendingBurnTotal: bigint; balance0x0: bigint }> | null | undefined): bigint | null {
+  if (!inputs) return null;
+  const live = inputs.currencySupply - inputs.pendingBurnTotal - inputs.balance0x0;
+  return live > 0n ? live : null;
+}
+
+/**
+ * USD per quote coin times the whole coins in circulation. A whole-token price in the quote, times
+ * this, is the market cap in USD; the coin page's headline and chart axis both multiply by it, so they agree.
+ */
+export function marketCapRate(quoteUsd: string | null | undefined, supplyAtoms: bigint | string | null | undefined, decimals: number | null | undefined): string | null {
+  const rate = exactDecimal(quoteUsd);
+  const supply = exactAtoms(supplyAtoms, decimals);
+  return rate?.n && supply?.n ? exactText(multiplyExact(rate, supply)) : null;
 }

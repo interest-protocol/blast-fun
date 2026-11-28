@@ -1053,7 +1053,7 @@ test("coin stats with a 24h change, as blast-infra sends them, reach the screen'
     window_24h: { volume_quote: "2456000000000", volume_usd: "8400.25", buys: 12, sells: 5, trades: 17 },
     holders: 412, progress_bps: 7250, liquidity_quote: "310000000000",
   });
-  assert.deepEqual(seen, [{ poolKey: CURVE, checkpoint: 20, lifecycle: "live", holders: 412, fdvUsd: "5230.75", volumeUsd: "8400.25" }]);
+  assert.deepEqual(seen, [{ poolKey: CURVE, checkpoint: 20, lifecycle: "live", holders: 412, fdvUsd: "5230.75", volumeUsd: "8400.25", changeBps: -2124 }]);
 });
 
 // This fails if a migrated coin's frozen curve stats replace its venue stats, or a late screen waits for the next change.

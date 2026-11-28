@@ -15,6 +15,7 @@ import { useFeelSound } from "#web/components/blast-feel/FeelProvider.tsx";
 import { hasActiveToast } from "#web/components/blast-ui/toast-actions.ts";
 import { useBalancesContext } from "#web/components/social/coins/balances.tsx";
 import { useCoinTradeWallet } from "./CoinTradeSignerProvider";
+import { usePublishHeldBalance } from "./held-balance.tsx";
 import { useLaunchpadSigners } from "../transaction/LaunchpadSignerProvider";
 import { useCaptureSignerToast } from "../transaction/use-capture-signer-toast";
 import type { LaunchpadChain } from "../transaction/preflight";
@@ -127,6 +128,7 @@ export function CurveTradeProvider({
   const balanceKey = `${walletIdentity}:${refreshes}`;
   const balances = balanceRead?.identity === balanceKey ? balanceRead.value : null;
   const balancesPending = Boolean(wallet?.identity && balanceRead?.identity !== balanceKey);
+  usePublishHeldBalance(balances?.meme ?? null);
   const [direction, setDirection] = useState<TradeDirection>("buy");
   const [completed, setCompleted] = useState<CurveTradeSession["completed"]>({});
   const refresh = useCallback(() => setRefreshes((count) => count + 1), []);
