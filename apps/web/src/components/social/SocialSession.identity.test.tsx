@@ -34,6 +34,22 @@ const { SocialSession } = await import("./SocialSession");
 const { useSocialAccount } = await import("./use-social-account");
 const { useSocialViewer } = await import("./SignInGate");
 
+test("a blocked account preference returns a recoverable switch failure", async (t) => {
+  const dom = new JSDOM("", { url: "https://blast.test" });
+  const { rememberAccountSession } = await import("./account-selection");
+  Object.assign(globalThis, { window: dom.window, document: dom.window.document });
+  try {
+    t.mock.setter(document, "cookie", () => {
+      throw new dom.window.DOMException("Cookie access denied.", "SecurityError");
+    });
+    assert.equal(rememberAccountSession("privy"), false);
+  } finally {
+    dom.window.close();
+    Reflect.deleteProperty(globalThis, "window");
+    Reflect.deleteProperty(globalThis, "document");
+  }
+});
+
 test("production SocialSession publishes a new principal during a held then refused me lookup and recovers the same owner", async () => {
   const dom = new JSDOM('<div id="mount"></div>', {
     url: "https://blast.test",

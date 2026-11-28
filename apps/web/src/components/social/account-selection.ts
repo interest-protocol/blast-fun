@@ -16,8 +16,12 @@ export function selectedAccountSession(cookie: string): AccountSession | null {
 export function rememberAccountSession(session: AccountSession | null): boolean {
   const setting = session ?? "; Max-Age=0";
   const secure = window.location.protocol === "https:" ? "; Secure" : "";
-  document.cookie = `${PREFERENCE}=${setting}; Path=/; SameSite=Lax${secure}`;
-  return selectedAccountSession(document.cookie) === session;
+  try {
+    document.cookie = `${PREFERENCE}=${setting}; Path=/; SameSite=Lax${secure}`;
+    return selectedAccountSession(document.cookie) === session;
+  } catch {
+    return false;
+  }
 }
 
 export function switchAccountSession(session: AccountSession): boolean {
