@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { track } from "@vercel/analytics";
 import clsx from "clsx";
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore, type Ref } from "react";
@@ -57,7 +57,7 @@ import {
   type TransferState,
   usdBand,
 } from "./bridge-model.ts";
-import { explorerLink, mergeRows, type BridgeRow, type BridgeSdk, type EvmWallet, type SolanaWallet, type SourceWallet } from "./bridge-sdk.ts";
+import { explorerLink, mergeRows, type BridgeRow, type BridgeSdk, type EvmWallet, type SolanaWallet, type SourceWallet, type TransferStatus } from "./bridge-sdk.ts";
 import styles from "./bridge.module.css";
 import { SourceTokenPicker } from "./SourceTokenPicker.tsx";
 import { readSolanaSubmission, solanaSubmissionSignature, SOLANA_RETRY_UNAVAILABLE, subscribeSolanaSubmission, withSolanaSubmissionLock } from "./solana-submission.ts";
@@ -858,6 +858,18 @@ function RecentBridges({ id, rows, sdk, onArrived, onRetry, now }: Readonly<{
   );
 }
 
+function announceBridgeArrival(queryClient: QueryClient, onArrived: BridgeFormProps["onArrived"], row: BridgeRow, toAmount: string | null) {
+  const arrivalKey = ["bridge", "arrival", row.hash];
+  if (queryClient.getQueryData(arrivalKey)) return;
+  queryClient.setQueryData(arrivalKey, true);
+  void queryClient.invalidateQueries({ queryKey: ["bridge", "balance"] });
+  try {
+    onArrived(row, toAmount);
+  } catch (error) {
+    console.error("Bridge arrival announcement failed", error);
+  }
+}
+
 function BridgeRowView({ row, sdk, onArrived, now }: Readonly<{ row: BridgeRow; sdk: BridgeSdk; onArrived: BridgeFormProps["onArrived"]; now: () => number }>) {
   const age = now() - Date.parse(row.at);
   const watching = row.state === "pending" && age < STATUS_GIVE_UP_MS;
@@ -865,7 +877,13 @@ function BridgeRowView({ row, sdk, onArrived, now }: Readonly<{ row: BridgeRow; 
   const statusKey = ["bridge", "status", row.hash] as const;
   const status = useQuery({
     queryKey: statusKey,
-    queryFn: () => sdk.status(row.hash),
+    queryFn: async () => {
+      const before = queryClient.getQueryData<TransferStatus>(statusKey)?.state;
+      const result = await sdk.status(row.hash);
+      // The read can finish after the sheet closes.
+      if (before !== "done" && result.state === "done") announceBridgeArrival(queryClient, onArrived, row, result.toAmount);
+      return result;
+    },
     enabled: watching,
     // Every 5 s while the page is visible; it stops once Mayan settles it.
     refetchInterval: (query) => (query.state.data?.state ?? "pending") === "pending" && now() - Date.parse(row.at) < STATUS_GIVE_UP_MS ? STATUS_POLL_MS : false,
@@ -878,16 +896,7 @@ function BridgeRowView({ row, sdk, onArrived, now }: Readonly<{ row: BridgeRow; 
   useEffect(() => {
     const previous = previousState.current;
     previousState.current = state;
-    if (previous !== "pending" || state !== "done") return;
-    const arrivalKey = ["bridge", "arrival", row.hash];
-    if (queryClient.getQueryData(arrivalKey)) return;
-    queryClient.setQueryData(arrivalKey, true);
-    void queryClient.invalidateQueries({ queryKey: ["bridge", "balance"] });
-    try {
-      onArrived(row, toAmount);
-    } catch (error) {
-      console.error("Bridge arrival announcement failed", error);
-    }
+    if (previous === "pending" && state === "done") announceBridgeArrival(queryClient, onArrived, row, toAmount);
   }, [onArrived, queryClient, row, state, toAmount]);
   const info = row.chain ? CHAINS[row.chain] : null;
   const chain = info?.label ?? "another chain";

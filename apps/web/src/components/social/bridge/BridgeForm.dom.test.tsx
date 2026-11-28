@@ -85,6 +85,7 @@ async function mount(sdk: BridgeSdk, calls: Calls, wallet: SourceWallet | null =
     rerender: render,
     /** A fresh form on the same query cache, like closing and reopening Bridge. */
     remount: () => render(wallet, "again"),
+    hide: () => act(async () => root.render(null)),
     /** USDC to send, then SUI to receive: USDC defaults the receiving coin to USDC. */
     async pickUsdc(receive: "SUI" | "USDC" = "SUI") {
       const option = (group: string, symbol: string) => [...container.querySelectorAll<HTMLButtonElement>(`[aria-label='${group}'] button`)].find((button) => button.textContent === symbol)!;
@@ -282,20 +283,30 @@ test("a checked quote bridges on one press, lists the row and reports the arriva
   }
 });
 
-test("reopening Bridge does not report an arrival again from the cache", async () => {
+test("an in-flight arrival is reported once after closing and reopening Bridge", async () => {
   const calls = newCalls();
   const listed: BridgeRow = { hash: "0xhash", chain: "base", fromAmount: "20", fromSymbol: "USDC", toAmount: "29.81", toSymbol: "SUI", state: "pending", at: new Date(BEFORE_EXPIRY).toISOString() };
   // The app keeps finished queries for minutes; the test client's default drops them at once.
-  const form = await mount(fakeSdk(calls, [QUOTE], { history: async () => (calls.sends > 0 ? [listed] : []) }), calls, evm(), { gcTime: 5 * 60_000 });
+  const started = Promise.withResolvers<void>();
+  const completion = Promise.withResolvers<{ state: "done"; toAmount: string }>();
+  const done = { state: "done", toAmount: "29.81" } as const;
+  const form = await mount(fakeSdk(calls, [QUOTE], {
+    history: async () => (calls.sends > 0 ? [listed] : []),
+    status: () => { started.resolve(); return completion.promise; },
+  }), calls, evm(), { gcTime: 5 * 60_000 });
   try {
     await form.pickUsdc();
     await form.type("20");
     await form.press();
+    await started.promise;
+    await form.hide();
+    await act(async () => completion.resolve(done));
     await waitFor(() => calls.arrived === 1, "the arrival");
     await form.remount();
     await waitFor(() => /Arrived · 29\.81\u00a0SUI/.test(form.text()), "the listed row");
     assert.equal(calls.arrived, 1, "the cached arrival is not told twice");
   } finally {
+    completion.resolve(done);
     await form.unmount();
   }
 });
