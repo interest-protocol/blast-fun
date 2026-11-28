@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 
 import { coinKey, tabMarketStream } from "#web/components/launchpad/market-stream-hub.ts";
 import {
@@ -8,6 +8,7 @@ import {
   MARKET_STREAM_BUDGET,
   type DisplayPrice,
   type DisplayPriceFrame,
+  type MarketTradeCue,
 } from "@blast/core/modules/launchpad-contract/market-stream.ts";
 import type { HomeCoin } from "@blast/core/web/contracts/home.ts";
 
@@ -40,7 +41,9 @@ export function homePriceCoins(coins: readonly HomeCoin[], previous: readonly st
   return [...kept].sort();
 }
 
-export function useHomePrices(coins: readonly HomeCoin[], enabled: boolean) {
+export function useHomePrices(coins: readonly HomeCoin[], enabled: boolean, onTradeCue?: (cue: MarketTradeCue) => void) {
+  const tradeCues = onTradeCue !== undefined;
+  const receiveCue = useEffectEvent((cue: MarketTradeCue) => onTradeCue?.(cue));
   const [latest, setLatest] = useState<ReadonlyMap<string, Observation>>(() => new Map());
   const [streamed, setStreamed] = useState<readonly string[]>([]);
   const picked = enabled ? homePriceCoins(coins, streamed) : [];
@@ -56,10 +59,10 @@ export function useHomePrices(coins: readonly HomeCoin[], enabled: boolean) {
       pools: [],
       priceCoins,
       expected: null,
-      listener: { state: () => {}, prices: receive },
+      listener: { state: () => {}, prices: receive, ...(tradeCues ? { tradeCue: (cue) => receiveCue(cue) } : {}) },
     });
     return () => subscription?.stop();
-  }, [subscriptionKey]);
+  }, [subscriptionKey, tradeCues]);
 
   return latest;
 }

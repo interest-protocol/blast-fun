@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { MARKET_STREAM_BUDGET } from "@blast/core/modules/launchpad-contract/market-stream.ts";
+import { INDEXED_POOL_COINS } from "@blast/core/modules/social/portfolio/core-coins.ts";
 import { ActivityHints } from "#web/components/social/home/activity-hints.ts";
 import { ACTIVITY_ONLY_GRACE_MS, marketHintTransport, setHintDemand } from "#web/lib/live-stream/market-hints.ts";
 import { HIDDEN_GRACE_MS, LINGER_MS, MarketStreamHub, RECONNECT_MIN_MS, SET_ANSWER_MS, STABLE_MS, type MarketEventSource, type MarketStreamState, type MarketTrade } from "./market-stream-hub.ts";
@@ -141,6 +142,58 @@ test("two subscribers to the same pool share one source, and it closes after the
   assert.equal(s.source().closed, true);
   assert.equal(s.timers.length, 0);
   assert.equal(s.listening(), false);
+});
+
+test("changing and reconnecting a Discover page only accepts cues from its acknowledged coins", async () => {
+  const s = setup();
+  const deep = INDEXED_POOL_COINS.find((coin) => coin.symbol === "DEEP")!.coinType;
+  const wal = INDEXED_POOL_COINS.find((coin) => coin.symbol === "WAL")!.coinType;
+  const received: string[] = [];
+  const watch = (coin: string) => s.hub.subscribe({
+    pools: [], priceCoins: [coin], expected: null,
+    listener: { state: () => {}, tradeCue: (cue) => received.push(cue.cursor) },
+  });
+  const hello = (source: Source) => source.emit("hint", {
+    type: "hello", provenance: wireProvenance(1), set: true, trade_cues: true,
+  });
+  const answer = (source: Source, coin: string) => {
+    const { seq } = source.sets().at(-1)!;
+    assert.deepEqual(source.sets().at(-1), {
+      op: "set", seq, pools: [], price_coins: [coin], presale: null, trade_cues: true,
+    });
+    source.emit("set", { seq, ok: true, held: { pools: [], price_coins: [coin], presale: null, trade_cues: true } });
+  };
+  const cue = (source: Source, coin_type: string, cp: number) => source.emit("trade_cue", {
+    coin_type, cursor: `${cp}:1:1:0`, side: "sell", timestamp_ms: NOW + cp, quote_atoms: "50", usd: "12",
+  });
+
+  const pageTwo = watch(wal);
+  await settle();
+  const first = s.source();
+  hello(first);
+  answer(first, wal);
+  cue(first, wal, 10);
+  pageTwo.stop();
+  const pageThree = watch(deep);
+  await settle();
+  cue(first, wal, 11);
+  cue(first, deep, 12);
+  answer(first, deep);
+  cue(first, deep, 13);
+  first.emit("error");
+  s.fire(RECONNECT_MIN_MS);
+  const second = s.source();
+  assert.notEqual(second, first);
+  assert.deepEqual(new URL(second.url, "https://blast.test").searchParams.getAll("price_coin"), [deep]);
+  hello(second);
+  answer(second, deep);
+  cue(first, deep, 14);
+  cue(second, wal, 15);
+  cue(second, deep, 16);
+  assert.deepEqual(received, ["10:1:1:0", "13:1:1:0", "16:1:1:0"]);
+  pageThree.stop();
+  await settle();
+  assert.deepEqual(s.source().sets().at(-1), { op: "set", seq: 4, pools: [], price_coins: [], presale: null, trade_cues: false });
 });
 
 test("a legacy relay keeps its original heartbeat deadline and requires a new fence after loss", async () => {

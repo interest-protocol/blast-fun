@@ -1,5 +1,5 @@
 import { EVENT_CURSOR, compareEventCursors } from "@blast/core/modules/launchpad-contract/cursor.ts";
-import { coinStatsFrameSchema, displayPriceCoinSchema, displayPriceFrameSchema, MARKET_STREAM_BUDGET, MARKET_STREAM_PATH, type CoinStatsFrame, type DisplayPriceFrame } from "@blast/core/modules/launchpad-contract/market-stream.ts";
+import { coinStatsFrameSchema, displayPriceCoinSchema, displayPriceFrameSchema, marketTradeCueSchema, MARKET_STREAM_BUDGET, MARKET_STREAM_PATH, type CoinStatsFrame, type DisplayPriceFrame, type MarketTradeCue } from "@blast/core/modules/launchpad-contract/market-stream.ts";
 import { deploymentMismatch, parseInfraProvenance, type ExpectedDeployment } from "@blast/core/modules/launchpad-contract/provenance.ts";
 import { CANDLE_INTERVALS, type CandleInterval, type MigrationMarker, type PoolTrade } from "@blast/core/modules/launchpad-contract/venue-history.ts";
 import { parseDiscoveryResponse, type DiscoveryResponse } from "@blast/core/modules/launchpad-discovery/rows.ts";
@@ -53,6 +53,7 @@ export type MarketStreamListener = Readonly<{
   frame?: (frame: ChartFrame, chars: number) => void;
   trade?: (trade: MarketTrade) => void;
   prices?: (frame: DisplayPriceFrame) => void;
+  tradeCue?: (cue: MarketTradeCue) => void;
   /** The coin's latest market stats for a fenced pool; a later one replaces it, and a late subscriber gets the latest. */
   stats?: (frame: CoinStatsFrame) => void;
   discovery?: (page: DiscoveryResponse) => void;
@@ -110,7 +111,7 @@ export type MarketStreamDependencies = Readonly<{
 }>;
 
 /** `pending`: its first replay (the stream's progress so far) has not run yet. */
-type Subscriber = { request: MarketStreamRequest; pools: ReadonlySet<string>; state: MarketStreamState | null; poolStates: Map<string, MarketStreamState>; pending: boolean };
+type Subscriber = { request: MarketStreamRequest; pools: ReadonlySet<string>; priceCoins: ReadonlySet<string>; state: MarketStreamState | null; poolStates: Map<string, MarketStreamState>; pending: boolean };
 type Observer = { coin: string; listener: CoinTradeListener; seen: string | null };
 /**
  * `coin` survives reconnects: it names the pool, not the connection's progress through it.
@@ -122,7 +123,7 @@ type Observer = { coin: string; listener: CoinTradeListener; seen: string | null
  */
 type Pool = { fence: number | null; seen: number; lastEvent: number; cursor: string | null; tradeCursor: string | null; resumeTrade?: string; tapeResumed?: true; summary: unknown; coin: string | null; priceMissing?: boolean; stats?: CoinStatsFrame; relay: "waiting" | "recovering" | "unavailable"; awaiting: boolean; refences: number; cancelRefence: (() => void) | null; cancelCalm: (() => void) | null };
 /** The topics one socket streams, as the relay names them. */
-type Topics = Readonly<{ pools: readonly string[]; priceCoins: readonly string[]; presale: string | null; discovery?: boolean }>;
+type Topics = Readonly<{ pools: readonly string[]; priceCoins: readonly string[]; presale: string | null; discovery?: boolean; tradeCues?: boolean }>;
 const NO_TOPICS: Topics = { pools: [], priceCoins: [], presale: null };
 /** A presale the tab no longer wants while the socket still streams it: wanted again before the relay drops it, it needs no new pong. */
 type LeavingPresale = { id: string; fence: number | null; seen: number };
@@ -136,10 +137,11 @@ type LeavingPresale = { id: string; fence: number | null; seen: number };
 type Connection = {
   pools: Map<string, Pool>; priceCoins: Set<string>; presale?: string; presaleFence: number | null; presaleSeen: number; expected: ExpectedDeployment | null;
   discovery?: boolean; discoverySupported?: boolean; discoveryPages: Map<string, { revision: bigint; page: DiscoveryResponse }>;
+  tradeCues?: boolean; tradeCuesSupported?: boolean;
   source: MarketEventSource | null; hello: boolean; upstream: "ok" | "recovering" | "stale"; unavailableLast: boolean;
   held: Topics; sent: (Topics & { seq: number }) | null; settable: boolean; leaving: Map<string, Pool>; leavingPresale: LeavingPresale | null; presaleAwaiting: boolean;
 };
-type Wanted = { pools: string[]; priceCoins: Set<string>; presale?: string; discovery?: boolean; expected: ExpectedDeployment | null };
+type Wanted = { pools: string[]; priceCoins: Set<string>; presale?: string; discovery?: boolean; tradeCues?: boolean; expected: ExpectedDeployment | null };
 /** The socket: `open` once its hello arrived; `refused` while the tab waits out a refusal. */
 type Socket = "connecting" | "open" | "reconnecting" | "paused" | "refused";
 
@@ -197,7 +199,7 @@ function wantedTopics(wanted: Wanted): Topics {
 }
 
 function topics(connection: Connection): Topics {
-  return { pools: [...connection.pools.keys()], priceCoins: [...connection.priceCoins], presale: connection.presale ?? null, discovery: connection.discovery && connection.discoverySupported };
+  return { pools: [...connection.pools.keys()], priceCoins: [...connection.priceCoins], presale: connection.presale ?? null, discovery: connection.discovery && connection.discoverySupported, tradeCues: connection.tradeCues && connection.tradeCuesSupported };
 }
 
 /** The pools the socket holds or was last asked for. */
@@ -210,16 +212,16 @@ function sameTopics(left: Topics, right: Topics): boolean {
     const other = new Set(b);
     return a.length === b.length && a.every((item) => other.has(item));
   };
-  return !!left.discovery === !!right.discovery && left.presale === right.presale && same(left.pools, right.pools) && same(left.priceCoins, right.priceCoins);
+  return !!left.discovery === !!right.discovery && !!left.tradeCues === !!right.tradeCues && left.presale === right.presale && same(left.pools, right.pools) && same(left.priceCoins, right.priceCoins);
 }
 
 /** The `held` of a `set` answer, or null when it is not one. */
 function readHeld(value: unknown): Topics | null {
   const strings = (list: unknown): list is string[] => Array.isArray(list) && list.every((item) => typeof item === "string");
   if (value === null || typeof value !== "object") return null;
-  const { pools, price_coins: priceCoins, presale, discovery } = value as Record<string, unknown>;
+  const { pools, price_coins: priceCoins, presale, discovery, trade_cues: tradeCues } = value as Record<string, unknown>;
   if (!strings(pools) || !strings(priceCoins) || (presale !== null && typeof presale !== "string")) return null;
-  return { pools, priceCoins, presale, discovery: discovery === true };
+  return { pools, priceCoins, presale, discovery: discovery === true, tradeCues: tradeCues === true };
 }
 
 function fitsExpected(request: MarketStreamRequest, expected: ExpectedDeployment | null): boolean {
@@ -385,7 +387,7 @@ export class MarketStreamHub {
       priceCoins.some((coin) => !displayPriceCoinSchema.safeParse(coin).success)) {
       throw new Error("Invalid subscription to market pools or coin prices.");
     }
-    const subscriber: Subscriber = { request, pools: new Set(request.pools), state: null, poolStates: new Map(), pending: this.connection !== null };
+    const subscriber: Subscriber = { request, pools: new Set(request.pools), priceCoins: new Set(request.priceCoins), state: null, poolStates: new Map(), pending: this.connection !== null };
     this.subscribers.unshift(subscriber);
     this.active.add(subscriber);
     this.stopVisibility ??= this.deps.onVisibilityChange(() => this.visibility());
@@ -447,7 +449,8 @@ export class MarketStreamHub {
       for (const coin of request.priceCoins ?? []) if (priceCoins.size < MARKET_STREAM_BUDGET.maxPriceCoinsPerClient) priceCoins.add(coin);
     }
     const discovery = this.subscribers.some(({ request }) => request.discovery && fitsExpected(request, expected));
-    return { pools: [...pools], priceCoins, presale, discovery, expected };
+    const tradeCues = this.subscribers.some(({ request }) => request.priceCoins?.length && request.listener.tradeCue && fitsExpected(request, expected));
+    return { pools: [...pools], priceCoins, presale, discovery, tradeCues, expected };
   }
 
   /** Each pool's coin, as its subscribers name it. */
@@ -483,6 +486,8 @@ export class MarketStreamHub {
    */
   private linger(): void {
     if (!this.connection) return this.close();
+    // Release the page's trade topics as soon as it leaves, even while the socket lingers.
+    if (this.connection.tradeCues) this.empty(this.connection);
     this.cancelLinger ??= this.deps.schedule(() => {
       this.cancelLinger = null;
       const connection = this.connection!;
@@ -533,7 +538,7 @@ export class MarketStreamHub {
     this.drop();
     this.connection = {
       pools: new Map(wanted.pools.map((pool) => [pool, emptyPool(current?.pools.get(pool)?.coin ?? null)])), priceCoins: wanted.priceCoins, presale: wanted.presale,
-      discovery: wanted.discovery, discoveryPages: new Map(),
+      discovery: wanted.discovery, discoveryPages: new Map(), tradeCues: wanted.tradeCues,
       presaleFence: null, presaleSeen: 0, expected: wanted.expected, source: null, hello: false, upstream: "ok", unavailableLast: false,
       held: NO_TOPICS, sent: null, settable: false, leaving: new Map(), leavingPresale: null, presaleAwaiting: false,
     };
@@ -563,6 +568,7 @@ export class MarketStreamHub {
     }
     connection.priceCoins = wanted.priceCoins;
     connection.discovery = wanted.discovery;
+    connection.tradeCues = wanted.tradeCues;
     if (!connection.discovery && !connection.held.discovery && !connection.sent?.discovery) connection.discoveryPages.clear();
     const presaleBack = this.changePresale(connection, wanted.presale);
     this.sync();
@@ -619,7 +625,11 @@ export class MarketStreamHub {
     const next = topics(connection);
     if (sameTopics(next, connection.held)) return;
     const seq = ++this.seq;
-    if (!source.send(JSON.stringify({ op: "set", seq, pools: next.pools, price_coins: next.priceCoins, presale: next.presale, ...(connection.discoverySupported ? { discovery: !!next.discovery } : {}) }))) return this.reconnect();
+    if (!source.send(JSON.stringify({
+      op: "set", seq, pools: next.pools, price_coins: next.priceCoins, presale: next.presale,
+      ...(connection.discoverySupported ? { discovery: !!next.discovery } : {}),
+      ...(connection.tradeCuesSupported ? { trade_cues: !!next.tradeCues } : {}),
+    }))) return this.reconnect();
     connection.sent = { ...next, seq };
     this.cancelAnswer = this.deps.schedule(() => {
       this.cancelAnswer = null;
@@ -874,6 +884,7 @@ export class MarketStreamHub {
     connection.sent = null;
     connection.settable = false;
     connection.discoverySupported = false;
+    connection.tradeCuesSupported = false;
     connection.discoveryPages.clear();
     connection.leavingPresale = null;
     connection.presaleAwaiting = false;
@@ -944,6 +955,16 @@ export class MarketStreamHub {
     source.addEventListener("tape", (event) => {
       if (current()) this.tape(connection, event.data ?? "");
     });
+    source.addEventListener("trade_cue", (event) => {
+      if (!current() || !connection.held.tradeCues || !this.deps.visible() || !event.data || event.data.length > MARKET_STREAM_BUDGET.maxChunkBytes) return;
+      const cue = marketTradeCueSchema.safeParse(readObject(event.data));
+      if (!cue.success || !connection.held.priceCoins.includes(cue.data.coin_type)) return;
+      for (const subscriber of [...this.subscribers]) {
+        const { listener } = subscriber.request;
+        if (!listener.tradeCue || !subscriber.priceCoins.has(cue.data.coin_type) || !this.active.has(subscriber) || !fitsExpected(subscriber.request, connection.expected) || !current()) continue;
+        safely(() => listener.tradeCue!(cue.data));
+      }
+    });
     source.addEventListener("prices", (event) => {
       if (!current() || !event.data || event.data.length > MARKET_STREAM_BUDGET.maxChunkBytes) return;
       let frame: DisplayPriceFrame;
@@ -953,10 +974,9 @@ export class MarketStreamHub {
         return;
       }
       for (const subscriber of [...this.subscribers]) {
-        const { priceCoins, listener } = subscriber.request;
-        if (!priceCoins?.length || !listener.prices || !this.active.has(subscriber) || !fitsExpected(subscriber.request, connection.expected) || !current()) continue;
-        const requested = new Set(priceCoins);
-        const prices = frame.prices.filter((price) => requested.has(price.coin_type));
+        const { listener } = subscriber.request;
+        if (!subscriber.priceCoins.size || !listener.prices || !this.active.has(subscriber) || !fitsExpected(subscriber.request, connection.expected) || !current()) continue;
+        const prices = frame.prices.filter((price) => subscriber.priceCoins.has(price.coin_type));
         if (prices.length) safely(() => listener.prices!({ ...frame, prices }));
       }
     });
@@ -1039,6 +1059,7 @@ export class MarketStreamHub {
           connection.hello = true;
           connection.settable = hint.set === true;
           connection.discoverySupported = hint.discovery === true;
+          connection.tradeCuesSupported = hint.trade_cues === true;
           if (!connection.discoverySupported) connection.held = { ...connection.held, discovery: false };
           this.socket = "open";
           this.cancelHello?.();

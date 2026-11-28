@@ -24,6 +24,8 @@ import { resultsAnnouncement, SORT_LABELS, type HeaderSort } from "./home-state"
 import { addPops, biggestTrade, homeCoinKey, popsOn, tradeCueOf, type HomeCueTrade, type HomePop } from "./home-model";
 import { TableFooter } from "./TableFooter";
 import { countWords } from "@blast/core/web/format.ts";
+import type { MarketTradeCue } from "@blast/core/modules/launchpad-contract/market-stream.ts";
+import { coinKey } from "#web/components/launchpad/market-stream-hub.ts";
 import type { FeedFreshnessSource } from "../home/feed-freshness";
 import { useHomeLive } from "./use-home-live";
 import { useSortPrefetch } from "./use-sort-prefetch";
@@ -125,11 +127,11 @@ function motionKeys(props: ListProps, viewKey: string | undefined, motionVersion
  * With no rows (a `result` in their place) the pager, count go;
  * a settled `empty` result drops the column header and its sorts too.
  */
-export function CoinList({ coins, props, result, empty = false, end, viewKey, rankings, checkpoint = 0, pops = NO_POPS, swapping = false }: Readonly<{ coins: readonly RankedCoin[]; props: ListProps; result?: ReactNode; empty?: boolean; end?: ReactNode; viewKey?: string; rankings?: Rankings; checkpoint?: number; /** Trades popping on these rows. */ pops?: readonly HomePop[]; /** The previous view's rows, held while the new view loads. */ swapping?: boolean }>) {
+export function CoinList({ coins, props, result, empty = false, end, viewKey, rankings, checkpoint = 0, pops = NO_POPS, swapping = false, onTradeCue }: Readonly<{ coins: readonly RankedCoin[]; props: ListProps; result?: ReactNode; empty?: boolean; end?: ReactNode; viewKey?: string; rankings?: Rankings; checkpoint?: number; /** Trades popping on these rows. */ pops?: readonly HomePop[]; /** The previous view's rows, held while the new view loads. */ swapping?: boolean; onTradeCue?: (cue: MarketTradeCue) => void }>) {
   const motion = motionKeys(props, viewKey, rankings?.motionVersion);
   const list = useRankMotion(motion.view, { group: motion.group, holding: swapping });
   const hasResult = Boolean(result);
-  const latest = useHomePrices(coins, props.streamPrices === true && !hasResult);
+  const latest = useHomePrices(coins, props.streamPrices === true && !hasResult, onTradeCue);
   // Home shows new-coin admissions in the Coins header.
   const slotted = useRankingsSlot(rankings);
   const controls = rankings && !slotted ? <RankingControls rankings={rankings} /> : null;
@@ -243,7 +245,7 @@ function useHomePops(query: HomeQuery, settled: boolean, showTrades: boolean | u
   const [pops, setPops] = useState<{ view: string; showing: readonly HomePop[] }>({ view, showing: NO_POPS });
   const [announced, setAnnounced] = useState("");
   const nextAnnounceAt = useRef(0);
-  useHomeLive(query, settled, freshness, trades => {
+  const queueTrade = useHomeLive(query, settled, freshness, trades => {
     if (!showTrades) return;
     const listed = new Map(coins.map(coin => [homeCoinKey(coin), coin.symbol]));
     const popping = trades.filter(trade => listed.has(trade.coin_key) && popsOn(trade));
@@ -268,7 +270,21 @@ function useHomePops(query: HomeQuery, settled: boolean, showTrades: boolean | u
       if (announcing) setAnnounced("");
     }, HOME_POP_MS);
   });
-  return { pops: settled && pops.view === view ? pops.showing : NO_POPS, announced };
+  const byType = useMemo(() => new Map(coins.map(coin => [coinKey(coin.coin_type), coin])), [coins]);
+  const receiveCue = (cue: MarketTradeCue) => {
+    const row = byType.get(cue.coin_type);
+    if (!row) return;
+    queueTrade({
+      coin_key: homeCoinKey(row), activity_id: cue.cursor, side: cue.side,
+      occurred_at_ms: cue.timestamp_ms, quote_atoms: cue.quote_atoms,
+      quote_symbol: null, quote_decimals: null, usd: cue.usd,
+    });
+  };
+  return {
+    pops: settled && pops.view === view ? pops.showing : NO_POPS,
+    announced,
+    onTradeCue: settled && showTrades ? receiveCue : undefined,
+  };
 }
 
 /** One trade as a screen reader hears it: `JOEY buy for $42`. */
@@ -290,7 +306,7 @@ export function DiscoverList({ query, initial, props, freshness }: Readonly<{ qu
     checkpoint: settled?.as_of?.checkpoint,
   });
   const coins = previous?.coins ?? rankings.coins;
-  const { pops, announced } = useHomePops(query, settled !== undefined, props.streamPrices, freshness, coins);
+  const { pops, announced, onTradeCue } = useHomePops(query, settled !== undefined, props.streamPrices, freshness, coins);
   useLastPage(props.page, settled?.pages, props.onPage);
 
   const refresh = () => void read.refetch({ cancelRefetch: false });
@@ -307,6 +323,7 @@ export function DiscoverList({ query, initial, props, freshness }: Readonly<{ qu
       <CoinList
         checkpoint={previous?.as_of?.checkpoint}
         pops={pops}
+        onTradeCue={onTradeCue}
         rankings={rankings}
         viewKey={JSON.stringify([query, read.isPlaceholderData])}
         coins={coins}

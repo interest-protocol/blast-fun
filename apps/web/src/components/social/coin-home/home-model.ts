@@ -194,13 +194,12 @@ export function tradeCueOf(trade: Pick<HomeCueTrade, "quote_atoms" | "quote_deci
   return trade.side === "buy" ? { ...cue, side: "buy" } : { text: `\u2212${cue.text.slice(1)}`, tier: "small", side: "sell" };
 }
 
-/** Home pops a trade worth more than this many dollars, or an unpriced buy from a read (shown in its own coin). */
+/** Home pops a trade with a confirmed value above this many dollars. */
 export const HOME_POP_MIN_USD = "1";
 const MIN_POP_USD = exactDecimal(HOME_POP_MIN_USD)!;
 
 /** Whether a trade earns a pop: above `HOME_POP_MIN_USD`, compared as an exact decimal. */
 export function popsOn(trade: Pick<HomeCueTrade, "usd">): boolean {
-  if (trade.usd === undefined) return true;
   const usd = exactDecimal(trade.usd);
   return usd !== null && compareExact(usd, MIN_POP_USD) > 0;
 }

@@ -5,6 +5,7 @@ import {
   MARKET_STREAM_PATH,
   marketStreamPools,
 } from "@blast/core/modules/launchpad-contract/market-stream.ts";
+import { INDEXED_POOL_COINS } from "@blast/core/modules/social/portfolio/core-coins.ts";
 import { MarketStreamRelay } from "@blast/server/modules/launchpad-market/stream-relay.ts";
 import type { RelaySocket } from "@blast/server/modules/launchpad-market/stream-relay.ts";
 import {
@@ -181,6 +182,116 @@ test("oversized Discover pages replace the cached page and let clients recover o
     assert.equal((await page(live)).section.state, "empty");
   } finally {
     await live.cancel();
+  }
+});
+
+test("Discover streams only live swaps over one dollar to tabs showing the tracked coin", () => {
+  const socket = new Socket();
+  const relay = new MarketStreamRelay(() => socket, expected);
+  const deep = INDEXED_POOL_COINS.find((coin) => coin.symbol === "DEEP")!;
+  const wheels = INDEXED_POOL_COINS.find((coin) => coin.symbol === "Wheels")!;
+  const target = new Request(`https://frontend.test${MARKET_STREAM_PATH}?activity=true`);
+  const attach = () => {
+    const messages: string[] = [];
+    const subscription = relay.subscribe(target, {
+      close() {},
+      send: (bytes) => {
+        messages.push(new TextDecoder().decode(bytes));
+        return true;
+      },
+    });
+    assert.ok(!(subscription instanceof Response));
+    return {
+      ...subscription,
+      view: (coinType: string) =>
+        subscription.set({
+          pools: [],
+          priceCoins: [coinType],
+          presale: null,
+          tradeCues: true,
+        }),
+      cues: () =>
+        messages
+          .filter((message) => message.startsWith("event: trade_cue\n"))
+          .map((message) => JSON.parse(message.match(/^data: (.+)$/m)![1]!)),
+      market: () => messages.filter((message) => message.startsWith("event: market\n")),
+    };
+  };
+  const swap = (
+    coin: typeof deep | typeof wheels,
+    cp: number,
+    usd: string | null,
+    side = "buy",
+  ) => {
+    const value = trade(cp, coin.poolKey);
+    return {
+      ...value,
+      trade: {
+        ...value.trade,
+        coin: coin.coinType,
+        kind: "swap",
+        usd: "500",
+        volume_usd: usd,
+        side,
+      },
+    };
+  };
+  const deepTab = attach();
+  const secondDeepTab = attach();
+  const wheelsTab = attach();
+  const pricesOnly = attach();
+  try {
+    pricesOnly.set({ pools: [], priceCoins: [deep.coinType], presale: null });
+    deepTab.view(deep.coinType);
+    secondDeepTab.view(deep.coinType);
+    wheelsTab.view(wheels.coinType);
+    socket.hello();
+    assert.deepEqual(socket.sent[0], {
+      op: "subscribe",
+      topics: ["activity", `pool:${deep.poolKey}`, `pool:${wheels.poolKey}`],
+    });
+    socket.receive({ ...snapshot(deep.poolKey), trades: [swap(deep, 10, "8").trade] });
+    socket.receive(snapshot(wheels.poolKey));
+    socket.receive(swap(deep, 11, null));
+    socket.receive(swap(deep, 12, "0.99"));
+    socket.receive(swap(deep, 13, "1"));
+    const buy = swap(deep, 14, "1.000000000000000001");
+    socket.receive(buy);
+    socket.receive(buy);
+    const expectedBuy = {
+      coin_type: deep.coinType,
+      cursor: buy.trade.cursor,
+      side: "buy",
+      timestamp_ms: buy.trade.timestamp_ms,
+      quote_atoms: buy.trade.quote_amount,
+      usd: buy.trade.volume_usd,
+    };
+    assert.deepEqual(deepTab.cues(), [expectedBuy]);
+    assert.deepEqual(secondDeepTab.cues(), [expectedBuy]);
+    assert.deepEqual(wheelsTab.cues(), []);
+    assert.deepEqual(pricesOnly.cues(), []);
+    assert.deepEqual(deepTab.market(), []);
+
+    deepTab.view(wheels.coinType);
+    secondDeepTab.stop();
+    assert.deepEqual(socket.sent.at(-1), { op: "unsubscribe", topics: [`pool:${deep.poolKey}`] });
+    socket.receive(swap(deep, 15, "23", "sell"));
+    const sell = swap(wheels, 16, "42.5", "sell");
+    socket.receive(sell);
+    const expectedSell = {
+      coin_type: wheels.coinType,
+      cursor: sell.trade.cursor,
+      side: "sell",
+      timestamp_ms: sell.trade.timestamp_ms,
+      quote_atoms: sell.trade.quote_amount,
+      usd: sell.trade.volume_usd,
+    };
+    assert.deepEqual(deepTab.cues(), [expectedBuy, expectedSell]);
+    assert.deepEqual(wheelsTab.cues(), [expectedSell]);
+  } finally {
+    for (const tab of [deepTab, secondDeepTab, wheelsTab, pricesOnly]) {
+      tab.stop();
+    }
   }
 });
 

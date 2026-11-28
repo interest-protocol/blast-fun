@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { mintLiveTicket } from "@blast/core/modules/launchpad-contract/live-ticket.ts";
+import { INDEXED_POOL_COINS } from "@blast/core/modules/social/portfolio/core-coins.ts";
 import type { HintSink } from "@blast/server/lib/hint-subscription.ts";
 import { MarketStreamRelay } from "@blast/server/modules/launchpad-market/stream-relay.ts";
 import type { RelaySocket } from "@blast/server/modules/launchpad-market/stream-relay.ts";
@@ -149,7 +150,13 @@ type Answer = {
   ok: boolean;
   reason?: string;
   retry_ms?: number;
-  held: { pools: string[]; price_coins: string[]; presale: string | null; discovery?: true };
+  held: {
+    pools: string[];
+    price_coins: string[];
+    presale: string | null;
+    discovery?: true;
+    trade_cues?: true;
+  };
 };
 
 const sendSet = (
@@ -198,6 +205,42 @@ test("Discover joins and leaves on the same admitted socket and validates its in
     initial.ws.close();
     const invalid = open("activity=true&discovery=maybe");
     assert.equal((await invalid.closed).code, LIVE_CLOSE.query);
+  } finally {
+    server.stop(true);
+  }
+});
+
+test("a price watcher can enable and leave trade cues on its existing socket", async () => {
+  const { server, open, subs } = harness();
+  try {
+    const priceCoins = [coin(1)];
+    const client = open(`activity=true&price_coin=${priceCoins[0]}`);
+    await admitted(client);
+    for (const [seq, tradeCues] of [
+      [1, true],
+      [2, false],
+    ] as const) {
+      client.ws.send(
+        JSON.stringify({
+          op: "set",
+          seq,
+          pools: [],
+          price_coins: priceCoins,
+          presale: null,
+          trade_cues: tradeCues,
+        }),
+      );
+      await until(() => answers(client).length === seq);
+      assert.deepEqual(answers(client)[seq - 1]?.held, {
+        pools: [],
+        price_coins: priceCoins,
+        presale: null,
+        ...(tradeCues ? { trade_cues: true } : {}),
+      });
+      assert.equal(subs[0]?.sets.at(-1)?.tradeCues, tradeCues || undefined);
+    }
+    assert.equal(subs.length, 1);
+    client.ws.close();
   } finally {
     server.stop(true);
   }
@@ -606,6 +649,26 @@ test("one address adds at most 40 pools a minute; one socket sends at most 10 se
     );
     again.ws.close();
     await until(() => live.stats().addresses === 0);
+
+    const trackedCoin = INDEXED_POOL_COINS[0]!.coinType;
+    const watcher = open(`activity=true&price_coin=${trackedCoin}`);
+    await admitted(watcher);
+    watcher.ws.send(
+      JSON.stringify({
+        op: "set",
+        seq: 1,
+        pools: [],
+        price_coins: [trackedCoin],
+        presale: null,
+        trade_cues: true,
+      }),
+    );
+    await until(() => answers(watcher).length === 1);
+    const cueChurn = answers(watcher)[0]!;
+    assert.equal(cueChurn.reason, "churn", "a tracked cue join also costs an upstream snapshot");
+    assert.deepEqual(cueChurn.held, { pools: [], price_coins: [trackedCoin], presale: null });
+    watcher.ws.close();
+    await until(() => live.stats().addresses === 0);
   } finally {
     server.stop(true);
   }
@@ -653,6 +716,7 @@ test("bad set frames close 1008", async () => {
   try {
     const frames = [
       { op: "set", seq: 1, pools: [], price_coins: [], presale: null, extra: 1 },
+      { op: "set", seq: 1, pools: [], price_coins: [], presale: null, trade_cues: 1 },
       { op: "set", seq: 1, pools: ["not-a-pool"], price_coins: [], presale: null },
       { op: "set", seq: 1, pools: [pool(1), pool(2), pool(3)], price_coins: [], presale: null },
       { op: "set", seq: 1, pools: [pool(1), pool(1)], price_coins: [], presale: null },

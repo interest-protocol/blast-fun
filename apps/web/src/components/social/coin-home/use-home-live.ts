@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useEffectEvent } from "react";
+import { useEffect, useEffectEvent, useRef } from "react";
 
 import { invalidateAfter } from "#web/lib/query/invalidate.ts";
 import { useAppQueryClient } from "#web/lib/query/provider.tsx";
@@ -36,7 +36,8 @@ export function useHomeLive(
   source?: FeedFreshnessSource,
   onTrades?: (trades: readonly HomeCueTrade[]) => void,
   refreshRelated?: () => Promise<unknown>,
-): void {
+) {
+  const queueCurrent = useRef<(trade: HomeCueTrade) => void>(null);
   const client = useAppQueryClient();
   const key = JSON.stringify(query);
   const reportTrades = useEffectEvent((trades: readonly HomeCueTrade[]) => onTrades?.(trades));
@@ -87,11 +88,8 @@ export function useHomeLive(
     // A priced trade hint, raw (before the 1 s coalescer, so none in a burst is lost): its pop only, no read.
     let collected: HomeCueTrade[] = [];
     let flush: number | undefined;
-    const offHints = trackTrades ? freshness.hints?.((hint) => {
-      if (disposed || document.visibilityState !== "visible") return;
-      const trade = hintTrade(hint);
-      if (!trade) return;
-      if (!remember(trade.activity_id)) return;
+    const queue = (trade: HomeCueTrade) => {
+      if (disposed || document.visibilityState !== "visible" || !remember(trade.activity_id)) return;
       collected.push(trade);
       if (flush === undefined) flush = window.setTimeout(() => {
         flush = undefined;
@@ -99,11 +97,17 @@ export function useHomeLive(
         collected = [];
         if (!disposed && document.visibilityState === "visible") reportTrades(trades);
       }, HOME_HINT_CUE_COLLECT_MS);
+    };
+    queueCurrent.current = trackTrades ? queue : null;
+    const offHints = trackTrades ? freshness.hints?.((hint) => {
+      const trade = hintTrade(hint);
+      if (trade) queue(trade);
     }) : undefined;
     const onVisibility = () => { visibleSince = Date.now(); };
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
       disposed = true;
+      queueCurrent.current = null;
       off();
       offHints?.();
       window.clearTimeout(flush);
@@ -113,4 +117,5 @@ export function useHomeLive(
     // `key` stands for `query`: a query with the same text is the same read.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client, enabled, key, source, trackTrades]);
+  return (trade: HomeCueTrade) => queueCurrent.current?.(trade);
 }
