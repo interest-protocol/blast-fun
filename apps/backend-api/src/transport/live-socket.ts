@@ -436,7 +436,8 @@ export function createLiveSocket(options: LiveSocketOptions) {
     return (
       !!entry &&
       (distinct(entry.pools, pools) > LIVE_SOCKET.perIp.pools ||
-        new Set(limitedPriceCoins([...entry.priceCoins.keys(), ...priceCoins])).size > LIVE_SOCKET.perIp.priceCoins)
+        new Set(limitedPriceCoins([...entry.priceCoins.keys(), ...priceCoins])).size >
+          LIVE_SOCKET.perIp.priceCoins)
     );
   };
   /** Moves this socket's share of the address tables from what it holds to `next`. */
