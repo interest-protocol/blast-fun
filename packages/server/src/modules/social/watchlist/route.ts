@@ -21,6 +21,7 @@ import type { PresaleTermsSource } from "@blast/server/modules/social/presales/d
 import { SocialRouteError } from "@blast/core/modules/social/route-kit/errors.ts";
 import type { SocialRequestContext, SocialRouteKit } from "@blast/server/modules/social/route-kit/route.ts";
 import { COIN_TYPE, SUI_OBJECT_ID_PATTERN } from "@blast/core/lib/sui/ids.ts";
+import { readStep } from "@blast/server/modules/social/read-steps.ts";
 
 /** A star's key: a presale id, or a bonding-curve coin's type. */
 const WATCHLIST_KEY_PATTERN = new RegExp(`${SUI_OBJECT_ID_PATTERN.source}|${COIN_TYPE.source}`);
@@ -113,7 +114,8 @@ export function createSocialWatchlistRoutes(dependencies: SocialWatchlistRouteDe
       GET: kit.route(read(SOCIAL_WATCHLIST_ROUTE), async (context) => {
         const query = parseWatchlistQuery(new URL(context.request.url));
         const page = await timed("list", () => readWatchlistPage(database(), context.account!.account_id, query, now()));
-        const sales = await withCatalogTerms(page.items.map(item => item.presale), dependencies.terms);
+        // The terms read after the page (`social.watchlist` times the page itself).
+        const sales = await readStep("watchlist", "catalog_terms", () => withCatalogTerms(page.items.map(item => item.presale), dependencies.terms));
         return context.json({ ...page, items: page.items.map((item, index) => ({ ...item, presale: sales[index]! })) });
       }),
     }),

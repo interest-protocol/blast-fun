@@ -10,6 +10,7 @@ import { readWatchlistEntries } from "@blast/server/modules/social/watchlist/sto
 import { atomsToUsd, isFreshPrice } from "@blast/core/modules/social/portfolio/read.ts";
 import { presalePrices } from "@blast/server/modules/social/profiles/calls.ts";
 import { readPresaleFacts, type PresaleFacts } from "@blast/server/modules/social/profiles/presales.ts";
+import { readSteps } from "@blast/server/modules/social/read-steps.ts";
 
 /**
  * The profile page's viewer reads: who of the people the viewer follows
@@ -98,24 +99,25 @@ export function positionStatusOf(facts: PresaleFacts, claimed: boolean): Portfol
 }
 
 export async function readMePresales(db: ReadableDatabase, accountId: string, nowMs: number): Promise<SocialMePresales> {
-  const [addresses, watch] = await Promise.all([
+  const step = readSteps("me_presales");
+  const [addresses, watch] = await step("round_1", () => Promise.all([
     readAccountAddresses(db, accountId),
     readWatchlistEntries(db, accountId, { limit: WATCHLIST_ROWS, cursor: null, includeFollows: true }),
-  ]);
-  const [positions, coins, vestings, ledger, created] = await Promise.all([
-    addresses.length ? db.read<PositionRow>(POSITIONS_SQL, [addresses]).then((result) => result.rows) : [],
-    addresses.length ? readSaleCoinHoldings(db, addresses) : [],
-    addresses.length ? readVestingSchedules(db, addresses) : [],
-    addresses.length ? readCostBasisLedgerOrNull(db, addresses) : { rows: [], truncated: false },
-    readCreatedPresaleIds(db, accountId, addresses),
-  ]);
+  ]));
+  const [positions, coins, vestings, ledger, created] = await step("round_2", () => Promise.all([
+    addresses.length ? step("positions", () => db.read<PositionRow>(POSITIONS_SQL, [addresses])).then((result) => result.rows) : [],
+    addresses.length ? step("coins", () => readSaleCoinHoldings(db, addresses)) : [],
+    addresses.length ? step("vestings", () => readVestingSchedules(db, addresses)) : [],
+    addresses.length ? step("cost_basis", () => readCostBasisLedgerOrNull(db, addresses)) : { rows: [], truncated: false },
+    step("created", () => readCreatedPresaleIds(db, accountId, addresses)),
+  ]));
   // R3-32: the same figures `/me/portfolio` answers for each position and coin.
   const basisOf = costBasisFiguresOf(ledger, coins, nowMs);
-  const facts = await readPresaleFacts(
+  const facts = await step("round_3", () => readPresaleFacts(
     db,
     [...positions, ...watch.entries, ...coins, ...vestings].map((row) => row.presale_id).concat(created),
     nowMs,
-  );
+  ));
   const multipleOf = (presale: PresaleFacts) => presalePrices(presale, nowMs).multiple;
   const valueOf = (presale: PresaleFacts, units: number) => {
     const { current } = presalePrices(presale, nowMs);
