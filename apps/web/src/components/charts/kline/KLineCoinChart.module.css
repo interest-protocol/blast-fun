@@ -13,14 +13,14 @@
  */
 .plot { position: relative; inline-size: 100%; block-size: calc(var(--kline-base, var(--kline-plot-height)) + var(--kline-grow, 0rem)); overflow: hidden; touch-action: pan-y; }
 .loading, .sized {
-  /* The plot, as the chart sizes it in px: price 290 + volume 100 + 1 + axis 25 = 416, which 26rem matches at the default text size (phone 200 + 64 + 1 + 25). */
+  /* The plot, as the chart sizes it in px: price 290 + volume 100 + 1 + axis 25 = 416, which 26rem matches at the default text size (phone: price 403, its volume on the floor, + axis 25 = 428). */
   --kline-plot-height: 26rem;
   block-size: calc(var(--kline-plot-height) + var(--kline-grow, 0rem));
 }
 /* A state in the chart's place (empty, error) keeps its height, and grows only for its own content. */
 .sized { block-size: auto; min-block-size: calc(var(--kline-plot-height) + var(--kline-grow, 0rem)); }
 @media (max-width: 760px), (pointer: coarse) {
-  .chart, .loading, .sized { --kline-plot-height: 290px; }
+  .chart, .loading, .sized { --kline-plot-height: 428px; }
 }
 .loadingFrame { display: block; }
 .loadingFrame > .loading { display: block; }

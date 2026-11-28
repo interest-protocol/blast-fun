@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { DrawnSeries } from "#web/components/launchpad/chart/chart-geometry.ts";
-import { barChanges, fillGaps, foldTrade, foldTrades, MAX_FILLED_BARS, klineBars, pricePrecision, priceParts, volumeText, chartDate, ticksInside, plotHeightFor, topGap, type Bar } from "./kline-model.ts";
+import { barChanges, fillGaps, foldTrade, foldTrades, MAX_FILLED_BARS, klineBars, pricePrecision, priceParts, volumeText, chartDate, ticksInside, plotHeightFor, paneGaps, type Bar } from "./kline-model.ts";
 
 const MINUTE = 60_000;
 const T0 = 1_795_188_300_000; // a 5-minute boundary
@@ -115,18 +115,21 @@ test("axis dates read as short local dates, and a label that would run off the p
   assert.deepEqual(ticksInside(ticks, 200).map((tick) => tick.text), ["05:00"]);
 });
 
-test("the top gap leaves the asked px free over the highest value, as KLineCharts widens the range", () => {
+test("the gaps leave the asked px free over the highest and under the lowest value, as KLineCharts widens the range", () => {
   // KLineCharts (YAxisImp.calcRange): the gaps are shares of the value range, added to both ends.
-  const freePx = (top: number, bottom: number, height: number) => height * top / (1 + top + bottom);
-  for (const [px, height, bottom] of [[76, 290, .06], [72, 200, .06], [22, 101, .05]] as const)
-    assert.ok(Math.abs(freePx(topGap(px, height, bottom), bottom, height) - px) < 1e-9, `${px}px of ${height}`);
-  assert.ok(freePx(76 / 290, .06, 290) < 60, "the plain px share leaves far less room");
-  // KLineCharts reads 1 or more as pixels, so the share stays under 1 however much is asked.
-  for (const px of [112, 200, 300]) assert.ok(topGap(px, 200, .06) < 1, `${px}px of 200`);
+  // A share of the range: the px it frees is height × share / (1 + top + bottom).
+  const freePx = (share: number, gaps: { top: number; bottom: number }, height: number) => height * share / (1 + gaps.top + gaps.bottom);
+  for (const [top, bottom, height] of [[76, 16, 290], [72, 76, 403], [22, 0, 101]] as const) {
+    const gaps = paneGaps(top, bottom, height);
+    assert.ok(Math.abs(freePx(gaps.top, gaps, height) - top) < 1e-9, `${top}px above in ${height}`);
+    assert.ok(Math.abs(freePx(gaps.bottom, gaps, height) - bottom) < 1e-9, `${bottom}px below in ${height}`);
+  }
+  // KLineCharts reads 1 or more as pixels, so each share stays under 1 however much is asked.
+  for (const px of [112, 200, 300]) assert.ok(paneGaps(px, 30, 200).top < 1, `${px}px of 200`);
 });
 
 test("the plot's height matches the loading block that holds its place", () => {
-  // The CSS fallback (--kline-plot-height: 26rem = 416px desktop at the default text size, 290px phone).
+  // The CSS fallback (--kline-plot-height: 26rem = 416px desktop at the default text size, 428px phone).
   assert.equal(plotHeightFor(false), 416);
-  assert.equal(plotHeightFor(true), 290);
+  assert.equal(plotHeightFor(true), 428);
 });

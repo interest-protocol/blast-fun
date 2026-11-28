@@ -315,14 +315,22 @@
   .chart[data-compact-chart] { --kline-grow: clamp(0rem, 100dvh - 60rem, 14rem); }
 }
 /*
- * A phone gives the price pane up on a short screen, so the time axis still ends above the Trade dock:
- * 772 px is the shell header, the back link, the coin's row, the price and timeframe rows, a 290 px plot
- * and the taller of the two docks (a sale's Sell and Buy) with the tab bar. `svh` is the screen with the
- * browser's bars shown, and it holds still while they slide, so scrolling never resizes the chart.
- * At most 112 px goes: the price pane keeps about 100 px of candles over the volume and the time axis.
+ * A phone's chart is the screen less the rows around it and the safe areas, from 360 px to 520 px; the
+ * price pane takes the change from its 428 px plot (kline-model `plotHeightFor`). `--coin-chart-chrome`
+ * is those rows at a 390 px phone (452 px at its 16 px root): 234 px above the plot on a bonding coin (the
+ * shell header, the back row with the balance, the coin's row, the price row), the 52 px controls row under
+ * it, and the Trade dock with the tab bar (165 px). It is in rem, as those rows grow with the root text on a
+ * wider phone.
+ * Below that plus 360 px the floor wins and the plot's foot reaches under the dock until the page scrolls.
+ * `svh` is the screen with the browser's bars shown, and it holds still while they slide, so scrolling
+ * never resizes the chart. The controls row sits under the plot, so the candles come straight after the price.
  */
 @media (max-width: 760px) {
-  .chart[data-compact-chart] { --kline-grow: clamp(-112px, 100svh - 772px, 0px); }
+  .chart[data-compact-chart] {
+    --coin-chart-chrome: 28.25rem;
+    --kline-grow: calc(clamp(360px, 100svh - var(--coin-chart-chrome) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px), 520px) - 428px);
+  }
+  .chart[data-compact-chart] > .compactHead { order: 1; }
 }
 
 .chart .chartEmpty { justify-content: center; background: transparent; }

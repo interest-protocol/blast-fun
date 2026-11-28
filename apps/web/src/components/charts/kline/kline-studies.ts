@@ -1,6 +1,8 @@
-import { registerOverlay, type Chart } from "klinecharts";
+import { registerIndicator, registerOverlay, type Chart } from "klinecharts";
+import { FLOOR_VOLUME_SHARE } from "./kline-model.ts";
 
 export const BLAST_GRADUATION = "blastGraduation";
+export const BLAST_FLOOR_VOLUME = "blastFloorVolume";
 /** "Graduated" at 11 px with its 4 px side padding, a little over its measured 60 px. */
 const GRADUATED_CHIP_WIDTH = 64;
 
@@ -12,10 +14,45 @@ function plainText(chart: Chart) {
 
 let registered = false;
 
-/** Registers the graduation marker once per page. */
-export function registerGraduation() {
+/** The floor volume bars' colours, by the bar's direction. */
+export type FloorVolumeColors = Readonly<{ up: string; down: string; flat: string }>;
+
+/** Registers the graduation marker and the floor volume bars once per page. */
+export function registerStudies() {
   if (registered) return;
   registered = true;
+
+  // A phone's volume: faint bars on the price pane's floor, each its share of the tallest bar in view, up to
+  // FLOOR_VOLUME_SHARE of the pane. It has no figures, so it never widens the price axis; the price pane's
+  // bottom gap keeps the candles above the bars. Drawn here (`draw` returns true), so the library adds nothing.
+  // The price axis takes the fewest decimals of the price and its pane's indicators (YAxisImp.createRangeImp),
+  // so the bars claim the most (16, kline-model `pricePrecision`) and leave the price's own.
+  registerIndicator<unknown, unknown, FloorVolumeColors>({
+    name: BLAST_FLOOR_VOLUME,
+    precision: 16,
+    figures: [],
+    calc: (dataList) => dataList.map(() => ({})),
+    createTooltipDataSource: () => ({ name: "", calcParamsText: "", features: [], legends: [] }),
+    draw: ({ ctx, chart, indicator, bounding, xAxis }) => {
+      const bars = chart.getDataList();
+      const { from, to } = chart.getVisibleRange();
+      const first = Math.max(0, from), last = Math.min(bars.length, to);
+      let tallest = 0;
+      for (let index = first; index < last; index++) tallest = Math.max(tallest, bars[index]?.volume ?? 0);
+      if (!(tallest > 0)) return true;
+      const band = bounding.height * FLOOR_VOLUME_SHARE;
+      const { gapBar, halfGapBar } = chart.getBarSpace();
+      const colors = indicator.extendData;
+      for (let index = first; index < last; index++) {
+        const bar = bars[index];
+        const height = bar?.volume ? Math.max(1, band * bar.volume / tallest) : 0;
+        if (!bar || !height) continue;
+        ctx.fillStyle = bar.close > bar.open ? colors.up : bar.close < bar.open ? colors.down : colors.flat;
+        ctx.fillRect(xAxis.convertToPixel(index) - halfGapBar, bounding.height - height, Math.max(1, gapBar), height);
+      }
+      return true;
+    },
+  });
 
   registerOverlay({
     name: BLAST_GRADUATION,
