@@ -569,8 +569,11 @@ function CompactChart({ view }: Readonly<{ view: ChartViewControls }>) {
     </div>
     <ChartLastTrade />
     <div className={styles.plotFrame}>
-      <CompactChartBody view={view} traders={traders} />
-      <CompactStatus view={view} />
+      <div className={styles.plotStage}>
+        <CompactChartBody view={view} traders={traders} />
+        <CompactStatus view={view} />
+      </div>
+      {view.geometry && <CompactSourceNotices view={view} />}
     </div>
   </div>;
 }
@@ -598,7 +601,7 @@ function StreamNotice({ view }: Readonly<{ view: ChartViewControls }>) {
 
 /**
  * A source's delayed notice with its Try again (and on a narrow chart the stream's), on a card
- * over the plot's foot. The status region stays while the card comes and goes.
+ * over the plot's foot, just above the time axis; the notes under the plot sit outside its box. The status region stays while the card comes and goes.
  */
 function CompactStatus({ view }: Readonly<{ view: ChartViewControls }>) {
   const alert = view.geometry ? compactSourceAlert(view) : null;
@@ -613,10 +616,7 @@ function CompactChartBody({ view, traders }: Readonly<{ view: ChartViewControls;
   const { source, quoteUsd, controls, migration, venuePoolKey, drawn, geometry, latest, latestAvailable } = view;
   const candleTrade = useCandleTrade();
   if (!geometry) return <CompactEmptyChart view={view} />;
-  return <>
-    <ChartFigure compact candleTrade={candleTrade} traders={traders} quoteUsd={quoteUsd} drawn={drawn} migrationAt={migration?.timestampMs} venuePoolKey={venuePoolKey} geometry={geometry} latest={latest} latestAvailable={latestAvailable} source={source} controls={controls} />
-    <CompactSourceNotices view={view} />
-  </>;
+  return <ChartFigure compact candleTrade={candleTrade} traders={traders} quoteUsd={quoteUsd} drawn={drawn} migrationAt={migration?.timestampMs} venuePoolKey={venuePoolKey} geometry={geometry} latest={latest} latestAvailable={latestAvailable} source={source} controls={controls} />;
 }
 
 function CompactEmptyChart({ view }: Readonly<{ view: ReturnType<typeof useChartViewControls> }>) {

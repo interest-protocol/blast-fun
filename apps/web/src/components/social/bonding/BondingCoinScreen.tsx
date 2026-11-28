@@ -412,8 +412,7 @@ function CoinMarket({ snapshot, page, chart, activity, poolKey, checkpoint, expe
   // The best known price at once; after the viewer's own trade, only one that includes it.
   const price = useChartPrice(poolKey, null, page.launchId);
   const context = coinTradeSource(view, poolKey, lastTrade, receivedAt);
-  // A phone reads the last trade under the chart, so the candles sit right under the price.
-  const phone = usePhoneLayout();
+  // A phone reads the last trade under the chart (CSS shows one of the two), so the candles sit right under the price.
   const recent = context && <ChartLastTrade placement="headline" />;
   return <ChartPriceLaunch value={{ poolKey, launchId: page.launchId }}><ChartTradeContext value={context}>
     <div className={styles.market}>
@@ -421,8 +420,8 @@ function CoinMarket({ snapshot, page, chart, activity, poolKey, checkpoint, expe
       {liveOn ? <LifecycleRefresh lifecycle={live.stats?.lifecycle ?? null} /> : null}
       <CoinMarketCards graduated={graduated} view={view} tick={tick} tradeId={tradeId} stats={stats} chart={chart} activity={activity}
         price={<MarketPrice units={priceUnits(view)} price={price?.price} tradeId={tradeId && price?.cursor ? tradeId : null}
-          showCurrency={view.identity.quoteType !== null} activity={phone ? null : recent} />}
-        foot={<><span className={styles.byline}><CreatorByline page={page} />{view.identity.coinType ? <CoinTypeTag coinType={view.identity.coinType} /> : null}</span>{phone ? recent : null}</>} />
+          showCurrency={view.identity.quoteType !== null} activity={recent} />}
+        foot={<><span className={styles.byline}><CreatorByline page={page} />{view.identity.coinType ? <CoinTypeTag coinType={view.identity.coinType} /> : null}</span>{recent}</>} />
     </div>
   </ChartTradeContext></ChartPriceLaunch>;
 }

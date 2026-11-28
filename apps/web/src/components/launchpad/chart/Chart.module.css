@@ -176,7 +176,8 @@
 }
 
 /* The plot and what floats over it: a delayed source's notice over the plot's foot, clear of the Latest button. */
-.plotFrame { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); gap: .5rem; min-inline-size: 0; }
+.plotFrame { display: grid; grid-template-columns: minmax(0, 1fr); gap: .5rem; min-inline-size: 0; }
+.plotStage { position: relative; min-inline-size: 0; }
 .alertSlot { position: absolute; inset-block-end: 2.25rem; inset-inline: .5rem 7rem; z-index: 5; pointer-events: none; }
 .alertCard {
   display: flex;
@@ -296,7 +297,7 @@
   .slotNotice { display: flex; }
   /* The row fills the head: the range at the start, Traders at the end. */
   .compactTools { flex-grow: 1; margin-inline-start: 0; }
-  .compactTools > :last-child { margin-inline-start: auto; }
+  .compactTools > .tradersToggle { margin-inline-start: auto; }
 }
 .filters .filterClose,
 .chart .chartRetry { --control-height: max(44px, 2.75rem); }
@@ -317,7 +318,7 @@
  * A phone gives the price pane up on a short screen, so the time axis still ends above the Trade dock:
  * 745 px is the shell header, the coin's row, the price and timeframe rows, a 290 px plot and the dock
  * with the tab bar. `svh` is the screen with the browser's bars shown, and it holds still while they
- * slide, so scrolling never resizes the chart. At most 88 px goes, leaving the candles about 110 px.
+ * slide, so scrolling never resizes the chart. At most 88 px goes: the price pane keeps about 112 px, about 55 px of candles under the Traders' faces.
  */
 @media (max-width: 760px) {
   .chart[data-compact-chart] { --kline-grow: clamp(-88px, 100svh - 745px, 0px); }

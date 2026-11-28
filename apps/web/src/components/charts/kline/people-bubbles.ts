@@ -130,7 +130,7 @@ export const bubbleHeadroom = (size: number) => Math.ceil(clearance(size) + size
 
 /** What the chart draws under the bubbles: candles, each bar's high to low. */
 export type DrawnPrice = Readonly<{
-  /** Px at the top of the price pane kept clear for the study legends. */
+  /** Px at the top of the price pane that bubbles keep clear of. */
   topInset?: number;
   /** The bars on screen, in px: candles' high and low. */
   spans?: readonly BarSpan[];
@@ -148,8 +148,7 @@ export type DrawnPrice = Readonly<{
  * viewer's own first and always, then tagged wallets, then the newest, and folds the
  * rest into one "+N". Every column floats one bubble height (`GAP`) over the highest
  * price drawn under it, its own bars' and any of `drawn.spans` within reach, and stacks up from there; a column with no room above goes the
- * same gap under the lowest price instead. Nothing goes above `drawn.topInset` px,
- * where the study legends sit.
+ * same gap under the lowest price instead. Nothing goes above `drawn.topInset` px.
  */
 export function layoutBubbles(people: readonly Person[], place: (person: Person) => BarSpan | null, width: number, height: number, size: number, drawn: DrawnPrice = {}): Bubble[] {
   if (width <= 0 || height <= 0 || size <= 0) return [];

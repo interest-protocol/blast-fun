@@ -80,8 +80,9 @@ export default function KLineCoinChart({ sources, interval, memeDecimals, quoteD
     setStepping(true);
     const at = view.hovered.get();
     const found = at === null ? -1 : bars.findIndex((bar) => bar.timestamp === at);
-    const from = found < 0 ? bars.length - 1 : found;
-    view.hovered.set(bars[Math.min(bars.length - 1, Math.max(0, from + move))]!.timestamp);
+    // With no bar read yet, the first arrow reads the newest one.
+    const next = found < 0 ? (Number.isFinite(move) ? bars.length - 1 : move) : found + move;
+    view.hovered.set(bars[Math.min(bars.length - 1, Math.max(0, next))]!.timestamp);
   };
 
   useEffect(() => {
@@ -94,8 +95,9 @@ export default function KLineCoinChart({ sources, interval, memeDecimals, quoteD
     if (container) {
       // The plot itself is the one tab stop; the library's own container (tabIndex 1) stays out of the order.
       container.tabIndex = -1;
-      // The library takes every touch; a vertical swipe on the chart scrolls the page instead.
+      // A vertical swipe on the chart scrolls the page: the browser may pan up and down, and the scroll chains out of the library's box.
       container.style.touchAction = "pan-y";
+      container.style.overscrollBehavior = "auto";
     }
     created.setFormatter({ formatDate: ({ timestamp, template }) => chartDate(timestamp, template, created.getTimezone()) });
     created.overrideXAxis({ createTicks: ({ bounding, defaultTicks }) => ticksInside(defaultTicks, bounding.width) });
@@ -106,44 +108,49 @@ export default function KLineCoinChart({ sources, interval, memeDecimals, quoteD
       unsubscribeBar: () => { push.current = null; },
     });
     // The action carries only the pointer's x; the bar under it (none past the newest) is the readout's.
-    let touching = false;
+    // A finger drags to pan and holds to scrub (the library's long tap): the crosshair then follows the finger, and goes when it lifts.
+    // An up-and-down swipe is the page's scroll, so the readout stays away while one runs.
+    // Setting the crosshair this way tells no subscriber, so the readout is cleared with it. (Its type has no null.)
+    const clear = () => {
+      created.executeAction("onCrosshairChange", null as unknown as Crosshair);
+      view.hovered.set(null);
+    };
+    let swipe: { x: number; y: number; vertical: boolean | null } | null = null;
     created.subscribeAction("onCrosshairChange", (data) => {
       const x = (data as Crosshair | undefined)?.x;
-      // A finger's drag reads to the library as a pan, which clears its crosshair: the finger's readout stays.
-      if (x === undefined && touching) return;
+      // The library's long-tap timer still runs under a page scroll it never saw.
+      if (x !== undefined && swipe?.vertical) return clear();
       view.hovered.set(x === undefined ? null : barAt(created, x));
     });
     // KLineCharts reports no action when the mouse leaves.
     const leave = (event: PointerEvent) => { if (event.pointerType === "mouse") view.hovered.set(null); };
     element.addEventListener("pointerleave", leave);
-    // A finger scrubs: the readout and crosshair follow it from the first touch, and go when it lifts.
-    // The library would pan on a sideways drag instead, so a touch turns its scrolling off (a mouse still drags to scroll).
     let lifted = 0;
-    const press = (event: PointerEvent) => created.setScrollEnabled(event.pointerType !== "touch");
-    // Touch events reach this element after the library's own handlers on its inner container, so the finger's crosshair is the last word.
-    const scrub = (event: TouchEvent) => {
+    const touch = (event: TouchEvent) => {
       const finger = event.touches[0];
-      if (!finger) return;
-      touching = true;
       window.clearTimeout(lifted);
-      const box = element.getBoundingClientRect();
-      const x = finger.clientX - box.left;
-      const y = Math.min(finger.clientY - box.top, created.getSize("candle_pane")?.height ?? Infinity);
-      created.executeAction("onCrosshairChange", { x, y, paneId: "candle_pane" });
-      view.hovered.set(barAt(created, x));
+      swipe = finger && event.touches.length === 1 ? { x: finger.clientX, y: finger.clientY, vertical: null } : null;
     };
+    // The library cancels every drag past 5 px on the document, vertical ones too; this runs first and keeps an
+    // up-and-down swipe from it (its own rule: vertical when the rise is at least half the run), unless a hold is scrubbing.
+    const move = (event: TouchEvent) => {
+      const finger = event.touches[0];
+      if (!swipe || !finger || event.touches.length > 1) return;
+      if (swipe.vertical === null) {
+        const dx = Math.abs(finger.clientX - swipe.x), dy = Math.abs(finger.clientY - swipe.y);
+        if (dx + dy < 5) return;
+        swipe.vertical = view.hovered.get() === null && dy >= dx / 2;
+      }
+      if (swipe.vertical) event.stopPropagation();
+    };
+    // A tap leaves the library's crosshair up; it goes with the finger, after the library's own tap handling.
     const lift = (event: TouchEvent) => {
       if (event.touches.length) return;
-      touching = false;
-      // After the library's own tap handling, which would show the crosshair again; null clears it (its type has no null).
-      lifted = window.setTimeout(() => {
-        created.executeAction("onCrosshairChange", null as unknown as Crosshair);
-        view.hovered.set(null);
-      });
+      swipe = null;
+      lifted = window.setTimeout(clear);
     };
-    element.addEventListener("pointerdown", press);
-    element.addEventListener("touchstart", scrub, { passive: true });
-    element.addEventListener("touchmove", scrub, { passive: true });
+    element.addEventListener("touchstart", touch, { passive: true });
+    element.addEventListener("touchmove", move, { passive: true });
     element.addEventListener("touchend", lift);
     element.addEventListener("touchcancel", lift);
     // Scrolled back by more than a bar: offer the way back to the newest one.
@@ -164,9 +171,8 @@ export default function KLineCoinChart({ sources, interval, memeDecimals, quoteD
     return () => {
       scheme.removeEventListener("change", retheme);
       element.removeEventListener("pointerleave", leave);
-      element.removeEventListener("pointerdown", press);
-      element.removeEventListener("touchstart", scrub);
-      element.removeEventListener("touchmove", scrub);
+      element.removeEventListener("touchstart", touch);
+      element.removeEventListener("touchmove", move);
       element.removeEventListener("touchend", lift);
       element.removeEventListener("touchcancel", lift);
       window.clearTimeout(lifted);

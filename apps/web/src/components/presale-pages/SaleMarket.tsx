@@ -49,7 +49,6 @@ import { CoinPriceCurrencyProvider, useCoinPriceCurrency } from "#web/components
 import { useLiveListening, useLiveScreen, useReportListening } from "#web/components/launchpad/coin/LiveScreen.tsx";
 import { statsAfterRead, useLiveCoin, type LiveCoinStats } from "#web/components/launchpad/coin/live-coin.ts";
 import { cx } from "./cx";
-import { usePhoneLayout } from "#web/components/blast-ui/use-shell-prefs.ts";
 import { marketPoll } from "./sale-market-poll";
 import { createQuoteOf } from "@blast/core/web/contracts/create.ts";
 import { atomsText, NO_VALUE } from "@blast/core/web/format.ts";
@@ -416,8 +415,7 @@ export function SaleMarket({
     client,
   );
   const liveScreen = useLiveScreen();
-  // A phone reads the last trade under the chart, so the candles sit right under the price.
-  const phone = usePhoneLayout();
+  // A phone reads the last trade under the chart (CSS shows one of the two); the head's copy plays the sound.
   const lastTrade = <ChartLastTrade placement="headline" playSound />;
   const market = marketQuery.data?.coin_type === sale.sale_token ? marketQuery.data : null;
   const poolKey = market?.pool ? `${market.pool.venue}:${market.pool.id}` : null;
@@ -462,7 +460,8 @@ export function SaleMarket({
       chart={(extras) => <>{market?.pool ? (
         <CoinPriceCurrencyProvider quoteType={market.quote.type} quoteSymbol={market.quote.symbol}>
           <div className={coinStyles.market} data-sale-market="">
-            <ChartCard head={<PresaleMarketPrice market={market} move={extras.move} activity={phone ? null : lastTrade} />} foot={phone ? lastTrade : null}><SalePoolChart sale={sale} market={market} pool={market.pool} /></ChartCard>
+            <ChartCard head={<PresaleMarketPrice market={market} move={extras.move} activity={lastTrade} />}
+              foot={<ChartLastTrade placement="headline" />}><SalePoolChart sale={sale} market={market} pool={market.pool} /></ChartCard>
           </div>
           {extras.note}
         </CoinPriceCurrencyProvider>

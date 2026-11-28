@@ -157,6 +157,8 @@
   .chartFoot { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; padding: .5rem var(--coin-chart-heading-inset, 0) 0; }
   .chartFoot > .byline { padding: 0; }
   .chartFoot > [data-chart-last-trade] { flex: 1 1 100%; }
+  /* The last trade reads under the chart here, so the price row's copy steps aside. */
+  .marketChart > .marketPriceRow [data-chart-last-trade] { display: none; }
   .layout { grid-template-columns: minmax(0, 1fr); gap: 1rem; grid-template-areas: "market" "details"; }
   .layout[data-no-market] { grid-template-areas: "details"; }
   .market { gap: 0.75rem; }

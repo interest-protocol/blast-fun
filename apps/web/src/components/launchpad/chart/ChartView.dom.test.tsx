@@ -280,7 +280,7 @@ test("opening the chart's picker focuses its card, not its first field (focusing
   }
 });
 
-test("Live is a line chart on desktop and mobile and keeps the newest trade cue", async (t) => {
+test("Live draws candles on every screen and keeps the newest trade cue", async (t) => {
   const start = 1_800_000_000_000;
   const now = start;
   t.mock.method(Date, "now", () => now);

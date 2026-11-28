@@ -64,7 +64,7 @@ export function PeopleBubbles({ chart, bars, interval, coinTrades, quoteDecimals
   coinTrades: readonly PersonTrade[] | null;
   quoteDecimals: number | null;
   quoteUsd: string | null;
-  /** Px at the top of the price pane kept clear for the study legends. */
+  /** Px at the top of the price pane that bubbles keep clear of. */
   topInset?: number;
 }>) {
   const activity = useWalletTrades();
