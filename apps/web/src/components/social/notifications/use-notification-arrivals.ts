@@ -57,7 +57,8 @@ export function useNotificationArrivals(accountId: string | null, getAccessToken
       const answer = unwrapApiResult(await fetchUnreadNewest({ getAccessToken: getAccessToken!, signal }));
       if (signal.aborted || !session || owner.current !== session) return answer;
       const active = document.visibilityState === "visible" && session.epoch === epoch;
-      const arrived = session.receive(answer.newest_unread_id, active && !session.baseline);
+      // Without the ID (a backend from before `?newest=1`) nothing moves, so its first real answer is the starting point.
+      const arrived = answer.newest_unread_id !== undefined && session.receive(answer.newest_unread_id, active && !session.baseline);
       session.baseline = !active;
       // A mark-read or newer count answered while this snapshot was in flight.
       if (client.getQueryState(queryKeys.me.notifications.unread())?.dataUpdateCount === countVersion) setCount(answer.unread_count);

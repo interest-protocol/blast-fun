@@ -1,3 +1,4 @@
+import { z } from "zod";
 import {
   NOTIFICATION_UNREAD_NEWEST_PARAMETER,
   SOCIAL_NOTIFICATIONS_PATH,
@@ -44,15 +45,18 @@ export function fetchUnreadCount(
   );
 }
 
+/** A backend from before `?newest=1` answers the count alone; the poll then only updates the count. */
+const unreadNewestOrCountSchema = z.union([socialNotificationUnreadNewestSchema, socialNotificationUnreadSchema]);
+
 /** The count and the newest unread ID: the small read a visible tab polls to spot new alerts. */
 export function fetchUnreadNewest(
   options: SocialApiOptions,
-): Promise<ApiResult<SocialNotificationUnreadNewest>> {
+): Promise<ApiResult<SocialNotificationUnread & Partial<SocialNotificationUnreadNewest>>> {
   return callSocialApi(
     options,
     `${SOCIAL_NOTIFICATIONS_UNREAD_PATH}?${NOTIFICATION_UNREAD_NEWEST_PARAMETER}=1`,
     { method: "GET" },
-    socialNotificationUnreadNewestSchema,
+    unreadNewestOrCountSchema,
   );
 }
 

@@ -71,6 +71,37 @@ test("the foreground reader silently baselines, deduplicates, consumes returns a
   mounted = false;
 });
 
+test("an older backend's count-only answer keeps the count and never pops; its first ID is the starting point", async (t) => {
+  const client = createTestQueryClient();
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  let answer: object = { unread_count: 2 };
+  let count = 0;
+  let pulses = 0;
+  t.mock.method(globalThis, "fetch", async () => Response.json(answer));
+  Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+  const token = async () => "token";
+  function Session() {
+    const subscribe = useNotificationArrivals("account", token, (value) => { count = value; });
+    useEffect(() => subscribe(() => { pulses++; }), [subscribe]);
+    return null;
+  }
+  const refresh = async () => { await act(async () => { await client.refetchQueries({ queryKey: queryKeys.me.notifications.arrivals() }); }); };
+  t.after(async () => { await act(async () => root.unmount()); client.clear(); container.remove(); });
+  await act(async () => { root.render(withQueryClient(client, <Session />)); await settleQueries(client); });
+  assert.equal(count, 2);
+  answer = { unread_count: 3 };
+  await refresh();
+  assert.equal(count, 3);
+  answer = { unread_count: 3, newest_unread_id: "9" };
+  await refresh();
+  assert.equal(pulses, 0, "the first ID after the deploy is the starting point");
+  answer = { unread_count: 4, newest_unread_id: "10" };
+  await refresh();
+  assert.equal(pulses, 1);
+});
+
 test("a slow snapshot cannot restore unread notifications cleared while it was in flight", async (t) => {
   const client = createTestQueryClient();
   const container = document.createElement("div");
