@@ -59,8 +59,7 @@ import type { ModuleTransaction } from "@blast/core/modules/database/transaction
  * sender's own USDC (`suiBurnTransaction`) and sponsors it here; the policy
  * admits exactly that burn — the coin plumbing, then the three calls with the
  * identity's shared objects, a Forwarding hook, no destination caller,
- * Standard finality — and nothing else. The HTTP route never takes the intent,
- * and a sponsored withdrawal counts toward the presale's daily budget.
+ * Standard finality. Only the in-process service accepts this intent.
  */
 
 const IDS = SUI_CCTP_V2_MAINNET;
@@ -388,7 +387,7 @@ function service(env: Record<string, string>) {
     executions: {
       async today(did) {
         todayCalls.push(did);
-        return { allowed: true };
+        return { allowed: false };
       },
     },
     config: () => ({
@@ -413,8 +412,10 @@ const embeddedBurn = async (
     }),
   ).toBytes();
 
-test("a burn is sponsored in-process under an identity with the V2 handler: its kind unchanged, the sponsor's gas, no presale, counted toward the daily budget", async () => {
+test("a bridge withdrawal is sponsored after the daily budgets are exhausted", async () => {
   const s = service(identity({ cctp: SUI_CCTP_V2_IDENTITY }));
+  s.limits.refuse.add("presale_sponsor_account_daily");
+  s.limits.refuse.add("presale_sponsor_global");
   const kind = await embeddedBurn("solana");
   const answer = await s.sponsor.sponsor({
     caller: { kind: "privy" as const, did: DID },
@@ -429,27 +430,14 @@ test("a burn is sponsored in-process under an identity with the V2 handler: its 
   ).V1!;
   assert.deepEqual(bcs.TransactionKind.serialize(data.kind).toBytes(), kind);
   assert.equal(normalizeSuiAddress(data.gasData.owner!), SPONSOR);
-  assert.deepEqual(
-    s.todayCalls,
-    [DID],
-    "a sponsored withdrawal spends the member's daily sponsorship",
-  );
+  assert.deepEqual(s.todayCalls, []);
   const [row] = s.reservations.reserved();
   assert.deepEqual(
     [row?.intent, row?.presaleId, row?.sender],
     ["bridge_withdraw", null, EMBEDDED],
   );
-  // Review M1: the withdrawal path pays the sponsor's per-IP, per-account daily and platform budgets.
-  assert.deepEqual(s.limits.calls, [
-    "presale_sponsor_ip",
-    "presale_sponsor_account_daily",
-    "presale_sponsor_global",
-  ]);
-  assert.deepEqual(s.limits.subjects, [
-    { ip: "198.51.100.4" },
-    { accountId: DID },
-    {},
-  ]);
+  assert.deepEqual(s.limits.calls, ["presale_sponsor_ip"]);
+  assert.deepEqual(s.limits.subjects, [{ ip: "198.51.100.4" }]);
 });
 
 test("without the V2 handler in the identity, or for a kind that is not the burn, nothing is sponsored", async () => {
@@ -530,8 +518,8 @@ test("a durable withdrawal identity atomically retains bytes and replays without
     (error: unknown) => error instanceof PresaleRouteError && error.code === "target_not_allowed");
   assert.equal(s.reservations.rows.length, 1);
   assert.equal(s.reservations.rows[0]!.state, "reserved");
-  assert.deepEqual(s.limits.calls, ["presale_sponsor_ip", "presale_sponsor_account_daily", "presale_sponsor_global"]);
-  assert.deepEqual(s.todayCalls, [DID]);
+  assert.deepEqual(s.limits.calls, ["presale_sponsor_ip"]);
+  assert.deepEqual(s.todayCalls, []);
 });
 
 test("a crash after shared budgets but before reservation insert never recounts that withdrawal", async (t) => {
@@ -547,7 +535,7 @@ test("a crash after shared budgets but before reservation insert never recounts 
   assert.equal(s.reservations.store.claim, original);
   await assert.rejects(s.sponsor.sponsor(request), (error: unknown) => error instanceof PresaleRouteError && error.code === "service_unavailable");
   assert.equal(s.reservations.rows.length, 0);
-  assert.deepEqual(s.limits.calls, ["presale_sponsor_ip", "presale_sponsor_account_daily", "presale_sponsor_global"]);
+  assert.deepEqual(s.limits.calls, ["presale_sponsor_ip"]);
 });
 
 test("overlapping owners cannot both consume a keyed withdrawal's shared budgets", async (t) => {
@@ -572,11 +560,11 @@ test("overlapping owners cannot both consume a keyed withdrawal's shared budgets
   const reserved = await first;
   assert.deepEqual(await s.sponsor.sponsor(request), reserved);
   assert.equal(s.reservations.rows.length, 1);
-  assert.deepEqual(s.limits.calls, ["presale_sponsor_ip", "presale_sponsor_account_daily", "presale_sponsor_global"]);
+  assert.deepEqual(s.limits.calls, ["presale_sponsor_ip"]);
 });
 
 test("definite keyed budget and slot refusals replay before rebuilding and never recount", async (t) => {
-  for (const reason of ["presale_sponsor_ip", "presale_sponsor_account_daily", "presale_sponsor_global", "open_reservations", "claim_busy"] as const) {
+  for (const reason of ["presale_sponsor_ip", "open_reservations", "claim_busy"] as const) {
     const s = service(identity({ cctp: SUI_CCTP_V2_IDENTITY }));
     const request = { caller: { kind: "privy" as const, did: DID }, presaleId: null, sender: EMBEDDED, kindBytes: await embeddedBurn(), intent: "bridge_withdraw" as const, ip: "198.51.100.4", reservationId: "44444444-4444-4444-8444-444444444444" };
     if (reason === "open_reservations" || reason === "claim_busy") {

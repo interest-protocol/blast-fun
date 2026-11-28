@@ -32,9 +32,12 @@ export function isSocialPortfolio(value: unknown): value is SocialPortfolio {
  * `error`.
  */
 export async function fetchPortfolio(
-  input: Readonly<{ getAccessToken: AccessTokenSource; summary?: boolean; signal?: AbortSignal; fetch?: typeof globalThis.fetch }>,
+  input: Readonly<{ getAccessToken: AccessTokenSource; summary?: boolean; wallet?: string; signal?: AbortSignal; fetch?: typeof globalThis.fetch }>,
 ): Promise<PortfolioReadResult> {
-  const result = await callSocialApi(input, input.summary ? `${SOCIAL_PORTFOLIO_PATH}?view=summary` : SOCIAL_PORTFOLIO_PATH, { method: "GET" }, socialPortfolioSchema);
+  const params = new URLSearchParams();
+  if (input.summary) params.set("view", "summary");
+  if (input.wallet) params.set("wallet", input.wallet);
+  const result = await callSocialApi(input, params.size ? `${SOCIAL_PORTFOLIO_PATH}?${params}` : SOCIAL_PORTFOLIO_PATH, { method: "GET" }, socialPortfolioSchema);
   return result.status === "ok" ? { status: "ready", portfolio: result.body } : result;
 }
 
@@ -42,7 +45,8 @@ export function isPortfolioCoinPage(value: unknown): value is PortfolioCoinPage 
   return portfolioCoinPageSchema.safeParse(value).success;
 }
 
-export async function fetchPortfolioCoins(input: Readonly<{ getAccessToken: AccessTokenSource; page: number; search: string; hideSmall?: boolean; signal?: AbortSignal }>) {
+export async function fetchPortfolioCoins(input: Readonly<{ getAccessToken: AccessTokenSource; page: number; search: string; hideSmall?: boolean; wallet?: string; signal?: AbortSignal }>) {
   const params = new URLSearchParams({ page: String(input.page), q: input.search, hide_small: String(input.hideSmall ?? false) });
+  if (input.wallet) params.set("wallet", input.wallet);
   return callSocialApi(input, `${SOCIAL_PORTFOLIO_COINS_PATH}?${params}`, { method: "GET" }, portfolioCoinPageSchema);
 }

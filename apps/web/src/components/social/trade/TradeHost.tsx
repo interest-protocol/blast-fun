@@ -42,8 +42,7 @@ const findBrowserRoute: TradeRouteFinder = (request) => import("./trade-estimate
  *   by every surface for a few seconds and read again once balances move.
  * - `send` is R3-31's `runTrade`, with the signer read at the press from that
  *   wallet: an embedded Blast wallet signs with Privy's key, a wallet session
- *   signs in Slush, and Blast's gas pool pays for both within the day's cap
- *   (owner ruling 2026-11-20, reversing OA-17); where the server answers
+ *   signs in Slush, and Blast's gas pool sponsors both. Where the server answers
  *   wallet-pays, the wallet session pays its own fee. It plays the Feel layer's `land` on
  *   a fill and `error` on a refusal (FEEL-LAYER.md: the gate wraps
  *   `executeTrade` with `land`), toasts `Traded 100 USDC for 47,566 KSTL`

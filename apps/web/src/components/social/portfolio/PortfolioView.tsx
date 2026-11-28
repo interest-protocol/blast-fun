@@ -5,6 +5,7 @@ import { DateStamp } from "#web/components/blast-ui/DateStamp.tsx";
 import { PARTIAL_BALANCE_NOTE } from "#web/components/blast-ui/account-balance-model.ts";
 import { Button, ButtonLink, DisclosureSummary, IconButton } from "#web/components/blast-ui/Button.tsx";
 import { Checkbox } from "#web/components/blast-ui/Checkbox.tsx";
+import { CopyAddress } from "#web/components/blast-ui/CopyAddress.tsx";
 import { EmptyState } from "#web/components/blast-ui/EmptyState.tsx";
 import { Pager } from "#web/components/blast-ui/Pager.tsx";
 import { Segmented, SegmentedLinks } from "#web/components/blast-ui/Segmented.tsx";
@@ -49,6 +50,7 @@ import { useShellClaimPath } from "../feed-ui/shell-bridge";
 import { WalletLaunches } from "../../launchpad/discovery/WalletLaunches";
 import { LaunchRewards, type CreatorAccountRead, type CreatorWalletRead } from "../launch-rewards/LaunchRewards";
 import { presaleListQuery } from "../queries";
+import type { AccountSession } from "../account-selection";
 import { PositionsList, VestingsList } from "./HoldingsLists";
 import { ClientOnly } from "#web/components/ui-libraries/use-hydrated.tsx";
 import PortfolioValuePlot from "./PortfolioValuePlot";
@@ -61,6 +63,7 @@ import {
   heroFigures,
   todayChange,
   totalParts,
+  figureText,
   type PortfolioFigureKey,
   type PortfolioFigures,
 } from "./portfolio-model";
@@ -89,6 +92,16 @@ export type PortfolioCoinControls = Readonly<{
   retry: () => void;
 }>;
 
+export type PortfolioWalletSelection = "all" | AccountSession;
+type WalletCard = Readonly<{ session: AccountSession; address?: string; name: string; method: string; active: boolean; total: number | null }>;
+type WalletCoinGroup = WalletCard & Readonly<{ coins: readonly HoldingCoin[]; page: PortfolioCoinControls; sync?: PortfolioViewData["walletSync"] }>;
+type WalletSelection = Readonly<{
+  value: PortfolioWalletSelection;
+  select: (value: PortfolioWalletSelection) => void;
+  wallets: readonly WalletCard[];
+  groups: readonly WalletCoinGroup[];
+}>;
+
 export type PortfolioViewData = Readonly<{
   mode: PortfolioMode;
   walletSync?: "ready" | "syncing" | "stale";
@@ -112,8 +125,10 @@ export type PortfolioViewData = Readonly<{
   /** The value chart's ranges (`/me/portfolio/history`); without it the hero draws no period switch and no line. */
   history?: PortfolioHistoryReads;
   /** The account's public-portfolio setting (OA-10); null until Settings' read answers (no chip yet). */
-  isPublic: boolean | null;
+  isPublic: boolean | null | undefined;
   coinPage?: PortfolioCoinControls;
+  walletSelection?: WalletSelection;
+  walletUnavailable?: () => void;
   /** The visible page in global USD order. */
   coins: readonly HoldingCoin[];
   /** R3-20's 24 h prices by coin key; a key with null has no history (an empty slot), undefined is still reading. */
@@ -183,6 +198,9 @@ export function PortfolioView({
         title="Portfolio"
         titleId={TITLE_ID}
       />
+      {data.walletSelection ? <WalletFilters selection={data.walletSelection} /> : null}
+      {data.walletUnavailable ? <EmptyState compact role="alert" title="Your other wallet could not load"
+        action={<Button onClick={data.walletUnavailable} size="sm">Try again</Button>} /> : null}
       <Hero
         compact={tab !== "coins"}
         data={data}
@@ -195,7 +213,22 @@ export function PortfolioView({
   );
 }
 
+function WalletFilters({ selection }: Readonly<{ selection: WalletSelection }>) {
+  const wallets = [...selection.wallets].sort((a, b) => a.session.localeCompare(b.session));
+  return (
+    <Segmented
+      className={styles.walletFilters}
+      label="Portfolio wallets"
+      options={[["all", "All accounts"] as const, ...wallets.map(wallet => [wallet.session, wallet.name] as const)]}
+      onChange={selection.select}
+      size="chip"
+      value={selection.value}
+    />
+  );
+}
+
 function PortfolioPrivacy({ isPublic }: Readonly<{ isPublic: PortfolioViewData["isPublic"] }>) {
+  if (isPublic === undefined) return null;
   if (isPublic === null) return <span aria-hidden="true" className={styles.priv}><LockIcon /><SkeletonText>Only you</SkeletonText></span>;
   return (
     <Link className={styles.priv} href={SETTINGS_PATH}>
@@ -456,6 +489,7 @@ function Holdings({
   claims: ReturnType<typeof useToastedClaims>;
 }>) {
   const tabs = portfolioTabs();
+  const active = tab === "coins" ? undefined : data.walletSelection?.wallets.find(wallet => wallet.active);
   return (
     <section aria-label="Your holdings" className={clsx("card", styles.hold)} id="pfHold" ref={cardRef}>
       <div className={styles.tabs}>
@@ -463,6 +497,7 @@ function Holdings({
         {tab === "coins" && data.coinPage && data.mode !== "visitor" && data.mode !== "no-account" ? <CoinSearch page={data.coinPage} /> : null}
       </div>
       <div aria-labelledby={`pft-${tab}`} className={styles.body} id="pfBody2" ref={bodyRef} role="tabpanel">
+        {active ? <p className={styles.walletScope}>Active account · {active.name}</p> : null}
         <HoldingsBody data={data} nowMs={nowMs} tab={tab} claims={claims} />
       </div>
     </section>
@@ -479,7 +514,22 @@ function HoldingsBody({ data, nowMs, tab, claims }: Readonly<{
   if (data.mode === "visitor" || data.mode === "no-account") {
     return <EmptyState title={data.mode === "visitor" ? "Sign in to see your holdings" : "Finish setting up your account"} />;
   }
-  if (tab === "coins") return <Coins data={data} />;
+  if (tab === "coins") return data.walletSelection ? (
+    <div className={styles.walletGroups}>
+      {data.walletSelection.groups.map(group => (
+        <section aria-label={group.name} className={styles.walletGroup} key={group.session}>
+          <div className={styles.walletHeading}>
+            <div>
+              <h3>{group.name}{group.active ? <span className={styles.walletActive}>Active</span> : null}</h3>
+              {group.address ? <CopyAddress copyLabel="Copy wallet address" label={group.name === group.method ? "Wallet" : group.method} value={group.address} /> : null}
+            </div>
+            {group.total !== null ? <strong className="num">{figureText(group.total, data.hidden, true)}</strong> : null}
+          </div>
+          <Coins data={{ ...data, coins: group.coins, coinPage: group.page, portfolio: "ready", walletSync: group.sync }} />
+        </section>
+      ))}
+    </div>
+  ) : <Coins data={data} />;
   if (!data.holdings) return <PendingHoldings failed={data.holdingsFailed} message={data.holdingsErrorMessage} tab={tab} retry={data.retryHoldings} />;
   if (data.holdings.positions.length === 0) return <NoBackedPresales />;
   return <div><PositionsList claims={claims} classes={{ list: styles.pfList, row: `${styles.posRow} ${styles.presRow}` }} hidden={data.hidden} nowMs={nowMs} positions={data.holdings.positions} /></div>;

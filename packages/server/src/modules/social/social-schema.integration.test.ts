@@ -1549,7 +1549,7 @@ test("R3-31 (0089): a trade is one row per key and digest, built with its bytes 
     assert.deepEqual(indexes.map((row) => row.indexname), [
       "social_swap_intents_digest_idx", "social_swap_intents_key", "social_swap_intents_pkey", "social_swap_intents_sponsored_idx", "social_swap_intents_tracking_idx",
     ]);
-    // 0102 (review L2): a trade that failed on chain counts toward the sponsorship cap; only an expired one does not.
+    // The legacy sponsorship index excludes expired trades.
     assert.match(indexes[3]!.indexdef, /\(account_id, created_at_ms\) WHERE \(\(fee_payer = 'blast'::text\) AND \(failure_code IS DISTINCT FROM 'expired'::text\)\)$/);
 
     // The web runtime settles a built trade (rolled back here) and has no DELETE.

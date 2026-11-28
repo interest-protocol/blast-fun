@@ -38,7 +38,7 @@ export async function requestCurvePayment(
   return result.body;
 }
 
-/** The server will not sponsor this trade: the account's daily trade cap is spent. */
+/** The trade service reports that Blast gas sponsorship is unavailable. */
 export class CurveSponsorshipUnavailable extends Error {
   constructor() {
     super("Blast gas sponsorship is unavailable. Nothing was signed. Try again shortly.");

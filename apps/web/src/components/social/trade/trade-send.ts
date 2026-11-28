@@ -22,8 +22,7 @@ import { sentToast, tradedToast } from "./trade-result";
  * The trade kit's `send` (R3-55 over R3-31), apart from React so it is a
  * test: the Blast wallet read at the press picks the signer — an embedded
  * wallet signs with Privy's key, a wallet session signs in Slush; Blast's gas
- * pool pays for both within the day's cap (owner ruling 2026-11-20, reversing
- * OA-17), and a wallet session the server answers wallet-pays pays its own
+ * pool sponsors both. A wallet session the server answers wallet-pays pays its own
  * fee — then `runTrade` builds, signs, executes and settles **the quote on
  * screen**: its `quote_id`, its `amount_in` (for a sell, the token amount, not
  * the dollars typed) and its `min_out`, so the fill is held to what the

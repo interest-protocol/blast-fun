@@ -15,8 +15,7 @@ import type { TradeQuoteAnswer } from "./trade-quotes";
  *
  * There is one trade path: `send` is `runTrade` (`trades/trade-flow.ts`) with
  * the Blast wallet's signer — Privy's embedded key or a wallet session's
- * Slush, both sponsored by Blast within the day's cap (owner ruling
- * 2026-11-20, reversing OA-17) — and it toasts, sounds and moves the balances itself, so a
+ * Slush, both sponsored by Blast — and it toasts, sounds and moves the balances itself, so a
  * surface only renders. Nothing here quotes a number: the quote is the
  * route's, and `send` submits the quote's own `amount_in` and `min_out`, so the
  * fill is checked against the quote the person saw.

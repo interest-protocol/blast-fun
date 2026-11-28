@@ -221,7 +221,7 @@ export function curveTradeAdapter(direction: TradeDirection, routePayment = requ
           ...(input.payment ? { quote_id: input.payment.quoteId } : {}),
         });
       } catch (error) {
-        // Past the daily trade cap an outside wallet pays its own gas, as a swap does; an embedded wallet cannot.
+        // Only an outside wallet can cover an unavailable sponsor with its own gas.
         if (signer.kind !== "wallet" || !(error instanceof CurveSponsorshipUnavailable)) throw error;
         return { transaction: buildTrade(fresh, context, true) };
       }

@@ -8,9 +8,11 @@ import { useShellAction } from "#web/components/blast-ui/shell-actions.tsx";
 import { useToast } from "#web/components/blast-ui/Toasts.tsx";
 import { diagnosticMessage, splitDiagnostic } from "#web/lib/errors.ts";
 import { useSignInDraft } from "../sign-in-draft";
+import { useSocialViewer } from "../SignInGate";
 import { coinDraftKey, firstScreen, parseSavedCoinScreen, type CoinOpening, type CoinScreen, type WalletCoinView } from "./coin-model";
 import type { CoinsHost } from "./CoinsHost";
 import { tradableCoinView, tradeOpening } from "./swap-model";
+import { useWalletActionDraft, type WalletActionDraft } from "./wallet-action-draft";
 
 const loadingToast = "opening-wallet";
 
@@ -24,9 +26,10 @@ export function CoinsOverlay() {
   const [Host, setHost] = useState<typeof CoinsHost | null>(null);
   const loading = useRef(false);
   const toast = useToast();
+  const viewer = useSocialViewer();
 
-  const open = (screen: CoinScreen, coins?: readonly WalletCoinView[]) => {
-    setOpening({ screen, coins });
+  const open = (screen: CoinScreen, coins?: readonly WalletCoinView[], walletDraft?: WalletActionDraft) => {
+    setOpening({ screen, coins, walletDraft });
     if (Host || loading.current) return;
     loading.current = true;
     const pending = window.setTimeout(() => toast("Opening wallet…", { id: loadingToast, tone: "pending" }), T4);
@@ -56,6 +59,9 @@ export function CoinsOverlay() {
     const next = parseSavedCoinScreen(saved.screen);
     if (next) open(next);
   });
+  useWalletActionDraft("overlay", viewer.sessionIdentity === "wallet" ? "wallet" : "privy", restored => {
+    open(restored.screen, restored.coins, restored.walletDraft);
+  }, viewer.signedIn && !viewer.sessionPending);
 
   return Host && opening ? <Host opening={opening} /> : null;
 }

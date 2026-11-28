@@ -16,6 +16,7 @@ import { startPrivy, usePrivyLoginEvents, usePrivySession } from "#web/component
 import { usePreparePrivyWalletPicker } from "#web/components/auth/privy-wallet-picker.ts";
 import { usePrivySessionMounted } from "#web/components/presale/providers/PrivySessionProvider.tsx";
 import { switchAccountSession, type AccountSession } from "#web/components/social/account-selection.ts";
+import { signInMethodName } from "#web/components/social/account-wallets.ts";
 import { useSocialViewer } from "#web/components/social/SignInGate.tsx";
 import { useWalletSession } from "#web/components/social/WalletSession.tsx";
 import { diagnosticMessage } from "#web/lib/errors.ts";
@@ -78,6 +79,7 @@ export function SignInContent({
   headingId = HEADING_ID,
   additionalAccount,
   resumeAccount,
+  resumeMethod,
   onResumeAccount,
 }: Readonly<{
   state: SignInState;
@@ -90,6 +92,7 @@ export function SignInContent({
   headingId?: string;
   additionalAccount?: AccountSession;
   resumeAccount?: AccountSession;
+  resumeMethod?: string;
   onResumeAccount?: (account: AccountSession) => void;
 }>) {
   const waiting = waitingMethod(state);
@@ -132,7 +135,7 @@ export function SignInContent({
       <div className={styles.methods}>
         {resumeAccount === "privy" ? (
           <Button className={styles.method} data-sign-in-method="resume-privy" disabled={disabled} onClick={() => onResumeAccount?.("privy")} size="lg" variant="ink">
-            Continue with Privy
+            {resumeMethod && resumeMethod !== "Blast account" ? `Continue with ${resumeMethod}` : "Continue with Blast account"}
           </Button>
         ) : additionalAccount !== "wallet" && SOCIAL_SIGN_IN_METHODS.map(renderMethod)}
         {walletAvailable ? (
@@ -162,7 +165,7 @@ function signInTitle(additionalAccount?: AccountSession): string {
     return "Sign in with Slush";
   }
   if (additionalAccount === "privy") {
-    return "Sign in with Privy";
+    return "Add sign-in account";
   }
   return "Join Blast";
 }
@@ -411,6 +414,7 @@ export function SignInSheet() {
 
 function PrivySignInSheet() {
   const viewer = useSocialViewer();
+  const { user } = usePrivySession();
   const resumeAccount = useResumableAccount();
   const [mode, setMode] = useState<"default" | AccountSession | null>(null);
   const additionalAccount = mode === "wallet" || mode === "privy" ? mode : undefined;
@@ -453,6 +457,7 @@ function PrivySignInSheet() {
         onMethod={flow.start}
         onResumeAccount={flow.resume}
         resumeAccount={mode === "default" ? resumeAccount : undefined}
+        resumeMethod={signInMethodName(user)}
         onRetryWallets={suiWallets.retry}
         state={flow.state}
         suiWallets={choices}
@@ -503,6 +508,7 @@ function useResumableAccount(): AccountSession | undefined {
 
 function PrivySignInCard({ returnTo }: Readonly<{ returnTo: string }>) {
   const viewer = useSocialViewer();
+  const { user } = usePrivySession();
   const resumeAccount = useResumableAccount();
   usePreparePrivyWalletPicker(!viewer.signedIn);
   const flow = useSignInFlow(() => undefined);
@@ -515,6 +521,7 @@ function PrivySignInCard({ returnTo }: Readonly<{ returnTo: string }>) {
       onMethod={flow.start}
       onResumeAccount={flow.resume}
       resumeAccount={resumeAccount}
+      resumeMethod={signInMethodName(user)}
       state={flow.state}
       onRetryWallets={suiWallets.retry}
       suiWallets={suiWallets.wallets}

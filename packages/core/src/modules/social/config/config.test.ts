@@ -38,8 +38,6 @@ test("T-003-AC-1 config values: each type accepts its form and refuses others", 
     ["reactions", "a,b,c,d,e,f,g,h", ["a", "b", "c", "d", "e", "f", "g", "h"]],
     ["fastest_window_ms", "21600000", 21_600_000],
     ["recap_trading_days", "30", 30],
-    ["trade_sponsor_daily_cap", "0", 0],
-    ["trade_sponsor_daily_cap", "100000", 100_000],
   ];
   for (const [key, text, value] of accepted) {
     assert.deepEqual(parseSocialConfigInput(key, text), value, `${key} ${text}`);
@@ -60,9 +58,6 @@ test("T-003-AC-1 config values: each type accepts its form and refuses others", 
     ["big_commit_usd", "1,000"],
     ["big_commit_usd", "1000.1234567"],
     ["big_commit_usd", ""],
-    ["trade_sponsor_daily_cap", "-1"],
-    ["trade_sponsor_daily_cap", "100001"],
-    ["trade_sponsor_daily_cap", "2.5"],
     ["participant_milestones", ""],
     ["participant_milestones", "10,10"],
     ["participant_milestones", "0,10"],

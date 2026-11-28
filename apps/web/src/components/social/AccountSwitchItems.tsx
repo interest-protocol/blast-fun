@@ -1,24 +1,30 @@
 "use client";
 
-import { skipToken, useQuery } from "@tanstack/react-query";
-import { useId, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import clsx from "clsx";
+import { useState } from "react";
 import { shortAddress } from "@blast/core/web/format.ts";
 
 import { usePrivySession } from "#web/components/auth/privy-session.ts";
 import styles from "#web/components/blast-ui/AppShell.module.css";
-import { BlastMenuItem, BlastMenuRadioGroup, BlastMenuRadioItem, BlastMenuRadioItemIndicator } from "#web/components/blast-ui/BlastMenu.tsx";
+import {
+  BlastMenuItem,
+  BlastMenuRadioGroup,
+  BlastMenuRadioItem,
+  BlastMenuRadioItemIndicator,
+  BlastSubmenu,
+} from "#web/components/blast-ui/BlastMenu.tsx";
 import { DiagnosticText } from "#web/components/blast-ui/DiagnosticText.tsx";
 import { CheckIcon } from "#web/components/blast-ui/Icons.tsx";
 import { LoadingIndicator } from "#web/components/blast-ui/LoadingIndicator.tsx";
 import { useShellActions } from "#web/components/blast-ui/shell-actions.tsx";
+import { useToast } from "#web/components/blast-ui/Toasts.tsx";
 import { findEmbeddedSuiWallet } from "#web/components/mission-control/privy-embedded-wallet.ts";
 import { usePrivySessionMounted } from "#web/components/presale/providers/PrivySessionProvider.tsx";
-import { rememberedWalletName } from "#web/components/sign-in/wallet-sign-in-client.ts";
 import { diagnosticMessage, PublicError } from "#web/lib/errors.ts";
-import { queryKeys } from "#web/lib/query/keys.ts";
 import { useAppQueryClient } from "#web/lib/query/provider.tsx";
-import { resolveDefaultSuiName } from "#web/lib/sui-address-input.ts";
 
+import { signInMethodName, useWalletSuiName, walletCookie, walletSessionName } from "./account-wallets";
 import { switchAccountSession, type AccountSession } from "./account-selection";
 import { fetchWalletIdentity } from "./coins/coins-client";
 import { withdrawalSwitchBlock, type WithdrawalSwitchBlock } from "./coins/withdraw-attempt";
@@ -27,13 +33,12 @@ import { useSocialViewer } from "./SignInGate";
 import { requirePrivyAccessToken } from "./use-active-privy-session";
 import { useWalletSession } from "./WalletSession";
 
-const walletCookie = async () => null;
-const SWITCH_FAILED = diagnosticMessage("Could not switch accounts. Try again.", { code: "account_switch_failed" });
+const SWITCH_FAILED = "Could not switch accounts. Try again.";
+const switchNotice = { id: "account-switch", tone: "error" } as const;
 const WITHDRAWAL_SWITCH_MESSAGE: Record<WithdrawalSwitchBlock, string> = {
   broadcasting: "Wait for your withdrawal to submit before switching accounts.",
   receipt: "Retry your withdrawal to check its status before switching accounts. This won’t send it again.",
 };
-const SUI_NAME_FRESH_MS = 5 * 60_000;
 
 export function AccountSwitchItems({ closeMenu }: Readonly<{ closeMenu: () => void }>) {
   const viewer = useSocialViewer();
@@ -58,27 +63,38 @@ function AccountChoices({ active, closeMenu, walletScope }: Readonly<{
   const wallet = useWalletSession();
   const client = useAppQueryClient();
   const run = useShellActions();
-  const labelId = useId();
-  const [status, setStatus] = useState<"idle" | "switching" | "failed" | WithdrawalSwitchBlock>("idle");
-  const pending = status === "switching";
+  const toast = useToast();
+  const [pendingSession, setPendingSession] = useState<AccountSession | null>(null);
+  const pending = pendingSession !== null;
 
   const walletQuery = walletIdentityQuery(walletScope, walletCookie);
   const walletRead = useQuery({ ...walletQuery, enabled: wallet.active, refetchOnWindowFocus: false }, client);
   const walletAddress = walletRead.data?.address;
-  const walletName = (walletAddress && rememberedWalletName(walletAddress)) || "Sui wallet";
+  const walletName = walletSessionName(walletAddress);
   const privyAddress = findEmbeddedSuiWallet(privy.user)?.address;
 
   function reportWithdrawalBlock(): boolean {
     const block = withdrawalSwitchBlock();
-    if (!block) return false;
-    setStatus(block);
+    if (!block) {
+      return false;
+    }
+    toast(WITHDRAWAL_SWITCH_MESSAGE[block], switchNotice);
     return true;
   }
 
+  function reportSwitchFailure() {
+    toast(SWITCH_FAILED, {
+      ...switchNotice,
+      titleContent: <DiagnosticText message={diagnosticMessage(SWITCH_FAILED, { code: "account_switch_failed" })} />,
+    });
+  }
+
   function signIn(session: AccountSession) {
-    if (reportWithdrawalBlock()) return;
+    if (reportWithdrawalBlock()) {
+      return;
+    }
     if (!wallet.keepAccount(active)) {
-      setStatus("failed");
+      reportSwitchFailure();
       return;
     }
     closeMenu();
@@ -86,50 +102,53 @@ function AccountChoices({ active, closeMenu, walletScope }: Readonly<{
   }
 
   function select(session: AccountSession) {
-    if (session === active || pending) {
+    if (session === active || pending || reportWithdrawalBlock()) {
       return;
     }
-    if (reportWithdrawalBlock()) return;
-    setStatus("switching");
+    setPendingSession(session);
     const verified = session === "wallet"
       ? client.fetchQuery({ ...walletQuery, staleTime: 0 })
       : verifyPrivyAccount(privy.getAccessToken);
     void verified.then(() => {
       if (!switchAccountSession(session)) {
-        setStatus(withdrawalSwitchBlock() ?? "failed");
+        setPendingSession(null);
+        if (!reportWithdrawalBlock()) {
+          reportSwitchFailure();
+        }
       }
     }).catch((cause: unknown) => {
-      setStatus("failed");
+      setPendingSession(null);
       if (session === "wallet" && cause instanceof PublicError && cause.httpStatus === 401) {
         wallet.refresh();
         signIn("wallet");
+        return;
       }
+      reportSwitchFailure();
     });
   }
 
   return (
-    <>
-      <div className={styles.accountMenuLabel} id={labelId}>Accounts</div>
-      <BlastMenuRadioGroup aria-labelledby={labelId} value={active}>
+    <BlastSubmenu
+      className={clsx(styles.menu, styles.accountSubmenu)}
+      label="Accounts"
+      trigger={<span className={styles.mtext}><b>Accounts</b></span>}
+      triggerClassName={clsx(styles.mitem, styles.accountsTrigger)}
+    >
+      <BlastMenuRadioGroup value={active}>
         {(privy.authenticated || active === "privy") && (
-          <AccountRow session="privy" name="Privy" address={privyAddress} pending={pending} onSelect={select} />
+          <AccountRow session="privy" name={signInMethodName(privy.user)} address={privyAddress} pendingSession={pendingSession} onSelect={select} />
         )}
         {wallet.active && (
-          <AccountRow session="wallet" name={walletName} address={walletAddress} pending={pending} onSelect={select} />
+          <AccountRow session="wallet" name={walletName} address={walletAddress} pendingSession={pendingSession} onSelect={select} />
         )}
       </BlastMenuRadioGroup>
       {privy.ready && !privy.authenticated && active === "wallet" && (
-        <BlastMenuItem className={styles.mitem} closeOnClick={false} disabled={pending} onClick={() => signIn("privy")}>Sign in with Privy</BlastMenuItem>
+        <BlastMenuItem className={clsx(styles.mitem, styles.accountChoice)} closeOnClick={false} disabled={pending} onClick={() => signIn("privy")}>Add Blast account</BlastMenuItem>
       )}
       {!wallet.active && active === "privy" && (
-        <BlastMenuItem className={styles.mitem} closeOnClick={false} disabled={pending} onClick={() => signIn("wallet")}>Sign in with Slush</BlastMenuItem>
+        <BlastMenuItem className={clsx(styles.mitem, styles.accountChoice)} closeOnClick={false} disabled={pending} onClick={() => signIn("wallet")}>Sign in with Slush</BlastMenuItem>
       )}
-      {pending && <LoadingIndicator className={styles.accountMenuPending} label="Switching accounts" />}
-      {(status === "broadcasting" || status === "receipt") && (
-        <div className={styles.accountMenuLabel} role="alert">{WITHDRAWAL_SWITCH_MESSAGE[status]}</div>
-      )}
-      {status === "failed" && <div className={styles.accountMenuLabel} role="alert"><DiagnosticText message={SWITCH_FAILED} /></div>}
-    </>
+    </BlastSubmenu>
   );
 }
 
@@ -140,29 +159,20 @@ async function verifyPrivyAccount(getAccessToken: () => Promise<string | null>):
   }
 }
 
-function AccountRow({ session, name, address, pending, onSelect }: Readonly<{
+function AccountRow({ session, name, address, pendingSession, onSelect }: Readonly<{
   session: AccountSession;
   name: string;
   address?: string | null;
-  pending: boolean;
+  pendingSession: AccountSession | null;
   onSelect: (session: AccountSession) => void;
 }>) {
-  const client = useAppQueryClient();
-  const { data: suiName } = useQuery({
-    queryKey: queryKeys.suiName(address ?? null),
-    queryFn: address ? () => resolveDefaultSuiName(address) : skipToken,
-    staleTime: SUI_NAME_FRESH_MS,
-    gcTime: SUI_NAME_FRESH_MS,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-    retry: false,
-  }, client);
+  const suiName = useWalletSuiName(address);
 
   return (
     <BlastMenuRadioItem
-      className={styles.mitem}
+      className={clsx(styles.mitem, styles.accountChoice)}
       closeOnClick={false}
-      disabled={pending}
+      disabled={pendingSession !== null}
       onClick={() => onSelect(session)}
       value={session}
     >
@@ -175,7 +185,13 @@ function AccountRow({ session, name, address, pending, onSelect }: Readonly<{
           </span>
         )}
       </span>
-      <BlastMenuRadioItemIndicator className={styles.accountMenuCheck} aria-hidden="true"><CheckIcon /></BlastMenuRadioItemIndicator>
+      <span className={styles.accountChoiceStatus}>
+        {pendingSession === session ? (
+          <LoadingIndicator label={`Switching to ${suiName ?? name}`} />
+        ) : (
+          <BlastMenuRadioItemIndicator aria-hidden="true"><CheckIcon /></BlastMenuRadioItemIndicator>
+        )}
+      </span>
     </BlastMenuRadioItem>
   );
 }
