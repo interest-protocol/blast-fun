@@ -31,8 +31,10 @@ type Entry = SheetLayer & { open: boolean };
 const stack: Entry[] = [];
 
 function restack(): void {
+  const top = stack.findLastIndex((entry) => entry.open);
   stack.forEach((entry, index) => {
     entry.scrim.style.zIndex = String(Math.min(BASE_Z + index, TOP_Z));
+    entry.sheet.toggleAttribute("inert", entry.open && index < top);
   });
 }
 
@@ -60,7 +62,9 @@ export function openSheetLayer(layer: SheetLayer): void {
 /** A sheet starts to close: it stops being a layer at once, and stays drawn where it was until it is gone. */
 export function closeSheetLayer(sheet: HTMLElement): void {
   const entry = stack.find((candidate) => candidate.sheet === sheet);
-  if (entry) entry.open = false;
+  if (!entry) return;
+  entry.open = false;
+  restack();
 }
 
 /**

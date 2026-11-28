@@ -15,7 +15,8 @@ import { livePins, pinSort, useCoinPins } from "../coins/coin-pins";
 import { CoinRow } from "../coins/SideCoins";
 import { useWalletCoins } from "../coins/use-wallet";
 import { useSocialViewer } from "../SignInGate";
-import { ArrowDownIcon, ArrowUpIcon } from "#web/components/blast-ui/Icons.tsx";
+import { ArrowDownIcon, ArrowUpIcon, BridgeIcon } from "#web/components/blast-ui/Icons.tsx";
+import { useBridge } from "../bridge/bridge-context.tsx";
 import styles from "./WalletCard.module.css";
 
 /**
@@ -39,6 +40,7 @@ export function WalletCardView({
   onRetry,
   onDeposit,
   onWithdraw,
+  onBridge,
 }: Readonly<{
   coins: readonly WalletCoinView[] | null;
   value?: number | null;
@@ -51,6 +53,8 @@ export function WalletCardView({
   onRetry?(): void;
   onDeposit(): void;
   onWithdraw(): void;
+  /** Bridge to Sui; absent while its flag is off, and the row keeps two buttons. */
+  onBridge?(): void;
 }>) {
   const ready = !unavailable && !failed && coins !== null;
   return (
@@ -63,7 +67,7 @@ export function WalletCardView({
           {onRetry ? <Button onClick={onRetry} size="sm">Try again</Button> : null}
         </div>
       ) : <WalletRows coins={coins} hidden={hidden} onOpen={onOpen} pins={pins} />}
-      <div className={styles.actions}>
+      <div className={styles.actions} data-three={onBridge ? "" : undefined}>
         <Button onClick={onDeposit} variant="primary">
           <ArrowDownIcon />
           Deposit
@@ -72,6 +76,10 @@ export function WalletCardView({
           <ArrowUpIcon />
           Withdraw
         </Button>
+        {onBridge ? <Button onClick={onBridge}>
+          <BridgeIcon />
+          Bridge
+        </Button> : null}
       </div>
     </div>
   );
@@ -109,6 +117,7 @@ export function SettingsWalletCard() {
   const run = useShellActions();
   const pins = useCoinPins();
   const read = useWalletCoins();
+  const bridge = useBridge();
   return (
     <WalletCardView
       coins={viewer.signedIn && read.status === "ready" ? read.coins : viewer.sessionPending ? null : []}
@@ -121,6 +130,7 @@ export function SettingsWalletCard() {
       onOpen={(key) => run("openCoin", key)}
       onRetry={read.retry}
       onWithdraw={() => run("openWithdraw")}
+      onBridge={bridge ? () => run("openBridge") : undefined}
       pins={pins}
     />
   );

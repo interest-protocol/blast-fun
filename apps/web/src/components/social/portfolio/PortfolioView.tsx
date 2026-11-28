@@ -21,12 +21,13 @@ import { useLayoutEffect, useRef, type ReactNode, type RefObject } from "react";
 import { usePortfolioState } from "./use-portfolio-state";
 
 import { Sparkline } from "#web/components/charts/Sparkline.tsx";
-import { EyeIcon, EyeOffIcon, SearchIcon, ArrowDownIcon, ArrowUpIcon, COIN_VERIFIED_LABEL, CoinVerifiedMark } from "#web/components/blast-ui/Icons.tsx";
+import { EyeIcon, EyeOffIcon, SearchIcon, ArrowDownIcon, ArrowUpIcon, BridgeIcon, COIN_VERIFIED_LABEL, CoinVerifiedMark } from "#web/components/blast-ui/Icons.tsx";
 import { SETTINGS_PATH } from "#web/components/blast-ui/nav.ts";
 import { PageHeader } from "#web/components/blast-ui/PageHeader.tsx";
 import { SkeletonText } from "#web/components/blast-ui/Skeleton.tsx";
 import { RowSkeletons } from "./HoldingsSkeleton";
 import { useShellActions } from "#web/components/blast-ui/shell-actions.tsx";
+import { useBridge } from "../bridge/bridge-context.tsx";
 import { setShellPref, usePhoneLayout } from "#web/components/blast-ui/use-shell-prefs.ts";
 import type { PortfolioVesting } from "@blast/core/web/contracts/portfolio.ts";
 import type { SocialPriceHistory } from "@blast/core/web/contracts/prices.ts";
@@ -159,6 +160,7 @@ export function PortfolioView({
 }: Readonly<{ data: PortfolioViewData; nowMs: number; signIn?: ReactNode; initialTab?: PortfolioTab }>) {
   if (data.mode === "visitor" || data.mode === "no-account") data = { ...data, figures: NO_FIGURES, today: null, isPublic: null, coins: [], holdings: null };
   const run = useShellActions();
+  const bridge = useBridge();
   const claims = useToastedClaims(useShellClaimPath(), { toastRefusals: true });
   const { tab, select, card, body } = useHoldingsSwitch(initialTab);
   useFeedbackReveal(`${tab}:${data.mode}:${data.portfolio}`, body);
@@ -168,7 +170,12 @@ export function PortfolioView({
       <PageHeader
         actions={
           (
+            // The primary sits at the trailing edge, so the row reads Deposit, Withdraw, Bridge from it.
             data.mode === "ready" || data.mode === "loading" ? <div className={styles.actsD}>
+              {bridge ? <Button disabled={data.mode === "loading"} onClick={() => run("openBridge")}>
+                <BridgeIcon />
+                Bridge
+              </Button> : null}
               <Button disabled={data.mode === "loading"} onClick={() => run("openWithdraw")}>
                 <ArrowUpIcon />
                 Withdraw
@@ -231,6 +238,7 @@ function portfolioValueLabel(busy: boolean, subtotal: number | null, hidden: boo
 
 function Hero({ compact, data, signIn }: Readonly<{ compact: boolean; data: PortfolioViewData; signIn?: ReactNode }>) {
   const run = useShellActions();
+  const bridge = useBridge();
   // Opens on 1W (owner, 2026-10-27): 1D has no line yet (one snapshot a day), so it would open on an empty chart.
   const [period, setPeriod] = usePortfolioState<PortfolioPeriod>("history-period", "1w");
   const { hidden, busy, figures, subtotal, figureRows, shares } = portfolioHeroFigures(data);
@@ -267,7 +275,7 @@ function Hero({ compact, data, signIn }: Readonly<{ compact: boolean; data: Port
         /></div> : <HeroChart data={data} history={history} period={period} />
       ) : null}
       <HeroAllocation shares={shares} figureRows={figureRows} busy={busy} hidden={hidden} />
-      <div aria-label="Funding" className={styles.actsM} role="group">
+      <div aria-label="Funding" className={styles.actsM} data-three={bridge || undefined} role="group">
         <Button disabled={busy} onClick={() => run("openDeposit")} size="lg" variant="primary">
           <ArrowDownIcon />
           Deposit
@@ -276,6 +284,10 @@ function Hero({ compact, data, signIn }: Readonly<{ compact: boolean; data: Port
           <ArrowUpIcon />
           Withdraw
         </Button>
+        {bridge ? <Button disabled={busy} onClick={() => run("openBridge")} size="lg">
+          <BridgeIcon />
+          Bridge
+        </Button> : null}
       </div>
     </section>
   );

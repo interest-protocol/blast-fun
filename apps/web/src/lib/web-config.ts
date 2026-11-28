@@ -11,6 +11,7 @@ import { concurrencyFromEnvironment } from "@blast/server/lib/concurrency.ts";
 import { parseRelayConfig, type RelayConfig } from "@blast/server/private/relay-config.ts";
 
 import { readPresaleConfig, type PresaleConfig } from "../components/presale/config.ts";
+import { readBridgeEnabled } from "../components/social/bridge/bridge-config.ts";
 import { boostsLinkUrl } from "./launchpad/boosts-link.ts";
 
 type Environment = Readonly<Record<string, string | undefined>>;
@@ -47,6 +48,10 @@ export type WebConfig = Readonly<{
   signingChain: SigningChainConfig | null;
   presaleDeployment: PresaleDeploymentState;
   presale: PresaleConfig;
+  /** `NEXT_PUBLIC_MAYAN_BRIDGE_ENABLED=1`; false hides Bridge to Sui. */
+  bridge: boolean;
+  /** Direct Base USDC fallback in the hosted dev environment. */
+  bridgeFastMctp: boolean;
   /** `NODE_ENV` is development: the CSP allows the dev server's eval and websocket. */
   development: boolean;
   /** The direct market socket, or null when it is off and tabs have no live stream. */
@@ -62,7 +67,9 @@ export type LiveSocketConfig = Readonly<{ url: string; origin: string }>;
 
 export function parseWebConfig(environment: Environment): WebConfig {
   const relay = parseRelayConfig(environment);
-  const { production } = deploymentIdentity(environment);
+  const { production, target } = deploymentIdentity(environment);
+  const presale = readPresaleConfig(environment);
+  const bridge = readBridgeEnabled(environment);
 
   return {
     relay,
@@ -73,7 +80,9 @@ export function parseWebConfig(environment: Environment): WebConfig {
     expectedDeployment: expectedDeployment(environment),
     signingChain: configuredSigningChain(environment),
     presaleDeployment: readPresaleDeploymentIdentity(environment),
-    presale: readPresaleConfig(environment),
+    presale,
+    bridge,
+    bridgeFastMctp: bridge && !production && target === "dev" && environment.VERCEL === "1",
     development: environment.NODE_ENV === "development",
     liveSocket: liveSocketConfig(environment, relay),
   };

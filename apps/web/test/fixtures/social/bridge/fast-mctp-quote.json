@@ -1,0 +1,35 @@
+{
+  "type": "FAST_MCTP",
+  "fromChain": "base",
+  "toChain": "sui",
+  "fromToken": {
+    "contract": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+    "chainId": 8453,
+    "wChainId": 30,
+    "decimals": 6
+  },
+  "toToken": {
+    "contract": "0xdba34672e30cb065b1f93e3ab55318768fd6fef66c15942c9f7cb846e2f900e7::usdc::USDC",
+    "wChainId": 21,
+    "decimals": 6
+  },
+  "effectiveAmountIn64": "20000000",
+  "expectedAmountOut": 19.980292,
+  "expectedAmountOutBaseUnits": "19980292",
+  "minReceived": 19.980292,
+  "minReceivedBaseUnits": "19980292",
+  "fastMctpInputContract": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+  "fastMctpMayanContract": "0xC1062b7C5Dc8E4b1Df9F200fe360cDc0eD6e7741",
+  "fastMctpMinFinality": 1,
+  "circleMaxFee64": "2861",
+  "redeemRelayerFee": 0.010852,
+  "redeemRelayerFee64": "10852",
+  "clientRelayerFeeSuccess": 0.010852403,
+  "deadline64": "1795819849",
+  "etaSeconds": 35,
+  "gasDrop": 0,
+  "gasless": false,
+  "hasAuction": false,
+  "onlyBridging": true,
+  "referrerBps": 0
+}

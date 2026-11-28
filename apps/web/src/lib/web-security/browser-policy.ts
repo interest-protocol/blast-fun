@@ -70,12 +70,16 @@ export function createContentSecurityPolicy(input: {
   development?: boolean;
   /** The presale's origins for the configured network (`presaleConnectSources`), while it is on. */
   presaleConnectSources?: readonly string[];
+  /** Mayan's hosts, its RPC included (`bridgeConnectSources`), while the Bridge to Sui card is on. */
+  bridgeConnectSources?: readonly string[];
   /** The direct market socket's origin (`wss://…`), while it is configured. */
   liveSocketOrigin?: string | null;
 }): string {
   if (input.nonce !== null) assertNonce(input.nonce);
   const presaleSources = input.presaleConnectSources ?? [];
   assertPlainSources(presaleSources);
+  const bridgeSources = input.bridgeConnectSources ?? [];
+  assertPlainSources(bridgeSources);
   const liveSources = input.liveSocketOrigin ? [input.liveSocketOrigin] : [];
   assertPlainSources(liveSources);
   const inline = input.nonce === null ? "'unsafe-inline'" : `'nonce-${input.nonce}'`;
@@ -99,7 +103,7 @@ export function createContentSecurityPolicy(input: {
     "img-src 'self' data: blob: https:",
     "font-src 'self' data:",
     [
-      // A presale source may repeat a base one (the mainnet fullnode); each is listed once.
+      // A presale or bridge source may repeat another (the fullnode, a shared RPC); each is listed once.
       ...new Set([
         "connect-src 'self'",
         PRIVY_AUTH_ORIGIN,
@@ -111,6 +115,7 @@ export function createContentSecurityPolicy(input: {
         ...PRIVY_CONNECT_SOURCES,
         TURNSTILE_ORIGIN,
         ...presaleSources,
+        ...bridgeSources,
         ...liveSources,
       ]),
     ].join(" "),
@@ -131,6 +136,7 @@ export function securityHeaders(input: {
   nonce: string | null;
   development?: boolean;
   presaleConnectSources?: readonly string[];
+  bridgeConnectSources?: readonly string[];
   liveSocketOrigin?: string | null;
 }): Readonly<Record<string, string>> {
   return {

@@ -206,11 +206,13 @@ test("OA-31: a signed-out Notify me opens sign-in on top of the sale dialog, and
   assert.ok(z("Join Blast") > z("Tidal"), "sign-in, first in the overlays but opened last, is drawn above the sale dialog");
   // Both are modal layers. In the page's order, which is now the order they opened: each portals to the end of the Blast UI root (OA-28 M2).
   assert.deepEqual(modal(), ["Tidal", "Join Blast"]);
+  assert.ok(dialog("Tidal").hasAttribute("inert"), "the covered sheet is out of the tab order and accessibility tree");
   focused($('[data-focus="sign-in"]'), "sign-in takes focus");
 
   await key("Escape");
   assert.deepEqual(modal(), ["Tidal"], "Escape closed sign-in, not the sale dialog");
   await settle();
+  assert.ok(!dialog("Tidal").hasAttribute("inert"), "the revealed sheet is interactive again");
   focused($('[data-host="notify"]'), "focus is back on Notify me, in the sale dialog");
   assert.equal(document.body.style.overflow, "hidden", "the sale dialog still holds the page");
 

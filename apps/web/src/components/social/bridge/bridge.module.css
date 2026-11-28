@@ -1,0 +1,88 @@
+/* Groups sit 2× their inner gap apart: the two panels 0.5rem, the form's groups 1rem. */
+.form { display: flex; flex-direction: column; gap: 1rem; container-type: inline-size; }
+.sourceSetup { display: grid; gap: 0.5rem; }
+.panels { display: flex; flex-direction: column; gap: 0.5rem; }
+.amountPresets { margin-block-start: 0.5rem; }
+[data-blast-ui] .amountPresets [data-ui-button] { --control-height: 2.75rem; }
+.coinPick { flex: none; margin-left: auto; }
+/* A chain's or coin's name with its logo, inside a picker segment. */
+.named { display: inline-flex; align-items: center; gap: 0.375rem; }
+.logo { inline-size: 1rem; block-size: 1rem; flex: none; object-fit: contain; }
+.logo[data-size="24"] { inline-size: 1.5rem; block-size: 1.5rem; }
+/* The source chain: a full-width menu button with the chain's logo; its menu draws like the Sort and raise-coin menus. */
+[data-blast-ui] .chainPick { --control-height: 2.75rem; inline-size: 100%; justify-content: flex-start; gap: 0.625rem; }
+[data-blast-ui] .chainPick [data-ui-label] { display: inline-flex; align-items: center; gap: 0.625rem; }
+[data-blast-ui] .chainMenu { min-width: 15rem; max-width: calc(100vw - 1.5rem); padding: 0.3125rem; border-radius: var(--r-sm); background: var(--card); box-shadow: var(--sh-pop); }
+[data-blast-ui] .chainOption { display: flex; align-items: center; gap: 0.75rem; min-height: max(44px, 3rem); padding: 0.5rem 0.75rem 0.5rem 0.625rem; border-radius: var(--r-button); color: var(--ink); font-size: 0.9375rem; cursor: pointer; outline: none; transition: background-color var(--t1) var(--ease-std); }
+[data-blast-ui] .chainOption b { font-weight: 600; }
+[data-blast-ui] .chainOption > svg { width: 1rem; height: 1rem; flex: none; margin-left: auto; }
+[data-blast-ui] .chainOption[aria-checked="true"] { background: var(--bg); }
+@media (hover: hover) and (pointer: fine) { [data-blast-ui] .chainOption:hover { background: var(--hair); } }
+[data-blast-ui] .chainOption:active { background: var(--hair); transition-duration: 0s; }
+[data-blast-ui] .chainOption:focus-visible { outline: 0.125rem solid var(--focus-color, var(--ink)); outline-offset: -0.125rem; }
+/* The amount box draws the edge and the focus ring; the shared field inside it keeps only its type. */
+[data-blast-ui] .amountInput { min-height: 0; line-height: normal; box-shadow: none; }
+[data-blast-ui] .amountInput:focus-visible { outline: none !important; }
+
+/*
+ * A new quote replaces the numbers in place: they stay, turn muted while the
+ * next one loads, and come back to ink. Nothing blanks, nothing moves.
+ */
+.summary { display: flex; flex-direction: column; gap: 0.5rem; transition: color var(--t2) var(--ease-std); }
+/* The sentence carries the money; the rows under it are quieter (500, not the terms' 600). */
+.summary dl dd { font-weight: 500; transition: color var(--t2) var(--ease-std); }
+.summary.refreshing, .summary.refreshing dd { color: var(--muted); }
+.sentence { margin: 0; padding: 0 0.125rem; font-size: 0.875rem; line-height: 1.45; color: var(--ink); text-wrap: pretty; }
+.summary.refreshing .sentence { color: var(--muted); }
+
+.note { text-align: left; }
+.action { inline-size: 100%; }
+.powered { margin: 0; font-size: 0.75rem; color: var(--muted); text-align: center; }
+
+.recent { display: flex; flex-direction: column; gap: 0.5rem; padding-top: 0.5rem; }
+.recent h3 { margin: 0; font-size: 0.8125rem; font-weight: 600; color: var(--muted); }
+.recent ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 0.75rem; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; min-height: 2.75rem; }
+.rowText { flex: 1; display: flex; flex-direction: column; gap: 0.125rem; min-width: 0; font-size: 0.8125rem; font-variant-numeric: tabular-nums; }
+.rowText b { font-weight: 600; color: var(--ink); overflow-wrap: anywhere; }
+.rowText span { color: var(--muted); transition: color var(--t2) var(--ease-std); }
+.row[data-state="done"] .rowText span { color: var(--ink); }
+.row > :last-child { flex: none; }
+
+/*
+ * New lines arrive softly: a quote's summary, a note, a just-sent row. They
+ * appear a few times per bridge, so a short ease-out fade with a 4px rise is
+ * enough to say "this is new" without slowing the next press. Browsers
+ * without @starting-style show them at once.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  .summary, .note, .row { transition: opacity var(--t2) var(--ease-std), translate var(--t2) var(--ease-std), color var(--t2) var(--ease-std); }
+  @starting-style {
+    .summary, .note, .row { opacity: 0; translate: 0 0.25rem; }
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .summary, .note, .row { transition: opacity var(--t2) var(--ease-std), color var(--t2) var(--ease-std); }
+  @starting-style {
+    .summary, .note, .row { opacity: 0; }
+  }
+}
+
+.chainsLoading { display: block; inline-size: 100%; block-size: 2.25rem; border-radius: var(--r-button); }
+.actionLoading { display: block; inline-size: 100%; block-size: 3.25rem; border-radius: var(--r-button-lg); }
+
+[data-blast-ui] .sourcePick { --control-height: 2.75rem; flex: none; margin-left: auto; max-inline-size: 52%; }
+.sourcePick [data-ui-label] { display: flex; align-items: center; gap: 0.375rem; min-inline-size: 0; }
+.tokenSheet.tokenSheet { gap: 0.75rem; }
+.tokenHeading { position: relative; display: flex; align-items: center; min-block-size: 44px; }
+.tokenClose { position: absolute; inset-inline-end: 0; }
+.tokenSheet .tokenList { display: flex; flex-direction: column; flex-shrink: 1; min-block-size: 0; max-block-size: 17rem; overflow-y: auto; overscroll-behavior: contain; }
+.tokenRow { display: flex; gap: 0.5rem; align-items: center; }
+[data-blast-ui] .tokenCopy [data-ui-button] { --control-height: 2.75rem; min-inline-size: 44px; }
+[data-blast-ui] .tokenOption { flex: 1; block-size: auto; min-block-size: 2.75rem; min-inline-size: 0; justify-content: flex-start; --control-pad: 0.5rem; color: var(--ink); }
+.tokenOption { gap: 0.625rem; }
+.tokenOption > svg { flex: none; margin-inline-start: auto; }
+.tokenText { display: grid; min-inline-size: 0; line-height: 1.2; text-align: start; white-space: normal; }
+.tokenText small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 0.75rem; }
+.tokenMark { display: grid; place-items: center; flex: none; inline-size: 1.25rem; block-size: 1.25rem; border-radius: 50%; background: var(--hair); }
+.tokenMark img { border-radius: inherit; object-fit: contain; }

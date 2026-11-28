@@ -5,13 +5,14 @@ import { JSDOM } from "jsdom";
 import { act, StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { PrivyStart } from "./privy-start.ts";
+import { PrivySourceWalletsStore, PrivyStart } from "./privy-start.ts";
 import { setShellPref } from "#web/components/blast-ui/use-shell-prefs.ts";
 
 // The page's start; these tests only watch the SDK's wallet clients.
 const start = new PrivyStart();
+const sourceWallets = new PrivySourceWalletsStore();
 
-const resources = { factories: 0, listeners: 0 };
+const resources = { factories: 0, listeners: 0, ready: false };
 Object.assign(globalThis, { privyLifetimeResources: resources });
 const reactUrl = import.meta.resolve("react");
 registerHooks({
@@ -20,6 +21,8 @@ registerHooks({
       return {
         shortCircuit: true,
         url: `data:text/javascript,${encodeURIComponent(`
+          export const useWallets = () => ({ ready: false, wallets: [] });
+          export const useSignTransaction = () => ({ signTransaction: async () => ({}) });
           export function toSolanaWalletConnectors() {
             const resources = globalThis.privyLifetimeResources;
             resources.factories++;
@@ -50,9 +53,11 @@ registerHooks({
             }, [connectors]);
             return createElement("section", { "data-app": appId, "data-wallets": connectors?.get().map(c => c.wallet.name).join(","), "data-theme": config.appearance?.theme }, children);
           }
-          export const usePrivy = () => ({ ready: false, authenticated: false, user: null, getAccessToken: async () => null, logout: async () => {} });
+          export const usePrivy = () => ({ ready: globalThis.privyLifetimeResources.ready, authenticated: false, user: null, getAccessToken: async () => null, logout: async () => {} });
           export const useLogin = () => ({ login() {} });
           export const useLoginWithOAuth = () => ({ initOAuth: async () => {} });
+          export const useConnectWallet = () => ({ connectWallet() {} });
+          export const useWallets = () => ({ ready: false, wallets: [] });
         `)}`,
       };
     }
@@ -63,8 +68,29 @@ const { default: PrivySessionRuntime } = await import("./PrivySessionRuntime.tsx
 
 const noop = () => undefined;
 function Runtime({ appId }: Readonly<{ appId: string }>) {
-  return <PrivySessionRuntime appId={appId} emit={noop} nonce={null} start={start} />;
+  return <PrivySessionRuntime appId={appId} emit={noop} nonce={null} start={start} wallets={sourceWallets} />;
 }
+
+test("Bridge can render while Privy's wallet discovery is still pending", async () => {
+  const dom = new JSDOM('<div id="mount"></div>', { url: "https://blast.test" });
+  Object.assign(globalThis, { window: dom.window, document: dom.window.document, IS_REACT_ACT_ENVIRONMENT: true });
+  const root = createRoot(document.getElementById("mount")!);
+  const unsubscribe = sourceWallets.subscribe(noop);
+  resources.ready = true;
+  try {
+    await act(async () => root.render(<Runtime appId="bridge-app" />));
+    assert.deepEqual(sourceWallets.get()?.evm, []);
+    assert.deepEqual(sourceWallets.get()?.solana, []);
+    assert.equal(typeof sourceWallets.get()?.connectWallet, "function");
+  } finally {
+    await act(async () => root.unmount());
+    unsubscribe();
+    resources.ready = false;
+    dom.window.close();
+    Reflect.deleteProperty(globalThis, "window");
+    Reflect.deleteProperty(globalThis, "document");
+  }
+});
 
 test("the wallet picker follows Blast's theme while the wallet session stays mounted", async () => {
   const dom = new JSDOM('<div data-blast-ui id="mount"></div>', { url: "https://blast.test" });

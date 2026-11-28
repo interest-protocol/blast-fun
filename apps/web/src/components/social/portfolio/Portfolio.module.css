@@ -172,6 +172,10 @@ button.row:active, a.row:active { background: var(--raised); }
 @media (max-width: 760px) {
   .actsD { display: none; }
   .actsM { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 8em), 1fr)); gap: 0.5rem; padding-top: 0.25rem; }
+  /* Three ways in or out do not fit side by side as icon-and-label at phone widths: icon over label, one row. */
+  .actsM[data-three] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  /* Three across at 320px: a smaller label keeps "Withdraw" clear of its edges. */
+  .actsM[data-three] > * { flex-direction: column; gap: 0.25rem; min-width: 0; overflow-wrap: anywhere; font-size: 0.9375rem; --control-pad: 0.5rem; --control-height: 4rem; --control-coarse-height: 4rem; }
   .hero { padding: 1rem; gap: 0.875rem; }
   .hero[data-compact] { gap: 0; }
   .hero[data-compact] :is(.period, .chart, .mix, .actsM) { display: none; }
