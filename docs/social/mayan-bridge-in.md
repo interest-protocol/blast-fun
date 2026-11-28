@@ -99,7 +99,8 @@ Jose, 2026-11-26: its own **Bridge** button, beside Deposit and Withdraw.
 
 Each chain starts with its native coin and canonical USDC. The picker loads
 Mayan's verified ERC-20, SPL or Token-2022 catalog for the selected chain and
-searches by name, symbol or address. Selecting a token still requires a Blink
+searches by name, symbol or address. It opens over the bridge as a centered
+desktop dialog and a bottom sheet on phones. Selecting a token still requires a Blink
 route for the amount and destination. These routes may swap on the source
 chain and use a different approval spender, which `getEvmSwapApproval` chooses.
 
@@ -107,9 +108,10 @@ chain and use a different approval spender, which `getEvmSwapApproval` chooses.
 
 From the top, Aftermath's order minus what a deposit does not need:
 
-1. **From**: a chain menu (six chains, so a menu, not a tab row), a token
-   chip, the amount field, and the connected wallet's balance with Max (Max
-   keeps gas back for native tokens; hidden until a wallet is connected).
+1. **From**: a chain menu, then the chain-specific Connect or Switch action
+   when needed. The send field holds the token picker and amount. A loaded
+   source balance reveals 25%, 50%, 75% and Max below the amount. The shortcuts
+   keep gas back for native tokens.
 2. **To**: SUI or USDC, "Your Blast wallet" with the shortened address through
    `CopyAddress`. Never an input.
 3. **Quote rows** (once a quote exists): one sentence ("Send 20 USDC from
@@ -117,8 +119,8 @@ From the top, Aftermath's order minus what a deposit does not need:
    only for USDC) and Arrives (Mayan's `etaSeconds`, "about 10 s"). Slippage
    is Mayan's auto value, folded into "at least", not a row. "Powered by
    Mayan" footer.
-4. **One button**, labelled with the next step: Sign in · Connect wallet ·
-   Switch to Base · Enter an amount · Not enough ETH · Approve USDC · Bridge.
+4. **One primary button**. Connect and Switch sit under the source chain.
+   Sign in, Approve, and Bridge sit below the transfer details.
 5. **Recent bridges** below the card: last 5 from the explorer by the Blast
    address, the pending one first. Read on open and retry briefly for transfers
    this tab submitted that the explorer has yet to list.
@@ -128,8 +130,8 @@ One direction only: other chains → Sui. No flip, no Sui → other chain, no sw
 | State | Shown |
 | --- | --- |
 | Signed out | Inputs live (unbound quotes are public); button "Sign in" |
-| No source wallet | Unbound preview quote; button "Connect wallet" |
-| Wrong network (EVM) | "Switch to {chain}" (`switchChain`) |
+| No source wallet | Unbound preview quote; "Connect {chain} wallet" under From |
+| Wrong network (EVM) | "Switch to {chain}" under From (`switchChain`) |
 | Quoting | Skeleton rows; previous numbers dimmed, never blank |
 | Quote error | `ROUTE_NOT_FOUND` → "No route from {chain} {token} to Sui right now"; limits → Mayan's min/max in plain words; network or 429 → "Couldn't get a price" after backoff, and the button becomes "Try again" |
 | Above the BLINK cap | `AMOUNT_TOO_LARGE` → "The largest amount is 300 USDC" (Mayan's `maxAmountIn`); the button stays disabled. Larger amounts wait for FAST_MCTP (below) |

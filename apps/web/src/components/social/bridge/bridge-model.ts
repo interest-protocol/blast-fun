@@ -2,7 +2,7 @@ import { USDC_COIN_TYPE } from "@blast/core/lib/sui/coin-types.ts";
 import { groupedExact } from "@blast/core/web/exact-amount.ts";
 import { NO_VALUE } from "@blast/core/web/format.ts";
 
-import { parseAtoms } from "../trade/trade-ticket.ts";
+import { parseAtoms, sellPresetAtoms, type SellPreset } from "../trade/trade-ticket.ts";
 
 import type { BridgeChain } from "./bridge-config.ts";
 
@@ -12,7 +12,7 @@ export type SourceToken = Readonly<{
   decimals: number;
   mayan: string;
   native: boolean;
-  /** Atoms kept back by Max so the wallet can still pay its network fee. */
+  /** Atoms kept back so the wallet can still pay its network fee. */
   reserve: bigint;
   logo: string | null;
   name?: string;
@@ -88,10 +88,11 @@ export function bridgeAmountField(atoms: bigint, decimals: number): string {
   return groupedExact({ n: atoms, scale: decimals }, decimals);
 }
 
-/** Max fills the balance, less the fee reserve for a native token. */
-export function maxField(balance: bigint, token: SourceToken): string {
+/** Apply the preset to the balance available after the native fee reserve. */
+export function presetField(balance: bigint, token: SourceToken, preset: SellPreset): string {
   const spendable = balance - (token.native ? token.reserve : 0n);
-  return spendable > 0n ? bridgeAmountField(spendable, token.decimals) : "0";
+  const atoms = sellPresetAtoms(preset, { atoms: spendable > 0n ? spendable : 0n, decimals: token.decimals });
+  return bridgeAmountField(atoms, token.decimals);
 }
 
 /** True when the amount, plus the fee reserve for a native token, is more than the balance. */
@@ -252,7 +253,7 @@ export function actionLabel(action: BridgeAction, chain: ChainInfo, token: Sourc
     case "signIn":
       return "Sign in";
     case "connect":
-      return "Connect wallet";
+      return `Connect ${chain.label} wallet`;
     case "switch":
       return `Switch to ${chain.label}`;
     case "approve":

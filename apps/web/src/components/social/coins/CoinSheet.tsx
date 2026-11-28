@@ -205,7 +205,7 @@ function useCoinSteps(props: Pick<CoinSheetProps, "first" | "onScreen" | "inline
   const go = (next: CoinScreen, nextTrade?: TradeState) => {
     const active = document.activeElement;
     const side = active?.getAttribute("data-coin-pick");
-    const label = screen.kind === "fund" ? "Withdraw" : active?.getAttribute("aria-label");
+    const label = screen.kind === "fund" ? (next.kind === "bridge" ? "Bridge" : "Withdraw") : active?.getAttribute("aria-label");
     const fallbackFocus = screen.kind === "pick" ? '[aria-label="Search your coins"]' : '[aria-label="Search coins"]';
     const focus = side ? `[data-coin-pick=${JSON.stringify(side)}]` : label ? `[aria-label=${JSON.stringify(label)}]` : active?.id ? `#${CSS.escape(active.id)}` : fallbackFocus;
     swap(() => {
@@ -416,7 +416,7 @@ function CoinSheetForm(props: CoinSheetProps & Readonly<{ titleId: string; onCon
       </div>
       {!props.trading.signedIn ? <Button loading={props.trading.sessionPending === true} loadingLabel="Restoring session" onClick={props.trading.onSignIn} size="lg" variant="primary">Sign in to get your address</Button> : null}
       {fund ? <Button aria-label="Withdraw" onClick={() => go({ kind: "pick", mode: "withdraw" })} size="lg" variant="secondary"><ArrowUpIcon />Withdraw</Button> : null}
-      {fund && bridge ? <Button onClick={() => go({ kind: "bridge" })} size="lg" variant="secondary"><BridgeIcon />Bridge</Button> : null}
+      {fund && bridge ? <Button aria-label="Bridge" onClick={() => go({ kind: "bridge" })} size="lg" variant="secondary"><BridgeIcon />Bridge</Button> : null}
     </>
   );
 
