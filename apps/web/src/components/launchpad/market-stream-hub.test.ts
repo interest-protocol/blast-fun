@@ -240,6 +240,21 @@ test("a late subscriber to a live pool starts from what the stream already deliv
   assert.equal(early.trades.length, 2);
 });
 
+test("Home's price-only stream gets the same 15 s when hidden; longer pauses it", () => {
+  const s = setup();
+  s.hub.subscribe({ pools: [], priceCoins: [SUI], expected: null, listener: { ...watcher([]).listener, tradeCue: () => {} } });
+  s.source().hello();
+  s.setVisible(false);
+  assert.equal(s.source().closed, false, "a quick tab flip keeps Home's socket");
+  s.setVisible(true);
+  assert.equal(s.sources.length, 1, "coming back asks for no new ticket or socket");
+  s.setVisible(false);
+  s.fire(HIDDEN_GRACE_MS);
+  assert.equal(s.source().closed, true);
+  s.setVisible(true);
+  assert.equal(s.sources.length, 2);
+});
+
 test("a hidden tab keeps its stream for 15 s; longer pauses it, and showing it again reconnects", async () => {
   const s = setup();
   const chart = watcher();
@@ -894,7 +909,8 @@ for (const hiddenFor of [1_000, LINGER_MS]) {
   test(`a sale that subscribes late in the linger resumes on the hub after a ${hiddenFor} ms tab hide`, async (t) => {
     const s = setup();
     const { hints, fallback } = activityClient(s);
-    const home = s.hub.subscribe({ pools: [], priceCoins: [SUI], expected: null, listener: watcher([]).listener });
+    // Real Home takes trade cues, so leaving it empties the socket's topics at once.
+    const home = s.hub.subscribe({ pools: [], priceCoins: [SUI], expected: null, listener: { ...watcher([]).listener, tradeCue: () => {} } });
     s.source().hello();
     home.stop();
     await settle();
