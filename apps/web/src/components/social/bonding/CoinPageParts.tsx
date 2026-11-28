@@ -95,8 +95,17 @@ function showsUnit(switchShown: boolean, priceNamesUnit: boolean, amountsHidden:
  * row keeps that figure's space, unseen, so the content below does not move.
  * `priceNamesUnit`: the price is a figure that shows its unit ($ or the quote symbol), not a placeholder.
  */
+export type PriceMoveLabel = Readonly<{ value: ReactNode; direction?: "up" | "down" }>;
+
+/** The price's move, green or red; hidden with the trader's amounts. `held`: kept unseen while an older price holds the slot. */
+export function PriceChange({ change, held }: Readonly<{ change: PriceMoveLabel; held?: true }>) {
+  const { amountsHidden } = useShellPrefs();
+  if (amountsHidden) return null;
+  return <span className={styles.priceChange} data-direction={change.direction} data-held={held} aria-hidden={held}>{change.value}</span>;
+}
+
 export function MarketPriceRow({ price, reserve, priceLabel = "Price", change, activity, showCurrency = true, priceNamesUnit = false }: Readonly<{
-  price: ReactNode; reserve?: ReactNode; priceLabel?: string; change?: Readonly<{ value: ReactNode; direction?: "up" | "down" }> | null;
+  price: ReactNode; reserve?: ReactNode; priceLabel?: string; change?: PriceMoveLabel | null;
   activity?: ReactNode; showCurrency?: boolean; priceNamesUnit?: boolean;
 }>) {
   const { amountsHidden } = useShellPrefs();
@@ -108,8 +117,7 @@ export function MarketPriceRow({ price, reserve, priceLabel = "Price", change, a
   return <div className={styles.marketPriceRow} data-unit-shown={showsUnit(currency != null, priceNamesUnit, amountsHidden)}>
     {hasPrice || activity ? <div className={styles.marketPrice}>
       {hasPrice && <><span>{priceLabel}</span><PriceSlot price={price} reserve={reserve} /></>}
-      {hasPrice && change && !amountsHidden && <span className={styles.priceChange} data-direction={change.direction}
-        data-held={held} aria-hidden={held}>{change.value}</span>}
+      {hasPrice && change && <PriceChange change={change} held={held} />}
       {activity}
     </div> : null}
     {currency && <div className={styles.priceControls}>
@@ -150,9 +158,16 @@ export function MarketOverview({
   </section>;
 }
 
-/** The price chart's card; `head` is the price row, so the price and the candles read as one block. */
-export function ChartCard({ head, children }: Readonly<{ head?: ReactNode; children: ReactNode }>) {
-  return <section className={`${styles.card} ${styles.marketChart}`} aria-label="Price chart">{head}{children}</section>;
+/**
+ * The price chart's card; `head` is the price row, so the price and the candles read as one block.
+ * `foot` is a phone's line under the chart (the creator, the coin's address, the last trade), so only
+ * the name, the price and the controls sit above the candles; a wider screen does not show it.
+ */
+export function ChartCard({ head, foot, children }: Readonly<{ head?: ReactNode; foot?: ReactNode; children: ReactNode }>) {
+  return <section className={`${styles.card} ${styles.marketChart}`} aria-label="Price chart">
+    {head}{children}
+    {foot ? <div className={styles.chartFoot} data-chart-foot="">{foot}</div> : null}
+  </section>;
 }
 
 type ActivityTab = "trades" | "holders" | "posts";

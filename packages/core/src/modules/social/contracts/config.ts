@@ -17,7 +17,6 @@ export const SOCIAL_CONFIG_KEYS = [
   "reactions",
   "fastest_window_ms",
   "recap_trading_days",
-  "trade_sponsor_daily_cap",
 ] as const;
 export type SocialConfigKey = (typeof SOCIAL_CONFIG_KEYS)[number];
 
@@ -27,8 +26,7 @@ export type SocialConfigValueType =
   | "days" // a positive integer number of days
   | "decimal" // a positive decimal string, such as "1000" or "2500.5"
   | "integer_list" // distinct positive integers, stored ascending
-  | "reaction_list" // 1 to 8 distinct lowercase reaction keys, in display order
-  | "count"; // a non-negative integer up to 100,000
+  | "reaction_list"; // 1 to 8 distinct lowercase reaction keys, in display order
 
 export const SOCIAL_CONFIG_TYPES: Readonly<Record<SocialConfigKey, SocialConfigValueType>> = Object.freeze({
   why_boost_ms: "duration_ms",
@@ -42,7 +40,6 @@ export const SOCIAL_CONFIG_TYPES: Readonly<Record<SocialConfigKey, SocialConfigV
   reactions: "reaction_list",
   fastest_window_ms: "duration_ms",
   recap_trading_days: "days",
-  trade_sponsor_daily_cap: "count",
 });
 
 export type SocialConfig = Readonly<{
@@ -62,13 +59,6 @@ export type SocialConfig = Readonly<{
   fastest_window_ms: number;
   /** "Today on Blast" (§16) shows trading presales that migrated within this many days. */
   recap_trading_days: number;
-  /**
-   * Trades Blast's gas pool sponsors per account per UTC day (R3-31, OA-25
-   * Q12), counted per account for embedded wallets and wallet sessions
-   * alike; 0 sponsors none. Past it the wallet may still trade and pays its
-   * own fee.
-   */
-  trade_sponsor_daily_cap: number;
 }>;
 
 export type SocialConfigValue = SocialConfig[SocialConfigKey];
@@ -88,16 +78,12 @@ export const SOCIAL_CONFIG_DEFAULTS: SocialConfig = Object.freeze({
   // FEATURE-MAP §5.2: "the last 6 hours' commits ÷ target".
   fastest_window_ms: 21_600_000,
   recap_trading_days: 30,
-  // OA-25 Q12: a cap per account per day; 20 sponsored trades is a busy trader's day.
-  trade_sponsor_daily_cap: 20,
 });
 
 /** The `social_reactions.reaction` slug (migration 0054). */
 export const REACTION_KEY_PATTERN = /^[a-z][a-z0-9_]{0,31}$/;
 export const MAX_REACTIONS = 8;
 export const MAX_MILESTONES = 50;
-/** The largest `count` value. */
-export const MAX_COUNT = 100_000;
 /** A decimal value: up to 12 integer and 6 fractional digits. */
 export const DECIMAL_PATTERN = /^(?:0|[1-9][0-9]{0,11})(?:\.[0-9]{1,6})?$/;
 

@@ -281,6 +281,21 @@ test("review H2: the third wrong signature expires the reservation; the platform
   );
 });
 
+test("swaps and withdrawals execute after the platform daily sponsorship limit is exhausted", async () => {
+  for (const intent of ["trade", "withdraw", "bridge_withdraw"] as const) {
+    const limiter = new MemoryLimiter();
+    limiter.refuse.add("presale_sponsor_exec_global");
+    const { h, reservation, signature } = await reserved({ limiter }, { intent, presaleId: null });
+
+    const outcome = await successBody(await h.route(
+      executeRequest(reservation.id, { user_signature: signature }), testClient()
+    ));
+    assert.equal(outcome.digest, reservation.digest, intent);
+    assert.equal(h.executions.rows[0]?.state, "executed", intent);
+    assert.equal(h.consumed(), 0, intent);
+  }
+});
+
 test("review H2: a full platform cap refuses a valid signature as rate_limited before anything is submitted", async () => {
   const limiter = new MemoryLimiter();
   limiter.refuse.add("presale_sponsor_exec_global");

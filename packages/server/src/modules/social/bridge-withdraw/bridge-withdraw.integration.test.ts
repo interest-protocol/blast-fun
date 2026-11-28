@@ -165,10 +165,10 @@ async function withFixture(run: (fixture: Fixture) => Promise<void>, options: { 
       reservations: new PostgresSponsorReservations(webPool),
       executions: { async today() { return { allowed: true }; } },
       config: () => ({ sponsorAddress: SPONSOR, maxGasMist: CAP, swapTargets: [], tradeFee: () => null }),
-      // The sponsor's per-IP, per-account daily and platform budgets, in the shared table (review M1).
+      // The sponsor's short-window rate limit uses the shared table.
       limits: { async consume(bucket, subject) {
         sponsorBudgetCalls.push(bucket);
-        if (options.refuseSponsorBudget && bucket === "presale_sponsor_global") return { allowed: false, bucket, policyVersion: 1, retryAfterSeconds: 60 };
+        if (options.refuseSponsorBudget && bucket === "presale_sponsor_ip") return { allowed: false, bucket, policyVersion: 1, retryAfterSeconds: 60 };
         return sponsorLimiter.consume(bucket, subject);
       } },
       clock: () => new Date(clock ?? Date.now()),
@@ -510,8 +510,8 @@ test("definite sponsor refusal commits one failed ledger and retries without reb
     const replay = await withdrawalOf(await create(body), 200);
     assert.deepEqual(replay, failed);
     assert.deepEqual(sponsorCalls, ["bridge_withdraw"]);
-    assert.deepEqual(sponsorBudgetCalls, ["presale_sponsor_ip", "presale_sponsor_account_daily", "presale_sponsor_global"]);
-    assert.deepEqual((await admin.query("SELECT state, refusal_reason FROM presale_sponsor_budget_attempts")).rows, [{ state: "refused", refusal_reason: "presale_sponsor_global" }]);
+    assert.deepEqual(sponsorBudgetCalls, ["presale_sponsor_ip"]);
+    assert.deepEqual((await admin.query("SELECT state, refusal_reason FROM presale_sponsor_budget_attempts")).rows, [{ state: "refused", refusal_reason: "presale_sponsor_ip" }]);
     assert.deepEqual((await logRows(admin)).map((row) => [row.state, row.failure_code]), [["failed", "sponsor_refused"]]);
     assert.equal((await admin.query("SELECT count(*)::int AS n FROM presale_sponsor_reservations")).rows[0].n, 0);
   }, { refuseSponsorBudget: true, afterSponsorRefusal: async () => { if (lost) { lost = false; throw new Error("refusal response lost"); } } });
@@ -559,11 +559,7 @@ test(
           [["failed", "expired"]],
         );
         assert.deepEqual(sponsorCalls, ["bridge_withdraw"]);
-        assert.deepEqual(sponsorBudgetCalls, [
-          "presale_sponsor_ip",
-          "presale_sponsor_account_daily",
-          "presale_sponsor_global",
-        ]);
+        assert.deepEqual(sponsorBudgetCalls, ["presale_sponsor_ip"]);
       },
       {
         afterSponsor: async () => {

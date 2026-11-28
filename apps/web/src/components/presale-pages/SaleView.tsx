@@ -1295,9 +1295,9 @@ function TradingSale({ detail, claims, children, nowMs: pageNowMs }: Readonly<{ 
   const nowMs = useAgoClock(pageNowMs);
   const claimCard = claims ? <div className={cx("trading-mobile-claims")}>{claims}</div> : null;
   return <>
-    {phone ? claimCard : null}
     <SaleTradeFeed key={detail.presale.presale_id} sale={detail.presale}>
-      <SaleMarket sale={detail.presale} terms={detail.terms} nowMs={nowMs} windows={COIN_WINDOWS} activity={(holders) => <CoinActivity detail={detail} holders={holders} nowMs={nowMs} />}>
+      <SaleMarket sale={detail.presale} terms={detail.terms} nowMs={nowMs} windows={COIN_WINDOWS} activity={(holders) => <CoinActivity detail={detail} holders={holders} nowMs={nowMs} />}
+        afterChart={phone ? claimCard : null}>
         {phone ? null : claimCard}
       </SaleMarket>
     </SaleTradeFeed>

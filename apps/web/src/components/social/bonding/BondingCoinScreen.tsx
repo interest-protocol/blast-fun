@@ -21,6 +21,7 @@ import { usePhoneLayout } from "#web/components/blast-ui/use-shell-prefs.ts";
 import { poolPrices } from "#web/components/charts/candle-data.ts";
 import { CoinPriceCurrencyProvider, useCoinPriceCurrency } from "#web/components/launchpad/chart/CoinPriceCurrency.tsx";
 import { Button, ButtonLink, DisclosureSummary } from "#web/components/blast-ui/Button.tsx";
+import { CoinTypeTag } from "#web/components/blast-ui/CoinTypeTag.tsx";
 import { CopyAddress } from "#web/components/blast-ui/CopyAddress.tsx";
 import { DexIdentity } from "#web/components/blast-ui/DexIdentity.tsx";
 import { Disclosure } from "#web/components/blast-ui/Disclosure.tsx";
@@ -109,7 +110,8 @@ function CreatorByline({ page }: Readonly<{ page: CoinPage }>) {
   );
 }
 
-function Identity({ page, view, fallbackLogo, verified }: Readonly<{ page: CoinPage; view: View; fallbackLogo?: string; verified: boolean }>) {
+/** `compact`: a chart shows, and on a phone the creator and the coin's address move under it. */
+function Identity({ page, view, fallbackLogo, verified, compact }: Readonly<{ page: CoinPage; view: View; fallbackLogo?: string; verified: boolean; compact: boolean }>) {
   const { identity, lifecycle } = view;
   return <CoinIdentityHeader
     coin={{ key: identity.coinType ?? page.launchId, coinType: identity.coinType ?? undefined, iconUrl: identity.iconUrl || fallbackLogo || null, round: false }}
@@ -118,6 +120,7 @@ function Identity({ page, view, fallbackLogo, verified }: Readonly<{ page: CoinP
     status={statusLabel(lifecycle, page.confirmed)}
     graduated={lifecycle === "migrated"}
     mark={verified ? <CoinVerifiedMark /> : null}
+    compact={compact}
   >
     <CreatorByline page={page} />
   </CoinIdentityHeader>;
@@ -359,13 +362,13 @@ function coinBackOrigin(origin: string | null | undefined): URL | null {
   }
 }
 
-function CoinPageHeader({ page, view, details, verified, marketCatchingUp }: Readonly<{
-  page: CoinPage; view: View; details: LaunchPageDetails | null; verified: boolean; marketCatchingUp: boolean;
+function CoinPageHeader({ page, view, details, verified, marketCatchingUp, compact }: Readonly<{
+  page: CoinPage; view: View; details: LaunchPageDetails | null; verified: boolean; marketCatchingUp: boolean; compact: boolean;
 }>) {
   const origin = useListOrigin(page.launchId);
   return <>
     <CoinBackLink origin={origin} />
-    <Identity page={page} view={view} fallbackLogo={details?.iconUrl} verified={verified} />
+    <Identity page={page} view={view} fallbackLogo={details?.iconUrl} verified={verified} compact={compact} />
     {!page.confirmed ? <EmptyState framed title="Launch could not be confirmed" role="alert" action={<ButtonLink href={`/coin/${page.launchId}`}>Reload</ButtonLink>}>The launch could not be read. Try again in a moment.</EmptyState> : null}
     {!marketCatchingUp && (page.curve.state === "stale" || page.coin.state === "stale" || page.venue?.state === "stale") ? <p className={styles.notice} role="status">Market data is delayed. Trading availability follows the latest chain read.</p> : null}
     {page.conflict && !marketCatchingUp ? <p className={styles.notice} role="status">The index is catching up with this launch. Trading follows its current chain state.</p> : null}
@@ -409,20 +412,23 @@ function CoinMarket({ snapshot, page, chart, activity, poolKey, checkpoint, expe
   // The best known price at once; after the viewer's own trade, only one that includes it.
   const price = useChartPrice(poolKey, null, page.launchId);
   const context = coinTradeSource(view, poolKey, lastTrade, receivedAt);
+  // A phone reads the last trade under the chart (CSS shows one of the two), so the candles sit right under the price.
+  const recent = context && <ChartLastTrade placement="headline" />;
   return <ChartPriceLaunch value={{ poolKey, launchId: page.launchId }}><ChartTradeContext value={context}>
     <div className={styles.market}>
       <Reconnecting live={live} />
       {liveOn ? <LifecycleRefresh lifecycle={live.stats?.lifecycle ?? null} /> : null}
       <CoinMarketCards graduated={graduated} view={view} tick={tick} tradeId={tradeId} stats={stats} chart={chart} activity={activity}
         price={<MarketPrice units={priceUnits(view)} price={price?.price} tradeId={tradeId && price?.cursor ? tradeId : null}
-          showCurrency={view.identity.quoteType !== null} activity={context && <ChartLastTrade placement="headline" />} />} />
+          showCurrency={view.identity.quoteType !== null} activity={recent} />}
+        foot={<><span className={styles.byline}><CreatorByline page={page} />{view.identity.coinType ? <CoinTypeTag coinType={view.identity.coinType} /> : null}</span>{recent}</>} />
     </div>
   </ChartTradeContext></ChartPriceLaunch>;
 }
 
 /** The chart comes first at every width, the price row as its head; without a chart the price row stands alone. */
-function CoinMarketCards({ graduated, view, tick, tradeId, stats, chart, activity, price }: Readonly<{
-  graduated: boolean; view: View; tick: ReturnType<typeof useCoinTrade>["tick"]; tradeId: string | null; stats: LiveCoinStats | null; chart: ReactNode; activity: ReactNode; price: ReactNode;
+function CoinMarketCards({ graduated, view, tick, tradeId, stats, chart, activity, price, foot }: Readonly<{
+  graduated: boolean; view: View; tick: ReturnType<typeof useCoinTrade>["tick"]; tradeId: string | null; stats: LiveCoinStats | null; chart: ReactNode; activity: ReactNode; price: ReactNode; foot: ReactNode;
 }>) {
   const phone = usePhoneLayout();
   const phoneProgress = phone && !graduated;
@@ -431,7 +437,7 @@ function CoinMarketCards({ graduated, view, tick, tradeId, stats, chart, activit
     <ProgressCard view={view} tradeId={tradeId}>{phone ? null : facts}</ProgressCard>
   );
   return <>
-    {chart ? <ChartCard head={price}>{chart}</ChartCard> : price}
+    {chart ? <ChartCard head={price} foot={foot}>{chart}</ChartCard> : price}
     {overview}
     {phoneProgress && facts ? <div className={`${styles.card} ${styles.progressFacts}`}>{facts}</div> : null}
     {activity}
@@ -556,12 +562,13 @@ export function LegacyCoinScreen({ coinType, name, symbol, logoUrl, chart, decim
   const mark = <>{verified || verifiedCommunity ? <CoinVerifiedMark community={verifiedCommunity} /> : null}{legacy ? <CoinLegacyMark /> : null}</>;
   return <div className={styles.page} data-legacy-coin="">
     <CoinBackLink origin={origin} tradeJump={trade != null} home={major} />
-    <CoinIdentityHeader coin={{ key: coinType, coinType, iconUrl: logoUrl, round: major }} name={name} symbol={symbol} status={major ? "" : "Graduated"} graduated={!major} mark={mark} />
+    <CoinIdentityHeader coin={{ key: coinType, coinType, iconUrl: logoUrl, round: major }} name={name} symbol={symbol} status={major ? "" : "Graduated"} graduated={!major} mark={mark} compact />
     <div className={styles.layout} data-no-trade={trade == null || undefined}>
       <CoinPriceCurrencyProvider quoteType={quote.coinType} quoteSymbol={quote.symbol}>
         <div className={styles.market}>
           <Reconnecting live={live} />
-          <ChartCard head={<MarketPrice units={units} price={price?.price} tradeId={price?.cursor} showCurrency={!major} />}><SectionBoundary subject="chart">{chart}</SectionBoundary></ChartCard>
+          <ChartCard head={<MarketPrice units={units} price={price?.price} tradeId={price?.cursor} showCurrency={!major} />}
+            foot={<span className={styles.byline}><CoinTypeTag coinType={coinType} /></span>}><SectionBoundary subject="chart">{chart}</SectionBoundary></ChartCard>
           <MarketOverview fdv={major ? null : fdvUsd} holders={live.stats?.holders} volume={live.stats?.volumeUsd} venue={major ? null : poolKey.split(":")[0]} />
           <Card title="Trades">
             <SectionBoundary subject="trades" key={poolKeys.join()}>
@@ -587,14 +594,15 @@ export function BondingCoinScreen({ page, details, verified = false, slots, expe
   const { graduated, poolKey, marketKey, marketCatchingUp, marketOffline, showMarket, checkpoint } = coinPageMarket(page, view);
   const liveScreen = useLiveScreen();
   const slot = (name: keyof TerminalSlots) => <SectionBoundary subject={name} key={`${page.launchId}:${name}`}>{slots[name]}</SectionBoundary>;
+  const charted = showMarket && !marketOffline && slots.chart != null;
   return <div className={styles.page} data-bonding-coin="">
-    <CoinPageHeader page={page} view={view} details={details} verified={verified} marketCatchingUp={marketCatchingUp} />
+    <CoinPageHeader page={page} view={view} details={details} verified={verified} marketCatchingUp={marketCatchingUp} compact={charted} />
     <WalletTradesProvider key={page.launchId} deployer={view.coin?.launcher ?? null}>
       <div className={styles.layout} data-graduated={graduated || undefined} data-market-offline={marketOffline || undefined} data-no-market={!showMarket || undefined}>
         {showMarket ? (
           <CoinPriceCurrencyProvider key={page.launchId} quoteType={view.identity.quoteType} quoteSymbol={view.identity.quoteSymbol}>
             <CoinMarket key={marketKey} snapshot={view} page={page} poolKey={poolKey} checkpoint={checkpoint} expected={expected}
-              chart={marketOffline || slots.chart == null ? null : slot("chart")}
+              chart={charted ? slot("chart") : null}
               activity={marketOffline ? null : <CoinTradingActivity key={page.launchId} trades={slots.activity} holders={slots.holders} lazyHolders={liveScreen} />}
             />
           </CoinPriceCurrencyProvider>

@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { PublicVesting } from "@blast/core/modules/vesting/model.ts";
 
 import { socialInput } from "@blast/server/modules/social/route-kit/validation.ts";
+import { SocialRouteError } from "@blast/core/modules/social/route-kit/errors.ts";
 import { readPortfolioCoinPage } from "@blast/server/modules/social/portfolio/coin-page.ts";
 import { summarizePortfolio } from "@blast/server/modules/social/portfolio/summary.ts";
 import { recordMetric } from "@blast/core/lib/metrics.ts";
@@ -137,6 +138,16 @@ export async function assemblePortfolio(
 export function createSocialPortfolioRoute(dependencies: SocialPortfolioRouteDependencies) {
   const { kit, wallets, database, walletVestings } = dependencies;
   const now = dependencies.now ?? Date.now;
+  const addressesOf = async (accountId: string, params: URLSearchParams) => {
+    const selected = params.get("wallet");
+    if (selected !== null && (params.getAll("wallet").length !== 1 || !/^0x[0-9a-f]{64}$/.test(selected))) {
+      throw new SocialRouteError("invalid_parameter", { extra: { parameter: "wallet" } });
+    }
+    const addresses = (await wallets.wallets(accountId)).map((wallet) => wallet.address);
+    if (selected === null) return addresses;
+    if (!addresses.includes(selected)) throw new SocialRouteError("not_found");
+    return [selected];
+  };
 
   return Object.freeze({
     COINS: kit.route(
@@ -151,7 +162,7 @@ export function createSocialPortfolioRoute(dependencies: SocialPortfolioRouteDep
         }), {
           page: params.get("page") ?? "1", search: params.get("q") ?? "", hideSmall: params.get("hide_small") ?? "false",
         }, "invalid_parameter");
-        const addresses = (await wallets.wallets(context.account.account_id)).map((wallet) => wallet.address);
+        const addresses = await addressesOf(context.account.account_id, params);
         return context.json(await readPortfolioCoinPage(database(), addresses, page, search, now(), hideSmall));
       },
     ),
@@ -168,9 +179,9 @@ export function createSocialPortfolioRoute(dependencies: SocialPortfolioRouteDep
       async (context) => {
         const account = context.account;
         if (!account) throw new TypeError("The kit loads the account of a required-account route.");
-        const view = new URL(context.request.url).searchParams.get("view") === "summary" ? "summary" : "full";
-        const accountWallets = await readStep(view === "summary" ? "portfolio_summary" : "portfolio", "wallets", () => wallets.wallets(account.account_id), { public: false });
-        const addresses = accountWallets.map((entry) => entry.address);
+        const params = new URL(context.request.url).searchParams;
+        const view = params.get("view") === "summary" ? "summary" : "full";
+        const addresses = await readStep(view === "summary" ? "portfolio_summary" : "portfolio", "wallets", () => addressesOf(account.account_id, params), { public: false });
         const db = database();
         const body: SocialPortfolio = await assemblePortfolio({
           db,

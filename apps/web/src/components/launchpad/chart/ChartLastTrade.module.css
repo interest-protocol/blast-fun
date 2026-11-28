@@ -35,10 +35,10 @@
   }
   [data-chart-last-trade="headline"] :is(.measure, .value) { grid-area: 2 / 1; }
 }
-/* A sale page gives the last trade the market's full width on a phone (bonding-coin.module.css), so it keeps one line down to about 360px screens. */
+/* Under a phone's chart the last trade has the card's full width (bonding-coin.module.css), so it keeps one line down to about 360px screens. */
 @container (min-width: 20rem) {
-  :global([data-sale-page]) .slot[data-chart-last-trade="headline"] { grid-template-columns: max-content minmax(0, 1fr); }
-  :global([data-sale-page]) [data-chart-last-trade="headline"] :is(.measure, .value) { grid-area: 1 / 2; }
+  :global([data-chart-foot]) .slot[data-chart-last-trade="headline"] { grid-template-columns: max-content minmax(0, 1fr); }
+  :global([data-chart-foot]) [data-chart-last-trade="headline"] :is(.measure, .value) { grid-area: 1 / 2; }
 }
 .text { position: relative; }
 .fill { position: absolute; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0; }

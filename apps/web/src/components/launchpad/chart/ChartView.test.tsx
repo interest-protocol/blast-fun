@@ -239,8 +239,8 @@ test("compact chart exposes controls and history notices without a chart disclos
   assert.doesNotMatch(html, /Source details|type="checkbox"/);
   assert.equal(count(html, /aria-label="Chart range and interval: All · 1m"/g), 1);
   assert.doesNotMatch(html, /<select|>Refresh chart</);
-  // A handful of candles is drawn as a line: the picker stays, its candles option says why it is off.
-  assert.match(html, /aria-label="Chart style\. Candles need 10 or more trades in range\."/);
+  // A handful of candles still draws candles: there is no style to pick.
+  assert.doesNotMatch(html, /Chart style/);
   assert.doesNotMatch(text(html), /Source Network|Show 4 bonding curve candles/);
 });
 

@@ -206,11 +206,12 @@ export function walletIdentityQuery(viewer: string, getAccessToken: Token) {
 
 /** `GET /api/social/me/portfolio`: the Portfolio page, the gold card, the rail's Portfolio figures and Blast mode's bar. Wallet holdings come from the indexer; transaction completion invalidates the shared read. */
 export const PORTFOLIO_STALE_MS = 60_000;
-export function portfolioQuery(getAccessToken: Token, workspaceScope?: string, summary = true) {
+export function portfolioQuery(getAccessToken: Token, workspaceScope?: string, summary = true, wallet?: string) {
+  const key = queryKeys.me.portfolioRead(workspaceScope, summary);
   return queryOptions({
-    queryKey: queryKeys.me.portfolioRead(workspaceScope, summary),
+    queryKey: wallet ? [...key, "wallet", wallet] as const : key,
     queryFn: async ({ signal }) => {
-      const result = await fetchPortfolio({ getAccessToken, signal, summary });
+      const result = await fetchPortfolio({ getAccessToken, signal, summary, wallet });
       return unwrapApiResult(result.status === "ready" ? { status: "ok", body: result.portfolio } : result.status === "refused" ? { ...result, retryAfterSeconds: result.retryAfterSeconds ?? null } : result);
     },
     staleTime: PORTFOLIO_STALE_MS,
@@ -351,10 +352,11 @@ export function presaleViewerRequestQuery(getAccessToken: Token, request: Social
 }
 
 /** Pages live below the portfolio prefix so completed trades invalidate them too. */
-export function portfolioCoinsQuery(getAccessToken: Token, page: number, search: string, hideSmall = false, workspaceScope?: string) {
+export function portfolioCoinsQuery(getAccessToken: Token, page: number, search: string, hideSmall = false, workspaceScope?: string, wallet?: string) {
+  const key = queryKeys.me.portfolioCoins(page, search, hideSmall);
   return queryOptions({
-    queryKey: workspaceScope ? [...queryKeys.me.portfolioCoins(page, search, hideSmall), "workspace", workspaceScope] as const : queryKeys.me.portfolioCoins(page, search, hideSmall),
-    queryFn: async ({ signal }) => unwrapApiResult(await fetchPortfolioCoins({ getAccessToken, page, search, hideSmall, signal })),
+    queryKey: wallet ? [...key, "wallet", wallet] as const : workspaceScope ? [...key, "workspace", workspaceScope] as const : key,
+    queryFn: async ({ signal }) => unwrapApiResult(await fetchPortfolioCoins({ getAccessToken, page, search, hideSmall, wallet, signal })),
     staleTime: PORTFOLIO_STALE_MS,
   });
 }

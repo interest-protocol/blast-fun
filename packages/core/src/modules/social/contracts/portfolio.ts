@@ -9,7 +9,8 @@ import { SUI_OBJECT_ID_PATTERN } from "@blast/core/lib/sui/ids.ts";
  *   account_required`. There is no parameter
  *   naming an account, callsign or wallet: the wallets are the verified
  *   token's account's (`social_wallet_owners`), and query parameters are
- *   ignored except `view=summary`, which omits coin rows and returns `coin_summary`.
+ *   ignored except `wallet`, an optional verified wallet address, and `view=summary`,
+ *   which omits coin rows and returns `coin_summary`.
  * - Every answer is `Cache-Control: private, no-store`. Without a valid token
  *   it is `401 unauthorized` with no portfolio field.
  * - Every database read (social tables and `chain_read_v1` views) runs on the

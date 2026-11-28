@@ -308,23 +308,34 @@
   box-shadow: var(--sh-pop);
 }
 
-.accountMenu {
+.accountMenu,
+.accountSubmenu {
   max-height: var(--available-height, calc(100dvh - 1rem));
   overflow-y: auto;
   overscroll-behavior: contain;
 }
 
-.accountMenu :is([role="menuitem"], [role="menuitemradio"]) {
+:is(.accountMenu, .accountSubmenu) :is([role="menuitem"], [role="menuitemradio"]) {
   touch-action: manipulation;
   -webkit-user-select: none;
   user-select: none;
   -webkit-touch-callout: none;
 }
 
-.accountMenu .mitem:focus-visible { transition: none; }
+:is(.accountMenu, .accountSubmenu) .mitem:not([aria-disabled="true"], :disabled) { cursor: pointer; }
+:is(.accountMenu, .accountSubmenu) .mitem:focus-visible { transition: none; }
 
 @media (max-width: 760px) {
   .accountMenu { max-height: calc(100dvh - 1rem - env(safe-area-inset-bottom, 0px)); }
+}
+
+.menu.accountSubmenu {
+  width: min(16.75rem, calc(100vw - 1rem));
+  padding: 0.5rem;
+  border-radius: var(--r-sm);
+}
+@media (max-width: 760px) {
+  .menu.accountSubmenu { width: min(24rem, calc(100vw - 2rem)); }
 }
 
 .menu.audioMenu { width: min(13rem, calc(100vw - 1rem)); }
@@ -349,21 +360,14 @@
 .mtext { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.3; }
 .mtext b { font-weight: 600; display: flex; align-items: center; gap: 0.25rem; min-width: 0; }
 .mtext > span { font-size: 0.8125rem; color: var(--muted); font-weight: 400; }
-.accountMenuLabel {
-  padding: 0.375rem 0.625rem;
-  color: var(--muted);
-  font-size: 0.8125rem;
-}
-.accountMenuPending {
-  padding: 0.375rem 0.625rem;
-  color: var(--muted);
-  /* Keep the status out of the accessibility tree until the shared ring appears. */
-  animation: accountMenuPending var(--t4) step-end !important;
-}
-@keyframes accountMenuPending { from { visibility: hidden; } }
+.accountsTrigger[data-popup-open],
+.accountChoice[aria-checked="true"] { background: var(--track); }
+.accountMenu .mitem.accountsTrigger:focus-visible,
+.accountSubmenu .mitem.accountChoice:focus-visible { outline: 1px solid var(--focus-color); outline-offset: -0.125rem; }
+.accountChoice { min-height: 3.5rem; }
 .accountMenuDetails { display: flex; gap: 0.25rem; white-space: nowrap; }
-.accountMenuCheck { display: flex; flex: none; }
-.accountMenuCheck svg { width: 1rem; height: 1rem; }
+.accountChoiceStatus { display: grid; flex: none; width: 1.125rem; height: 1.125rem; place-items: center; }
+.accountChoiceStatus svg { display: block; width: 1rem; height: 1rem; }
 .acctMe .mtext > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .danger { color: var(--down); }
 /* OA-41: the viewer's row ends in a faint chevron (oa41 8140). */
@@ -592,7 +596,7 @@
   .rail .railCreate:hover { background: var(--control-hover); color: var(--ink); }
   .accountBalance:not([role="status"]):hover,
   .topbarAvatar:not([role="status"]):hover { background: var(--chip); }
-  .mitem:hover { background: var(--chip); }
+  .mitem:not([aria-disabled="true"], :disabled):hover { background: var(--chip); }
 }
 
 /*

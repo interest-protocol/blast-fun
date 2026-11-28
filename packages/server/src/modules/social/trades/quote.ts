@@ -1,8 +1,6 @@
 import { observeMetric } from "@blast/core/lib/metrics.ts";
 import type { ReadableDatabase } from "@blast/core/modules/database/transaction.ts";
 import {
-  SOCIAL_TRADE_BASE_COINS,
-  walletTradeGasBudget,
   SOCIAL_TRADE_QUOTE_TTL_MS,
   type SocialTradeImpactUnavailable,
   type SocialTradeNetworkFee,
@@ -59,19 +57,9 @@ export type TradeQuoteDependencies = Readonly<{
   chain: () => TradeChain;
   /** The `quote_id` sealing key (`tradeQuoteKey`); throws when the pepper is missing. */
   quoteKey: () => Buffer;
-  /**
-   * Who would pay the executed trade's network fee: Blast for a signed-in
-   * caller, an embedded wallet and a wallet session alike (owner ruling
-   * 2026-11-20 reversed OA-17). R3-31 refines it with the daily sponsorship cap.
-   */
-  feePayer?: (caller: TradeQuoteCaller) => Promise<"blast" | "wallet">;
   now?: () => number;
   trackWork?: <T>(promise: Promise<T>) => Promise<T>;
 }>;
-
-const FEE_LABELS = { blast: "Paid by Blast", wallet: "Paid from your SUI" } as const;
-
-const defaultFeePayer = async (caller: TradeQuoteCaller) => (caller.kind === null ? "wallet" as const : "blast" as const);
 
 /** One line per answered quote (never an address or an amount): its outcome, why, its impact and how long the route took. */
 function measure(fields: Readonly<Record<string, string | number | boolean | null>>): void {
@@ -203,22 +191,19 @@ export async function quoteTrade(
   if (reader === null || walletReads === null) return refused(admission!);
   const chain = reader;
 
-  const payer = await (dependencies.feePayer ?? defaultFeePayer)(caller);
   const networkFee = (estimate: bigint | null): SocialTradeNetworkFee => ({
-    payer,
-    label: FEE_LABELS[payer],
+    payer: "blast",
+    label: "Paid by Blast",
     estimate_mist: estimate === null ? null : estimate.toString(),
   });
   const router = tradeRouter;
   const sender = caller.wallet!;
-  const sui = SOCIAL_TRADE_BASE_COINS.sui;
 
   let verdict: TradeDryRun;
-  let held: bigint;
   let referenceRun: Promise<TradeDryRun | null> | null = null;
   const finishFullnode = startQuoteStage("fullnode_main");
   try {
-    held = await walletReads.held;
+    const held = await walletReads.held;
     if (held < route.amountIn) {
       finishFullnode("refused");
       return refused("insufficient_balance", { network_fee: networkFee(null), balance_failure: { reason: "input", coin_type: input.inCoin, required_atoms: route.amountIn.toString(), available_atoms: held.toString() } });
@@ -257,23 +242,6 @@ export async function quoteTrade(
 
   const priceImpact = await measuredImpact(impact, route, reference, referenceRun, verdict);
 
-  async function walletFeeRefusal(): Promise<SocialTradeQuote | null> {
-    // A wallet that pays its own fee must also hold the SUI for it.
-    if (payer !== "wallet") return null;
-    let suiHeld: bigint;
-    try {
-      suiHeld = input.inCoin === sui ? held : await observeQuoteStage("fullnode_wallet_balance", () => chain.balance(sender, sui, signal));
-    } catch {
-      measure({ outcome: "unavailable", reason: "pool_unavailable", cause: "fullnode", routeMs: quotedAtMs - started });
-      return unavailableQuote(input, quotedAtMs, "pool_unavailable");
-    }
-    const needed = walletTradeGasBudget(verdict.gasMist) + (input.inCoin === sui ? route.amountIn : 0n);
-    if (suiHeld < needed) return refused("insufficient_balance", { ...priceImpact, network_fee: networkFee(verdict.gasMist), dry_run: "passed", balance_failure: { reason: "gas", coin_type: sui, required_atoms: needed.toString(), available_atoms: suiHeld.toString() } });
-    return null;
-  }
-  const feeRefusal = await walletFeeRefusal();
-  if (feeRefusal !== null) return feeRefusal;
-
   const expiresAtMs = quotedAtMs + SOCIAL_TRADE_QUOTE_TTL_MS;
   const quoteId = sealTradeQuote(dependencies.quoteKey(), {
     accountId: caller.accountId!,
@@ -293,7 +261,7 @@ export async function quoteTrade(
   });
   measure({
     outcome: "offered",
-    payer,
+    payer: "blast",
     impactBps: priceImpact.price_impact_bps,
     impactSource: impactSource(priceImpact.price_impact_bps),
     impactUnavailable: priceImpact.price_impact_unavailable,

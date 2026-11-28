@@ -447,3 +447,5 @@ button.tpChip.on { background: var(--chip); box-shadow: none; }
 @media (max-width:760px) { [data-blast-ui] .sheet.sheet { height:min(40rem, calc(var(--sheet-viewport-height, 100dvh) * .92)); } }
 .coinList { gap:0.25rem; }
 .lrow { min-height:3.125rem; }
+.walletSwitchCta { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+.walletSwitchStatus { grid-column: 1 / -1; min-height: 2.75rem; color: var(--down); }

@@ -11,6 +11,7 @@ export const curvePaymentRequestSchema = z
     launch_id: z.string().regex(SUI_OBJECT_ID_PATTERN),
     quote_id: z.string().min(1).max(3000),
     min_meme_out: socialPositiveAtomsSchema,
+    wallet_pays_gas: z.literal(true).optional(),
   })
   .strict();
 export const curvePaymentBuildSchema = z.object({

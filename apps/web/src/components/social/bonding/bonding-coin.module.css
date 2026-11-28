@@ -40,15 +40,15 @@
 .priceControls { display: flex; align-items: center; gap: .5rem; min-width: 0; margin-inline-start: auto; }
 .marketPrice { display: grid; gap: .5rem; min-width: 0; }
 .marketPrice > span, .migrationState > span { font-size: .8125rem; color: var(--muted); }
-.marketPrice .priceChange { font-variant-numeric: tabular-nums; }
-.marketPrice .priceChange[data-direction="up"] { color: var(--up); }
-.marketPrice .priceChange[data-direction="down"] { color: var(--down); }
+.priceChange { font-variant-numeric: tabular-nums; }
+.priceChange[data-direction="up"] { color: var(--up); }
+.priceChange[data-direction="down"] { color: var(--down); }
 /* The label and the last trade each have their own line, so a price arriving or growing never moves them. */
 .marketPrice > span:first-child, .marketPrice > [data-chart-last-trade="headline"] { flex-basis: 100%; }
 .marketPrice strong { font-family: var(--display); font-size: 2.25rem; font-weight: 650; letter-spacing: -.04em; overflow-wrap: anywhere; }
 .priceHold { display: inline-grid; min-width: 0; }
 .priceHold > * { grid-area: 1 / 1; }
-.priceHold > [aria-hidden], .marketPrice [data-held] { visibility: hidden; }
+.priceHold > [aria-hidden], .marketPrice [data-held], .chartFoot [data-held] { visibility: hidden; }
 :global([data-amounts="hidden"]) .priceFigure > * { display: none; }
 :global([data-amounts="hidden"]) .priceFigure::after { content: "••••"; }
 .marketPrice .amount { flex-wrap: wrap; }
@@ -115,6 +115,7 @@
 }
 /* The price row heads the chart card: the card's own padding and surface hold it. */
 .marketChart > .marketPriceRow { padding: 0 var(--coin-chart-heading-inset, 0) .75rem; background: none; }
+.chartFoot { display: none; }
 /* A shorter laptop keeps the chart in view while long amounts can still wrap. */
 @media (min-width: 761px) and (max-height: 850px) {
   .progressCard { padding-block: .75rem; }
@@ -149,14 +150,15 @@
   .identity[data-compact] h1 { font-size: 1.5rem; }
   .identity[data-compact] .byline { padding-block-start: .125rem; }
   .identity[data-compact] .byline > :not(:global(.status)) { display: none; }
-  /* A sale page stacks the price and its change in the left column beside the currency switch, and gives the last trade a full-width line below. */
-  :global([data-sale-page]) .marketPriceRow { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: .125rem 1rem; }
-  :global([data-sale-page]) .marketPrice { display: contents; }
-  :global([data-sale-page]) .marketPrice > * { grid-column: 1; }
-  :global([data-sale-page]) .marketPrice > [data-chart-last-trade="headline"] { grid-column: 1 / -1; }
-  :global([data-sale-page]) .priceControls { grid-column: 2; grid-row: 1; }
-  /* A sale page's price explains itself on a phone; the label stays for screen readers. */
-  :global([data-sale-page]) .marketPrice > span:first-child { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  /* The price explains itself on a phone; the label stays for screen readers, and the currency switch keeps the price's line. */
+  .marketPrice > span:first-child { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .marketChart > .marketPriceRow { padding-block-end: .5rem; }
+  /* Under the chart: the creator, the coin's address and the last trade, which a wider screen shows above it. */
+  .chartFoot { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; padding: .5rem var(--coin-chart-heading-inset, 0) 0; }
+  .chartFoot > .byline { padding: 0; }
+  .chartFoot > [data-chart-last-trade] { flex: 1 1 100%; }
+  /* The last trade and the price's move read under the chart here, so the price row's copies step aside and it keeps one line. */
+  .marketChart > .marketPriceRow [data-chart-last-trade], .marketChart > .marketPriceRow .priceChange { display: none; }
   .layout { grid-template-columns: minmax(0, 1fr); gap: 1rem; grid-template-areas: "market" "details"; }
   .layout[data-no-market] { grid-template-areas: "details"; }
   .market { gap: 0.75rem; }

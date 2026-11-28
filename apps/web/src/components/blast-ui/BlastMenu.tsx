@@ -8,8 +8,10 @@ import { usePortalContainer } from "#web/components/ui-libraries/portal.ts";
 import { useHydrated } from "#web/components/ui-libraries/use-hydrated.tsx";
 
 import menuStyles from "./BlastMenu.module.css";
+import { ChevronIcon } from "./Icons.tsx";
 import type { BlastMenuPlacement } from "./menu-placement.ts";
 import { closeMenuMotion, menuMotionMode, openMenuMotion } from "./menu-motion";
+import { usePhoneLayout } from "./use-shell-prefs";
 
 export type { BlastMenuPlacement } from "./menu-placement.ts";
 
@@ -93,6 +95,45 @@ export const BlastMenuCheckboxItemIndicator = Menu.CheckboxItemIndicator;
 /** Keys that would start base-ui's typeahead: one printable character, no modifier (Space still presses the row). */
 function typeaheadKey(event: Readonly<{ key: string; ctrlKey: boolean; metaKey: boolean; altKey: boolean }>): boolean {
   return event.key.length === 1 && event.key !== " " && !event.ctrlKey && !event.metaKey && !event.altKey;
+}
+
+export function BlastSubmenu({ label, className, trigger, triggerClassName, children }: Readonly<{
+  label: string;
+  className: string;
+  trigger: ReactNode;
+  triggerClassName: string;
+  children: ReactNode;
+}>) {
+  const container = usePortalContainer();
+  const phone = usePhoneLayout();
+
+  return (
+    <Menu.SubmenuRoot highlightItemOnHover={false}>
+      <Menu.SubmenuTrigger className={clsx(triggerClassName, menuStyles.submenuTrigger)} openOnHover={false}>
+        {trigger}
+        <ChevronIcon />
+      </Menu.SubmenuTrigger>
+      <Menu.Portal container={container}>
+        <Menu.Positioner
+          align={phone ? "center" : "start"}
+          className={menuStyles.submenuPositioner}
+          collisionAvoidance={{ side: "flip", align: "shift", fallbackAxisSide: "none" }}
+          collisionPadding={8}
+          positionMethod="fixed"
+          side={phone ? "top" : "inline-start"}
+          sideOffset={phone ? 4 : 16}
+        >
+          <Menu.Popup
+            aria-label={label}
+            aria-labelledby={undefined}
+            className={clsx(className, menuStyles.popup, menuStyles.submenuPopup)}
+          >
+            {children}
+          </Menu.Popup>
+        </Menu.Positioner>
+      </Menu.Portal>
+    </Menu.SubmenuRoot>
+  );
 }
 
 export function BlastMenu<Payload>({

@@ -36,8 +36,6 @@ import { sponsorService } from "@blast/server/modules/sponsor/runtime.ts";
 import type { SponsorKindRequest } from "@blast/server/modules/sponsor/service.ts";
 import type { SponsorCaller } from "@blast/server/modules/sponsor/caller.ts";
 import type { SponsorResponse } from "@blast/core/modules/presale/contracts/web-api.ts";
-import { getSocialConfig } from "@blast/core/modules/social/config/reader.ts";
-import { tradeFeePayer } from "./swap.ts";
 import type { TradeRouter } from "./aggregator.ts";
 import type { TradeChain } from "./chain.ts";
 import { openTradeQuote } from "./quote-token.ts";
@@ -45,7 +43,6 @@ import {
   socialTradeChain,
   socialTradeQuoteKey,
   socialTradeRouter,
-  socialTradePrimary,
 } from "./runtime.ts";
 
 type Dependencies = Readonly<{
@@ -199,7 +196,7 @@ export async function buildSponsoredCurveTrade(
     tx.setSender(sender);
     kind = await tx.build({ client: dependencies.chain.client, onlyTransactionKind: true });
   }
-  // The existing sponsor enforces shared per-account, IP, platform and open-reservation budgets.
+  // The sponsor enforces the IP request rate and open-reservation limit.
   const sponsored = await dependencies.sponsor({ caller, presaleId: null, sender, kindBytes: kind, intent: "trade", ip, signal });
   return { ...sponsored, expires_at_ms: Math.min(expiresAtMs, sponsored.expires_at_ms), transaction_kind_bytes: toBase64(kind) };
 }
@@ -212,10 +209,7 @@ export function createCurveBuyRoute(
       input: CurvePaymentRequest,
       accountId: string,
       sender: string,
-      useGasCoin: boolean,
     ): Promise<CurvePaymentBuild>;
-    /** Who pays this caller's next trade gas: the routed build takes SUI from the gas coin only when the wallet pays. */
-    feePayer(caller: SocialCaller, accountId: string): Promise<"blast" | "wallet">;
     /** Blast's gas pool pays for a Privy embedded wallet and a wallet session alike (owner ruling 2026-11-20). */
     sponsor?(input: CurveSponsorRequest, accountId: string, sender: string, caller: SocialCaller, ip: string, signal: AbortSignal): Promise<CurveSponsoredBuild>;
   }>,
@@ -229,7 +223,7 @@ export function createCurveBuyRoute(
       cache: "private",
     },
     async (context) => {
-      const body = await readSocialJson(context.request, ["launch_id"], ["quote_id", "min_meme_out", "sponsor", "direction", "amount", "min_out"]);
+      const body = await readSocialJson(context.request, ["launch_id"], ["quote_id", "min_meme_out", "sponsor", "direction", "amount", "min_out", "wallet_pays_gas"]);
       const input = socialInput(body.sponsor === true ? curveSponsorRequestSchema : curvePaymentRequestSchema, body);
       const wallet = await dependencies.blastWallet(context.caller!);
       if (!wallet) throw new SocialRouteError("blast_wallet_missing");
@@ -238,10 +232,8 @@ export function createCurveBuyRoute(
         return context.json(await dependencies.sponsor(input, context.account!.account_id, normalizeSuiAddress(wallet), context.caller!, context.client.rateKey, context.request.signal));
       }
       const accountId = context.account!.account_id;
-      // Built for the payer the sponsor step will find, so a sponsored buy signs these exact command bytes.
-      const walletPays = (await dependencies.feePayer(context.caller!, accountId)) === "wallet";
       return context.json(
-        await dependencies.build(input, accountId, normalizeSuiAddress(wallet), walletPays),
+        await dependencies.build(input, accountId, normalizeSuiAddress(wallet)),
         200,
       );
     },
@@ -252,7 +244,7 @@ export const routedCurveBuy = (request: Request, client: ClientAddress) =>
   createCurveBuyRoute({
     kit: sharedSocialRouteKit(),
     blastWallet: blastWalletOf,
-    async build(input, accountId, sender, useGasCoin) {
+    async build(input, accountId, sender) {
       const config = configuredSigningChain();
       if (!config) throw new SocialRouteError("service_unavailable");
       return buildRoutedCurveBuy(
@@ -263,17 +255,14 @@ export const routedCurveBuy = (request: Request, client: ClientAddress) =>
           manifest: config.manifest,
           mode: config.mode,
           now: Date.now(),
-          useGasCoin,
+          useGasCoin: input.wallet_pays_gas === true,
         },
         input,
         accountId,
         sender,
       );
     },
-    feePayer: async (caller, accountId) =>
-      tradeFeePayer(socialTradePrimary(), await getSocialConfig(), { kind: caller.kind, accountId }, Date.now()),
     async sponsor(input, accountId, sender, caller, ip, signal) {
-      if (await tradeFeePayer(socialTradePrimary(), await getSocialConfig(), { kind: caller.kind, accountId }, Date.now()) !== "blast") throw new SocialRouteError("sponsorship_unavailable");
       const config = configuredSigningChain();
       if (!config) throw new SocialRouteError("service_unavailable");
       return buildSponsoredCurveTrade({

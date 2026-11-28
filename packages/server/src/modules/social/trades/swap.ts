@@ -12,7 +12,6 @@ import { fromBase64, normalizeSuiAddress, toBase64 } from "@mysten/sui/utils";
 import { recordMetric } from "@blast/core/lib/metrics.ts";
 import type { ModuleTransaction, ReadableDatabase } from "@blast/core/modules/database/transaction.ts";
 import type { SponsorKindRequest } from "@blast/server/modules/sponsor/service.ts";
-import type { SocialConfig } from "@blast/core/modules/social/contracts/config.ts";
 import {
   socialTradeInputSchema,
   SOCIAL_TRADE_BASE_COINS,
@@ -47,9 +46,8 @@ export { filledOut } from "./receipts.ts";
  *
  * Who pays the network fee (OA-25 Q12; owner ruling 2026-11-20 reversed
  * OA-17): Blast's gas pool, for an embedded Blast wallet and a wallet session
- * alike, up to `trade_sponsor_daily_cap` sponsored trades per account a UTC
- * day, through the presale sponsor's in-process `trade` intent. Past the cap, or with the sponsor down, the
- * route answers `sponsorship_unavailable` with the fee, and the same request
+ * alike, through the sponsor's in-process `trade` intent. If sponsorship is
+ * unavailable, the route answers `sponsorship_unavailable` with the fee, and the same request
  * with `accept_fee` builds a trade the wallet pays for: never a refusal to
  * trade.
  *
@@ -143,7 +141,6 @@ export type SocialSwapRoutesDependencies = Readonly<{
   /** The `quote_id` key (R3-30). */
   quoteKey: () => Buffer;
   sponsor: () => TradeSponsor;
-  config: () => Promise<SocialConfig>;
   transactions: () => TradeLookup;
   blastWallet: (caller: SocialCaller) => Promise<string | null>;
   now?: () => number;
@@ -200,44 +197,6 @@ export const TRADE_COLUMNS = `trade_id::text AS trade_id, account_id::text AS ac
 export const TRADE_BY_KEY_SQL = `SELECT ${TRADE_COLUMNS} FROM social_swap_intents WHERE account_id = $1::uuid AND idempotency_key = $2`;
 /** One trade of the account, by its primary key, locked for its settlement. */
 export const TRADE_LOCK_SQL = `SELECT ${TRADE_COLUMNS} FROM social_swap_intents WHERE trade_id = $1::uuid AND account_id = $2::uuid FOR UPDATE`;
-/**
- * The trades Blast sponsored for the account since `$2` (the UTC day's start),
- * by the partial index, counted up to `$3` (the cap): the answer only has to
- * say whether the cap is reached, so no account's history costs more than
- * the cap's rows. A trade that failed on chain counts, since Blast's sponsor
- * paid its gas (review L2); only one that never landed (`expired`) does not.
- * Curve reservations share the cap; swap reservations already in the ledger count once.
- * A reservation is keyed by the caller's `sponsorAccountKey`: one of the
- * account's Privy DIDs, or `sui:<address>` for a wallet session signed in with
- * any address the account holds.
- */
-export const TRADE_SPONSORED_SINCE_SQL = `SELECT count(*)::int AS sponsored FROM (
-    SELECT 1 FROM social_swap_intents
-    WHERE account_id = $1::uuid AND fee_payer = 'blast' AND failure_code IS DISTINCT FROM 'expired' AND created_at_ms >= $2
-    UNION ALL
-    SELECT 1 FROM presale_sponsor_reservations r
-    WHERE r.intent = 'trade' AND r.created_at >= to_timestamp($2::double precision / 1000)
-      AND r.state NOT IN ('reservation_failed', 'expired')
-      AND (r.submitted_at IS NOT NULL OR r.expires_at > to_timestamp($4::double precision / 1000))
-      AND r.privy_did IN (
-        SELECT a.privy_did FROM social_accounts a WHERE a.account_id = $1::uuid
-        UNION
-        SELECT i.provider_subject FROM social_accounts a
-        JOIN mission_control_account_identities i ON i.profile_id = a.profile_id AND i.provider = 'privy'
-        WHERE a.account_id = $1::uuid
-        UNION
-        SELECT 'sui:' || a.sui_address FROM social_accounts a WHERE a.account_id = $1::uuid AND a.sui_address IS NOT NULL
-        UNION
-        SELECT 'sui:' || w.address FROM social_account_wallets w WHERE w.account_id = $1::uuid
-        UNION
-        SELECT 'sui:' || w.sui_address FROM social_accounts a
-        JOIN mission_control_account_wallets w ON w.profile_id = a.profile_id
-        WHERE a.account_id = $1::uuid
-      )
-      AND NOT EXISTS (SELECT 1 FROM social_swap_intents s WHERE s.reservation_id = r.id)
-    LIMIT $3
-  ) sponsored`;
-
 export const TRADE_INSERT_SQL = `INSERT INTO social_swap_intents (trade_id, account_id, idempotency_key, quote_digest, side, sender, in_coin, out_coin,
     amount_in, amount_out, min_out, slippage_bps, route, route_label, quote_expires_at_ms, usd_value, fee_payer, reservation_id, tx_bytes,
     digest, expires_at_ms, state, failure_code, created_at_ms, settled_at_ms, balance_failure)
@@ -250,34 +209,6 @@ export const TRADE_SETTLE_SQL = `UPDATE social_swap_intents SET state = $2, fail
     settled_at_ms = GREATEST($5::bigint, created_at_ms)
   WHERE trade_id = $1::uuid AND state = 'built'
   RETURNING ${TRADE_COLUMNS}`;
-
-/** The start of `nowMs`'s UTC day. */
-export function utcDayStartMs(nowMs: number): number {
-  return nowMs - (nowMs % 86_400_000);
-}
-
-/** The account's sponsored trades today, counted up to `limit`. */
-export async function sponsoredToday(db: ReadableDatabase, accountId: string, nowMs: number, limit: number): Promise<number> {
-  const { rows } = await db.read<{ sponsored: number }>(TRADE_SPONSORED_SINCE_SQL, [accountId, utcDayStartMs(nowMs), limit, nowMs]);
-  return Number(rows[0]?.sponsored ?? 0);
-}
-
-/**
- * Who would pay an account's next trade's fee (the quote's `network_fee`,
- * R3-30, refined): Blast for a signed-in caller (a Privy session's embedded
- * wallet or a wallet session) while the account is under today's cap, the
- * wallet otherwise.
- */
-export async function tradeFeePayer(
-  db: ReadableDatabase,
-  config: SocialConfig,
-  caller: Readonly<{ kind: "privy" | "wallet" | null; accountId: string | null }>,
-  nowMs: number,
-): Promise<"blast" | "wallet"> {
-  if (caller.kind === null || caller.accountId === null || config.trade_sponsor_daily_cap <= 0) return "wallet";
-  const cap = config.trade_sponsor_daily_cap;
-  return (await sponsoredToday(db, caller.accountId, nowMs, cap)) < cap ? "blast" : "wallet";
-}
 
 /** The trade as the routes answer it. */
 export function tradeBody(row: TradeRow): SocialTrade {
@@ -425,7 +356,6 @@ export function createSocialSwapRoutes(dependencies: SocialSwapRoutesDependencie
   async function sponsoredSwap(quote: SealedTradeQuote, caller: SocialCaller, kind: Uint8Array, ip: string, signal: AbortSignal, gas: bigint, acceptFee: boolean): Promise<Built | null> {
     const sender = quote.sender;
     try {
-      // The sponsor counts this client IP, the account's daily share and the platform's cap after its dry run.
       const sponsored = await dependencies.sponsor().sponsor({
         caller,
         presaleId: null,
@@ -445,18 +375,9 @@ export function createSocialSwapRoutes(dependencies: SocialSwapRoutesDependencie
     }
   }
 
-  async function fundedSwap(quote: SealedTradeQuote, caller: SocialCaller, accountId: string, acceptFee: boolean, ip: string, signal: AbortSignal, kind: Uint8Array, gas: bigint): Promise<Built | null> {
-    if ((await tradeFeePayer(database(), await dependencies.config(), { kind: caller.kind, accountId }, now())) !== "blast") {
-      if (!acceptFee) throw new FeeRequired(gas);
-      return null;
-    }
-    return sponsoredSwap(quote, caller, kind, ip, signal, gas, acceptFee);
-  }
-
   async function build(
     quote: SealedTradeQuote,
     caller: SocialCaller,
-    accountId: string,
     acceptFee: boolean,
     ip: string,
     signal: AbortSignal,
@@ -493,7 +414,7 @@ export function createSocialSwapRoutes(dependencies: SocialSwapRoutesDependencie
       return "pool_unavailable";
     }
 
-    const sponsored = await fundedSwap(quote, caller, accountId, acceptFee, ip, signal, kind, gas);
+    const sponsored = await sponsoredSwap(quote, caller, kind, ip, signal, gas, acceptFee);
     if (sponsored) return sponsored;
 
     return buildWalletSwap(quote, chain, router, held, price, gas, signal);
@@ -518,13 +439,13 @@ export function createSocialSwapRoutes(dependencies: SocialSwapRoutesDependencie
     return quote;
   }
 
-  async function buildCurrentQuote(quote: SealedTradeQuote, blastFeeBps: number, createdAtMs: number, caller: SocialCaller, accountId: string, acceptFee: boolean, context: SocialRequestContext): Promise<Built | Refusal> {
+  async function buildCurrentQuote(quote: SealedTradeQuote, blastFeeBps: number, createdAtMs: number, caller: SocialCaller, acceptFee: boolean, context: SocialRequestContext): Promise<Built | Refusal> {
     let outcome: Built | Refusal;
     // A quote priced at another Blast fee rate than the one charged now is stale: the trade asks for a new quote.
     if (createdAtMs >= quote.expiresAtMs || quote.blastFeeBps !== blastFeeBps) outcome = "quote_expired";
     else {
       try {
-        outcome = await build(quote, caller, accountId, acceptFee, context.client.rateKey, context.request.signal);
+        outcome = await build(quote, caller, acceptFee, context.client.rateKey, context.request.signal);
       } catch (error) {
         if (!(error instanceof FeeRequired)) throw error;
         recordMetric("social.trade", { step: "create", outcome: "fee_required" });
@@ -571,7 +492,7 @@ export function createSocialSwapRoutes(dependencies: SocialSwapRoutesDependencie
       usd: inCoin && inCoin.usdPrice !== null ? atomsToUsd(quote.amountIn.toString(), inCoin.decimals, inCoin.usdPrice) : null,
     };
 
-    const outcome = await buildCurrentQuote(quote, blastFeeBps, createdAtMs, caller, accountId, acceptFee, context);
+    const outcome = await buildCurrentQuote(quote, blastFeeBps, createdAtMs, caller, acceptFee, context);
 
     const { built, refusal, balanceFailure } = preparationFacts(outcome);
     const digest = built ? TransactionDataBuilder.getDigestFromBytes(built.bytes) : null;

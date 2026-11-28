@@ -327,8 +327,8 @@ export const SOCIAL_TRADE_BASE_COINS = Object.freeze({
  *   (`status: "failed"` with its code; nothing was built or sent);
  * - 200: this key was already answered: the first answer, never a second build;
  * - 409 `trade_conflict`: this key was used for another quote;
- * - 409 `sponsorship_unavailable` with `fee_mist`: Blast will not pay the fee
- *   today (the daily cap, or the sponsor is down); send again with
+ * - 409 `sponsorship_unavailable` with `fee_mist`: Blast sponsorship is
+ *   unavailable; send again with
  *   `accept_fee: true` to pay it from the wallet's SUI. Nothing is recorded.
  *
  * Refusals that record a failed trade answer 201 with `status: "failed"` and

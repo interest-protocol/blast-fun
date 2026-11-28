@@ -9,14 +9,13 @@ import { runtimeConfig } from "@blast/server/config/runtime-config.ts";
 import { autocommitReader, type ReadableDatabase } from "@blast/core/modules/database/transaction.ts";
 import { sponsorService } from "@blast/server/modules/sponsor/runtime.ts";
 import { blastWalletOf } from "@blast/server/modules/social/coins/runtime.ts";
-import { getSocialConfig } from "@blast/core/modules/social/config/reader.ts";
 import { sharedSocialRouteKit, socialMainnetClient } from "@blast/server/modules/social/route-kit/shared-runtime.ts";
 import { createCetusTradeRouter, type TradeRouter } from "@blast/server/modules/social/trades/aggregator.ts";
 import { createAftermathDaoRouter, fullnodeAftermathDaoPools, routeByVenue } from "@blast/server/modules/social/trades/aftermath.ts";
 import { fullnodeTradeChain, type TradeChain } from "@blast/server/modules/social/trades/chain.ts";
 import { tradeQuoteKey } from "@blast/server/modules/social/trades/quote-token.ts";
 import { createSocialTradeRoutes, type SocialTradeRoutes } from "@blast/server/modules/social/trades/route.ts";
-import { createSocialSwapRoutes, fullnodeTradeLookup, tradeFeePayer, type SocialSwapRoutes } from "@blast/server/modules/social/trades/swap.ts";
+import { createSocialSwapRoutes, fullnodeTradeLookup, type SocialSwapRoutes } from "@blast/server/modules/social/trades/swap.ts";
 
 /** The mainnet node (`socialMainnetClient`), one per process: the swap builder's coin and pool reads and the dry runs. */
 function mainnet(): SuiGrpcClient {
@@ -65,11 +64,11 @@ export function socialTradeQuoteKey(): Buffer {
 }
 
 /** Trades on the primary: personal, and an owner sees what they just did. */
-export function socialTradePrimary(): ReadableDatabase {
+function socialTradePrimary(): ReadableDatabase {
   return autocommitReader(primaryPool(), "social", { label: "social.trades-primary" });
 }
 
-/** The production quote route over the shared social kit. Its fee line counts today's sponsored trades (R3-31). */
+/** The production quote route over the shared social kit. */
 export function socialTradeRoutes(): SocialTradeRoutes {
   return processSingleton("social.trade-routes", () =>
     createSocialTradeRoutes({
@@ -80,14 +79,13 @@ export function socialTradeRoutes(): SocialTradeRoutes {
       quoteKey: () => socialTradeQuoteKey(),
       blastWallet: blastWalletOf,
       trackWork: trackRequestWork,
-      feePayer: async (caller) => tradeFeePayer(socialTradePrimary(), await getSocialConfig(), caller, Date.now()),
     }));
 }
 
 /**
  * The production swap routes (R3-31): the same router, fullnode and quote
  * key, the primary, the presale sponsor in-process (its gas pool, reservations
- * and deployment gate), and the social config's daily cap.
+ * and deployment gate).
  */
 export function socialSwapRoutes(): SocialSwapRoutes {
   return processSingleton("social.swap-routes", () =>
@@ -98,7 +96,6 @@ export function socialSwapRoutes(): SocialSwapRoutes {
       chain: socialTradeChain,
       quoteKey: () => socialTradeQuoteKey(),
       sponsor: sponsorService,
-      config: getSocialConfig,
       transactions: () => fullnodeTradeLookup(mainnet),
       blastWallet: blastWalletOf,
     }));
