@@ -9,6 +9,9 @@ const queries = `export function portfolioQuery() {
   return { queryKey: ["blast", "me", "portfolio", "holdings"], queryFn: async () => { globalThis.reads += 1; return globalThis.portfolio; } };
 }`;
 registerHooks({ resolve(specifier, context, next) {
+  if (specifier === "#web/components/social/SignInGate.tsx" && /\/(bonding\/HolderLine|trade\/held-balance)\.tsx$/.test(context.parentURL ?? "")) {
+    return { shortCircuit: true, url: `data:text/javascript,${encodeURIComponent(viewer)}` };
+  }
   if (context.parentURL?.endsWith("/bonding/HolderLine.tsx")) {
     if (specifier === "#web/components/social/SignInGate.tsx") return { shortCircuit: true, url: `data:text/javascript,${encodeURIComponent(viewer)}` };
     if (specifier === "#web/components/social/queries.ts") return { shortCircuit: true, url: `data:text/javascript,${encodeURIComponent(queries)}` };
@@ -70,6 +73,15 @@ test("a signed-in holder reads the portfolio once per open, and once more after 
   await render(null);
   assert.equal(container.textContent, "");
   assert.equal(world.reads, 2);
+});
+
+test("another account starts with no balance, so nothing is read for it until its own rail reads", async () => {
+  const { container, render } = await mount(true, 10n);
+  assert.equal(world.reads, 1);
+  world.viewer = { signedIn: true, callsign: "other", getAccessToken: async () => "token" };
+  await render(10n);
+  assert.equal(container.textContent, "");
+  assert.equal(world.reads, 1);
 });
 
 test("nothing is read for a signed-out viewer, a non-holder, or before the rail knows the balance", async () => {

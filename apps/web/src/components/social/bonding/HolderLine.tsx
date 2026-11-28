@@ -21,7 +21,7 @@ const HOLDER_STALE_MS = 30 * 60_000;
  * full portfolio (Blast mode's coin panels read the same entry). It reads only for a signed-in
  * trader whose wallet a trade rail on screen has seen holding this coin: once per page open, and once
  * again after each of their own committed trades. No polling and no read on focus. Without a portfolio,
- * or once the rail reads no balance (a sell of all of it), it shows nothing. While the read is in flight
+ * or until a rail has read this account holding the coin (and after a sell of all of it), it shows nothing. While the read is in flight
  * the line keeps its space unseen, so nothing moves when it lands.
  */
 export function HolderLine({ coinType, capUsd }: Readonly<{ coinType: string | null; capUsd: string | null }>) {
@@ -37,9 +37,9 @@ export function HolderLine({ coinType, capUsd }: Readonly<{ coinType: string | n
     refetchOnReconnect: false,
     retry: false,
   }, useAppQueryClient());
-  if (!coinType || !supply || amountsHidden || !signedIn || held === "none") return null;
+  if (!coinType || !supply || amountsHidden || !signedIn || held !== "holds") return null;
   const line = data?.wallet_sync?.status === "ready" ? holderLine(positionOf(data.coins, coinType), supply.atoms, capUsd) : null;
-  if (!line) return held === "holds" && isFetching ? <span className={styles.holderLine} data-holder-line="" aria-hidden /> : null;
+  if (!line) return isFetching ? <span className={styles.holderLine} data-holder-line="" aria-hidden /> : null;
   return <span className={styles.holderLine} data-holder-line="">
     <span>In at {line.entry}</span>
     <span className={styles.priceChange} data-direction={line.tone === "flat" ? undefined : line.tone}>{line.pnl} · {line.percent}</span>
