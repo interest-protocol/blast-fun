@@ -31,7 +31,7 @@ export function CoinChart({
   livePreset,
 }: Readonly<{ source: ChartSource; compact?: boolean; coinType: string; initialControls: ChartControls; initialSnapshot?: ChartSnapshot; livePreset: boolean }>) {
   const currency = useCoinPriceCurrency();
-  const standaloneRate = useQuoteUsd(currency ? null : source.quoteType ?? null);
+  const standaloneRate = useQuoteUsd(currency ? null : source.quoteType ?? null, { live: true });
   const quoteUsd = currency ? currency.quoteUsd : standaloneRate;
   const [entry] = useState(initialSnapshot);
   const { controls, ready, commit, chosen } = useCoinChartControls(compact, initialControls, true, livePreset, entry !== undefined);
