@@ -14,6 +14,8 @@ type SegmentedProps<Key extends string | number | boolean> = Readonly<{
   options: readonly SegmentedOption<Key>[];
   value: Key;
   onChange: (key: Key) => void;
+  /** A choice the trader is about to pick: a pointer rests on it, a finger lands on it, or it takes keyboard focus. */
+  onIntent?: (key: Key) => void;
   /** A tablist with roving focus and arrow keys; otherwise a group of pressed buttons. */
   tabs?: boolean;
   /** `md` 38 (32px segments), `sm` 34, `chip` 36, `toolbar` 28, `touch` 44px targets for icon segments. */
@@ -40,7 +42,7 @@ type SegmentedProps<Key extends string | number | boolean> = Readonly<{
  * and a callback; the track, thumb, sizes and keyboard model live here.
  */
 export function Segmented<Key extends string | number | boolean>({
-  label, options, value, onChange, tabs = false, size = "md", variant, stretch = false, wrap = false, disabled = false, optionDisabled, tabId, panelId, className, id,
+  label, options, value, onChange, onIntent, tabs = false, size = "md", variant, stretch = false, wrap = false, disabled = false, optionDisabled, tabId, panelId, className, id,
 }: SegmentedProps<Key>) {
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (!tabs) return;
@@ -80,6 +82,8 @@ export function Segmented<Key extends string | number | boolean>({
         // With no current tab (the shown choice lives outside the row), the first tab keeps the row in the Tab order.
         const entry = on || (index === firstOpen && !options.some(([option]) => option === value));
         const off = disabled || (optionDisabled?.(key) ?? false);
+        const live = !on && !off;
+        const intent = () => { if (live) onIntent?.(key); };
         return (
           <button
             aria-controls={tabs && panelId ? panelId(key) : undefined}
@@ -88,7 +92,10 @@ export function Segmented<Key extends string | number | boolean>({
             disabled={off}
             id={tabs && tabId ? tabId(key) : undefined}
             key={String(key)}
-            onClick={() => { if (!on && !off) onChange(key); }}
+            onClick={() => { if (live) onChange(key); }}
+            onFocus={intent}
+            onPointerDown={intent}
+            onPointerEnter={intent}
             role={tabs ? "tab" : undefined}
             tabIndex={tabs && !entry ? -1 : undefined}
             type="button"
