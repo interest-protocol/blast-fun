@@ -316,12 +316,13 @@
 }
 /*
  * A phone gives the price pane up on a short screen, so the time axis still ends above the Trade dock:
- * 745 px is the shell header, the coin's row, the price and timeframe rows, a 290 px plot and the dock
- * with the tab bar. `svh` is the screen with the browser's bars shown, and it holds still while they
- * slide, so scrolling never resizes the chart. At most 88 px goes: the price pane keeps about 112 px, about 55 px of candles under the Traders' faces.
+ * 772 px is the shell header, the back link, the coin's row, the price and timeframe rows, a 290 px plot
+ * and the taller of the two docks (a sale's Sell and Buy) with the tab bar. `svh` is the screen with the
+ * browser's bars shown, and it holds still while they slide, so scrolling never resizes the chart.
+ * At most 112 px goes: the price pane keeps about 100 px of candles over the volume and the time axis.
  */
 @media (max-width: 760px) {
-  .chart[data-compact-chart] { --kline-grow: clamp(-88px, 100svh - 745px, 0px); }
+  .chart[data-compact-chart] { --kline-grow: clamp(-112px, 100svh - 772px, 0px); }
 }
 
 .chart .chartEmpty { justify-content: center; background: transparent; }

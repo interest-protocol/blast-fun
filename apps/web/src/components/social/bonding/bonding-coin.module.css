@@ -40,9 +40,9 @@
 .priceControls { display: flex; align-items: center; gap: .5rem; min-width: 0; margin-inline-start: auto; }
 .marketPrice { display: grid; gap: .5rem; min-width: 0; }
 .marketPrice > span, .migrationState > span { font-size: .8125rem; color: var(--muted); }
-.marketPrice .priceChange { font-variant-numeric: tabular-nums; }
-.marketPrice .priceChange[data-direction="up"] { color: var(--up); }
-.marketPrice .priceChange[data-direction="down"] { color: var(--down); }
+.priceChange { font-variant-numeric: tabular-nums; }
+.priceChange[data-direction="up"] { color: var(--up); }
+.priceChange[data-direction="down"] { color: var(--down); }
 /* The label and the last trade each have their own line, so a price arriving or growing never moves them. */
 .marketPrice > span:first-child, .marketPrice > [data-chart-last-trade="headline"] { flex-basis: 100%; }
 .marketPrice strong { font-family: var(--display); font-size: 2.25rem; font-weight: 650; letter-spacing: -.04em; overflow-wrap: anywhere; }
@@ -157,8 +157,8 @@
   .chartFoot { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; padding: .5rem var(--coin-chart-heading-inset, 0) 0; }
   .chartFoot > .byline { padding: 0; }
   .chartFoot > [data-chart-last-trade] { flex: 1 1 100%; }
-  /* The last trade reads under the chart here, so the price row's copy steps aside. */
-  .marketChart > .marketPriceRow [data-chart-last-trade] { display: none; }
+  /* The last trade and the price's move read under the chart here, so the price row's copies step aside and it keeps one line. */
+  .marketChart > .marketPriceRow [data-chart-last-trade], .marketChart > .marketPriceRow .priceChange { display: none; }
   .layout { grid-template-columns: minmax(0, 1fr); gap: 1rem; grid-template-areas: "market" "details"; }
   .layout[data-no-market] { grid-template-areas: "details"; }
   .market { gap: 0.75rem; }

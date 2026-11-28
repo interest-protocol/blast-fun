@@ -95,8 +95,17 @@ function showsUnit(switchShown: boolean, priceNamesUnit: boolean, amountsHidden:
  * row keeps that figure's space, unseen, so the content below does not move.
  * `priceNamesUnit`: the price is a figure that shows its unit ($ or the quote symbol), not a placeholder.
  */
+export type PriceMoveLabel = Readonly<{ value: ReactNode; direction?: "up" | "down" }>;
+
+/** The price's move, green or red; hidden with the trader's amounts. `held`: kept unseen while an older price holds the slot. */
+export function PriceChange({ change, held }: Readonly<{ change: PriceMoveLabel; held?: true }>) {
+  const { amountsHidden } = useShellPrefs();
+  if (amountsHidden) return null;
+  return <span className={styles.priceChange} data-direction={change.direction} data-held={held} aria-hidden={held}>{change.value}</span>;
+}
+
 export function MarketPriceRow({ price, reserve, priceLabel = "Price", change, activity, showCurrency = true, priceNamesUnit = false }: Readonly<{
-  price: ReactNode; reserve?: ReactNode; priceLabel?: string; change?: Readonly<{ value: ReactNode; direction?: "up" | "down" }> | null;
+  price: ReactNode; reserve?: ReactNode; priceLabel?: string; change?: PriceMoveLabel | null;
   activity?: ReactNode; showCurrency?: boolean; priceNamesUnit?: boolean;
 }>) {
   const { amountsHidden } = useShellPrefs();
@@ -108,8 +117,7 @@ export function MarketPriceRow({ price, reserve, priceLabel = "Price", change, a
   return <div className={styles.marketPriceRow} data-unit-shown={showsUnit(currency != null, priceNamesUnit, amountsHidden)}>
     {hasPrice || activity ? <div className={styles.marketPrice}>
       {hasPrice && <><span>{priceLabel}</span><PriceSlot price={price} reserve={reserve} /></>}
-      {hasPrice && change && !amountsHidden && <span className={styles.priceChange} data-direction={change.direction}
-        data-held={held} aria-hidden={held}>{change.value}</span>}
+      {hasPrice && change && <PriceChange change={change} held={held} />}
       {activity}
     </div> : null}
     {currency && <div className={styles.priceControls}>
