@@ -70,11 +70,33 @@ export function sourceAddressKey(chain: BridgeChain, address: string): string {
   return chain === "solana" ? address : address.toLowerCase();
 }
 
-export type DestinationToken = Readonly<{ symbol: "SUI" | "USDC"; decimals: number; coinType: string; logo: string }>;
+export type DestinationToken = Readonly<{
+  symbol: "SUI" | "USDC";
+  decimals: number;
+  coinType: string;
+  /** The coin's two metadata objects on Sui mainnet (read 2026-11-28). An auction order signs one of them as the coin to deliver. */
+  metadataId: string;
+  currencyId: string;
+  logo: string;
+}>;
 
 export const DESTINATIONS: readonly DestinationToken[] = [
-  { symbol: "SUI", decimals: 9, coinType: "0x2::sui::SUI", logo: LOGO.sui },
-  { symbol: "USDC", decimals: 6, coinType: USDC_COIN_TYPE, logo: LOGO.usdc },
+  {
+    symbol: "SUI",
+    decimals: 9,
+    coinType: "0x2::sui::SUI",
+    metadataId: "0x9258181f5ceac8dbffb7030890243caed69a9599d2886d957a9cb7656af3bdb3",
+    currencyId: "0xf256d3fb6a50eaa748d94335b34f2982fbc3b63ceec78cafaa29ebc9ebaf2bbc",
+    logo: LOGO.sui,
+  },
+  {
+    symbol: "USDC",
+    decimals: 6,
+    coinType: USDC_COIN_TYPE,
+    metadataId: "0x69b7a7c3c200439c1b5f3b19d7d495d5966d5f08de66c69276152f8db3992ec6",
+    currencyId: "0x75cfbbf8c962d542e99a1d15731e6069f60a00db895407785b15d14f606f2b4a",
+    logo: LOGO.usdc,
+  },
 ];
 
 /** Typed text as atoms; null when empty, unreadable or zero. */
@@ -159,14 +181,18 @@ export function displayAmount(value: number | string, symbol: string): string {
   return Number.isFinite(number) ? `${amountText(number, 9)}\u00a0${symbol}` : `${value}\u00a0${symbol}`;
 }
 
+function etaText(seconds: number): string {
+  return seconds < 60 ? `About ${Math.max(seconds, 1)}\u00a0s` : `About ${Math.round(seconds / 60)}\u00a0min`;
+}
+
 /** Rows under the amount: what arrives, the floor (slippage included), Mayan's fee and time. */
 export function quoteRows(quote: QuoteFacts, from: SourceToken, to: DestinationToken): QuoteRows {
-  const seconds = quote.etaSeconds ?? 0;
+  const seconds = quote.etaSeconds;
   return {
     amount: amountText(quote.expectedAmountOut, to.decimals),
     minimum: `${amountText(quote.minReceived, to.decimals)}\u00a0${to.symbol}`,
     fee: feeText(quote, from),
-    eta: seconds < 60 ? `About ${Math.max(seconds, 1)}\u00a0s` : `About ${Math.round(seconds / 60)}\u00a0min`,
+    eta: typeof seconds === "number" ? etaText(seconds) : NO_VALUE,
   };
 }
 

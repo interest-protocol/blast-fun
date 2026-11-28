@@ -74,9 +74,20 @@ const DEADLINE_HEADROOM_MS = 60_000;
 const usdcAtoms = (value: number) => Math.round(value * 1e6);
 
 /**
+ * Our check that an auction order signs the chosen coin. `toToken.contract`
+ * is not what the SDK signs for Sui: MCTP signs the coin's metadata id and
+ * Fast MCTP its currency id.
+ */
+function signsChosenCoin(quote: Quote, to: DestinationToken): boolean {
+  const [signed, expected] = quote.type === "MCTP" ? [quote.toToken.verifiedAddress, to.metadataId] : [quote.toToken.currencyId, to.currencyId];
+  return typeof signed === "string" && signed !== "" && normalizeSuiAddress(signed) === expected;
+}
+
+/**
  * Our check that what the SDK signs covers the minimum the card shows. An
  * auction order signs `minAmountOut` (SUI is cut to eight decimals). Without an
- * auction no minimum is signed: Circle moves USDC, less the signed fees.
+ * auction no minimum is signed: Circle moves USDC, less the signed fees. That
+ * is an upper bound: the contract also takes Mayan's protocol fee.
  */
 function coversShownMinimum(quote: Quote, to: DestinationToken): boolean {
   if (quote.hasAuction) return quote.minAmountOut >= quote.minReceived;
@@ -88,6 +99,15 @@ function coversShownMinimum(quote: Quote, to: DestinationToken): boolean {
   const redeem = Math.max(usdcAtoms(quote.redeemRelayerFee), Number(quote.redeemRelayerFee64 ?? 0));
   const circle = Number(quote.circleMaxFee64 ?? 0);
   return bridged - redeem - circle >= usdcAtoms(quote.minReceived);
+}
+
+/** Our checks on what the SDK signs for the MCTP routes. A Blink order is read in full before sending. */
+function mctpRefusal(quote: Quote, to: DestinationToken, now: number): string | null {
+  // On EVM the SDK can take this in the source chain's own coin, and the card's fee leaves it out.
+  if (quote.bridgeFee !== 0) return "unexpected bridge fee";
+  if (quote.hasAuction && !signsChosenCoin(quote, to)) return "wrong destination coin";
+  if (!(Number(quote.deadline64) * 1000 > now + DEADLINE_HEADROOM_MS)) return "expired";
+  return coversShownMinimum(quote, to) ? null : "unsigned minimum output";
 }
 
 /**
@@ -109,8 +129,8 @@ export function checkQuote(quote: Quote, ask: QuoteAsk, now: number): GuardResul
   if (!(quote.minReceived > 0 && quote.minReceived <= quote.expectedAmountOut)) return refused("wrong minimum output");
   if (!(quote.slippageBps >= 0 && quote.slippageBps <= MAX_SLIPPAGE_BPS)) return refused("wrong slippage");
   if (quote.type === "BLINK") return PASSED;
-  if (!(Number(quote.deadline64) * 1000 > now + DEADLINE_HEADROOM_MS)) return refused("expired");
-  return coversShownMinimum(quote, ask.to) ? PASSED : refused("unsigned minimum output");
+  const refusal = mctpRefusal(quote, ask.to, now);
+  return refusal ? refused(refusal) : PASSED;
 }
 
 /**

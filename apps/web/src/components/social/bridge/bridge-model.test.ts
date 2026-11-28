@@ -51,6 +51,7 @@ test("quote rows: tiny fees, missing USD and time", () => {
   const unknownFee = quoteRows({ expectedAmountOut: 1, minReceived: 1, fee: null, etaSeconds: 150 }, ETH, DESTINATIONS[0]!);
   assert.deepEqual([unknownFee.eta, unknownFee.fee], ["About 3\u00a0min", "\u2014"]);
   assert.equal(quoteRows({ expectedAmountOut: 1, minReceived: 1, fee: 0, etaSeconds: 1 }, USDC, DESTINATIONS[1]!).fee, "$0.00");
+  assert.equal(quoteRows({ expectedAmountOut: 1, minReceived: 1 }, USDC, DESTINATIONS[1]!).eta, "—", "no time given, no time shown");
 });
 
 test("amounts drop digits instead of rounding up, even where the browser ignores roundingMode", () => {

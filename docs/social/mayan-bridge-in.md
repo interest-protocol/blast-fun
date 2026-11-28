@@ -365,13 +365,25 @@ wherever Bridge is on.
   gasless, a minimum no higher than the estimate, and slippage of at most 500 bps
   (the most Mayan's price API documents for `slippageBps`). For MCTP and Fast
   MCTP, also:
+  - the quote's `bridgeFee` is 0. On EVM the SDK can take it in the source
+    chain's own coin, and the Fee row leaves it out;
+  - for an auction order, the coin ID the SDK signs is the chosen coin's: MCTP
+    signs `toToken.verifiedAddress` (the coin's metadata object on Sui), Fast
+    MCTP signs `toToken.currencyId`. Neither is `toToken.contract`, so the card
+    pins both IDs for SUI and USDC (read from Sui mainnet, 2026-11-28). SDK
+    16.1.0;
   - at least 60 seconds are left before the quote's deadline;
   - what the SDK signs covers the minimum on screen. An auction order signs
     `minAmountOut`. Without an auction no minimum is signed, so the coin on Sui
     must be USDC, and the amount bridged (or the signed floor of the
-    source-chain swap) less the signed fees must cover it. This follows SDK
-    16.1.0's code; check it again on each upgrade;
+    source-chain swap) less the signed fees must cover it. That is an upper
+    bound: the contract also takes Mayan's protocol fee, which is not signed.
+    This follows SDK 16.1.0's code; check it again on each upgrade;
   - on EVM, the SDK's transaction goes to Mayan's Forwarder contract.
+
+  The check runs on a fresh quote at each press, and again after the allowance
+  and price reads, right before the send. Before an approval or a send, the card
+  also stops if it has closed or another wallet is now connected.
 
   Known limit: this refuses the MCTP backup for a native coin into USDC on the
   five EVM chains. In two samples its shown minimum was about 0.001 USDC above
@@ -394,6 +406,8 @@ wherever Bridge is on.
   arrives and, when there is one, where a refund goes. Fee adds Mayan's relayer
   fee, protocol fee and Circle fee, and shows "—" if one is missing (a Blink
   order states one fee). There is no Route row.
+  A quote with no ETA shows "—". A history reply with no list is an error with
+  Retry; only an empty list means no bridges.
 - **Errors.** No route: "No price for ARB. Bridge USDC." (for USDC, "Try
   another chain."). Too large: "Largest right now: 75.94 ETH." when Mayan's
   message gives a number, else "Try a smaller amount."
@@ -407,8 +421,10 @@ wherever Bridge is on.
   blocked. When only the fixed fee puts it above 3%, it says "Send more". A
   price that is missing or more than 120 seconds old also opens the pop-up
   ("Loss unknown"). Blast has no price for POL or most tokens, so those always
-  ask. Known limit: ETH and SOL are priced from their wrapped coins on Sui, so a
-  wrapped coin trading away from the real one skews the figure.
+  ask. So does a price read with no answer after 5 seconds (our limit, so a
+  press never hangs). Known limit: ETH and SOL are priced from their wrapped
+  coins on Sui, so a wrapped coin trading away from the real one skews the
+  figure.
 - **Requests.** Mayan: one POST per settled amount, at most 2.5 per second for
   a card being typed in; at 10,000 visible tabs with 1% typing, 250 per second
   (calculated). Each POST asks three routes; how Mayan counts that is

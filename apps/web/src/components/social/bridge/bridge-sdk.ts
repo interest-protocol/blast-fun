@@ -120,7 +120,8 @@ const text = (value: unknown): string | null => (typeof value === "string" && va
  */
 export function explorerRows(json: unknown, blastAddress: string, limit = 5): BridgeRow[] {
   const data = (json as { data?: unknown } | null)?.data;
-  if (!Array.isArray(data)) return [];
+  // A reply with no list says nothing about past bridges, so it must not read as "none".
+  if (!Array.isArray(data)) throw new Error("Unreadable Mayan explorer reply");
   const rows: BridgeRow[] = [];
   for (const swap of data as ExplorerSwap[]) {
     const hash = text(swap.sourceTxHash);

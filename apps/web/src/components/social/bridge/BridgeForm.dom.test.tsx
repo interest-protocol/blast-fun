@@ -17,6 +17,7 @@ const { createRoot } = await import("react-dom/client");
 const { GC_MS } = await import("#web/lib/query/client.ts");
 const { createTestQueryClient, withQueryClient } = await import("#web/lib/query/test-client.ts");
 const { BridgeForm } = await import("./BridgeForm.tsx");
+const { SUI_COIN_TYPE } = await import("@blast/core/lib/sui/coin-types.ts");
 const { mayanSdk } = await import("./mayan-sdk.ts");
 
 // Live Mayan quotes captured 2026-11-26 with placeholder addresses (the guard tests use the same file).
@@ -64,9 +65,9 @@ function evm(address = SOURCE): EvmWallet {
 
 const coded = (code: unknown) => Object.assign(new Error("refused"), { code });
 
-type MountOptions = Readonly<{ signedIn?: boolean; at?: number }>;
+type MountOptions = Readonly<{ signedIn?: boolean; at?: number; clock?: () => number }>;
 
-async function mount(sdk: BridgeSdk, calls: Calls, wallet: SourceWallet | null = evm(), queries: Record<string, unknown> = {}, { signedIn = true, at = BEFORE_EXPIRY }: MountOptions = {}) {
+async function mount(sdk: BridgeSdk, calls: Calls, wallet: SourceWallet | null = evm(), queries: Record<string, unknown> = {}, { signedIn = true, at = BEFORE_EXPIRY, clock = () => at }: MountOptions = {}) {
   const container = dom.document.createElement("div");
   container.setAttribute("data-blast-ui", "");
   dom.document.body.appendChild(container);
@@ -78,7 +79,7 @@ async function mount(sdk: BridgeSdk, calls: Calls, wallet: SourceWallet | null =
     <BridgeForm
       key={key}
       blastAddress={signedIn ? BLAST : null}
-      now={() => at}
+      now={clock}
       onArrived={() => { calls.arrived += 1; }}
       onSignIn={() => undefined}
       sdk={sdk}
@@ -128,8 +129,8 @@ async function mount(sdk: BridgeSdk, calls: Calls, wallet: SourceWallet | null =
 
 const newCalls = (): Calls => ({ quotes: [], sends: 0, approves: 0, arrived: 0 });
 
-// At this SUI price the recorded Blink quotes lose under 3%, so a press sends. A test of the loss check sets its own prices.
-beforeEach((t) => { stubPrices(t as TestContext, { SUI: { usd: "0.67" } }); });
+// At these prices the recorded Blink quotes lose under 3%, so a press sends. A test of the loss check sets its own prices.
+beforeEach((t) => { stubPrices(t as TestContext, { SOL: { usd: "70" }, SUI: { usd: "0.67" } }); });
 
 test("switching the source network keeps keyboard focus in the send flow", async () => {
   const calls = newCalls();
@@ -303,18 +304,18 @@ test("an in-flight arrival is reported once after closing and reopening Bridge",
   const calls = newCalls();
   const listed: BridgeRow = { hash: "0xhash", chain: "base", fromAmount: "20", fromSymbol: "USDC", toAmount: "29.81", toSymbol: "SUI", state: "pending", at: new Date(BEFORE_EXPIRY).toISOString() };
   // The app keeps finished queries for minutes; the test client's default drops them at once.
-  const started = Promise.withResolvers<void>();
+  let watching = false;
   const completion = Promise.withResolvers<{ state: "done"; toAmount: string }>();
   const done = { state: "done", toAmount: "29.81" } as const;
   const form = await mount(fakeSdk(calls, [QUOTE], {
     history: async () => (calls.sends > 0 ? [listed] : []),
-    status: () => { started.resolve(); return completion.promise; },
+    status: () => { watching = true; return completion.promise; },
   }), calls, evm(), { gcTime: 5 * 60_000 });
   try {
     await form.pickUsdc();
     await form.type("20");
     await form.press();
-    await started.promise;
+    await waitFor(() => watching, "the status read starts");
     await form.hide();
     await act(async () => completion.resolve(done));
     await waitFor(() => calls.arrived === 1, "the arrival");
@@ -472,25 +473,37 @@ test("closing Bridge while the fresh quote is on its way opens no wallet", async
   assert.equal(calls.sends, 0);
 });
 
-test("closing Bridge while the allowance is checked opens no wallet", async () => {
-  const calls = newCalls();
-  let hold = false;
-  const started = Promise.withResolvers<void>();
-  const allowance = Promise.withResolvers<boolean>();
-  const sdk = fakeSdk(calls, [QUOTE]);
-  const form = await mount({ ...sdk, allowanceEnough: (...args) => {
-    if (!hold) return sdk.allowanceEnough(...args);
-    started.resolve();
-    return allowance.promise;
-  } }, calls);
-  await form.pickUsdc();
-  await form.type("20");
-  hold = true;
-  await act(async () => form.button().click());
-  await started.promise;
-  await form.unmount();
-  await act(async () => allowance.resolve(true));
-  assert.equal(calls.sends, 0);
+test("nothing is sent when Bridge closes, the wallet changes or the quote runs out during the allowance check", async () => {
+  for (const change of ["closed", "wallet changed", "quote ran out"] as const) {
+    const calls = newCalls();
+    let hold = false;
+    let checking = false;
+    let time = BEFORE_EXPIRY;
+    const allowance = Promise.withResolvers<boolean>();
+    const sdk = fakeSdk(calls, [QUOTE]);
+    const form = await mount({ ...sdk, allowanceEnough: (...args) => {
+      if (!hold) return sdk.allowanceEnough(...args);
+      checking = true;
+      return allowance.promise;
+    } }, calls, evm(), {}, { clock: () => time });
+    try {
+      await form.pickUsdc();
+      await form.type("20");
+      hold = true;
+      await act(async () => form.button().click());
+      await waitFor(() => checking, "the allowance check starts");
+      if (change === "closed") await form.hide();
+      if (change === "wallet changed") await form.rerender(evm(`0x${"22".repeat(20)}`));
+      if (change === "quote ran out") time += 24 * 60 * 60 * 1000;
+      await act(async () => allowance.resolve(true));
+      if (change !== "closed") await waitFor(() => !form.button().hasAttribute("aria-busy"), "the press settles");
+      assert.equal(calls.sends, 0, change);
+      if (change === "quote ran out") assert.match(form.text(), /Code: bridge_quote_failed/);
+    } finally {
+      allowance.resolve(false);
+      await form.unmount();
+    }
+  }
 });
 
 test("history can confirm a watched bridge before the status read does", async () => {
@@ -758,8 +771,15 @@ const answering = (quote: Quote) => JSON.stringify({ quotes: [{ ...quote, deadli
 
 type Priced = Readonly<{ usd: string; ageMs?: number }>;
 
+/** The coins the loss check reads: SUI, and the wrapped coins on Sui that price ETH and SOL. */
+const PRICED = new Map([
+  [SUI_COIN_TYPE, "SUI"],
+  ["0xd0e89b2af5e4910726fbcd8b8dd37bb79b29e5f83f7491bca830e94f7f226d29::eth::ETH", "ETH"],
+  ["0xb7844e289a8410e50fb3ca48d69eb9cf29e27d223ef90353fe1bd8e27ff8f3f8::coin::COIN", "SOL"],
+] as const);
+
 /** Blast's price route: each coin asked answers with its price here, or has no entry. */
-function stubPrices(t: TestContext, prices: Readonly<{ ETH?: Priced; SUI?: Priced }>, status = 200) {
+function stubPrices(t: TestContext, prices: Readonly<{ ETH?: Priced; SOL?: Priced; SUI?: Priced }>, status = 200) {
   const asked: string[][] = [];
   const real = globalThis.fetch;
   t.mock.method(globalThis, "fetch", async (input: string | URL | Request, init?: RequestInit) => {
@@ -768,7 +788,8 @@ function stubPrices(t: TestContext, prices: Readonly<{ ETH?: Priced; SUI?: Price
     if (coins.length === 0) return real(input, init);
     asked.push(coins);
     const listed = coins.flatMap((coin) => {
-      const price = prices[coin.endsWith("::eth::ETH") ? "ETH" : "SUI"];
+      const name = PRICED.get(coin);
+      const price = name && prices[name];
       return price ? [{ presale_id: null, coin_type: coin, tier: "5m", from_ms: 0, points: [], price_usd: price.usd, price_24h_usd: null, change_24h_bps: null, day_open_usd: null, day_open_ms: null, price_as_of_ms: LIVE_NOW - (price.ageMs ?? 1_000) }] : [];
     });
     return Response.json({ window: "24h", clock_ms: LIVE_NOW, prices: listed, as_of: { checkpoint: 1, timestamp_ms: LIVE_NOW, lag_ms: 0 } }, { status });
@@ -821,8 +842,8 @@ test("a worst case under 3% reads both prices once and sends on one press", asyn
     await form.press();
     assert.equal(calls.sends, 1);
     assert.ok(!sheet(), "no loss sheet");
-    assert.equal(prices.length, 1);
-    assert.equal(prices[0]!.length, 2);
+    const asked = [...PRICED].filter(([, name]) => name !== "SOL").map(([coin]) => coin);
+    assert.deepEqual(prices.map((coins) => coins.toSorted()), [asked.toSorted()], "one request names both coins");
   } finally {
     await form.unmount();
   }

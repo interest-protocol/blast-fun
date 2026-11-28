@@ -9,6 +9,9 @@ import { CHAINS, sourceAddressKey, type DestinationToken, type SourceToken } fro
 /** Jose, 2026-11-28: a worst case that loses more than 3% takes a second press. Nothing is blocked. */
 export const LOSS_ASK_BPS = 300;
 
+/** Ours: a price read with no answer by now counts as no price, so a press never hangs on it. */
+export const PRICE_WAIT_MS = 5_000;
+
 /** What the worst case loses, in Blast's own dollar prices. */
 export type Loss =
   | Readonly<{ kind: "unknown" }>
@@ -37,13 +40,17 @@ function destinationPrice(to: DestinationToken): PriceSource {
 /** The coin's dollar price, or null when there is none, the read fails or it is too old. */
 async function dollars(source: PriceSource, read: ReadPrice, now: () => number): Promise<number | null> {
   if (typeof source !== "string") return source;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    const answer = await read(source);
+    const late = new Promise<null>((resolve) => { timer = setTimeout(resolve, PRICE_WAIT_MS, null); });
+    const answer = await Promise.race([read(source), late]);
     const price = Number(answer?.price_usd ?? 0);
     const asOf = answer?.price_as_of_ms;
     return price > 0 && asOf !== undefined && now() - asOf <= PORTFOLIO_PRICE_MAX_AGE_MS ? price : null;
   } catch {
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 

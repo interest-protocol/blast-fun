@@ -128,6 +128,7 @@ test("an MCTP quote is refused when it is not what was asked", () => {
   assert.equal(refusal({ referrerBps: 5 }), "unexpected referrer");
   assert.equal(refusal({ gasDrop: 1 }), "unexpected gas drop");
   assert.equal(refusal({ gasless: true }), "gasless order");
+  assert.equal(refusal({ bridgeFee: 0.001 }), "unexpected bridge fee");
   assert.equal(refusal({ minReceived: 0 }), "wrong minimum output");
   assert.equal(refusal({ minReceived: fast.expectedAmountOut + 1 }), "wrong minimum output");
   assert.equal(refusal({ slippageBps: 501 }), "wrong slippage");
@@ -137,6 +138,17 @@ test("an MCTP quote is refused when it is not what was asked", () => {
   for (const blastAddress of ["", "0x0", "not an address"]) assert.equal(refusal({}, { ...BASE_USDC, blastAddress }), "wrong recipient", blastAddress);
   // The card prices a quote before there is a Blast address.
   assert.deepEqual(checkQuote(fast, BASE_USDC, LIVE_NOW), { ok: true });
+});
+
+test("an auction order must sign the chosen coin's own id", () => {
+  const other = `0x${"22".repeat(32)}`;
+  const [fast, mctp] = live("base-usdc-sui");
+  for (const [quote, signed] of [[fast, "currencyId"], [mctp, "verifiedAddress"]] as const) {
+    assert.equal(quote.hasAuction, true);
+    for (const id of [other, undefined]) {
+      assert.equal(reason({ ...quote, toToken: { ...quote.toToken, [signed]: id } } as Quote, BASE_USDC, LIVE_NOW), "wrong destination coin", `${quote.type} ${id}`);
+    }
+  }
 });
 
 test("the fee adds Mayan's three parts, and a missing part shows no figure", () => {
