@@ -57,17 +57,15 @@ export function BubbleStage({ children }: Readonly<{ children: ReactNode }>) {
  * own account. It makes no requests of its own, so the viewer's own trades show
  * when the account is loaded and the trade is among the activity rows.
  */
-export function PeopleBubbles({ chart, bars, interval, coinTrades, quoteDecimals, quoteUsd, topInset = 0, line = false }: Readonly<{
+export function PeopleBubbles({ chart, bars, interval, coinTrades, quoteDecimals, quoteUsd, topInset = 0 }: Readonly<{
   chart: RefObject<Chart | null>;
   bars: readonly Bar[];
   interval: CandleInterval;
   coinTrades: readonly PersonTrade[] | null;
   quoteDecimals: number | null;
   quoteUsd: string | null;
-  /** Px at the top of the price pane kept clear for the study legends. */
+  /** Px at the top of the price pane that bubbles keep clear of. */
   topInset?: number;
-  /** The chart draws a line through the closes, not candles: the bubbles clear the line. */
-  line?: boolean;
 }>) {
   const activity = useWalletTrades();
   const deployer = useLaunchWallet();
@@ -80,7 +78,7 @@ export function PeopleBubbles({ chart, bars, interval, coinTrades, quoteDecimals
   const people = useMemo(() => barPeople(coinTrades ?? personTrades(activity, deployer, quoteDecimals, quoteUsd), bars, own, callsign, coinTrades ? interval : undefined), [coinTrades, activity, deployer, quoteDecimals, quoteUsd, bars, own, callsign, interval]);
   const ownProfile = useMemo(() => callsign === undefined ? null : { callsign, avatarUrl: avatarUrl ?? null }, [callsign, avatarUrl]);
   const layer = useRef<HTMLDivElement>(null);
-  const { bubbles, size } = useBubbleLayout(chart, layer, people, topInset, line);
+  const { bubbles, size } = useBubbleLayout(chart, layer, people, topInset);
 
   const profile = useCallback((person: Person) => {
     if (person.address === null) return person.profile;
@@ -118,9 +116,9 @@ function useSeenTraderProfiles(enabled: boolean): ReadonlyMap<string, SeenProfil
  * resizes, gets new bars, or has its price axis dragged (KLineCharts reports no
  * action for that, so a drag over the plot counts).
  */
-function useBubbleLayout(chart: RefObject<Chart | null>, layer: RefObject<HTMLElement | null>, people: readonly Person[], topInset: number, line: boolean): Readonly<{ bubbles: readonly Bubble[]; size: number }> {
+function useBubbleLayout(chart: RefObject<Chart | null>, layer: RefObject<HTMLElement | null>, people: readonly Person[], topInset: number): Readonly<{ bubbles: readonly Bubble[]; size: number }> {
   const [layout, setLayout] = useState<Readonly<{ bubbles: readonly Bubble[]; size: number }>>({ bubbles: [], size: 20 });
-  const latest = useRef({ people, topInset, line });
+  const latest = useRef({ people, topInset });
   const schedule = useRef<() => void>(() => {});
   useEffect(() => {
     let frame = 0;
@@ -131,11 +129,11 @@ function useBubbleLayout(chart: RefObject<Chart | null>, layer: RefObject<HTMLEl
       if (!current || !size) return;
       const target = current;
       const bubble = bubbleSize(size.width);
-      const { people, topInset, line } = latest.current;
+      const { people, topInset } = latest.current;
       // One conversion for every person's bar, read back by position.
-      const spans = barSpans(target, people.map(({ bar, high, low, close }) => ({ timestamp: bar, high, low, close })), line);
+      const spans = barSpans(target, people.map(({ bar, high, low }) => ({ timestamp: bar, high, low })));
       const at = new Map(people.map((person, index) => [person, spans[index] ?? null]));
-      setLayout({ size: bubble, bubbles: layoutBubbles(people, (person) => at.get(person) ?? null, size.width, size.height, bubble, { topInset, spans: visibleSpans(target, line), halfBar: target.getBarSpace().halfGapBar, line }) });
+      setLayout({ size: bubble, bubbles: layoutBubbles(people, (person) => at.get(person) ?? null, size.width, size.height, bubble, { topInset, spans: visibleSpans(target), halfBar: target.getBarSpace().halfGapBar }) });
     };
     const request = () => { if (!frame) frame = requestAnimationFrame(place); };
     // A drag that starts on the chart keeps following the pointer outside it, as the chart does.
@@ -182,28 +180,28 @@ function useBubbleLayout(chart: RefObject<Chart | null>, layer: RefObject<HTMLEl
     };
   }, [chart, layer]);
   useEffect(() => {
-    latest.current = { people, topInset, line };
+    latest.current = { people, topInset };
     // Wait a frame so the chart has drawn the new bars and axis first.
     schedule.current();
-  }, [people, topInset, line]);
+  }, [people, topInset]);
   return layout;
 }
 
-type PricedBar = Readonly<{ timestamp: number; high: number; low: number; close: number }>;
+type PricedBar = Readonly<{ timestamp: number; high: number; low: number }>;
 
-/** Each bar's x and the y of the top and bottom of what is drawn for it (its high and low, or on a line its close), in px over the price pane; null where the chart can't place it. */
-function barSpans(chart: Chart, bars: readonly PricedBar[], line: boolean): (BarSpan | null)[] {
-  const points = chart.convertToPixel(bars.flatMap(({ timestamp, high, low, close }) => [{ timestamp, value: line ? close : high }, { timestamp, value: line ? close : low }]), { paneId: "candle_pane" });
+/** Each bar's x and the y of the top and bottom of what is drawn for it (its high and low), in px over the price pane; null where the chart can't place it. */
+function barSpans(chart: Chart, bars: readonly PricedBar[]): (BarSpan | null)[] {
+  const points = chart.convertToPixel(bars.flatMap(({ timestamp, high, low }) => [{ timestamp, value: high }, { timestamp, value: low }]), { paneId: "candle_pane" });
   return bars.map((_, index) => {
     const top = Array.isArray(points) ? points[index * 2] : undefined, bottom = Array.isArray(points) ? points[index * 2 + 1] : undefined;
     return top?.x === undefined || top.y === undefined || bottom?.y === undefined ? null : { x: top.x, top: top.y, bottom: bottom.y };
   });
 }
 
-/** The bars on screen and one past each edge (a line leaves the screen toward them), so a bubble also clears its neighbours' prices, not only its own bar's. */
-function visibleSpans(chart: Chart, line: boolean): BarSpan[] {
+/** The bars on screen and one past each edge, so a bubble also clears its neighbours' prices, not only its own bar's. */
+function visibleSpans(chart: Chart): BarSpan[] {
   const { realFrom, realTo } = chart.getVisibleRange();
-  return barSpans(chart, chart.getDataList().slice(Math.max(0, realFrom - 1), Math.max(0, realTo + 1)), line).filter((span) => span !== null);
+  return barSpans(chart, chart.getDataList().slice(Math.max(0, realFrom - 1), Math.max(0, realTo + 1))).filter((span) => span !== null);
 }
 
 const PersonBubble = memo(function PersonBubble({ person, x, y, size, profile, allVenues }: Readonly<{ person: Person; x: number; y: number; size: number; profile: TraderProfile | null; allVenues: boolean }>) {
