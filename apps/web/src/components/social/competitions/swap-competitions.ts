@@ -3,11 +3,11 @@
 import { pollInterval } from "#web/lib/query/polling.ts";
 import { queryKeys } from "#web/lib/query/keys.ts";
 import { useQuery } from "@tanstack/react-query";
+import { useCallback, useSyncExternalStore } from "react";
 import { gatedFetch } from "#web/lib/api-gate-client.ts";
 import { responseError } from "#web/lib/errors.ts";
 import { useAppQueryClient } from "#web/lib/query/provider.tsx";
 import { socialCompetitionsPath, type Competition, type SwapCompetitions } from "@blast/core/modules/social/competitions/contracts.ts";
-import { useCommitClock } from "../commit/commit-clock.ts";
 import type { WalletCoinView } from "../coins/coin-model.ts";
 import { canTrade, tradableCoinView } from "../coins/swap-model.ts";
 
@@ -25,9 +25,58 @@ export function liveSwapCompetitions(
   );
 }
 
+/** This browser's time of each start and end: the only moments the live set can change. */
+function changeTimes(data: TimedCompetitions): number[] {
+  return data.competitions.flatMap((event) =>
+    [event.starts_at_ms, event.ends_at_ms].map((at) => data.request_started_at_ms + at - data.as_of_ms),
+  );
+}
+
+/**
+ * The time to judge the live set at: the last start or end passed, so one timer
+ * for the next one redraws only when the set can change. 0 with nothing to time.
+ * `useCommitClock` would redraw the whole Swap form each second, and the query
+ * redraws only when a fresh read answers.
+ */
+function useCompetitionClock(data: TimedCompetitions | undefined): number {
+  const subscribe = useCallback(
+    (changed: () => void) => {
+      if (!data) return () => {};
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      // `since` is when the set was last judged: a change after it, even a past one, still gets its wake.
+      const arm = (since: number) => {
+        clearTimeout(timer);
+        const next = Math.min(...changeTimes(data).filter((at) => at > since));
+        // The longest wait a browser timer takes; a farther change arms again from there.
+        if (Number.isFinite(next)) timer = setTimeout(wake, Math.min(next - Date.now(), 2_147_483_647));
+      };
+      const wake = () => {
+        // Taken before the re-read: a timer can fire a moment early.
+        const since = Date.now();
+        // A hidden tab is left alone; its return wakes this again.
+        if (document.visibilityState !== "hidden") changed();
+        arm(since);
+      };
+      // A return to the tab re-reads too: a hidden tab's timers can run late.
+      document.addEventListener("visibilitychange", wake);
+      arm(Date.now());
+      return () => {
+        clearTimeout(timer);
+        document.removeEventListener("visibilitychange", wake);
+      };
+    },
+    [data],
+  );
+  const snapshot = () => {
+    if (!data) return 0;
+    const now = Date.now();
+    return Math.max(data.request_started_at_ms, ...changeTimes(data).filter((at) => at <= now));
+  };
+  return useSyncExternalStore(subscribe, snapshot, () => 0);
+}
+
 export function useSwapCompetitions(enabled: boolean, knownCoins: readonly WalletCoinView[]) {
   const client = useAppQueryClient();
-  const clockMs = useCommitClock();
   const query = useQuery(
     {
       queryKey: queryKeys.competitions.swap(),
@@ -55,6 +104,7 @@ export function useSwapCompetitions(enabled: boolean, knownCoins: readonly Walle
     },
     client,
   );
+  const clockMs = useCompetitionClock(enabled ? query.data : undefined);
   // Failed promotional reads never interrupt the normal swap or retain stale badges.
   const competitions = enabled && !query.isError ? liveSwapCompetitions(query.data, clockMs) : [];
   const resolved = query.data?.coins ?? [];

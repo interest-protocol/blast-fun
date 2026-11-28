@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { type TestContext } from "node:test";
 import {
   installTestDom,
   setInputValue,
@@ -20,7 +20,7 @@ const { createRoot } = await import("react-dom/client");
 const { createTestQueryClient, settleQueries, withQueryClient } = await import("#web/lib/query/test-client.ts");
 const { CoinSheet } = await import("../coins/CoinSheet.tsx");
 const { TokenPickerBody } = await import("../coins/TokenPicker.tsx");
-const { liveSwapCompetitions } = await import("./swap-competitions.ts");
+const { liveSwapCompetitions, useSwapCompetitions } = await import("./swap-competitions.ts");
 const coin = { ...FIXTURE_COINS[2]!, key: FIXTURE_COINS[2]!.coinType, presale: null };
 const event = {
   ...competitionInput.parse({
@@ -195,4 +195,84 @@ test("expiry removes promotion while a prepared swap retains its assets, amount 
   assert.match(container.querySelector('[data-coin-pick="out"]')!.textContent!, /KSTL/);
   assert.equal(container.querySelector("[data-trade]")!.getAttribute("aria-busy"), "true");
   await act(async () => pending.resolve({ status: "traded" }));
+});
+
+/** The Swap promotions from one read, 1 s into a competition-free server clock; a second read never answers. */
+async function mountPromotions(t: TestContext, window: Readonly<{ starts_at_ms: number; ends_at_ms: number }>) {
+  t.mock.timers.enable({ apis: ["setTimeout", "setInterval", "Date"], now: 50_000 });
+  const seen = { reads: 0, draws: 0, live: [] as readonly string[] };
+  t.mock.method(globalThis, "fetch", async () => {
+    seen.reads++;
+    if (seen.reads > 1) return new Promise<Response>(() => undefined);
+    return Response.json({ competitions: [{ ...event, ...window }], coins: [], as_of_ms: 1_000, next_change_at_ms: null });
+  });
+  const client = createTestQueryClient();
+  const root = createRoot(document.createElement("div"));
+  t.after(async () => { await act(async () => root.unmount()); client.clear(); });
+  function Promotions() {
+    seen.draws++;
+    seen.live = useSwapCompetitions(true, []).competitions.map((competition) => competition.slug);
+    return null;
+  }
+  const pass = async (ms: number) => {
+    for (let passed = 0; passed < ms; passed += 100) {
+      await act(async () => { t.mock.timers.tick(100); await new Promise((resolve) => setImmediate(resolve)); });
+    }
+  };
+  await act(async () => root.render(withQueryClient(client, <Promotions />)));
+  await pass(500);
+  return { seen, pass };
+}
+
+test("a competition starts and ends on time with no fresh read, and nothing redraws between", async (t) => {
+  const { seen, pass } = await mountPromotions(t, { starts_at_ms: 5_000, ends_at_ms: 20_000 });
+  const waiting = seen.draws;
+  await pass(3_000);
+  assert.deepEqual(seen.live, []);
+  assert.equal(seen.draws, waiting);
+  await pass(700);
+  assert.deepEqual(seen.live, ["kestrel-week"]);
+  const running = seen.draws;
+  await pass(14_000);
+  assert.deepEqual(seen.live, ["kestrel-week"]);
+  assert.equal(seen.draws, running);
+  await pass(1_200);
+  assert.deepEqual(seen.live, []);
+});
+
+test("a return to the tab shows a competition whose timer is late, before the fresh read answers", async (t) => {
+  const { seen } = await mountPromotions(t, { starts_at_ms: 3_600_000, ends_at_ms: 7_200_000 });
+  assert.deepEqual(seen.live, []);
+  // The clock moves on with no timer run, as after a sleeping computer.
+  t.mock.timers.setTime(50_000 + 3_600_000);
+  await act(async () => { document.dispatchEvent(new window.Event("visibilitychange")); });
+  assert.deepEqual(seen.live, ["kestrel-week"]);
+});
+
+test("a wake a millisecond early never loses the change it was for", async (t) => {
+  const { seen, pass } = await mountPromotions(t, { starts_at_ms: 3_600_000, ends_at_ms: 7_200_000 });
+  const start = 50_000 + 3_600_000 - 1_000;
+  const wake = new window.Event("visibilitychange");
+  // The clock moves on a millisecond with each read, from a millisecond short of the start.
+  let now = start - 1;
+  const moving = t.mock.method(Date, "now", () => now++);
+  await act(async () => { document.dispatchEvent(wake); });
+  moving.mock.restore();
+  t.mock.timers.setTime(start + 100);
+  await pass(100);
+  assert.deepEqual(seen.live, ["kestrel-week"]);
+});
+
+test("a competition that starts while the tab is hidden redraws nothing until the return", async (t) => {
+  const { seen, pass } = await mountPromotions(t, { starts_at_ms: 5_000, ends_at_ms: 20_000 });
+  let visibility: DocumentVisibilityState = "visible";
+  Object.defineProperty(document, "visibilityState", { get: () => visibility, configurable: true });
+  t.after(() => { Reflect.deleteProperty(document, "visibilityState"); });
+  const show = (state: DocumentVisibilityState) => act(async () => { visibility = state; document.dispatchEvent(new window.Event("visibilitychange")); });
+  await show("hidden");
+  const draws = seen.draws;
+  await pass(5_000);
+  assert.equal(seen.draws, draws);
+  await show("visible");
+  assert.deepEqual(seen.live, ["kestrel-week"]);
 });

@@ -210,7 +210,8 @@ export function useCommitHost({ presaleDeployed, balances: shellBalances }: Comm
   const readIdentity = useCallback(() => queries.fetchQuery(walletIdentityQuery(walletScope, api.getAccessToken)).catch(() => null),
     [api, queries, walletScope]);
   const { sale, wallet, facts, walletCoinsState } = useCommitDialogRead(dialogSaleId, api, queries, viewer, readIdentity);
-  const nowMs = useCommitClock();
+  // Read only by the open dialog, so with none open the app shell has no clock redrawing it.
+  const nowMs = useCommitClock(dialog.kind !== "none");
 
   const openCommit = useCallback(
     (item: FeedItem) => {
