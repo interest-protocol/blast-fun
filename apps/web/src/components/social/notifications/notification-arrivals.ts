@@ -5,7 +5,7 @@ import { isNotificationId } from "@blast/core/web/contracts/notifications.ts";
  * answer while not announcing, only moves the starting point. An ID above
  * every ID seen so far is an arrival, even when the unread count stays the
  * same (one alert read while another arrives). Reading the newest alert lowers
- * the ID, which is never an arrival; so is an alert stored with an ID below
+ * the ID, which is never an arrival. Nor is an alert stored with an ID below
  * one already seen (it shows in the count and the list, without a pop).
  */
 export function notificationArrivals() {

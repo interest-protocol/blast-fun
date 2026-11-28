@@ -80,7 +80,7 @@ const PAGE_SQL = `
 const UNREAD_ROWS = `social_notifications n
     LEFT JOIN social_accounts actor ON actor.account_id = n.actor_account_id
     WHERE n.account_id = $1 AND n.read_at IS NULL
-      AND n.notification_id > (SELECT COALESCE(max(r.read_through), 0) FROM social_notification_reads r WHERE r.account_id = $1)
+      AND n.notification_id > ${READ_THROUGH}
       AND ${STILL_NAMED}
       AND EXISTS (SELECT 1 FROM ${SHOWN_PRESALES} p WHERE p.presale_id = n.presale_id)`;
 
