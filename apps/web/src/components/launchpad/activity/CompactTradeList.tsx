@@ -17,7 +17,7 @@ import { ShellAvatar } from "#web/components/blast-ui/ShellAvatar.tsx";
 import { SkeletonBox, SkeletonRows, SkeletonText } from "#web/components/blast-ui/Skeleton.tsx";
 import { Ticker } from "#web/components/blast-ui/Ticker.tsx";
 import { TransactionLink } from "#web/components/blast-ui/TransactionLink.tsx";
-import { useChartClock } from "../chart/use-chart-clock";
+import { useCommitClock } from "#web/components/social/commit/commit-clock.ts";
 import { formatAmountShort } from "../coin/coin-format";
 import primitives from "../primitives/primitives.module.css";
 import { explorerTransactionUrl } from "../transaction/explorer";
@@ -81,7 +81,6 @@ export const useTradeInspector = () => useContext(TradeInspectContext);
 export type TradeRowState = Readonly<{
   entering: boolean;
   leaving: boolean;
-  now: number | null;
 }>;
 
 /**
@@ -126,7 +125,6 @@ export function CompactTradeList<Row extends { position: string }>({
   children: (row: Row, state: TradeRowState) => ReactNode;
 }>) {
   const { rows: visibleRows, held, holdRows, hideSmallTrades, changeFilter, allows } = visibility;
-  const now = useChartClock(1_000, visibleRows.length > 0);
   const list = useRef<HTMLOListElement>(null);
   const keyboardFocus = useRef(false);
   const openInspectors = useRef(0);
@@ -162,7 +160,7 @@ export function CompactTradeList<Row extends { position: string }>({
             }}
           >
             {rendered.map((row) => children(row, {
-              entering: row.position === entering, leaving: row === leaving, now,
+              entering: row.position === entering, leaving: row === leaving,
             }))}
           </ol>
         </div>
@@ -193,7 +191,7 @@ function filteredTrades<Row extends { position: string }>(
 }
 
 export function CompactTradeRow({
-  side, trader, profile, wallet = null, timestampMs, tokens, quote, digest, explorer, entering, leaving, now,
+  side, trader, profile, wallet = null, timestampMs, tokens, quote, digest, explorer, entering, leaving,
 }: TradeRowState & Readonly<{
   side: "buy" | "sell";
   trader: ReactNode;
@@ -207,12 +205,10 @@ export function CompactTradeRow({
   explorer: TradeExplorer;
 }>) {
   const onInspect = useTradeInspector();
-  const age = now === null ? undefined : bxAgo(timestampMs, now);
   return <li className={styles.tradeRow} data-live-trade={entering ? side : undefined} data-leaving={leaving || undefined} inert={leaving} aria-hidden={leaving || undefined}>
     <span className={styles.tradeType}>
       <b data-side={side}>{side === "sell" ? "Sell" : "Buy"}</b>{" · "}
-      <DateStamp at={timestampMs} label="trade time" displayText={age}
-        triggerLabel={tradeTimeButtonLabel(age)} onInspect={onInspect} />
+      <TradeAge at={timestampMs} onInspect={onInspect} />
     </span>
     <span className={styles.trader}>
       <TraderAvatar profile={profile} wallet={wallet} />
@@ -224,6 +220,13 @@ export function CompactTradeRow({
     </span>
     {digest ? <span className={styles.tradeLink}><Transaction digest={digest} explorer={explorer} /></span> : null}
   </li>;
+}
+
+/** The only part of a row that redraws each second: one shared clock serves every row's age. */
+function TradeAge({ at, onInspect }: Readonly<{ at: number; onInspect: (open: boolean) => void }>) {
+  const now = useCommitClock();
+  const age = now === 0 ? undefined : bxAgo(at, now);
+  return <DateStamp at={at} label="trade time" displayText={age} triggerLabel={tradeTimeButtonLabel(age)} onInspect={onInspect} />;
 }
 
 const ageUnits: Partial<Record<string, string>> = { s: "second", m: "minute", h: "hour", d: "day", y: "year" };
