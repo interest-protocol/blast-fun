@@ -205,7 +205,7 @@ function request(did: string | null, path: string, method = "GET"): Request {
   return new Request(`${ORIGIN}${path}`, { method, headers: did ? { authorization: `Bearer ${token(did)}` } : {} });
 }
 
-async function json<Body>(response: Response, schema: "notification-page" | "notification-unread-response" | "error", status = 200): Promise<Body> {
+async function json<Body>(response: Response, schema: "notification-page" | "notification-unread-response" | "notification-unread-newest-response" | "error", status = 200): Promise<Body> {
   const body: unknown = await response.json();
   assert.equal(response.status, status, JSON.stringify(body));
   assert.deepEqual(validator.validate(schema, body).errors, []);
@@ -355,11 +355,20 @@ test("UI-13: the routes page, count and mark read the caller's own notifications
     const unread = async (did: string) =>
       (await json<{ unread_count: number }>(await routes.unread.GET(request(did, "/api/social/me/notifications/unread"), testClient()), "notification-unread-response")).unread_count;
     assert.equal(await unread(kai), page.items.length);
+    // `?newest=1` adds the highest unread ID: what a polling tab compares to spot a new alert.
+    const newest = async (did: string) =>
+      json<{ unread_count: number; newest_unread_id: string | null }>(
+        await routes.unread.GET(request(did, "/api/social/me/notifications/unread?newest=1"), testClient()),
+        "notification-unread-newest-response",
+      );
+    const highestId = (ids: readonly string[]) => ids.reduce<string | null>((max, id) => max === null || BigInt(id) > BigInt(max) ? id : max, null);
+    assert.deepEqual(await newest(kai), { unread_count: page.items.length, newest_unread_id: highestId(page.items.map((item) => item.id)) });
     const one = await json<{ unread_count: number }>(
       await routes.markRead.POST(request(kai, `/api/social/me/notifications/${follow.id}/read`, "POST"), testClient()),
       "notification-unread-response",
     );
     assert.equal(one.unread_count, page.items.length - 1);
+    assert.equal((await newest(kai)).newest_unread_id, highestId(page.items.filter((item) => item.id !== follow.id).map((item) => item.id)));
     // Repeating is harmless.
     await json(await routes.markRead.POST(request(kai, `/api/social/me/notifications/${follow.id}/read`, "POST"), testClient()), "notification-unread-response");
     const bobsId = (await admin.query<{ id: string }>("SELECT notification_id::text AS id FROM social_notifications WHERE account_id = $1 LIMIT 1", [ACCOUNTS.bob.id])).rows[0]!.id;
@@ -382,6 +391,7 @@ test("UI-13: the routes page, count and mark read the caller's own notifications
     });
     const bounded = await json<{ unread_count: number }>(await routes.readAll.POST(markSeen, testClient()), "notification-unread-response");
     assert.equal(bounded.unread_count, 1);
+    assert.deepEqual(await newest(kai), { unread_count: 1, newest_unread_id: late.rows[0]!.id }, "a backdated alert still has the newest ID");
     assert.equal(await unread(ACCOUNTS.bob.did), 2);
     const withLate = await json<SocialNotificationPage>(await routes.page.GET(request(kai, "/api/social/me/notifications"), testClient()), "notification-page");
     assert.deepEqual(withLate.items.filter((item) => !item.read).map((item) => item.id), [late.rows[0]!.id]);
@@ -390,6 +400,7 @@ test("UI-13: the routes page, count and mark read the caller's own notifications
     });
     const all = await json<{ unread_count: number }>(await routes.readAll.POST(legacy, testClient()), "notification-unread-response");
     assert.equal(all.unread_count, 0);
+    assert.deepEqual(await newest(kai), { unread_count: 0, newest_unread_id: null });
 
     // Going private hides the actor's notifications everywhere, old ones too.
     await admin.query("DELETE FROM social_notifications WHERE source_key = 'funded:late'");
@@ -399,6 +410,7 @@ test("UI-13: the routes page, count and mark read the caller's own notifications
     const afterPrivate = await json<SocialNotificationPage>(await routes.page.GET(request(kai, "/api/social/me/notifications"), testClient()), "notification-page");
     assert.equal(afterPrivate.items.some((item) => item.kind === "follow"), false);
     assert.equal(afterPrivate.unread_count, page.items.length - 1);
+    assert.deepEqual(await newest(kai), { unread_count: page.items.length - 1, newest_unread_id: highestId(afterPrivate.items.map((item) => item.id)) }, "a hidden actor's alert is never the newest");
 
     // Signed out, or without an account.
     await json(await routes.unread.GET(request(null, "/api/social/me/notifications/unread"), testClient()), "error", 401);
