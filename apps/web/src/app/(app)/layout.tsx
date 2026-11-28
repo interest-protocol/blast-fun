@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { FeelProvider } from "#web/components/blast-feel/index.ts";
 import { BlastUiRoot } from "#web/components/blast-ui/BlastUiRoot.tsx";
 import { PresaleProviders } from "#web/components/presale/providers/PresaleProviders.tsx";
+import { selectedAccountSession } from "#web/components/social/account-selection.ts";
 import { SocialSession } from "#web/components/social/SocialSession.tsx";
 import { SocialShell } from "#web/components/social/SocialShell.tsx";
 import { requestLaunchFlags } from "#web/lib/launch-flags.server.ts";
@@ -48,7 +49,7 @@ export default async function AppLayout({
     <BlastUiRoot nonce={nonce}>
       <FeelProvider>
         <PresaleProviders config={config} nonce={nonce} privySession={hasPrivySessionCookie(requestHeaders)}>
-          <SocialSession>
+          <SocialSession initialSelection={selectedAccountSession(requestHeaders.get("cookie") ?? "")}>
             {shell}
           </SocialSession>
         </PresaleProviders>

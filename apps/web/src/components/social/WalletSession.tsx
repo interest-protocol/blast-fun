@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useSyncExternalStore, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 
 import {
   endWalletSession,
@@ -9,6 +9,8 @@ import {
   type WalletSigner,
   type WalletSignInResult,
 } from "#web/components/sign-in/wallet-sign-in-client.ts";
+
+import { rememberAccountSession, type AccountSession } from "./account-selection";
 
 /**
  * The page's Sui wallet session (Sui wallet sign-in, OA-16). Privy is not
@@ -23,6 +25,8 @@ export type WalletSession = Readonly<{
   available: boolean;
   /** This browser holds the wallet session hint. */
   active: boolean;
+  selection: AccountSession | null;
+  keepAccount(session: AccountSession | null): boolean;
   /** Connects the wallet, signs the challenge and starts the session. */
   signIn(signer: WalletSigner): Promise<WalletSignInResult>;
   /** Ends the wallet session (no-op without one). */
@@ -34,6 +38,8 @@ export type WalletSession = Readonly<{
 const NONE: WalletSession = {
   available: false,
   active: false,
+  selection: null,
+  keepAccount: () => false,
   signIn: async () => "failed",
   end: async () => undefined,
   refresh: () => undefined,
@@ -60,8 +66,17 @@ const noHint = () => false;
 const loadWalletSigner = () => import("#web/components/sign-in/sui-wallet-signer.ts");
 
 /** Provides the wallet session to the viewer, the `me` read, the sign-in sheet and sign-out. */
-export function WalletSessionProvider({ children }: Readonly<{ children: ReactNode }>) {
+export function WalletSessionProvider({ children, initialSelection = null }: Readonly<{ children: ReactNode; initialSelection?: AccountSession | null }>) {
   const active = useSyncExternalStore(subscribe, hintSnapshot, noHint);
+  // Keep this tab scoped to its loaded account until an explicit switch reloads the page.
+  const [selection, setSelection] = useState(initialSelection);
+  const keepAccount = useCallback((session: AccountSession | null) => {
+    if (!rememberAccountSession(session)) {
+      return false;
+    }
+    setSelection(session);
+    return true;
+  }, []);
   // A wallet session signs in its wallet: its kit (code only) loads now, so the first signature's popup opens without waiting for it.
   useEffect(() => {
     if (active) void loadWalletSigner().catch(() => undefined);
@@ -78,6 +93,6 @@ export function WalletSessionProvider({ children }: Readonly<{ children: ReactNo
     await loadWalletSigner().then(({ forgetWalletConnection }) => forgetWalletConnection()).catch(() => undefined);
     changed();
   }, []);
-  const value = useMemo<WalletSession>(() => ({ available: true, active, signIn, end, refresh: changed }), [active, signIn, end]);
+  const value = useMemo<WalletSession>(() => ({ available: true, active, selection, keepAccount, signIn, end, refresh: changed }), [active, selection, keepAccount, signIn, end]);
   return <WalletSessionContext value={value}>{children}</WalletSessionContext>;
 }

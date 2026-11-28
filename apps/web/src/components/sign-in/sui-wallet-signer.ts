@@ -7,14 +7,11 @@ import { normalizeSuiAddress } from "@mysten/sui/utils";
 
 import { SUI_MAINNET_GRPC_URL } from "@blast/core/lib/sui-mainnet.ts";
 
-import { isWalletRejection, type WalletSigner } from "./wallet-sign-in-client.ts";
+import { isWalletRejection, rememberedWalletName, SLUSH_WEB_WALLET_ID, WALLET_SIGN_IN_STORAGE_KEY as STORAGE_KEY, type WalletSigner } from "./wallet-sign-in-client.ts";
 import type { SuiSignInMethod } from "./sign-in-flow";
 
 /** The Slush web wallet's metadata, served by this app (`/api/social/sign-in/slush-metadata`). */
 export const SLUSH_METADATA_PATH = "/api/social/sign-in/slush-metadata";
-
-/** Where the social sign-in's dApp Kit keeps its state, apart from Mission Control's and the launchpad's. */
-const STORAGE_KEY = "blast:social:sign-in:v1";
 
 let dAppKit: SocialKit | null = null;
 const walletIds = new Map<string, string>();
@@ -25,6 +22,7 @@ function rememberWallet(address: string, wallet: UiWallet): void {
   walletIds.set(canonical, id);
   try {
     localStorage.setItem(`${STORAGE_KEY}:wallet-id:${canonical}`, id);
+    localStorage.setItem(`${STORAGE_KEY}:wallet:${canonical}`, wallet.name);
   } catch {
     // Blocked storage keeps the wallet choice for this page only.
   }
@@ -37,14 +35,6 @@ function rememberedWalletId(address: string): string | null {
     return localStorage.getItem(`${STORAGE_KEY}:wallet-id:${address}`);
   } catch {
     return null;
-  }
-}
-
-function legacyWalletName(address: string): string {
-  try {
-    return localStorage.getItem(`${STORAGE_KEY}:wallet:${address}`) ?? SLUSH_WALLET_NAME;
-  } catch {
-    return SLUSH_WALLET_NAME;
   }
 }
 
@@ -72,7 +62,6 @@ export function socialDAppKit(): SocialKit {
 }
 
 type SocialKit = ReturnType<typeof createSocialDAppKit>;
-const SLUSH_WEB_WALLET_ID = "com.mystenlabs.suiwallet.web";
 
 export function subscribeSuiSignInWallets(onWallets: (wallets: readonly SuiSignInMethod[]) => void): () => void {
   return socialDAppKit().stores.$wallets.subscribe((wallets) => {
@@ -86,9 +75,9 @@ export function subscribeSuiSignInWallets(onWallets: (wallets: readonly SuiSignI
 
       const id = getWalletUniqueIdentifier(wallet);
       if (id === SLUSH_WEB_WALLET_ID) {
-        slushWeb = { id, wallet };
+        slushWeb = { id, wallet, slush: true };
       } else {
-        installed.push({ id, wallet });
+        installed.push({ id, wallet, slush: wallet.name === SLUSH_WALLET_NAME });
       }
     }
 
@@ -136,7 +125,7 @@ export async function suiSigningAccount(address: string) {
   const matches = (account: { address: string }) => normalizeSuiAddress(account.address) === expected;
   const connection = kit.stores.$connection.get();
   const id = rememberedWalletId(expected);
-  const legacyName = id === null ? legacyWalletName(expected) : null;
+  const legacyName = id === null ? (rememberedWalletName(expected) ?? SLUSH_WALLET_NAME) : null;
   const matchesWallet = (wallet: UiWallet) => id === null ? wallet.name === legacyName : getWalletUniqueIdentifier(wallet) === id;
   const authorized = connection.wallet && matchesWallet(connection.wallet)
     ? connection.wallet.accounts.find(matches)

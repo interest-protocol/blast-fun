@@ -140,3 +140,94 @@ test("production SocialSession publishes a new principal during a held then refu
     Reflect.deleteProperty(globalThis, "t013Privy");
   }
 });
+
+test("the shared client reads and acts as the chosen account while both sign-ins remain live", async () => {
+  const dom = new JSDOM('<div id="mount"></div>', { url: "https://blast.test" });
+  let getPrivyToken = true;
+  Object.assign(globalThis, {
+    window: dom.window,
+    document: dom.window.document,
+    IS_REACT_ACT_ENVIRONMENT: true,
+    t013Privy: {
+      ...privy,
+      user: { id: "principal-A" },
+      getAccessToken: async () => getPrivyToken ? "principal-A" : null,
+    },
+  });
+  const { rememberAccountSession } = await import("./account-selection");
+  const { socialRequestAuth } = await import("./social-fetch.ts");
+  const root = createRoot(document.getElementById("mount")!);
+  const client = new QueryClient();
+  const original = globalThis.fetch;
+  let viewer!: ReturnType<typeof useSocialViewer>;
+  let current!: ReturnType<typeof useSocialAccount>;
+  let walletExpired = false;
+
+  document.cookie = "__Host-blast_wallet_hint=1; Path=/; Secure";
+  const reads: (string | null)[] = [];
+  globalThis.fetch = async (url, init) => {
+    if (String(url).endsWith("x-handle")) {
+      return Response.json({ updated: false });
+    }
+    const token = new Headers(init?.headers).get("authorization");
+    reads.push(token);
+    if (!token && walletExpired) {
+      document.cookie = "__Host-blast_wallet_hint=; Max-Age=0; Path=/; Secure";
+      return Response.json({ error: { code: "unauthorized" } }, { status: 401 });
+    }
+    return Response.json({
+      account: {
+        account_id: token ? ACCOUNT_A : ACCOUNT_B,
+        kind: "new",
+        callsign: token ? "privy_pilot" : "slush_pilot",
+        display_name: null,
+        avatar_url: null,
+        x_handle: null,
+        verified: false,
+        onboarding: { shown: true, completed: true },
+        privacy: "public",
+        sharing_since_ms: null,
+        wallets: [],
+      },
+    });
+  };
+
+  function Probe() {
+    viewer = useSocialViewer();
+    current = useSocialAccount();
+    return <span>{viewer.callsign}</span>;
+  }
+
+  try {
+    assert.equal(rememberAccountSession("wallet"), true);
+    await act(async () => {
+      root.render(<QueryProvider client={client}><SocialSession initialSelection="wallet"><Probe /></SocialSession></QueryProvider>);
+    });
+    await waitFor(() => viewer.callsign === "slush_pilot", "the selected Slush account");
+    assert.equal(reads[0], null);
+    assert.deepEqual((await socialRequestAuth(viewer.getAccessToken))?.headers, {});
+
+    walletExpired = true;
+    await act(async () => current.refresh());
+    await waitFor(() => !viewer.signedIn, "the selected Slush session to expire");
+    await act(async () => {});
+    assert.ok(reads.every((token) => token === null), "Slush expiry does not select Privy");
+
+    document.cookie = "__Host-blast_wallet_hint=1; Path=/; Secure";
+    await act(async () => {
+      assert.equal(rememberAccountSession("privy"), true);
+      root.render(<QueryProvider client={client}><SocialSession initialSelection="privy" key="new-document"><Probe /></SocialSession></QueryProvider>);
+    });
+    await waitFor(() => viewer.callsign === "privy_pilot", "the selected Privy account");
+    assert.deepEqual((await socialRequestAuth(viewer.getAccessToken))?.headers, { authorization: "Bearer principal-A" });
+    assert.match(document.cookie, /__Host-blast_wallet_hint=1/);
+    getPrivyToken = false;
+    assert.equal(await socialRequestAuth(viewer.getAccessToken), null, "a missing Privy token cannot authenticate as Slush");
+  } finally {
+    await act(async () => root.unmount());
+    client.clear();
+    globalThis.fetch = original;
+    dom.window.close();
+    Reflect.deleteProperty(globalThis, "t013Privy");
+  }
+});

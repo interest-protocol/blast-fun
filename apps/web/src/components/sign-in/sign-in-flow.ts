@@ -15,7 +15,7 @@ import { diagnosticMessage } from "#web/lib/errors.ts";
 export const SOCIAL_SIGN_IN_METHODS = ["x", "google"] as const;
 type SocialSignInMethod = (typeof SOCIAL_SIGN_IN_METHODS)[number];
 export type PrivySignInMethod = SocialSignInMethod | "wallet";
-export type SuiSignInMethod = Readonly<{ id: string; wallet: UiWallet }>;
+export type SuiSignInMethod = Readonly<{ id: string; wallet: UiWallet; slush?: boolean }>;
 export type SignInMethod = PrivySignInMethod | SuiSignInMethod;
 
 /** The name in "Waiting for …". */
@@ -69,12 +69,12 @@ export function waitingMethod(state: SignInState): SignInMethod | null {
 }
 
 /** The line under the methods after an attempt that did not sign in (no line otherwise). */
-export function signInMessage(state: SignInState): Readonly<{ text: string; alert: boolean }> | null {
+export function signInMessage(state: SignInState, addingAccount = false): Readonly<{ text: string; alert: boolean }> | null {
   switch (state.status) {
     case "cancelled":
-      return { text: diagnosticMessage("Sign-in was cancelled. You are still signed out.", { code: "request_cancelled" }), alert: false };
+      return { text: diagnosticMessage(addingAccount ? "Sign-in was cancelled." : "Sign-in was cancelled. You are still signed out.", { code: "request_cancelled" }), alert: false };
     case "failed":
-      return { text: diagnosticMessage("Sign-in did not finish. You are still signed out. Try again.", { code: "authentication_unavailable" }), alert: true };
+      return { text: diagnosticMessage(addingAccount ? "Sign-in did not finish. Try again." : "Sign-in did not finish. You are still signed out. Try again.", { code: "authentication_unavailable" }), alert: true };
     case "rate-limited":
       return { text: diagnosticMessage("Too many sign-in attempts. Wait a few minutes, then try again.", { code: "rate_limited" }), alert: true };
     case "stalled":

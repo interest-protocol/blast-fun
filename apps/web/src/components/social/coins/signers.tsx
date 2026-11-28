@@ -6,6 +6,8 @@ import { startPrivy, usePrivySession } from "#web/components/auth/privy-session.
 
 import { findEmbeddedSuiWallet } from "#web/components/mission-control/privy-embedded-wallet.ts";
 
+import { useSocialViewer } from "../SignInGate";
+import { useWalletSession } from "../WalletSession";
 import type { WithdrawSigner } from "./withdraw-flow";
 
 /** The key-format code (Privy's Sui signer), loaded at the first signature, not with the page. */
@@ -28,12 +30,20 @@ export type PrivyCoinSigner = Readonly<{
  * Privy does not start.
  */
 export function PrivyCoinSignerBridge({ onChange }: Readonly<{ onChange: (signer: PrivyCoinSigner | null) => void }>) {
-  const { runtime, load } = usePrivySession();
+  const session = usePrivySession();
+  const { load } = session;
+  const { selection } = useWalletSession();
+  const { sessionIdentity } = useSocialViewer();
+  const active = selection !== "wallet" && sessionIdentity !== "wallet";
+  const runtime = active ? session.runtime : null;
   const latest = useRef(runtime);
   useEffect(() => {
     latest.current = runtime;
   });
   useEffect(() => {
+    if (!active) {
+      return;
+    }
     const embedded = () => (latest.current?.authenticated ? findEmbeddedSuiWallet(latest.current.user) : null);
     const started = async () => latest.current ?? startPrivy(load);
     onChange({
@@ -56,6 +66,6 @@ export function PrivyCoinSignerBridge({ onChange }: Readonly<{ onChange: (signer
       },
     });
     return () => onChange(null);
-  }, [load, onChange]);
+  }, [active, load, onChange]);
   return null;
 }
