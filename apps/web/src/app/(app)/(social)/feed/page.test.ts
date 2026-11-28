@@ -77,8 +77,9 @@ test("Home starts visible reads, uses the 24-hour leaderboard, and can render wh
         new Promise<null>((resolve) => setImmediate(() => resolve(null))),
       ]);
       assert.ok(shell, "Home can return its shell before the market resolves");
-      assert.deepEqual(requests.map((path) => path.split("?")[0]), ["/api/social/home"], "the default Trending view reads only the market");
-      assert.equal(new URL(requests[0], "http://home").searchParams.get("presales"), "1", "Trending asks for presales in the same read");
+      assert.deepEqual(requests.map((path) => path.split("?")[0]), ["/api/social/home"], "the default Closest to graduating view reads only the market");
+      const read = new URL(requests[0], "http://home").searchParams;
+      assert.deepEqual([read.get("stage"), read.get("sort"), read.get("presales")], ["almost", "progress", null], "Home opens on Closest to graduating, with no presales");
       assert.ok(shell.props.initial instanceof Promise, "the shell streams before the market is ready");
       market.resolve();
       const seed = await shell.props.initial;

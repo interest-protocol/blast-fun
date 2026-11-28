@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Button, ButtonLink, IconButton } from "#web/components/blast-ui/Button.tsx";
 import { CloseIcon } from "#web/components/blast-ui/Icons.tsx";
 import { EmptyState } from "#web/components/blast-ui/EmptyState.tsx";
+import { LAUNCH_PATH } from "#web/components/blast-ui/nav.ts";
 import { PendingPanel } from "#web/components/blast-ui/PendingPanel.tsx";
 import { publicErrorMessage } from "#web/lib/errors.ts";
 import { pollInterval } from "#web/lib/query/polling.ts";
@@ -346,15 +347,16 @@ export function DiscoverEmpty({ query, onReset, compact }: DiscoverEmptyProps) {
   return <FilteredDiscoverEmpty compact={compact} onReset={onReset} query={query} />;
 }
 
-/** An empty tab says what it is waiting for, in the Bonding Curves card's words. */
+/** An empty tab says what it is waiting for; Closest to graduating, with no live curve at all, offers the launch instead. */
 const STAGE_EMPTY: Readonly<Record<HomeStage, string>> = {
   all: "No coins to discover.",
-  almost: "No curve is at 60% yet.",
+  almost: "Launch the next curve",
   graduated: "No coin has graduated yet.",
 };
 
 function DiscoverCatalogEmpty({ compact, stage }: Readonly<{ compact?: boolean; stage: HomeStage }>) {
-  return <EmptyState compact={compact} listEmpty role="status" title={STAGE_EMPTY[stage]} />;
+  const action = stage === "almost" ? <ButtonLink href={LAUNCH_PATH} size="sm">Launch</ButtonLink> : undefined;
+  return <EmptyState action={action} compact={compact} listEmpty role="status" title={STAGE_EMPTY[stage]} />;
 }
 
 function FilteredDiscoverEmpty({ query, onReset, compact }: DiscoverEmptyProps) {

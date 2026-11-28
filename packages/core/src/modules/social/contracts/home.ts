@@ -192,16 +192,14 @@ export function isHomeSort(value: unknown): value is HomeSort {
 /**
  * Which coins Discover lists. `all`: every coin except bonding curves still
  * filling, which list only on `almost` and, once traded in the window, on
- * Trending with `HOME_PRESALES_PARAM`. `almost`: live bonding curves at
- * `HOME_ALMOST_GRADUATED_BPS` or more of their graduation target, and curves
- * ready to migrate.
+ * Trending with `HOME_PRESALES_PARAM`. `almost` (Closest to graduating):
+ * live bonding curves with a known progress, however far along, and curves
+ * ready to migrate; those traded in the last 24 hours first.
  * `graduated`: every coin that trades on a DEX (graduated curves, migrated
  * sales, V1 and catalog coins); a sale or a curve still filling is left out.
  */
 export const HOME_STAGES = ["all", "almost", "graduated"] as const;
 export type HomeStage = (typeof HOME_STAGES)[number];
-/** A live curve at or past this progress (60%) is almost graduated, the Bonding card's rule. */
-export const HOME_ALMOST_GRADUATED_BPS = 6_000;
 
 export const homeStageSchema = z.enum(HOME_STAGES);
 

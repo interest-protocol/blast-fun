@@ -186,41 +186,46 @@ test("a sale opens its presale page, a curve coin its coin page, and a coin with
 
 test("Home's Trending asks for presales; every other tab's URL is unchanged, and Blast mode never asks", () => {
   const path = (state: HomeViewState) => socialHomePath(discoverQueryOf(state));
-  assert.equal(path(HOME_DEFAULT_FEED), "/api/social/home?window=1h&presales=1");
-  assert.equal(path({ ...HOME_DEFAULT_FEED, window: "24h", page: 2 }), "/api/social/home?presales=1&page=2");
+  const trending: HomeViewState = { ...HOME_DEFAULT_FEED, stage: HOME_TABS.trending.stage, sort: HOME_TABS.trending.sort };
+  assert.equal(path(trending), "/api/social/home?window=1h&presales=1");
+  assert.equal(path({ ...trending, window: "24h", page: 2 }), "/api/social/home?presales=1&page=2");
   for (const key of HOME_TAB_KEYS.filter((tab) => tab !== "trending")) {
     const { stage, sort } = HOME_TABS[key];
     assert.doesNotMatch(path({ ...HOME_DEFAULT_FEED, stage, sort }), /presales/, key);
   }
-  assert.doesNotMatch(path({ ...HOME_DEFAULT_FEED, sort: "held" }), /presales/, "a header sort");
-  assert.equal(socialHomePath(workspaceDiscoverQuery(HOME_DEFAULT_FEED, 10)), "/api/social/home?window=1h");
+  assert.doesNotMatch(path({ ...trending, sort: "held" }), /presales/, "a header sort");
+  assert.equal(socialHomePath(workspaceDiscoverQuery(trending, 10)), "/api/social/home?window=1h");
 });
 
 test("the view state round-trips through the URL, with defaults left out and unknown values read as defaults", () => {
+  // Home opens on Closest to graduating (Jose, 2026-11-28).
   assert.deepEqual(viewStateOf(new URLSearchParams("")), HOME_DEFAULT_FEED);
   const defaultQuery = discoverQueryOf(viewStateOf(new URLSearchParams("")));
-  assert.equal(defaultQuery.sort, "relevant");
+  assert.deepEqual([defaultQuery.stage, defaultQuery.sort], ["almost", "progress"]);
   assert.equal(defaultQuery.window, "1h");
   assert.equal(discoverQueryOf(HOME_DEFAULT_FEED, 5).limit, 5);
   assert.equal(viewStateOf(new URLSearchParams("w=24h")).window, "24h");
   assert.equal(viewSearchOf(viewStateOf(new URLSearchParams("w=1h"))), "");
-  // Relevant is the default view, so its old explicit link folds to the plain address.
-  assert.equal(viewSearchOf(viewStateOf(new URLSearchParams("sort=relevant"))), "");
+  // Trending names its order, so its link still opens Trending; a link filtered or paged without a tab keeps its old list.
+  assert.equal(viewSearchOf(viewStateOf(new URLSearchParams("sort=relevant"))), "?sort=relevant");
+  const legacy = viewStateOf(new URLSearchParams("w=24h"));
+  assert.deepEqual([legacy.stage, legacy.sort], ["all", "held"]);
   const state = { source: "following", stage: "all", sort: "newest", window: "24h", minParticipants: 5, age: "7d", tradable: true, knownDeployer: true, page: 3 } as const;
   assert.equal(viewSearchOf(state), "?src=following&sort=newest&w=24h&min=5&age=7d&tradable=1&known=1&page=3");
   assert.deepEqual(viewStateOf(new URLSearchParams(viewSearchOf(state))), state);
   assert.equal(viewSearchOf(HOME_DEFAULT_FEED), "");
   assert.equal(viewSearchOf(HOME_DEFAULT_VIEW), "?sort=held");
   assert.deepEqual(viewStateOf(new URLSearchParams("src=x&sort=cap&w=7d&min=3&age=1d&tradable=yes&known=yes&page=0")), HOME_DEFAULT_FEED);
-  // A tab's stage implies its order, so the link names only the stage; a header sort within it is named.
+  // A tab's stage implies its order, so the link names only the stage (none for Home's own tab); a header sort within it is named.
   const almost = viewStateOf(new URLSearchParams("stage=almost"));
   assert.deepEqual([almost.stage, almost.sort], ["almost", "progress"]);
-  assert.equal(viewSearchOf(almost), "?stage=almost");
+  assert.equal(viewSearchOf(almost), "");
+  assert.equal(viewSearchOf({ ...almost, window: "24h" }), "?stage=almost&w=24h");
   assert.equal(viewSearchOf({ ...almost, sort: "held" }), "?stage=almost&sort=held");
   assert.equal(viewStateOf(new URLSearchParams("stage=graduated")).sort, "market_cap");
-  assert.equal(viewStateOf(new URLSearchParams("stage=moon")).stage, "all");
+  assert.equal(viewStateOf(new URLSearchParams("stage=moon")).stage, "almost");
   assert.equal(viewSearchOf(viewStateOf(new URLSearchParams("sort=last_trade"))), "?sort=last_trade");
-  assert.equal(resultsAnnouncement(almost, 12, 3), "Discover · Almost graduated · 12 coins · page 1 of 3 · sorted by Progress · last hour");
+  assert.equal(resultsAnnouncement(almost, 12, 3), "Discover · Closest to graduating · 12 coins · page 1 of 3 · sorted by Progress · last hour");
   // The page: an integer from 1; anything else (0, a fraction, a word, beyond the last page allowed) is page 1.
   assert.equal(viewStateOf(new URLSearchParams("page=12")).page, 12);
   assert.equal(viewStateOf(new URLSearchParams("page=12")).sort, "held");

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { mock } from "node:test";
 import { createWorkspaceStore } from "./model";
 
 const { installTestDom } = await import("../../../../../test/fixtures/social/test-dom.ts");
@@ -8,9 +8,12 @@ const { createTestQueryClient } = await import("#web/lib/query/test-client.ts");
 const { document, window } = installTestDom();
 window.scrollTo = () => {};
 const { act } = await import("react");
+const { environmentManager } = await import("@tanstack/react-query");
 const { createRoot } = await import("react-dom/client");
 const { WorkspaceHost } = await import("./WorkspaceHost");
 const { BondingData } = await import("./BondingData");
+const { MarketStreamHub, resetTabMarketStream } = await import("#web/components/launchpad/market-stream-hub.ts");
+type StreamListener = NonNullable<Parameters<InstanceType<typeof MarketStreamHub>["subscribe"]>[0]["listener"]>;
 
 const provenance = { source: "blast-infra", network: "mainnet", deployment: "d", checkpoint: 7, timestampMs: 1, observedAt: 1, lagMs: 0 } as const;
 const SUI = "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI";
@@ -151,12 +154,12 @@ test("Bonding: an empty stage says so after its read; a failed read offers Retry
 
 test("Bonding keeps the confirmed empty result and offers Retry if a refresh fails", async () => {
   let failing = false;
-  const view = await mounted((url) => failing ? "error" : { view: answerView(url), section: { state: "empty", provenance } }, { gcTime: 60_000 });
+  const view = await mounted((url) => failing ? "error" : almost(url) ? page(answerView(url), [row("d4", { progressBps: 9000 })]) : { view: answerView(url), section: { state: "empty", provenance } }, { gcTime: 60_000 });
   try {
     assert.match(view.panel().textContent!, /No bonding curves yet/);
     assert.equal(view.panel().querySelector('[aria-label="Refresh bonding curves"]'), null, "no refresh button: choosing a stage reads it again");
     await view.click("Almost graduated");
-    assert.match(view.panel().textContent!, /No curve is almost graduated/);
+    assert.match(view.panel().textContent!, /90% to graduation/);
     failing = true;
     await view.click("New");
     assert.match(view.panel().textContent!, /No bonding curves yet/);
@@ -166,6 +169,75 @@ test("Bonding keeps the confirmed empty result and offers Retry if a refresh fai
     assert.equal(view.panel().querySelector('[role="alert"]'), null);
     assert.match(view.panel().textContent!, /No bonding curves yet/);
   } finally { await view.dispose(); }
+});
+
+test("Bonding: with no curve at 60%, Almost graduated leaves the switch and the rail shows New, keeping the saved stage", async () => {
+  const view = await mounted((url) => almost(url) ? { view: answerView(url), section: { state: "empty", provenance } } : page(answerView(url), [row("a1", { progressBps: 2800 })]));
+  try {
+    await view.click("Almost graduated");
+    assert.equal(view.panel().querySelector('[aria-label="Curve stage"]')!.textContent, "New", "no empty stage on offer");
+    assert.equal(view.panel().querySelector('[aria-pressed="true"]')?.textContent, "New");
+    assert.match(view.panel().textContent!, /FROGFroggy28% to graduation/, "the 28% curve shows under New");
+    assert.doesNotMatch(view.panel().textContent!, /almost graduated/i);
+    assert.equal(view.store.getSnapshot().data.controls.Bonding?.view, "near_graduation", "the saved stage comes back with its first curve");
+  } finally { await view.dispose(); }
+});
+
+test("Bonding: with the stream down, a hidden Almost graduated comes back with its first curve", async () => {
+  // Query loaded before the test DOM, so it took this for a server and would schedule no refetch timer.
+  const wasServer = environmentManager.isServer();
+  environmentManager.setIsServer(() => false);
+  mock.timers.enable({ apis: ["setInterval"] });
+  let near: readonly unknown[] = [];
+  const view = await mounted((url) => almost(url) ? (near.length ? page(answerView(url), near) : { view: answerView(url), section: { state: "empty", provenance } }) : page(answerView(url), [row("a1", { progressBps: 2800 })]));
+  try {
+    await view.click("Almost graduated");
+    assert.equal(view.panel().querySelector('[aria-label="Curve stage"]')!.textContent, "New");
+    near = [row("b2", { progressBps: 6100 })];
+    await act(async () => mock.timers.tick(36_000));
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 40)); });
+    assert.equal(view.panel().querySelector('[aria-label="Curve stage"]')!.textContent, "NewAlmost graduated", "back at the fallback pace");
+    assert.equal(view.panel().querySelector('[aria-pressed="true"]')?.textContent, "Almost graduated", "the saved stage shows again");
+  } finally {
+    await view.dispose();
+    mock.timers.reset();
+    environmentManager.setIsServer(() => wasServer);
+  }
+});
+
+test("Bonding: a stage the stream emptied comes back by HTTP once the stream drops", async (t) => {
+  const wasServer = environmentManager.isServer();
+  environmentManager.setIsServer(() => false);
+  const original = Object.getOwnPropertyDescriptor(globalThis, "WebSocket");
+  Object.defineProperty(globalThis, "WebSocket", { value: class {}, configurable: true, writable: true });
+  let listener: StreamListener | undefined;
+  t.mock.method(MarketStreamHub.prototype, "subscribe", (request: { listener: StreamListener }) => {
+    listener = request.listener;
+    return { stop() {} };
+  });
+  // The stream's empty page is older than what HTTP reads after the drop.
+  const later = { ...provenance, checkpoint: 8 };
+  const view = await mounted((url) => almost(url)
+    ? { view: answerView(url), section: { state: "available", data: { rows: [row("b2", { progressBps: 6100 })], nextCursor: null }, provenance: later } }
+    : page(answerView(url), [row("a1", { progressBps: 2800 })]));
+  try {
+    assert.ok(listener, "the rail listens to the stream");
+    await act(async () => {
+      listener!.state("live");
+      listener!.discovery?.({ view: "near_graduation", section: { state: "empty", provenance } } as never);
+    });
+    assert.equal(view.panel().querySelector('[aria-label="Curve stage"]')!.textContent, "New", "the stream emptied Almost graduated");
+    assert.equal(view.requests.filter(almost).length, 0, "no HTTP read of it while the stream is live");
+    await act(async () => listener!.state("recovering"));
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 40)); });
+    assert.equal(view.panel().querySelector('[aria-label="Curve stage"]')!.textContent, "NewAlmost graduated", "read by HTTP once the stream drops");
+  } finally {
+    await view.dispose();
+    resetTabMarketStream();
+    if (original) Object.defineProperty(globalThis, "WebSocket", original);
+    else Reflect.deleteProperty(globalThis, "WebSocket");
+    environmentManager.setIsServer(() => wasServer);
+  }
 });
 
 test("Bonding opens a setup saved on the retired Graduated stage on New", async () => {

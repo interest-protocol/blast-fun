@@ -14,9 +14,15 @@ test("Home restores saved filters, skips explicit views, and retains unrelated U
   const selected = viewStateOf(new URLSearchParams("src=following&w=24h&min=5&sort=newest&age=7d&tradable=1&page=4"));
   rememberHomeFilters(HOME_DEFAULT_FEED, selected);
 
-  assert.equal(window.localStorage.getItem(STORAGE_KEY), "?sort=newest&w=24h&min=5&age=7d&tradable=1");
+  // Filters and window are saved; the tab is not, so a bare Home opens on Closest to graduating (Jose, 2026-11-28).
+  assert.equal(window.localStorage.getItem(STORAGE_KEY), "?stage=almost&w=24h&min=5&age=7d&tradable=1");
   assert.equal(restoreHomeFilters(new URL(`${home}?ref=jose#coins`))?.href,
-    `${home}?ref=jose&sort=newest&w=24h&min=5&age=7d&tradable=1#coins`);
+    `${home}?ref=jose&stage=almost&w=24h&min=5&age=7d&tradable=1#coins`);
+  // A tab alone saves nothing.
+  window.localStorage.clear();
+  rememberHomeFilters(HOME_DEFAULT_FEED, { ...HOME_DEFAULT_FEED, stage: "graduated", sort: "market_cap" });
+  assert.equal(window.localStorage.getItem(STORAGE_KEY), null);
+  rememberHomeFilters(HOME_DEFAULT_FEED, selected);
   assert.equal(restoreHomeFilters(new URL(`${home}?w=1h`)), null);
   assert.equal(restoreHomeFilters(new URL(`${home}?page=2`)), null);
 
@@ -30,8 +36,8 @@ test("Home restores saved filters, skips explicit views, and retains unrelated U
 
 test("Home validates stored filters and tolerates denied storage", (t) => {
   window.localStorage.setItem(STORAGE_KEY, "sort=unknown&w=24h&min=999&src=following&page=4");
-  // An unknown sort falls back to the order the filters imply (`held`), which the URL leaves out.
-  assert.equal(restoreHomeFilters(new URL(home))?.href, `${home}?w=24h`);
+  // An unknown sort is dropped with the tab: the window alone comes back, on Closest to graduating.
+  assert.equal(restoreHomeFilters(new URL(home))?.href, `${home}?stage=almost&w=24h`);
 
   window.localStorage.setItem(STORAGE_KEY, "w=unknown&min=999&page=4");
   assert.equal(restoreHomeFilters(new URL(home)), null);
