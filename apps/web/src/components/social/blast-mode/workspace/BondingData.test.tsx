@@ -12,6 +12,8 @@ const { environmentManager } = await import("@tanstack/react-query");
 const { createRoot } = await import("react-dom/client");
 const { WorkspaceHost } = await import("./WorkspaceHost");
 const { BondingData } = await import("./BondingData");
+const { MarketStreamHub, resetTabMarketStream } = await import("#web/components/launchpad/market-stream-hub.ts");
+type StreamListener = NonNullable<Parameters<InstanceType<typeof MarketStreamHub>["subscribe"]>[0]["listener"]>;
 
 const provenance = { source: "blast-infra", network: "mainnet", deployment: "d", checkpoint: 7, timestampMs: 1, observedAt: 1, lagMs: 0 } as const;
 const SUI = "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI";
@@ -199,6 +201,41 @@ test("Bonding: with the stream down, a hidden Almost graduated comes back with i
   } finally {
     await view.dispose();
     mock.timers.reset();
+    environmentManager.setIsServer(() => wasServer);
+  }
+});
+
+test("Bonding: a stage the stream emptied comes back by HTTP once the stream drops", async (t) => {
+  const wasServer = environmentManager.isServer();
+  environmentManager.setIsServer(() => false);
+  const original = Object.getOwnPropertyDescriptor(globalThis, "WebSocket");
+  Object.defineProperty(globalThis, "WebSocket", { value: class {}, configurable: true, writable: true });
+  let listener: StreamListener | undefined;
+  t.mock.method(MarketStreamHub.prototype, "subscribe", (request: { listener: StreamListener }) => {
+    listener = request.listener;
+    return { stop() {} };
+  });
+  // The stream's empty page is older than what HTTP reads after the drop.
+  const later = { ...provenance, checkpoint: 8 };
+  const view = await mounted((url) => almost(url)
+    ? { view: answerView(url), section: { state: "available", data: { rows: [row("b2", { progressBps: 6100 })], nextCursor: null }, provenance: later } }
+    : page(answerView(url), [row("a1", { progressBps: 2800 })]));
+  try {
+    assert.ok(listener, "the rail listens to the stream");
+    await act(async () => {
+      listener!.state("live");
+      listener!.discovery?.({ view: "near_graduation", section: { state: "empty", provenance } } as never);
+    });
+    assert.equal(view.panel().querySelector('[aria-label="Curve stage"]')!.textContent, "New", "the stream emptied Almost graduated");
+    assert.equal(view.requests.filter(almost).length, 0, "no HTTP read of it while the stream is live");
+    await act(async () => listener!.state("recovering"));
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 40)); });
+    assert.equal(view.panel().querySelector('[aria-label="Curve stage"]')!.textContent, "NewAlmost graduated", "read by HTTP once the stream drops");
+  } finally {
+    await view.dispose();
+    resetTabMarketStream();
+    if (original) Object.defineProperty(globalThis, "WebSocket", original);
+    else Reflect.deleteProperty(globalThis, "WebSocket");
     environmentManager.setIsServer(() => wasServer);
   }
 });

@@ -113,15 +113,15 @@ export function BondingCurves({ view: saved, onViewChange, now, onOpen }: Readon
 
 /**
  * Whether Almost graduated has no curve, from the stream or the last read of its first page; that read is
- * the stage's own query. While it is hidden and the stream is down, it is read at the fallback pace, so it
- * comes back with its first curve.
+ * the stage's own query. While it is hidden (by either) and the stream is down, it is read at the fallback
+ * pace, so it comes back with its first curve.
  */
 function useAlmostEmpty(live: ReturnType<typeof useLiveDiscovery>, fallbackInterval: number): boolean {
   const client = useAppQueryClient();
   const almostRead = useQuery(
     {
       ...railQuery("near_graduation", null),
-      enabled: (query) => !live.live && isEmpty(query.state.data),
+      enabled: (query) => !live.live && isEmpty(liveDiscoveryPage(live.pages.near_graduation, query.state.data)),
       staleTime: fallbackInterval,
       refetchInterval: fallbackInterval,
     },
