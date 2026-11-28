@@ -1,9 +1,9 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { track } from "@vercel/analytics";
 import clsx from "clsx";
-import { useCallback, useEffect, useId, useRef, useState, type Ref } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore, type Ref } from "react";
 
 import type { Quote } from "@mayanfinance/swap-sdk";
 
@@ -60,6 +60,7 @@ import {
 import { explorerLink, mergeRows, type BridgeRow, type BridgeSdk, type EvmWallet, type SolanaWallet, type SourceWallet, type TransferStatus } from "./bridge-sdk.ts";
 import styles from "./bridge.module.css";
 import { SourceTokenPicker } from "./SourceTokenPicker.tsx";
+import { readSolanaSubmission, solanaSubmissionSignature, SOLANA_RETRY_UNAVAILABLE, subscribeSolanaSubmission, withSolanaSubmissionLock } from "./solana-submission.ts";
 
 /** The source wallets Privy has connected, and how to connect one. */
 export type BridgeWallets = Readonly<{
@@ -88,6 +89,7 @@ const STATUS_GIVE_UP_MS = 30 * 60_000;
 const INDEXING_WINDOW_MS = 60_000;
 const BUSY_TEXT = "Confirm in your wallet.";
 const HISTORY_FAILED = "Couldn’t load recent bridges";
+const CHECKING_TEXT = "Checking Solana transfer.";
 
 /** Retry only what may pass on a second try: rate limits, server errors, the network. */
 function retryable(error: unknown): boolean {
@@ -118,7 +120,11 @@ function useBridgeReads(args: ReadArgs) {
   const quoted = useBridgeQuote(args);
   const source = useSourceReads(args, quoted);
   const history = useBridgeHistory(args.sdk, args.blastAddress);
-  return { ...quoted, ...source, history };
+  const { token, to } = args.selection;
+  const facts = quoted.shown ? quoteRows(quoteFacts(quoted.shown, token), token, to) : null;
+  const refreshing = facts !== null && (quoted.quote.isFetching || quoted.typing);
+  const retryHistory = history.isError && !history.isFetching ? () => { void history.refetch(); } : undefined;
+  return { ...quoted, ...source, facts, refreshing, history, retryHistory };
 }
 
 /** Mayan's quote for the settled amount, bound to the source wallet and the Blast address once both are known. */
@@ -203,6 +209,11 @@ function rememberSubmission(blastAddress: string, hash: string) {
   writeBrowserStorage("session", recentSubmissionKey(blastAddress), recent.map((entry) => `${entry.at}:${entry.hash}`).join(","));
 }
 
+function forgetSubmission(blastAddress: string, hash: string) {
+  const remaining = recentSubmissions(blastAddress).filter((entry) => entry.hash !== hash);
+  writeBrowserStorage("session", recentSubmissionKey(blastAddress), remaining.map((entry) => `${entry.at}:${entry.hash}`).join(","));
+}
+
 /** Bridges Mayan lists for the Blast address. */
 function useBridgeHistory(sdk: BridgeSdk, blastAddress: string | null) {
   return useQuery({
@@ -223,8 +234,16 @@ function useBridgeHistory(sdk: BridgeSdk, blastAddress: string | null) {
 
 type SendKeys = Readonly<{ quoteKey: readonly unknown[]; allowanceKey: readonly unknown[] }>;
 
+function quoteNeedsReview(fresh: Quote, shown: Quote | undefined) {
+  if (!shown) return false;
+  if (fresh.type !== shown.type) return true;
+  return fresh.type === "FAST_MCTP"
+    ? fresh.expectedAmountOut < shown.expectedAmountOut
+    : fresh.minReceived < shown.minReceived;
+}
+
 /** Approve, switch and bridge: each re-asks Mayan for a bound quote and checks it before any wallet call. */
-function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent }: Readonly<{
+function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent, solanaAddress }: Readonly<{
   sdk: BridgeSdk;
   selection: Selection;
   keys: SendKeys;
@@ -232,6 +251,7 @@ function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent }: R
   now: () => number;
   onPaused: (error: unknown) => void;
   onSent: () => void;
+  solanaAddress: string | null;
 }>) {
   const { chain, info, token, to } = selection;
   const queryClient = useQueryClient();
@@ -239,6 +259,9 @@ function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent }: R
   // The inputs for a fresh route or lower rate that needs review.
   const [rateChangedFor, setRateChangedFor] = useState<string | null>(null);
   const [sent, setSent] = useState<readonly BridgeRow[]>([]);
+  const [solanaNotice, setSolanaNotice] = useState<Readonly<{ address: string; text: string; error: boolean }> | null>(null);
+  const activeSolana = useRef(solanaAddress);
+  useLayoutEffect(() => { activeSolana.current = solanaAddress; }, [solanaAddress]);
   const running = useRef(false);
   // Closing the screen aborts: no wallet opens afterwards, from here or inside the SDK.
   const life = useRef<AbortController | null>(null);
@@ -271,29 +294,42 @@ function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent }: R
 
   // One wallet step at a time; its pending state is the card's busy state.
   const step = useMutation({
-    mutationFn: ({ work }: Readonly<{ work: () => Promise<void>; switching: boolean }>) => work(),
+    mutationFn: ({ work }: Readonly<{ work: () => Promise<void>; switching?: boolean; checkingAddress?: string }>) => work(),
     // Run now even offline: the quote fails with its copy, instead of pausing and prompting the wallet on reconnect.
     networkMode: "always",
-    onError: (error) => {
+    onError: (error, { checkingAddress }) => {
       // The person said no in the wallet: nothing to explain.
       if (rejected(error)) return;
       console.error("Bridge failed", error);
       // Closed: no card left to explain it on.
       if (signal().aborted) return;
+      if (checkingAddress) {
+        if (activeSolana.current === checkingAddress) {
+          setSolanaNotice({ address: checkingAddress, text: "Couldn’t check the Solana transfer. Check again before sending. Code: bridge_solana_status_failed.", error: true });
+        }
+        return;
+      }
+      if ((error as { code?: unknown } | null)?.code === SOLANA_RETRY_UNAVAILABLE) {
+        setFailed("Couldn’t secure a Solana send. Close other Bridge tabs or use a current browser with storage enabled. Code: bridge_solana_retry_unavailable.");
+        return;
+      }
       if (isPausedError(error)) onPaused(error);
       setFailed(isPausedError(error) ? PAUSED_TEXT : SEND_FAILED_TEXT);
     },
     // An approval or a bridge spends from the source wallet, gas included.
     // Not awaited, so the button frees up before the balance comes back.
-    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ["bridge", "balance"] }); },
+    onSuccess: (_result, { checkingAddress }) => {
+      if (!checkingAddress) void queryClient.invalidateQueries({ queryKey: ["bridge", "balance"] });
+    },
     onSettled: () => { running.current = false; },
   });
-  const run = (work: () => Promise<void>, switching = false) => {
+  const run = (work: () => Promise<void>, options: Readonly<{ switching?: boolean; checkingAddress?: string }> = {}) => {
     // The ref also stops a second press that lands before the busy render.
     if (running.current) return;
     running.current = true;
     setFailed(null);
-    step.mutate({ work, switching });
+    setSolanaNotice(null);
+    step.mutate({ work, ...options });
   };
 
   const approve = (ask: BridgeRequest, source: EvmWallet) => run(async () => {
@@ -309,14 +345,12 @@ function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent }: R
     queryClient.setQueryData(keys.allowanceKey, await sdk.allowanceEnough(fresh, source, chain));
   });
 
-  const bridge = (ask: BridgeRequest, source: SourceWallet, fromAmount: string) => run(async () => {
+  const sendBridge = async (ask: BridgeRequest, source: SourceWallet, fromAmount: string) => {
+    if (source.kind === "solana" && readSolanaSubmission(source.address)) return;
     const fresh = await freshQuote(ask);
     if (!fresh) return;
     queryClient.setQueryData(keys.quoteKey, fresh);
-    const worseQuote = fresh.type === "FAST_MCTP"
-      ? shown && fresh.expectedAmountOut < shown.expectedAmountOut
-      : shown && fresh.minReceived < shown.minReceived;
-    if (shown && (fresh.type !== shown.type || worseQuote)) {
+    if (quoteNeedsReview(fresh, shown)) {
       setRateChangedFor(inputs);
       return;
     }
@@ -324,22 +358,56 @@ function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent }: R
       queryClient.setQueryData(keys.allowanceKey, false);
       return;
     }
-    if (signal().aborted) return;
+    if (signal().aborted || (source.kind === "solana" && activeSolana.current !== source.address)) return;
+    let signedHash: string | undefined;
     const record = (hash: string) => {
+      signedHash = hash;
       rememberSubmission(ask.blastAddress, hash);
       setSent((rows) => rows.some((row) => row.hash === hash) ? rows : [{ hash, chain, fromAmount, fromSymbol: token.symbol, toAmount: String(fresh.expectedAmountOut), toSymbol: to.symbol, state: "pending", refundOnSui: fresh.type === "FAST_MCTP", at: new Date(now()).toISOString() }, ...rows]);
     };
-    record(await sdk.send(fresh, ask, source, record, signal()));
+    try {
+      const hash = await sdk.send(fresh, ask, source, record, signal());
+      if (!signedHash) record(hash);
+    } catch (error) {
+      if (source.kind !== "solana" || !signedHash) throw error;
+      console.error("Solana bridge submission could not be confirmed", error);
+    }
     routeEvent(fresh, chain, token);
-    onSent();
+    if (source.kind !== "solana" || activeSolana.current === source.address) onSent();
     setRateChangedFor(null);
     // The send spent the allowance; the same amount again must check it afresh.
     queryClient.removeQueries({ queryKey: ["bridge", "allowance"] });
-  });
+  };
 
-  const switchTo = (source: EvmWallet) => run(() => source.switchChain(info.chainId!), true);
+  const bridge = (ask: BridgeRequest, source: SourceWallet, amount: string) => run(() =>
+    source.kind === "solana"
+      ? withSolanaSubmissionLock(source.address, () => sendBridge(ask, source, amount))
+      : sendBridge(ask, source, amount));
 
-  return { busy: step.isPending, switching: step.isPending && step.variables.switching, failed, setFailed, rateChanged: rateChangedFor === inputs, sent, approve, bridge, switchTo };
+  const checkSolana = (address: string, blastAddress: string) => run(async () => {
+    const result = await sdk.checkSolanaSubmission(address, signal());
+    if (!result) return;
+    if (result.state === "failed") {
+      forgetSubmission(blastAddress, result.signature);
+      setSent((rows) => rows.filter((row) => row.hash !== result.signature));
+    }
+    if (signal().aborted || activeSolana.current !== address) return;
+    if (result.state === "failed") {
+      setSolanaNotice({ address, text: "The Solana transfer didn’t go through. You can bridge again. Code: bridge_solana_not_sent.", error: true });
+    } else if (result.state === "confirmed") {
+      onSent();
+      setSolanaNotice({ address, text: "Your transfer was confirmed on Solana.", error: false });
+      void queryClient.invalidateQueries({ queryKey: ["bridge", "history", blastAddress] });
+      void queryClient.invalidateQueries({ queryKey: ["bridge", "balance", "solana"] });
+    } else {
+      setSolanaNotice({ address, text: "Solana hasn’t confirmed this transfer.", error: false });
+    }
+  }, { checkingAddress: address });
+
+  const switchTo = (source: EvmWallet) => run(() => source.switchChain(info.chainId!), { switching: true });
+
+  const notice = solanaNotice?.address === solanaAddress ? solanaNotice : null;
+  return { busy: step.isPending, switching: step.isPending && step.variables.switching === true, busyText: step.variables?.checkingAddress ? CHECKING_TEXT : BUSY_TEXT, failed: failed ?? (notice?.error ? notice.text : null), setFailed, solanaNotice: notice?.error ? null : notice?.text, rateChanged: rateChangedFor === inputs, sent, approve, bridge, checkSolana, switchTo };
 }
 
 /**
@@ -394,12 +462,13 @@ type ActionInputs = Readonly<{
   atoms: bigint | null;
   id: string;
   paused: boolean;
+  solanaPending: boolean;
   signedIn: boolean;
   blastAddress: string | null;
 }>;
 
 /** What the button does now, and why the last quote failed if it did. */
-function formAction({ reads, send, selection, wallet, atoms, id, paused, signedIn, blastAddress }: ActionInputs) {
+function formAction({ reads, send, selection, wallet, atoms, id, paused, signedIn, blastAddress, solanaPending }: ActionInputs) {
   const { info, token } = selection;
   const quoteSettled = reads.quote.isError && !reads.quote.isFetching && atoms !== null && !reads.typing && !paused;
   const quoteError = quoteSettled ? quoteErrorText(reads.quote.error, info, token) : null;
@@ -416,6 +485,7 @@ function formAction({ reads, send, selection, wallet, atoms, id, paused, signedI
     quoteFailed: quoteError === QUOTE_FAILED_TEXT,
     hasQuote: reads.current,
     busy: send.busy,
+    solanaPending,
     needsApproval: reads.allowance.data === false,
     rateChanged: send.rateChanged,
   });
@@ -432,8 +502,7 @@ function formAction({ reads, send, selection, wallet, atoms, id, paused, signedI
   return { action, actionBusy, actionDescription, balance, balanceFailed, disableAction, message, noteId, reason, sourceAction };
 }
 
-export function BridgeForm({ sdk, wallets, blastAddress, signedIn, onSignIn, onArrived, now = Date.now }: BridgeFormProps) {
-  const id = useId();
+function useSourceActionFocus() {
   const chainTrigger = useRef<HTMLButtonElement>(null);
   const sourceActionRef = useCallback((button: HTMLButtonElement | null) => {
     if (!button) return;
@@ -446,6 +515,12 @@ export function BridgeForm({ sdk, wallets, blastAddress, signedIn, onSignIn, onA
       });
     };
   }, []);
+  return { chainTrigger, sourceActionRef };
+}
+
+export function BridgeForm({ sdk, wallets, blastAddress, signedIn, onSignIn, onArrived, now = Date.now }: BridgeFormProps) {
+  const id = useId();
+  const { chainTrigger, sourceActionRef } = useSourceActionFocus();
   const { selection, toIndex, setToIndex, amount, setAmount, chooseChain, chooseToken } = useBridgeInputs();
   const { chain, info, token } = selection;
   const [paused, setPaused] = useState(false);
@@ -455,10 +530,11 @@ export function BridgeForm({ sdk, wallets, blastAddress, signedIn, onSignIn, onA
   }, []);
 
   const wallet: SourceWallet | null = info.kind === "evm" ? wallets.evm : wallets.solana;
+  const { solanaAddress, signature, solanaPending } = usePendingSolanaSubmission(wallet);
   const atoms = amountAtoms(amount, token);
-  const reads = useBridgeReads({ sdk, selection, wallet, blastAddress, atoms, paused, onPaused });
-  const send = useBridgeSend({ sdk, selection, keys: reads, shown: reads.shown, now, onPaused, onSent: () => setAmount("") });
-  const { action, actionBusy, actionDescription, balance, balanceFailed, disableAction, message, noteId, reason, sourceAction } = formAction({ reads, send, selection, wallet, atoms, id, paused, signedIn, blastAddress });
+  const reads = useBridgeReads({ sdk, selection, wallet, blastAddress, atoms: solanaPending ? null : atoms, paused, onPaused });
+  const send = useBridgeSend({ sdk, selection, keys: reads, shown: reads.shown, now, onPaused, onSent: () => setAmount(""), solanaAddress });
+  const { action, actionBusy, actionDescription, balance, balanceFailed, disableAction, message, noteId, reason, sourceAction } = formAction({ reads, send, selection, wallet, atoms, id, paused, signedIn, blastAddress, solanaPending });
 
   const request = (): BridgeRequest => ({ chain, token, to: selection.to, amountIn64: atoms!.toString(), blastAddress: blastAddress!, sourceAddress: wallet!.address });
   const press = () => pressAction(action.kind, {
@@ -467,13 +543,13 @@ export function BridgeForm({ sdk, wallets, blastAddress, signedIn, onSignIn, onA
     switch: () => { if (reads.evmWallet) send.switchTo(reads.evmWallet); },
     retry: () => { void reads.quote.refetch(); },
     approve: () => { if (reads.evmWallet) send.approve(request(), reads.evmWallet); },
+    checkSolana: () => send.checkSolana(solanaAddress!, blastAddress!),
     bridge: () => { if (wallet) send.bridge(request(), wallet, amount.replace(/,/g, "")); },
   });
 
-  const facts = reads.shown ? quoteRows(quoteFacts(reads.shown, token), token, selection.to) : null;
-  const refreshing = facts !== null && (reads.quote.isFetching || reads.typing);
   // Nothing to change while a wallet is asked or Mayan has paused this SDK.
   const locked = send.busy || paused;
+  const inputsDisabled = locked || solanaPending;
   const rows = mergeRows(send.sent, reads.history.data ?? []);
   const actionButton = (
     <Button
@@ -482,7 +558,7 @@ export function BridgeForm({ sdk, wallets, blastAddress, signedIn, onSignIn, onA
       disabled={disableAction}
       focusableDisabled={sourceAction}
       loading={actionBusy}
-      loadingLabel={BUSY_TEXT}
+      loadingLabel={send.busyText}
       onClick={press}
       ref={sourceAction ? sourceActionRef : undefined}
       size="lg"
@@ -503,7 +579,7 @@ export function BridgeForm({ sdk, wallets, blastAddress, signedIn, onSignIn, onA
           amount={amount}
           balance={balance}
           balanceFailed={balanceFailed}
-          busy={locked}
+          busy={inputsDisabled}
           chain={chain}
           connected={wallet !== null}
           id={id}
@@ -515,34 +591,35 @@ export function BridgeForm({ sdk, wallets, blastAddress, signedIn, onSignIn, onA
         />
         <GetPanel
           blastAddress={blastAddress}
-          busy={locked}
-          facts={facts}
+          busy={inputsDisabled}
+          facts={reads.facts}
           onTo={setToIndex}
-          refreshing={refreshing}
+          refreshing={reads.refreshing}
           toIndex={toIndex}
           waiting={atoms !== null && !message}
         />
       </div>
       <QuoteNotes
-        amount={amount}
-        busy={actionBusy}
-        facts={atoms === null ? null : facts}
+        amount={reads.current ? amount : null}
+        busyText={actionBusy ? send.busyText : null}
+        facts={reads.facts}
         fastMctp={reads.shown?.type === "FAST_MCTP"}
         info={info}
         message={message}
         noteId={noteId}
         rateChanged={send.rateChanged}
         reason={reason}
-        refreshing={refreshing}
+        refreshing={reads.refreshing}
         token={token}
       />
+      <SolanaStatus notice={send.solanaNotice} signature={signature} />
       {sourceAction ? null : actionButton}
       <p className={styles.powered}>Powered by Mayan</p>
       <RecentBridges
         id={id}
         now={now}
         onArrived={onArrived}
-        onRetry={reads.history.isError && !reads.history.isFetching ? () => { void reads.history.refetch(); } : undefined}
+        onRetry={reads.retryHistory}
         rows={rows}
         sdk={sdk}
       />
@@ -550,7 +627,29 @@ export function BridgeForm({ sdk, wallets, blastAddress, signedIn, onSignIn, onA
   );
 }
 
-type PressHandlers = Readonly<{ signIn(): void; connect(): void; switch(): void; retry(): void; approve(): void; bridge(): void }>;
+const noSubscription = () => () => undefined;
+
+function usePendingSolanaSubmission(wallet: SourceWallet | null) {
+  const solanaAddress = wallet?.kind === "solana" ? wallet.address : null;
+  const signature = useSyncExternalStore(
+    solanaAddress ? subscribeSolanaSubmission : noSubscription,
+    () => solanaAddress ? solanaSubmissionSignature(readSolanaSubmission(solanaAddress)) : null,
+    () => null,
+  );
+  return { solanaAddress, signature, solanaPending: signature !== null };
+}
+
+function SolanaStatus({ notice, signature }: Readonly<{ notice?: string | null; signature: string | null }>) {
+  if (!notice && !signature) return null;
+  return (
+    <div className={coinStyles.amtFoot}>
+      {notice ? <p className={clsx(coinStyles.status, styles.note)} role="status">{notice}</p> : null}
+      {signature ? <TransactionLink href={`https://explorer.solana.com/tx/${encodeURIComponent(signature)}`} label="View on Solana Explorer" /> : null}
+    </div>
+  );
+}
+
+type PressHandlers = Readonly<{ signIn(): void; connect(): void; switch(): void; retry(): void; approve(): void; checkSolana(): void; bridge(): void }>;
 
 function pressAction(kind: BridgeAction["kind"], handlers: PressHandlers): void {
   switch (kind) {
@@ -559,6 +658,7 @@ function pressAction(kind: BridgeAction["kind"], handlers: PressHandlers): void 
     case "switch":
     case "retry":
     case "approve":
+    case "checkSolana":
     case "bridge":
       return handlers[kind]();
     case "requote":
@@ -698,10 +798,10 @@ function GetPanel({ facts, waiting, refreshing, toIndex, onTo, busy, blastAddres
   );
 }
 
-function QuoteNotes({ facts, fastMctp, amount, info, token, refreshing, message, noteId, rateChanged, reason, busy }: Readonly<{
+function QuoteNotes({ facts, fastMctp, amount, info, token, refreshing, message, noteId, rateChanged, reason, busyText }: Readonly<{
   facts: QuoteRows | null;
   fastMctp: boolean;
-  amount: string;
+  amount: string | null;
   info: ChainInfo;
   token: SourceToken;
   refreshing: boolean;
@@ -709,15 +809,15 @@ function QuoteNotes({ facts, fastMctp, amount, info, token, refreshing, message,
   noteId: string;
   rateChanged: boolean;
   reason: string | null;
-  busy: boolean;
+  busyText: string | null;
 }>) {
   return (
     <>
-      {facts ? <QuoteSummary facts={facts} fastMctp={fastMctp} rateChanged={rateChanged} refreshing={refreshing} sent={displayAmount(amount.replace(/,/g, ""), token.symbol)} source={info.label} /> : null}
+      {facts ? <QuoteSummary facts={facts} fastMctp={fastMctp} rateChanged={rateChanged} refreshing={refreshing} sent={amount === null ? null : displayAmount(amount.replace(/,/g, ""), token.symbol)} source={info.label} /> : null}
       {message ? <p className={clsx(coinStyles.status, styles.note)} id={noteId} role="alert"><DiagnosticText message={message} /></p> : null}
       {rateChanged ? <p className={clsx(coinStyles.status, styles.note)} role="status">The quote changed. Review it before continuing.</p> : null}
       {reason && !message ? <p className={clsx(coinStyles.status, styles.note)} id={noteId}>{reason}</p> : null}
-      {busy ? <p aria-hidden="true" className={clsx(coinStyles.status, styles.note)}>{BUSY_TEXT}</p> : null}
+      {busyText ? <p aria-hidden="true" className={clsx(coinStyles.status, styles.note)}>{busyText}</p> : null}
     </>
   );
 }
@@ -727,14 +827,14 @@ function QuoteSummary({ facts, fastMctp, rateChanged, refreshing, sent, source }
   fastMctp: boolean;
   rateChanged: boolean;
   refreshing: boolean;
-  sent: string;
+  sent: string | null;
   source: string;
 }>) {
   return (
     <div className={clsx(styles.summary, refreshing && styles.refreshing)}>
-      <p className={styles.sentence}>
+      {sent ? <p className={styles.sentence}>
         Send {sent} from {source}. {fastMctp ? "The amount shown is an estimate." : `You get at least ${facts.minimum}.`}
-      </p>
+      </p> : null}
       <dl className={coinStyles.terms}>
         <div><dt>{fastMctp ? "Estimated fee" : "Fee"}</dt><dd>{facts.fee}</dd></div>
         <div><dt>Arrives</dt><dd>{facts.eta}</dd></div>
@@ -771,6 +871,18 @@ function RecentBridges({ id, rows, sdk, onArrived, onRetry, now }: Readonly<{
   );
 }
 
+function announceBridgeArrival(queryClient: QueryClient, onArrived: BridgeFormProps["onArrived"], row: BridgeRow, toAmount: string | null) {
+  const arrivalKey = ["bridge", "arrival", row.hash];
+  if (queryClient.getQueryData(arrivalKey)) return;
+  queryClient.setQueryData(arrivalKey, true);
+  void queryClient.invalidateQueries({ queryKey: ["bridge", "balance"] });
+  try {
+    onArrived(row, toAmount);
+  } catch (error) {
+    console.error("Bridge arrival announcement failed", error);
+  }
+}
+
 function BridgeRowView({ row, sdk, onArrived, now }: Readonly<{ row: BridgeRow; sdk: BridgeSdk; onArrived: BridgeFormProps["onArrived"]; now: () => number }>) {
   const age = now() - Date.parse(row.at);
   const watching = row.state === "pending" && age < STATUS_GIVE_UP_MS;
@@ -778,21 +890,12 @@ function BridgeRowView({ row, sdk, onArrived, now }: Readonly<{ row: BridgeRow; 
   const statusKey = ["bridge", "status", row.hash] as const;
   const status = useQuery({
     queryKey: statusKey,
-    // Announced where the read lands, and only on a change to "done": a "done" cached from an earlier visit is not news.
     queryFn: async () => {
       const before = queryClient.getQueryData<TransferStatus>(statusKey)?.state;
-      const next = await sdk.status(row.hash);
-      if (next.state === "done" && before !== "done") {
-        // The source transaction is mined by now; the balance read right after sending was too early.
-        void queryClient.invalidateQueries({ queryKey: ["bridge", "balance"] });
-        // A failing announcement must not fail the read, or its retry would announce again.
-        try {
-          onArrived(row, next.toAmount);
-        } catch (error) {
-          console.error("Bridge arrival announcement failed", error);
-        }
-      }
-      return next;
+      const result = await sdk.status(row.hash);
+      // The read can finish after the sheet closes.
+      if (before !== "done" && result.state === "done") announceBridgeArrival(queryClient, onArrived, row, result.toAmount);
+      return result;
     },
     enabled: watching,
     // Every 5 s while the page is visible; it stops once Mayan settles it.
@@ -802,6 +905,12 @@ function BridgeRowView({ row, sdk, onArrived, now }: Readonly<{ row: BridgeRow; 
   const settled = row.state === "pending" ? status.data : row;
   const state = settled?.state ?? row.state;
   const toAmount = settled?.toAmount ?? row.toAmount;
+  const previousState = useRef(state);
+  useEffect(() => {
+    const previous = previousState.current;
+    previousState.current = state;
+    if (previous === "pending" && state === "done") announceBridgeArrival(queryClient, onArrived, row, toAmount);
+  }, [onArrived, queryClient, row, state, toAmount]);
   const info = row.chain ? CHAINS[row.chain] : null;
   const chain = info?.label ?? "another chain";
   const sentText = displayAmount(row.fromAmount, row.fromSymbol);

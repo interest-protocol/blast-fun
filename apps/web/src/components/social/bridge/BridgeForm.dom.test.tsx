@@ -6,16 +6,18 @@ import type { Quote } from "@mayanfinance/swap-sdk";
 
 import { installTestDom, recordAnimations, setInputValue, testEvent, waitFor } from "../../../../test/fixtures/social/test-dom.ts";
 
-import type { BridgeRow, BridgeSdk, EvmWallet, QuoteInput } from "./bridge-sdk.ts";
+import type { BridgeRow, BridgeSdk, EvmWallet, QuoteInput, SourceWallet } from "./bridge-sdk.ts";
+import { rememberSolanaSubmission, settleSolanaSubmission } from "./solana-submission.ts";
 
 const dom = installTestDom();
 const { act } = await import("react");
 const { createRoot } = await import("react-dom/client");
+const { GC_MS } = await import("#web/lib/query/client.ts");
 const { createTestQueryClient, withQueryClient } = await import("#web/lib/query/test-client.ts");
 const { BridgeForm } = await import("./BridgeForm.tsx");
 
 // Live Mayan quotes captured 2026-11-26 with placeholder addresses (the guard tests use the same file).
-const QUOTES = JSON.parse(readFileSync(new URL("../../../../test/fixtures/social/bridge/blink-quotes.json", import.meta.url), "utf8")) as Record<"baseUsdcToSui", Quote>;
+const QUOTES = JSON.parse(readFileSync(new URL("../../../../test/fixtures/social/bridge/blink-quotes.json", import.meta.url), "utf8")) as Record<"baseUsdcToSui" | "solToSuiUsdc", Quote>;
 const QUOTE = QUOTES.baseUsdcToSui;
 const FAST_MCTP = JSON.parse(readFileSync(new URL("../../../../test/fixtures/social/bridge/fast-mctp-quote.json", import.meta.url), "utf8")) as Quote;
 const BLAST = `0x${"ab".repeat(32)}`;
@@ -42,6 +44,7 @@ function fakeSdk(calls: Calls, answers: ReadonlyArray<Quote | Error>, overrides:
       onSigned("0xhash");
       return "0xhash";
     },
+    checkSolanaSubmission: async () => null,
     history: async () => [],
     status: async () => ({ state: "done", toAmount: "29.81" }),
     ...overrides,
@@ -54,13 +57,15 @@ function evm(address = SOURCE): EvmWallet {
 
 const coded = (code: unknown) => Object.assign(new Error("refused"), { code });
 
-async function mount(sdk: BridgeSdk, calls: Calls, wallet: EvmWallet | null = evm(), queries: Record<string, unknown> = {}) {
+async function mount(sdk: BridgeSdk, calls: Calls, wallet: SourceWallet | null = evm(), queries: Record<string, unknown> = {}) {
   const container = dom.document.createElement("div");
   container.setAttribute("data-blast-ui", "");
   dom.document.body.appendChild(container);
   const root = createRoot(container);
   const client = createTestQueryClient({ queries });
-  const render = (next: EvmWallet | null, key = "first") => act(async () => root.render(withQueryClient(client,
+  // Arrival deduplication is shared across the status read and view for the app's cache lifetime.
+  client.setQueryDefaults(["bridge", "arrival"], { gcTime: GC_MS });
+  const render = (next: SourceWallet | null, key = "first") => act(async () => root.render(withQueryClient(client,
     <BridgeForm
       key={key}
       blastAddress={BLAST}
@@ -69,7 +74,7 @@ async function mount(sdk: BridgeSdk, calls: Calls, wallet: EvmWallet | null = ev
       onSignIn={() => undefined}
       sdk={sdk}
       signedIn
-      wallets={{ evm: next, solana: null, connect: () => undefined }}
+      wallets={{ evm: next?.kind === "evm" ? next : null, solana: next?.kind === "solana" ? next : null, connect: () => undefined }}
     />,
   )));
   await render(wallet);
@@ -77,11 +82,13 @@ async function mount(sdk: BridgeSdk, calls: Calls, wallet: EvmWallet | null = ev
   const text = () => container.textContent ?? "";
   return {
     container,
+    client,
     button,
     text,
     rerender: render,
     /** A fresh form on the same query cache, like closing and reopening Bridge. */
     remount: () => render(wallet, "again"),
+    hide: () => act(async () => root.render(null)),
     /** USDC to send, then SUI to receive: USDC defaults the receiving coin to USDC. */
     async pickUsdc(receive: "SUI" | "USDC" = "SUI") {
       const option = (group: string, symbol: string) => [...container.querySelectorAll<HTMLButtonElement>(`[aria-label='${group}'] button`)].find((button) => button.textContent === symbol)!;
@@ -104,6 +111,7 @@ async function mount(sdk: BridgeSdk, calls: Calls, wallet: EvmWallet | null = ev
     },
     async unmount() {
       await act(async () => root.unmount());
+      client.clear();
       container.remove();
     },
   };
@@ -132,6 +140,77 @@ test("switching the source network keeps keyboard focus in the send flow", async
   } finally {
     switched.resolve();
     await form.unmount();
+  }
+});
+
+test("a lost Solana send response stays blocked after reopening until expiry is verified", async () => {
+  const calls = newCalls();
+  const address = "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM";
+  let expiryProven = false;
+  let rpcFails = true;
+  const sdk = fakeSdk(calls, [QUOTES.solToSuiUsdc], {
+    async send(_quote, _request, _wallet, onSigned) {
+      calls.sends += 1;
+      rememberSolanaSubmission(address, "sol-hash", { slot: 200, blockhash: "blockhash", lastValidBlockHeight: 340 });
+      onSigned("sol-hash");
+      throw new Error("RPC disconnected after broadcasting");
+    },
+    checkSolanaSubmission: (source) => settleSolanaSubmission({
+      async getSignatureStatuses() {
+        if (rpcFails) throw new Error("RPC unavailable");
+        return { context: { slot: 360 }, value: [null] };
+      },
+    }, source, async (expiry, signature) => {
+      assert.deepEqual(expiry, { slot: 200, blockhash: "blockhash", lastValidBlockHeight: 340 });
+      assert.equal(signature, "sol-hash");
+      return expiryProven ? "failed" : "pending";
+    }),
+    status: async () => ({ state: "pending", toAmount: null }),
+  });
+  Object.defineProperty(navigator, "locks", { configurable: true, value: {
+    request: async (_name: string, _options: LockOptions, work: (lock: object) => Promise<unknown>) => work({}),
+  } });
+  const form = await mount(sdk, calls, { kind: "solana", address, signTransaction: async (bytes) => bytes });
+  const pickSolana = async () => {
+    await act(async () => form.container.querySelector<HTMLButtonElement>("[aria-label='From Base. Change chain']")!.click());
+    const item = await waitFor(() => [...dom.document.querySelectorAll<HTMLElement>("[role='menuitemradio']")].find((option) => option.textContent === "Solana"), "Solana in the source chain menu");
+    await act(async () => item.click());
+  };
+  const receiveUsdc = () => act(async () => [...form.container.querySelectorAll<HTMLButtonElement>("[aria-label='Coin to receive'] button")].find((option) => option.textContent === "USDC")!.click());
+  const check = async (copy: RegExp) => {
+    assert.equal(form.button().textContent, "Check Solana transfer");
+    await act(async () => form.button().click());
+    await waitFor(() => copy.test(form.text()), "the source status result");
+    assert.equal(calls.sends, 1, "a check never signs or sends again");
+  };
+
+  try {
+    await pickSolana();
+    await receiveUsdc();
+    await form.type("0.1");
+    await form.press();
+    assert.equal(calls.sends, 1);
+    assert.doesNotMatch(form.text(), /bridge didn’t start/);
+    await form.remount();
+    await pickSolana();
+    await check(/Couldn’t check the Solana transfer/);
+    rpcFails = false;
+    await check(/hasn’t confirmed/);
+    assert.ok(form.container.querySelector("a[href='https://explorer.solana.com/tx/sol-hash']"), "the saved signature remains available after reopening");
+    expiryProven = true;
+    await check(/didn’t go through/);
+    assert.equal(form.button().textContent, "Bridge");
+    assert.equal(form.button().disabled, true, "a new send requires re-entering the amount");
+    await receiveUsdc();
+    await form.type("0.1");
+    await waitFor(() => !form.button().disabled, "the new transfer can be sent");
+    await form.press();
+    assert.equal(calls.sends, 2, "a deliberate new send is allowed after verified expiry");
+  } finally {
+    await form.unmount();
+    Reflect.deleteProperty(navigator, "locks");
+    dom.window.localStorage.removeItem(`blast:solana-bridge-submission:${address}`);
+    dom.window.sessionStorage.removeItem(`blast:bridge-submissions:${BLAST}`);
   }
 });
 
@@ -208,20 +287,30 @@ test("a checked quote bridges on one press, lists the row and reports the arriva
   }
 });
 
-test("reopening Bridge does not report an arrival again from the cache", async () => {
+test("an in-flight arrival is reported once after closing and reopening Bridge", async () => {
   const calls = newCalls();
   const listed: BridgeRow = { hash: "0xhash", chain: "base", fromAmount: "20", fromSymbol: "USDC", toAmount: "29.81", toSymbol: "SUI", state: "pending", at: new Date(BEFORE_EXPIRY).toISOString() };
   // The app keeps finished queries for minutes; the test client's default drops them at once.
-  const form = await mount(fakeSdk(calls, [QUOTE], { history: async () => (calls.sends > 0 ? [listed] : []) }), calls, evm(), { gcTime: 5 * 60_000 });
+  const started = Promise.withResolvers<void>();
+  const completion = Promise.withResolvers<{ state: "done"; toAmount: string }>();
+  const done = { state: "done", toAmount: "29.81" } as const;
+  const form = await mount(fakeSdk(calls, [QUOTE], {
+    history: async () => (calls.sends > 0 ? [listed] : []),
+    status: () => { started.resolve(); return completion.promise; },
+  }), calls, evm(), { gcTime: 5 * 60_000 });
   try {
     await form.pickUsdc();
     await form.type("20");
     await form.press();
+    await started.promise;
+    await form.hide();
+    await act(async () => completion.resolve(done));
     await waitFor(() => calls.arrived === 1, "the arrival");
     await form.remount();
     await waitFor(() => /Arrived · 29\.81\u00a0SUI/.test(form.text()), "the listed row");
     assert.equal(calls.arrived, 1, "the cached arrival is not told twice");
   } finally {
+    completion.resolve(done);
     await form.unmount();
   }
 });
@@ -252,20 +341,23 @@ test("a terminal Fast MCTP history row wins over a cached pending status", async
 
 test("a failed history read offers a retry and a successful empty read clears it", async () => {
   const calls = newCalls();
-  let failed = true;
+  let reads = 0;
+  const answer = Promise.withResolvers<BridgeRow[]>();
   const sdk = fakeSdk(calls, [], { history: async () => {
-    if (failed) throw new Error("Mayan unavailable");
-    return [];
+    if (++reads <= 2) throw new Error("Mayan unavailable");
+    return answer.promise;
   } });
-  const form = await mount(sdk, calls);
+  const form = await mount(sdk, calls, evm(), { retryDelay: 0 });
   try {
     const retry = await waitFor(() => [...form.container.querySelectorAll("button")].find((button) => button.textContent === "Retry history"), "the history retry action");
     assert.match(form.text(), /Couldn’t load recent bridges/);
     assert.match(form.text(), /Code: bridge_history_failed\./);
-    failed = false;
     await act(async () => retry.click());
-    await waitFor(() => !form.text().includes("Recent bridges"), "the recovered empty history");
+    await waitFor(() => reads === 3, "the manual history retry starts");
+    await act(async () => answer.resolve([]));
+    await waitFor(() => !form.text().includes("Recent bridges"), "the empty history removes the retry action");
   } finally {
+    answer.resolve([]);
     await form.unmount();
   }
 });
@@ -371,17 +463,48 @@ test("closing Bridge while the fresh quote is on its way opens no wallet", async
 test("closing Bridge while the allowance is checked opens no wallet", async () => {
   const calls = newCalls();
   let hold = false;
-  let release: (enough: boolean) => void = () => undefined;
+  const started = Promise.withResolvers<void>();
+  const allowance = Promise.withResolvers<boolean>();
   const sdk = fakeSdk(calls, [QUOTE]);
-  const form = await mount({ ...sdk, allowanceEnough: (...args) => hold ? new Promise<boolean>((resolve) => { release = resolve; }) : sdk.allowanceEnough(...args) }, calls);
+  const form = await mount({ ...sdk, allowanceEnough: (...args) => {
+    if (!hold) return sdk.allowanceEnough(...args);
+    started.resolve();
+    return allowance.promise;
+  } }, calls);
   await form.pickUsdc();
   await form.type("20");
   hold = true;
   await act(async () => form.button().click());
-  await waitFor(() => form.button().hasAttribute("aria-busy"), "the press is running");
+  await started.promise;
   await form.unmount();
-  await act(async () => release(true));
+  await act(async () => allowance.resolve(true));
   assert.equal(calls.sends, 0);
+});
+
+test("history can confirm a watched bridge before the status read does", async () => {
+  const calls = newCalls();
+  const listed: BridgeRow = { hash: "0xhash", chain: "base", fromAmount: "20", fromSymbol: "USDC", toAmount: "29.81", toSymbol: "SUI", state: "done", at: new Date(BEFORE_EXPIRY).toISOString() };
+  let arrived = false;
+  const status = Promise.withResolvers<{ state: "done"; toAmount: string }>();
+  const form = await mount(fakeSdk(calls, [QUOTE], {
+    history: async () => arrived ? [listed] : [],
+    status: () => status.promise,
+  }), calls);
+  try {
+    await form.pickUsdc();
+    await form.type("20");
+    await form.press();
+    await waitFor(() => /On the way/.test(form.text()), "the pending bridge");
+    arrived = true;
+    await act(async () => { await form.client.invalidateQueries({ queryKey: ["bridge", "history", BLAST] }); });
+    await waitFor(() => calls.arrived === 1, "history confirms arrival");
+    await act(async () => status.resolve({ state: "done", toAmount: "29.81" }));
+    await form.remount();
+    assert.equal(calls.arrived, 1, "the status result and reopened history do not announce twice");
+  } finally {
+    status.resolve({ state: "done", toAmount: "29.81" });
+    await form.unmount();
+  }
 });
 
 test("closing Bridge while the SDK prepares the send aborts it before the wallet", async () => {
