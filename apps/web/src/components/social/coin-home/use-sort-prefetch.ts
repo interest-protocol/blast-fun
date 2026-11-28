@@ -7,7 +7,7 @@ import { useAppQueryClient } from "#web/lib/query/provider.tsx";
 import type { HomeQuery } from "@blast/core/web/contracts/home.ts";
 
 import { discoverQuery } from "./home-client";
-import { HOME_TABS, type HomeTab } from "./home-state";
+import { withTab, type HomeTab } from "./home-state";
 
 /**
  * A cached view older than the public freshness limit is shown at once and
@@ -37,7 +37,7 @@ export function useSortPrefetch(query: HomeQuery): void {
 export function useTabPrefetch(query: HomeQuery): (tab: HomeTab) => void {
   const client = useAppQueryClient();
   return (tab) => {
-    const { stage, sort } = HOME_TABS[tab];
-    void client.prefetchQuery(discoverQuery({ ...query, stage, sort, page: 1, cursor: null }, true));
+    // The same helper as a tab press, so the prefetched URL is the one the press reads (New's age included).
+    void client.prefetchQuery(discoverQuery({ ...withTab(query, tab), page: 1, cursor: null }, true));
   };
 }

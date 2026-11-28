@@ -1619,3 +1619,43 @@ test("Trending with presales: live curves traded in the window rank beside every
     }
     assert.deepEqual(shownCurves(await ok<HomeCoinsPage>(await discover("?sort=relevant&presales=1&limit=50", { trades: false }), "home-coins-page")), [], "trades hidden");
   }));
+
+test("New: every coin launched in its age, newest first, live-curve dust kept; older, test-SUI and catalog coins stay off", { skip }, () =>
+  withFixture(async ({ admin, discover, now }) => {
+    await admin.query("INSERT INTO blast_infra_fixture.coin_metadata (coin_type,name,symbol,decimals) VALUES ($1,'USD Coin','USDC',6),($2,'Test SUI','TSUI',9)", [QUOTE, CREATE_TEST_SUI_QUOTE_TYPE]);
+    const curve = async (id: string, symbol: string, agoMs: number, { lifecycle = "live", quote = QUOTE, raised = "100000000", target = "999000000" }: { lifecycle?: string; quote?: string; raised?: string; target?: string } = {}) => {
+      const coinType = coinOf(hex(id), symbol);
+      await admin.query("INSERT INTO blast_infra_fixture.coin_metadata (coin_type,name,symbol,decimals) VALUES ($1,$2,$2,9)", [coinType, symbol]);
+      // 100 of 999 USDC by default: a fresh curve, under the dust line.
+      await admin.query(`INSERT INTO pools (pool_key,venue,coin_type,quote_type,lifecycle,created_checkpoint,created_at_ms,quote_reserve,params)
+        VALUES ($1,'blast_curve',$2,$3,$4,41000,$5,$7,$6)`, [`blast_curve:${hex(`${id}0`)}`, coinType, quote, lifecycle, now - agoMs, { graduation_target: target }, raised]);
+      return coinType;
+    };
+    await curve("d01", "FRESH", 10 * MINUTE);
+    await curve("d02", "MORNING", 5 * HOUR);
+    await curve("d03", "MONDAY", 3 * DAY);
+    await curve("d04", "STALE", 9 * DAY);
+    await curve("d05", "TESTQ", 5 * MINUTE, { quote: CREATE_TEST_SUI_QUOTE_TYPE });
+    // A curve that graduated counts from its curve's creation, through its launch vault; its 2,000 USDC target is over the dust line.
+    const grad = await curve("d06", "GRAD", 6 * HOUR, { lifecycle: "migrated", raised: "2000000000", target: "2000000000" });
+    // A graduated coin under the dust line stays off New: only a live curve is exempt.
+    const tiny = await curve("d07", "TINY", 4 * HOUR, { lifecycle: "migrated" });
+    await admin.query(`INSERT INTO blast_infra_fixture.vaults
+      (vault_id,origin_kind,origin_id,meme_type,venue_type,venue,pool_id,quote_type,created_checkpoint,created_tx_slot)
+      VALUES ($1,'launch',$1,$2,$3,'cetus',$1,$4,40000,0)`, [hex("d070"), tiny, `${hex("f")}::cetus::Venue`, QUOTE]);
+    await admin.query(`INSERT INTO blast_infra_fixture.vaults
+      (vault_id,origin_kind,origin_id,meme_type,venue_type,venue,pool_id,quote_type,created_checkpoint,created_tx_slot)
+      VALUES ($1,'launch',$1,$2,$3,'cetus',$1,$4,40000,0)`, [hex("d060"), grad, `${hex("f")}::cetus::Venue`, QUOTE]);
+    const symbolsOf = (page: HomeCoinsPage) => symbols(page.coins);
+    // ORBIT migrated 2 days ago and CROWD 5; EMAN, AFTR and QUIET over a week ago.
+    const week = await ok<HomeCoinsPage>(await discover("?stage=new&sort=newest&age=7d&curve=1&limit=50"), "home-coins-page");
+    assert.deepEqual(symbolsOf(week), ["FRESH", "MORNING", "GRAD", "ORBIT", "MONDAY", "CROWD"]);
+    assert.deepEqual(week.coins[0]?.curve, { lifecycle: "live", progress_bps: 1_001, quote_remaining: "899000000" });
+    assert.deepEqual(symbolsOf(await ok<HomeCoinsPage>(await discover("?stage=new&sort=newest&age=24h&limit=50"), "home-coins-page")), ["FRESH", "MORNING", "GRAD"]);
+    assert.deepEqual(symbolsOf(await ok<HomeCoinsPage>(await discover("?stage=new&sort=newest&age=1h&limit=50"), "home-coins-page")), ["FRESH"]);
+    // Any other age reads New's whole week.
+    assert.deepEqual(symbolsOf(await ok<HomeCoinsPage>(await discover("?stage=new&sort=newest&limit=50"), "home-coins-page")), symbolsOf(week));
+    // The other stages keep their own lists: no curve still filling, dust off.
+    const all = await ok<HomeCoinsPage>(await discover("?sort=newest&limit=50"), "home-coins-page");
+    assert.equal(symbols(all.coins).some((symbol) => ["FRESH", "MORNING", "MONDAY"].includes(symbol)), false);
+  }));

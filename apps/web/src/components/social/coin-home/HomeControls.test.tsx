@@ -5,7 +5,7 @@ import { installTestDom, waitFor } from "../../../../test/fixtures/social/test-d
 const { document, window } = installTestDom();
 const { act } = await import("react");
 const { createRoot } = await import("react-dom/client");
-const { CoinTabs, CoinsListControls } = await import("./HomeControls.tsx");
+const { CoinTabs, CoinsListControls, NewLaunchEmpty } = await import("./HomeControls.tsx");
 const { HOME_DEFAULT_FEED, HOME_TABS } = await import("./home-state.ts");
 type HomeViewState = import("./home-state.ts").HomeViewState;
 
@@ -64,4 +64,33 @@ test("a Home tab the trader focuses or touches asks for its list; the current ta
   await act(async () => other.focus());
   await act(async () => { other.dispatchEvent(new window.MouseEvent("pointerdown", { bubbles: true })); });
   assert.deepEqual(asked, [other.id.replace("coins-", ""), other.id.replace("coins-", "")]);
+});
+
+test("New shows its one age control, not the Launched filter; its empty state launches or looks back the week", async (t) => {
+  t.mock.method(window, "matchMedia", (query: string) => ({ matches: false, media: query, addEventListener() {}, removeEventListener() {} }));
+  const container = document.createElement("div"); container.dataset.blastUi = ""; document.body.append(container);
+  const root = createRoot(container);
+  t.after(async () => { await act(async () => root.unmount()); container.remove(); });
+  const picked: HomeViewState[] = [];
+  const fresh: HomeViewState = { ...HOME_DEFAULT_FEED, stage: "new", sort: "newest", age: "24h" };
+  await act(async () => root.render(<CoinsListControls onChange={(next) => picked.push(next)} state={fresh} />));
+  const ages = [...container.querySelectorAll<HTMLButtonElement>('[role="radiogroup"][aria-label="Launched"] [role="radio"], [aria-label="Launched"] button')];
+  assert.deepEqual(ages.map((button) => button.textContent), ["1h", "24h", "7d"]);
+  await act(async () => ages[0]!.click());
+  assert.equal(picked.at(-1)?.age, "1h");
+  await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label^="Filters"], button[aria-haspopup]')!.click());
+  await waitFor(() => document.querySelector('select[aria-label="Participants"]'), "the Filters menu");
+  assert.equal(document.querySelector('select[aria-label="Launched"]'), null);
+
+  const ageAsked: string[] = [];
+  await act(async () => root.render(<NewLaunchEmpty age="24h" onAge={(age) => ageAsked.push(age)} />));
+  const actions = [...container.querySelectorAll<HTMLElement>("a, button")];
+  assert.deepEqual(actions.map((action) => action.textContent), ["Launch", "7d"]);
+  assert.equal(container.textContent?.includes("No coins"), false);
+  // Late lists hide a section marked list-empty; New's empty keeps its controls.
+  assert.equal(container.querySelector("[data-list-empty]"), null);
+  await act(async () => (actions[1] as HTMLButtonElement).click());
+  assert.deepEqual(ageAsked, ["7d"]);
+  await act(async () => root.render(<NewLaunchEmpty age="7d" onAge={() => {}} />));
+  assert.deepEqual([...container.querySelectorAll("a, button")].map((action) => action.textContent), ["Launch"]);
 });

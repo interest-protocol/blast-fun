@@ -197,7 +197,9 @@ export function CoinHome({ initial, initialState, pinned, traders, posts = null,
     onPage,
     onRows,
     onWindow: (window) => change({ ...state, window, page: 1 }),
-    onReset: () => change({ ...HOME_DEFAULT_FEED, stage: state.stage, sort: state.sort }),
+    onAge: (age) => change({ ...state, age }),
+    // New's age is its control, not a filter, so a reset keeps it.
+    onReset: () => change({ ...HOME_DEFAULT_FEED, stage: state.stage, sort: state.sort, age: state.stage === "new" ? state.age : HOME_DEFAULT_FEED.age }),
   // eslint-disable-next-line react-hooks/exhaustive-deps -- `change` closes over the same state the keys name.
   }), [state, rows, now, trading, onPage, onRows]);
   const specs: Readonly<Record<HomeSectionKey, SectionSpec>> = {

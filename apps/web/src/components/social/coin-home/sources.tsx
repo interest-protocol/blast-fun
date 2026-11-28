@@ -14,7 +14,7 @@ import { pollInterval } from "#web/lib/query/polling.ts";
 import { useAppQueryClient } from "#web/lib/query/provider.tsx";
 import type { AsOf } from "@blast/core/web/contracts/items.ts";
 import { SOCIAL_FEED_DELAYED_LAG_MS } from "@blast/core/web/contracts/feed.ts";
-import { HOME_COINS_MAX_IDS, type HomeCoinsPage, type HomeQuery, type HomeSort, type HomeSource, type HomeStage, type HomeWindow } from "@blast/core/web/contracts/home.ts";
+import { HOME_COINS_MAX_IDS, type HomeCoinsPage, type HomeQuery, type HomeSort, type HomeSource, type HomeNewAge, type HomeStage, type HomeWindow } from "@blast/core/web/contracts/home.ts";
 
 import { useSignInGate, useSocialViewer } from "../SignInGate";
 import { useWatchlistSnapshot, useWatchlistRetry, useWatchStar } from "../watchlist/Watchlist";
@@ -35,6 +35,7 @@ import { useLiveCoins, type RankedCoin } from "./use-live-coins";
 import { useRankMotion } from "./use-rank-motion";
 import { useRankings, type Rankings } from "./use-rankings";
 import { RankingControls, useRankingsSlot } from "./RankingControls";
+import { NewLaunchEmpty } from "./HomeControls";
 
 /** What every source list shares: the view and the clock. */
 export type ListProps = Readonly<{
@@ -44,6 +45,8 @@ export type ListProps = Readonly<{
   trading: boolean;
   onReset?: () => void;
   onWindow?: (window: HomeWindow) => void;
+  /** New's launch age, which its empty state widens to 7 days. */
+  onAge?: (age: HomeNewAge) => void;
   marketLoading?: boolean;
   /** Discover's tab (its stage and order) and how a header changes the order; the other sources keep their own order. */
   stage?: HomeStage;
@@ -314,7 +317,7 @@ export function DiscoverList({ query, initial, props, freshness }: Readonly<{ qu
   const error = listReadError(read, data !== undefined, refresh);
   const result = data === undefined
     ? error ?? <PendingPanel label="Loading coins" />
-    : coins.length === 0 ? <DiscoverEmpty query={query} onReset={props.onReset} /> : null;
+    : coins.length === 0 ? <DiscoverEmpty query={query} onAge={props.onAge} onReset={props.onReset} /> : null;
 
   return (
     <>
@@ -339,31 +342,33 @@ export function DiscoverList({ query, initial, props, freshness }: Readonly<{ qu
   );
 }
 
-type DiscoverEmptyProps = Readonly<{ query: HomeQuery; onReset?: () => void; compact?: boolean }>;
+type DiscoverEmptyProps = Readonly<{ query: HomeQuery; onReset?: () => void; onAge?: (age: HomeNewAge) => void; compact?: boolean }>;
 
-export function DiscoverEmpty({ query, onReset, compact }: DiscoverEmptyProps) {
-  const filtered = query.minParticipants > 0 || query.age !== "all" || query.tradable || query.knownDeployer;
-  if (!filtered) return <DiscoverCatalogEmpty compact={compact} stage={query.stage} />;
-  return <FilteredDiscoverEmpty compact={compact} onReset={onReset} query={query} />;
+export function DiscoverEmpty({ query, onReset, onAge, compact }: DiscoverEmptyProps) {
+  // New's age is its own control, not a filter: its empty state offers the week instead.
+  const filtered = query.minParticipants > 0 || (query.stage !== "new" && query.age !== "all") || query.tradable || query.knownDeployer;
+  if (!filtered) return <DiscoverCatalogEmpty compact={compact} onAge={onAge} query={query} />;
+  return <FilteredDiscoverEmpty compact={compact} onAge={onAge} onReset={onReset} query={query} />;
 }
 
 /** An empty tab says what it is waiting for; Closest to graduating, with no live curve at all, offers the launch instead. */
-const STAGE_EMPTY: Readonly<Record<HomeStage, string>> = {
+const STAGE_EMPTY: Readonly<Record<Exclude<HomeStage, "new">, string>> = {
   all: "No coins to discover.",
   almost: "Launch the next curve",
   graduated: "No coin has graduated yet.",
 };
 
-function DiscoverCatalogEmpty({ compact, stage }: Readonly<{ compact?: boolean; stage: HomeStage }>) {
-  const action = stage === "almost" ? <ButtonLink href={LAUNCH_PATH} size="sm">Launch</ButtonLink> : undefined;
-  return <EmptyState action={action} compact={compact} listEmpty role="status" title={STAGE_EMPTY[stage]} />;
+function DiscoverCatalogEmpty({ compact, query, onAge }: Readonly<{ compact?: boolean; query: HomeQuery; onAge?: (age: HomeNewAge) => void }>) {
+  if (query.stage === "new") return <NewLaunchEmpty age={query.age} compact={compact} onAge={onAge} />;
+  const action = query.stage === "almost" ? <ButtonLink href={LAUNCH_PATH} size="sm">Launch</ButtonLink> : undefined;
+  return <EmptyState action={action} compact={compact} listEmpty role="status" title={STAGE_EMPTY[query.stage]} />;
 }
 
-function FilteredDiscoverEmpty({ query, onReset, compact }: DiscoverEmptyProps) {
+function FilteredDiscoverEmpty({ query, onReset, onAge, compact }: DiscoverEmptyProps) {
   const client = useAppQueryClient();
-  const unfiltered = useQuery(discoverQuery({ ...query, minParticipants: 0, age: "all", tradable: false, knownDeployer: false, page: 1, cursor: null }), client);
+  const unfiltered = useQuery(discoverQuery({ ...query, minParticipants: 0, age: query.stage === "new" ? query.age : "all", tradable: false, knownDeployer: false, page: 1, cursor: null }), client);
   const total = settledHomePage(unfiltered)?.total;
-  if (total === 0) return <DiscoverCatalogEmpty compact={compact} stage={query.stage} />;
+  if (total === 0) return <DiscoverCatalogEmpty compact={compact} onAge={onAge} query={query} />;
   return <EmptyState
     action={onReset && total !== undefined && total > 0 ? <Button onClick={onReset} size="sm">Reset filters</Button> : undefined}
     compact={compact}

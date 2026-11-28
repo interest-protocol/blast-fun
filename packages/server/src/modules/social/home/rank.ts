@@ -32,7 +32,9 @@ import { decodeCursor, encodeCursor, invalidCursor } from "@blast/server/modules
  * `stage=almost` (Closest to graduating), only the live bonding curves and
  * those ready to migrate, the ones traded in the last 24 hours first, then
  * nearest their target, at most `HOME_CLOSEST_CURVES`
- * (`homeClosestCurveSources`). Both less the
+ * (`homeClosestCurveSources`); on `stage=new`, only the
+ * newest `HOME_NEW_LIMIT` coins launched in the last 7 days, live curves
+ * included (`homeNewCoinSources`), dust kept. The others less the
  * Blast dust (`HOME_DUST_USD`): a Blast coin whose raise (a presale's, or a
  * curve's graduation target) or market cap is under $1,000. Catalog coins
  * are never dust. Trending with `presales=1` also ranks presales not trading
@@ -95,7 +97,8 @@ import { decodeCursor, encodeCursor, invalidCursor } from "@blast/server/modules
  * however far along, and curves ready to migrate; `graduated`
  * keeps coins that trade on a DEX (no sale and no curve still filling); `all`
  * keeps every candidate, which has no curve still filling except Trending's
- * traded ones.
+ * traded ones; `new` keeps every candidate of its own base, which `age`
+ * narrows.
  *
  * **Why shown vs why ranked.** Every coin carries `rank.why`: the inputs in
  * words ("4 participants · 8 trades in the last 24h"; a standalone vault coin

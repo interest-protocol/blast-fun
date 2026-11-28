@@ -177,7 +177,7 @@ export function isHomeWindow(value: unknown): value is HomeWindow {
  *   newest launch first.
  *
  * A Blast coin whose raise, curve target or market cap is under $1,000
- * (`HOME_DUST_USD`) is left out of every order and every stage.
+ * (`HOME_DUST_USD`) is left out of every order and every stage but `new`.
  */
 export const HOME_SORTS = ["relevant", "trending", "newest", "held", "progress", "market_cap", "last_trade"] as const;
 export type HomeSort = (typeof HOME_SORTS)[number];
@@ -197,8 +197,13 @@ export function isHomeSort(value: unknown): value is HomeSort {
  * ready to migrate; those traded in the last 24 hours first.
  * `graduated`: every coin that trades on a DEX (graduated curves, migrated
  * sales, V1 and catalog coins); a sale or a curve still filling is left out.
+ * `new`: coins launched in the last `HOME_NEW_AGES` span (7 days), newest
+ * first, at most `HOME_NEW_LIMIT`: live bonding curves by their curve's
+ * creation, curve coins that migrated by the same time, sales by their
+ * migration. A live curve under the dust line is still listed (a fresh curve
+ * is small by nature); a sale or a graduated coin under it is not. `age` narrows it to `1h`, `24h` or `7d`; any other age is 7 days.
  */
-export const HOME_STAGES = ["all", "almost", "graduated"] as const;
+export const HOME_STAGES = ["all", "new", "almost", "graduated"] as const;
 export type HomeStage = (typeof HOME_STAGES)[number];
 
 export const homeStageSchema = z.enum(HOME_STAGES);
@@ -208,10 +213,26 @@ export function isHomeStage(value: unknown): value is HomeStage {
 }
 
 /** The launch-age filter: coins that started trading within the period, or every coin. */
-export const HOME_AGES = ["24h", "7d", "30d", "all"] as const;
+export const HOME_AGES = ["1h", "24h", "7d", "30d", "all"] as const;
 export type HomeAge = (typeof HOME_AGES)[number];
+/** The ages the Launched filter offers on every list but New: an hour is New's alone. */
+export const HOME_LAUNCHED_AGES = ["24h", "7d", "30d", "all"] as const satisfies readonly HomeAge[];
+/** New's ages (`stage=new`), its one control; the last is the span its read covers. */
+export const HOME_NEW_AGES = ["1h", "24h", "7d"] as const satisfies readonly HomeAge[];
+export type HomeNewAge = (typeof HOME_NEW_AGES)[number];
+export const HOME_NEW_DEFAULT_AGE: HomeNewAge = "24h";
+export const isHomeNewAge = (value: unknown): value is HomeNewAge => (HOME_NEW_AGES as readonly unknown[]).includes(value);
+/**
+ * The most coins New holds: the newest launches in its span. Measured on
+ * mainnet on 2026-11-28: 14 curves launched in 24 h, 661 in 7 days (402 of
+ * them on one day), so a day fits with room and a week keeps its newest.
+ */
+export const HOME_NEW_LIMIT = 100;
+/** The span New's read covers: its widest age, 7 days. */
+export const HOME_NEW_SPAN_MS = 7 * 86_400_000;
 export const HOME_AGE_MS: Readonly<Record<HomeAge, number | null>> =
   Object.freeze({
+    "1h": 3_600_000,
     "24h": 86_400_000,
     "7d": 7 * 86_400_000,
     "30d": 30 * 86_400_000,

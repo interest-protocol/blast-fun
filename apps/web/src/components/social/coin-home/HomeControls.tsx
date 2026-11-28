@@ -1,6 +1,8 @@
 "use client";
 
-import { Button, DisclosureButton, IconButton, type ControlSize } from "#web/components/blast-ui/Button.tsx";
+import { Button, ButtonLink, DisclosureButton, IconButton, type ControlSize } from "#web/components/blast-ui/Button.tsx";
+import { EmptyState } from "#web/components/blast-ui/EmptyState.tsx";
+import { LAUNCH_PATH } from "#web/components/blast-ui/nav.ts";
 import { FilterMenu } from "#web/components/blast-ui/FilterMenu.tsx";
 import { SelectField } from "#web/components/blast-ui/TextField.tsx";
 import type { ReactNode } from "react";
@@ -12,12 +14,12 @@ import { Segmented } from "#web/components/blast-ui/Segmented.tsx";
 import { useShellActions } from "#web/components/blast-ui/shell-actions.tsx";
 import { usePhoneLayout } from "#web/components/blast-ui/use-shell-prefs.ts";
 
-import { HOME_AGES, HOME_ROWS_CHOICES, HOME_SOURCES, HOME_WINDOWS, type HomeSource } from "@blast/core/web/contracts/home.ts";
+import { HOME_LAUNCHED_AGES, HOME_NEW_AGES, HOME_NEW_DEFAULT_AGE, HOME_ROWS_CHOICES, HOME_SOURCES, HOME_WINDOWS, isHomeNewAge, type HomeNewAge, type HomeSource } from "@blast/core/web/contracts/home.ts";
 
 import styles from "./CoinHome.module.css";
 import { HOME_SECTIONS_MENU_ID, type SectionChange } from "./HomeSections";
 import { HOME_SECTIONS_DEFAULT, moveHomeSection, HOME_SECTION_TITLES, isHomeSectionShown, setHomeSectionShown, shownHomeSections, type HomeSectionPrefs } from "./home-sections";
-import { AGE_LABELS, HOME_DEFAULT_FEED, HOME_TAB_KEYS, HOME_TABS, activeFilterCount, MIN_PARTICIPANT_CHOICES, SORT_LABELS, SOURCE_LABELS, WINDOW_LABELS, controlsApply, stageDefaultSort, tabOf, type HeaderSort, type HomeTab, type HomeViewState } from "./home-state";
+import { AGE_LABELS, HOME_DEFAULT_FEED, HOME_TAB_KEYS, HOME_TABS, NEW_AGE_LABELS, activeFilterCount, MIN_PARTICIPANT_CHOICES, SORT_LABELS, SOURCE_LABELS, WINDOW_LABELS, controlsApply, stageDefaultAge, stageDefaultSort, tabOf, withTab, type HeaderSort, type HomeTab, type HomeViewState } from "./home-state";
 
 const SOURCE_OPTIONS = HOME_SOURCES.map((key) => [key, SOURCE_LABELS[key]] as const);
 
@@ -35,7 +37,7 @@ const TAB_OPTIONS = HOME_TAB_KEYS.map((key) => [key, HOME_TABS[key].label] as co
 export function CoinTabs({ state, onChange, onIntent, panelId }: ViewProps & Readonly<{ panelId: string; onIntent?: (tab: HomeTab) => void }>) {
   return <Segmented<HomeTab | "">
     label="Coins"
-    onChange={(key) => { if (key) onChange({ ...state, stage: HOME_TABS[key].stage, sort: HOME_TABS[key].sort }); }}
+    onChange={(key) => { if (key) onChange(withTab(state, key)); }}
     onIntent={onIntent && ((key) => { if (key) onIntent(key); })}
     options={TAB_OPTIONS}
     panelId={() => panelId}
@@ -136,8 +138,34 @@ export function HomeSettingsMenu({ sections, onSections, showLabel }: Readonly<{
 /** The column orders a phone picks here, since its list has no column header. */
 const HEADER_SORTS = ["market_cap", "trending", "held"] as const satisfies readonly HeaderSort[];
 
+const NEW_AGE_OPTIONS = HOME_NEW_AGES.map((key) => [key, NEW_AGE_LABELS[key]] as const);
+
+/** New's one control: how long ago the coins launched. */
+export function NewAgePick({ age, onAge }: Readonly<{ age: HomeNewAge; onAge: (age: HomeNewAge) => void }>) {
+  return <Segmented label="Launched" onChange={onAge} options={NEW_AGE_OPTIONS} size="chip" value={age} />;
+}
+
+/**
+ * New with nothing launched in its span: launch one, or look back the whole week.
+ * Not marked `listEmpty`: while lists are late that marker hides the section, and
+ * this empty must keep its age chips and 7d action. The list's `data-list-none`
+ * still hides the row tools.
+ */
+export function NewLaunchEmpty({ age, onAge, compact }: Readonly<{ age: HomeViewState["age"]; onAge?: (age: HomeNewAge) => void; compact?: boolean }>) {
+  return <EmptyState
+    action={<>
+      <ButtonLink href={LAUNCH_PATH} size="sm" variant="primary">Launch</ButtonLink>
+      {age !== "7d" && onAge ? <Button onClick={() => onAge("7d")} size="sm">7d</Button> : null}
+    </>}
+    compact={compact}
+    role="status"
+    title="Be first"
+  />;
+}
+
 export function CoinsListControls({ state, onChange }: ViewProps) {
   const discover = controlsApply(state.source);
+  const newest = discover && state.stage === "new";
   const phone = usePhoneLayout();
   // The tab's own order first: a narrowed stage opens on its default, a whole-list tab on the order it names.
   const tabSort = state.stage === "all" && tabOf(state) ? state.sort : stageDefaultSort(state.stage);
@@ -147,7 +175,7 @@ export function CoinsListControls({ state, onChange }: ViewProps) {
     ? state.window !== HOME_DEFAULT_FEED.window || activeFilterCount(state) > 0
     : state.window !== HOME_DEFAULT_FEED.window;
   const label = ["Filters", WINDOW_LABELS[state.window], changed ? "active" : null].filter(Boolean).join(", ");
-  return <FilterMenu active={changed} label={label}>
+  return <>{newest ? <NewAgePick age={isHomeNewAge(state.age) ? state.age : HOME_NEW_DEFAULT_AGE} onAge={(age) => onChange({ ...state, age })} /> : null}<FilterMenu active={changed} label={label}>
     {discover && phone ? <label>Sort<SelectField aria-label="Sort" value={state.sort} onChange={event => onChange({ ...state, sort: event.target.value as HomeViewState["sort"] })}>
       {sorts.map(key => <option key={key} value={key}>{SORT_LABELS[key]}</option>)}
     </SelectField></label> : null}
@@ -158,12 +186,12 @@ export function CoinsListControls({ state, onChange }: ViewProps) {
       <label>Participants<SelectField aria-label="Participants" value={state.minParticipants} onChange={event => onChange({ ...state, minParticipants: Number(event.target.value) })}>
         {MIN_PARTICIPANT_CHOICES.map(value => <option key={value} value={value}>{value ? `${value} or more` : "Any"}</option>)}
       </SelectField></label>
-      <label>Launched<SelectField aria-label="Launched" value={state.age} onChange={event => onChange({ ...state, age: event.target.value as HomeViewState["age"] })}>
-        {HOME_AGES.map(key => <option key={key} value={key}>{AGE_LABELS[key]}</option>)}
-      </SelectField></label>
+      {newest ? null : <label>Launched<SelectField aria-label="Launched" value={state.age} onChange={event => onChange({ ...state, age: event.target.value as HomeViewState["age"] })}>
+        {[...new Set([...HOME_LAUNCHED_AGES, state.age])].map(key => <option key={key} value={key}>{AGE_LABELS[key]}</option>)}
+      </SelectField></label>}
       <label><Checkbox checked={state.tradable} onChange={event => onChange({ ...state, tradable: event.target.checked })} />Trades in the app only</label>
       <label><Checkbox checked={state.knownDeployer} onChange={event => onChange({ ...state, knownDeployer: event.target.checked })} />Known deployer only</label>
     </> : null}
-    {changed ? <Button onClick={() => onChange(discover ? { ...HOME_DEFAULT_FEED, source: state.source, stage: state.stage, sort: state.sort } : { ...state, window: HOME_DEFAULT_FEED.window })} size="sm">Reset filters</Button> : null}
-  </FilterMenu>;
+    {changed ? <Button onClick={() => onChange(discover ? { ...HOME_DEFAULT_FEED, source: state.source, stage: state.stage, sort: state.sort, age: newest ? state.age : stageDefaultAge(state.stage) } : { ...state, window: HOME_DEFAULT_FEED.window })} size="sm">Reset filters</Button> : null}
+  </FilterMenu></>;
 }

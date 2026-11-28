@@ -18,6 +18,7 @@ import {
   tabOf,
   viewSearchOf,
   viewStateOf,
+  withTab,
   type HomeViewState,
 } from "./home-state";
 import {
@@ -146,6 +147,22 @@ test("a tab is a stage and an order; a header sort keeps the stage's tab and lea
   assert.equal(tabOf({ stage: "almost", sort: "held" }), "almost");
   assert.equal(tabOf({ stage: "graduated", sort: "market_cap" }), "graduated");
   assert.equal(tabOf({ stage: "all", sort: "market_cap" }), null);
+});
+
+test("New is its own stage with one age control: it opens on the last day, its link names only a changed age, and leaving it drops the age", () => {
+  assert.equal(tabOf({ stage: "new", sort: "market_cap" }), "new");
+  const fresh = withTab(HOME_DEFAULT_FEED, "new");
+  assert.deepEqual([fresh.stage, fresh.sort, fresh.age], ["new", "newest", "24h"]);
+  assert.equal(viewSearchOf(fresh), "?stage=new");
+  assert.deepEqual(viewStateOf(new URLSearchParams("stage=new")), fresh);
+  assert.equal(viewSearchOf({ ...fresh, age: "1h" }), "?stage=new&age=1h");
+  assert.equal(viewStateOf(new URLSearchParams("stage=new&age=30d")).age, "24h", "an age New does not offer reads as its default");
+  assert.equal(activeFilterCount({ ...fresh, age: "7d" }), 0, "New's age is its control, not a filter");
+  assert.equal(discoverQueryOf({ ...fresh, age: "1h" }).age, "1h");
+  assert.equal(withTab({ ...fresh, age: "7d" }, "trending").age, "all");
+  assert.equal(withTab({ ...HOME_DEFAULT_FEED, age: "30d" }, "graduated").age, "30d", "the Launched filter stays between other tabs");
+  assert.equal(withTab({ ...fresh, age: "1h" }, "new").age, "1h");
+  assert.equal(resultsAnnouncement(fresh, 3), "Discover · New · 3 coins · sorted by Newest · last hour");
 });
 
 test("the Status cell says where a coin is in one line: its curve, its sale, its listing or its venue", () => {
