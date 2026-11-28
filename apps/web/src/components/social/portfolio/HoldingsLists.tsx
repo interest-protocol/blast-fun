@@ -134,7 +134,7 @@ export function VestingsList({
   claims = NO_CLAIMS,
   compact = false,
 }: Readonly<{ vestings: readonly MeVesting[]; hidden: boolean; compact?: boolean; nowMs: number; classes?: ListClasses; claims?: Claims }>) {
-  const list = useHoldingSearch(vestings, vesting => `${vesting.presale.name} ${vesting.presale.symbol} ${vesting.schedule_id}`, compact ? "claimable-vestings" : "presale-vestings");
+  const list = useHoldingSearch(vestings, vesting => `${vesting.presale.name} ${vesting.presale.symbol} ${vesting.symbol} ${vesting.schedule_id}`, compact ? "claimable-vestings" : "presale-vestings");
   if (vestings.length === 0) return <EmptyState title="Nothing vesting" />;
   return (
     <div className={join(styles.pfList, classes.list)}>

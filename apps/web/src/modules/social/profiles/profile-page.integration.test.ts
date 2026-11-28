@@ -648,7 +648,7 @@ test("#173: a creator's raise vests in the quote coin, with its symbol, decimals
     const rows = body.vestings.map((v) => [v.schedule_id, v.symbol, v.total, v.claimable, v.claimable_usd]).sort(([a], [b]) => String(a).localeCompare(String(b)));
     assert.deepEqual(rows, [
       ["vs-raise", "USDC", "690", "69", "69.00"],
-      ["vs-token", body.vestings[0]!.presale.symbol, "400000", "40000", "168.00"],
+      ["vs-token", "MIGR", "400000", "40000", "168.00"],
     ]);
   });
 });
