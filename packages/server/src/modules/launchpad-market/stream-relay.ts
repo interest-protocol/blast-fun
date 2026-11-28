@@ -7,6 +7,7 @@ import {
   MARKET_STREAM_BUDGET as B,
   marketStreamPools,
   marketStreamActivity,
+  marketStreamDiscovery,
   marketStreamPriceCoins,
   marketStreamPresale,
 } from "@blast/core/modules/launchpad-contract/market-stream.ts";
@@ -23,11 +24,13 @@ import {
 import type { WebSocket } from "undici";
 import { POOL_KEY } from "@blast/core/modules/launchpad-contract/venues.ts";
 import { parseOpeningRound } from "@blast/core/modules/launchpad-contract/activity.ts";
+import type { DiscoveryResponse } from "@blast/core/modules/launchpad-discovery/rows.ts";
 import {
   DisplayPriceFeed,
   type DisplayPriceReader,
   type DisplayPriceSubscription,
 } from "./display-price-feed.ts";
+import { projectDiscovery } from "../launchpad-discovery/live.ts";
 import type { HintSink } from "../../lib/hint-subscription.ts";
 
 /** Only the upstream operations this read-only relay needs. */
@@ -51,6 +54,7 @@ export type MarketSet = Readonly<{
   pools: readonly string[];
   priceCoins: readonly string[];
   presale: string | null;
+  discovery?: boolean;
 }>;
 /** A socket's handle: `set` changes its pools, coins and presale in place; kept pools keep their fence. */
 export type MarketSubscription = Readonly<{
@@ -64,6 +68,7 @@ type Client = {
   activity: boolean;
   presale: string | null;
   prices?: DisplayPriceSubscription;
+  resume: Map<string, string>;
   sink: HintSink;
   stop: () => void;
 };
@@ -76,6 +81,8 @@ type Topic = {
   /** Recent frames for browser resume; every frame after `floor` is here. */
   ring: { cursor: string; bytes: Uint8Array; at: number }[];
   ringBytes: number;
+  /** Recent committed fills from the reader's shared pool snapshot and later frames. */
+  trades?: readonly Frame[];
   floor?: string;
   /**
    * An upstream resume from `cursor` is in flight. The reader answers
@@ -235,9 +242,9 @@ function validateCandle(frame: Frame): void {
 }
 
 /** One private market socket per process; subscription and downstream byte budgets are finite. */
-function parseSubscription(request: Request): { pools: readonly string[]; priceCoins: readonly string[]; presale: string | null } | null {
+function parseSubscription(request: Request): MarketSet | null {
   try {
-    return { pools: marketStreamPools(request), priceCoins: marketStreamPriceCoins(request), presale: marketStreamPresale(request) };
+    return { pools: marketStreamPools(request), priceCoins: marketStreamPriceCoins(request), presale: marketStreamPresale(request), discovery: marketStreamDiscovery(request) };
   } catch {
     return null;
   }
@@ -286,6 +293,10 @@ export class MarketStreamRelay {
   #ready = false;
   #hello: Frame | null = null;
   #hintReady = false;
+  #discovering = false;
+  readonly #discoveryClients = new Set<Client>();
+  #discoveryPages = new Map<string, { bytes: Uint8Array; display: string }>();
+  #discoveryRevision = -1n;
   #presaleCheckpoint: number | null = null;
   #feedPending = false;
   #pongDeadline?: ReturnType<typeof setTimeout>;
@@ -339,7 +350,7 @@ export class MarketStreamRelay {
         400,
       );
     }
-    const { pools, priceCoins, presale } = parsed;
+    const { pools, priceCoins, presale, discovery } = parsed;
     const added = pools.filter((pool) => !this.#topics.has(pool));
     if (
       this.#clients.size >= this.#maxClients ||
@@ -356,10 +367,12 @@ export class MarketStreamRelay {
       priceCoins: [],
       activity: marketStreamActivity(request) || presale !== null,
       presale: null,
+      resume: new Map(options.resume),
       sink,
       stop: () => {
         if (!this.#clients.delete(client)) return;
         client.prices?.stop();
+        this.#setDiscovery(client, false);
         this.#leavePresale(client);
         this.#releaseTopics(client, client.pools);
         sink.close();
@@ -370,8 +383,9 @@ export class MarketStreamRelay {
     this.#setPrices(client, priceCoins);
     this.#joinPresale(client, presale);
     this.#send(client, event("status", { state: "connecting" }));
-    this.#joinTopics(client, pools, options.resume);
+    this.#joinTopics(client, pools);
     this.#greetHints(client);
+    this.#setDiscovery(client, discovery === true);
     const subscription = { stop: client.stop, set: (next: MarketSet) => this.#set(client, next) };
     // A refused send already dropped the client: start nothing for it.
     if (!this.#clients.has(client)) return subscription;
@@ -394,6 +408,7 @@ export class MarketStreamRelay {
     // A failed upstream `unsubscribe` ends the session; a refused `recovering` stops this client.
     if (!this.#clients.has(client)) return;
     this.#setPrices(client, next.priceCoins);
+    this.#setDiscovery(client, next.discovery === true);
     if (next.presale !== client.presale) {
       this.#leavePresale(client);
       this.#joinPresale(client, next.presale);
@@ -402,6 +417,62 @@ export class MarketStreamRelay {
     const fresh = added.filter((pool) => !this.#topics.has(pool));
     this.#joinTopics(client, added);
     this.#subscribeFresh(fresh);
+  }
+
+  #setDiscovery(client: Client, enabled: boolean): void {
+    if (enabled && this.#clients.has(client)) {
+      if (this.#discoveryClients.has(client)) return;
+      this.#discoveryClients.add(client);
+      for (const page of this.#discoveryPages.values()) this.#send(client, page.bytes);
+    } else {
+      this.#discoveryClients.delete(client);
+    }
+    this.#syncDiscovery();
+  }
+
+  #syncDiscovery(): void {
+    const enabled = this.#discoveryClients.size > 0;
+    if (!this.#hintReady || this.#hello?.discovery !== true || enabled === this.#discovering) return;
+    this.#discovering = enabled;
+    if (!enabled) this.#clearDiscovery();
+    try {
+      this.#socket?.send(JSON.stringify({ op: "discover", enabled }));
+    } catch {
+      this.#end("upstream-unavailable");
+    }
+  }
+
+  #clearDiscovery(): void {
+    this.#discoveryPages.clear();
+    this.#discoveryRevision = -1n;
+  }
+
+  #discovery(frame: Frame): void {
+    if (!this.#discovering || typeof frame.revision !== "string" || !/^(0|[1-9]\d{0,19})$/.test(frame.revision)) return;
+    const revision = BigInt(frame.revision);
+    if (revision <= this.#discoveryRevision) return;
+    const provenance = parseInfraProvenance(frame.provenance);
+    if (deploymentMismatch(provenance, this.#expected)) throw new Fatal();
+    const unavailable = (view: DiscoveryResponse["view"]): DiscoveryResponse => ({
+      view, section: { state: "unavailable", reason: "frame-too-large", provenance },
+    });
+    const pack = (page: DiscoveryResponse) => event("discovery", { revision: frame.revision, provenance: frame.provenance, page });
+    const pages = frame.new === null && frame.progress === null
+      ? [unavailable("new"), unavailable("near_graduation")]
+      : projectDiscovery(frame, provenance);
+    this.#discoveryRevision = revision;
+    for (let page of pages) {
+      let bytes = pack(page);
+      if (bytes.byteLength > B.maxChunkBytes) {
+        page = unavailable(page.view);
+        bytes = pack(page);
+      }
+      const display = JSON.stringify(page.section.state === "available" ? page.section.data : page.section.state);
+      const previous = this.#discoveryPages.get(page.view);
+      this.#discoveryPages.set(page.view, { bytes, display });
+      if (previous?.display === display) continue;
+      for (const client of this.#discoveryClients) this.#send(client, bytes);
+    }
   }
 
   /** Upstream `subscribe` for pools new to the process that still have a topic: a client dropped while joining left none. */
@@ -445,7 +516,7 @@ export class MarketStreamRelay {
   }
 
   /** Each catch-up can drop the client (its sink refused); then it joins nothing more. */
-  #joinTopics(client: Client, pools: readonly string[], resume?: ReadonlyMap<string, string>): void {
+  #joinTopics(client: Client, pools: readonly string[]): void {
     for (const pool of pools) {
       if (!this.#clients.has(client)) return;
       client.pools = [...client.pools, pool];
@@ -455,23 +526,47 @@ export class MarketStreamRelay {
         this.#topics.set(pool, topic);
       }
       topic.clients.add(client);
-      this.#catchUp(client, pool, topic, resume?.get(pool));
+      this.#catchUp(client, pool, topic);
     }
   }
 
   /** A joining browser gets the pool's fence and what it missed, or `recovering` while the pool has none. */
-  #catchUp(client: Client, pool: string, topic: Topic, cursor: string | undefined): void {
+  #catchUp(client: Client, pool: string, topic: Topic): void {
     if (!topic.fence) {
       if (topic.recovering) this.#send(client, event("status", { state: "recovering", pool_key: pool }));
       return;
     }
-    const missed = this.#missed(topic, cursor);
+    const cursor = client.resume.get(pool);
+    client.resume.delete(pool);
+    const missed = this.#missed(topic, topic.resuming ? undefined : cursor);
     if (missed) {
       // The ring holds every frame after the browser's cursor: keep its state, send only what it missed.
       this.#send(client, event("status", { ...topic.fence, cursor: missed.from, resumed: true }));
       for (const frame of missed.frames) this.#send(client, frame.bytes);
-    } else this.#send(client, event("status", topic.fence));
+    } else if (topic.resuming && cursor) client.resume.set(pool, cursor);
+    else this.#sendTapeFence(client, pool, topic, cursor);
     if (topic.stats) this.#send(client, topic.stats.bytes);
+  }
+
+  /**
+   * Another gateway can recover when the committed snapshot contains the last applied trade.
+   * Membership, not age or a checkpoint guess, proves coverage. Use the normal history fence
+   * after expiry, an incomplete snapshot, or a replay that exceeds the output budget.
+   */
+  #sendTapeFence(client: Client, pool: string, topic: Topic, cursor: string | undefined): void {
+    if (!topic.fence) return;
+    const trades = topic.trades ?? [];
+    const position = cursor ? trades.findIndex((trade) => trade.cursor === cursor) : -1;
+    if (position >= 0) {
+      const missed = trades.slice(0, position);
+      const bytes = event("tape", { pool_key: pool, provenance: topic.fence.provenance, trades: missed });
+      if (bytes.byteLength <= B.maxChunkBytes && missed.every((trade) => safeCount(trade.timestamp_ms) && Number(trade.timestamp_ms) >= Date.now() - RESUME_RING.ms)) {
+        if (missed.length) this.#send(client, bytes);
+        this.#send(client, event("status", { ...topic.fence, tape_resumed: true }));
+        return;
+      }
+    }
+    this.#send(client, event("status", topic.fence));
   }
 
   /** Latest wins by checkpoint; its cursor may precede trades it already counts, so it skips the cursor order. */
@@ -489,6 +584,7 @@ export class MarketStreamRelay {
   #releaseTopics(client: Client, pools: readonly string[]): void {
     client.pools = client.pools.filter((pool) => !pools.includes(pool));
     for (const pool of pools) {
+      client.resume.delete(pool);
       const topic = this.#topics.get(pool);
       if (!topic) continue;
       topic.clients.delete(client);
@@ -604,6 +700,9 @@ export class MarketStreamRelay {
       case "pong":
         this.#pong(socket, frame);
         return true;
+      case "discovery":
+        this.#discovery(frame);
+        return true;
       case "resume_complete":
         // The pool's trailing snapshot ends its resume (`#market`); its deadline runs until then.
         this.#resumes.shift();
@@ -647,7 +746,7 @@ export class MarketStreamRelay {
     )
       throw new Fatal();
     this.#ready = true;
-    this.#hello = { type: "hello", provenance: frame.provenance, heartbeat: true, heartbeat_ms: B.heartbeatMs, set: true };
+    this.#hello = { type: "hello", provenance: frame.provenance, heartbeat: true, heartbeat_ms: B.heartbeatMs, set: true, ...(frame.discovery === true ? { discovery: true } : {}) };
     this.#hint(this.#hello);
     this.#readyAt = Date.now();
     const fenced = [...this.#topics].filter(([, topic]) => topic.resuming && topic.cursor);
@@ -677,10 +776,16 @@ export class MarketStreamRelay {
       for (const client of this.#clients) this.#send(client, HEARTBEAT);
       return;
     }
-    if (safeCount(frame.activity_checkpoint)) {
-      this.#presaleCheckpoint = Math.max(this.#presaleCheckpoint ?? -1, Number(frame.activity_checkpoint));
+    this.#finishHandshake(socket, frame.activity_checkpoint);
+  }
+
+  #finishHandshake(socket: RelaySocket, activityCheckpoint: unknown): void {
+    if (safeCount(activityCheckpoint)) {
+      this.#presaleCheckpoint = Math.max(this.#presaleCheckpoint ?? -1, Number(activityCheckpoint));
     }
     this.#hintReady = true;
+    this.#syncDiscovery();
+    if (socket !== this.#socket) return;
     clearTimeout(this.#handshake);
     this.#handshake = undefined;
     if (this.#lostAt !== undefined) {
@@ -745,7 +850,7 @@ export class MarketStreamRelay {
     const cursor = validateEnvelope(frame, this.#expected);
     this.#marketProgress();
     if (frame.type === "coin_stats") return this.#stats(topic, frame);
-    if (topic.resuming && !this.#endResume(topic, frame, cursor)) return;
+    if (topic.resuming && !this.#endResume(pool, topic, frame, cursor)) return;
     // The reader snapshots every pool it streams: a frame before the snapshot is in it.
     if (frame.type !== "snapshot" && !topic.fence) return;
     if (topic.cursor && compareEventCursors(cursor, topic.cursor) < 0)
@@ -761,7 +866,7 @@ export class MarketStreamRelay {
   }
 
   /** True when a resuming pool's frame should be delivered: only a snapshot after a change while away. */
-  #endResume(topic: Topic, frame: Frame, cursor: string): boolean {
+  #endResume(pool: string, topic: Topic, frame: Frame, cursor: string): boolean {
     if (frame.type !== "snapshot") {
       // Replayed frames lack their state; the browser gets them through the snapshot's new fence.
       if (!topic.cursor || compareEventCursors(cursor, topic.cursor) > 0) topic.resumeChanged = true;
@@ -771,16 +876,19 @@ export class MarketStreamRelay {
     clearTimeout(topic.deadline);
     Object.assign(topic, { deadline: undefined, resuming: false, resumeChanged: false });
     if (changed === true) return true;
-    // Nothing happened to the pool while upstream was away: browsers keep their fence and ring.
+    // Nothing happened while upstream was away. Only browsers waiting to resume need their fence.
+    for (const client of topic.clients) if (client.resume.has(pool)) this.#catchUp(client, pool, topic);
     if (topic.stats?.unsent) for (const client of topic.clients) this.#send(client, topic.stats.bytes);
     if (topic.stats) topic.stats.unsent = false;
     return false;
   }
 
   /** Fences the pool at a snapshot's cursor and tells its clients. */
-  #fence(pool: string, topic: Topic, at: FencePoint): void {
+  #fence(pool: string, topic: Topic, at: FencePoint, trades: unknown): void {
     clearTimeout(topic.retry);
     Object.assign(topic, { retry: undefined, recovering: false, missing: false, fencedAt: Date.now() });
+    const previousTrade = topic.trades?.[0]?.cursor;
+    topic.trades = Array.isArray(trades) ? trades.map((trade) => object(withoutLabels(trade))) : [];
     topic.cursor = at.cursor;
     topic.fence = fenceStatus(pool, at, topic.priceMissing);
     clearTimeout(topic.deadline);
@@ -790,7 +898,9 @@ export class MarketStreamRelay {
     topic.floor = at.cursor;
     if (topic.stats) topic.stats.unsent = false;
     for (const client of topic.clients) {
-      this.#send(client, event("status", topic.fence));
+      const from = client.resume.get(pool) ?? (typeof previousTrade === "string" ? previousTrade : undefined);
+      client.resume.delete(pool);
+      this.#sendTapeFence(client, pool, topic, from);
       if (topic.stats) this.#send(client, topic.stats.bytes);
     }
   }
@@ -798,13 +908,14 @@ export class MarketStreamRelay {
   #deliver(pool: string, topic: Topic, frame: Frame, cursor: string): void {
     topic.priceMissing = priceMissing(frame) ?? topic.priceMissing;
     const at = { checkpoint: frame.checkpoint, cursor, provenance: frame.provenance };
-    if (frame.type === "snapshot") this.#fence(pool, topic, at);
+    if (frame.type === "snapshot") this.#fence(pool, topic, at, frame.trades);
     else {
       topic.cursor = cursor;
       topic.fence = fenceStatus(pool, at, topic.priceMissing);
       const bytes = event("market", stampRelay(withoutLabels(frame), Date.now()), cursor);
       if (bytes.byteLength > B.maxChunkBytes) throw new Error("frame-too-large");
       this.#remember(topic, cursor, bytes);
+      if (frame.type === "trade") topic.trades = [object(withoutLabels(frame.trade)), ...(topic.trades ?? [])].slice(0, 50);
       for (const client of topic.clients) this.#send(client, bytes);
     }
   }
@@ -829,6 +940,7 @@ export class MarketStreamRelay {
     if (!from || !topic.floor || !topic.cursor) return null;
     if (compareEventCursors(from, topic.floor) < 0 || compareEventCursors(from, topic.cursor) > 0) return null;
     const frames = topic.ring.filter((frame) => compareEventCursors(frame.cursor, from) > 0);
+    if (frames.some((frame) => frame.at < Date.now() - RESUME_RING.ms)) return null;
     const bytes = frames.reduce((total, frame) => total + frame.bytes.byteLength, 0);
     return bytes > RESUME_RING.replayBytes ? null : { from, frames };
   }
@@ -895,7 +1007,7 @@ export class MarketStreamRelay {
     clearTimeout(topic.retry);
     Object.assign(topic, {
       deadline: undefined, retry: undefined, fence: undefined, cursor: undefined, floor: undefined,
-      ring: [], ringBytes: 0, resuming: false, resumeChanged: false, priceMissing: undefined, fencedAt: undefined,
+      ring: [], ringBytes: 0, trades: undefined, resuming: false, resumeChanged: false, priceMissing: undefined, fencedAt: undefined,
     });
     return topic;
   }
@@ -1058,6 +1170,8 @@ export class MarketStreamRelay {
     this.#ready = false;
     this.#hello = null;
     this.#hintReady = false;
+    this.#discovering = false;
+    this.#clearDiscovery();
     this.#presaleCheckpoint = null;
     this.#feedPending = false;
     this.#marketCheckpoint = null;

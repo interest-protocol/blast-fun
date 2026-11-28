@@ -7,6 +7,7 @@ import { verifyLiveTicket } from "@blast/core/modules/launchpad-contract/live-ti
 import {
   MARKET_STREAM_BUDGET,
   MARKET_STREAM_PATH,
+  marketStreamDiscovery,
   marketStreamPools,
   marketStreamPresale,
   marketStreamPriceCoins,
@@ -139,6 +140,7 @@ export type LiveSocketData = {
   pools: readonly string[];
   priceCoins: readonly string[];
   presale: string | null;
+  discovery?: boolean;
   /** The relay handle, once admitted: a `set` before it closes the socket. */
   relay?: MarketSubscription;
   lifetime?: ReturnType<typeof setTimeout>;
@@ -156,6 +158,7 @@ type Query = Readonly<{
   pools: readonly string[];
   priceCoins: readonly string[];
   presale: string | null;
+  discovery?: boolean;
   resume: ReadonlyMap<string, string>;
 }>;
 type SetRefusal = "rate" | "per_ip" | "churn" | "busy";
@@ -198,10 +201,18 @@ export function liveSocketQuery(url: URL): Query {
     }
     resume.set(pool, cursor);
   }
-  return { request, pools, priceCoins, presale, resume };
+  return {
+    request,
+    pools,
+    priceCoins,
+    presale,
+    resume,
+    ...(marketStreamDiscovery(request) ? { discovery: true } : {}),
+  };
 }
 
 const KEYS = ["op", "seq", "pools", "price_coins", "presale"].sort().join();
+const DISCOVERY_KEYS = ["discovery", "op", "seq", "pools", "price_coins", "presale"].sort().join();
 const strings = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every((item) => typeof item === "string");
 
@@ -210,9 +221,10 @@ const strings = (value: unknown): value is string[] =>
  * cannot drift. `activity` stays as the socket opened. Throws on anything else.
  */
 export function liveSetMessage(frame: Record<string, unknown>): { seq: number } & MarketSet {
-  const { seq, pools, price_coins: coins, presale } = frame;
+  const { seq, pools, price_coins: coins, presale, discovery } = frame;
+  const keys = Object.keys(frame).sort().join();
   if (
-    Object.keys(frame).sort().join() !== KEYS ||
+    (keys !== KEYS && (keys !== DISCOVERY_KEYS || typeof discovery !== "boolean")) ||
     !Number.isSafeInteger(seq) ||
     !strings(pools) ||
     !strings(coins) ||
@@ -236,6 +248,7 @@ export function liveSetMessage(frame: Record<string, unknown>): { seq: number } 
     pools: marketStreamPools(request),
     priceCoins: marketStreamPriceCoins(request),
     presale: marketStreamPresale(request),
+    ...(discovery === true ? { discovery: true } : {}),
   };
 }
 
@@ -429,6 +442,7 @@ export function createLiveSocket(options: LiveSocketOptions) {
     data.pools = next.pools;
     data.priceCoins = next.priceCoins;
     data.presale = next.presale;
+    data.discovery = next.discovery;
   };
   const hold = (data: LiveSocketData, query: Query) => {
     data.admitted = true;
@@ -546,7 +560,12 @@ export function createLiveSocket(options: LiveSocketOptions) {
           seq,
           ok: !refusal,
           ...(refusal ? { reason: refusal, retry_ms: retryMs } : {}),
-          held: { pools: data.pools, price_coins: data.priceCoins, presale: data.presale },
+          held: {
+            pools: data.pools,
+            price_coins: data.priceCoins,
+            presale: data.presale,
+            ...(data.discovery ? { discovery: true } : {}),
+          },
         })}\n\n`,
       );
     };
@@ -568,11 +587,13 @@ export function createLiveSocket(options: LiveSocketOptions) {
       pools: data.pools.filter((pool) => next.pools.includes(pool)),
       priceCoins: data.priceCoins.filter((coin) => next.priceCoins.includes(coin)),
       presale: next.presale === data.presale ? data.presale : null,
+      ...(next.discovery && data.discovery ? { discovery: true } : {}),
     };
     if (
       kept.pools.length !== data.pools.length ||
       kept.priceCoins.length !== data.priceCoins.length ||
-      kept.presale !== data.presale
+      kept.presale !== data.presale ||
+      kept.discovery !== data.discovery
     ) {
       take(data, kept);
       relay.set(kept);

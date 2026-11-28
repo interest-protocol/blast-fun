@@ -110,6 +110,7 @@ function CoinActivityFeed({ source, compact, initialActivity, start }: CoinActiv
   // A tiny trade never takes a row, the switch on or off.
   const [hideSmallTrades, setHideSmallTrades] = useState(true);
   const following = useRef<ReturnType<typeof followLiveTrades> | null>(null);
+  const historyOpen = useRef(false);
   const hidesLive = useEffectEvent((row: ActivityRow) => showTape && isUnder(row, tradeFloor(hideSmallTrades)));
   const smallTradeFilter = useMemo(() => [hideSmallTrades, (hide: boolean) => {
     setHideSmallTrades(hide);
@@ -121,6 +122,7 @@ function CoinActivityFeed({ source, compact, initialActivity, start }: CoinActiv
   const poolsKey = pools.join(",");
   const [stream, setStream] = useState({ key: "", live: false });
   const liveScreen = useLiveScreen();
+  const recentOnly = liveScreen && showTape;
   const live = stream.key === poolsKey && stream.live;
   useEffect(() => {
     const hub = poolsKey ? tabMarketStream() : null;
@@ -131,6 +133,8 @@ function CoinActivityFeed({ source, compact, initialActivity, start }: CoinActiv
       pools: poolsKey.split(","),
       expected: network && deployment ? { network, deployment } : null,
       feed,
+      recentOnly,
+      historyOpen: historyOpen.current,
       hides: (row) => hidesLive(row),
       onState: (state) => setStream({ key: poolsKey, live: state === "live" }),
       schedule: (run, ms) => {
@@ -145,7 +149,7 @@ function CoinActivityFeed({ source, compact, initialActivity, start }: CoinActiv
       following.current = null;
       follow();
     };
-  }, [feed, launchId, network, deployment, poolsKey]);
+  }, [feed, launchId, network, deployment, poolsKey, recentOnly]);
   useMarketPoll({
     live,
     stopWhileLive: liveScreen,
@@ -183,6 +187,10 @@ function CoinActivityFeed({ source, compact, initialActivity, start }: CoinActiv
       onRefresh={() => void feed.refresh(true)}
       onMoreActivity={() => void feed.more()}
       onShowNewerActivity={() => feed.showNewer()}
+      onHistoryOpen={(open) => {
+        historyOpen.current = open;
+        following.current?.showHistory(open);
+      }}
       onWindow={setFlowWindow}
       smallTradeFilter={smallTradeFilter}
     />

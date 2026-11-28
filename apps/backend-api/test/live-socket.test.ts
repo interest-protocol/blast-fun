@@ -149,7 +149,7 @@ type Answer = {
   ok: boolean;
   reason?: string;
   retry_ms?: number;
-  held: { pools: string[]; price_coins: string[]; presale: string | null };
+  held: { pools: string[]; price_coins: string[]; presale: string | null; discovery?: true };
 };
 
 const sendSet = (
@@ -173,6 +173,35 @@ const set = async (client: Client, seq: number, pools: string[], priceCoins: str
   return answer;
 };
 const admitted = (client: Client) => until(() => client.messages.length > 0);
+
+test("Discover joins and leaves on the same admitted socket and validates its initial query", async () => {
+  const { server, open, subs } = harness();
+  try {
+    const client = open("activity=true");
+    await admitted(client);
+    for (const [seq, discovery] of [
+      [1, true],
+      [2, false],
+    ] as const) {
+      client.ws.send(
+        JSON.stringify({ op: "set", seq, pools: [], price_coins: [], presale: null, discovery }),
+      );
+      await until(() => answers(client).length === seq);
+      assert.equal(answers(client)[seq - 1]?.held.discovery, discovery || undefined);
+      assert.equal(subs[0]?.sets.at(-1)?.discovery, discovery || undefined);
+    }
+    assert.equal(subs.length, 1);
+    client.ws.close();
+    const initial = open("discovery=true");
+    await admitted(initial);
+    assert.equal(new URL(subs[1]!.url).searchParams.get("discovery"), "true");
+    initial.ws.close();
+    const invalid = open("activity=true&discovery=maybe");
+    assert.equal((await invalid.closed).code, LIVE_CLOSE.query);
+  } finally {
+    server.stop(true);
+  }
+});
 
 const until = async (check: () => boolean, ms = 1_000) => {
   for (let i = 0; i < ms / 5 && !check(); i++) {
