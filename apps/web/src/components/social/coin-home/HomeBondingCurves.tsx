@@ -16,11 +16,12 @@ import { saveListContent, useListContent } from "#web/components/blast-ui/list-r
 import { IntentLink } from "#web/components/blast-ui/NavigationLink.tsx";
 import { Segmented } from "#web/components/blast-ui/Segmented.tsx";
 import { SkeletonBox, SkeletonRegion, SkeletonText } from "#web/components/blast-ui/Skeleton.tsx";
+import { liveDiscoveryPage, useLiveDiscovery } from "#web/components/launchpad/discovery/discovery-live.ts";
 import { useAppQueryClient } from "#web/lib/query/provider.tsx";
 import { readableUsd } from "#web/lib/market-format.ts";
-import { bondingCatalogQuery, graduatedMarketCapQuery } from "../bonding/bonding-client.ts";
+import { bondingCatalogQuery, graduatedMarketCapQuery, pageOf } from "../bonding/bonding-client.ts";
 import { shortCoinType } from "../coins/coin-display.ts";
-import { BONDING_COLUMN_ROWS, columnRows, graduatedColumnRows, type BondingColumn } from "./home-model";
+import { BONDING_COLUMN_ROWS, columnRows, graduatedColumnRows, homeAlmostColumn, homeNewColumn, type BondingColumn } from "./home-model";
 import { TableCard } from "./TableFooter";
 import styles from "./HomeBondingCurves.module.css";
 
@@ -37,22 +38,39 @@ const STAGE_HISTORY_KEY = "home:bonding-stage";
  * Home's Bonding Curves: one card, three columns (New, Almost graduated,
  * Graduated), each with the same row limit, including four Blast V1 coins in Graduated.
  * Narrow, the same columns become a switch that
- * shows one at a time. The live reads are shared with the Bonding page.
+ * shows one at a time. The visible tab shares its Discover stream with other live features.
  */
 export function HomeBondingCurves({ nowMs }: Readonly<{ nowMs: number }>) {
   const client = useAppQueryClient();
   const id = useId();
   const [shown, setShown] = useState<BondingColumn>("new");
   useListContent(STAGE_HISTORY_KEY, shown, setShown, { restoreOnMount: true });
-  const fresh = useQuery(bondingCatalogQuery("bonding", "newest", "", null), client);
-  const closest = useQuery(bondingCatalogQuery("bonding", "progress", "", null), client);
+  const live = useLiveDiscovery(true);
+  const [fallbackInterval] = useState(() => 25_000 + Math.round(Math.random() * 10_000));
+  const closest = useQuery({
+    ...bondingCatalogQuery("bonding", "progress", "", null),
+    refetchInterval: live.live ? false : fallbackInterval,
+  }, client);
+  const closestAnswer = liveDiscoveryPage(live.pages.near_graduation, closest.data);
+  const { needsCatalogTail } = homeNewColumn(live.pages.new, undefined, closestAnswer);
+  const fresh = useQuery({
+    ...bondingCatalogQuery("bonding", "newest", "", null),
+    refetchInterval: !live.live || needsCatalogTail ? fallbackInterval : false,
+  }, client);
+  const freshAnswer = liveDiscoveryPage(live.pages.new, fresh.data);
+  const { rows: newest } = homeNewColumn(freshAnswer, fresh.data, closestAnswer);
+  const almost = homeAlmostColumn(closestAnswer, freshAnswer);
   const graduated = useQuery(graduatedMarketCapQuery(), client);
   const reads = { new: fresh, almost: closest, graduated } as const;
+  const rowsByColumn = { new: newest, almost, graduated: columnRows("graduated", graduated.data) };
+  const verified = new Set([fresh.data, closest.data].flatMap((answer) =>
+    pageOf(answer)?.rows.filter((row) => row.verifiedTeam).map((row) => row.launchId) ?? [],
+  ));
   const retry = () => { for (const read of Object.values(reads)) if (read.isError) void read.refetch(); };
   const retrying = Object.values(reads).some((read) => read.isError && read.isFetching);
   const states = COLUMNS.map((column) => {
     const read = reads[column.key];
-    return { ...column, rows: columnRows(column.key, read.data), metrics: read.data?.metrics, failed: read.isError || read.data?.section.state === "unavailable" };
+    return { ...column, rows: rowsByColumn[column.key], metrics: read.data?.metrics, failed: read.isError || read.data?.section.state === "unavailable" };
   });
   // Keep the first-load skeleton. Once settled, the legacy catalog is available even if a live read fails.
   if (states.every((state) => state.rows === null && !state.failed)) return <TableCard className={styles.card}><BondingSkeleton /></TableCard>;
@@ -75,7 +93,7 @@ export function HomeBondingCurves({ nowMs }: Readonly<{ nowMs: number }>) {
       <div className={styles.columns}>
         {states.map(({ key, title, none, rows, metrics, failed }) => {
           const heading = `${id}-${key}`;
-          const renderLaunch = (row: DiscoveryRow) => <CurveRow column={key} key={row.launchId} metrics={metrics?.[row.launchId]} nowMs={nowMs} row={row} />;
+          const renderLaunch = (row: DiscoveryRow) => <CurveRow column={key} key={row.launchId} metrics={metrics?.[row.launchId]} nowMs={nowMs} row={row} verified={row.verifiedTeam || (key !== "graduated" && verified.has(row.launchId))} />;
           const items = key === "graduated"
             ? graduatedColumnRows(rows, graduated.data).map((entry) => entry.kind === "launch"
               ? renderLaunch(entry.row)
@@ -108,13 +126,13 @@ export function HomeBondingCurves({ nowMs }: Readonly<{ nowMs: number }>) {
   );
 }
 
-function CurveRow({ column, row, metrics, nowMs }: Readonly<{ column: BondingColumn; row: DiscoveryRow; metrics?: DiscoveryMetrics; nowMs: number }>) {
+function CurveRow({ column, row, metrics, nowMs, verified }: Readonly<{ column: BondingColumn; row: DiscoveryRow; metrics?: DiscoveryMetrics; nowMs: number; verified: boolean }>) {
   return <BondingCoinRow
     coin={row}
     detail={column === "new" ? <CurveAge nowMs={nowMs} row={row} /> : null}
     figures={<RowFigures column={column} metrics={metrics} nowMs={nowMs} row={row} />}
     rowKey={`home:bonding:${column}:${row.launchId}`}
-    verified={row.verifiedTeam}
+    verified={verified}
   />;
 }
 

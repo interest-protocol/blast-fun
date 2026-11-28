@@ -34,6 +34,24 @@ const COIN = (symbol: string | null, decimals: number | null) => (symbol !== nul
 export type BondingColumn = "new" | "almost" | "graduated";
 export const BONDING_COLUMN_ROWS = HOME_BONDING_ROWS;
 
+function isNewCurve(row: DiscoveryRow): boolean {
+  return row.lifecycle !== "migrated" && (row.progressBps === null || row.progressBps < ALMOST_GRADUATED_BPS);
+}
+
+function isAlmostGraduated(row: DiscoveryRow): row is DiscoveryRow & { progressBps: number } {
+  return row.lifecycle !== "migrated" && row.progressBps !== null && row.progressBps >= ALMOST_GRADUATED_BPS;
+}
+
+/** A newer page can update rows that still appear in an older catalog. */
+function newerDiscoveryRows(current: DiscoveryResponse | undefined, other: DiscoveryResponse | undefined) {
+  const section = other?.section;
+  const currentCheckpoint = current?.section.provenance?.checkpoint ?? -1;
+  return new Map((section?.state === "available" || section?.state === "stale") &&
+    (section.provenance?.checkpoint ?? -1) > currentCheckpoint
+    ? section.data.rows.map((row) => [row.launchId, row] as const)
+    : []);
+}
+
 /** Keep the catalog order and reserve four of the ten Graduated rows for V1 coins. */
 export function columnRows(column: BondingColumn, answer: DiscoveryResponse | undefined): readonly DiscoveryRow[] | null {
   const section = answer?.section;
@@ -43,10 +61,53 @@ export function columnRows(column: BondingColumn, answer: DiscoveryResponse | un
 
   if (column === "graduated") return rows.slice(0, BONDING_COLUMN_ROWS - BLAST_V1_COINS.length);
 
-  const kept = column === "new"
-    ? rows.filter((row) => row.progressBps === null || row.progressBps < ALMOST_GRADUATED_BPS)
-    : rows.filter((row) => row.progressBps !== null && row.progressBps >= ALMOST_GRADUATED_BPS);
+  const kept = column === "new" ? rows.filter(isNewCurve) : rows.filter(isAlmostGraduated);
   return kept.slice(0, BONDING_COLUMN_ROWS);
+}
+
+/** Use more recent progress we already know while the ordered progress page catches up. */
+export function homeAlmostColumn(answer: DiscoveryResponse | undefined, newest: DiscoveryResponse | undefined): readonly DiscoveryRow[] | null {
+  const newer = newerDiscoveryRows(answer, newest);
+  if (newer.size === 0) return columnRows("almost", answer);
+
+  const section = answer?.section;
+  const current = section?.state === "available" || section?.state === "stale" ? section.data.rows : [];
+  const candidates = new Map(current.map((row) => [row.launchId, row]));
+  for (const [id, row] of newer) candidates.set(id, row);
+  const ranked = [...candidates.values()].filter(isAlmostGraduated).sort((a, b) => b.progressBps - a.progressBps);
+  if (!ranked.length && (!section || section.state === "unavailable")) return null;
+  return ranked.slice(0, BONDING_COLUMN_ROWS);
+}
+
+/**
+ * The live New page ranks all recent launches, including ones outside Home's
+ * New column. Fill any remaining slots past that page from the HTTP catalog.
+ */
+export function homeNewColumn(
+  answer: DiscoveryResponse | undefined,
+  catalog: DiscoveryResponse | undefined,
+  progress: DiscoveryResponse | undefined,
+): { rows: readonly DiscoveryRow[] | null; needsCatalogTail: boolean } {
+  const section = answer?.section;
+  if (!section || section.state === "unavailable") return { rows: null, needsCatalogTail: false };
+  if (section.state === "empty") return { rows: [], needsCatalogTail: false };
+
+  const { rows, nextCursor } = section.data;
+  const newer = newerDiscoveryRows(answer, progress);
+  const kept = rows.map((row) => newer.get(row.launchId) ?? row).filter(isNewCurve);
+  const needsCatalogTail = answer !== catalog && nextCursor !== null && kept.length < BONDING_COLUMN_ROWS;
+  if (!needsCatalogTail) return { rows: kept.slice(0, BONDING_COLUMN_ROWS), needsCatalogTail };
+
+  const liveIds = new Set(rows.map((row) => row.launchId));
+  const oldestLiveMs = rows.at(-1)?.createdAtMs ?? Infinity;
+  const cached = catalog?.section;
+  const newerTail = newerDiscoveryRows(catalog, progress);
+  const tail = cached?.state === "available" || cached?.state === "stale"
+    ? cached.data.rows.map((row) => newerTail.get(row.launchId) ?? row)
+      .filter((row) => isNewCurve(row) && row.createdAtMs <= oldestLiveMs && !liveIds.has(row.launchId))
+    : [];
+  const combined = [...kept, ...tail].slice(0, BONDING_COLUMN_ROWS);
+  return { rows: combined.length || (cached && cached.state !== "unavailable") ? combined : null, needsCatalogTail };
 }
 
 export function graduatedColumnRows(rows: readonly DiscoveryRow[] | null, answer: DiscoveryResponse | undefined) {
