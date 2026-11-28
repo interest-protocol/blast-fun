@@ -642,7 +642,7 @@ function usePendingSolanaSubmission(wallet: SourceWallet | null) {
 function SolanaStatus({ notice, signature }: Readonly<{ notice?: string | null; signature: string | null }>) {
   if (!notice && !signature) return null;
   return (
-    <div className={styles.amtFoot}>
+    <div className={coinStyles.amtFoot}>
       {notice ? <p className={clsx(coinStyles.status, styles.note)} role="status">{notice}</p> : null}
       {signature ? <TransactionLink href={`https://explorer.solana.com/tx/${encodeURIComponent(signature)}`} label="View on Solana Explorer" /> : null}
     </div>
