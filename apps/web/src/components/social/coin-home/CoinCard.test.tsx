@@ -318,7 +318,7 @@ test("the Status cell names where each coin is in its life", () => {
   });
   assert.deepEqual(status(curve("live", 7250)), ["72% · 310 SUI to go", "72"]);
   assert.deepEqual(status({ ...curve("migrated", 10_000), lifecycle: "migrated", graduated_ms: now - 3 * day }), ["Graduated 3d ago", null]);
-  assert.deepEqual(status({ ...coin, presale_id: "0xsale", launched_ms: now - 3 * day }), ["Listed 3d ago", null]);
+  assert.deepEqual(status({ ...coin, presale_id: "0xsale", launched_ms: now - 3 * day }), ["Listed", null]);
   // A coin with no Blast history: the venue alone, by name for assistive technology.
   assert.match(status(coin)[0] ?? "", /Cetus/);
   // The server sends `curve: null` for every coin that never had a curve.

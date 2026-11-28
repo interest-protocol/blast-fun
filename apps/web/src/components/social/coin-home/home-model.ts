@@ -644,7 +644,8 @@ export type HomeStatus = Readonly<{ text: string; fill?: number; venue?: string;
 export function homeStatus(coin: HomeCoin, nowMs: number): HomeStatus {
   if (coin.curve) return curveStatus(coin, coin.curve, nowMs);
   if (coin.sale && coin.lifecycle !== "migrated") return saleStatus(coin, coin.sale, nowMs);
-  if (coin.lifecycle === "migrated" && (coin.presale_id !== null || coin.launch_id !== null)) return { text: since("Listed", coin.launched_ms, nowMs) };
+  // The age already sits beside the ticker, so a listed coin's status is the word alone.
+  if (coin.lifecycle === "migrated" && (coin.presale_id !== null || coin.launch_id !== null)) return { text: "Listed" };
   return coin.venue ? { text: "", venue: coin.venue } : { text: "—" };
 }
 
