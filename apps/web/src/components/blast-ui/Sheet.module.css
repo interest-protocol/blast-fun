@@ -75,6 +75,21 @@
   background: linear-gradient(to bottom, transparent, var(--card) 0.8125rem);
 }
 
+/*
+ * More below: a sheet taller than the window (Swap in a short window) hides
+ * its scrollbar, so a shadow on its bottom edge shows that content is tucked
+ * under it. The shadow is a background fixed to the sheet's edge; a
+ * card-coloured cover at the end of the content scrolls over it, so it is gone
+ * once the end is reached and never shows on a sheet that fits. A CTA or dock
+ * already holds that edge.
+ */
+.sheet:not(.hasCta, .hasDock) {
+  background:
+    linear-gradient(transparent, var(--card) 70%) bottom / 100% 2.5rem no-repeat local,
+    radial-gradient(farthest-side at 50% 100%, color-mix(in srgb, var(--ink) 22%, transparent), transparent) bottom / 100% 1rem no-repeat scroll,
+    var(--card);
+}
+
 .close {
   position: absolute;
   top: 1.25rem;
