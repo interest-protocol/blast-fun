@@ -1,4 +1,5 @@
 import { presaleConnectSources } from "#web/components/presale/config.ts";
+import { bridgeConnectSources } from "#web/components/social/bridge/bridge-config.ts";
 import { webConfig } from "../server-config.ts";
 import { securityHeaders } from "./browser-policy.ts";
 
@@ -13,6 +14,7 @@ export function applyPartnerBrowserHeaders<T extends Response>(
     nonce: refused ? crypto.randomUUID().replaceAll("-", "") : null,
     development: webConfig().development,
     presaleConnectSources: presaleConnectSources(webConfig().presale),
+    bridgeConnectSources: bridgeConnectSources(webConfig().bridge),
     liveSocketOrigin: webConfig().liveSocket?.origin ?? null,
   });
   for (const [name, value] of Object.entries(browserHeaders)) response.headers.set(name, value);

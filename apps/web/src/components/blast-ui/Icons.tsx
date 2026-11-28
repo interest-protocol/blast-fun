@@ -219,6 +219,12 @@ export const ArrowDownIcon = (p: IconProps) => (
     <path d="M12 5v14M6 13l6 6 6-6" />
   </LineIcon>
 );
+/** "Bridge" (Bridge to Sui): an arrow entering a wallet through its open side. */
+export const BridgeIcon = (p: IconProps) => (
+  <LineIcon {...p}>
+    <path d="M8 9.5v-1A2.5 2.5 0 0 1 10.5 6h8A2.5 2.5 0 0 1 21 8.5v8a2.5 2.5 0 0 1-2.5 2.5h-8A2.5 2.5 0 0 1 8 16.5v-1M3 12.5h10M10 9.5l3 3-3 3M17.5 12.5h.5" />
+  </LineIcon>
+);
 /** "Withdraw" (Portfolio and Settings boards): an arrow up. */
 export const ArrowUpIcon = (p: IconProps) => (
   <LineIcon {...p}>

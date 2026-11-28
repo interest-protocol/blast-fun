@@ -1,15 +1,15 @@
 "use client";
 
-import { useLogin, useLoginWithOAuth, usePrivy, type PrivyClientConfig } from "@privy-io/react-auth";
+import { useConnectWallet, useLogin, useLoginWithOAuth, usePrivy, useWallets, type PrivyClientConfig } from "@privy-io/react-auth";
 import { useCreateWallet, useSignRawHash } from "@privy-io/react-auth/extended-chains";
-import { toSolanaWalletConnectors } from "@privy-io/react-auth/solana";
+import { toSolanaWalletConnectors, useSignTransaction, useWallets as useSolanaWallets } from "@privy-io/react-auth/solana";
 import { getWallets, type Wallets } from "@wallet-standard/app";
-import { useContext, useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { PrivyAuthProvider } from "#web/components/auth/PrivyAuthProvider.tsx";
 import type { PrivyLoginListener, PrivyRuntime } from "#web/components/auth/privy-session.ts";
 import { EnableWallets } from "#web/components/auth/privy-wallet-picker.ts";
 import { useIsDark } from "#web/components/blast-ui/use-shell-prefs.ts";
-import type { PrivyStart } from "./privy-start.ts";
+import type { PrivySourceWalletsStore, PrivyStart } from "./privy-start.ts";
 
 type WalletConfig = { solana: { connectors: ReturnType<typeof toSolanaWalletConnectors> } };
 const documentConfigs = new WeakMap<Document, Map<string, WalletConfig>>();
@@ -19,6 +19,8 @@ export type PrivySessionRuntimeProps = Readonly<{
   nonce: string | null;
   /** The page's start: receives the ready SDK, null when it stops, or a failed start. */
   start: PrivyStart;
+  /** The page's source wallets: receives Privy's connected wallets once it is ready, null when it stops. */
+  wallets: PrivySourceWalletsStore;
   emit: PrivyLoginListener;
 }>;
 
@@ -27,13 +29,34 @@ export type PrivySessionRuntimeProps = Readonly<{
  * when a session or a sign-in needs it. Presale and social pages share
  * Mission Control's app ID and discover installed Solana wallets.
  */
-export default function PrivySessionRuntime({ appId, nonce, start, emit }: PrivySessionRuntimeProps) {
+export default function PrivySessionRuntime({ appId, nonce, start, wallets, emit }: PrivySessionRuntimeProps) {
   const theme = useIsDark() ? "dark" : "light";
   return (
     <PrivyAuthProvider key={appId} appId={appId} nonce={nonce} deferWalletPicker externalWallets={sessionWallets(appId)} theme={theme}>
       <PrivySessionBridge emit={emit} start={start} />
+      <PrivySourceWallets wallets={wallets} />
     </PrivyAuthProvider>
   );
+}
+
+/** Mounts the wallet hooks only while the page reads them (Bridge to Sui is open). */
+function PrivySourceWallets({ wallets }: Pick<PrivySessionRuntimeProps, "wallets">) {
+  const wanted = useSyncExternalStore(wallets.subscribeWanted, wallets.wanted, wallets.wanted);
+  return wanted ? <PrivySourceWalletsBridge wallets={wallets} /> : null;
+}
+
+/** Publishes Privy's connected EVM and Solana wallets to the page, which renders outside Privy's provider. */
+function PrivySourceWalletsBridge({ wallets }: Pick<PrivySessionRuntimeProps, "wallets">) {
+  const { ready } = usePrivy();
+  const { connectWallet } = useConnectWallet();
+  const { wallets: evm } = useWallets();
+  const { wallets: solana } = useSolanaWallets();
+  const { signTransaction } = useSignTransaction();
+  useEffect(() => {
+    wallets.publish(ready ? { evm, solana, connectWallet, signSolanaTransaction: signTransaction } : null);
+  }, [connectWallet, evm, ready, signTransaction, solana, wallets]);
+  useEffect(() => () => wallets.publish(null), [wallets]);
+  return null;
 }
 
 /** Publishes Privy's session and actions to the page, which renders outside Privy's provider. */

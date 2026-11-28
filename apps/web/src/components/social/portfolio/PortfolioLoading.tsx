@@ -6,7 +6,7 @@ import { Button, IconButton } from "#web/components/blast-ui/Button.tsx";
 import { Segmented } from "#web/components/blast-ui/Segmented.tsx";
 import { queryKeys } from "#web/lib/query/keys.ts";
 import { useAppQueryClient } from "#web/lib/query/provider.tsx";
-import { EyeIcon, ArrowDownIcon, ArrowUpIcon } from "#web/components/blast-ui/Icons.tsx";
+import { EyeIcon, ArrowDownIcon, ArrowUpIcon, BridgeIcon } from "#web/components/blast-ui/Icons.tsx";
 import { PageHeader } from "#web/components/blast-ui/PageHeader.tsx";
 import { SkeletonText as Text } from "#web/components/blast-ui/Skeleton.tsx";
 import { LockIcon } from "../profile/icons";
@@ -23,23 +23,30 @@ import { useSocialViewer } from "../SignInGate";
 import { useAmountsHidden } from "../profile/use-profile-data";
 import { PORTFOLIO_PERIODS } from "./portfolio-history";
 import { PortfolioScreen } from "./PortfolioScreen";
+import { useBridge } from "../bridge/bridge-context.tsx";
 
+const ACTION_ICONS = { Deposit: ArrowDownIcon, Withdraw: ArrowUpIcon, Bridge: BridgeIcon } as const;
+
+/** The live rows' buttons, disabled: Deposit, Withdraw and Bridge (while it is on), primary at the trailing edge on desktop. */
 function PortfolioActions({ mobile = false }: Readonly<{ mobile?: boolean }>) {
+  const bridge = useBridge();
+  const labels = (["Deposit", "Withdraw", ...(bridge ? ["Bridge"] as const : [])] as const);
   return (
-    <div className={mobile ? portfolio.actsM : portfolio.actsD}>
-      {(mobile ? ["Deposit", "Withdraw"] : ["Withdraw", "Deposit"]).map(
-        (label) => (
+    <div className={mobile ? portfolio.actsM : portfolio.actsD} data-three={(mobile && bridge) || undefined}>
+      {(mobile ? labels : [...labels].reverse()).map((label) => {
+        const Icon = ACTION_ICONS[label];
+        return (
           <Button
             disabled
             key={label}
             size={mobile ? "lg" : "md"}
             variant={label === "Deposit" ? "primary" : "secondary"}
           >
-            {label === "Deposit" ? <ArrowDownIcon /> : <ArrowUpIcon />}
+            <Icon />
             {label}
           </Button>
-        ),
-      )}
+        );
+      })}
     </div>
   );
 }

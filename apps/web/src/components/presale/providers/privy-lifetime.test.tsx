@@ -5,11 +5,12 @@ import { JSDOM } from "jsdom";
 import { act, StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { PrivyStart } from "./privy-start.ts";
+import { PrivySourceWalletsStore, PrivyStart } from "./privy-start.ts";
 import { setShellPref } from "#web/components/blast-ui/use-shell-prefs.ts";
 
 // The page's start; these tests only watch the SDK's wallet clients.
 const start = new PrivyStart();
+const sourceWallets = new PrivySourceWalletsStore();
 
 const resources = { factories: 0, listeners: 0 };
 Object.assign(globalThis, { privyLifetimeResources: resources });
@@ -20,6 +21,8 @@ registerHooks({
       return {
         shortCircuit: true,
         url: `data:text/javascript,${encodeURIComponent(`
+          export const useWallets = () => ({ wallets: [] });
+          export const useSignTransaction = () => ({ signTransaction: async () => ({}) });
           export function toSolanaWalletConnectors() {
             const resources = globalThis.privyLifetimeResources;
             resources.factories++;
@@ -53,6 +56,8 @@ registerHooks({
           export const usePrivy = () => ({ ready: false, authenticated: false, user: null, getAccessToken: async () => null, logout: async () => {} });
           export const useLogin = () => ({ login() {} });
           export const useLoginWithOAuth = () => ({ initOAuth: async () => {} });
+          export const useConnectWallet = () => ({ connectWallet() {} });
+          export const useWallets = () => ({ wallets: [] });
         `)}`,
       };
     }
@@ -63,7 +68,7 @@ const { default: PrivySessionRuntime } = await import("./PrivySessionRuntime.tsx
 
 const noop = () => undefined;
 function Runtime({ appId }: Readonly<{ appId: string }>) {
-  return <PrivySessionRuntime appId={appId} emit={noop} nonce={null} start={start} />;
+  return <PrivySessionRuntime appId={appId} emit={noop} nonce={null} start={start} wallets={sourceWallets} />;
 }
 
 test("the wallet picker follows Blast's theme while the wallet session stays mounted", async () => {
