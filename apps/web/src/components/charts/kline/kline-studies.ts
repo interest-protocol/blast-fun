@@ -35,21 +35,26 @@ export function registerStudies() {
     createTooltipDataSource: () => ({ name: "", calcParamsText: "", features: [], legends: [] }),
     draw: ({ ctx, chart, indicator, bounding, xAxis }) => {
       const bars = chart.getDataList();
-      // realFrom/realTo are the bars on screen; `from` can start a few bars earlier when the newest bar sits off the right edge.
+      // realFrom/realTo bound the bars on screen, padded by one each side (StoreImp._adjustVisibleRange), so keep only
+      // bars whose rectangle reaches into the plot: an offscreen spike must not set the scale.
       const { realFrom, realTo } = chart.getVisibleRange();
-      const first = Math.max(0, realFrom), last = Math.min(bars.length, realTo);
-      let tallest = 0;
-      for (let index = first; index < last; index++) tallest = Math.max(tallest, bars[index]?.volume ?? 0);
+      const { gapBar, halfGapBar } = chart.getBarSpace();
+      const width = Math.max(1, gapBar);
+      const shown: Array<{ bar: (typeof bars)[number]; x: number }> = [];
+      for (let index = Math.max(0, realFrom); index < Math.min(bars.length, realTo); index++) {
+        const bar = bars[index];
+        const x = xAxis.convertToPixel(index) - halfGapBar;
+        if (bar && x + width > 0 && x < bounding.width) shown.push({ bar, x });
+      }
+      const tallest = shown.reduce((most, { bar }) => Math.max(most, bar.volume ?? 0), 0);
       if (!(tallest > 0)) return true;
       const band = bounding.height * FLOOR_VOLUME_SHARE;
-      const { gapBar, halfGapBar } = chart.getBarSpace();
       const colors = indicator.extendData;
-      for (let index = first; index < last; index++) {
-        const bar = bars[index];
-        const height = floorBarHeight(bar?.volume, tallest, band);
-        if (!bar || !height) continue;
+      for (const { bar, x } of shown) {
+        const height = floorBarHeight(bar.volume, tallest, band);
+        if (!height) continue;
         ctx.fillStyle = bar.close > bar.open ? colors.up : bar.close < bar.open ? colors.down : colors.flat;
-        ctx.fillRect(xAxis.convertToPixel(index) - halfGapBar, bounding.height - height, Math.max(1, gapBar), height);
+        ctx.fillRect(x, bounding.height - height, width, height);
       }
       return true;
     },
