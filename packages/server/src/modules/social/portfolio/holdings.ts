@@ -1,6 +1,6 @@
 import { SOCIAL_PAGE_PATHS } from "@blast/core/lib/social-page-routes.ts";
 import type { PublicVesting } from "@blast/core/modules/vesting/model.ts";
-import { DISPLAY_PRICES } from "@blast/core/modules/social/prices/test-sui.ts";
+import { displayPriceOf } from "@blast/core/modules/social/prices/test-sui.ts";
 import type { ReadableDatabase } from "@blast/core/modules/database/transaction.ts";
 import type { CostBasisFigures, PortfolioCoin, PortfolioVesting } from "@blast/core/modules/social/contracts/portfolio.ts";
 import { vestingMsSql, vestingStepsSql } from "@blast/core/modules/social/contracts/vesting.ts";
@@ -48,7 +48,7 @@ const SALE_COINS_SQL = `
     sum(cb.balance)::text AS balance, pr.usd_price::text AS usd_price, pr.as_of_ms::text AS as_of_ms
   FROM ${SHOWN_PRESALES} p
   JOIN chain_read_v1.coin_balances cb ON cb.coin_type = p.sale_token AND cb.owner = ANY($1::text[])
-  LEFT JOIN ${DISPLAY_PRICES} pr ON pr.coin_type = p.sale_token
+  LEFT JOIN ${displayPriceOf("p.sale_token")} pr ON TRUE
   WHERE cb.balance > 0
   GROUP BY p.presale_id, p.sale_token, p.sale_symbol, p.sale_decimals, pr.usd_price, pr.as_of_ms`;
 

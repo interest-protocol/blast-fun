@@ -1,5 +1,5 @@
 import { TEST_SUI_COIN_TYPES } from "@blast/core/modules/social/contracts/create.ts";
-import { DISPLAY_PRICES } from "@blast/core/modules/social/prices/test-sui.ts";
+import { displayPriceOf } from "@blast/core/modules/social/prices/test-sui.ts";
 import { socialParameter, socialSingle } from "@blast/server/modules/social/route-kit/validation.ts";
 import { z } from "zod";
 import { isValidStructTag } from "@mysten/sui/utils";
@@ -70,7 +70,7 @@ export const TRADE_COIN_LIST_SQL = `
   SELECT ${liveSaleSql("p", "$5::bigint")} AS in_presale, p.presale_id, p.sale_token, p.sale_symbol, p.sale_name, p.sale_icon_url, p.sale_decimals, p.quote_symbol, p.quote_type,
     pr.usd_price::text AS usd_price, pr.as_of_ms::text AS as_of_ms, coalesce(trust.verified_team, false) AS verified_team
   FROM ${SHOWN_PRESALES} p
-  LEFT JOIN ${DISPLAY_PRICES} pr ON pr.coin_type = p.sale_token
+  LEFT JOIN ${displayPriceOf("p.sale_token")} pr ON TRUE
   LEFT JOIN social_sale_trust trust ON trust.presale_id = p.presale_id
   WHERE (CASE WHEN $7::text IS NOT NULL THEN p.sale_token = $7
     ELSE ((p.lifecycle = 'migrated' AND p.venue IN ('cetus', 'bluefin', 'aftermath')

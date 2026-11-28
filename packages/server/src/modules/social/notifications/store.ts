@@ -16,7 +16,7 @@ import {
 import { SocialRouteError } from "@blast/core/modules/social/route-kit/errors.ts";
 import { renderNotification, type NotificationRow } from "./copy.ts";
 import { SHOWN_PRESALES } from "@blast/core/modules/social/read-model/chain-presales.ts";
-import { DISPLAY_PRICES } from "@blast/core/modules/social/prices/test-sui.ts";
+import { displayPriceOf } from "@blast/core/modules/social/prices/test-sui.ts";
 
 /**
  * The web runtime's side of `social_notifications` (0064): an account's page,
@@ -64,7 +64,7 @@ const PAGE_SQL = `
   LEFT JOIN social_accounts actor ON actor.account_id = n.actor_account_id
   LEFT JOIN social_account_identities i ON i.account_id = n.actor_account_id
   JOIN ${SHOWN_PRESALES} p ON p.presale_id = n.presale_id
-  LEFT JOIN LATERAL (SELECT pr.usd_price, pr.as_of_ms FROM ${DISPLAY_PRICES} pr WHERE n.kind = 'call_up' AND pr.coin_type = p.sale_token) price ON true
+  LEFT JOIN ${displayPriceOf("p.sale_token", "n.kind = 'call_up'")} price ON TRUE
   WHERE n.account_id = $1
     AND ($2::bigint IS NULL OR (n.occurred_at_ms, n.notification_id) < ($2::bigint, $3::bigint))
     AND ${STILL_NAMED}

@@ -15,7 +15,7 @@ test("wallets value test SUI at zero while the test-market price follows SUI", {
   const client = new pg.Client({ connectionString: database.url });
   await client.connect();
   try {
-    const { DISPLAY_PRICES } = await import("@blast/core/modules/social/prices/test-sui.ts");
+    const { displayPricesIn } = await import("@blast/core/modules/social/prices/test-sui.ts");
     const { readWalletHoldings, readWalletHoldingsBatch, walletHoldingValue } = await import("../portfolio/wallet-holdings.ts");
     const { walletCoins } = await import("../coins/wallet.ts");
     const { readPortfolioCoinPage } = await import("../portfolio/coin-page.ts");
@@ -67,7 +67,7 @@ test("wallets value test SUI at zero while the test-market price follows SUI", {
     };
     assert.equal(await assertWalletValues(), "3.42");
     const testMarketPrice = async () => (await client.query(
-      `SELECT usd_price::text, source FROM ${DISPLAY_PRICES} p WHERE coin_type = $1`, [CREATE_TEST_SUI_QUOTE_TYPE],
+      `SELECT usd_price::text, source FROM ${displayPricesIn("ARRAY[$1::text]")} p`, [CREATE_TEST_SUI_QUOTE_TYPE],
     )).rows;
     assert.deepEqual(await testMarketPrice(), [{ usd_price: "3.4187", source: "test_sui_proxy" }]);
     for (const [usd, age] of [["3.4187", 121_000], ["0", 1_000], ["3.4187", -60_000]] as const) {
