@@ -2,7 +2,7 @@ import { diagnosticMessage } from "#web/lib/errors.ts";
 import type { AllowlistProof } from "@interest-protocol/blast-sdk/presale";
 
 import type { CommitBlocker } from "@blast/core/web/contracts/commit.ts";
-import { toAtoms, type CommitSale } from "@blast/core/modules/social/commit/quote.ts";
+import { saleIsOpen, toAtoms, type CommitSale } from "@blast/core/modules/social/commit/quote.ts";
 
 import type { SocialApiOptions } from "#web/components/social/social-api.ts";
 import { COMMIT_COIN_DECIMALS } from "./commit-view";
@@ -40,6 +40,10 @@ export async function runCommitFor(input: Readonly<{
   onPhase?: (phase: CommitPhase) => void;
 }>): Promise<CommitResult> {
   if (input.blockers.length > 0) return { status: "blocked", reasons: input.blockers };
+  // The time is read here: a screen's clock pauses in a hidden tab, so it can still show an ended sale as open.
+  if (!saleIsOpen(input.sale, Date.now())) {
+    return { status: "failed", message: diagnosticMessage("This presale is not open for purchases. Nothing was sent.", { code: "commit_unavailable" }), digest: null };
+  }
   if (input.input.payWith !== input.sale.quoteCoin) return { status: "failed", message: "Choose a payment coin in the presale form. Nothing was sent.", digest: null };
   // An allowlisted sale takes only `commit_allowlisted` with the wallet's own
   // leaf; the open route would abort on chain. No leaf, nothing is asked for.

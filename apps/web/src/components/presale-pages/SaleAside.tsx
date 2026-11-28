@@ -174,7 +174,7 @@ function CommitSideBox({ detail, sale, mine, gate, noteId, now, commit, kit, onC
         // OA-43: signed in under the commit host, the box is the commit panel itself (the dialog's, the same flow);
         // a visitor gets "Sign in to blast in", and the button stays until the panel's first quote answers.
         kit ? (
-          <InlineCommit fallback={blastIn} key={sale.presale_id} kit={kit} nowMs={now} onCommitted={onCommitted} presaleId={sale.presale_id} />
+          <InlineCommit fallback={blastIn} key={sale.presale_id} kit={kit} onCommitted={onCommitted} presaleId={sale.presale_id} />
         ) : (
           blastIn
         )
