@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { MARKET_STREAM_BUDGET } from "@blast/core/modules/launchpad-contract/market-stream.ts";
+import { SUI_COIN_TYPE, USDC_COIN_TYPE } from "@blast/core/lib/sui/coin-types.ts";
+import { CREATE_QUOTE_TYPES } from "@blast/core/modules/social/contracts/create.ts";
 import { MarketStreamRelay, type MarketSubscription } from "./stream-relay.ts";
 import type { RelaySocket } from "./stream-relay.ts";
 import type { DisplayPriceReader } from "./display-price-feed.ts";
@@ -279,4 +281,17 @@ test("a client dropped by a refused presale pong during set joins no pool", (t) 
   client.sub.set({ pools: [A], priceCoins: [], presale: P2 });
   assert.equal(topics(relay), 1, "only the holder's B is left");
   holder.sub.stop();
+});
+
+// This fails if a coin page's quote coin counts toward the shared price table: a full table would then refuse the
+// page's pool stream with it, since the relay admits a socket's pools and coins together.
+test("a full price table still admits a pool with Create's quote coin, and refuses any other coin", (t) => {
+  t.mock.timers.enable({ apis: ["setInterval", "setTimeout"] });
+  const { relay, join } = harness({ prices: async () => ({ checkpoint: 1, prices: [] }) });
+  const others = Array.from({ length: MARKET_STREAM_BUDGET.maxPriceCoins - CREATE_QUOTE_TYPES.size }, (_, index) => `0x${(0x1000 + index).toString(16).padStart(64, "0")}::coin::COIN`);
+  const per = MARKET_STREAM_BUDGET.maxPriceCoinsPerClient;
+  const clients = Array.from({ length: Math.ceil(others.length / per) }, (_, index) => join(["activity=true", ...others.slice(index * per, (index + 1) * per).map((each) => `price_coin=${each}`)].join("&")));
+  assert.equal(relay.admits([A], [coin("9")]), false, "the table is full for any other coin");
+  assert.equal(relay.admits([A], [SUI_COIN_TYPE, USDC_COIN_TYPE]), true, "a coin page's pool and quote coins open");
+  for (const client of clients) client.sub.stop();
 });
