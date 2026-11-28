@@ -64,7 +64,7 @@ function sourceRefusal(quote: Quote, { chain, token }: QuoteAsk): string | null 
   return null;
 }
 
-/** The order Mayan's price API tries them: fastest first. */
+/** Our order, not Mayan's; the reasons are under Routes in docs/social/mayan-bridge-in.md. */
 const ROUTE_ORDER = ["FAST_MCTP", "MCTP", "BLINK"] as const;
 /** Our limit, not Mayan's rule: 500 bps is the most its price API documents for `slippageBps`. */
 const MAX_SLIPPAGE_BPS = 500;

@@ -355,11 +355,19 @@ wherever Bridge is on.
   full. SWIFT, Wormhole, Shuttle and mono-chain are off. In
   the 2026-11-28 checks of why pairs had no route, none of 8 inputs was offered
   SWIFT, Wormhole or Shuttle.
-- **Our order.** The card takes the first quote that passes its check: Fast MCTP,
-  then MCTP, then Blink. Mayan's docs say its default answer lists the quickest
-  first and then the best return, and the README quickstart takes the first. Our
-  choice can differ from that. In the four recorded answers, our pick was the
-  first quote.
+- **Our order, not Mayan's.** The card takes the first quote that passes its
+  check: Fast MCTP, then MCTP, then Blink. Mayan's docs say its default answer
+  lists the quickest first and then the best return, and the README quickstart
+  takes the first. Our choice can differ from that. In the four recorded answers,
+  our pick was the first quote. Why this order:
+  - Fast MCTP before MCTP: in live quotes on 2026-11-28 ($1 and $5 of Base USDC,
+    0.01 Base ETH) it gave more, and said about 35 s against 20 minutes from
+    Base. MCTP said 15 minutes from Ethereum and 60 s from Solana. At $100,000
+    of USDC, MCTP gave about 0.01% more, which we judge not worth the wait.
+  - Blink last: it quoted on 2026-11-26 but gave no quote in the 2026-11-28
+    runs (172 coins, then 72 quotes), so this card's Blink send has no live
+    test. On an EVM swap the card also cannot check what the deposit locks (see
+    below).
 - **What we check (ours).** The quote that comes back matches what we asked:
   chains, source coin and amount, coin on Sui, no referrer, no gas drop, not
   gasless, a minimum no higher than the estimate, and slippage of at most 500 bps
@@ -393,11 +401,21 @@ wherever Bridge is on.
   the Forwarder.
 
   The destination we give the SDK is the signed-in Blast Sui address.
-- **How we send: Mayan's way.** For MCTP and Fast MCTP the SDK builds the
-  transaction (`getEvmSwapApproveTxs`, `getSwapFromEvmTxPayload`,
-  `swapFromSolana`). The card does not decode it. Approvals are signed as the
-  SDK returns them, one receipt at a time: an old Ethereum USDT allowance takes
-  two. No permits. A Blink order is still read in full, as above.
+- **How we send: Mayan's way.** The SDK builds the transaction
+  (`getEvmSwapApproveTxs`, `getSwapFromEvmTxPayload`, `swapFromSolana`).
+  Approvals are signed as the SDK returns them, one receipt at a time: an old
+  Ethereum USDT allowance takes two. No permits.
+- **What the card reads of that transaction.** Very little:
+  - MCTP and Fast MCTP: the card checks quote fields and the recipient, then
+    sends the SDK's transaction unread, with one exception. On EVM it must go to
+    Mayan's Forwarder.
+  - Blink: the card reads the whole order, but not the transaction the SDK builds
+    from it, and does not check where that transaction goes. On an EVM swap, the
+    swap data, the coin locked and the least amount locked come from a second
+    Mayan reply. The SDK checks the swap router against Mayan's contract list;
+    the card checks none of these (SDK 16.1.0).
+  - Solana, every route: the card reads only the blockhash and the signature, to
+    track a pending send.
 - **Refunds.** Blink refunds the source wallet. An auction order pays a USDC
   refund to the Blast wallet on Sui, minus a refund fee. A transfer without an
   auction has no order to refund, so the sentence promises none. Recent bridges
