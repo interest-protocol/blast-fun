@@ -5,6 +5,7 @@ import { MARKET_STREAM_BUDGET } from "@blast/core/modules/launchpad-contract/mar
 import { INDEXED_POOL_COINS } from "@blast/core/modules/social/portfolio/core-coins.ts";
 import { ActivityHints } from "#web/components/social/home/activity-hints.ts";
 import { ACTIVITY_ONLY_GRACE_MS, marketHintTransport, setHintDemand } from "#web/lib/live-stream/market-hints.ts";
+import { liveCoinStats } from "./coin/live-coin.ts";
 import { HIDDEN_GRACE_MS, LINGER_MS, MarketStreamHub, RECONNECT_MIN_MS, SET_ANSWER_MS, STABLE_MS, type MarketEventSource, type MarketStreamState, type MarketTrade } from "./market-stream-hub.ts";
 
 const CURVE = `blast_curve:0x${"11".repeat(32)}`;
@@ -1015,6 +1016,28 @@ test("coin stats reach only the fenced pool's subscribers from the expected depl
   s.source().emit("stats", { ...stats(4), holders: -1 });
   assert.deepEqual(curve, [2]);
   assert.deepEqual(other, []);
+});
+
+// This fails if the browser rejects a value shaped as blast-infra's `ws_coin_stats` schema sends it: the whole frame is lost.
+test("coin stats with a 24h change, as blast-infra sends them, reach the screen's header numbers", async () => {
+  const s = setup();
+  const seen: unknown[] = [];
+  s.hub.subscribe({ pools: [CURVE], expected, listener: { state: () => {}, stats: (frame) => seen.push(liveCoinStats(frame)) } });
+  await settle();
+  s.source().fence(10);
+  s.source().hello();
+  s.source().emit("stats", {
+    type: "coin_stats", coin: `0x${"44".repeat(32)}::meme::MEME`, pool_key: CURVE, checkpoint: 20, timestamp_ms: NOW + 20,
+    cursor: "20:0:4294967295:0", provenance: wireProvenance(20), lifecycle: "live", price: "0.000088098231292", market_cap: "88098231292",
+    market: {
+      market_cap_usd: "4120.5", fdv_usd: "5230.75", change_24h_bps: "-2124", interval_end_ms: NOW + 20,
+      baseline_timestamp_ms: NOW - 86_400_000, baseline_pool: CURVE, current_pool: CURVE, basis: "usd_price", baseline_resolution_ms: 300_000,
+    },
+    quote_usd: { price: "342000000", expo: -8, publish_time: 1_790_000_000, age_ms: 20 }, quote_decimals: "9",
+    window_24h: { volume_quote: "2456000000000", volume_usd: "8400.25", buys: 12, sells: 5, trades: 17 },
+    holders: 412, progress_bps: 7250, liquidity_quote: "310000000000",
+  });
+  assert.deepEqual(seen, [{ poolKey: CURVE, checkpoint: 20, lifecycle: "live", holders: 412, fdvUsd: "5230.75", volumeUsd: "8400.25" }]);
 });
 
 // This fails if a migrated coin's frozen curve stats replace its venue stats, or a late screen waits for the next change.
