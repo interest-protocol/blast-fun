@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { track } from "@vercel/analytics";
 import clsx from "clsx";
-import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 
 import type { Quote } from "@mayanfinance/swap-sdk";
 
@@ -58,7 +58,7 @@ import {
 import { explorerLink, mergeRows, type BridgeRow, type BridgeSdk, type EvmWallet, type SolanaWallet, type SourceWallet, type TransferStatus } from "./bridge-sdk.ts";
 import styles from "./bridge.module.css";
 import { SourceTokenPicker } from "./SourceTokenPicker.tsx";
-import { readSolanaSubmission, SOLANA_RETRY_UNAVAILABLE, subscribeSolanaSubmission } from "./solana-submission.ts";
+import { readSolanaSubmission, SOLANA_RETRY_UNAVAILABLE, subscribeSolanaSubmission, withSolanaSubmissionLock } from "./solana-submission.ts";
 
 /** The source wallets Privy has connected, and how to connect one. */
 export type BridgeWallets = Readonly<{
@@ -226,7 +226,7 @@ function useBridgeHistory(sdk: BridgeSdk, blastAddress: string | null) {
 type SendKeys = Readonly<{ quoteKey: readonly unknown[]; allowanceKey: readonly unknown[] }>;
 
 /** Approve, switch and bridge: each re-asks Mayan for a bound quote and checks it before any wallet call. */
-function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent }: Readonly<{
+function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent, solanaAddress }: Readonly<{
   sdk: BridgeSdk;
   selection: Selection;
   keys: SendKeys;
@@ -234,6 +234,7 @@ function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent }: R
   now: () => number;
   onPaused: (error: unknown) => void;
   onSent: () => void;
+  solanaAddress: string | null;
 }>) {
   const { chain, info, token, to } = selection;
   const queryClient = useQueryClient();
@@ -241,7 +242,9 @@ function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent }: R
   // The quote inputs a lower fresh rate was found for; any new input clears the prompt.
   const [rateChangedFor, setRateChangedFor] = useState<string | null>(null);
   const [sent, setSent] = useState<readonly BridgeRow[]>([]);
-  const [solanaNotice, setSolanaNotice] = useState<string | null>(null);
+  const [solanaNotice, setSolanaNotice] = useState<Readonly<{ address: string; text: string; error: boolean }> | null>(null);
+  const activeSolana = useRef(solanaAddress);
+  useLayoutEffect(() => { activeSolana.current = solanaAddress; }, [solanaAddress]);
   const running = useRef(false);
   // Closing the screen aborts: no wallet opens afterwards, from here or inside the SDK.
   const life = useRef<AbortController | null>(null);
@@ -274,17 +277,19 @@ function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent }: R
 
   // One wallet step at a time; its pending state is the card's busy state.
   const step = useMutation({
-    mutationFn: ({ work }: { work: () => Promise<void>; checking: boolean }) => work(),
+    mutationFn: ({ work }: { work: () => Promise<void>; checkingAddress: string | null }) => work(),
     // Run now even offline: the quote fails with its copy, instead of pausing and prompting the wallet on reconnect.
     networkMode: "always",
-    onError: (error, { checking }) => {
+    onError: (error, { checkingAddress }) => {
       // The person said no in the wallet: nothing to explain.
       if (rejected(error)) return;
       console.error("Bridge failed", error);
       // Closed: no card left to explain it on.
       if (signal().aborted) return;
-      if (checking) {
-        setFailed("Couldn’t check the Solana transfer. Check again before sending. Code: bridge_solana_status_failed.");
+      if (checkingAddress) {
+        if (activeSolana.current === checkingAddress) {
+          setSolanaNotice({ address: checkingAddress, text: "Couldn’t check the Solana transfer. Check again before sending. Code: bridge_solana_status_failed.", error: true });
+        }
         return;
       }
       if ((error as { code?: unknown } | null)?.code === SOLANA_RETRY_UNAVAILABLE) {
@@ -296,16 +301,18 @@ function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent }: R
     },
     // An approval or a bridge spends from the source wallet, gas included.
     // Not awaited, so the button frees up before the balance comes back.
-    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ["bridge", "balance"] }); },
+    onSuccess: (_result, { checkingAddress }) => {
+      if (!checkingAddress) void queryClient.invalidateQueries({ queryKey: ["bridge", "balance"] });
+    },
     onSettled: () => { running.current = false; },
   });
-  const run = (work: () => Promise<void>, checking = false) => {
+  const run = (work: () => Promise<void>, checkingAddress: string | null = null) => {
     // The ref also stops a second press that lands before the busy render.
     if (running.current) return;
     running.current = true;
     setFailed(null);
     setSolanaNotice(null);
-    step.mutate({ work, checking });
+    step.mutate({ work, checkingAddress });
   };
 
   const approve = (ask: BridgeRequest, source: EvmWallet) => run(async () => {
@@ -316,7 +323,7 @@ function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent }: R
     queryClient.setQueryData(keys.allowanceKey, await sdk.allowanceEnough(fresh, source, chain));
   });
 
-  const bridge = (ask: BridgeRequest, source: SourceWallet, fromAmount: string) => run(async () => {
+  const sendBridge = async (ask: BridgeRequest, source: SourceWallet, fromAmount: string) => {
     if (source.kind === "solana" && readSolanaSubmission(source.address)) return;
     const fresh = await freshQuote(ask);
     if (!fresh) return;
@@ -329,7 +336,7 @@ function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent }: R
       queryClient.setQueryData(keys.allowanceKey, false);
       return;
     }
-    if (signal().aborted) return;
+    if (signal().aborted || (source.kind === "solana" && activeSolana.current !== source.address)) return;
     let signedHash: string | undefined;
     const record = (hash: string) => {
       signedHash = hash;
@@ -344,31 +351,38 @@ function useBridgeSend({ sdk, selection, keys, shown, now, onPaused, onSent }: R
       console.error("Solana bridge submission could not be confirmed", error);
     }
     routeEvent(fresh, chain, token);
-    onSent();
+    if (source.kind !== "solana" || activeSolana.current === source.address) onSent();
     setRateChangedFor(null);
     // The send spent the allowance; the same amount again must check it afresh.
     queryClient.removeQueries({ queryKey: ["bridge", "allowance"] });
-  });
+  };
+
+  const bridge = (ask: BridgeRequest, source: SourceWallet, amount: string) => run(() =>
+    source.kind === "solana"
+      ? withSolanaSubmissionLock(source.address, () => sendBridge(ask, source, amount))
+      : sendBridge(ask, source, amount));
 
   const checkSolana = (source: SolanaWallet, blastAddress: string) => run(async () => {
     const result = await sdk.checkSolanaSubmission(source.address);
-    if (signal().aborted || !result) return;
+    if (!result || signal().aborted || activeSolana.current !== source.address) return;
     if (result.state === "failed") {
       forgetSubmission(blastAddress, result.signature);
       setSent((rows) => rows.filter((row) => row.hash !== result.signature));
-      setFailed("The Solana transfer didn’t go through. You can bridge again. Code: bridge_solana_not_sent.");
+      setSolanaNotice({ address: source.address, text: "The Solana transfer didn’t go through. You can bridge again. Code: bridge_solana_not_sent.", error: true });
     } else if (result.state === "confirmed") {
       onSent();
-      setSolanaNotice("Your transfer was confirmed on Solana.");
+      setSolanaNotice({ address: source.address, text: "Your transfer was confirmed on Solana.", error: false });
       void queryClient.invalidateQueries({ queryKey: ["bridge", "history", blastAddress] });
+      void queryClient.invalidateQueries({ queryKey: ["bridge", "balance", "solana"] });
     } else {
-      setSolanaNotice("Solana is still confirming your transfer. Check again in a moment.");
+      setSolanaNotice({ address: source.address, text: "Solana is still confirming your transfer. Check again in a moment.", error: false });
     }
-  }, true);
+  }, source.address);
 
   const switchTo = (source: EvmWallet) => run(() => source.switchChain(info.chainId!));
 
-  return { busy: step.isPending, busyText: step.variables?.checking ? CHECKING_TEXT : BUSY_TEXT, failed, setFailed, solanaNotice, rateChanged: rateChangedFor === inputs, sent, approve, bridge, checkSolana, switchTo };
+  const notice = solanaNotice?.address === solanaAddress ? solanaNotice : null;
+  return { busy: step.isPending, busyText: step.variables?.checkingAddress ? CHECKING_TEXT : BUSY_TEXT, failed: failed ?? (notice?.error ? notice.text : null), setFailed, solanaNotice: notice?.error ? null : notice?.text, rateChanged: rateChangedFor === inputs, sent, approve, bridge, checkSolana, switchTo };
 }
 
 /**
@@ -479,7 +493,7 @@ export function BridgeForm({ sdk, wallets, blastAddress, signedIn, onSignIn, onA
   );
   const atoms = amountAtoms(amount, token);
   const reads = useBridgeReads({ sdk, selection, wallet, blastAddress, atoms: solanaPending ? null : atoms, paused, onPaused });
-  const send = useBridgeSend({ sdk, selection, keys: reads, shown: reads.shown, now, onPaused, onSent: () => setAmount("") });
+  const send = useBridgeSend({ sdk, selection, keys: reads, shown: reads.shown, now, onPaused, onSent: () => setAmount(""), solanaAddress });
   const { action, actionDescription, balance, balanceFailed, message, noteId, reason } = formAction({ reads, send, selection, wallet, atoms, id, paused, signedIn, blastAddress, solanaPending });
 
   const request = (): BridgeRequest => ({ chain, token, to: selection.to, amountIn64: atoms!.toString(), blastAddress: blastAddress!, sourceAddress: wallet!.address });

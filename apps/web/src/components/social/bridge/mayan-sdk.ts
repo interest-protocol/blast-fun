@@ -96,22 +96,20 @@ export function mayanSdk(): BridgeSdk {
         onSigned(hash);
         return hash;
       }
-      return withSolanaSubmissionLock(wallet.address, async () => {
-        if (readSolanaSubmission(wallet.address)) throw new Error("Another Solana transfer is awaiting confirmation");
-        signal.throwIfAborted();
-        const connection = new BridgeSolanaConnection(mayanRpc("solana"), "confirmed");
-        const sign = solanaSigner(wallet, signal, (transaction) => {
-          const expiry = connection.lastBlockhash;
-          const blockhash = transaction instanceof VersionedTransaction ? transaction.message.recentBlockhash : transaction.recentBlockhash;
-          if (!expiry || expiry.value.blockhash !== blockhash) throw new Error("Unknown Solana transaction expiry");
-          const signature = getTransactionFirstSignature(transaction);
-          // Persist before returning the signed bytes to Mayan, which can now broadcast them.
-          rememberSolanaSubmission(wallet.address, { signature, lastValidBlockHeight: expiry.value.lastValidBlockHeight, slot: expiry.context.slot });
-          onSigned(signature);
-        });
-        const { signature } = await swapFromSolana(quote, wallet.address, request.blastAddress, null, sign, connection, []);
-        return signature;
+      if (readSolanaSubmission(wallet.address)) throw new Error("Another Solana transfer is awaiting confirmation");
+      signal.throwIfAborted();
+      const connection = new BridgeSolanaConnection(mayanRpc("solana"), "confirmed");
+      const sign = solanaSigner(wallet, signal, (transaction) => {
+        const expiry = connection.lastBlockhash;
+        const blockhash = transaction instanceof VersionedTransaction ? transaction.message.recentBlockhash : transaction.recentBlockhash;
+        if (!expiry || expiry.value.blockhash !== blockhash) throw new Error("Unknown Solana transaction expiry");
+        const signature = getTransactionFirstSignature(transaction);
+        // Persist before returning the signed bytes to Mayan, which can now broadcast them.
+        rememberSolanaSubmission(wallet.address, { signature, lastValidBlockHeight: expiry.value.lastValidBlockHeight, slot: expiry.context.slot });
+        onSigned(signature);
       });
+      const { signature } = await swapFromSolana(quote, wallet.address, request.blastAddress, null, sign, connection, []);
+      return signature;
     },
     checkSolanaSubmission: (address) => withSolanaSubmissionLock(address, () => settleSolanaSubmission(solanaConnection(), address)),
     async history(blastAddress) {

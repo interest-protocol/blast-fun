@@ -117,6 +117,7 @@ test("a lost Solana send response stays blocked after reopening until Solana pro
   const address = "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM";
   let finalizedHeight = 150;
   let statusSlot = 179;
+  let minimumSlot = 21;
   let rpcFails = true;
   const sdk = fakeSdk(calls, [QUOTES.solToSuiUsdc], {
     async send(_quote, _request, _wallet, onSigned) {
@@ -131,10 +132,13 @@ test("a lost Solana send response stays blocked after reopening until Solana pro
         return { absoluteSlot: 180, blockHeight: finalizedHeight, epoch: 0, slotIndex: 180, slotsInEpoch: 200 };
       },
       async getSignatureStatuses() { return { context: { slot: statusSlot }, value: [null] }; },
-      async getFirstAvailableBlock() { return 1; },
+      async getMinimumLedgerSlot() { return minimumSlot; },
     }, source),
     status: async () => ({ state: "pending", toAmount: null }),
   });
+  Object.defineProperty(navigator, "locks", { configurable: true, value: {
+    request: async (_name: string, _options: LockOptions, work: (lock: object) => Promise<unknown>) => work({}),
+  } });
   const form = await mount(sdk, calls, { kind: "solana", address, signTransaction: async (bytes) => bytes });
   const pickSolana = async () => {
     await act(async () => form.container.querySelector<HTMLButtonElement>("[aria-label='From Base. Change chain']")!.click());
@@ -163,6 +167,8 @@ test("a lost Solana send response stays blocked after reopening until Solana pro
     finalizedHeight += 1;
     await check(/still confirming/);
     statusSlot = 180;
+    await check(/still confirming/);
+    minimumSlot = 20;
     await check(/didn’t go through/);
     assert.equal(form.button().textContent, "Bridge");
     assert.equal(form.button().disabled, true, "a new send requires re-entering the amount");
@@ -171,6 +177,7 @@ test("a lost Solana send response stays blocked after reopening until Solana pro
     assert.equal(calls.sends, 2, "a deliberate new send is allowed after expiry");
   } finally {
     await form.unmount();
+    Reflect.deleteProperty(navigator, "locks");
     dom.window.localStorage.removeItem(`blast:solana-bridge-submission:${address}`);
     dom.window.sessionStorage.removeItem(`blast:bridge-submissions:${BLAST}`);
   }

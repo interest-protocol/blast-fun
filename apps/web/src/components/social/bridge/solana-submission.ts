@@ -45,7 +45,7 @@ export type SolanaSubmissionState = "pending" | "confirmed" | "failed";
 
 /** The RPC must be past expiry and able to look back to signing before absence permits another send. */
 export async function settleSolanaSubmission(
-  connection: Pick<Connection, "getEpochInfo" | "getSignatureStatuses" | "getFirstAvailableBlock">,
+  connection: Pick<Connection, "getEpochInfo" | "getSignatureStatuses" | "getMinimumLedgerSlot">,
   address: string,
 ): Promise<Readonly<{ signature: string; state: SolanaSubmissionState }> | null> {
   const saved = readSolanaSubmission(address);
@@ -59,7 +59,8 @@ export async function settleSolanaSubmission(
   if (status?.confirmationStatus === "finalized") {
     state = status.err ? "failed" : "confirmed";
   } else if (status === null && context.slot >= finalized.absoluteSlot && (finalized.blockHeight ?? 0) > Number(expiry)
-    && await connection.getFirstAvailableBlock() <= Number(signedSlot)) {
+    // An archive lookup can return null after an internal error. Only trust absence while the node still has these slots.
+    && await connection.getMinimumLedgerSlot() <= Number(signedSlot)) {
     state = "failed";
   }
   if (state !== "pending") {
