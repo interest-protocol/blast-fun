@@ -314,7 +314,7 @@ export function SaleMarketView({
     fdvFigure={fdv != null
       ? <InspectValue value={`$${fdv}`} label="FDV in USD">{readableUsd(fdv)}</InspectValue>
       : marketLoading ? <SkeletonText>0000</SkeletonText> : null}
-    holders={live?.holders ?? coin?.holders}
+    holders={live ? live.holders : coin?.holders}
     holdersFigure={loading ? <SkeletonText>0000</SkeletonText> : null}
     volumeFigure={volumeFigure(coin, live, volume, loading)}
     venue={venue ?? market?.pool?.venue}
