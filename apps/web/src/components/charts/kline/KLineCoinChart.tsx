@@ -150,7 +150,7 @@ export default function KLineCoinChart({ sources, interval, memeDecimals, quoteD
     };
     // A tap leaves the library's crosshair up; it goes with the finger, after the library's own tap handling.
     const lift = (event: TouchEvent) => {
-      if (event.touches.length) return;
+      if (event.targetTouches.length) return;
       swipe = null;
       lifted = window.setTimeout(clear);
     };
@@ -170,7 +170,8 @@ export default function KLineCoinChart({ sources, interval, memeDecimals, quoteD
     themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "class"] });
     const resize = new ResizeObserver(() => {
       created.resize();
-      setPricePane(created.getSize("candle_pane")?.height ?? null);
+      // The library lays out in a microtask; read the pane after it.
+      queueMicrotask(() => setPricePane(created.getSize("candle_pane")?.height ?? null));
     });
     resize.observe(element);
     return () => {

@@ -42,7 +42,7 @@ import { formatMove, presaleHolderShare, priceDirection, type PriceMove } from "
 import { useChartPrice } from "#web/components/launchpad/chart/chart-live-price.ts";
 import { PoolChart } from "#web/components/social/coins/PoolChart.tsx";
 import { PresaleHolderSummary } from "./PresaleHolderSummary";
-import { ChartCard, CoinPriceFigure, MarketOverview, MarketPriceRow, useLastPrice } from "#web/components/social/bonding/CoinPageParts.tsx";
+import { ChartCard, CoinPriceFigure, MarketOverview, MarketPriceRow, PriceChange, useLastPrice, type PriceMoveLabel } from "#web/components/social/bonding/CoinPageParts.tsx";
 import coinStyles from "#web/components/social/bonding/bonding-coin.module.css";
 import { ChartLastTrade } from "#web/components/launchpad/chart/ChartLastTrade.tsx";
 import { CoinPriceCurrencyProvider, useCoinPriceCurrency } from "#web/components/launchpad/chart/CoinPriceCurrency.tsx";
@@ -461,7 +461,7 @@ export function SaleMarket({
         <CoinPriceCurrencyProvider quoteType={market.quote.type} quoteSymbol={market.quote.symbol}>
           <div className={coinStyles.market} data-sale-market="">
             <ChartCard head={<PresaleMarketPrice market={market} move={extras.move} activity={lastTrade} />}
-              foot={<ChartLastTrade placement="headline" />}><SalePoolChart sale={sale} market={market} pool={market.pool} /></ChartCard>
+              foot={<><PresaleMarketMove market={market} move={extras.move} /><ChartLastTrade placement="headline" /></>}><SalePoolChart sale={sale} market={market} pool={market.pool} /></ChartCard>
           </div>
           {extras.note}
         </CoinPriceCurrencyProvider>
@@ -512,15 +512,32 @@ function usePresalePoolPrice(pool: HomeCoinMarket["pool"]) {
   return pool && confirmedAt != null && confirmedAt > pool.as_of_ms ? price : null;
 }
 
-function PresaleMarketPrice({ market, move, activity }: Readonly<{ market: HomeCoinMarket; move?: PriceMove | null; activity: ReactNode }>) {
+/** The headline's price: the pool's live price once confirmed, else the last one shown, in the chosen currency. */
+function usePresaleHeadline(market: HomeCoinMarket) {
   const currency = useCoinPriceCurrency();
   const live = usePresalePoolPrice(market.pool);
   const last = useLastPrice(live?.price);
   const prices = poolPrices(market.decimals, market.quote.decimals, currency?.quoteUsd);
+  return { currency, live, last, prices };
+}
+
+function presaleChange(move: PriceMove | null | undefined, last: string | null, usd: boolean): PriceMoveLabel | null {
+  return move && last != null && usd ? { value: <>{formatMove(move)} <span>24h</span></>, direction: priceDirection(move.bps) } : null;
+}
+
+function PresaleMarketPrice({ market, move, activity }: Readonly<{ market: HomeCoinMarket; move?: PriceMove | null; activity: ReactNode }>) {
+  const { currency, live, last, prices } = usePresaleHeadline(market);
   const quoteSymbol = prices.usd ? undefined : market.quote.symbol;
   return <MarketPriceRow showCurrency={currency?.rate != null} priceNamesUnit={live != null}
     activity={activity}
     price={live ? <CoinPriceFigure price={prices.price(live.price)} quoteSymbol={quoteSymbol} tradeId={live.cursor} /> : NO_VALUE}
     reserve={!live && last != null ? <CoinPriceFigure price={prices.price(last)} quoteSymbol={quoteSymbol} tradeId={null} /> : null}
-    change={move && last != null && prices.usd ? { value: <>{formatMove(move)} <span>24h</span></>, direction: priceDirection(move.bps) } : null} />;
+    change={presaleChange(move, last, prices.usd)} />;
+}
+
+/** The 24h move under a phone's chart, so the price row above it stays one line. */
+function PresaleMarketMove({ market, move }: Readonly<{ market: HomeCoinMarket; move?: PriceMove | null }>) {
+  const { live, last, prices } = usePresaleHeadline(market);
+  const change = live ? presaleChange(move, last, prices.usd) : null;
+  return change && <PriceChange change={change} />;
 }
