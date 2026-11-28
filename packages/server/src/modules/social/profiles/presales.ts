@@ -1,4 +1,4 @@
-import { DISPLAY_PRICES } from "@blast/core/modules/social/prices/test-sui.ts";
+import { displayPriceOf } from "@blast/core/modules/social/prices/test-sui.ts";
 import type { ReadableDatabase } from "@blast/core/modules/database/transaction.ts";
 import { coinLabel } from "@blast/core/modules/social/contracts/financial-wire.ts";
 import { fillPercent } from "@blast/core/lib/format.ts";
@@ -79,8 +79,8 @@ const PRESALES_SQL = `
     coalesce(trust.verified_team, false) AS verified_team
   FROM ${SHOWN_PRESALES} p
   LEFT JOIN social_sale_trust trust ON trust.presale_id = p.presale_id
-  LEFT JOIN ${DISPLAY_PRICES} pr ON pr.coin_type = p.sale_token
-  LEFT JOIN ${DISPLAY_PRICES} qp ON qp.coin_type = p.quote_type
+  LEFT JOIN ${displayPriceOf("p.sale_token")} pr ON TRUE
+  LEFT JOIN ${displayPriceOf("p.quote_type")} qp ON TRUE
   LEFT JOIN LATERAL (
     SELECT sum(c.commitment - COALESCE(c.claimed_quote_refund, 0)) AS net, sum(c.commitment) AS committed,
       sum(c.claimed_tokens) AS tokens

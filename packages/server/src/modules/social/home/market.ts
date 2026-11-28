@@ -13,7 +13,7 @@ import {
   type HomeMarketWindowName,
 } from "@blast/core/modules/social/contracts/coin-market.ts";
 import { changeBps } from "@blast/core/modules/social/prices/change.ts";
-import { DISPLAY_PRICES } from "@blast/core/modules/social/prices/test-sui.ts";
+import { displayPriceOf } from "@blast/core/modules/social/prices/test-sui.ts";
 import { SocialRouteError } from "@blast/core/modules/social/route-kit/errors.ts";
 import { socialParameter } from "@blast/server/modules/social/route-kit/validation.ts";
 
@@ -82,8 +82,8 @@ export const MARKET_COIN_SQL = `SELECT c.presale_id, c.sale_token AS coin_type, 
   FROM ${HOME_COIN_SOURCES} c
   LEFT JOIN chain_read_v1.coins cs ON c.presale_id IS NULL AND cs.coin_type = c.sale_token
   LEFT JOIN chain_read_v1.presale_coin_supply ps ON c.presale_id IS NOT NULL AND ps.coin_type = c.sale_token
-  LEFT JOIN ${DISPLAY_PRICES} pr ON pr.coin_type = c.sale_token
-  LEFT JOIN ${DISPLAY_PRICES} qp ON qp.coin_type = c.quote_type
+  LEFT JOIN ${displayPriceOf("c.sale_token")} pr ON TRUE
+  LEFT JOIN ${displayPriceOf("c.quote_type")} qp ON TRUE
   ${HOME_MARKET_WINDOWS.map((name, index) => openJoin(index, HOME_MARKET_WINDOW_MS[name])).join("\n  ")}
   LEFT JOIN LATERAL (
     ${outstandingSaleTokensSql("c.presale_id")}

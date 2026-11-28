@@ -1,4 +1,4 @@
-import { DISPLAY_PRICES } from "@blast/core/modules/social/prices/test-sui.ts";
+import { displayPriceOf } from "@blast/core/modules/social/prices/test-sui.ts";
 import type { ReadableDatabase } from "@blast/core/modules/database/transaction.ts";
 import type { PresaleTerms } from "@blast/core/modules/presale/terms/index.ts";
 import type { SocialConfig } from "@blast/core/modules/social/contracts/config.ts";
@@ -414,8 +414,8 @@ export async function readPresaleDetail(
     row.stable
       ? Promise.resolve(null)
       : step("quote_price", () => db.read<QuotePriceRow>(
-        `SELECT q.usd_price::text AS usd_price, q.as_of_ms::text AS as_of_ms FROM ${DISPLAY_PRICES} q
-         JOIN ${SHOWN_PRESALES} p ON p.quote_type = q.coin_type WHERE p.presale_id = $1`,
+        `SELECT q.usd_price::text AS usd_price, q.as_of_ms::text AS as_of_ms FROM ${SHOWN_PRESALES} p
+         CROSS JOIN ${displayPriceOf("p.quote_type")} q WHERE p.presale_id = $1`,
         [presaleId],
       )),
     step("momentum", () => readMomentum(db, presaleId, row, Math.min(asOf.timestamp_ms, nowMs))),
