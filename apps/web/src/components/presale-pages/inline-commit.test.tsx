@@ -1,7 +1,7 @@
 import { createTestQueryClient } from "#web/lib/query/test-client.ts";
 import assert from "node:assert/strict";
 import { SUI_COIN_TYPE } from "@blast/core/lib/sui/coin-types.ts";
-import test, { type TestContext } from "node:test";
+import test, { mock, type TestContext } from "node:test";
 
 import { installTestDom, setInputValue, TestElement } from "../../../test/fixtures/social/test-dom.ts";
 import { fixtureQuote } from "../../../test/fixtures/social/coins/swap-fixture.ts";
@@ -51,6 +51,8 @@ const WALLET = {
   as_of_ms: FIXTURE_NOW,
 } as const;
 
+// The fixture sale is open at FIXTURE_NOW; the panel reads the time itself.
+mock.method(Date, "now", () => FIXTURE_NOW);
 // The panel reads its payment balance fresh from the wallet read, as in the app; the kit carries every other request.
 const wallet = installWalletReads(WALLET.coins.map((coin) => coinView(coin as never)), WALLET.address);
 

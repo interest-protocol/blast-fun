@@ -5,7 +5,6 @@ import type { ReactNode } from "react";
 
 import styles from "./AppShell.module.css";
 import { BlastMenu, BlastMenuItem, type MenuHandle } from "./BlastMenu";
-import { Button } from "./Button";
 import { ChevronIcon, VerifiedBadge } from "./Icons";
 import { accountMenuPlacement } from "./menu-placement.ts";
 import { themeLabel, type ThemeSetting } from "./prefs";
@@ -30,7 +29,6 @@ export function AccountMenu({
   viewer,
   theme,
   onProfile,
-  onPortfolio,
   onSettings,
   onInvites,
   onCycleTheme,
@@ -41,7 +39,6 @@ export function AccountMenu({
   viewer: ShellViewer | null;
   theme: ThemeSetting;
   onProfile: () => void;
-  onPortfolio: () => void;
   onSettings: () => void;
   onInvites: () => void;
   onCycleTheme: (origin: HTMLElement) => void;
@@ -71,9 +68,6 @@ export function AccountMenu({
         <ChevronIcon />
       </BlastMenuItem>
       {children}
-      <BlastMenuItem nativeButton className={styles.mitem} onClick={onPortfolio} render={<Button variant="ghost" />}>
-        <span className={styles.mtext}><b>Portfolio</b></span>
-      </BlastMenuItem>
       <BlastMenuItem nativeButton className={styles.mitem} onClick={onInvites} render={<button type="button" />}>
         <span className={styles.mtext}><b>Invites</b></span>
       </BlastMenuItem>

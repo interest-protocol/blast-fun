@@ -194,3 +194,25 @@ test("host quote failures preserve safe codes, response references and retry met
   assert.match(invalid.message, /Code: invalid_response\. Reference: commit-invalid-reference\./);
   assert.doesNotMatch(invalid.message, /malformed success detail/);
 });
+
+test("with no dialog open, passing time never redraws the host that wraps every screen", async (t) => {
+  t.mock.timers.enable({ apis: ["setInterval", "Date"], now: ALON_READ.presale.start_ms });
+  t.mock.method(globalThis, "fetch", async () => new Response(null, { status: 503 }));
+  const client = createTestQueryClient();
+  let draws = 0;
+  function Host() {
+    draws++;
+    const balances = useBalances(() => {});
+    return useCommitHost({ presaleDeployed: true, balances }).node;
+  }
+  const root = createRoot(dom.document.createElement("div"));
+  t.after(async () => { await act(async () => root.unmount()); client.clear(); });
+  const router = { bfcacheId: "test", push() {}, replace() {}, prefetch() {}, back() {}, forward() {}, refresh() {}, hmrRefresh() {} };
+  await act(async () => root.render(withQueryClient(client,
+    <AppRouterContext value={router}><SocialAccountContext value={{ status: "signed_out", account: null, refresh() {} }}>
+      <SocialViewerProvider signedIn={false} callsign={null} getAccessToken={undefined}><ToastProvider><Host /></ToastProvider></SocialViewerProvider>
+    </SocialAccountContext></AppRouterContext>)));
+  const settled = draws;
+  for (let second = 0; second < 10; second++) await act(async () => { t.mock.timers.tick(1_000); });
+  assert.equal(draws, settled);
+});

@@ -583,6 +583,17 @@ test("a direct payment in a different quote coin is refused before any request o
   assert.deepEqual(quiet.paths(), []);
 });
 
+test("a sale whose end has passed sends nothing, even when the screen still showed it open", async () => {
+  const quiet = transport({});
+  const result = await runCommitFor({
+    api: { getAccessToken: async () => null, fetch: quiet.fetcher },
+    signer: { fee: "sponsored", address: SENDER, signTransaction: async () => assert.fail("must not sign") },
+    blockers: [], sale: { ...MERIDIAN, allowlisted: false, endMs: Date.now() }, input: { payWith: "USDC", pay: 50, usd: 50, quote: 50, why: "" }, sourceEntryId: null, allowlist: null,
+  });
+  assert.deepEqual(result, { status: "failed", message: "This presale is not open for purchases. Nothing was sent. Code: commit_unavailable.", digest: null });
+  assert.deepEqual(quiet.paths(), []);
+});
+
 test("an unconfirmed sponsored execution keeps its digest pending rather than inventing a failure", async () => {
   const { kind, full } = await offlineCommit();
   const digest = TransactionDataBuilder.getDigestFromBytes(full);

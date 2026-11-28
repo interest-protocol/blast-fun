@@ -178,7 +178,7 @@ test("OA-31: the Create button closes the account menu as it opens its own: one 
   assert.equal(button(CREATE_MENU_ID).getAttribute("aria-expanded"), "true");
 });
 
-test("the account menu preserves Profile, Portfolio, Invites, Settings, Appearance and Log out; Appearance keeps it open", async (t) => {
+test("the account menu shows Profile, Invites, Settings, Appearance and Log out; Appearance keeps it open", async (t) => {
   let signedOut = 0;
   await mount(t, { onSignOut: async () => void (signedOut += 1) });
   await press(button(ACCOUNT_MENU_ID));
@@ -189,13 +189,12 @@ test("the account menu preserves Profile, Portfolio, Invites, Settings, Appearan
   assert.equal(button(ACCOUNT_MENU_ID).getAttribute("aria-controls"), ACCOUNT_MENU_ID);
   assert.equal(button(ACCOUNT_MENU_ID).getAttribute("aria-label"), "Account menu");
   const items = rows(ACCOUNT_MENU_ID);
-  assert.equal(items.length, 6);
+  assert.equal(items.length, 5);
   assert.ok(items.every((item) => item.localName === "button" && item.getAttribute("type") === "button"), "rows are buttons (the gate's button.mitem presses)");
   // Words only: no separators, and Log out does not repeat the handle.
   const order = [...menu.children].map((child) => (child.getAttribute("role") === "separator" ? "—" : child.textContent));
   assert.deepEqual(order.map((text) => text.replace(/(System|Light|Dark)$/, "")), [
     "Kai Moreno@kaimoreno",
-    "Portfolio",
     "Invites",
     "Settings",
     "Appearance",
@@ -207,13 +206,13 @@ test("the account menu preserves Profile, Portfolio, Invites, Settings, Appearan
   assert.equal([...items[0]!.children].at(-1)!.querySelector("path")!.getAttribute("d"), "m9 6 6 6-6 6");
   assert.equal(menu.querySelector(".wico"), null, "no item icons");
   assert.equal(document.activeElement, items[0], "the first item takes focus");
-  assert.match(items[4]!.textContent, /^Appearance(System|Light|Dark)$/);
-  const before = items[4]!.textContent;
-  await press(items[4]!);
+  assert.match(items[3]!.textContent, /^Appearance(System|Light|Dark)$/);
+  const before = items[3]!.textContent;
+  await press(items[3]!);
   assert.ok(menuOf(ACCOUNT_MENU_ID), "Appearance keeps the menu open, as the gate's theme-cycle does");
-  assert.notEqual(rows(ACCOUNT_MENU_ID)[4]!.textContent, before, "and shows the next theme");
-  assert.equal(items[5]!.textContent, "Log out");
-  await press(rows(ACCOUNT_MENU_ID)[5]!);
+  assert.notEqual(rows(ACCOUNT_MENU_ID)[3]!.textContent, before, "and shows the next theme");
+  assert.equal(items[4]!.textContent, "Log out");
+  await press(rows(ACCOUNT_MENU_ID)[4]!);
   assert.equal(signedOut, 1);
   assert.equal(button(ACCOUNT_MENU_ID).getAttribute("aria-expanded"), "false", "a choice closes the menu");
 });

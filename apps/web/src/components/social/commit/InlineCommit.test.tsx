@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { mock } from "node:test";
 
 import { SUI_COIN_TYPE } from "@blast/core/lib/sui/coin-types.ts";
 import { installTestDom, recordAnimations, setInputValue, testEvent } from "../../../../test/fixtures/social/test-dom.ts";
@@ -21,6 +21,8 @@ const { SocialViewerProvider } = await import("../SignInGate");
 const { createTestQueryClient, withQueryClient } = await import("#web/lib/query/test-client.ts");
 
 installWalletReads([TSUI]);
+// The fixture sale is open at ALON_NOW; the panel reads the time itself.
+mock.method(Date, "now", () => ALON_NOW);
 const settle = () => act(async () => { await new Promise((resolve) => setTimeout(resolve, 40)); });
 
 const factsOf = (detail = ALON_READ): CommitFacts => {
@@ -43,7 +45,7 @@ test("a delayed purchase read shows its supplied loading status, then the real f
   const container = dom.document.createElement("div"); dom.document.body.append(container);
   const root = createRoot(container);
   t.after(async () => { await act(async () => root.unmount()); quotes.dispose(); client.clear(); container.remove(); });
-  await act(async () => root.render(withQueryClient(client, <InlineCommit kit={kit} presaleId={ALON_ID} nowMs={ALON_NOW} purchase={{}} fallback={<p role="status">Loading purchase details</p>} />)));
+  await act(async () => root.render(withQueryClient(client, <InlineCommit kit={kit} presaleId={ALON_ID} purchase={{}} fallback={<p role="status">Loading purchase details</p>} />)));
   assert.match(container.querySelector('[role="status"]')?.textContent ?? "", /Loading purchase details/);
   assert.equal(container.querySelector('input[inputmode="decimal"]'), null);
   assert.ok(container.querySelector('[aria-busy="true"]'));
@@ -113,7 +115,7 @@ test("ALON with nullable USD valuations and TSUI 10 reaches an actionable exact-
   const root = createRoot(container);
   t.after(async () => { await act(async () => root.unmount()); quotes.dispose(); client.clear(); container.remove(); });
   await act(async () => root.render(withQueryClient(client, <SocialViewerProvider signedIn callsign="kai" getAccessToken={ACCESS_TOKEN}>
-    <InlineCommit kit={kit} presaleId={ALON_ID} nowMs={ALON_NOW} purchase={{ initialPayCoin: TSUI.coinType }} fallback={<p>Loading presale terms…</p>} />
+    <InlineCommit kit={kit} presaleId={ALON_ID} purchase={{ initialPayCoin: TSUI.coinType }} fallback={<p>Loading presale terms…</p>} />
   </SocialViewerProvider>)));
   await typeAmount(container, "10.000000001");
   const amount = container.querySelector<HTMLInputElement>('input[inputmode="decimal"]');
@@ -144,7 +146,7 @@ test("closed, missing, unpriced terms and failed reads resolve to explicit recov
     const container = dom.document.createElement("div"); dom.document.body.append(container);
     const root = createRoot(container);
     sub.after(async () => { await act(async () => root.unmount()); quotes.dispose(); client.clear(); container.remove(); });
-    await act(async () => root.render(withQueryClient(client, <InlineCommit kit={kit} presaleId={ALON_ID} nowMs={ALON_NOW} purchase={{}} fallback={<p>Loading presale terms…</p>} />)));
+    await act(async () => root.render(withQueryClient(client, <InlineCommit kit={kit} presaleId={ALON_ID} purchase={{}} fallback={<p>Loading presale terms…</p>} />)));
     await act(async () => { sub.mock.timers.tick(15_000); });
     assert.ok(container.querySelector(`[data-presale-state="${scenario.state}"]`));
     assert.match(container.textContent!, scenario.text);
@@ -164,7 +166,7 @@ test("a late response for an earlier selection cannot display that presale or it
   const container = dom.document.createElement("div"); dom.document.body.append(container);
   const root = createRoot(container);
   t.after(async () => { await act(async () => root.unmount()); quotes.dispose(); client.clear(); container.remove(); });
-  const render = (id: string) => withQueryClient(client, <InlineCommit kit={kit} presaleId={id} nowMs={ALON_NOW} purchase={{ initialPayCoin: TSUI.coinType }} fallback={<p>Loading presale terms…</p>} />);
+  const render = (id: string) => withQueryClient(client, <InlineCommit kit={kit} presaleId={id} purchase={{ initialPayCoin: TSUI.coinType }} fallback={<p>Loading presale terms…</p>} />);
   await act(async () => root.render(render(ALON_ID)));
   assert.ok(container.querySelector('[aria-busy="true"]'));
   await act(async () => root.render(render(newer.presale.presale_id)));
@@ -187,7 +189,7 @@ test("a completed malformed HTTP 200 sale read leaves loading and can be retried
   const root = createRoot(container);
   t.after(async () => { await act(async () => root.unmount()); quotes.dispose(); client.clear(); container.remove(); });
   await act(async () => root.render(withQueryClient(client, <SocialViewerProvider signedIn callsign="kai" getAccessToken={ACCESS_TOKEN}>
-    <InlineCommit kit={kit} presaleId={ALON_ID} nowMs={ALON_NOW} purchase={{ initialPayCoin: TSUI.coinType }} fallback={<p>Loading presale terms…</p>} />
+    <InlineCommit kit={kit} presaleId={ALON_ID} purchase={{ initialPayCoin: TSUI.coinType }} fallback={<p>Loading presale terms…</p>} />
   </SocialViewerProvider>)));
   await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
   assert.equal(quotes.peek(ALON_ID).failed, true);
@@ -215,7 +217,7 @@ test("an unavailable restored payment stays selected with its amount until the u
   const root = createRoot(container);
   t.after(async () => { await act(async () => root.unmount()); quotes.dispose(); client.clear(); container.remove(); });
   await act(async () => root.render(withQueryClient(client, <SocialViewerProvider signedIn callsign="kai" getAccessToken={ACCESS_TOKEN}>
-    <InlineCommit kit={kit} presaleId={ALON_ID} nowMs={ALON_NOW} purchase={{ initialPayCoin: `0x${"a".repeat(64)}::wal::WAL`, draft: { coinType: `0x${"a".repeat(64)}::wal::WAL`, amount: "10", why: "" } }} fallback={<p>Loading presale terms…</p>} />
+    <InlineCommit kit={kit} presaleId={ALON_ID} purchase={{ initialPayCoin: `0x${"a".repeat(64)}::wal::WAL`, draft: { coinType: `0x${"a".repeat(64)}::wal::WAL`, amount: "10", why: "" } }} fallback={<p>Loading presale terms…</p>} />
   </SocialViewerProvider>)));
   assert.equal(container.querySelector<HTMLInputElement>('input[inputmode="decimal"]')?.value, "10");
   assert.equal(container.querySelector("select"), null);
@@ -246,7 +248,7 @@ test("Buy keeps untouched estimates empty, discloses its terms, and sends exact 
   const root = createRoot(container);
   t.after(async () => { await act(async () => root.unmount()); quotes.dispose(); client.clear(); container.remove(); });
   await act(async () => root.render(withQueryClient(client, <SocialViewerProvider signedIn callsign="kai" getAccessToken={ACCESS_TOKEN}>
-    <InlineCommit kit={kit} presaleId={ALON_ID} nowMs={ALON_NOW} purchase={{ initialPayCoin: TSUI.coinType }} fallback={<p>Loading presale terms…</p>} />
+    <InlineCommit kit={kit} presaleId={ALON_ID} purchase={{ initialPayCoin: TSUI.coinType }} fallback={<p>Loading presale terms…</p>} />
   </SocialViewerProvider>)));
   assert.match(container.textContent!, /Enter an amount to see your estimate/);
   assert.doesNotMatch(container.textContent!, /≈ 0 ALON|<0.01%|100% at current funding/);
@@ -279,7 +281,7 @@ test("a purchase hands its receipt only to its still-visible submitting surface"
   const root = createRoot(container);
   t.after(async () => { await act(async () => root.unmount()); container.remove(); quotes.dispose(); client.clear(); });
   const render = (active: boolean) => withQueryClient(client, <SocialViewerProvider signedIn callsign="kai" getAccessToken={ACCESS_TOKEN}>
-    <InlineCommit purchase={{ active, onConfirmed: () => { received++; }, initialPayCoin: TSUI.coinType }} kit={kit} presaleId={ALON_ID} nowMs={ALON_NOW}
+    <InlineCommit purchase={{ active, onConfirmed: () => { received++; }, initialPayCoin: TSUI.coinType }} kit={kit} presaleId={ALON_ID}
       fallback={<p>Loading</p>} />
   </SocialViewerProvider>);
   await act(async () => root.render(render(true)));
@@ -308,10 +310,31 @@ test("a loaded wallet can choose other payment coins without a wallet listing", 
   const root = createRoot(container);
   t.after(async () => { await act(async () => root.unmount()); quotes.dispose(); client.clear(); container.remove(); });
   await act(async () => root.render(withQueryClient(client, <SocialViewerProvider signedIn callsign="kai" getAccessToken={ACCESS_TOKEN}>
-    <InlineCommit kit={kit} presaleId={ALON_ID} nowMs={ALON_NOW} purchase={{}} fallback={<p>Loading presale terms…</p>} />
+    <InlineCommit kit={kit} presaleId={ALON_ID} purchase={{}} fallback={<p>Loading presale terms…</p>} />
   </SocialViewerProvider>)));
   assert.equal(container.querySelector("select"), null);
   assert.ok(container.querySelector('button[aria-label^="Pay with"]'));
   assert.doesNotMatch(container.textContent!, /Coins unavailable/);
   assert.doesNotMatch(container.textContent!, /check a swap route|Pay directly/);
+});
+
+test("the buy box closes within a second of the sale's end, with no clock from the page around it", async (t) => {
+  let now = ALON_NOW;
+  t.mock.method(Date, "now", () => now);
+  t.mock.timers.enable({ apis: ["setInterval"] });
+  const client = createTestQueryClient();
+  const ending = { ...ALON_READ, presale: { ...ALON_READ.presale, end_ms: ALON_NOW + 1_500 } };
+  const quotes = createCommitQuotes<CommitFacts>({ client, read: async () => factsOf(ending) });
+  const kit: CommitKit = { quotes, quotePayment: async () => assert.fail("unexpected swap"), signedIn: false, signIn() {}, deposit() {}, send: async () => assert.fail("preview only") };
+  const container = dom.document.createElement("div"); container.setAttribute("data-blast-ui", ""); dom.document.body.append(container);
+  const root = createRoot(container);
+  t.after(async () => { await act(async () => root.unmount()); quotes.dispose(); client.clear(); container.remove(); });
+  await act(async () => root.render(withQueryClient(client, <InlineCommit kit={kit} presaleId={ALON_ID} purchase={{}} fallback={<p>Loading presale terms…</p>} />)));
+  await settle();
+  const pass = (ms: number) => act(async () => { now += ms; t.mock.timers.tick(ms); });
+  await pass(1_000);
+  assert.ok(container.querySelector('input[inputmode="decimal"]'), "still open half a second before the end");
+  await pass(1_000);
+  assert.ok(!container.querySelector('input[inputmode="decimal"]'), "closed half a second after the end");
+  assert.match(container.textContent!, /This presale is not open for purchases\./);
 });
