@@ -125,7 +125,7 @@ export function MarketPriceRow({ price, reserve, priceLabel = "Price", change, a
         label="Price currency" size="sm"
         options={[["usd", "USD"], ["quote", currency.quoteSymbol]]}
         value={currency.currency} onChange={currency.setCurrency}
-        optionDisabled={(choice) => choice === "usd" && currency.rate === null}
+        optionDisabled={(choice) => choice === "usd" && currency.rate === null && !currency.pending}
       />
     </div>}
   </div>;

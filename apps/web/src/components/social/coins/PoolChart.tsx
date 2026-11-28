@@ -105,7 +105,8 @@ export function PoolChart({ poolKey, coinType, symbol, decimals, quote = SUI_POO
   return <ChartView
     compact
     source={{ curvePoolKey: null, venuePoolKey: poolKey, migration: null, expected: null, symbol, memeDecimals: decimals, quoteDecimals: quote.decimals, quoteSymbol: quote.symbol }}
-    state={state.key === key ? state : initialChart(key, true)}
+    // While the dollar rate is still being read, the chart holds its loading frame rather than plot in the quote coin first.
+    state={state.key === key && !currency?.pending ? state : initialChart(key, true)}
     currentPrice={latest?.price ?? null}
     controls={controls}
     request={chartRequest(controls, query.data?.readAt ?? 0)}

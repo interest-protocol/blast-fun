@@ -16,6 +16,7 @@ import { Segmented } from "#web/components/blast-ui/Segmented.tsx";
 import { SheetDock } from "#web/components/blast-ui/Sheet.tsx";
 import { usePhoneLayout } from "#web/components/blast-ui/use-shell-prefs.ts";
 import {
+  PendingStatus,
   SkeletonBox,
   SkeletonRegion,
 } from "#web/components/blast-ui/Skeleton.tsx";
@@ -393,11 +394,8 @@ function RouteStatus({
           <span>Recorded graduation pool</span>
         </div>
       ) : null}
-      {reading ? (
-        <SkeletonRegion label="Reading trading route">
-          <SkeletonBox className={styles.skeleton} />
-        </SkeletonRegion>
-      ) : null}
+      {/* The form below holds its place and its action stays disabled, so the read draws nothing that would move it. */}
+      {reading ? <PendingStatus label="Reading trading route" /> : null}
       {problem ? (
         <EmptyState
           title="Trading couldn't load"

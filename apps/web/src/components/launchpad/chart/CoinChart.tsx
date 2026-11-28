@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
-import { useQuoteUsd } from "#web/components/social/prices/use-quote-usd.ts";
+import { useQuoteUsdState } from "#web/components/social/prices/use-quote-usd.ts";
 
 import { atCheckpoint, browserMarketDependencies } from "../blast-infra-browser";
 import { chartFromSnapshot, chartPoolKeys, chartTailRequest, readChartPool, type ChartSnapshot, type ChartSource } from "./chart-client";
@@ -30,9 +30,7 @@ export function CoinChart({
   initialSnapshot,
   livePreset,
 }: Readonly<{ source: ChartSource; compact?: boolean; coinType: string; initialControls: ChartControls; initialSnapshot?: ChartSnapshot; livePreset: boolean }>) {
-  const currency = useCoinPriceCurrency();
-  const standaloneRate = useQuoteUsd(currency ? null : source.quoteType ?? null, { live: true });
-  const quoteUsd = currency ? currency.quoteUsd : standaloneRate;
+  const { quoteUsd, holding } = useChartRate(source.quoteType ?? null);
   const [entry] = useState(initialSnapshot);
   const { controls, ready, commit, chosen } = useCoinChartControls(compact, initialControls, true, livePreset, entry !== undefined);
   const [state, setState] = useState(() => chartFromSnapshot(source, initialControls, initialSnapshot));
@@ -134,7 +132,7 @@ export function CoinChart({
   return (
     <ChartView
       compact={compact}
-      state={shown}
+      state={holding ? initialChart(key, shown.venue !== null, shown.migration) : shown}
       // Until the stream's first price arrives, the last REST close is the price shown, never "—".
       currentPrice={currentPrice}
       source={source}
@@ -164,6 +162,16 @@ const STREAM_TEXT: Readonly<Record<ChartStreamStatus, string | null>> = {
 
 function chartUpdateText(status: ChartStreamStatus, preview: boolean): string | null {
   return preview && status === "connecting" ? null : STREAM_TEXT[status];
+}
+
+/**
+ * The page's dollar rate, or the chart's own off a page. `holding` while that rate is still being read: the chart
+ * keeps its loading frame rather than plot in the quote coin first.
+ */
+function useChartRate(quoteType: string | null): Readonly<{ quoteUsd: string | null; holding: boolean }> {
+  const currency = useCoinPriceCurrency();
+  const standalone = useQuoteUsdState(currency ? null : quoteType, { live: true });
+  return currency ? { quoteUsd: currency.quoteUsd, holding: currency.pending } : { quoteUsd: standalone.rate, holding: standalone.pending };
 }
 
 /** The chart's price: `undefined` until the stream's first price (the last close shows), `null` once the stream withdraws it. */

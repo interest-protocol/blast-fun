@@ -78,11 +78,6 @@
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
-.skeleton {
-  min-height: 8rem;
-  border-radius: var(--r-button);
-}
-
 .feedback {
   display: flex;
   align-items: center;
