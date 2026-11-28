@@ -79,7 +79,7 @@ function hopsOf(route: TradeRoute): SocialTradeHop[] {
 }
 
 /** `atoms` of `coin` in USD to the cent, rounded half up; null without a plain decimal price. */
-function usd(atoms: bigint, coin: RouteQuoteCoin): string | null {
+export function atomsUsd(atoms: bigint, coin: Pick<RouteQuoteCoin, "decimals" | "usdPrice">): string | null {
   const amount = exactAtoms(atoms, coin.decimals);
   const price = exactDecimal(coin.usdPrice);
   return amount === null || price === null ? null : fixedExact(multiplyExact(amount, price), 2);
@@ -128,8 +128,8 @@ export function priceRoute(
     route: hopsOf(route),
     route_label: routeLabel(route.paths.map((path) => ({ ...path, venue: venueOf(path.provider) })), input.inCoin, input.outCoin, symbols),
     price_per_out: coins.out.usdPrice,
-    amount_in_usd: usd(route.amountIn, coins.in),
-    amount_out_usd: usd(route.amountOut, coins.out),
+    amount_in_usd: atomsUsd(route.amountIn, coins.in),
+    amount_out_usd: atomsUsd(route.amountOut, coins.out),
     network_fee: null,
     dry_run: "not_run",
     offer_refused: null,

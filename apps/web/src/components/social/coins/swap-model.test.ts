@@ -11,7 +11,7 @@ import type { SocialTradeQuote } from "@blast/core/modules/social/contracts/trad
 import { priceText, type WalletCoinView } from "./coin-model";
 
 import { FIXTURE_COINS, FIXTURE_MORE_COINS } from "../../../../test/fixtures/social/coins/coins-fixture-model.ts";
-import { canTrade, ECOSYSTEM_COIN_VIEWS, costSentence, decodeTradeAction, encodeTradeAction, FINDING_PRICE, flippedField, fullName, impactUnavailableText, noMatchText, pairFor, pickedPair, pickerFigures, pickerGroups, pxRatio, ratioText, salePair, swapCta, swapPanels, swapPayoutWarning, swapQuoteRequest, tradableCoinView, tradeAction, tradeLabel, tradeOpening, tradeTitle, txRows, txSummary, usdText } from "./swap-model";
+import { canTrade, ECOSYSTEM_COIN_VIEWS, costSentence, decodeTradeAction, encodeTradeAction, FINDING_PRICE, flippedField, fullName, impactUnavailableText, noMatchText, pairFor, pickedPair, pickerFigures, pickerGroups, pxRatio, quoteWithUsd, ratioText, salePair, swapCta, swapPanels, swapPayoutWarning, swapQuoteRequest, tradableCoinView, tradeAction, tradeLabel, tradeOpening, tradeTitle, txRows, txSummary, usdText } from "./swap-model";
 import { SUI_COIN_TYPE, USDC_COIN_TYPE } from "@blast/core/lib/sui/coin-types.ts";
 
 /**
@@ -72,6 +72,21 @@ test("the payout warning uses quoted values without rounding away precision", ()
   assert.match(swapPayoutWarning(quoteOf({ amount_in_usd: "10.00", amount_out_usd: "9.00" })) ?? "", /10% below/);
   assert.equal(swapPayoutWarning(quoteOf({ amount_in_usd: "10.00", amount_out_usd: "9.01" })), null);
   assert.match(swapPayoutWarning(quoteOf({ amount_in_usd: null, price_impact_bps: 1_250 })) ?? "", /High price impact/);
+});
+
+test("filling dollar values keeps the quote's own and prices only the quote's own coins", () => {
+  const sui = { coinType: SUI_COIN_TYPE, decimals: 9, usdPrice: "2" };
+  const usdc = { coinType: USDC_COIN_TYPE, decimals: 6, usdPrice: "1" };
+  const served = quoteWithUsd(quoteOf({ amount_in_usd: "342.00", amount_out_usd: null }), sui, usdc)!;
+  assert.deepEqual([served.amount_in_usd, served.amount_out_usd], ["342.00", "342.00"], "100 SUI keeps the served $342, not $200; 341.997073 USDC rounds to $342.00");
+  // The last pair's answer, still on screen after the pair changed: its coins are on neither side.
+  const other = quoteWithUsd(quoteOf({ amount_in_usd: null, amount_out_usd: null }), usdc, sui)!;
+  assert.deepEqual([other.amount_in_usd, other.amount_out_usd], [null, null]);
+  const unpriced = quoteWithUsd(quoteOf({ amount_in_usd: null }), { ...sui, usdPrice: null }, usdc)!;
+  assert.equal(unpriced.amount_in_usd, null);
+  // A quote with no route has no amounts to value.
+  const empty = quoteWithUsd(quoteOf({ amount_in: null, amount_out: null, amount_in_usd: null, amount_out_usd: null }), sui, usdc)!;
+  assert.deepEqual([empty.amount_in_usd, empty.amount_out_usd], [null, null]);
 });
 
 test("the side follows the coins, as the quote route requires (a buy spends USDC or SUI on a coin, a sell the reverse)", () => {
